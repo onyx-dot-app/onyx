@@ -1,5 +1,53 @@
 import type { Message } from "@/app/app/types";
 import type { LLMOverride } from "@/app/app/services/lib";
+import type { ProjectFile } from "@/lib/projects/types";
+
+/** A chat skill the user picked with `@`, by name. */
+export interface SkillMention {
+  type: "skill";
+  name: string;
+}
+
+/** What the user tagged in a message with `@`. Mirrors `Mention` in
+ * `backend/onyx/chat/mention_models.py`: each kind is one member of the union
+ * on `type`, and skills are the only kind. */
+export type Mention = SkillMention;
+
+/** The most distinct mentions one message can send. Mirrors
+ * `MAX_MENTIONS_PER_MESSAGE` in `backend/onyx/chat/mention_models.py`. */
+export const MAX_MENTIONS_PER_MESSAGE = 20;
+
+/** A picked skill at the version the user ran when its question was
+ * accepted. */
+export interface RecordedSkillMention extends SkillMention {
+  version_id: string;
+}
+
+/** A mention as its question's turn resolved it. Mirrors `RecordedMention`
+ * in `backend/onyx/chat/mention_models.py`. */
+export type RecordedMention = RecordedSkillMention;
+
+/** A mention as a question holds it: one per picked tile, with `index`, where
+ * its `@name` starts in the message. A mention known only from the server,
+ * such as a recorded or queued one, has no `index`. The server gets each
+ * mention once, without `index` (`lib/chat/mentions.ts:requestMentions`). */
+export type ComposedMention = Mention & { index?: number };
+
+/** A mention at a known place in its message. */
+export type PlacedMention = Mention & { index: number };
+
+/** A question as the user wrote it: its text and what the user tagged in it.
+ * Mentions come only from the `@` menu; the text holds an `@name` for each,
+ * and plain `@name` text mentions nothing. */
+export interface ComposedMessage {
+  message: string;
+  mentions: ComposedMention[];
+}
+
+/** A question that did not reach the server, to put back in the composer. */
+export interface UnsentMessage extends ComposedMessage {
+  files: ProjectFile[];
+}
 
 /** Composer choices that a queued or interrupting message's turn starts with. */
 export interface PendingTurnSettings {
@@ -15,6 +63,7 @@ export interface PendingChatMessage {
   target_response_id: number | null;
   deep_research: boolean;
   llm_override: LLMOverride | null;
+  mentions: Mention[];
 }
 
 export interface ChatHistoryPage {
@@ -42,10 +91,12 @@ export interface ChatSessionQueue {
   needsResponseSelection: boolean;
   /**
    * A queued or interrupting message's turn starts as Deep Research when
-   * `deepResearch` is set, with `llmOverride` as its model.
+   * `deepResearch` is set, with `llmOverride` as its model and the SKILL.md
+   * files of its mentioned skills after its question. A `send` gives its
+   * mentions to the running response.
    */
   submit: (
-    message: string,
+    composed: ComposedMessage,
     delivery: PendingChatMessage["delivery"],
     turn: PendingTurnSettings
   ) => Promise<boolean>;

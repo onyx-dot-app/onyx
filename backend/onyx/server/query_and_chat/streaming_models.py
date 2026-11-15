@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
 
+from onyx.chat.mention_models import RecordedMention
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
@@ -118,6 +119,8 @@ class UserMessagePacket(BaseObj):
     type: Literal["user_message"] = StreamingType.USER_MESSAGE.value
     id: str
     message: str
+    # What the message picked, as its acceptance resolved it.
+    mentions: list[RecordedMention]
 
 
 ################################################

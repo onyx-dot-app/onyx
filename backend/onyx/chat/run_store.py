@@ -38,6 +38,7 @@ from onyx.agents.runtime import Agent, AgentBusy, Run, RunNotTransferable
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
+from onyx.chat.mention_models import AcceptedPicks, PickedMentions
 from onyx.chat.models import (
     ChatBranch,
     ChatInbox,
@@ -47,6 +48,7 @@ from onyx.chat.models import (
     ResponseStatus,
     SavedAgentContext,
     SavedResponse,
+    accepted_input_messages,
 )
 from onyx.chat.presentation import project_response
 from onyx.chat.response import response_record, response_snapshot
@@ -91,9 +93,11 @@ from onyx.db.chat_subagents import (
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import User
+from onyx.db.skill import list_chat_skills
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, UserMessage
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.skills.chat import accept_picked_skills
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -478,15 +482,53 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         )
 
     def receive_inputs(self, run: Run) -> list[UserMessage]:
-        """Read sent messages, then finished results of children this run's agent started."""
+        """Read sent messages, then finished results of children this run's agent started.
+
+        A sent message's picks are accepted here, against the user's skills
+        now, as a question's are when its turn starts: each skill is recorded
+        at the version the user runs, and its `<skill>` message follows the
+        message.
+        """
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-            messages, results = read_run_inputs(
+            received, results = read_run_inputs(
                 session,
                 run.agent_id,
                 run.id,
                 self._root_branch(run),
                 self._input_branch.message_ids,
                 follow_up=self._is_follow_up(run),
+            )
+            picks = [
+                message.metadata.content_metadata.mentions
+                if isinstance(message.metadata, InputMessageMetadata)
+                and isinstance(message.metadata.content_metadata, PickedMentions)
+                else []
+                for message in received
+            ]
+            accepted = (
+                accept_picked_skills(
+                    picks, list_chat_skills(session, self._user), self._user.id, session
+                )
+                if any(picks)
+                else [AcceptedPicks() for _ in received]
+            )
+        messages: list[UserMessage] = []
+        for message, accepted_picks in zip(received, accepted, strict=True):
+            if not accepted_picks.mentions:
+                messages.append(message)
+                continue
+            # Sent messages are read with their identity and provenance.
+            if message.id is None or not isinstance(
+                message.metadata, InputMessageMetadata
+            ):
+                raise ValueError("A sent message has no identity or provenance")
+            messages += accepted_input_messages(
+                message_id=message.id,
+                content=message.text,
+                source=message.metadata.source,
+                source_run_id=message.metadata.source_run_id,
+                mentions=accepted_picks.mentions,
+                skill_messages=accepted_picks.skill_messages,
             )
         finished = [
             result.response_id for result in results if result.status.is_terminal

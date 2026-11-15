@@ -206,10 +206,16 @@ class AgentState(BaseModel):
 
 
 class CompactionMetadata(BaseModel):
-    """Summary input text and whether a message can anchor a saved summary."""
+    """Summary input text, whether a message can anchor a saved summary, and
+    whether it is context of the user message before it."""
 
     compaction_text: str | None = None
     allow_compaction_cutoff: bool = True
+    # Context of the user message before it, such as a skill that the message
+    # picked. It belongs to that message: it is never the task or a turn of its
+    # own, a cut never separates it from that message, and compacted history
+    # keeps only the message.
+    is_input_context: bool = False
 
 
 class PreparedStep(BaseModel):

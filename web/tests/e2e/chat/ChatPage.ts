@@ -99,14 +99,33 @@ export class ChatPage {
     return this.aiMessage(index).getByText(text, { exact: true });
   }
 
-  async goto(sessionId?: string): Promise<void> {
+  /** With `skills`, also waits until the composer has the user's chat
+   * skills, so that `@` opens the picker at once. */
+  async goto(sessionId?: string, { skills = false } = {}): Promise<void> {
     await this.page.goto(sessionId ? `/app?chatId=${sessionId}` : "/app");
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
+    if (skills) await this.waitForChatSkills();
   }
 
-  async reload(): Promise<void> {
+  /** With `skills`, also waits until the composer has the user's chat
+   * skills, so that `@` opens the picker at once. */
+  async reload({ skills = false } = {}): Promise<void> {
     await this.page.reload();
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
+    if (skills) await this.waitForChatSkills();
+  }
+
+  /** The picker reads the skills only on input, so `@` is typed again until
+   * it opens. The input is left empty. */
+  private async waitForChatSkills(): Promise<void> {
+    await expect(async () => {
+      await this.inputBar.clear();
+      await this.inputBar.typeText("@");
+      await expect(this.inputBar.skillPicker).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 15000 });
+    await this.inputBar.clear();
+    await expect(this.inputBar.skillPicker).toBeHidden();
+    await expect(this.inputBar.textbox).toHaveText("");
   }
 
   async scrollTo(position: "top" | "bottom"): Promise<void> {
@@ -457,6 +476,14 @@ export class ChatPage {
 
   async expectHumanMessage(text: string, index = 0): Promise<void> {
     await expect(this.humanMessage(index)).toContainText(text);
+  }
+
+  /** The skill chips of question bubble `index`, counting the bubbles of
+   * messages that a running response accepted. */
+  skillMentionChips(index = 0): Locator {
+    return this.humanMessageBubbles
+      .nth(index)
+      .locator('[data-testid="mention-chip"][data-mention-type="skill"]');
   }
 
   async expectNoHumanMessages(): Promise<void> {

@@ -90,7 +90,14 @@ It turns a failure in setup or start into one `StreamingError` line.
 
 **Line kinds.** `chat/models.py:AnswerStreamPart` lists what the backend
 writes: `Packet`, `MessageResponseIDInfo`, `MultiModelMessageResponseIDInfo`,
-`CreateChatSessionID` and `StreamingError`. Only `Packet` has a placement. A
+`CreateChatSessionID` and `StreamingError`. Only `Packet` has a placement.
+The two ID lines also carry `mentions`, what the saved question tagged with
+`@` as its turn recorded it ([[skills]]). Each mention has a `type`; `skill`
+is the only kind. A queued or interrupting turn sends them in the first line
+of its own stream. Session history returns the
+same field on the question. A shared view empties `mentions` on question
+details and on replayed `user_message` packets. Packets and ID lines carry
+only the record of a pick (type, name and version id), never its skill text. A
 per-model error puts `model_index` in `StreamingError.details`. The resume
 endpoint adds a sixth kind,
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamCursor`, after each batch. It
@@ -240,7 +247,9 @@ its background task end ([[#pure-asgi-middleware]]).
    block. Calls under a parent tool always take a new
    `sub_turn_index`. Saved-session replay uses the same renderer, so a change
    here changes reloads too. An accepted human instruction gets a `user_message`
-   packet in its own section before the next model step. Its placement orders
+   packet in its own section before the next model step. The packet carries
+   the `mentions` that the instruction's acceptance recorded, live and on
+   replay, empty in a shared view. Its placement orders
    the user bubble relative to assistant and tool output, both live and on replay.
 8. `no-answer-end-packet` **The answer stream has no end packet, and errors are
    separate lines.** `AgentResponseDelta` ends at `OverallStop`. Each model's

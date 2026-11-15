@@ -8,6 +8,7 @@ import React, {
   useRef,
 } from "react";
 import { Message } from "@/app/app/types";
+import type { ComposedMessage } from "@/lib/chat/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/app/app/message/HumanMessage";
 import AgentResultsDivider from "@/app/app/message/AgentResultsDivider";
@@ -64,18 +65,19 @@ export interface ChatUIProps {
   stopGenerating: () => void;
 
   // Submit handlers
-  onSubmit: (args: {
-    message: string;
-    messageIdToResend?: number;
-    currentMessageFiles: any[];
-    deepResearch: boolean;
-    modelOverride?: LlmDescriptor;
-    regenerationRequest?: {
-      messageId: number;
-      parentMessage: Message;
-    };
-    selectedModels?: SelectedModel[];
-  }) => Promise<void>;
+  onSubmit: (
+    args: ComposedMessage & {
+      messageIdToResend?: number;
+      currentMessageFiles: any[];
+      deepResearch: boolean;
+      modelOverride?: LlmDescriptor;
+      regenerationRequest?: {
+        messageId: number;
+        parentMessage: Message;
+      };
+      selectedModels?: SelectedModel[];
+    }
+  ) => Promise<void>;
   deepResearchEnabled: boolean;
   currentMessageFiles: any[];
 
@@ -194,6 +196,7 @@ const ChatUI = React.memo(
         return async function (modelOverride: LlmDescriptor) {
           return await onSubmitRef.current({
             message: regenerationRequest.parentMessage.message,
+            mentions: regenerationRequest.parentMessage.mentions ?? [],
             currentMessageFiles: currentMessageFilesRef.current,
             deepResearch: deepResearchEnabledRef.current,
             modelOverride,
@@ -206,10 +209,10 @@ const ChatUI = React.memo(
     );
 
     const handleEditWithMessageId = useCallback(
-      (editedContent: string, msgId: number) => {
+      (edited: ComposedMessage, msgId: number) => {
         const models = selectedModelsRef.current;
         onSubmitRef.current({
-          message: editedContent,
+          ...edited,
           messageIdToResend: msgId,
           currentMessageFiles: [],
           deepResearch: deepResearchEnabledRef.current,
@@ -281,6 +284,7 @@ const ChatUI = React.memo(
                       stopGenerating={stopGenerating}
                       content={message.message}
                       files={message.files}
+                      mentions={message.mentions}
                       messageId={message.messageId}
                       nodeId={message.nodeId}
                       onEdit={handleEditWithMessageId}

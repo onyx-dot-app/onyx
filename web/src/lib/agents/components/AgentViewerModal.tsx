@@ -31,6 +31,7 @@ import { EmptyMessageCard } from "@opal/components";
 import { InputSwitch } from "@opal/components";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import type { ComposedMessage } from "@/lib/chat/types";
 import AppInputBar from "@/sections/input/AppInputBar";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
 import { useLlmManager } from "@/lib/hooks";
@@ -126,7 +127,7 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
  */
 interface AgentChatInputProps {
   agent: FullAgent;
-  onSubmit: (message: string) => void;
+  onSubmit: (composed: ComposedMessage) => void;
 }
 function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   const llmManager = useLlmManager(undefined, agent);
@@ -140,9 +141,9 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   // that page will find it rather than travelling with the call. Closing the
   // viewer without sending leaves nothing behind.
   const submit = useCallback(
-    (message: string) => {
+    (composed: ComposedMessage) => {
       toolConfiguration.handOffToNewChatWith(agent.id);
-      onSubmit(message);
+      onSubmit(composed);
     },
     [toolConfiguration, agent.id, onSubmit]
   );
@@ -200,12 +201,18 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
   const { appName } = useSettings();
 
   const handleStartChat = useCallback(
-    (message: string) => {
+    ({ message, mentions }: ComposedMessage) => {
       const params = new URLSearchParams({
         [SEARCH_PARAM_NAMES.AGENT_ID]: String(agent.id),
         [SEARCH_PARAM_NAMES.USER_PROMPT]: message,
         [SEARCH_PARAM_NAMES.SEND_ON_LOAD]: "true",
       });
+      // Skill mentions travel as skill names.
+      const skills = mentions
+        .filter((mention) => mention.type === "skill")
+        .map((mention) => mention.name);
+      if (skills.length > 0)
+        params.set(SEARCH_PARAM_NAMES.SKILLS, skills.join(","));
       navigation.go(`/app?${params.toString()}`);
     },
     [agent.id, navigation]
@@ -427,7 +434,12 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
                 {agent.starter_messages.map((starter, index) => (
                   <Interactive.Stateless
                     key={index}
-                    onClick={() => handleStartChat(starter.message)}
+                    onClick={() =>
+                      handleStartChat({
+                        message: starter.message,
+                        mentions: [],
+                      })
+                    }
                     prominence="tertiary"
                   >
                     <Interactive.Container>

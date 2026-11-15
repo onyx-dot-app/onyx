@@ -191,6 +191,7 @@ from onyx.server.query_and_chat.session_loading import (
 from onyx.server.query_and_chat.streaming_models import (
     Packet,
     StreamCursor,
+    UserMessagePacket,
     heartbeat_packet,
 )
 from onyx.server.query_and_chat.token_limit import (
@@ -543,6 +544,24 @@ def get_chat_session(
         for msg in session_messages
         if msg.message_type == MessageType.ASSISTANT
     ]
+    if is_shared:
+        # A shared view shows no skills the owner picked: not on questions and
+        # not on messages accepted during a response.
+        chat_message_details = [
+            detail.model_copy(update={"mentions": []})
+            for detail in chat_message_details
+        ]
+        replay_packet_lists = [
+            [
+                packet.model_copy(
+                    update={"obj": packet.obj.model_copy(update={"mentions": []})}
+                )
+                if isinstance(packet.obj, UserMessagePacket)
+                else packet
+                for packet in packets
+            ]
+            for packets in replay_packet_lists
+        ]
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
@@ -1566,6 +1585,7 @@ def submit_pending_chat_message(
         and get_processing_stream_id(session_id, cache) is None,
         deep_research=body.deep_research,
         llm_override=body.llm_override,
+        mentions=body.mentions,
     )
     # The interrupt stops the turn running at commit, never the turn it starts.
     interrupted = current_turn_owner(session_id, cache)

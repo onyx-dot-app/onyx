@@ -13,6 +13,10 @@ import type { AppActionPoliciesView } from "@/lib/plugins/types";
 import type { SkillsList } from "@/lib/skills/types";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { NextIntlClientProvider } from "next-intl";
+import type { ReactNode } from "react";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   builtinFixture,
   customFixture,
@@ -131,10 +135,15 @@ function show(
   plugin: MemberPlugin,
   onDisconnected = jest.fn(),
   surface?: "all" | "craft",
-  options: { initialTab?: "approvals"; onClose?: () => void } = {}
+  options: {
+    initialTab?: "approvals";
+    onClose?: () => void;
+    beside?: ReactNode;
+  } = {}
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={memberPluginMessages}>
+      {options.beside}
       <MemberPluginDetailModal
         plugin={plugin}
         surface={surface}
@@ -1299,6 +1308,13 @@ test("skill enable changes stay drafts across tabs and save only on Save", async
       )
     );
   const onClose = jest.fn();
+  // Stands in for the chat input's skill list.
+  function ChatSkillsReader() {
+    useSWR(SWR_KEYS.chatSkills, errorHandlingFetcher);
+    return null;
+  }
+  const chatSkillFetches = () =>
+    requests.mock.calls.filter(([url]) => url === SWR_KEYS.chatSkills).length;
   show(
     {
       kind: "external-app",
@@ -1307,9 +1323,10 @@ test("skill enable changes stay drafts across tabs and save only on Save", async
     },
     jest.fn(),
     "craft",
-    { onClose }
+    { onClose, beside: <ChatSkillsReader /> }
   );
   const user = setupUser();
+  await waitFor(() => expect(chatSkillFetches()).toBe(1));
   expect(screen.getByRole("status")).toHaveTextContent("Ready to use");
   expect(await screen.findByText("Issues")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Review skills" }));
@@ -1329,6 +1346,7 @@ test("skill enable changes stay drafts across tabs and save only on Save", async
       body: JSON.stringify({ enabled: true, replace_conflict: false }),
     })
   );
+  await waitFor(() => expect(chatSkillFetches()).toBe(2));
 });
 
 test("reverting a skill draft leaves Save disabled without writing", async () => {
@@ -1455,6 +1473,8 @@ test("skill saves disable conflicts first and retry only unsaved changes", async
     "craft",
     { onClose }
   );
+  const skillListFetches = () =>
+    requests.mock.calls.filter(([url]) => url === SWR_KEYS.userSkills).length;
   const user = setupUser();
   await user.click(screen.getByRole("tab", { name: "Skills" }));
   const enable = await screen.findByRole("switch", {
@@ -1463,9 +1483,12 @@ test("skill saves disable conflicts first and retry only unsaved changes", async
   const disable = screen.getByRole("switch", { name: "Disable report-writer" });
   await user.click(enable);
   await user.click(disable);
+  const fetchesBeforeSave = skillListFetches();
   await user.click(screen.getByRole("button", { name: "Save" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Enable failed");
   expect(onClose).not.toHaveBeenCalled();
+  // The disable that succeeded before the failure refreshes the skill lists.
+  await waitFor(() => expect(skillListFetches()).toBe(fetchesBeforeSave + 1));
   expect(
     requests.mock.calls
       .filter(([, init]) => init?.method === "PUT")

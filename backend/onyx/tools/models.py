@@ -33,20 +33,18 @@ class GeneratedImage(BaseModel):
 
 
 class FileReaderArguments(BaseModel):
-    file_id: str
-    start_char: int = 0
-    num_chars: int = FILE_READER_MAX_CHARS
-
-    @model_validator(mode="before")
-    @classmethod
-    def null_uses_defaults(cls, value: object) -> object:
-        if not isinstance(value, dict):
-            return value
-        return {
-            key: item
-            for key, item in value.items()
-            if item is not None or key not in {"start_char", "num_chars"}
-        }
+    file_id: str = Field(description="The UUID of the file to read.")
+    start_char: int = Field(
+        default=0,
+        description="Character offset to start reading from. Use null for the default of 0.",
+    )
+    num_chars: int = Field(
+        default=FILE_READER_MAX_CHARS,
+        description=(
+            f"Number of characters to return (max {FILE_READER_MAX_CHARS}). "
+            f"Use null for the default of {FILE_READER_MAX_CHARS}."
+        ),
+    )
 
 
 class FileReadResult(BaseModel):
@@ -66,7 +64,18 @@ class MemoryOperation(str, Enum):
 
 
 class MemoryArguments(BaseModel):
-    memory: str
+    memory: str = Field(
+        description=(
+            "The text of the memory to add or update. "
+            "Should be a concise, standalone statement that "
+            "captures the key information. For example: "
+            "'User prefers dark mode' or 'User's favorite frontend framework is React'."
+        )
+    )
+
+
+class KnowledgeGraphArguments(BaseModel):
+    query: str = Field(description="What to search for")
 
 
 class MemoryUpdated(BaseModel):
@@ -313,7 +322,7 @@ class LlmOpenUrlResult(BaseCiteableToolResult):
 
 
 class PythonArguments(BaseModel):
-    code: str
+    code: str = Field(description="Python source code to execute")
 
 
 class PythonExecutionFile(BaseModel):
@@ -346,7 +355,7 @@ class LlmPythonExecutionResult(BaseModel):
 
 
 class BashArguments(BaseModel):
-    cmd: str
+    cmd: str = Field(description="Bash command to execute in the session.")
 
 
 class LlmBashExecutionResult(BaseModel):

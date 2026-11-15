@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "스킬 선택기"
         },
-        "empty": {
-          "text": "일치하는 스킬 없음"
-        },
         "mcpServersGroup": {
           "label": "MCP 서버"
         },
@@ -12597,6 +12594,19 @@
         "expandButton": {
           "label": "입력창에 펼치기",
           "tooltip": "이 타일을 전체 텍스트로 바꿔 입력창에 넣습니다"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "{name} 제거"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "붙여넣은 텍스트: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "붙여넣은 텍스트 제거"
+          }
         }
       },
       "plusMenuButton": {

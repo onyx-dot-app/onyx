@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "スキル選択"
         },
-        "empty": {
-          "text": "一致するスキルはありません"
-        },
         "mcpServersGroup": {
           "label": "MCP サーバー"
         },
@@ -12597,6 +12594,19 @@
         "expandButton": {
           "label": "入力バーに展開",
           "tooltip": "このタイルを全文に置き換えて入力欄に表示します"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "{name} を削除"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "貼り付けたテキスト: {preview}、{meta}",
+          "removeButton": {
+            "ariaLabel": "貼り付けたテキストを削除"
+          }
         }
       },
       "plusMenuButton": {

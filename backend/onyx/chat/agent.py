@@ -79,6 +79,7 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
     update_search_context,
 )
+from onyx.tools.tool_implementations.skills.skill_tools import skills_catalog_message
 from onyx.tools.tool_implementations.subagents.subagent_tools import (
     InterruptAgentTool,
     ListAgentsTool,
@@ -138,6 +139,9 @@ class ChatAgent(Agent, RestorableFeature):
         # The tools the chat is configured with; restored and child agents receive
         # them, and code mode applies per agent.
         self.configured_tools = list(tools)
+        self.skills_catalog_message = skills_catalog_message(
+            self.configured_tools, llm.config.max_input_tokens
+        )
         self.code_mode = code_mode
         # Each agent instance has its own cells, so a restored run has none open.
         self.application_tools, self.code_cells = (
@@ -391,6 +395,7 @@ class ChatAgent(Agent, RestorableFeature):
                 agent_instructions=self.agent_instructions,
                 system_prompt=prompt.system_prompt,
                 user_info_prompt=prompt.user_info_prompt,
+                skills_catalog_message=self.skills_catalog_message,
                 custom_agent_prompt=prompt.custom_prompt,
                 reminder_message=prompt.reminder,
                 request_context_message=UserMessage(

@@ -224,6 +224,7 @@ def test_input_changed_after_a_run_read_it_is_not_accepted(
         delivery=MessageDelivery.SEND,
         target_response_id=response.id,
         turn_preparing=False,
+        mentions=[],
     )
     messages = read()
     assert consume_inputs__no_commit(
@@ -976,6 +977,7 @@ def test_send_now_starts_after_a_send_fails_during_preparation(
     # The client learns the saved turn's IDs before its error.
     ids, error = packets
     assert ids == MessageResponseIDInfo(
+        mentions=[],
         user_message_id=failed.parent_message_id,
         reserved_assistant_message_id=failed.id,
     )
@@ -2529,6 +2531,7 @@ def test_status_starts_child_work_when_no_turn_hosts_it(
                         delivery=MessageDelivery.QUEUE,
                         target_response_id=None,
                         turn_preparing=False,
+                        mentions=[],
                     ).id
                 )
                 session.commit()

@@ -41,7 +41,10 @@ from onyx.tools.tool_implementations.code_mode.cells import (
     CodeCells,
     durable_details,
 )
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
+    CodeModeTool,
+    WaitCodeTool,
+)
 from onyx.tools.tool_implementations.code_mode.models import (
     UNFINISHED_CALL_MESSAGE,
     CodeModeCallFinished,
@@ -445,6 +448,53 @@ def test_description_lists_stubs() -> None:
     assert first.parameters["required"] == ["code"]
     assert "asyncio.gather" in first.description
     assert "[n]" in first.description
+
+
+def test_parameters_come_from_arguments() -> None:
+    max_output_tokens: JsonValue = {
+        "type": "integer",
+        "default": 10000,
+        "description": "Token budget for the output this call returns; longer "
+        "output is cut in the middle. Defaults to 10000 tokens, at most 40000.",
+    }
+    assert _make_tool().tool_definition().parameters == {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string", "description": "The Python program to run."},
+            "yield_time_ms": {
+                "type": "integer",
+                "default": 30000,
+                "description": "How long to wait for the program before returning "
+                "its output so far while it keeps running. Defaults to 30000 ms, at "
+                "most 120000 ms.",
+            },
+            "max_output_tokens": max_output_tokens,
+        },
+        "required": ["code"],
+    }
+    assert WaitCodeTool(CodeCells()).tool_definition().parameters == {
+        "type": "object",
+        "properties": {
+            "cell_id": {
+                "type": "integer",
+                "description": "Identifier of the running cell.",
+            },
+            "yield_time_ms": {
+                "type": "integer",
+                "default": 15000,
+                "description": "How long to wait for more output before returning. "
+                "Defaults to 15000 ms, at most 300000 ms.",
+            },
+            "max_output_tokens": max_output_tokens,
+            "terminate": {
+                "type": "boolean",
+                "default": False,
+                "description": "True stops the running cell; false or omitted waits "
+                "for output.",
+            },
+        },
+        "required": ["cell_id"],
+    }
 
 
 def test_mcp_like_stub_runs_and_type_checks_its_arguments() -> None:

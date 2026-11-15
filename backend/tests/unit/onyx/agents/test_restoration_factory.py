@@ -1,5 +1,8 @@
 """Rebuild feature configuration and resources without replacing saved conversation state."""
 
+from unittest.mock import MagicMock
+from uuid import uuid4
+
 import pytest
 from pydantic import JsonValue
 
@@ -12,10 +15,12 @@ from onyx.agents.models import (
     RunStatus,
     StepInput,
 )
+from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent
 from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.restoration import restore_chat_agent
 from onyx.context.models import UserInfo, UserMemoryContext
+from onyx.db.models import User
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
@@ -29,8 +34,14 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     UserMessage,
 )
+from onyx.skills.models import ChatSkill
 from onyx.tools.constants import WAIT_CODE_TOOL_NAME
+from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from onyx.tools.tool_implementations.skills.skill_tools import (
+    SkillsListTool,
+    SkillsReadTool,
+)
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
     FakeModelClient,
@@ -254,10 +265,15 @@ def _offered(llm: ScriptedLLM) -> tuple[list[str], ToolChoiceOptions, str]:
     )
 
 
-def _chat_agent(llm: ScriptedLLM, *, code_mode: bool = False) -> ChatAgent:
+def _chat_agent(
+    llm: ScriptedLLM,
+    *,
+    code_mode: bool = False,
+    tools: list[Tool] | None = None,
+) -> ChatAgent:
     return ChatAgent(
         messages=[],
-        tools=[EchoTool()],
+        tools=tools or [EchoTool()],
         code_mode=code_mode,
         custom_agent_prompt=None,
         base_system_prompt="Base instructions",
@@ -278,7 +294,7 @@ def _chat_agent(llm: ScriptedLLM, *, code_mode: bool = False) -> ChatAgent:
     )
 
 
-def _suspended(agent: ChatAgent, state: dict[str, JsonValue]) -> ExecutionCheckpoint:
+def _suspended(agent: Agent, state: dict[str, JsonValue]) -> ExecutionCheckpoint:
     return ExecutionCheckpoint(
         agent_state=agent.state,
         run_state=RunState(
@@ -337,3 +353,77 @@ def test_restored_chat_keeps_the_saved_code_mode(
     ]
     assert choice == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {preferred}." in request_text
+
+
+@pytest.fixture
+def _user_skills(monkeypatch: pytest.MonkeyPatch) -> User:
+    """A user whose current skills are one skill, as the skill tools and
+    the catalog read them."""
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.skills.skill_tools.get_session_with_current_tenant",
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.skills.skill_tools.list_chat_skills",
+        lambda _session, _user: [
+            ChatSkill(name="triage", description="Sort.", version_id=uuid4())
+        ],
+    )
+    return User(id=uuid4())
+
+
+def test_restored_chat_offers_the_skill_tools_once(_user_skills: User) -> None:
+    # Restoration receives the turn's configured tools, skill tools included.
+    llm = ScriptedLLM([Delta(content="done")])
+    original = _chat_agent(
+        llm,
+        tools=[EchoTool(), SkillsListTool(_user_skills), SkillsReadTool(_user_skills)],
+    )
+    state = original.capture_state().model_dump(mode="json")
+
+    rebuilt = restore_chat_agent(
+        _suspended(original, state),
+        llm=llm,
+        tools=original.configured_tools,
+        user_identity=None,
+    )
+    assert isinstance(rebuilt, ChatAgent)
+    rebuilt.restore_state(state)
+    run_agent(rebuilt, max_steps=3, messages=[UserMessage(content="Go")])
+
+    names, _, _ = _offered(llm)
+    assert names == [EchoTool().name, "skills_list", "skills_read"]
+
+
+def test_restored_deep_research_offers_the_skill_tools_like_the_original(
+    _user_skills: User,
+) -> None:
+    llm = ScriptedLLM([])
+    original = DeepResearchAgent(
+        messages=[],
+        allowed_tools=[SkillsListTool(_user_skills), SkillsReadTool(_user_skills)],
+        llm=llm,
+        token_counter=len,
+        user_identity=None,
+        language_section="",
+        reasoning_effort=ReasoningEffort.LOW,
+        all_injected_file_metadata={},
+        skip_clarification=True,
+    )
+
+    rebuilt = restore_chat_agent(
+        _suspended(original, original.capture_state().model_dump(mode="json")),
+        llm=llm,
+        tools=original.application_tools,
+        user_identity=None,
+    )
+
+    names = [tool.definition.name for tool in original.tools]
+    assert {"skills_list", "skills_read"} <= set(names)
+    assert [tool.definition for tool in rebuilt.tools] == [
+        tool.definition for tool in original.tools
+    ]
+    assert isinstance(rebuilt, DeepResearchAgent)
+    for agent in (original, rebuilt):
+        assert agent.skills_catalog_message is not None
+        assert "- triage: Sort." in agent.skills_catalog_message.text

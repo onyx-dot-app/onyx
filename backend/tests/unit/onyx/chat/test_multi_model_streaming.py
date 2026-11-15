@@ -394,6 +394,8 @@ def _make_setup(n_models: int = 1) -> MagicMock:
             )
         )
     setup.incognito_record_mode = None
+    setup.mentions = []
+    setup.has_chat_skills = False
     setup.cache.exists.return_value = False
     setup.admission.cache = setup.cache
     # Fields consumed by SearchToolConfig / CustomToolConfig / FileReaderToolConfig
@@ -1642,6 +1644,7 @@ def test_message_ids_match_replay_prefix_before_response_output(
         )
     expected.append(
         MultiModelMessageResponseIDInfo(
+            mentions=[],
             user_message_id=999,
             responses=[
                 ModelResponseSlot(message_id=1000, model_name="model-0"),
@@ -1650,7 +1653,7 @@ def test_message_ids_match_replay_prefix_before_response_output(
         )
         if multi_model
         else MessageResponseIDInfo(
-            user_message_id=999, reserved_assistant_message_id=1000
+            mentions=[], user_message_id=999, reserved_assistant_message_id=1000
         )
     )
     setup.new_msg_req = request
@@ -1708,7 +1711,7 @@ def test_disconnect_during_initial_packets_keeps_execution_and_replay_alive(
     entered = threading.Event()
     release = threading.Event()
     first = MessageResponseIDInfo(
-        user_message_id=999, reserved_assistant_message_id=1000
+        mentions=[], user_message_id=999, reserved_assistant_message_id=1000
     )
 
     def generate(**_kwargs: Emitter | LLM | Future[ChatResponseOutcome]) -> None:
@@ -1996,7 +1999,9 @@ def test_full_response_waits_for_execution_after_delivery_ends() -> None:
             assert entered.wait(2)
             ended_delivery: list[AnswerStreamPart] = [
                 MessageResponseIDInfo(
-                    user_message_id=41, reserved_assistant_message_id=42
+                    mentions=[],
+                    user_message_id=41,
+                    reserved_assistant_message_id=42,
                 ),
                 StreamingError(error="Delivery gap", error_code="STREAM_GAP"),
             ]
@@ -2055,7 +2060,9 @@ def test_failed_response_releases_full_response_waiter(failure_stage: str) -> No
                 iter(
                     [
                         MessageResponseIDInfo(
-                            user_message_id=41, reserved_assistant_message_id=42
+                            mentions=[],
+                            user_message_id=41,
+                            reserved_assistant_message_id=42,
                         )
                     ]
                 ),
@@ -2122,7 +2129,9 @@ def test_full_response_reports_save_outcome_after_delivery_ends(
             assert save_started.wait(2)
             ended_delivery: list[AnswerStreamPart] = [
                 MessageResponseIDInfo(
-                    user_message_id=41, reserved_assistant_message_id=1000
+                    mentions=[],
+                    user_message_id=41,
+                    reserved_assistant_message_id=1000,
                 ),
                 StreamingError(error="Delivery gap", error_code="STREAM_GAP"),
             ]
@@ -3364,7 +3373,9 @@ def test_chat_delivery_reports_the_cycle_of_the_first_answer(
 def test_caller_wait_timeout_does_not_cancel_execution_outcome() -> None:
     outcome = Future[ChatResponseOutcome]()
     packets: list[AnswerStreamPart] = [
-        MessageResponseIDInfo(user_message_id=41, reserved_assistant_message_id=42)
+        MessageResponseIDInfo(
+            mentions=[], user_message_id=41, reserved_assistant_message_id=42
+        )
     ]
     with patch("onyx.chat.process_message.CHAT_RESPONSE_WAIT_TIMEOUT_S", 0.001):
         with pytest.raises(TimeoutError):
