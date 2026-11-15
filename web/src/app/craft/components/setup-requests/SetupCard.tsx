@@ -14,7 +14,7 @@ import {
   startExternalAppOAuth,
   upsertUserCredentials,
 } from "@/app/craft/services/externalAppsService";
-import CometEdge from "@/app/craft/components/CometEdge";
+import CometEdge from "@/refresh-components/CometEdge";
 import {
   OAUTH_POPUP_MESSAGE_SOURCE,
   OAuthPopupMessage,

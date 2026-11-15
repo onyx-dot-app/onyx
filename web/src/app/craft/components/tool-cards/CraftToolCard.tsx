@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Collapsible, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgChevronDown, SvgSparkle, SvgLoader } from "@opal/icons";
-import CometEdge from "@/app/craft/components/CometEdge";
+import CometEdge from "@/refresh-components/CometEdge";
 import SkillBadge from "@/app/craft/components/tool-cards/SkillBadge";
 import BashBody from "@/app/craft/components/tool-cards/BashBody";
 import DiffBody from "@/app/craft/components/tool-cards/DiffBody";

@@ -24,18 +24,53 @@ const approval: ApprovalView = {
   expires_at: null,
   decision: null,
   decided_at: null,
+  decided_via: null,
   is_live: true,
 };
+test("a pending request shows its header, details, and decisions inside the comet border", () => {
+  const { container } = render(
+    <ApprovalCard
+      approval={{
+        ...approval,
+        display_payload: { channel: "#general" },
+        expires_at: "2099-01-01T00:00:00Z",
+      }}
+    />
+  );
+  const trigger = screen.getByRole("button", {
+    name: /^Approval requested: Send message in Slack/,
+  });
+  expect(trigger).toHaveAttribute("aria-expanded", "true");
+  expect(trigger).toHaveTextContent(/Approve by \d{1,2}:\d{2}\s?[AP]M$/);
+  expect(container.querySelector(".craft-comet")).not.toBeNull();
+  expect(screen.getByText("#general")).toBeVisible();
+  expect(
+    screen
+      .getAllByRole("button")
+      .slice(1)
+      .map((button) => button.textContent)
+  ).toEqual(["Approve once", "Approve for session", "Reject"]);
+});
+
 // Decision submission
 describe("Decision submission", () => {
   it("uses the shared decision endpoint for session approval", async () => {
+    jest.mocked(postApprovalDecision).mockResolvedValue({
+      ...approval,
+      decision: "APPROVED",
+      decided_via: "SESSION_GRANT",
+      is_live: false,
+    });
     const user = setupUser();
     render(<ApprovalCard approval={approval} />);
     await user.click(screen.getByRole("button", { name: /approve.*session/i }));
+    expect(postApprovalDecision).toHaveBeenCalledWith(
+      "request",
+      "approve_session"
+    );
     await waitFor(() =>
-      expect(postApprovalDecision).toHaveBeenCalledWith(
-        "request",
-        "approve_session"
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Approved for this session: Send message in Slack"
       )
     );
   });
@@ -49,20 +84,18 @@ describe("Expiry", () => {
         approval={{ ...approval, is_live: false, decision: "EXPIRED" }}
       />
     );
-    expect(screen.queryByText("Rejected")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Approval timed out. The action did not run.")
-    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Timed out: Send message in Slack"
+    );
     expect(
       screen.queryByRole("button", { name: /approve.*once/i })
     ).not.toBeInTheDocument();
   });
   it("treats abandoned undecided requests outside the live window as expired", () => {
     render(<ApprovalCard approval={{ ...approval, is_live: false }} />);
-    expect(screen.queryByText("Rejected")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Approval timed out. The action did not run.")
-    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Timed out: Send message in Slack"
+    );
   });
 
   it("keeps server-live approvals actionable when the device clock is ahead", () => {
@@ -98,20 +131,17 @@ describe("Session approval eligibility", () => {
   });
 });
 
-test("expired outcomes use a collapsed neutral row with expandable details", async () => {
-  const user = setupUser();
+test("expired outcomes leave a one-line neutral record", () => {
   const { container } = render(
     <ApprovalCard
       approval={{ ...approval, decision: "EXPIRED", is_live: false }}
     />
   );
-  const row = screen.getByRole("button", { name: /Approval timed out/ });
-  expect(row).toHaveAttribute("aria-expanded", "false");
-  expect(screen.getByText("Send message in Slack")).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "Timed out: Send message in Slack"
+  );
   expect(container.querySelector(".craft-comet")).toBeNull();
   expect(container.querySelector(".border-status-error-03")).toBeNull();
+  expect(screen.queryByRole("button")).not.toBeInTheDocument();
   expect(screen.queryByText("No payload.")).not.toBeInTheDocument();
-  await user.click(row);
-  expect(row).toHaveAttribute("aria-expanded", "true");
-  expect(await screen.findByText("No payload.")).toBeVisible();
 });
