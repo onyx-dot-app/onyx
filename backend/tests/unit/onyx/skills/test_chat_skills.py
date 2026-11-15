@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from onyx.agents.tools import ToolInvocation
 from onyx.chat.mention_models import SkillMention
+from onyx.db.models import User
 from onyx.llm.cancellation import CancellationSignal
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.skill_prompts import SKILLS_OMITTED_LINE
@@ -66,64 +67,88 @@ def test_catalog_caps_one_description() -> None:
     assert len(line) == len("- long: ") + MAX_CATALOG_DESCRIPTION_CHARS
 
 
-def test_catalog_shortens_long_descriptions_to_one_limit_over_budget() -> None:
+def _line_tokens(line: str) -> int:
+    # Codex's cost of a catalog line: four bytes a token, newline included.
+    return -(-(len(line.encode()) + 1) // 4)
+
+
+def test_catalog_gives_description_characters_to_each_skill_in_turn() -> None:
     skills = [_skill(f"skill-{index}", "y" * 400) for index in range(10)]
     skills.append(_skill("short", "Fits."))
-    # 2% of 20,000 tokens at four bytes a token is 1,600 bytes.
+    # 2% of 20,000 tokens is 400 tokens.
     catalog = render_skills_catalog(skills, 20_000)
 
     assert catalog is not None
     lines = _catalog_lines(catalog)
     assert len(lines) == len(skills)
-    total = len("\n".join(lines))
-    assert total <= 1600
-    cut = {len(line.split(": ", 1)[1]) for line in lines[:-1]}
-    assert len(cut) == 1
+    assert sum(map(_line_tokens, lines)) <= 400
     assert lines[-1] == "- short: Fits."
+    cut = [len(line.split(": ", 1)[1]) for line in lines[:-1]]
+    # No skill takes the budget from the others: the cuts differ by at most
+    # one token of characters.
+    assert max(cut) - min(cut) <= 4
+    assert 0 < min(cut) < 400
     # A description cut for the budget has no ellipsis.
-    assert not any(line.endswith("...") for line in lines)
-    # The largest limit is used: one more character for each cut description
-    # would not fit.
-    assert total + len(lines) - 1 > 1600
+    assert not any(line.endswith(".") for line in lines[:-1])
 
 
 def test_catalog_budget_counts_utf8_bytes() -> None:
     # Two bytes a character: the character count fits the budget, the byte
     # count does not.
-    skills = [_skill(f"skill-{index}", "é" * 100) for index in range(10)]
+    skills = [_skill(f"skill-{index}", "é" * 300) for index in range(10)]
 
     catalog = render_skills_catalog(skills, 20_000)
 
     assert catalog is not None
     lines = _catalog_lines(catalog)
-    assert len("\n".join(lines).encode()) <= 1600
+    assert sum(map(_line_tokens, lines)) <= 400
     assert all(
-        line.endswith("é") and len(line) < len("- skill-0: ") + 100 for line in lines
+        line.endswith("é") and len(line) < len("- skill-0: ") + 300 for line in lines
     )
+
+
+def test_catalog_cut_below_the_cap_keeps_no_part_of_its_ellipsis() -> None:
+    # 258 tokens fit the name and 1,023 description characters, but not the
+    # capped 1,024-character description that ends in "...".
+    catalog = render_skills_catalog([_skill("long", "x" * 5000)], 12_900)
+
+    assert catalog is not None
+    assert _catalog_lines(catalog) == ["- long: " + "x" * 1023]
 
 
 def test_catalog_omits_skills_when_names_do_not_fit() -> None:
     skills = [_skill(f"skill-number-{index}") for index in range(100)]
+    # 200 tokens; each name line costs 5.
     catalog = render_skills_catalog(skills, 10_000)
 
     assert catalog is not None
     lines = _catalog_lines(catalog)
     omitted = len(skills) - (len(lines) - 1)
-    assert 1 < omitted < len(skills)
     assert lines[-1] == SKILLS_OMITTED_LINE.format(count=omitted, skills="skills")
-    assert len("\n".join(lines)) <= 800
+    assert sum(map(_line_tokens, lines)) <= 200
     assert lines[:-1] == [f"- {skill.name}" for skill in skills[: len(lines) - 1]]
+    # The omitted line is charged: one more name would not fit with it.
+    assert sum(map(_line_tokens, lines)) + 5 > 200
 
 
-def test_catalog_counts_one_omitted_skill_in_the_singular() -> None:
-    # 240 bytes: two names and the omitted line fit, three names do not.
-    skills = [_skill("a" * 80), _skill("b" * 80), _skill("c" * 80)]
+def test_catalog_lists_a_later_skill_that_fits_when_names_do_not() -> None:
+    # 60 tokens: the second name does not fit after the first, the later
+    # short names do.
+    skills = [_skill("a" * 100), _skill("b" * 200), _skill("c"), _skill("d")]
     catalog = render_skills_catalog(skills, 3_000)
 
     assert catalog is not None
-    assert _catalog_lines(catalog)[-1] == SKILLS_OMITTED_LINE.format(
-        count=1, skills="skill"
-    )
+    assert _catalog_lines(catalog) == [
+        f"- {'a' * 100}",
+        "- c",
+        "- d",
+        SKILLS_OMITTED_LINE.format(count=1, skills="skill"),
+    ]
+
+
+def test_catalog_is_left_out_when_the_omitted_line_does_not_fit() -> None:
+    # One token fits no skill and no omitted line.
+    assert render_skills_catalog([_skill("pdf-report")], 50) is None
 
 
 def test_skills_list_shows_the_full_description_capped() -> None:
@@ -132,15 +157,24 @@ def test_skills_list_shows_the_full_description_capped() -> None:
         _skill("long", "z" * 2000),
     ]
 
-    result = SkillsListTool(skills)._run(
-        ToolInvocation(
-            call_id="list",
-            arguments={},
-            cancellation=CancellationSignal(),
-            update=lambda _progress: None,
+    with (
+        patch(
+            "onyx.tools.tool_implementations.skills.skill_tools.get_session_with_current_tenant"
         ),
-        ToolContext(),
-    )
+        patch(
+            "onyx.tools.tool_implementations.skills.skill_tools.list_chat_skills",
+            return_value=skills,
+        ),
+    ):
+        result = SkillsListTool(User(id=uuid4()))._run(
+            ToolInvocation(
+                call_id="list",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
 
     notes, long = result.content.splitlines()
     assert notes == "- notes: Write release notes."

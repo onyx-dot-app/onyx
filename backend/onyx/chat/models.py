@@ -64,7 +64,6 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     StreamingError,
 )
-from onyx.skills.models import ChatSkill
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoadedFile
 from onyx.tools.models import (
     ChatFile,
@@ -126,6 +125,12 @@ def recorded_mentions(message: Message) -> list[RecordedMention]:
     )
 
 
+def skill_message_id(message_id: str, version_id: UUID) -> str:
+    """The id of the `<skill>` message that a message's pick of a skill
+    version gives the model."""
+    return f"{message_id}:skill:{version_id}"
+
+
 def picked_skill_messages(
     message_id: str,
     mentions: Sequence[RecordedMention],
@@ -138,7 +143,7 @@ def picked_skill_messages(
         raise ValueError("Each picked skill needs its saved skill message")
     return [
         UserMessage(
-            id=f"{message_id}:skill:{mention.version_id}",
+            id=skill_message_id(message_id, mention.version_id),
             content=by_version[mention.version_id].content,
             metadata=PromptMetadata(
                 token_count=by_version[mention.version_id].token_count,
@@ -856,8 +861,9 @@ class ChatTurnSetup(BaseModel):
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext
-    # The custom skills the user runs, for the skill tools and their catalog.
-    chat_skills: list[ChatSkill]
+    # The turn offers the skill tools when the user had custom skills as it
+    # started; the tools and each agent's catalog read the current skills.
+    has_chat_skills: bool
     # For deep research: was the last assistant message a clarification request?
     skip_clarification: bool
     cache: CacheBackend

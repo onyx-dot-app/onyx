@@ -1,17 +1,18 @@
-"""Tools that list the user's skills and read their instructions."""
+"""Tools that list the user's skills and read their instructions. Each call
+reads the user's current skills, as Codex reads the current files."""
 
 from collections.abc import Sequence
 from typing import ClassVar, Final
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.agents.tools import ToolInvocation
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import User
+from onyx.db.skill import list_chat_skills
 from onyx.llm.models import SystemMessage, ToolDefinition, ToolResult
 from onyx.skills.chat import render_skills_catalog, truncate_catalog_description
 from onyx.skills.content import read_versions_skill_md
-from onyx.skills.models import ChatSkill
 from onyx.tools.constants import SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME
 from onyx.tools.interface import (
     Tool,
@@ -49,8 +50,8 @@ class _SkillTool(Tool):
     code_mode_exposure = CodeModeExposure.DIRECT
     arguments: ClassVar[type[BaseModel]]
 
-    def __init__(self, skills: Sequence[ChatSkill]) -> None:
-        self.skills = list(skills)
+    def __init__(self, user: User) -> None:
+        self.user = user
 
     def tool_definition(self) -> ToolDefinition:
         return tool_definition_from_arguments(
@@ -74,14 +75,16 @@ class SkillsListTool(_SkillTool):
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         request = parse_tool_arguments(SkillsListArguments, invocation.arguments)
-        page = self.skills[request.offset : request.offset + SKILLS_PER_PAGE]
+        with get_session_with_current_tenant() as db_session:
+            skills = list_chat_skills(db_session, self.user)
+        page = skills[request.offset : request.offset + SKILLS_PER_PAGE]
         lines = [
             f"- {skill.name}: {truncate_catalog_description(skill.description)}"
             for skill in page
         ]
         end = request.offset + len(page)
-        if end < len(self.skills):
-            lines.append(f"{len(self.skills) - end} more skills: use offset={end}.")
+        if end < len(skills):
+            lines.append(f"{len(skills) - end} more skills: use offset={end}.")
         return ToolResult(
             content="\n".join(lines) if lines else "No skills at this offset.",
             details=self._summary({"skills": len(page)}),
@@ -97,26 +100,27 @@ class SkillsReadTool(_SkillTool):
     )
     arguments = SkillsReadArguments
 
-    def __init__(self, skills: Sequence[ChatSkill], user_id: UUID) -> None:
-        super().__init__(skills)
-        self.user_id = user_id
-
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         request = parse_tool_arguments(SkillsReadArguments, invocation.arguments)
-        skill = next(
-            (skill for skill in self.skills if skill.name == request.name), None
-        )
-        if skill is None:
-            raise ToolCallException(
-                message=f"Unknown skill: {request.name}",
-                llm_facing_message=(
-                    f"No skill is named '{request.name}'. Call "
-                    f"{SKILLS_LIST_TOOL_NAME} for the skills you can use."
-                ),
-            )
         with get_session_with_current_tenant() as db_session:
+            skill = next(
+                (
+                    skill
+                    for skill in list_chat_skills(db_session, self.user)
+                    if skill.name == request.name
+                ),
+                None,
+            )
+            if skill is None:
+                raise ToolCallException(
+                    message=f"Unknown skill: {request.name}",
+                    llm_facing_message=(
+                        f"No skill is named '{request.name}'. Call "
+                        f"{SKILLS_LIST_TOOL_NAME} for the skills you can use."
+                    ),
+                )
             skill_md = read_versions_skill_md(
-                [skill.version_id], self.user_id, db_session
+                [skill.version_id], self.user.id, db_session
             ).get(skill.version_id)
         if skill_md is None:
             raise ToolCallException(
@@ -138,14 +142,15 @@ class SkillsReadTool(_SkillTool):
 def skills_catalog_message(
     tools: Sequence[Tool], context_window_tokens: int
 ) -> SystemMessage | None:
-    """The catalog of the skills that an agent's `skills_list` lists, for its
-    prompt. Chat, Deep Research and research agents all build it here."""
-    catalog = next(
-        (
-            render_skills_catalog(tool.skills, context_window_tokens)
-            for tool in tools
-            if isinstance(tool, SkillsListTool)
-        ),
-        None,
-    )
+    """The catalog of the user's current skills, for the prompt of an agent
+    that has `skills_list`. Chat, Deep Research and research agents each
+    build it once, when the agent is built, so the prompt stays the same for
+    the agent's steps."""
+    list_tool = next((tool for tool in tools if isinstance(tool, SkillsListTool)), None)
+    if list_tool is None:
+        return None
+    with get_session_with_current_tenant() as db_session:
+        catalog = render_skills_catalog(
+            list_chat_skills(db_session, list_tool.user), context_window_tokens
+        )
     return SystemMessage(content=catalog) if catalog is not None else None

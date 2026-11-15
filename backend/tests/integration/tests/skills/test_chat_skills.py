@@ -660,23 +660,49 @@ def test_message_sent_into_a_running_response_gets_its_picked_skill(
         assert _texts_after(request, sent) == [_injected(skill.name, skill_md)]
 
 
-def test_a_send_picks_from_the_skills_of_its_running_response(
+def test_a_send_picks_a_skill_created_while_its_response_runs(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     # The user has a skill when the response starts, so it has the skill
-    # tools; a skill created while it runs is not in their list.
+    # tools; they and the send's picks read the skills the user has now.
     _create_skill(admin_user)
-    created: list[str] = []
+    name = f"chat-skill-{uuid4().hex[:8]}"
+    description = f"Write a summary {uuid4().hex[:8]}."
+    instructions = f"Lead with the outcome. Marker {uuid4().hex}."
+    created: list[SkillResponse] = []
 
     def create_during_response() -> SkillResponse:
-        skill, _, skill_md = _create_skill(admin_user)
-        created.append(skill_md)
-        return skill
+        created.append(
+            SkillManager.create_from_editor(
+                admin_user,
+                name=name,
+                description=description,
+                instructions_markdown=instructions,
+            )
+        )
+        return created[0]
 
     sent = "Also use the new skill."
     gate = f"running-{uuid4().hex}"
     chat_session = ChatSessionManager.create(user_performing_action=admin_user)
-    mock_llm.conversation("chat", *_paused_then_answers(gate))
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            text="Checking.",
+            tool_calls=[ToolCall(id="call_list", name="skills_list")],
+            pause_after_first_chunk=gate,
+        ),
+        Reply(
+            tool_calls=[
+                ToolCall(id="call_read", name="skills_read", arguments={"name": name})
+            ],
+            conditions=RequestConditions(has_results_for=["call_list"]),
+        ),
+        Reply(
+            text="Answer with the skill.",
+            conditions=RequestConditions(has_results_for=["call_read"]),
+        ),
+    )
 
     response = _send_during_response(
         mock_llm, chat_session.id, admin_user, gate, sent, create_during_response
@@ -688,12 +714,12 @@ def test_a_send_picks_from_the_skills_of_its_running_response(
         for packet in response.packets
         if packet["obj"]["type"] == StreamingType.USER_MESSAGE.value
     ]
-    # The pick is resolved against the response's skills, as its skill tools
-    # are, so the new skill is not applied.
-    assert accepted["mentions"] == []
-    _, next_step = mock_llm.requests_in("chat")
-    assert created[0] not in next_step.prompt_text
-    assert _texts_after(next_step, sent) == []
+    assert [(m["type"], m["name"]) for m in accepted["mentions"]] == [("skill", name)]
+    skill_md = _skill_md(created[0], description, instructions)
+    _, read_step, answer_step = mock_llm.requests_in("chat")
+    assert _texts_after(read_step, sent) == [_injected(name, skill_md)]
+    assert f"- {name}: {description}" in (read_step.tool_result("call_list") or "")
+    assert answer_step.tool_result("call_read") == skill_md
 
 
 def test_deleted_picked_skill_keeps_its_text_in_later_turns(

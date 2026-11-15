@@ -11,6 +11,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.agents.compaction import is_input_context
 from onyx.auth.permissions import has_global_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
@@ -51,12 +52,12 @@ from onyx.chat.models import (
     ChatTurnSetup,
     CreateChatSessionID,
     PersonaPromptConfig,
-    PromptMetadata,
     QueuedChatTurn,
     ReservedChatResponse,
     ToolCallResponse,
     picked_skill_messages,
 )
+from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.prompt_utils import (
     calculate_reserved_tokens,
     get_default_base_system_prompt,
@@ -438,7 +439,7 @@ def prepare_chat_turn(
                     OnyxErrorCode.BAD_REQUEST,
                     "The Coding Agent is not available in incognito. Start a normal chat to use it.",
                 )
-            # One read serves the skill tools, their catalog and the skills
+            # One read serves the catalog's context reservation and the skills
             # that an accepted question picked.
             chat_skills = list_chat_skills(db_session, user)
             # A question records its picks when it is accepted, after the
@@ -700,6 +701,7 @@ def prepare_chat_turn(
         ):
             history.all_injected_file_metadata = {}
         # Persistent history and the accepted user row are already loaded and saved.
+        history_store: RedisChatHistoryStore | None = None
         if not record_mode_persists_content(incognito_record_mode):
             admission.refresh()
             history_store = RedisChatHistoryStore(
@@ -710,10 +712,6 @@ def prepare_chat_turn(
             history, previous_run_id, checkpoint = history_store.prepare_messages(
                 history, accepted_text
             )
-            admission.refresh()
-            history_store.save_user_messages(history)
-            if incognito_session_ended(chat_session_id):
-                raise RuntimeError("Incognito session ended")
         admission.refresh()
         extracted_files = extract_context_files(
             user_files=context_user_files,
@@ -725,10 +723,9 @@ def prepare_chat_turn(
             # history holds them.
             reserved_token_count=reserved_tokens
             + sum(
-                message.metadata.token_count or 0
+                prompt_metadata(message).token_count or 0
                 for message in history.messages[history.input_start :]
-                if isinstance(message.metadata, PromptMetadata)
-                and message.metadata.is_input_context
+                if is_input_context(message)
             ),
         )
         admission.refresh()
@@ -748,6 +745,12 @@ def prepare_chat_turn(
             )
         ):
             preferred_tool_id = None
+        # Temporary history is saved after the work that can reject the turn.
+        if history_store is not None:
+            admission.refresh()
+            history_store.save_user_messages(history)
+            if incognito_session_ended(chat_session_id):
+                raise RuntimeError("Incognito session ended")
         admission.refresh()
         # Reserve assistant message IDs so each model response has a saved identity.
         with get_session_with_current_tenant() as db_session:
@@ -800,7 +803,7 @@ def prepare_chat_turn(
             chat_files_for_tools=chat_files_for_tools,
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,
-            chat_skills=chat_skills,
+            has_chat_skills=bool(chat_skills),
             skip_clarification=skip_clarification,
             cache=get_cache_backend(),
             admission=admission,

@@ -57,7 +57,6 @@ def ownership(
         cache=cache,
         follow_up_steps=4,
         user=User(),
-        chat_skills=[],
         control_cache=cache,
     )
     lease = _OwnerLease(ResponseOwner(token=uuid4(), root_message_id=1))
@@ -203,7 +202,6 @@ def test_saved_child_tool_calls_keep_their_tool_id_and_display_name(
         follow_up_steps=4,
         control_cache=cache,
         user=User(),
-        chat_skills=[],
         tool_ids={name: 7},
     )
     call = ModelToolCall(id="call", name=name, arguments={})
@@ -262,7 +260,6 @@ def test_every_step_receives_a_bounded_number_of_child_results(
         follow_up_steps=4,
         control_cache=cache,
         user=User(),
-        chat_skills=[],
     )
     finished = [
         AgentResultState(
@@ -324,7 +321,6 @@ def test_the_agent_cap_counts_runs_of_a_later_turn_on_the_branch(
         follow_up_steps=4,
         control_cache=cache,
         user=User(),
-        chat_skills=[],
     )
     later = ChatBranch(chat_session_id=chat_id, message_ids=[3, 1])
     counted: list[list[int]] = []

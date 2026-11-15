@@ -395,6 +395,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
         )
     setup.incognito_record_mode = None
     setup.mentions = []
+    setup.has_chat_skills = False
     setup.cache.exists.return_value = False
     setup.admission.cache = setup.cache
     # Fields consumed by SearchToolConfig / CustomToolConfig / FileReaderToolConfig

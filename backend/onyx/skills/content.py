@@ -16,7 +16,7 @@ from onyx.skills.bundle import (
     TEMPLATE_SUFFIX,
     custom_bundle_contents_from_stored,
     inspect_custom_bundle,
-    read_custom_bundle_skill_md,
+    read_stored_bundle,
     strip_skill_md_frontmatter,
 )
 from onyx.skills.models import CustomSkillBundleContents
@@ -117,7 +117,7 @@ def read_versions_skill_md(
             skill_md[version_id] = stored.skill_md
             continue
         try:
-            skill_md[version_id] = read_custom_bundle_skill_md(
+            skill_md[version_id], _ = read_stored_bundle(
                 read_skill_bundle_blob(stored.bundle_file_id, str(version_id))
             )
         except OnyxError:

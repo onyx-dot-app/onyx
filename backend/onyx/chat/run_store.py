@@ -93,11 +93,11 @@ from onyx.db.chat_subagents import (
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import User
+from onyx.db.skill import list_chat_skills
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, UserMessage
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.skills.chat import accept_picked_skills
-from onyx.skills.models import ChatSkill
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -277,7 +277,6 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         cache: CacheBackend,
         follow_up_steps: int,
         user: User,
-        chat_skills: Sequence[ChatSkill],
         restore_subagent: Callable[[SavedAgentContext, int], Agent] | None = None,
         root_response: RunStore | None = None,
         control_cache: CacheBackend | None = None,
@@ -286,9 +285,6 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         answers_agent_results: bool = False,
     ) -> None:
         self.tenant_id = tenant_id
-        # The skills that the runs' skill tools hold; a sent message's picks
-        # are accepted against them.
-        self._chat_skills = chat_skills
         # The root response answers unread agent results under a hidden
         # AGENT_RESULTS question, as a released wait's follow-up does.
         self._answers_agent_results = answers_agent_results
@@ -488,10 +484,10 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
     def receive_inputs(self, run: Run) -> list[UserMessage]:
         """Read sent messages, then finished results of children this run's agent started.
 
-        A sent message's picks are accepted here, as a question's are when its
-        turn starts, against the skills that the run's skill tools hold: each
-        skill is recorded at that version, and its `<skill>` message follows
-        the message.
+        A sent message's picks are accepted here, against the user's skills
+        now, as a question's are when its turn starts: each skill is recorded
+        at the version the user runs, and its `<skill>` message follows the
+        message.
         """
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
             received, results = read_run_inputs(
@@ -510,7 +506,9 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 for message in received
             ]
             accepted = (
-                accept_picked_skills(picks, self._chat_skills, self._user.id, session)
+                accept_picked_skills(
+                    picks, list_chat_skills(session, self._user), self._user.id, session
+                )
                 if any(picks)
                 else [AcceptedPicks() for _ in received]
             )

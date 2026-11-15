@@ -97,7 +97,7 @@ def test_research_request_restores_a_chat_child_without_a_live_chat_root(
     setup.user_identity = LLMUserIdentity()
     setup.chat_files_for_tools = []
     setup.reasoning_effort = ReasoningEffort.AUTO
-    setup.chat_skills = []
+    setup.has_chat_skills = False
     setup.all_injected_file_metadata = {}
     setup.incognito_record_mode = None
     configuration = ChatConfiguration(kind="chat")
@@ -379,7 +379,6 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
             cache=cache,
             follow_up_steps=4,
             user=User(),
-            chat_skills=[],
             control_cache=cache,
         )
         CURRENT_TENANT_ID_CONTEXTVAR.set("caller-tenant")

@@ -1,5 +1,6 @@
 """Rebuild feature configuration and resources without replacing saved conversation state."""
 
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -19,6 +20,7 @@ from onyx.chat.agent import ChatAgent
 from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.restoration import restore_chat_agent
 from onyx.context.models import UserInfo, UserMemoryContext
+from onyx.db.models import User
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
@@ -353,13 +355,29 @@ def test_restored_chat_keeps_the_saved_code_mode(
     assert f"selected these operations for this request: {preferred}." in request_text
 
 
-def test_restored_chat_offers_the_skill_tools_once() -> None:
+@pytest.fixture
+def _user_skills(monkeypatch: pytest.MonkeyPatch) -> User:
+    """A user whose current skills are one skill, as the skill tools and
+    the catalog read them."""
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.skills.skill_tools.get_session_with_current_tenant",
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.skills.skill_tools.list_chat_skills",
+        lambda _session, _user: [
+            ChatSkill(name="triage", description="Sort.", version_id=uuid4())
+        ],
+    )
+    return User(id=uuid4())
+
+
+def test_restored_chat_offers_the_skill_tools_once(_user_skills: User) -> None:
     # Restoration receives the turn's configured tools, skill tools included.
     llm = ScriptedLLM([Delta(content="done")])
-    skills = [ChatSkill(name="triage", description="Sort.", version_id=uuid4())]
     original = _chat_agent(
         llm,
-        tools=[EchoTool(), SkillsListTool(skills), SkillsReadTool(skills, uuid4())],
+        tools=[EchoTool(), SkillsListTool(_user_skills), SkillsReadTool(_user_skills)],
     )
     state = original.capture_state().model_dump(mode="json")
 
@@ -377,12 +395,13 @@ def test_restored_chat_offers_the_skill_tools_once() -> None:
     assert names == [EchoTool().name, "skills_list", "skills_read"]
 
 
-def test_restored_deep_research_offers_the_skill_tools_like_the_original() -> None:
+def test_restored_deep_research_offers_the_skill_tools_like_the_original(
+    _user_skills: User,
+) -> None:
     llm = ScriptedLLM([])
-    skills = [ChatSkill(name="triage", description="Sort.", version_id=uuid4())]
     original = DeepResearchAgent(
         messages=[],
-        allowed_tools=[SkillsListTool(skills), SkillsReadTool(skills, uuid4())],
+        allowed_tools=[SkillsListTool(_user_skills), SkillsReadTool(_user_skills)],
         llm=llm,
         token_counter=len,
         user_identity=None,

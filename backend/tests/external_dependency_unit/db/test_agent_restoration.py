@@ -284,7 +284,6 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
             cache=get_cache_backend(),
             follow_up_steps=4,
             user=User(),
-            chat_skills=[],
             restore_subagent=restore_research,
         )
         coordinator = run_store.bind(

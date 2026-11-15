@@ -558,7 +558,6 @@ def test_later_child_run_keeps_earlier_unread_result(
         cache=cache,
         follow_up_steps=4,
         user=User(),
-        chat_skills=[],
         control_cache=cache,
     )
     coordinator = AgentCoordinator()
@@ -676,7 +675,6 @@ def test_abandoned_background_child_is_delivered_as_failure(
         cache=cache,
         follow_up_steps=4,
         user=User(),
-        chat_skills=[],
         control_cache=cache,
     )
     coordinator = AgentCoordinator()
@@ -2832,7 +2830,6 @@ def test_coordinator_discovery_reads_no_content_or_inbox(
         cache=cache,
         follow_up_steps=4,
         user=User(),
-        chat_skills=[],
         control_cache=cache,
     )
     coordinator = AgentCoordinator(directory=store)
@@ -4054,7 +4051,6 @@ def test_existing_descendant_accepts_an_ancestor_invocation_without_reparenting(
             cache=cache,
             follow_up_steps=4,
             user=User(),
-            chat_skills=[],
             control_cache=cache,
         )
 

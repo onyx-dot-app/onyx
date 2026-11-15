@@ -30,6 +30,7 @@ from onyx.chat.models import (
     ToolReplayData,
     accepted_input_messages,
     recorded_mentions,
+    skill_message_id,
 )
 from onyx.chat.response import restore_response_sources
 from onyx.configs.constants import DocumentSource, MessageType
@@ -910,9 +911,10 @@ def _invoking_message_id(invocation: ToolCall) -> str:
 
 
 def _accepted_inputs(messages: list[UserMessage]) -> list[AcceptedChatInput]:
+    # A picked skill's message is saved with the input that picked it.
+    skills = {message.id: message for message in messages if is_input_context(message)}
     inputs: list[AcceptedChatInput] = []
-    for index, message in enumerate(messages):
-        # A picked skill's message is saved with the input that picked it.
+    for message in messages:
         if is_input_context(message):
             continue
         if message.id is None or not isinstance(message.content, str):
@@ -920,11 +922,10 @@ def _accepted_inputs(messages: list[UserMessage]) -> list[AcceptedChatInput]:
         origin = message.metadata
         mentions = recorded_mentions(message)
         skill_messages: list[PickedSkillMessage] = []
-        for offset, mention in enumerate(mentions, start=index + 1):
-            skill = messages[offset] if offset < len(messages) else None
+        for mention in mentions:
+            skill = skills.get(skill_message_id(message.id, mention.version_id))
             if (
                 skill is None
-                or skill.id != f"{message.id}:skill:{mention.version_id}"
                 or not isinstance(skill.metadata, PromptMetadata)
                 or skill.metadata.token_count is None
             ):

@@ -665,7 +665,6 @@ def bind_run_store(
         cache=get_cache_backend(),
         follow_up_steps=follow_up_steps,
         user=user,
-        chat_skills=setup.chat_skills,
         restore_subagent=partial(
             restore_subagent,
             setup=setup,
@@ -825,14 +824,12 @@ def create_chat_agent(
             search_usage_forcing_setting=setup.search_params.search_usage,
         )
         tools = [tool for tool_list in tools_by_type.values() for tool in tool_list]
-        # Every user with a chat skill gets the skill tools, whatever the
-        # agent's tool selection. Restored and child agents receive them with
+        # Every user with a chat skill when the turn starts gets the skill
+        # tools, whatever the agent's tool selection; each call reads the
+        # user's current skills. Restored and child agents receive them with
         # the other configured tools.
-        if setup.chat_skills:
-            tools += [
-                SkillsListTool(setup.chat_skills),
-                SkillsReadTool(setup.chat_skills, user.id),
-            ]
+        if setup.has_chat_skills:
+            tools += [SkillsListTool(user), SkillsReadTool(user)]
 
         preferred_tool_id = setup.preferred_tool_id
         if preferred_tool_id is not None and preferred_tool_id not in {

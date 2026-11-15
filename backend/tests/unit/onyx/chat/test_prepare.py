@@ -1149,6 +1149,38 @@ def test_incognito_preparation_fails_its_response_when_the_context_ended(
     fail_response.assert_called_once_with(ANY, 3)
 
 
+def test_incognito_preparation_saves_temporary_history_after_its_context_files(
+    monkeypatch: pytest.MonkeyPatch,
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+) -> None:
+    chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    store = MagicMock()
+    store.prepare_messages.return_value = (
+        ChatHistoryResult(
+            messages=[UserMessage(id="chat:2", content="Question")],
+            input_start=0,
+            all_injected_file_metadata={},
+        ),
+        None,
+        None,
+    )
+
+    def extract(**_kwargs: object) -> ExtractedContextFiles:
+        raise RuntimeError("Context files failed")
+
+    monkeypatch.setattr("onyx.chat.process_message.extract_context_files", extract)
+    with patch("onyx.chat.process_message.RedisChatHistoryStore", return_value=store):
+        with pytest.raises(RuntimeError, match="Context files failed"):
+            prepare_chat_turn(
+                SendMessageRequest(message="Question", chat_session_id=chat_session.id),
+                User(id=uuid4(), email="reader@example.com"),
+                llm_overrides=None,
+            )
+    store.prepare_messages.assert_called_once()
+    store.save_user_messages.assert_not_called()
+
+
 @pytest.mark.parametrize("replace_base", [False, True])
 @pytest.mark.parametrize("base_prompt", ["Base prompt", ""])
 def test_project_instructions_supplement_agent_prompt(
