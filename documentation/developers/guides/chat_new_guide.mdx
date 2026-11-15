@@ -276,12 +276,15 @@ Onyx starts that stream before the decision call returns, and `continuation` in 
 | `continuation.stream_id` | The ID of the new stream. It is not a message ID. |
 | `continuation.response_ids` | The IDs of the assistant messages that the stream writes, in model order for a turn that compares models. |
 
-`continuation` names a stream only when the decision starts or finds the new stream of a waiting answer.
-It is `null` in these cases:
+`continuation` names a stream when a continuation stream of the answer runs after the decision.
+That can be the stream that you already read: a continued answer that asks again,
+when the user decides while that stream still runs.
+Ignore a `continuation` whose `stream_id` is the stream that you read. It is `null` in these cases:
 
-- The decision leaves other requests of the answer open.
-- The answer still runs. For example, the decision came before the stream ended with `awaiting_approval`,
-  or another answer of a turn that compares models still runs. Keep reading the current stream.
+- The decision leaves other requests of the answer open, and no continuation stream of the answer runs.
+- The answer's first stream still runs. For example, the decision came before that stream ended with `awaiting_approval`. Keep reading the current stream.
+- Another stream of the chat runs, such as another answer of a turn that compares models.
+  The continuation starts when that stream ends. Read the status, as described below.
 - The request is a background agent's request.
 
 To follow the continuation,
@@ -291,13 +294,16 @@ Show its packets in place of the saved messages in `response_ids`.
 The `replay_end` packet has only a `type` in its `obj`.
 It also comes before the `error` or `stop` packet when the answer cannot continue. A send stream does not send it.
 
-When any stream ends with `awaiting_approval`,
-the new stream of an answer can start without a `continuation` in your decision response. Read the status.
-When every request of the answer already has a decision,
-Onyx keeps `is_processing` `true` from that stop until the new stream starts,
-so the first status read after the stop shows it. While `is_processing` is `true`,
+The new stream of an answer can start without a `continuation` in your decision response,
+for example when the decision came while another stream of the chat ran.
+Read the status after any stream of the chat ends.
+When an answer of the chat waits to continue and each of its requests has a decision,
+Onyx keeps `is_processing` `true` from the end of that stream until the new stream starts,
+so the first status read after the end shows it. While `is_processing` is `true`,
 read it again until `current_stream.response_ids` includes the answer, then read that stream from `cursor=0`.
 Stop when `is_processing` is `false`. Do not open a second reader for a stream that you already read.
+If a temporary storage error stops the new stream from starting, Onyx tries again several times after short waits.
+Between the tries, `is_processing` can be `false`. Read the chat session again later to get the answer.
 
 After a `409` or `404` from the decision call, or when you open the chat session again,
 read `GET /chat/chat-session/{chat_session_id}/status` once. While an answer runs, `is_processing` is `true`,
