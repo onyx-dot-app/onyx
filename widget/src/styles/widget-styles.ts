@@ -674,6 +674,15 @@ export const widgetStyles = css`
     overflow: hidden;
   }
 
+  .approval-source {
+    margin: 0;
+    padding: var(--onyx-space-xs) var(--onyx-space-sm) 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+
   .approval-header {
     display: flex;
     align-items: center;

@@ -85,29 +85,35 @@ send → ApiService                                   services/api-service.ts
   ├─ streamMessage → POST /chat/send-chat-message, origin "widget"
   │    └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
   │         └─ saveSession to sessionStorage, scoped by credential identity
-  ├─ finally: waitForSessionIdle again, then enable Send; a stream id other
-  │    than the reserved assistant id (the sent stream's id) → resumeStream
-  ├─ stop with stop_reason "awaiting_approval" → cards stay actionable, no
-  │    idle wait; the decision follows the continuation
-  └─ stream ended before its response, or 409 APPROVAL_PENDING → resumeStream
-       (409 also shows the session's latest saved answer, the waiting one)
-restore / resumeStream / decision with no stream    widget.ts
-  ├─ GET /chat/chat-session/{id}/resume-stream (cursor lines track stream_id
-  │    and next_cursor; only a 404 stops requests for that stream)
-  ├─ stop with "awaiting_approval" while a card waits → stop following; after
-  │    a decision, resume-stream?cursor=0 follows the continuation, a new
-  │    stream of the same response
+  ├─ stream over → resumeStream({sent}): the one follow path below
+  └─ 409 APPROVAL_PENDING → keep the draft, show the message, resumeStream
+       (shows the session's latest saved answer), point at the waiting card
+decision → POST /chat/approvals/{id}/decision       widget.ts, services/approvals.ts
+  ├─ continuation set → resumeStream from cursor 0 of continuation.stream_id
+  │    (stored for the active follow when a stream is followed)
+  ├─ continuation null → follow nothing; other requests still wait
+  └─ 404/409 → card shows "No longer waiting"; resumeStream follows the
+       current stream, and the saved session shows the outcome
+restore / sent stream / decision / 409 → resumeStream    widget.ts
+  ├─ GET /chat/chat-session/{id}/resume-stream (no stream_id: the current
+  │    stream; cursor lines track stream_id and next_cursor; only a 404 stops
+  │    requests for that stream)
+  ├─ stop with "awaiting_approval" → stop following, unless a decision named
+  │    a continuation during the stream
   ├─ a replayed user_message whose question the transcript lacks inserts it
   │    before the answer (ids from the response-ID packet)
   ├─ ended before its stop → wait 1s, waitForSessionIdle reports current_stream:
   │    same stream → reattach from the last cursor; new stream → from 0
-  ├─ after its stop → waitForSessionIdle; a new stream id → follow from 0
+  ├─ after its stop → waitForSessionIdle, then enable Send; a new stream id
+  │    → follow from 0
   └─ idle with a response unfinished or waiting for decisions, an
-       acknowledged answer not shown, a question with no answer after it, or
-       (restore, 409) a latest answer not shown → GET
-       /chat/get-chat-session/{id}, replay the saved answers (by
-       parent_message for questions; a question with none is removed); on
-       failure it stays unfinished for the next load
+       acknowledged answer not shown, a question with no answer after it,
+       (restore, 409) a latest answer not shown, or a changed
+       approvals_version → GET /chat/get-chat-session/{id}, replay the saved
+       answers (by parent_message for questions; a question with none is
+       removed; a version change replays answers with waiting subagent
+       requests and the latest answer); on failure it stays unfinished for
+       the next load
 ```
 `widget/src/config/config.ts:resolveAuthToken` picks the credential for each
 request: the `tokenProvider` result, else the API key, else it throws. The
@@ -242,9 +248,11 @@ panel picks up the new session when the user returns.
 12. `widget-send-waits-for-idle` **The end of the stream does not enable
     Send.** `widget/src/widget.ts:OnyxChatWidget.sendMessage` polls
     `widget/src/services/api-service.ts:ApiService.waitForSessionIdle` before a
-    send to an existing session and after every send or resumed stream
-    (`OnyxChatWidget.resumeStream`), because the server can still save the
-    turn after the stream ends. Failed polls retry and keep
+    send to an existing session. After every send, `OnyxChatWidget.resumeStream`
+    polls it again when the stream stops, because the server can still save the
+    turn after the stream ends. A stop for decisions is the exception: the
+    response is suspended, and the server refuses a send with 409
+    `APPROVAL_PENDING`. Failed polls retry and keep
     Send disabled; there is no overall deadline. A 403 or 404, a 405, or three
     401s in a row end the wait with an error, and none counts as idle. A
     backend without the status route answers 404, so a new bundle on an older

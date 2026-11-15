@@ -3,6 +3,7 @@
  */
 
 import {
+  ApprovalContinuation,
   ApprovalDecisionResponse,
   ChatSessionDetail,
   MessageResponseIDInfo,
@@ -109,13 +110,15 @@ export class ApiService {
 
   /**
    * Polls the session status until the session is idle (null), or until it
-   * runs a stream that `attachable` accepts (that stream's id).
+   * runs a stream that `attachable` accepts (that stream's id). Each status
+   * read reports its `approvals_version` to `onApprovalsVersion`.
    */
   async waitForSessionIdle(
     sessionId: string,
     signal: AbortSignal,
     onUnconfirmed: () => void,
-    attachable: (streamId: number) => boolean = () => false
+    attachable: (streamId: number) => boolean = () => false,
+    onApprovalsVersion: (version: string) => void = () => {}
   ): Promise<number | null> {
     let authenticationFailures = 0;
     while (!signal.aborted) {
@@ -167,6 +170,12 @@ export class ApiService {
           typeof status.is_processing !== "boolean"
         ) {
           throw new Error("Invalid chat readiness response");
+        }
+        if (
+          "approvals_version" in status &&
+          typeof status.approvals_version === "string"
+        ) {
+          onApprovalsVersion(status.approvals_version);
         }
         if (!status.is_processing) return null;
         const streamId =
@@ -280,7 +289,8 @@ export class ApiService {
 
   /**
    * Submit a decision on a tool call's approval request. Returns "closed"
-   * when the request no longer waits for a decision (404 or 409).
+   * when the request no longer waits for a decision (404 or 409). A response
+   * names the stream that continues the turn when the decision resumed it.
    */
   async submitApprovalDecision(
     approvalId: string,
@@ -308,7 +318,19 @@ export class ApiService {
     ) {
       throw new Error("Invalid approval decision response");
     }
-    return { decision: body.decision, decided_via: body.decided_via };
+    const continuation =
+      "continuation" in body &&
+      typeof body.continuation === "object" &&
+      body.continuation !== null &&
+      "stream_id" in body.continuation &&
+      typeof body.continuation.stream_id === "number"
+        ? (body.continuation as ApprovalContinuation)
+        : null;
+    return {
+      decision: body.decision,
+      decided_via: body.decided_via,
+      continuation,
+    };
   }
 
   /**

@@ -309,22 +309,24 @@ describe("widget readiness", () => {
     expect(widget["inputValue"]).toBe("");
   });
 
-  it("keeps an acknowledged prompt and follows its response again", async () => {
+  it("keeps an acknowledged prompt and finishes its response from the saved session", async () => {
+    const setTimer = globalThis.setTimeout;
+    spyOn(globalThis, "setTimeout").mockImplementation(
+      (callback, delay, ...args) =>
+        setTimer(callback, delay === 1_000 ? 0 : delay, ...args)
+    );
     const widget = new OnyxChatWidget();
     widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
     widget["inputValue"] = "accepted question";
     const api = new ApiService("https://onyx.test/api", async () => "key");
     api.createChatSession = mock(async () => "session");
-    api.waitForSessionIdle = mock(async () => {});
-    let errorDuringResume: string | undefined;
+    // The server ran the turn on and is idle; nothing is left to replay.
+    api.waitForSessionIdle = mock(async () => null);
     api.streamMessage = mock(async function* () {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
       throw new Error("delivery failed");
     });
-    // The server ran the turn on; nothing is left to replay.
-    api.resumeStream = mock(async function* () {
-      errorDuringResume = widget["error"];
-    });
+    api.resumeStream = mock(async function* () {});
     api.getChatSession = mock(async () => ({
       messages: [
         { message_id: 1, message_type: "user" },
@@ -350,12 +352,7 @@ describe("widget readiness", () => {
     } finally {
       Reflect.deleteProperty(globalThis, "sessionStorage");
     }
-    expect(api.resumeStream).toHaveBeenCalledWith(
-      "session",
-      expect.anything(),
-      null
-    );
-    expect(errorDuringResume).toBe("delivery failed");
+    expect(api.resumeStream).not.toHaveBeenCalled();
     expect(widget["messages"]).toHaveLength(2);
     expect(widget["messages"][0]).toMatchObject({
       id: 1,
@@ -655,7 +652,6 @@ describe("widget readiness", () => {
       tool_name: "send_email",
       display_name: "Send email",
       arguments: {},
-      expires_at: "2026-11-13T15:45:00Z",
     });
 
     it("is attached again from its last cursor without repeating packets", async () => {

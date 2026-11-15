@@ -10,6 +10,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { WidgetConfig, ChatMessage, TokenProvider } from "./types/widget-types";
 import {
+  ApprovalDecisionResponse,
   Packet,
   SearchDocument,
   ResolvedCitation,
@@ -34,17 +35,14 @@ import {
   APPROVAL_PENDING_ERROR_CODE,
   ApprovalDecision,
   ApprovalEntry,
-  ApprovalStatus,
-  approvalRecord,
   approvalStatus,
-  ARGUMENT_ROWS_SHOWN,
-  ArgumentRow,
-  argumentRows,
   decidedStatus,
   findPendingApproval,
+  LocalApproval,
   readOutcome,
   responseEnded,
 } from "./services/approvals";
+import { renderApprovalCard } from "./services/approval-card";
 import { MessageIDs, processPacket } from "./services/stream-parser";
 import { saveSession, loadSession, clearSession } from "./utils/storage";
 import { DEFAULT_LOGO } from "./assets/logo";
@@ -74,11 +72,6 @@ function newFollow(streamId: number | null): StreamFollow {
     ended: false,
   };
 }
-
-const ICON_LOADER = html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 1.5v2M8 12.5v2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M1.5 8h2M12.5 8h2M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>`;
-const ICON_CHECK = html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5.5 8l2 2 3-4"/></svg>`;
-const ICON_X = html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>`;
-const ICON_CLOCK = html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>`;
 
 @customElement("onyx-chat-widget")
 export class OnyxChatWidget extends LitElement {
@@ -113,11 +106,9 @@ export class OnyxChatWidget extends LitElement {
   @state() private streamingStatus = ""; // e.g., "Searching the web...", "Generating response..."
   @state() private error?: string;
   @state() private inputValue = "";
-  // Approval ids whose decision request is in flight or failed
-  @state() private submittingApprovals = new Set<string>();
-  @state() private failedApprovals = new Set<string>();
-  // Decisions from this widget, by approval id, until the stream resolves them
-  @state() private localApprovalStatuses = new Map<string, ApprovalStatus>();
+  // This widget's state for each request, by approval id, until the server
+  // resolves it
+  @state() private localApprovals = new Map<string, LocalApproval>();
   // Expanded argument values, as `[approval id, key]` JSON, and cards that
   // show all their rows, as `[approval id]` JSON
   @state() private expandedArguments: ReadonlySet<string> = new Set();
@@ -129,8 +120,17 @@ export class OnyxChatWidget extends LitElement {
   // Citation state — plain fields (not @state) since Map mutations don't trigger Lit re-renders
   private documentMap = new Map<string, SearchDocument>();
   private citationMap = new Map<number, string>();
-  // Rows of each request's arguments, built once instead of on each render
-  private argumentRowCache = new WeakMap<ToolApprovalRequest, ArgumentRow[]>();
+  // A continuation a decision named while another stream was followed
+  private continuationStreamId: number | null = null;
+  // The last `approvals_version` a status read reported; a change replays
+  // the saved session, the one source of subagent request outcomes
+  private approvalsVersion: string | null = null;
+  private approvalsChanged = false;
+  private readonly noteApprovalsVersion = (version: string) => {
+    if (version === this.approvalsVersion) return;
+    this.approvalsVersion = version;
+    this.approvalsChanged = true;
+  };
 
   constructor() {
     super();
@@ -305,10 +305,11 @@ export class OnyxChatWidget extends LitElement {
     this.isStreaming = false;
     this.isLoading = false;
     this.streamingStatus = "";
-    this.submittingApprovals = new Set();
-    this.failedApprovals = new Set();
-    this.localApprovalStatuses = new Map();
+    this.localApprovals = new Map();
     this.expandedArguments = new Set();
+    this.continuationStreamId = null;
+    this.approvalsVersion = null;
+    this.approvalsChanged = false;
     this.documentMap.clear();
     this.citationMap.clear();
     clearSession();
@@ -457,7 +458,7 @@ export class OnyxChatWidget extends LitElement {
 
   /** The request that still waits for this user, if any. */
   private get pendingApproval(): ApprovalEntry | null {
-    return findPendingApproval(this.messages, this.localApprovalStatuses);
+    return findPendingApproval(this.messages, this.localApprovals);
   }
 
   /** Brings a waiting card into view and focuses its first decision. */
@@ -483,37 +484,33 @@ export class OnyxChatWidget extends LitElement {
     decision: ApprovalDecision
   ) {
     const id = request.approval_id;
-    if (this.submittingApprovals.has(id)) return;
-    this.submittingApprovals = new Set(this.submittingApprovals).add(id);
-    const failed = new Set(this.failedApprovals);
-    failed.delete(id);
-    this.failedApprovals = failed;
-    let status: ApprovalStatus | null = null;
+    if (this.localApprovals.get(id) === "submitting") return;
+    this.localApprovals = new Map(this.localApprovals).set(id, "submitting");
+    let result: ApprovalDecisionResponse | "closed";
     try {
-      const result = await this.apiService.submitApprovalDecision(
-        id,
-        decision
-      );
-      // 404 or 409: the request no longer waits for a decision.
-      status = result === "closed" ? "closed" : decidedStatus(result);
+      result = await this.apiService.submitApprovalDecision(id, decision);
     } catch (err) {
       console.error("Failed to submit approval decision:", err);
-      this.failedApprovals = new Set(this.failedApprovals).add(id);
-    } finally {
-      const submitting = new Set(this.submittingApprovals);
-      submitting.delete(id);
-      this.submittingApprovals = submitting;
+      this.localApprovals = new Map(this.localApprovals).set(id, "failed");
+      return;
     }
-    if (status === null) return;
-    // The decided status shows at once; the resolution packet confirms it.
-    this.localApprovalStatuses = new Map(this.localApprovalStatuses).set(
+    // The decided status shows until the server's resolution arrives.
+    this.localApprovals = new Map(this.localApprovals).set(
       id,
-      status
+      result === "closed" ? "closed" : decidedStatus(result)
     );
-    // After the last decision the response continues on a new stream; follow
-    // it when no stream is followed.
-    if (this.abortController === undefined && this.chatSessionId) {
-      void this.resumeStream(this.chatSessionId);
+    // Follow the continuation the server names. A request that no longer
+    // waits (404 or 409) follows the session's current stream, and the saved
+    // session shows its outcome.
+    const continuation = result === "closed" ? null : result.continuation;
+    if (this.chatSessionId && (result === "closed" || continuation)) {
+      if (!this.abortController) {
+        void this.resumeStream(this.chatSessionId, {
+          startStreamId: continuation?.stream_id ?? null,
+        });
+      } else if (continuation) {
+        this.continuationStreamId = continuation.stream_id;
+      }
     }
     // The focused button is gone, so focus moves on.
     if (!this.isConnected) return;
@@ -529,32 +526,20 @@ export class OnyxChatWidget extends LitElement {
   private async sendMessage() {
     const message = this.inputValue.trim();
     if (!message || this.isLoading) return;
-    // The draft stays; the run waits for the user's decision first.
-    const pending = this.pendingApproval;
-    if (pending) {
-      this.pointAtApproval(pending.request.approval_id);
+    if (this.isStreaming) {
+      // The draft stays while a followed response holds the chat.
+      const pending = this.pendingApproval;
+      if (pending) this.pointAtApproval(pending.request.approval_id);
       return;
     }
-    if (this.isStreaming) return;
 
     const controller = new AbortController();
     this.abortController = controller;
     const stillOurs = () =>
       this.abortController === controller && !controller.signal.aborted;
     let sentSessionId: string | undefined;
-    let acknowledged = false;
-    // The server's id for the answer, from the acknowledgement; it is also
-    // the id of the response's stream
-    let reservedAssistantId: number | null = null;
-    // A stream another client started while this one was saved
-    let nextStream: number | null = null;
     const follow = newFollow(null);
-    // Set when the response runs on without this stream: it ended first, or
-    // the user decided before it stopped for decisions.
-    let reattach = false;
-    // The stream stopped for decisions
-    let awaiting = false;
-    // A send the server blocked for a waiting request this widget may not show
+    // The server refused the send while a request waits for a decision
     let blocked = false;
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -574,7 +559,9 @@ export class OnyxChatWidget extends LitElement {
             if (stillOurs())
               this.streamingStatus =
                 "Waiting to confirm that this conversation is ready.";
-          }
+          },
+          undefined,
+          this.noteApprovalsVersion
         );
       }
       if (!stillOurs()) return;
@@ -623,8 +610,8 @@ export class OnyxChatWidget extends LitElement {
         stillOurs,
         follow,
         ({ userMessageId, assistantMessageId }) => {
-          acknowledged = true;
-          reservedAssistantId = assistantMessageId;
+          // The sent response's stream id is its answer's id.
+          follow.streamId = assistantMessageId;
           if (userMessageId === null) return;
           // Create new array to trigger reactivity
           this.messages = this.messages.map((m) =>
@@ -632,10 +619,6 @@ export class OnyxChatWidget extends LitElement {
           );
         }
       );
-      awaiting = follow.message?.awaitingApproval === true;
-      reattach =
-        acknowledged &&
-        (!follow.ended || (awaiting && this.pendingApproval === null));
     } catch (err: unknown) {
       if (!stillOurs()) return;
       console.error("Failed to send message:", err);
@@ -643,13 +626,12 @@ export class OnyxChatWidget extends LitElement {
         blocked =
           err instanceof ApiError &&
           err.errorCode === APPROVAL_PENDING_ERROR_CODE;
-        reattach = blocked || (acknowledged && !follow.ended);
         this.error = blocked
-          ? "This chat waits for your decision on a tool request. Your message was not sent."
+          ? "Approve or reject the pending tool calls first."
           : err instanceof Error
             ? err.message
             : "Failed to send message";
-        if (!acknowledged) {
+        if (follow.assistantMessageId === null) {
           this.messages = this.messages.filter(
             (item) => item.id !== userMessage.id
           );
@@ -657,34 +639,6 @@ export class OnyxChatWidget extends LitElement {
         }
       }
     } finally {
-      // The server can still save the turn after its stream ends. A stream
-      // that stopped for decisions leaves following to the decision.
-      if (stillOurs() && sentSessionId && !reattach && !awaiting) {
-        const sentStream = reservedAssistantId;
-        try {
-          const next = await this.apiService.waitForSessionIdle(
-            sentSessionId,
-            controller.signal,
-            () => {
-              if (stillOurs())
-                this.streamingStatus =
-                  "Waiting to confirm that this conversation is ready.";
-            },
-            (id) => sentStream !== null && id !== sentStream
-          );
-          if (stillOurs() && typeof next === "number") nextStream = next;
-        } catch (error) {
-          if (
-            stillOurs() &&
-            !(error instanceof Error && error.name === "AbortError")
-          ) {
-            this.error ??=
-              error instanceof Error
-                ? error.message
-                : "Cannot confirm chat readiness";
-          }
-        }
-      }
       if (this.abortController === controller) {
         this.isStreaming = false;
         this.isLoading = false;
@@ -692,39 +646,43 @@ export class OnyxChatWidget extends LitElement {
         this.abortController = undefined;
       }
     }
-    if (
-      (reattach || nextStream !== null) &&
-      sentSessionId &&
-      this.abortController === undefined
-    ) {
-      await this.resumeStream(sentSessionId, {
-        reservedAssistantId,
-        startStreamId: nextStream,
-        showLatest: blocked,
-      });
+    if (!sentSessionId || controller.signal.aborted || this.abortController)
+      return;
+    if (blocked) {
+      // The saved session shows the waiting card.
+      await this.resumeStream(sentSessionId, { showLatest: true });
+      const pending = this.pendingApproval;
+      if (!pending || !this.isConnected) return;
+      await this.updateComplete;
+      this.pointAtApproval(pending.request.approval_id);
+      return;
     }
+    // An unacknowledged send left no stream; only the idle wait remains.
+    if (follow.assistantMessageId === null) follow.ended = true;
+    await this.resumeStream(sentSessionId, { sent: follow });
   }
 
   /**
-   * Follows the session's running response after a reload, a blocked send, a
-   * lost stream, or a decision. A stream that ends before the response does
-   * is attached again from its last cursor while the session still runs it;
-   * a new stream, such as the continuation after decisions, is followed from
-   * its start. A stream that stops for decisions ends the follow until a
-   * decision. `reservedAssistantId` names an answer that this widget has not
-   * shown yet. `startStreamId` names the stream to follow from its start,
-   * else the current one. `showLatest` also shows the session's latest saved
-   * answer when the transcript lacks it, such as one that waits for a
-   * decision.
+   * The one path that follows the session's running response: after a send,
+   * a reload, a blocked send, or a decision. `sent` is the send's stream,
+   * already applied. `startStreamId` names a stream to follow from its
+   * start, such as the continuation a decision names; else the follow starts
+   * at the server's current stream. `showLatest` also shows the session's
+   * latest saved answer when the transcript lacks it.
+   *
+   * A stream that ends before its stop is attached again from its last
+   * cursor while the session still runs it. After a stop, a new stream that
+   * the status reports is followed from its start. A stop for decisions ends
+   * the follow, unless a decision meanwhile named the continuation.
    */
   private async resumeStream(
     sessionId: string,
     {
-      reservedAssistantId = null,
+      sent = null,
       startStreamId = null,
       showLatest = false,
     }: {
-      reservedAssistantId?: number | null;
+      sent?: StreamFollow | null;
       startStreamId?: number | null;
       showLatest?: boolean;
     } = {}
@@ -743,41 +701,50 @@ export class OnyxChatWidget extends LitElement {
     try {
       const identity = await this.currentIdentity();
       if (!stillOurs()) return;
-      let follow = newFollow(startStreamId);
+      let follow = sent ?? newFollow(startStreamId);
+      let applied = sent !== null;
       // A stream without a replay buffer is never requested again.
       let streamWithoutBuffer: number | null = null;
       while (true) {
-        const { streamId, cursor } = follow;
-        const packets = this.apiService.resumeStream(
-          sessionId,
-          controller.signal,
-          streamId === null ? null : { streamId, cursor }
-        );
         let end: ResumeEnd | null = null;
-        try {
-          await this.followStream(
-            (async function* () {
-              end = yield* packets;
-            })(),
+        if (!applied) {
+          const { streamId, cursor } = follow;
+          const packets = this.apiService.resumeStream(
             sessionId,
-            identity,
-            stillOurs,
-            follow,
-            () => {}
+            controller.signal,
+            streamId === null ? null : { streamId, cursor }
           );
-        } catch (err: unknown) {
-          if (
-            !stillOurs() ||
-            follow.ended ||
-            (err instanceof Error && err.name === "AbortError")
-          )
-            throw err;
-          console.warn("The response stream ended early:", err);
+          try {
+            await this.followStream(
+              (async function* () {
+                end = yield* packets;
+              })(),
+              sessionId,
+              identity,
+              stillOurs,
+              follow,
+              () => {}
+            );
+          } catch (err: unknown) {
+            if (
+              !stillOurs() ||
+              follow.ended ||
+              (err instanceof Error && err.name === "AbortError")
+            )
+              throw err;
+            console.warn("The response stream ended early:", err);
+          }
         }
+        applied = false;
         if (!stillOurs()) return;
-        // A decision follows the continuation; one made during this stream
-        // follows it now.
-        if (follow.message?.awaitingApproval && this.pendingApproval) return;
+        if (follow.message?.awaitingApproval) {
+          // A decision made during this stream named its continuation.
+          const next = this.continuationStreamId;
+          this.continuationStreamId = null;
+          if (next === null || next === follow.streamId) return;
+          follow = newFollow(next);
+          continue;
+        }
         if (follow.ended) {
           // The server can still save the turn after its stream ends, and
           // another client can start a new response meanwhile.
@@ -787,7 +754,8 @@ export class OnyxChatWidget extends LitElement {
             controller.signal,
             onUnconfirmed,
             (id) =>
-              ended !== null && id !== ended && id !== streamWithoutBuffer
+              ended !== null && id !== ended && id !== streamWithoutBuffer,
+            this.noteApprovalsVersion
           );
           if (!stillOurs()) return;
           if (typeof next !== "number") break;
@@ -803,7 +771,8 @@ export class OnyxChatWidget extends LitElement {
           sessionId,
           controller.signal,
           onUnconfirmed,
-          (id) => id !== streamWithoutBuffer
+          (id) => id !== streamWithoutBuffer,
+          this.noteApprovalsVersion
         );
         if (!stillOurs()) return;
         if (typeof next !== "number") break;
@@ -817,8 +786,13 @@ export class OnyxChatWidget extends LitElement {
       // it: there was no replay (a 404, e.g. the run finished while the page
       // was closed), or the replay buffer ended early. The server's saved
       // copy finishes the response or shows its waiting requests, and
-      // answers or removes a saved question with no answer after it. On a
-      // failure the snapshot stays unfinished, so the next load tries again.
+      // answers or removes a saved question with no answer after it. A
+      // changed approvals version replays the answers whose subagent
+      // requests wait, and the latest answer, which can hold new requests.
+      // On a failure the snapshot stays unfinished, so the next load tries
+      // again.
+      const approvalsChanged = this.approvalsChanged;
+      this.approvalsChanged = false;
       const unanswered = this.messages
         .filter(
           (message, index) =>
@@ -828,9 +802,18 @@ export class OnyxChatWidget extends LitElement {
         .map((message) => message.id)
         .filter((id): id is number => typeof id === "number");
       const recoverIds = this.messages
-        .filter((message) => message.isStreaming || message.awaitingApproval)
+        .filter(
+          (message) =>
+            message.isStreaming ||
+            message.awaitingApproval ||
+            (approvalsChanged &&
+              message.approvals?.some(
+                (entry) => entry.request.agent_name && entry.outcome === null
+              ))
+        )
         .map((message) => message.id)
         .filter((id): id is number => typeof id === "number");
+      const reservedAssistantId = sent?.assistantMessageId ?? null;
       if (
         reservedAssistantId !== null &&
         !this.messages.some((message) => message.id === reservedAssistantId)
@@ -840,6 +823,7 @@ export class OnyxChatWidget extends LitElement {
       if (
         stillOurs() &&
         (showLatest ||
+          approvalsChanged ||
           recoverIds.length > 0 ||
           unanswered.length > 0 ||
           this.messages.some((message) => message.isStreaming))
@@ -866,10 +850,11 @@ export class OnyxChatWidget extends LitElement {
         }
         const latest = assistants[assistants.length - 1]?.message_id;
         if (
-          showLatest &&
           latest !== undefined &&
           !recoverIds.includes(latest) &&
-          !this.messages.some((message) => message.id === latest)
+          (approvalsChanged ||
+            (showLatest &&
+              !this.messages.some((message) => message.id === latest)))
         ) {
           recoverIds.push(latest);
         }
@@ -915,6 +900,7 @@ export class OnyxChatWidget extends LitElement {
         this.isStreaming = false;
         this.streamingStatus = "";
         this.abortController = undefined;
+        this.continuationStreamId = null;
       }
     }
   }
@@ -1008,11 +994,11 @@ export class OnyxChatWidget extends LitElement {
         "type" in packet.obj &&
         packet.obj.type === "tool_approval_resolved" &&
         readOutcome(packet.obj.outcome) !== null &&
-        this.localApprovalStatuses.has(packet.obj.approval_id)
+        this.localApprovals.has(packet.obj.approval_id)
       ) {
-        const statuses = new Map(this.localApprovalStatuses);
-        statuses.delete(packet.obj.approval_id);
-        this.localApprovalStatuses = statuses;
+        const local = new Map(this.localApprovals);
+        local.delete(packet.obj.approval_id);
+        this.localApprovals = local;
       }
 
       if (result.message) {
@@ -1246,16 +1232,27 @@ export class OnyxChatWidget extends LitElement {
                       }
                     </div>`
               }
-              ${(msg.approvals ?? []).map((entry) =>
-                this.renderApproval(
+              ${(msg.approvals ?? []).map((entry) => {
+                const local = this.localApprovals.get(
+                  entry.request.approval_id
+                );
+                return renderApprovalCard(
                   entry,
-                  approvalStatus(
-                    entry,
-                    this.localApprovalStatuses.get(entry.request.approval_id),
-                    responseEnded(msg)
-                  )
-                )
-              )}
+                  approvalStatus(entry, local, responseEnded(msg)),
+                  {
+                    submitting: local === "submitting",
+                    failed: local === "failed",
+                    expanded: this.expandedArguments,
+                    onDecide: (request, decision) =>
+                      this.decideApproval(request, decision),
+                    onToggle: (id) => {
+                      const expanded = new Set(this.expandedArguments);
+                      if (!expanded.delete(id)) expanded.add(id);
+                      this.expandedArguments = expanded;
+                    },
+                  }
+                );
+              })}
             </div>
           `
         )}
@@ -1289,162 +1286,19 @@ export class OnyxChatWidget extends LitElement {
     `;
   }
 
-  /** A waiting request shows its arguments and decisions; a decided one, one line. */
-  private renderApproval(entry: ApprovalEntry, status: ApprovalStatus) {
-    const { request } = entry;
-    const name = request.display_name || request.tool_name;
-    const record = approvalRecord(status, name);
-    const title = `Approval requested: ${name}`;
-    const submitting = this.submittingApprovals.has(request.approval_id);
-    let rows = this.argumentRowCache.get(request);
-    if (!rows) {
-      rows = argumentRows(request.arguments);
-      this.argumentRowCache.set(request, rows);
-    }
-    const allRowsId = JSON.stringify([request.approval_id]);
-    const allRows = this.expandedArguments.has(allRowsId);
-    const shownRows = allRows ? rows : rows.slice(0, ARGUMENT_ROWS_SHOWN);
-
-    return html`
-      <div class="approval" data-approval-id=${request.approval_id}>
-        <p class="sr-only" role="status">${record ?? title}</p>
-        ${
-          record !== null
-            ? html`<div class="approval-record" aria-hidden="true">
-                ${
-                  status === "approved" || status === "approvedForSession"
-                    ? ICON_CHECK
-                    : status === "rejected" || status === "disabled"
-                      ? ICON_X
-                      : ICON_CLOCK
-                }
-                <span title=${record}>${record}</span>
-              </div>`
-            : html`<div class="approval-card">
-                <div class="approval-header">
-                  <span class="approval-spinner" aria-hidden="true"
-                    >${ICON_LOADER}</span
-                  >
-                  <span class="approval-title" title=${title}>${title}</span>
-                </div>
-                <div class="approval-body">
-                  ${
-                    rows.length === 0
-                      ? html`<p class="approval-empty">No payload.</p>`
-                      : html`<dl class="approval-args">
-                            ${shownRows.map((row) => {
-                              const id = JSON.stringify([
-                                request.approval_id,
-                                row.key,
-                              ]);
-                              const expanded = this.expandedArguments.has(id);
-                              return html`
-                                <dt title=${row.key}>${row.key}</dt>
-                                <dd class=${row.mono ? "mono" : ""}>
-                                  <span class="arg-value"
-                                    >${
-                                      row.preview === null || expanded
-                                        ? row.text
-                                        : row.preview
-                                    }</span
-                                  >${
-                                    row.preview === null
-                                      ? ""
-                                      : html`<button
-                                          class="arg-toggle"
-                                          aria-expanded=${expanded}
-                                          @click=${() =>
-                                            this.toggleExpanded(id)}
-                                        >
-                                          ${
-                                            expanded ? "Show less" : "Show more"
-                                          }
-                                        </button>`
-                                  }
-                                </dd>
-                              `;
-                            })}
-                          </dl>
-                          ${
-                            rows.length > ARGUMENT_ROWS_SHOWN
-                              ? html`<button
-                                  class="arg-toggle"
-                                  aria-expanded=${allRows}
-                                  @click=${() =>
-                                    this.toggleExpanded(allRowsId)}
-                                >
-                                  ${
-                                    allRows
-                                      ? "Show fewer arguments"
-                                      : `Show all ${rows.length} arguments`
-                                  }
-                                </button>`
-                              : ""
-                          }`
-                  }
-                  ${
-                    this.failedApprovals.has(request.approval_id)
-                      ? html`<p class="approval-error" role="alert">
-                          Could not submit your decision. Try again.
-                        </p>`
-                      : ""
-                  }
-                </div>
-                <div class="approval-actions">
-                  <button
-                    class="approval-button primary"
-                    ?disabled=${submitting}
-                    @click=${() =>
-                      this.decideApproval(request, "approve_once")}
-                  >
-                    Approve once
-                  </button>
-                  <button
-                    class="approval-button"
-                    ?disabled=${submitting}
-                    title="Approve now and run this tool without asking again for the rest of this chat"
-                    @click=${() =>
-                      this.decideApproval(request, "approve_session")}
-                  >
-                    Approve for this chat
-                  </button>
-                  <button
-                    class="approval-button"
-                    ?disabled=${submitting}
-                    @click=${() => this.decideApproval(request, "reject")}
-                  >
-                    Reject
-                  </button>
-                </div>
-              </div>`
-        }
-      </div>
-    `;
-  }
-
-  /** Expands or collapses a long argument value or a card's rows. */
-  private toggleExpanded(id: string): void {
-    const expanded = new Set(this.expandedArguments);
-    if (!expanded.delete(id)) expanded.add(id);
-    this.expandedArguments = expanded;
-  }
-
-  /** Shown under the composer while a request waits for the user. */
-  private renderApprovalNotice() {
-    return this.pendingApproval
-      ? html`<div class="approval-notice">
-          Approve or reject the tool request above to continue. Your message
-          stays here.
-        </div>`
-      : "";
-  }
-
   private renderInput() {
     const pending = this.pendingApproval !== null;
     const inputDisabled = this.isLoading || (this.isStreaming && !pending);
     return html`
       <div class="input-wrapper">
-        ${this.renderApprovalNotice()}
+        ${
+          pending
+            ? html`<div class="approval-notice">
+                Approve or reject the tool request above to continue. Your
+                message stays here.
+              </div>`
+            : ""
+        }
         <div class="input-container">
           <input
             class="input"

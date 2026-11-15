@@ -37,6 +37,12 @@ export type ApprovalStatus =
   | "disabled"
   | "closed";
 
+/**
+ * This widget's short-lived state for a request: its decision is in flight,
+ * failed, or got the server's answer. The resolution packet replaces it.
+ */
+export type LocalApproval = "submitting" | "failed" | ApprovalStatus;
+
 export interface ApprovalEntry {
   request: ToolApprovalRequest;
   /** Null until the resolution packet arrives. */
@@ -60,16 +66,20 @@ export function readOutcome(value: unknown): ApprovalOutcome | null {
 
 /**
  * The resolution packet decides the status. Before it arrives, a decision from
- * this widget decides it; a response that ended closes the request.
+ * this widget decides it; a response that ended closes the root agent's
+ * request. A subagent's request outlives the response and resolves on a
+ * session refetch.
  */
 export function approvalStatus(
   entry: ApprovalEntry,
-  localStatus: ApprovalStatus | undefined,
+  local: LocalApproval | undefined,
   ended: boolean
 ): ApprovalStatus {
   switch (entry.outcome) {
     case null:
-      return localStatus ?? (ended ? "closed" : "pending");
+      if (local !== undefined && local !== "submitting" && local !== "failed")
+        return local;
+      return ended && !entry.request.agent_name ? "closed" : "pending";
     case "approved_for_chat":
       return "approvedForSession";
     case "cancelled":
@@ -98,17 +108,21 @@ export function responseEnded(message: ChatMessage): boolean {
   return !message.isStreaming && !message.awaitingApproval;
 }
 
-/** The first request that still waits for this user. */
+/**
+ * The first root agent request that still waits for this user. Subagent
+ * requests never hold the chat.
+ */
 export function findPendingApproval(
   messages: ChatMessage[],
-  localStatuses: ReadonlyMap<string, ApprovalStatus>
+  localApprovals: ReadonlyMap<string, LocalApproval>
 ): ApprovalEntry | null {
   for (const message of messages) {
     const pending = message.approvals?.find(
       (entry) =>
+        !entry.request.agent_name &&
         approvalStatus(
           entry,
-          localStatuses.get(entry.request.approval_id),
+          localApprovals.get(entry.request.approval_id),
           responseEnded(message)
         ) === "pending"
     );

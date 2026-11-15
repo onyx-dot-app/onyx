@@ -163,6 +163,8 @@ export interface ToolApprovalRequest {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
+  // The subagent that asks; null or absent for the root agent's own requests
+  agent_name?: string | null;
 }
 
 export interface ToolApprovalResolved {
@@ -173,10 +175,18 @@ export interface ToolApprovalResolved {
   outcome: string;
 }
 
+/** The stream that continues the response after a decision. */
+export interface ApprovalContinuation {
+  stream_id: number;
+  response_ids: number[];
+}
+
 export interface ApprovalDecisionResponse {
   decision: "APPROVED" | "REJECTED";
   // "POLICY": the action policy disabled the tool, so the approval rejected it.
   decided_via: string;
+  // Null while other requests still wait, or when nothing resumed
+  continuation: ApprovalContinuation | null;
 }
 
 /** The stream's last packet. */
