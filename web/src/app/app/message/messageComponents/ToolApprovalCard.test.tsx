@@ -14,12 +14,14 @@ import {
 } from "@/app/app/services/streamingModels";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { followChatStream, savedAnswers } from "@/lib/chat/settleChatSession";
+import { followChatStream } from "@/lib/chat/settleChatSession";
 import {
+  fetchSettledChatSession,
   readChatSessionStatus,
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
-import type { Message } from "@/app/app/types";
+import { processRawChatHistory } from "@/app/app/services/lib";
+import type { BackendChatSession, Message } from "@/app/app/types";
 import type { ChatSessionStatus } from "@/lib/chat/types";
 import type { ChatStream } from "@/app/app/types";
 import messages from "@/i18n/messages/en.json";
@@ -27,12 +29,17 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 jest.mock("@/lib/chat/settleChatSession", () => ({
+  ...jest.requireActual("@/lib/chat/settleChatSession"),
   followChatStream: jest.fn(),
-  savedAnswers: jest.fn(),
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
+  fetchSettledChatSession: jest.fn(),
   readChatSessionStatus: jest.fn(),
   waitForChatResponseEnd: jest.fn(),
+}));
+jest.mock("@/app/app/services/lib", () => ({
+  ...jest.requireActual("@/app/app/services/lib"),
+  processRawChatHistory: jest.fn(),
 }));
 
 const continuation: ChatStream = { stream_id: 900, response_ids: [82] };
@@ -198,18 +205,23 @@ describe("Continuation", () => {
     expect(statusReads).not.toHaveBeenCalled();
   });
 
+  const asked = { placement: { turn_index: 1, tab_index: 0 }, obj: request };
+  const answer = (packets: Message["packets"]): Message => ({
+    nodeId: 2,
+    messageId: 82,
+    type: "assistant",
+    message: "",
+    files: [],
+    packets,
+    toolCall: null,
+    parentNodeId: 1,
+  });
+  const savedPage = {
+    messages: [],
+    packets: [],
+  } as unknown as BackendChatSession;
+
   it("in incognito, reads a continuation that already ended from the saved answer", async () => {
-    const answer = (packets: Message["packets"]): Message => ({
-      nodeId: 2,
-      messageId: 82,
-      type: "assistant",
-      message: "",
-      files: [],
-      packets,
-      toolCall: null,
-      parentNodeId: 1,
-    });
-    const asked = { placement: { turn_index: 1, tab_index: 0 }, obj: request };
     const finalText = {
       placement: { turn_index: 2, tab_index: 0 },
       obj: { type: "message_delta" as const, content: "Created the issue." },
@@ -220,9 +232,14 @@ describe("Continuation", () => {
       messageTree: new Map([[2, answer([asked])]]),
     });
     jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
+    jest.mocked(fetchSettledChatSession).mockResolvedValue(savedPage);
     jest
-      .mocked(savedAnswers)
-      .mockResolvedValue(new Map([[2, answer([asked, finalText])]]));
+      .mocked(processRawChatHistory)
+      .mockReturnValue(
+        new Map([
+          [7, { ...answer([asked, finalText]), nodeId: 7, parentNodeId: 6 }],
+        ])
+      );
     respond(200, decided("APPROVED", "USER", null));
     render(<Harness />);
 
@@ -241,6 +258,48 @@ describe("Continuation", () => {
       })
     );
     expect(followChatStream).not.toHaveBeenCalled();
+  });
+
+  it("in incognito, drops a saved answer once a newer reader took the answer over", async () => {
+    const continued = {
+      placement: { turn_index: 2, tab_index: 0 },
+      obj: { type: "message_delta" as const, content: "Continued" },
+    };
+    useChatSessionStore.getState().createSession("session", {
+      incognito: true,
+      chatState: "input",
+      messageTree: new Map([[2, answer([asked])]]),
+    });
+    jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
+    const page = Promise.withResolvers<BackendChatSession>();
+    jest.mocked(fetchSettledChatSession).mockReturnValue(page.promise);
+    // The saved copy is the earlier parked snapshot.
+    jest
+      .mocked(processRawChatHistory)
+      .mockReturnValue(new Map([[2, answer([asked])]]));
+    respond(200, decided("APPROVED", "USER", null));
+    render(<Harness />);
+
+    await clickApprove();
+    await waitFor(() => expect(fetchSettledChatSession).toHaveBeenCalled());
+    // Another decision's continuation takes the answer and writes it.
+    act(() => {
+      const store = useChatSessionStore.getState();
+      store.updateSessionData("session", {
+        chatState: "streaming",
+        readerFinished: new Promise<void>(() => {}),
+        messageTree: new Map([[2, answer([asked, continued])]]),
+      });
+    });
+    await act(async () => {
+      page.resolve(savedPage);
+      await page.promise;
+    });
+
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.messageTree.get(2)
+        ?.packets
+    ).toEqual([asked, continued]);
   });
 
   it.each([

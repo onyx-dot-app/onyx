@@ -9,7 +9,10 @@ import { getModelIcon } from "@/lib/languageModels/utils";
 import type { MultiModelResponse } from "@/app/app/message/types";
 import { FetchError } from "@/lib/fetcher";
 import { postChatApprovalDecision } from "@/lib/chat/svc";
-import { followChatStream, savedAnswers } from "@/lib/chat/settleChatSession";
+import {
+  followChatStream,
+  refreshChatSession,
+} from "@/lib/chat/settleChatSession";
 import {
   readChatSessionStatus,
   waitForChatResponseEnd,
@@ -20,7 +23,6 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
 import {
   decidedStatus,
-  readToolApprovals,
   type ToolApproval,
   useToolApprovalUi,
 } from "@/lib/chat/toolApprovals";
@@ -66,10 +68,10 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
   // Without one, the response continues in a later turn or in a live reader,
   // or an agent continues in the background: a status read hands the chat to
   // its status subscriber, which follows server turns until the chat is idle
-  // and then loads the saved session. Incognito has no status subscriber: it
-  // waits for the next stream and follows it when it writes its answers. A
-  // continuation that already ended is read from the saved answer: only a
-  // chat that saves content can ask for approval.
+  // and then loads the saved session. Incognito does not follow server turns
+  // from its status: it waits for the next stream and follows it when it
+  // writes its answers. A continuation that already ended is read from the
+  // saved answer through a refresh.
   async function submit(decision: ApprovalSubmitDecision) {
     const { recordStatus } = useToolApprovalUi.getState();
     const sessionId = useChatSessionStore.getState().currentSessionId;
@@ -113,29 +115,8 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
         followChatStream(sessionId, next, tReadiness("checkFailed"));
         return;
       }
-      // Only the answer that holds this request takes its saved copy.
-      const local = [
-        ...(useChatSessionStore
-          .getState()
-          .sessions.get(sessionId)
-          ?.messageTree.values() ?? []),
-      ].find((message) =>
-        readToolApprovals(message.packets).entries.some(
-          (entry) => entry.request.approval_id === request.approval_id
-        )
-      );
-      if (!local) return;
-      const saved = (await savedAnswers(sessionId, [local])).get(local.nodeId);
-      const tree = useChatSessionStore
-        .getState()
-        .sessions.get(sessionId)?.messageTree;
-      if (!saved || !tree) return;
-      useChatSessionStore
-        .getState()
-        .updateSessionMessageTree(
-          sessionId,
-          new Map(tree).set(local.nodeId, saved)
-        );
+      // A continuation that already ended is read from its saved answer.
+      await refreshChatSession(sessionId, tReadiness("checkFailed"));
     } else void mutate(SWR_KEYS.chatSessionStatus(sessionId));
   }
 

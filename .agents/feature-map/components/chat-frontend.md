@@ -85,11 +85,14 @@
   not loaded. A claim also takes over the stream's answers: an older reader
   of an answer skips it (`writesAnswer`), even after the newer reader ends,
   and both the send reader and a
-  replay reader merge their answers into the current tree. Without a `continuation`, an incognito chat, which has no
-  status subscriber, waits for the next stream (`waitForChatResponseEnd`)
-  and follows it. When none comes because the continuation already ended,
-  the card replaces the answer that holds the request with its saved copy.
-  Only a chat that saves content can ask for approval. A stream that ends
+  replay reader merge their answers into the current tree. Without a `continuation`, an incognito chat waits for the next
+  stream (`waitForChatResponseEnd`) and follows it. When none comes because
+  the continuation already ended, the card refreshes the chat. An incognito
+  chat has no server queue, but `useChatSessionQueue` still reads its status,
+  so a background agent's request also refreshes it. An incognito refresh
+  keeps local content: only answers whose saved copies hold approval
+  requests take those copies, since only a chat that saves content can ask
+  for approval. A stream that ends
   with `stop(awaiting_approval)` settles like any other: the status reads
   follow a new `current_stream` until the session is idle. After a 409 or
   404 decision, the card reads the status once and follows `current_stream`
@@ -426,9 +429,10 @@ running turn or a latest response it does not have. Readiness polls write each
 status into the SWR status cache, so `lib/chat/hooks.ts:useChatSessionQueue`
 sees every status read; a changed `latest_response_id` also reloads the
 pending list.
-Overlapping calls for one session share one in-flight refresh. It drops its
-result if a new send replaced the session's `AbortController`, or a reader
-such as a continuation took the session (`readerFinished`). Refresh and
+Overlapping calls from one session owner share one in-flight refresh; a newer
+owner starts its own. A refresh drops its result if a new send replaced the
+session's `AbortController`, or a reader such as a continuation took the
+session (`readerFinished`). Refresh and
 settlement merge saved pages through one function that keeps local failed
 turns and remaps the selected response.
 After a resume, a Stop, an error or a failed save it also reloads saved

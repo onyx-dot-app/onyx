@@ -1,11 +1,19 @@
-import { renderHook } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import {
   Packet,
   PacketType,
   ToolApprovalRequest,
 } from "@/app/app/services/streamingModels";
-import { useToolApprovals } from "@/lib/chat/hooks";
+import { useChatSessionQueue, useToolApprovals } from "@/lib/chat/hooks";
 import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { refreshChatSession } from "@/lib/chat/settleChatSession";
+
+jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
+jest.mock("@/lib/chat/settleChatSession", () => ({
+  ...jest.requireActual("@/lib/chat/settleChatSession"),
+  refreshChatSession: jest.fn(async () => {}),
+}));
 
 function request(
   approvalId: string,
@@ -82,5 +90,48 @@ describe("useToolApprovals", () => {
     const { result } = renderHook(() => useToolApprovals(packets));
 
     expect(result.current).toEqual({ records: [], awaitingApproval: false });
+  });
+});
+
+describe("useChatSessionQueue", () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it("refreshes an incognito chat whose approvals changed, without its server queue", async () => {
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: "incognito-session",
+    });
+    useChatSessionStore.getState().createSession("incognito-session", {
+      incognito: true,
+      chatState: "input",
+      approvalsVersion: "1",
+    });
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            is_processing: false,
+            current_stream: null,
+            has_startable_input: false,
+            has_active_subagents: true,
+            latest_response_id: null,
+            approvals_version: "2",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+    );
+
+    renderHook(() => useChatSessionQueue(false));
+
+    await waitFor(() =>
+      expect(refreshChatSession).toHaveBeenCalledWith(
+        "incognito-session",
+        expect.any(String)
+      )
+    );
+    // Only the status is read; an incognito chat has no pending list.
+    expect(
+      fetchMock.mock.calls.every(([input]) => String(input).endsWith("/status"))
+    ).toBe(true);
   });
 });

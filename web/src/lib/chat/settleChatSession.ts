@@ -176,15 +176,15 @@ function mergeSavedHistory(
 }
 
 /**
- * The saved copies of `answers`, by node ID, linked where the answers sit in
- * the local tree. Incognito reads saved answers only where a chat that saves
- * content must have them, such as an answer that asked for approval.
+ * The saved copies of `answers` in `page`, by node ID, linked where the
+ * answers sit in the local tree. Incognito reads saved answers only where a
+ * chat that saves content must have them, such as an answer that asked for
+ * approval.
  */
-export async function savedAnswers(
-  sessionId: string,
+function savedAnswers(
+  page: BackendChatSession,
   answers: Message[]
-): Promise<Map<number, Message>> {
-  const page = await fetchSettledChatSession(sessionId);
+): Map<number, Message> {
   const saved = processRawChatHistory(page.messages, page.packets);
   const copies = new Map<number, Message>();
   for (const answer of answers) {
@@ -204,36 +204,66 @@ export async function savedAnswers(
   return copies;
 }
 
-// One refresh per session, so overlapping status checks share it.
-const refreshingSessions = new Map<string, Promise<void>>();
+// One refresh per session owner, so its overlapping status checks share it.
+// A newer owner, such as a continuation's reader, starts its own.
+const refreshingSessions = new Map<
+  string,
+  {
+    refresh: Promise<void>;
+    controller: AbortController;
+    reader: Promise<void> | undefined;
+  }
+>();
 
-/** Load and follow a turn the server started while this session had no reader. */
+/**
+ * Load and follow a turn the server started while this session had no
+ * reader. Incognito keeps its content locally: only its answers that hold
+ * approval requests take their saved copies, which only a chat that saves
+ * content has.
+ */
 export function refreshChatSession(
   sessionId: string,
   errorMessage: string,
   savedSession?: BackendChatSession
 ): Promise<void> {
+  const session = useChatSessionStore.getState().sessions.get(sessionId);
+  if (!session) return Promise.resolve();
+  const controller = session.abortController;
+  const reader = session.readerFinished;
   const existing = refreshingSessions.get(sessionId);
-  if (existing) return existing;
+  if (existing?.controller === controller && existing.reader === reader)
+    return existing.refresh;
+  // A send or a reader, such as a continuation, that starts during the
+  // fetch owns the session.
+  const ownsRefresh = () => {
+    const current = useChatSessionStore.getState().sessions.get(sessionId);
+    return (
+      current?.abortController === controller &&
+      current.readerFinished === reader
+    );
+  };
   const refresh = (async () => {
-    const session = useChatSessionStore.getState().sessions.get(sessionId);
-    if (!session || session.incognito) return;
-    const controller = session.abortController;
-    const reader = session.readerFinished;
-    // A send or a reader, such as a continuation, that starts during the
-    // fetch owns the session.
-    const ownsRefresh = () => {
-      const current = useChatSessionStore.getState().sessions.get(sessionId);
-      return (
-        current?.abortController === controller &&
-        current.readerFinished === reader
-      );
-    };
     try {
       const saved = savedSession ?? (await fetchSettledChatSession(sessionId));
       const store = useChatSessionStore.getState();
       const current = store.sessions.get(sessionId);
       if (!current || !ownsRefresh()) return;
+      if (current.incognito) {
+        const messageTree = new Map(current.messageTree);
+        const answers = [...current.messageTree.values()].filter(
+          (message) => message.type === "assistant" || message.type === "error"
+        );
+        for (const [nodeId, copy] of savedAnswers(saved, answers))
+          if (readToolApprovals(copy.packets).entries.length > 0)
+            messageTree.set(nodeId, copy);
+        store.updateSessionData(sessionId, {
+          messageTree,
+          approvalsVersion: saved.approvals_version,
+        });
+        if (saved.current_stream)
+          followChatStream(sessionId, saved.current_stream, errorMessage);
+        return;
+      }
       const merged = mergeSavedHistory(saved, current);
       const stream = saved.current_stream ?? null;
       const { messageTree, replayStream } = prepareSavedChat(
@@ -273,8 +303,11 @@ export function refreshChatSession(
         uncaughtError: { error: errorMessage },
       });
     }
-  })().finally(() => refreshingSessions.delete(sessionId));
-  refreshingSessions.set(sessionId, refresh);
+  })().finally(() => {
+    if (refreshingSessions.get(sessionId)?.refresh === refresh)
+      refreshingSessions.delete(sessionId);
+  });
+  refreshingSessions.set(sessionId, { refresh, controller, reader });
   return refresh;
 }
 
@@ -435,7 +468,7 @@ export async function settleChatSession({
         const candidates = [...lost, ...unread];
         const saved =
           candidates.length > 0
-            ? await savedAnswers(sessionId, candidates)
+            ? savedAnswers(await fetchSettledChatSession(sessionId), candidates)
             : new Map<number, Message>();
         if (!ownsSettlement()) return;
         const latest = useChatSessionStore.getState().sessions.get(sessionId);

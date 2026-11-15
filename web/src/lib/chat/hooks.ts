@@ -164,26 +164,35 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
   const t = useTranslations("chat.input.pendingMessages");
   const tReadiness = useTranslations("chat.readiness");
   // Primitives only: the message tree changes on every streamed frame.
-  const { sessionId, idle, needsResponseSelection, loadedApprovalsVersion } =
-    useChatSessionStore(
-      useShallow((state) => {
-        const session = state.currentSessionId
-          ? state.sessions.get(state.currentSessionId)
-          : undefined;
-        const target = pendingInputTarget(session?.messageTree);
-        return {
-          sessionId: state.currentSessionId,
-          idle:
-            session?.chatState === "input" && !session.isFetchingChatMessages,
-          needsResponseSelection: target.needsResponseSelection,
-          loadedApprovalsVersion: session?.approvalsVersion,
-        };
-      })
-    );
+  const {
+    sessionId,
+    idle,
+    incognito,
+    needsResponseSelection,
+    loadedApprovalsVersion,
+  } = useChatSessionStore(
+    useShallow((state) => {
+      const session = state.currentSessionId
+        ? state.sessions.get(state.currentSessionId)
+        : undefined;
+      const target = pendingInputTarget(session?.messageTree);
+      return {
+        sessionId: state.currentSessionId,
+        idle: session?.chatState === "input" && !session.isFetchingChatMessages,
+        incognito: session?.incognito ?? false,
+        needsResponseSelection: target.needsResponseSelection,
+        loadedApprovalsVersion: session?.approvalsVersion,
+      };
+    })
+  );
   const pendingKey =
     enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
+  // An incognito chat has no server queue, but its background agents' requests
+  // still arrive through its status.
   const statusKey =
-    enabled && sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null;
+    (enabled || incognito) && sessionId
+      ? SWR_KEYS.chatSessionStatus(sessionId)
+      : null;
 
   // Key-addressed, unlike the mutate useSWR returns, which follows the current key.
   const { mutate } = useSWRConfig();

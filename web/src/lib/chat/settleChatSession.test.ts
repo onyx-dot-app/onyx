@@ -974,6 +974,37 @@ describe("with stubbed server checks", () => {
     expect(session.messageTree.get(2)?.packets).toEqual([continued]);
   });
 
+  test("a newer owner's refresh applies while a superseded owner's refresh is still fetching", async () => {
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "input",
+      messageTree: new Map([[1, message(1, "user", "Question")]]),
+    });
+    const stale = Promise.withResolvers<BackendChatSession>();
+    const current = Promise.withResolvers<BackendChatSession>();
+    jest
+      .mocked(fetchSettledChatSession)
+      .mockReturnValueOnce(stale.promise)
+      .mockReturnValueOnce(current.promise);
+
+    const superseded = refreshChatSession("session", errorMessage);
+    // A reader takes the session; its settlement asks for its own refresh.
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "streaming",
+      readerFinished: Promise.resolve(),
+    });
+    const owned = refreshChatSession("session", errorMessage);
+    expect(owned).not.toBe(superseded);
+    current.resolve(savedSession([], null));
+    await owned;
+    stale.resolve(savedSession([], null));
+    await superseded;
+
+    expect(fetchSettledChatSession).toHaveBeenCalledTimes(2);
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("input");
+  });
+
   test("an answer that a newer stream took over stays with it after that stream ends", () => {
     expect(claimStreamReader(stream(992, [79]))).toBe(true);
     expect(claimStreamReader(stream(993, [79]))).toBe(true);
