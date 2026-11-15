@@ -1482,3 +1482,38 @@ def load_chat_approvals(
                 (response_id, anchor_call_id)
             )
     return approvals
+
+
+def waiting_approval_reply_ids(db_session: Session, chat_session_id: UUID) -> set[int]:
+    """The chat's responses that have a request waiting for a decision, or
+    that started a run, directly or through the runs it started, that has
+    one; a chat without waiting requests reads nothing else."""
+    if not db_session.scalar(
+        select(
+            exists().where(
+                ApprovalRequest.chat_session_id == chat_session_id,
+                ApprovalRequest.decision.is_(None),
+            )
+        )
+    ):
+        return set()
+    approvals = load_chat_approvals(
+        db_session,
+        chat_session_id,
+        db_session.scalars(
+            select(ChatMessage.id).where(
+                ChatMessage.chat_session_id == chat_session_id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+        ).all(),
+    )
+    waiting = {
+        response_id
+        for response_id, requests in approvals.requests.items()
+        if any(request.decision is None for request in requests)
+    }
+    return waiting | {
+        root_id
+        for root_id, runs in approvals.started_runs.items()
+        if any(run_id in waiting for run_id, _ in runs)
+    }

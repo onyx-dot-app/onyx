@@ -29,9 +29,12 @@ from onyx.chat.process_message import (
     handle_stream_message_objects,
 )
 from onyx.chat.run_store import ChatRunStore
-from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
+from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource, MessageType
 from onyx.context.search.models import BaseFilters
-from onyx.db.chat import delete_messages_and_files_from_chat_session
+from onyx.db.chat import (
+    create_new_chat_message,
+    delete_messages_and_files_from_chat_session,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import (
@@ -54,6 +57,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.query_and_chat.chat_backend import (
     decide_approval,
+    get_chat_session,
     get_chat_session_processing_status,
 )
 from onyx.server.query_and_chat.models import (
@@ -66,6 +70,7 @@ from onyx.server.query_and_chat.streaming_models import (
     AWAITING_APPROVAL,
     OverallStop,
     Packet,
+    ToolApprovalRequest,
 )
 from onyx.tools.models import ChatToolSelection
 from onyx.tools.tool_constructor import SearchToolConfig
@@ -400,6 +405,53 @@ def test_a_parked_response_saves_no_request_context(
         "the response completes",
     )
     assert turns.sent == ["team"]
+
+
+def test_the_latest_page_reaches_back_to_a_waiting_reply(
+    turns: ApprovalTurns, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reply waits for approval and later messages push it above the
+    latest page. The latest page still reaches back to that reply's question,
+    so a client that loads only that page shows its waiting card. An older
+    page keeps its own limit."""
+    stops = turns.start(monkeypatch, Script(turns.tool))
+    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    [request] = turns.requests()
+    with get_session_with_current_tenant() as session:
+        last = session.get_one(ChatMessage, request.chat_message_id)
+        question_id = last.parent_message_id
+        for index in range(6):
+            last = create_new_chat_message(
+                chat_session_id=turns.chat_session_id,
+                parent_message=last,
+                message=f"later {index}",
+                token_count=1,
+                message_type=MessageType.USER
+                if index % 2 == 0
+                else MessageType.ASSISTANT,
+                db_session=session,
+            )
+
+        page = get_chat_session(
+            turns.chat_session_id, limit=2, user=turns.user, db_session=session
+        )
+        message_ids = {message.message_id for message in page.messages}
+        assert {question_id, request.chat_message_id} <= message_ids
+        assert any(
+            isinstance(packet.obj, ToolApprovalRequest)
+            for packets in page.packets
+            for packet in packets
+        )
+        assert page.has_older_messages
+
+        older = get_chat_session(
+            turns.chat_session_id,
+            limit=2,
+            before_message_id=question_id,
+            user=turns.user,
+            db_session=session,
+        )
+        assert len(older.messages) <= 2
 
 
 def test_two_decided_roots_are_not_agents(

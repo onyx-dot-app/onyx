@@ -118,7 +118,7 @@ from onyx.db.chat_inputs import (
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
 )
-from onyx.db.chat_response import load_chat_approvals
+from onyx.db.chat_response import load_chat_approvals, waiting_approval_reply_ids
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
@@ -512,11 +512,16 @@ def get_chat_session(
     page_message_ids: set[int] | None = None
     has_older_messages = False
     if limit is not None:
+        # The latest page reaches back to every waiting card's reply, so a
+        # client that loads only that page shows every waiting card.
         page_message_ids, has_older_messages = get_chat_message_page_ids(
             chat_session_id=session_id,
             db_session=db_session,
             limit=limit,
             before_message_id=before_message_id,
+            waiting_reply_ids=waiting_approval_reply_ids(db_session, session_id)
+            if before_message_id is None
+            else (),
         )
 
     session_messages = get_chat_messages_by_session(

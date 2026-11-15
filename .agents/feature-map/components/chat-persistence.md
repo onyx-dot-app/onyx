@@ -100,7 +100,10 @@ ChatResponsePersistence.save               chat/persistence.py; for USAGE_ONLY i
                                            citations, final records
 GET /chat/get-chat-session/{id}
   get_chat_message_page_ids                with `limit`: one page of the current
-                                           branch and the children of its messages
+                                           branch and the children of its messages;
+                                           the latest page reaches back to each
+                                           waiting card's reply
+                                           (db/chat_response.py:waiting_approval_reply_ids)
   get_chat_messages_by_session             that page, or all branches without
                                            `limit`; two ToolCall levels
   translate_assistant_message_to_packets   runtime rows: read_chat_execution,
