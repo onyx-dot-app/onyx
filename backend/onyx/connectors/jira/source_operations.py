@@ -518,21 +518,83 @@ class JiraSourceOperations(SourceOperations):
     def get_service_desk_sla(
         self, *, issue_key: str, fast: bool = True
     ) -> dict[str, Any] | None:
-        """Returns the SLA information of a service desk request
-        (``servicedeskapi/request/{key}/sla``), or ``None`` when unavailable."""
-        try:
-            with _translate_errors(fast=fast):
-                return self._client(fast=fast)._get_json(
-                    f"request/{issue_key}/sla", base=_SERVICEDESK_BASE_URL
-                )
-        except (
-            JiraApiError,
-            JiraCloudIdError,
-            ValueError,
-            JIRAError,
-            requests.RequestException,
-        ):
-            return None
+        """Returns the paginated SLA information of a service desk request
+        (``servicedeskapi/request/{key}/sla``), or ``None`` when unavailable.
+        On partial pagination failures, returns collected values with
+        ``isLastPage=False`` so callers know the result is incomplete."""
+        all_values: list[Any] = []
+        start = 0
+
+        for page_num in range(_MAX_SERVICE_DESK_SLA_PAGES):
+            try:
+                with _translate_errors(fast=fast):
+                    client = self._client(fast=fast)
+                    if start == 0:
+                        page = client._get_json(
+                            f"request/{issue_key}/sla", base=_SERVICEDESK_BASE_URL
+                        )
+                    else:
+                        page = client._get_json(
+                            f"request/{issue_key}/sla",
+                            params={"start": start},
+                            base=_SERVICEDESK_BASE_URL,
+                        )
+            except (
+                JiraApiError,
+                JiraCloudIdError,
+                ValueError,
+                JIRAError,
+                requests.RequestException,
+            ):
+                if page_num == 0:
+                    return None
+                return {"values": all_values, "isLastPage": False}
+
+            if not isinstance(page, Mapping):
+                if page_num == 0:
+                    return None
+                return {"values": all_values, "isLastPage": False}
+
+            page_values = page.get("values")
+            if not isinstance(page_values, list):
+                if page_num == 0 and not sla_payload_has_more_pages(page):
+                    return dict(page)
+                return {"values": all_values, "isLastPage": False}
+
+            raw_start = page.get("start")
+            page_start = (
+                raw_start
+                if isinstance(raw_start, int) and not isinstance(raw_start, bool)
+                else start
+            )
+            if page_start < start:
+                return {"values": all_values, "isLastPage": False}
+
+            all_values.extend(page_values)
+            if not sla_payload_has_more_pages(page):
+                return {"values": all_values, "isLastPage": True}
+
+            if not page_values:
+                return {"values": all_values, "isLastPage": False}
+
+            next_start = page_start + len(page_values)
+            if next_start <= start:
+                return {"values": all_values, "isLastPage": False}
+            start = next_start
+
+        return {"values": all_values, "isLastPage": False}
+
+
+_MAX_SERVICE_DESK_SLA_PAGES = 100
+
+
+def sla_payload_has_more_pages(sla_payload: Mapping[str, Any]) -> bool:
+    """Returns True when a JSM SLA payload indicates additional unfetched pages."""
+    is_last_page = sla_payload.get("isLastPage")
+    if is_last_page is not None:
+        return not bool(is_last_page)
+    links = sla_payload.get("_links")
+    return isinstance(links, Mapping) and bool(links.get("next"))
 
 
 def is_cloud_gateway(gateway: JiraSourceOperations) -> bool:
