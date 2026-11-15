@@ -121,7 +121,8 @@ restore / sent stream / decision / 409 → resumeStream    widget.ts
   replay_end and a resolution sent again (replay, then live) change nothing
 any status read with has_active_subagents (a decided agent that waits to
   resume counts) → read the status every 1s until it is false; each
-  approvals_version change loads the session again; a new stream is followed
+  approvals_version change loads the session again; a new stream is followed; Send
+  stays enabled, and a send ends the poll (its own follow polls on)
 card status = the server's tool_approval_resolved outcome ("cancelled" →
   "No longer waiting"), else this widget's decision until the outcome
   arrives; no stop changes a card

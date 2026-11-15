@@ -443,6 +443,10 @@ describe("approval decisions", () => {
         message = processPacket(packet, message).message;
     }
     expect(message?.approvals).toEqual([entry("a")]);
+    // It starts no answer, sets no status and ends nothing.
+    expect(processPacket({ obj: { type: "replay_end" } }, null)).toEqual({
+      message: null,
+    });
   });
 
   it("ends a resume with noBuffer only on a 404, and ended on a body end", async () => {
@@ -976,11 +980,13 @@ describe("widget while a request waits", () => {
 
   /**
    * A widget whose answer 7 holds agent request c, shown by the load of
-   * version v0. Each status read takes the next of `statuses`; each session
-   * load replays c resolved, plus d once the version is v2.
+   * version v0. Each status read takes the next of `statuses`, then reports
+   * agents as `agentsRun` says; each session load replays c resolved, plus d
+   * once the version is v2.
    */
   function agentWidget(
-    statuses: { has_active_subagents: boolean; approvals_version: string }[]
+    statuses: { has_active_subagents: boolean; approvals_version: string }[],
+    agentsRun: () => boolean = () => false
   ) {
     skipPollPauses();
     const widget = new OnyxChatWidget();
@@ -1009,7 +1015,7 @@ describe("widget while a request waits", () => {
       urls.push(url);
       if (url.endsWith("/status")) {
         const status = statuses.shift() ?? {
-          has_active_subagents: false,
+          has_active_subagents: agentsRun(),
           approvals_version: version,
         };
         version = status.approvals_version;
@@ -1063,7 +1069,7 @@ describe("widget while a request waits", () => {
 
     try {
       await widget["decideApproval"](agentRequest("c"), "approve_once");
-      await waitUntil(() => !widget["isStreaming"]);
+      await waitUntil(() => widget["abortController"] === undefined);
     } finally {
       restore();
     }
@@ -1078,13 +1084,42 @@ describe("widget while a request waits", () => {
     expect(widget["approvalsVersion"]).toBe("v2");
   });
 
+  it("sends while it polls for running agents, and the send's follow polls on", async () => {
+    const { restore } = fakeSessionStorage();
+    // The agents run until the sent answer is done.
+    let answered = false;
+    const { widget, count } = agentWidget([], () => !answered);
+    const streamMessage = mock(async function* (): AsyncGenerator<Packet> {
+      yield { obj: { user_message_id: 8, reserved_assistant_message_id: 9 } };
+      yield { obj: { type: "message_start" } };
+      yield { obj: { type: "message_delta", content: "Done" } };
+      yield { obj: { type: "stop" } };
+      answered = true;
+    });
+    widget["apiService"].streamMessage = streamMessage;
+
+    try {
+      await widget["decideApproval"](agentRequest("c"), "approve_once");
+      await waitUntil(() => count("/status") >= 2);
+      widget["inputValue"] = "next";
+      await widget["sendMessage"]();
+      await waitUntil(() => widget["abortController"] === undefined);
+    } finally {
+      restore();
+    }
+
+    expect(streamMessage).toHaveBeenCalledTimes(1);
+    expect(widget["messages"].at(-1)).toMatchObject({ id: 9, content: "Done" });
+    expect(widget["inputValue"]).toBe("");
+  });
+
   it("reads the status once after an agent decision when no agent runs", async () => {
     const { restore } = fakeSessionStorage();
     const { widget, count } = agentWidget([]);
 
     try {
       await widget["decideApproval"](agentRequest("c"), "approve_once");
-      await waitUntil(() => !widget["isStreaming"]);
+      await waitUntil(() => widget["abortController"] === undefined);
     } finally {
       restore();
     }

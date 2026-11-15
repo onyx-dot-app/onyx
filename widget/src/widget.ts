@@ -546,6 +546,9 @@ export class OnyxChatWidget extends LitElement {
       return;
     }
 
+    // A send takes over from a status poll for background agents; its own
+    // follow reads the status after its stream.
+    this.abortController?.abort();
     const controller = new AbortController();
     this.abortController = controller;
     const stillOurs = () =>
@@ -933,18 +936,22 @@ export class OnyxChatWidget extends LitElement {
         }
         reservedAssistantId = null;
         if (!agentsRun) return;
+        // Agents never hold the chat: a send can end this poll.
+        this.isStreaming = false;
+        this.streamingStatus = "";
         if (pausesFirst)
           await pause(READINESS_POLL_INTERVAL_MS, controller.signal);
         pausesFirst = true;
         const status = await this.apiService.waitForSessionIdle(
           sessionId,
           controller.signal,
-          onUnconfirmed,
+          () => {},
           (stream: ChatStream) =>
             stream.stream_id !== streamWithoutBuffer &&
             stream.stream_id !== lastStreamId
         );
         if (!stillOurs()) return;
+        this.isStreaming = true;
         this.noteApprovalsVersion(status);
         agentsRun = status.has_active_subagents;
         const next = status.is_processing ? status.current_stream : null;
