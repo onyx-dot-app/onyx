@@ -20,10 +20,15 @@ Jira project of type ``service_desk``. Only two things change here:
 from collections.abc import Generator, Mapping
 from typing import Any, ClassVar
 
+import requests
+from jira.exceptions import JIRAError
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.source_operations import (
+    JiraApiError,
+    JiraCloudIdError,
     JiraSourceOperations,
     sla_payload_has_more_pages,
 )
@@ -71,13 +76,32 @@ def _sla_breached_summary(sla_payload: Mapping[str, Any]) -> str | None:
     return "false"
 
 
+def _apply_portal_request_metadata(
+    document: Document, request: Mapping[str, Any]
+) -> None:
+    """Populate portal request metadata from a validated Service Desk mapping."""
+    request_type_obj = request.get("requestType")
+    if isinstance(request_type_obj, Mapping):
+        request_type = request_type_obj.get("name")
+        if isinstance(request_type, str) and request_type:
+            document.metadata[META_REQUEST_TYPE] = request_type
+
+    status_obj = request.get("currentStatus")
+    if isinstance(status_obj, Mapping):
+        portal_status = status_obj.get("status")
+        if isinstance(portal_status, str) and portal_status:
+            document.metadata[META_PORTAL_STATUS] = portal_status
+
+
 class JiraServiceManagementConnector(JiraConnector):
     """Connector for Jira Service Management customer portal tickets."""
 
     connector_source: ClassVar[DocumentSource] = DocumentSource.JIRA_SERVICE_MANAGEMENT
+    _project_type_cache: dict[str, str | None]
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Bind Jira credentials using the JSM source identifier."""
+        self._project_type_cache = {}
         self._source_operations = JiraSourceOperations(
             credentials_provider=OnyxStaticCredentialsProvider(
                 None, DocumentSource.JIRA_SERVICE_MANAGEMENT.value, credentials
@@ -89,28 +113,69 @@ class JiraServiceManagementConnector(JiraConnector):
         )
         return None
 
+    def _get_project_type_cache(self) -> dict[str, str | None]:
+        cache: dict[str, str | None] | None = self.__dict__.get("_project_type_cache")
+        if cache is None:
+            cache = {}
+            self._project_type_cache = cache
+        return cache
+
     def _issue_project_type(self, issue: dict[str, Any]) -> str | None:
-        """Return the raw Jira projectTypeKey for an issue, if present."""
+        """Return the Jira projectTypeKey for an issue, resolving and caching
+        it via project metadata lookup when the issue payload omits it."""
         project = get_issue_field(issue, _FIELD_PROJECT)
-        return project.get(_FIELD_PROJECT_TYPE_KEY) if project else None
+        if not isinstance(project, Mapping):
+            return None
+
+        raw_type = project.get(_FIELD_PROJECT_TYPE_KEY)
+        if isinstance(raw_type, str) and raw_type:
+            return raw_type
+
+        project_key = project.get(_FIELD_KEY)
+        if not isinstance(project_key, str) or not project_key:
+            return None
+
+        cache = self._get_project_type_cache()
+        if project_key in cache:
+            return cache[project_key]
+
+        resolved: str | None = None
+        if self._source_operations is not None:
+            try:
+                resolved_project = self._source_operations.get_project(
+                    project_key=project_key, fast=True
+                )
+            except (
+                JiraApiError,
+                JiraCloudIdError,
+                ValueError,
+                JIRAError,
+                requests.RequestException,
+            ) as exc:
+                logger.debug(
+                    "Could not resolve projectTypeKey for %s: %s",
+                    project_key,
+                    exc,
+                )
+            else:
+                if isinstance(resolved_project, Mapping):
+                    candidate = resolved_project.get(_FIELD_PROJECT_TYPE_KEY)
+                    if isinstance(candidate, str) and candidate:
+                        resolved = candidate
+
+        cache[project_key] = resolved
+        return resolved
 
     def _drops_issue(self, issue: dict[str, Any]) -> bool:
         """Everything-scope gate. With the default "Everything" scope the
         inherited JQL matches every project the credential can browse,
-        including software projects. Ordinary Jira issues must not index
-        under the JSM source, so drop issues whose project is known not to
-        be a service desk. JQL-only configurations also leave jira_project
-        unset, but their scope is the user's explicit query, so the gate
-        applies to Everything only. When the payload omits projectTypeKey
-        (some Data Center versions) the issue indexes and enrichment stays
-        best effort, as documented."""
-        project_type = self._issue_project_type(issue)
-        return (
-            not self.jira_project
-            and not self.jql_query
-            and project_type is not None
-            and project_type != _PROJECT_TYPE_SERVICE_DESK
-        )
+        including software projects. Drop any issue whose project type is not
+        confirmed to be a service desk (after resolving and caching omitted
+        project types). Project-only and JQL-only configurations have an
+        explicit user scope, so the gate applies to Everything only."""
+        if self.jira_project or self.jql_query:
+            return False
+        return self._issue_project_type(issue) != _PROJECT_TYPE_SERVICE_DESK
 
     def _include_issue_in_slim_listing(self, issue: dict[str, Any]) -> bool:
         """Applies the Everything-scope gate to slim-document listing too.
@@ -154,26 +219,21 @@ class JiraServiceManagementConnector(JiraConnector):
         request = self.source_operations.get_service_desk_request(
             issue_key=issue_key, fast=True
         )
-        if request is None:
+        if not isinstance(request, Mapping):
             logger.debug(
                 "No JSM portal metadata for %s: request lookup returned "
-                "nothing (JSM absent or no service-desk access).",
+                "nothing (JSM absent, no service-desk access, or malformed payload).",
                 issue_key,
             )
-        if request is not None:
-            request_type = (request.get("requestType") or {}).get("name")
-            if request_type:
-                document.metadata[META_REQUEST_TYPE] = request_type
-            portal_status = (request.get("currentStatus") or {}).get("status")
-            if portal_status:
-                document.metadata[META_PORTAL_STATUS] = portal_status
+        else:
+            _apply_portal_request_metadata(document, request)
 
         sla = self.source_operations.get_service_desk_sla(
             issue_key=issue_key, fast=True
         )
-        if sla is None:
+        if not isinstance(sla, Mapping):
             logger.debug("No JSM SLA data for %s.", issue_key)
-        if sla is not None:
+        else:
             summary = _sla_breached_summary(sla)
             if summary is not None:
                 document.metadata[META_SLA_BREACHED] = summary

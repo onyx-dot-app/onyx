@@ -463,3 +463,120 @@ def test_project_permissions_pass_through_to_jira_base(
         "other_group",
     }
     assert unprefixed.external_user_group_ids == {"support-agents"}
+
+
+def test_malformed_portal_responses_do_not_drop_document(
+    jsm_connector: JiraServiceManagementConnector,
+    mock_source_operations: MagicMock,
+) -> None:
+    """Non-mapping portal/SLA responses or nested fields must skip only invalid
+    enrichment fields while keeping valid sibling fields and the Jira document."""
+    # Nested field is a string ("unavailable") while requestType is valid.
+    mock_source_operations.get_service_desk_request.return_value = {
+        "requestType": {"name": "Get IT help"},
+        "currentStatus": "unavailable",
+    }
+    mock_source_operations.get_service_desk_sla.return_value = ["unexpected-list"]
+
+    docs = _documents(jsm_connector, _make_issue("HELP-7"))
+    assert len(docs) == 1
+    assert docs[0].source is DocumentSource.JIRA_SERVICE_MANAGEMENT
+    assert docs[0].metadata["request_type"] == "Get IT help"
+    assert "portal_status" not in docs[0].metadata
+    assert "sla_breached" not in docs[0].metadata
+
+    # Top-level non-mapping request payload returned by gateway or _get_json.
+    mock_source_operations.get_service_desk_request.return_value = ["top-level-list"]
+    mock_source_operations.get_service_desk_sla.return_value = {
+        "values": [{"ongoingCycle": {"breached": False}}]
+    }
+
+    docs2 = _documents(jsm_connector, _make_issue("HELP-8"))
+    assert len(docs2) == 1
+    assert docs2[0].source is DocumentSource.JIRA_SERVICE_MANAGEMENT
+    assert "request_type" not in docs2[0].metadata
+    assert "portal_status" not in docs2[0].metadata
+    assert docs2[0].metadata["sla_breached"] == "false"
+
+
+def test_get_service_desk_request_rejects_non_mapping_json() -> None:
+    """Gateway must return None instead of leaking a top-level list/scalar payload."""
+    from onyx.connectors.jira.source_operations import JiraSourceOperations
+
+    client = MagicMock()
+    client._get_json.return_value = ["not-a-mapping"]
+    ops = JiraSourceOperations.__new__(JiraSourceOperations)
+    ops._cached_client = client
+    ops._cached_fast_client = client
+
+    assert ops.get_service_desk_request(issue_key="IT-1") is None
+
+
+def test_everything_scope_resolves_and_caches_omitted_project_type(
+    jsm_connector: JiraServiceManagementConnector,
+    mock_source_operations: MagicMock,
+) -> None:
+    """When issue omits projectTypeKey under Everything scope, resolve and cache
+    via get_project consistently across indexing and slim listing."""
+    jsm_connector.jira_project = None
+    jsm_connector.jql_query = None
+
+    def issue_without_type(key: str, project_key: str) -> dict[str, Any]:
+        issue = _make_issue(key, project_key=project_key)
+        issue["fields"]["project"].pop("projectTypeKey")
+        return issue
+
+    mock_source_operations.get_project.side_effect = [
+        {"key": "SW", "projectTypeKey": "software"},
+        {"key": "DESK", "projectTypeKey": "service_desk"},
+    ]
+
+    # Resolved software project -> dropped from indexing and slim listing; cached.
+    sw_issue_1 = issue_without_type("SW-1", "SW")
+    sw_issue_2 = issue_without_type("SW-2", "SW")
+    assert _documents(jsm_connector, sw_issue_1) == []
+    assert _documents(jsm_connector, sw_issue_2) == []
+    assert jsm_connector._include_issue_in_slim_listing(sw_issue_1) is False
+
+    # Resolved service_desk project -> indexed and included in slim listing; cached.
+    desk_issue_1 = issue_without_type("DESK-1", "DESK")
+    desk_issue_2 = issue_without_type("DESK-2", "DESK")
+    assert len(_documents(jsm_connector, desk_issue_1)) == 1
+    assert len(_documents(jsm_connector, desk_issue_2)) == 1
+    assert jsm_connector._include_issue_in_slim_listing(desk_issue_1) is True
+
+    assert mock_source_operations.get_project.call_args_list == [
+        call(project_key="SW", fast=True),
+        call(project_key="DESK", fast=True),
+    ]
+
+
+def test_everything_scope_drops_unresolvable_project_type(
+    jsm_connector: JiraServiceManagementConnector,
+    mock_source_operations: MagicMock,
+) -> None:
+    """Fail-closed under Everything scope when projectTypeKey cannot be determined,
+    while preserving explicit Project/JQL scopes."""
+    import requests
+
+    jsm_connector.jira_project = None
+    jsm_connector.jql_query = None
+
+    missing_type = _make_issue("UNK-1", project_key="UNK")
+    missing_type["fields"]["project"].pop("projectTypeKey")
+    mock_source_operations.get_project.return_value = {"key": "UNK"}
+
+    assert _documents(jsm_connector, missing_type) == []
+    assert jsm_connector._include_issue_in_slim_listing(missing_type) is False
+
+    failed_lookup = _make_issue("ERR-1", project_key="ERR")
+    failed_lookup["fields"]["project"].pop("projectTypeKey")
+    mock_source_operations.get_project.side_effect = requests.RequestException("boom")
+    assert _documents(jsm_connector, failed_lookup) == []
+    assert jsm_connector._include_issue_in_slim_listing(failed_lookup) is False
+
+    # Explicit scope still indexes when projectTypeKey cannot be resolved.
+    jsm_connector.jql_query = "project = ERR"
+    docs = _documents(jsm_connector, failed_lookup)
+    assert len(docs) == 1
+    assert jsm_connector._include_issue_in_slim_listing(failed_lookup) is True
