@@ -94,7 +94,46 @@ describe("useToolApprovals", () => {
 });
 
 describe("useChatSessionQueue", () => {
+  beforeEach(() => jest.mocked(refreshChatSession).mockClear());
   afterEach(() => jest.restoreAllMocks());
+
+  function serveStatus(approvalsVersion: string) {
+    return jest.spyOn(global, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            is_processing: false,
+            current_stream: null,
+            has_startable_input: false,
+            has_active_subagents: false,
+            latest_response_id: null,
+            approvals_version: approvalsVersion,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+    );
+  }
+
+  it("takes a started chat's first approvals version as its baseline without a refresh", async () => {
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: "started-session",
+    });
+    useChatSessionStore
+      .getState()
+      .createSession("started-session", { chatState: "input" });
+    serveStatus("0/0/None/None");
+
+    renderHook(() => useChatSessionQueue(true));
+
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("started-session")
+          ?.approvalsVersion
+      ).toBe("0/0/None/None")
+    );
+    expect(refreshChatSession).not.toHaveBeenCalled();
+  });
 
   it("refreshes an incognito chat whose approvals changed, without its server queue", async () => {
     useChatSessionStore.setState({
