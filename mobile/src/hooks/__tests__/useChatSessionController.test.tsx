@@ -1077,8 +1077,6 @@ describe("useChatSessionController", () => {
       .mockReturnValueOnce(
         scripted([
           startPacket("asked"),
-          // The continuation marks where its replayed prefix ends; this reader ignores it.
-          { type: "replay_end" } as unknown as StreamEvent,
           deltaPacket(" done"),
           stopPacket(),
           { stream_id: 7, next_cursor: 3, replay_complete: true },
@@ -1101,6 +1099,133 @@ describe("useChatSessionController", () => {
     // Only the settle loads the saved session.
     expect(getSessionMock).toHaveBeenCalledTimes(1);
     expect(assistantText("s1", 2)).toBe("asked done");
+  });
+
+  // A paused response's turn can keep running for a sibling; its resume is a later stream.
+  it("keeps reading status after a pause until a new stream names the response", async () => {
+    seedLiveSession(2);
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({
+        is_processing: true,
+        current_stream: { stream_id: 2, response_ids: [2, 3] },
+      })
+      .mockResolvedValueOnce({
+        is_processing: true,
+        current_stream: { stream_id: 2, response_ids: [2, 3] },
+      })
+      .mockResolvedValueOnce({
+        is_processing: true,
+        current_stream: { stream_id: 9, response_ids: [2] },
+      });
+    getSessionMock.mockResolvedValueOnce({
+      chat_session_id: "s1",
+      description: "",
+      persona_id: 0,
+      messages: backendMessages("asked done"),
+      packets: [[historyPacket("asked done")]],
+      time_created: "",
+      current_stream: null,
+    });
+    resumeMock
+      .mockReturnValueOnce(
+        scripted([
+          startPacket("asked"),
+          {
+            placement: { turn_index: 0 },
+            obj: {
+              type: PacketType.STOP,
+              stop_reason: StopReason.AWAITING_APPROVAL,
+            },
+          },
+          cursor(2),
+        ]),
+      )
+      .mockReturnValueOnce(
+        scripted([
+          startPacket("asked"),
+          deltaPacket(" done"),
+          stopPacket(),
+          { stream_id: 9, next_cursor: 3, replay_complete: true },
+        ]),
+      );
+
+    renderHook(() => useChatSessionController("s1"), { wrapper });
+
+    await waitFor(() =>
+      expect(useChatSessionStore.getState().sessions.get("s1")?.chatState).toBe(
+        "input",
+      ),
+    );
+    // The paused stream is never read again.
+    expect(resumeMock.mock.calls.map((call) => [call[1], call[2]])).toEqual([
+      [2, 0],
+      [9, 0],
+    ]);
+    expect(getChatSessionStatus).toHaveBeenCalledTimes(4);
+  });
+
+  // A continuation's replay holds every saved resolution, and its live part sends the resolution
+  // of a call the run continues again.
+  it("shows one decided card when a continuation repeats a resolution", async () => {
+    seedLiveSession(2);
+    const request: StreamEvent = {
+      placement: { turn_index: 0 },
+      obj: {
+        type: PacketType.TOOL_APPROVAL_REQUEST,
+        approval_id: "a1",
+        tool_call_id: "c1",
+        tool_name: "lookup",
+        display_name: "Lookup",
+        arguments: {},
+      },
+    };
+    const resolved: StreamEvent = {
+      placement: { turn_index: 0 },
+      obj: {
+        type: PacketType.TOOL_APPROVAL_RESOLVED,
+        approval_id: "a1",
+        outcome: "approved",
+      },
+    };
+    let release: () => void = () => {};
+    resumeMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        yield request;
+        yield resolved;
+        yield {
+          placement: { turn_index: 0 },
+          obj: { type: PacketType.REPLAY_END },
+        };
+        yield cursor(3);
+        yield resolved;
+        yield startPacket("Sunny");
+        yield cursor(5);
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      })(),
+    );
+
+    const { unmount } = renderHook(() => useChatSessionController("s1"), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(assistantText("s1", 2)).toBe("Sunny"));
+    const tree = useChatSessionStore.getState().sessions.get("s1")!.messageTree;
+    const packets = getMessageByMessageId(tree, 2)?.packets ?? [];
+    expect(
+      readToolApprovals(packets).map((entry) => [
+        entry.request.approval_id,
+        toolApprovalStatus(entry, undefined),
+      ]),
+    ).toEqual([["a1", "approved"]]);
+    // The replay boundary is not output.
+    expect(packets.map((packet) => packet.obj.type)).not.toContain(
+      PacketType.REPLAY_END,
+    );
+    unmount();
+    release();
   });
 
   it("follows a new stream instead of retrying one without a buffer", async () => {

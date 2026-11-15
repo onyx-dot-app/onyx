@@ -166,8 +166,11 @@ After a decision, `components/chat/ToolApprovalCard.tsx` follows the
 `continuation` that the decision response names, from cursor 0, when no
 reader runs. The server names one only for a suspended response; for a live
 response it is null and the running reader keeps its stream. A reader whose
-stream stops with `awaiting_approval` reads status and follows a new
-`current_stream` from cursor 0. A 404 or 409 decision starts `recoverChatSession` with no
+stream stops with `awaiting_approval` reads status while the server
+processes, such as for a sibling response, and follows the next new
+`current_stream` from cursor 0. It never reads the paused stream again. The
+recovery reader drops a continuation's `replay_end` packet. A repeated
+`tool_approval_resolved` is harmless, since cards key outcomes by `approval_id`. A 404 or 409 decision starts `recoverChatSession` with no
 stream, which reads status once and follows `current_stream` or reloads the
 saved session. A subagent's request (`agent_name`) shows the label "{agent}
 wants to run {tool}". It and its outcome arrive only in the session replay,

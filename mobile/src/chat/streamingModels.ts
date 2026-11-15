@@ -15,6 +15,8 @@ export enum PacketType {
   STOP = "stop",
   SECTION_END = "section_end",
   TOP_LEVEL_BRANCHING = "top_level_branching",
+  // Ends the replayed prefix of a continuation stream.
+  REPLAY_END = "replay_end",
   ERROR = "error",
 
   SEARCH_TOOL_START = "search_tool_start",
@@ -119,6 +121,10 @@ export interface SectionEnd extends BaseObj {
 export interface TopLevelBranching extends BaseObj {
   type: "top_level_branching";
   num_parallel_branches: number;
+}
+
+export interface ReplayEnd extends BaseObj {
+  type: "replay_end";
 }
 
 export interface PacketError extends BaseObj {
@@ -480,6 +486,7 @@ export type ObjTypes =
   | ChatHeartbeat
   | SectionEnd
   | TopLevelBranching
+  | ReplayEnd
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj

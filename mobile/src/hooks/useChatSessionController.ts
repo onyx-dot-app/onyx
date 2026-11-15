@@ -217,7 +217,12 @@ export async function recoverChatSession(
                 });
                 break;
               }
-              if (isPacket(event) && !isHeartbeat(event)) {
+              // The replay boundary is not output; the cursor already tracks the replay.
+              if (
+                isPacket(event) &&
+                !isHeartbeat(event) &&
+                event.obj.type !== PacketType.REPLAY_END
+              ) {
                 batch.push(event);
                 if (event.obj.type === PacketType.STOP) batchStop = event;
               }
