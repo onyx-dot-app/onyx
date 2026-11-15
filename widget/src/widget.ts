@@ -135,10 +135,10 @@ export class OnyxChatWidget extends LitElement {
   // load shows them.
   private unseenAnswerIds = new Set<number>();
   // The `approvals_version` of the requests the transcript shows, from the
-  // last session load or the new chat's first status read; a change replays
-  // the saved session, the one source of background agent requests and
-  // their outcomes
-  private approvalsVersion: string | null = null;
+  // last session load; "" before any load, the version of a chat with no
+  // requests. A change replays the saved session, the one source of
+  // background agent requests and their outcomes
+  private approvalsVersion = "";
   private approvalsChanged = false;
 
   /** Notes a status read's latest answer when the transcript lacks it. */
@@ -338,7 +338,7 @@ export class OnyxChatWidget extends LitElement {
     this.continuationStreamId = null;
     this.statusRecheck = false;
     this.unseenAnswerIds = new Set();
-    this.approvalsVersion = null;
+    this.approvalsVersion = "";
     this.approvalsChanged = false;
     this.documentMap.clear();
     this.citationMap.clear();
@@ -606,9 +606,6 @@ export class OnyxChatWidget extends LitElement {
     try {
       this.isStreaming = true;
       this.error = undefined;
-      // A new chat shows no requests, so its first read is the baseline
-      // that later reads compare to.
-      const created = !this.chatSessionId;
       if (!this.chatSessionId) {
         this.isLoading = true;
         const sessionId = await this.apiService.createChatSession(
@@ -628,8 +625,9 @@ export class OnyxChatWidget extends LitElement {
         }
       );
       if (!stillOurs()) return;
-      if (created) this.approvalsVersion = status.approvals_version;
-      else this.noteApprovalsVersion(status);
+      // A new chat shows no requests; a background agent can ask before
+      // this read, which then reports a version other than "".
+      this.noteApprovalsVersion(status);
       this.noteLatestAnswer(status);
 
       // Resolved once per send, so every persisted transcript is tagged with

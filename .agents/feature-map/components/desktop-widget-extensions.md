@@ -81,10 +81,11 @@ session.
   └─ resolveConfig (attributes win over VITE_* build values)  config/config.ts
 send → ApiService                                   services/api-service.ts
   ├─ createChatSession   (first message only)
-  ├─ waitForSessionIdle → GET /chat/chat-session/{id}/status; for a new chat
-  │    its approvals_version is the baseline (create returns none); a
-  │    latest_response_id the transcript lacks loads the saved session
-  │    first, and the question goes under that answer
+  ├─ waitForSessionIdle → GET /chat/chat-session/{id}/status; the
+  │    approvals_version baseline is "" (a chat with no requests) until a
+  │    session load, so a new chat whose first read reports another version
+  │    loads the session; a latest_response_id the transcript lacks loads
+  │    the saved session first, and the question goes under that answer
   ├─ streamMessage → POST /chat/send-chat-message, origin "widget"
   │    └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
   │         └─ saveSession to sessionStorage, scoped by credential identity

@@ -807,24 +807,39 @@ describe("widget while a request waits", () => {
     return { widget, api };
   }
 
-  it("takes a new chat's baseline from its read before the send", async () => {
-    const { widget, api } = sendingWidget();
-    const calls: string[] = [];
-    api.createChatSession = mock(async () => {
-      calls.push("create");
-      return "session";
-    });
-    api.waitForSessionIdle = mock(async () => {
-      calls.push("status");
-      return idle({ approvals_version: "v0" });
-    });
+  it.each([
+    ["", 0],
+    ["v1", 1],
+  ] as const)(
+    'starts a new chat at the baseline "" and loads the session when its first read reports %p',
+    async (version, loads) => {
+      const { widget, api } = sendingWidget();
+      const calls: string[] = [];
+      api.createChatSession = mock(async () => {
+        calls.push("create");
+        return "session";
+      });
+      // A background agent can ask before the new chat's first read.
+      api.waitForSessionIdle = mock(async () => {
+        calls.push("status");
+        return idle({ approvals_version: version });
+      });
+      const getChatSession = mock(
+        async (): Promise<ChatSessionDetail> => ({
+          approvals_version: version,
+          messages: [],
+          packets: [],
+        })
+      );
+      api.getChatSession = getChatSession;
 
-    await widget["sendMessage"]();
+      await widget["sendMessage"]();
 
-    expect(calls).toEqual(["create", "status", "status"]);
-    expect(widget["approvalsVersion"]).toBe("v0");
-    expect(api.getChatSession).not.toHaveBeenCalled();
-  });
+      expect(calls).toEqual(["create", "status", "status"]);
+      expect(widget["approvalsVersion"]).toBe(version);
+      expect(getChatSession).toHaveBeenCalledTimes(loads);
+    }
+  );
 
   it("reads the status once at a stop for decisions, and follows only a new stream of the response", async () => {
     const { widget, api } = sendingWidget();
