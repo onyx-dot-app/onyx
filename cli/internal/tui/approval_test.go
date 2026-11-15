@@ -1101,6 +1101,47 @@ func TestRootTurnThatAgentResultsStartIsFollowed(t *testing.T) {
 	}
 }
 
+func TestReplyThatEndsBetweenStatusReadsShows(t *testing.T) {
+	latest := 9
+	saved := waitingSession(t)
+	saved.Messages = append(saved.Messages, models.ChatMessageDetail{MessageID: latest, MessageType: "assistant", Message: "The agent filed ENG-1."})
+	saved.Packets = [][]json.RawMessage{saved.Packets[0][:1], {}}
+	client := &pollingClient{
+		resumingClient: &resumingClient{},
+		// The agent ran, and its follow-up reply ended before the next read.
+		statuses: []models.ChatSessionStatus{{LatestResponseID: &latest}},
+		sessions: map[string]*models.ChatSessionDetailResponse{"": saved},
+	}
+	m, ch := streamingModel(client)
+	session := waitingSessionID
+	m.chatSessionID = &session
+	m.viewport.startAgent()
+	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: 2})
+	m = receive(t, m, ch, models.MessageDeltaEvent{Content: "Filing the ticket."})
+	m = receive(t, m, ch, models.StopEvent{})
+	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
+	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch, status: models.ChatSessionStatus{HasActiveSubagents: true}})
+	m = updated.(Model)
+	pending := []tea.Cmd{cmd}
+	for len(pending) > 0 {
+		next := pending[0]
+		pending = pending[1:]
+		for _, msg := range messages(t, next) {
+			updated, follow := m.Update(msg)
+			m = updated.(Model)
+			if follow != nil {
+				pending = append(pending, follow)
+			}
+		}
+	}
+	if view := stripANSI(m.viewport.view(60)); !strings.Contains(view, "The agent filed ENG-1.") {
+		t.Fatalf("the finished reply does not show:\n%s", view)
+	}
+	if client.reads > 3 {
+		t.Fatalf("reads = %d, want the reads to settle after the reload", client.reads)
+	}
+}
+
 func TestContinuationIsNotFollowedAfterTheUserLeavesTheChat(t *testing.T) {
 	client := &resumingClient{running: make(chan models.StreamEvent, 8)}
 	m := stoppedForDecisions(t, client)

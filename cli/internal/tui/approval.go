@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -320,8 +321,16 @@ func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 	}
 	m, load := m.noteApprovalsVersion(msg.status)
 	var follow tea.Cmd
-	if stream := msg.status.CurrentStream; stream != nil && !m.isStreaming {
-		m, follow = m.followContinuation(*stream)
+	latest := msg.status.LatestResponseID
+	switch {
+	case m.isStreaming:
+	case msg.status.CurrentStream != nil:
+		m, follow = m.followContinuation(*msg.status.CurrentStream)
+	case latest != nil && *latest != m.reloadedResponseID &&
+		!slices.ContainsFunc(m.viewport.entries, func(entry chatEntry) bool { return entry.responseID == *latest }):
+		// A response that ended between reads shows in the saved session.
+		m.reloadedResponseID = *latest
+		m, follow = cmdResume(m, msg.sessionID, nil)
 	}
 	startable := !m.isStreaming && (msg.status.HasStartableInput || msg.status.IsProcessing)
 	if !msg.status.HasActiveSubagents && len(m.approvals) == 0 && !startable {

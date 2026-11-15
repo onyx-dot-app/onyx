@@ -65,6 +65,9 @@ type Model struct {
 	// follow numbers the status reads that wait for a decided response; a
 	// newer read or a followed continuation replaces an older read.
 	follow int
+	// reloadedResponseID is the newest response that a status read last
+	// reloaded the session to show.
+	reloadedResponseID int
 	// following marks a stream that follows a running response of the
 	// session instead of a new message.
 	following bool

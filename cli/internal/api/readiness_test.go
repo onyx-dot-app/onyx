@@ -106,7 +106,7 @@ func TestReadinessFailsClosed(t *testing.T) {
 
 func TestStatusNamesTheStreamAndTheApprovalsVersion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"is_processing":true,"current_stream":{"stream_id":9,"response_ids":[4]},"approvals_version":"v2","has_active_subagents":true,"has_startable_input":true}`)
+		fmt.Fprint(w, `{"is_processing":true,"current_stream":{"stream_id":9,"response_ids":[4]},"approvals_version":"v2","has_active_subagents":true,"has_startable_input":true,"latest_response_id":5}`)
 	}))
 	defer server.Close()
 	status, err := testutil.NewClient(server.URL).ChatSessionStatus(t.Context(), "session")
@@ -114,7 +114,7 @@ func TestStatusNamesTheStreamAndTheApprovalsVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	stream := status.CurrentStream
-	if stream == nil || stream.StreamID != 9 || len(stream.ResponseIDs) != 1 || stream.ResponseIDs[0] != 4 || status.ApprovalsVersion != "v2" || !status.HasActiveSubagents || !status.HasStartableInput {
+	if stream == nil || stream.StreamID != 9 || len(stream.ResponseIDs) != 1 || stream.ResponseIDs[0] != 4 || status.ApprovalsVersion != "v2" || !status.HasActiveSubagents || !status.HasStartableInput || status.LatestResponseID == nil || *status.LatestResponseID != 5 {
 		t.Fatalf("status = %+v, stream = %+v", status, stream)
 	}
 }

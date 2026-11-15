@@ -77,6 +77,8 @@ type ChatSessionStatus struct {
 	// HasStartableInput reports input that the server starts a root turn
 	// for, such as a finished agent's unread result.
 	HasStartableInput bool
+	// LatestResponseID is the newest response on the selected branch, or nil.
+	LatestResponseID *int
 }
 
 // ChatFileType represents a file type for uploads.
