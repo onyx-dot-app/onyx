@@ -7,7 +7,6 @@ from pydantic import JsonValue
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_DESCRIPTION,
     CODING_AGENT_THINK_TOOL_DESCRIPTION,
-    CODING_AGENT_TOOL_DESCRIPTION,
     GENERATE_ANSWER_TOOL_DESCRIPTION,
 )
 from onyx.deep_research.tool_definitions import (
@@ -87,7 +86,6 @@ def _check_closed_objects(schema: JsonValue) -> None:
         ],
         BASH_TOOL_DESCRIPTION,
         CODING_AGENT_THINK_TOOL_DESCRIPTION,
-        CODING_AGENT_TOOL_DESCRIPTION,
         GENERATE_ANSWER_TOOL_DESCRIPTION,
         GENERATE_PLAN_TOOL_DESCRIPTION,
         GENERATE_REPORT_TOOL_DESCRIPTION,
@@ -191,6 +189,56 @@ _STRINGS: dict[str, JsonValue] = {"type": "array", "items": _STRING}
                     "description": "One or more queries to look up on the web. Must "
                     "contain only printable characters",
                 }
+            ),
+        ),
+        (
+            BashTool,
+            _strict_parameters(
+                cmd={
+                    **_STRING,
+                    "description": "Bash command to execute in the session.",
+                }
+            ),
+        ),
+        (
+            CodingAgentTool,
+            _strict_parameters(
+                query={
+                    **_STRING,
+                    "description": "The user's question or task to perform against "
+                    "the repository.",
+                },
+                github_repo={
+                    **_STRING,
+                    "description": "GitHub repository URL or 'owner/repo' identifier "
+                    "(e.g. 'https://github.com/onyx-dot-app/onyx' or "
+                    "'onyx-dot-app/onyx').",
+                },
+            ),
+        ),
+        (
+            ImageGenerationTool,
+            _strict_parameters(
+                prompt={**_STRING, "description": "Prompt used to generate the image"},
+                shape=_nullable(
+                    {**_STRING, "enum": ["square", "portrait", "landscape"]},
+                    "Use null for the default square shape. Image shape: 'square', "
+                    "'portrait', or 'landscape'.",
+                ),
+                reference_image_file_ids=_nullable(
+                    _STRINGS,
+                    "Optional file_ids of existing images to edit or use as "
+                    "reference; the first is the primary edit source. Get file_ids "
+                    "from `[attached image — file_id: <id>]` tags on user-attached "
+                    "images or from prior generate_image tool responses. Use null "
+                    "for a fresh, unrelated generation.",
+                ),
+            ),
+        ),
+        (
+            PythonTool,
+            _strict_parameters(
+                code={**_STRING, "description": "Python source code to execute"}
             ),
         ),
     ],
