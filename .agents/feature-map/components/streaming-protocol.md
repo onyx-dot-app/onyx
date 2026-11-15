@@ -292,6 +292,28 @@ its background task end ([[#pure-asgi-middleware]]).
    `mobile/src/hooks/useChatSessionController.ts:recoverChatSession` uses to
    commit packets and to reattach from the last cursor; only a 404 stops it
    from requesting that stream again ([[#buffer-gap-ends-resume]]).
+   `cli/internal/api/stream.go:ResumeChatStream` delivers events only in
+   complete batches, each ending with its `StreamCursor` line, so the CLI chat
+   can continue from the last cursor without a repeated packet. It reports a
+   404 as `StreamUnavailableEvent`; only that stops the CLI from requesting
+   the response again, and a clean end before the first cursor is retried.
+   After a `stop` with `stop_reason` `awaiting_approval`, `cli/cmd/ask.go`
+   and `cli/internal/tui/app.go` keep the approval cards and stop reading.
+   They follow the stream that a decision response names in `continuation`
+   from cursor 0. When it is `null`, or after another client's decision, and
+   no stream that they read writes the response,
+   `cli/internal/api/client.go:FollowResponse` reads the status while
+   `is_processing` until a `current_stream` lists the response in
+   `response_ids`, and they follow it. When the session goes idle first, the
+   saved session shows the response. `ask` drops the replayed events up to
+   the `replay_end` packet, except outcomes of requests it asked, and keeps
+   the replayed text as the text it showed. From the saved session it shows
+   only the text after that prefix, because the saved packets render the
+   response as a replay does. The TUI loads the session. The TUI keeps a card until a
+   resolution or a session load gives its outcome, and loads the session
+   again when the status reports a new `approvals_version`. After a decision
+   on a background agent's card, it reads the status at once and again while
+   `has_active_subagents` is true.
 6. `turn-index-is-not-a-turn` **`turn_index` is not a backend turn.** It is a
    rendering block. `chat/renderer.py:ResponseLayout.next_section` gives each
    answer, reasoning or tool section its own index, so reasoning and the tool
@@ -414,8 +436,10 @@ its background task end ([[#pure-asgi-middleware]]).
     stream that runs instead of its send. Its idle result counts
     `has_startable_input` as background work and reloads when the chat does
     not show `latest_response_id` ([[mobile-app]]). The others are
-    `cli/internal/api/client.go:IsChatSessionProcessing` and
-    `widget/src/services/api-service.ts`. The CLI and widget stop with an error
+    `cli/internal/api/client.go:ChatSessionStatus` and
+    `widget/src/services/api-service.ts`. The CLI chat also reads
+    `current_stream` to follow a response whose stream it lost or that started
+    after a 404 from `resume-stream`. The CLI and widget stop with an error
     when an older server has no status endpoint. An old client in the field
     that sends as soon as the stream closes can meet the `CONFLICT` error.
 13. `pure-asgi-middleware` **API middleware must be pure ASGI.** Each middleware

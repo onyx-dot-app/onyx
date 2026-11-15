@@ -15,6 +15,41 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/testutil"
 )
 
+func TestCancellingAResumeOfAKnownStreamStopsItOnce(t *testing.T) {
+	requested := make(chan struct{})
+	stopped := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/chat/stop-chat-session/session" {
+			stopped <- r.URL.Query().Get("stream_id")
+			return
+		}
+		// The connection stalls before the first cursor.
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		close(requested)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(t.Context())
+	streamID := 7
+	events := testutil.NewClient(server.URL).ResumeChatStream(ctx, "session", &streamID, 3)
+	<-requested
+	cancel()
+	select {
+	case id := <-stopped:
+		if id != "7" {
+			t.Fatalf("Stop id = %s", id)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("no Stop for the known stream")
+	}
+	for range events {
+	}
+	if len(stopped) != 0 {
+		t.Fatal("Stop was sent twice")
+	}
+}
+
 func TestCancellationWaitsForAcknowledgement(t *testing.T) {
 	started := make(chan struct{})
 	acknowledge := make(chan struct{})
@@ -61,11 +96,26 @@ func TestReadinessFailsClosed(t *testing.T) {
 		t.Run(body, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
 			defer server.Close()
-			processing, err := testutil.NewClient(server.URL).IsChatSessionProcessing(t.Context(), "session")
-			if !processing {
+			status, err := testutil.NewClient(server.URL).ChatSessionStatus(t.Context(), "session")
+			if !status.IsProcessing {
 				t.Fatalf("unconfirmed response declared idle: %s (%v)", body, err)
 			}
 		})
+	}
+}
+
+func TestStatusNamesTheStreamAndTheApprovalsVersion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"is_processing":true,"current_stream":{"stream_id":9,"response_ids":[4]},"approvals_version":"v2","has_active_subagents":true,"has_startable_input":true,"latest_response_id":5}`)
+	}))
+	defer server.Close()
+	status, err := testutil.NewClient(server.URL).ChatSessionStatus(t.Context(), "session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := status.CurrentStream
+	if stream == nil || stream.StreamID != 9 || len(stream.ResponseIDs) != 1 || stream.ResponseIDs[0] != 4 || status.ApprovalsVersion != "v2" || !status.HasActiveSubagents || !status.HasStartableInput || status.LatestResponseID == nil || *status.LatestResponseID != 5 {
+		t.Fatalf("status = %+v, stream = %+v", status, stream)
 	}
 }
 
