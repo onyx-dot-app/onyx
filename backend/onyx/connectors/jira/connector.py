@@ -474,6 +474,9 @@ class JiraConnector(
 ):
     slim_listing_honors_indexing_start = True
 
+    # Subclasses (e.g. Jira Service Management) override the emitted source.
+    document_source: DocumentSource = DocumentSource.JIRA
+
     def __init__(
         self,
         jira_base_url: str,
@@ -487,10 +490,8 @@ class JiraConnector(
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
         scoped_token: bool = False,
-        document_source: DocumentSource = DocumentSource.JIRA,
     ) -> None:
         self.batch_size = batch_size
-        self.document_source: DocumentSource = document_source
 
         # dealing with scoped tokens is a bit tricky becasue we need to hit api.atlassian.net
         # when making jira requests but still want correct links to issues in the UI.

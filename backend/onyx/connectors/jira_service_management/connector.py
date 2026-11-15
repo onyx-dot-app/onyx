@@ -4,6 +4,8 @@ from onyx.connectors.jira.connector import JIRA_CONNECTOR_LABELS_TO_SKIP, JiraCo
 
 
 class JiraServiceManagementConnector(JiraConnector):
+    document_source: DocumentSource = DocumentSource.JIRA_SERVICE_MANAGEMENT
+
     def __init__(
         self,
         jira_base_url: str,
@@ -22,5 +24,4 @@ class JiraServiceManagementConnector(JiraConnector):
             labels_to_skip=labels_to_skip,
             jql_query=jql_query,
             scoped_token=scoped_token,
-            document_source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
         )
