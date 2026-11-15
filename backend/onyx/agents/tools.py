@@ -61,6 +61,8 @@ class PendingToolInput(BaseModel):
     # The run's ToolApprovals opened the request; only that owner answers or
     # withdraws it. The runtime sets it.
     approval: bool = False
+    # How the requester names the action, for display.
+    display_name: str | None = None
 
 
 class HumanToolAnswer(BaseModel):
@@ -211,21 +213,13 @@ class NestedCallGate(Protocol):
     A request that the gate returns is open: the run shows it at once. The call
     does not block on it. The tool returns it in a `NestedInputWait`, which the
     run saves and answers, or withdraws it. A request that is neither ends
-    without an answer when the run suspends or ends. Raises BeforeToolCallFailed
-    when the hook or the approval gate raises.
+    when the run suspends or ends. An approved request runs its call. Raises
+    BeforeToolCallFailed when the hook or the approval gate raises.
     """
 
     def decide(self, call: ToolCall) -> ToolResult | NestedInputRequest | None:
         """A result that replaces the call, a request that the call waits for,
         or None to run it."""
-        ...
-
-    def decide_approved(
-        self, call: ToolCall, request: NestedInputRequest
-    ) -> ToolResult | NestedInputRequest | None:
-        """The decision after the user approves `request`: None to run the
-        call, or, when the hook's request was approved and the call requires
-        approval, the approval gate's decision."""
         ...
 
     def withdraw(self, request: NestedInputRequest) -> None:

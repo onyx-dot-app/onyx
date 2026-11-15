@@ -187,8 +187,6 @@ def test_a_parked_program_resumes_in_another_process(
         assert saved_result is not None and saved_result.status == RunStatus.COMPLETE
         db_session.expire_all()
         assert db_session.get(ChatResponseCheckpoint, branch[1]) is None
-        # The resumed program deleted its dump once it loaded it.
-        assert file_store.list_files_by_prefix(prefix) == []
     finally:
         coordinator.close(timeout=1)
         for record in file_store.list_files_by_prefix(prefix):

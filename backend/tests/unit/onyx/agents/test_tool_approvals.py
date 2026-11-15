@@ -44,16 +44,11 @@ Outcome = PendingToolInput | ToolResult | None
 
 
 class Approvals(ToolApprovals):
-    """Answers each requiring call with the outcome set for its name, and ends
-    a withdrawn request with the answer set for it."""
+    """Answers each requiring call with the outcome set for its name, and
+    records the requests that tools withdraw."""
 
-    def __init__(
-        self,
-        outcomes: dict[str, Outcome],
-        ended: dict[str, HumanToolAnswer] | None = None,
-    ) -> None:
+    def __init__(self, outcomes: dict[str, Outcome]) -> None:
         self.outcomes = outcomes
-        self.ended = ended or {}
         self.requested: list[str] = []
         self.withdrawn: list[str] = []
         self._lock = threading.Lock()
@@ -69,10 +64,9 @@ class Approvals(ToolApprovals):
             self.requested.append(call.id)
         return self.outcomes[call.name]
 
-    def withdraw_approval(self, request_id: str) -> HumanToolAnswer | None:
+    def withdraw_approval(self, request_id: str) -> None:
         with self._lock:
             self.withdrawn.append(request_id)
-        return self.ended.get(request_id)
 
 
 def _request(request_id: str) -> PendingToolInput:
@@ -181,11 +175,6 @@ def _program_tool(
         if answered.answer.decision != InputDecision.APPROVE:
             assert answered.answer.result is not None
             return answered.answer.result
-        decision = gate.decide_approved(inner, answered.request)
-        if isinstance(decision, NestedInputRequest):
-            return NestedInputWait(requests=[decision])
-        if decision is not None:
-            return decision
         executed.append(inner.id)
         return ToolResult(content="send ran")
 
@@ -307,71 +296,90 @@ def test_calls_that_require_approval_are_not_merged() -> None:
         assert run.wait_for_idle(5)
 
 
-@pytest.mark.parametrize(
-    "ended, result",
-    [
-        (None, None),
-        (
-            HumanToolAnswer(
-                request_id="send-request",
-                decision=InputDecision.DENY,
-                result=ToolResult(content="rejected on Stop", is_error=True),
-            ),
-            "rejected on Stop",
-        ),
-    ],
-    ids=["unanswered", "denied"],
-)
-def test_a_cancelled_run_ends_its_requests_with_the_gates_answers(
-    ended: HumanToolAnswer | None, result: str | None
-) -> None:
-    """A request that ends with its run takes the answer the gate saved; a
-    denied call keeps the denial as its result, so later runs see it."""
-    approvals = Approvals(
-        {"send": _request("send-request")},
-        {"send-request": ended} if ended is not None else {},
-    )
-    run = _run(
-        [ToolCall(id="send-1", name="send", arguments={})],
-        [_recording_tool("send", [], approval_required=True)],
-        approvals,
-    )
-    ends: list[HumanToolAnswer | None] = []
-    run.subscribe(
-        lambda event: (
-            ends.append(event.answer) if isinstance(event, InputEndedEvent) else None
-        )
-    )
-    deadline = time.monotonic() + 5
-    while not run.pending_inputs:
-        assert time.monotonic() < deadline
-        time.sleep(0.01)
+def _blocking_program_tool(opened: threading.Event) -> AgentTool:
+    """A tool that opens a request for one `send` call and keeps it open until
+    the run stops, as a program that waits on a sibling call does."""
 
-    run.cancel()
+    def program(invocation: ToolInvocation) -> ToolOutcome:
+        gate = invocation.nested_calls
+        assert gate is not None
+        decision = gate.decide(ToolCall(id="inner-call", name="send", arguments={}))
+        assert isinstance(decision, NestedInputRequest)
+        opened.set()
+        while not invocation.cancellation.cancelled:
+            time.sleep(0.01)
+        gate.withdraw(decision)
+        return ToolResult(content="program stopped", is_error=True)
 
-    assert run.wait_for_idle(5)
-    assert approvals.withdrawn == ["send-request"]
-    assert ends == [ended]
-    saved = run.snapshot().steps[0].tools["send-1"].result
-    assert (saved.text if saved is not None else None) == result
+    return AgentTool(
+        definition=ToolDefinition(name="program", description="", parameters={}),
+        execute=program,
+        approval_required=["send"],
+    )
 
 
 @pytest.mark.parametrize("nested", [False, True], ids=["direct", "program_call"])
-def test_a_failed_withdrawal_still_ends_the_request_and_the_run(nested: bool) -> None:
+@pytest.mark.parametrize("rejected", [False, True], ids=["unanswered", "rejected"])
+def test_a_stopped_run_ends_its_requests_with_the_recorded_answers(
+    rejected: bool, nested: bool
+) -> None:
+    """A Stop submits its rejection before it cancels: the requests end with
+    that answer, and a direct call keeps the denial as its result, so later
+    runs see it. The run withdraws no request when it ends; its application
+    closes them."""
+    approvals = Approvals({"send": _request("send-request")})
+    opened = threading.Event()
+    ends: list[HumanToolAnswer | None] = []
+    run = _run(
+        [ToolCall(id="call", name="program" if nested else "send", arguments={})],
+        [
+            _blocking_program_tool(opened)
+            if nested
+            else _recording_tool("send", [], approval_required=True)
+        ],
+        approvals,
+        on_event=lambda event: (
+            ends.append(event.answer) if isinstance(event, InputEndedEvent) else None
+        ),
+    )
+    rejection = HumanToolAnswer(
+        request_id="send-request",
+        decision=InputDecision.DENY,
+        result=ToolResult(content="rejected on Stop", is_error=True),
+    )
+    if nested:
+        assert opened.wait(5)
+    else:
+        _until_suspended(run)
+
+    # The run applies the answer only after it sees the Stop.
+    with run.execution_lock:
+        if rejected:
+            run.submit(rejection)
+        run.cancel("user")
+
+    assert run.wait_for_idle(5)
+    assert run.snapshot().status == RunStatus.CANCELLED
+    assert ends == [rejection if rejected else None]
+    if not nested:
+        # The application closes a direct call's request when the run ends.
+        assert approvals.withdrawn == []
+    saved = run.snapshot().steps[0].tools["call"].result
+    expected = "rejected on Stop" if rejected and not nested else None
+    assert (saved.text if saved is not None else None) == expected
+
+
+def test_a_failed_withdrawal_still_ends_the_request_and_the_run() -> None:
     class FailingApprovals(Approvals):
-        def withdraw_approval(self, request_id: str) -> HumanToolAnswer | None:
+        def withdraw_approval(self, request_id: str) -> None:
             super().withdraw_approval(request_id)
             raise RuntimeError("approval store unavailable")
 
     approvals = FailingApprovals({"send": _request("send-request")})
     ends: list[str] = []
     run = _run(
-        [ToolCall(id="call", name="program" if nested else "send", arguments={})],
-        [
-            _program_tool([], keeps_waiting=False)
-            if nested
-            else _recording_tool("send", [], approval_required=True)
-        ],
+        [ToolCall(id="call", name="program", arguments={})],
+        [_program_tool([], keeps_waiting=False)],
         approvals,
         # Attached before the run starts, so no event is missed.
         on_event=lambda event: (
@@ -381,80 +389,14 @@ def test_a_failed_withdrawal_still_ends_the_request_and_the_run(nested: bool) ->
         ),
     )
     try:
-        if nested:
-            # The program's wait stops while the run continues.
-            assert run.result(timeout=5).output.text == "done"
-            # Idle once the run's events are delivered.
-            assert run.wait_for_idle(5)
-            assert _results(run) == {"call": "program stopped waiting"}
-        else:
-            _until_pending(run, "send-request")
-            run.cancel()
-            assert run.wait_for_idle(5)
-            assert run.snapshot().status == RunStatus.CANCELLED
+        # The program's wait stops while the run continues.
+        assert run.result(timeout=5).output.text == "done"
+        # Idle once the run's events are delivered.
+        assert run.wait_for_idle(5)
+        assert _results(run) == {"call": "program stopped waiting"}
         assert approvals.withdrawn == ["send-request"]
         assert ends == ["send-request"]
-        if nested:
-            assert run.pending_inputs == []
-    finally:
-        run.cancel()
-        assert run.wait_for_idle(5)
-
-
-@pytest.mark.parametrize(
-    "gate_asks", [False, True], ids=["gate_denies", "gate_asks_and_user_approves"]
-)
-@pytest.mark.parametrize("nested", [False, True], ids=["direct", "program_call"])
-def test_an_approved_hook_request_still_needs_the_approval_gate(
-    nested: bool, gate_asks: bool
-) -> None:
-    hooked: list[str] = []
-
-    def before_tool_call(context: ToolCallContext) -> Outcome:
-        if context.call.name != "send":
-            return None
-        hooked.append(context.call.id)
-        return _request(f"{context.call.id}-hook")
-
-    executed: list[str] = []
-    approvals = Approvals(
-        {
-            "send": _request("send-request")
-            if gate_asks
-            else ToolResult(content="denied by policy", is_error=True)
-        }
-    )
-    run = _run(
-        [ToolCall(id="call", name="program" if nested else "send", arguments={})],
-        [
-            _program_tool(executed)
-            if nested
-            else _recording_tool("send", executed, approval_required=True)
-        ],
-        approvals,
-        before_tool_call,
-    )
-    inner = "inner-call" if nested else "call"
-    try:
-        # A program's open request takes answers once its wait is saved.
-        _until_suspended(run)
-        run.submit(_approve(f"{inner}-hook"))
-        if gate_asks:
-            _until_suspended(run)
-            assert [request.request_id for request in run.pending_inputs] == [
-                "send-request"
-            ]
-            assert executed == []
-            run.submit(_approve("send-request"))
-
-        assert run.result(timeout=5).output.text == "done"
-        assert run.wait_for_idle(5)
-        # The hook decides once; the gate decides after its request is approved.
-        assert (hooked, approvals.requested) == ([inner], [inner])
-        assert executed == ([inner] if gate_asks else [])
-        assert _results(run) == {
-            "call": "send ran" if gate_asks else "denied by policy"
-        }
+        assert run.pending_inputs == []
     finally:
         run.cancel()
         assert run.wait_for_idle(5)

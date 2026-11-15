@@ -230,10 +230,10 @@ A decision that waits for input is an open `NestedInputRequest`: the run publish
 The waiting call does not block a thread.
 The tool returns its open requests in `NestedInputWait`, which the run saves as the outer call's pending entry, like `ChildRunWait`, so the run can suspend and transfer.
 When every request has an answer, the runtime calls `AgentTool.resume_with_input` with the answers instead of repeating `execute`.
-For an approved request, the tool asks `NestedCallGate.decide_approved`, which returns `None` to run the call, or the approval gate's decision after the user approved the hook's request.
+An approved request runs its call; a denied one gives the call the answer's result.
 The continuation returns a result, or another `NestedInputWait`.
 A tool that stops waiting, for example because its program ended, ends the request with `NestedCallGate.withdraw`.
-A request that no `NestedInputWait` saved ends without an answer when the run suspends or ends.
+A request that no `NestedInputWait` saved ends when the run suspends or ends.
 A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
 A code mode program stops at the failure; the observation that reports its end raises it.
 When no observation reports that end, the cells' finish or suspend hook raises `ReleaseFailed`.
@@ -241,12 +241,16 @@ For example, deep research normalizes a child report's citations before returnin
 
 Approval is separate from the callbacks. An `AgentTool` lists the call names that need the user's approval in `approval_required`: its own name, or the names of calls it makes for the model.
 The runtime gates those calls through the coordinator's `ToolApprovals` (`AgentCoordinator(approvals=...)`).
-A hook request does not replace that approval. When the user approves a `PendingToolInput` from `before_tool_call`, the runtime asks `ToolApprovals` next, without calling the hook again. `NestedCallGate.decide_approved` does the same for a nested call.
+A call whose `before_tool_call` request the user approves runs without asking `ToolApprovals`.
 `ToolApprovals.request_approval(run, tool_call, nested_call)` returns a `PendingToolInput` to wait for, a `ToolResult` for a call that cannot wait, or `None` when a standing grant approves the call. `tool_call` is the call of the run's step; `nested_call` is the call that its tool makes for the model, or `None` for a direct call.
-`ToolApprovals.withdraw_approval(request_id)` ends a request whose call stopped waiting without an answer: a nested call whose program ended, a request that no wait saved, or an unanswered call of a run that ends. It returns the answer of a decision that the application saved before the request ended, such as the user's rejection on Stop, or `None`.
-The runtime logs a `withdraw_approval` that raises and ends the request without an answer, so the run and the waiting call still end.
-The run reports that answer in `input_ended`. A direct call that the answer denies keeps the denial as its result, so the model sees it in later runs.
+`ToolApprovals.withdraw_approval(request_id)` ends the request of a call that a tool made for the model when that call stops waiting while the run goes on: its program ended, its park was refused, or the run suspended before any wait saved it.
+The runtime logs a `withdraw_approval` that raises, so the waiting call still ends.
+The requests of a run that ends are the application's to close; the run store does it when it releases the run.
+Answers live in `RunProgress.human_tool_answers`. A request ends with the answer recorded there, or none, and the run reports it in `input_ended`.
+To stop a run with answers, such as the user's rejection on Stop, submit them and cancel while holding `Run.execution_lock`; the run applies them only after it sees the cancellation.
+A direct call that an answer denies keeps the denial as its result, so the model sees it in later runs.
 The runtime sets `PendingToolInput.approval` on the requests that `ToolApprovals` opens. That owner answers and withdraws only those requests; hook and question-tool requests do not have it.
+`PendingToolInput.display_name` carries the application's name for the action to the card that shows the request.
 Without `ToolApprovals`, such a call returns an error result.
 
 The runtime records a tool's raw result before calling `after_tool_call`.
@@ -508,7 +512,7 @@ Snapshots taken during provider I/O or arbitrary callbacks support inspection on
 A question tool returns `PendingToolInput(mode=InputMode.RESULT)` to request its result from the caller.
 Each request has a unique `request_id` within its run.
 Submit a matching `HumanToolAnswer` through `run.submit()`, or pass saved answers to `Agent.resume(snapshot, answers=...)`; answers can arrive while sibling tools are still running.
-A request takes answers once the run saves it: a direct call's request, or one in a `NestedInputWait`.
+A request takes answers once the run saves it, a direct call's request or one in a `NestedInputWait`, or while a tool holds it open.
 A `standing` approval also approves later calls of the same action; the application that answers applies it to those calls.
 Approval executes the exact pending call. A result answer completes the question without repeating its tool code.
 The run publishes `input_ended` with the call and its answer when it applies the answer.

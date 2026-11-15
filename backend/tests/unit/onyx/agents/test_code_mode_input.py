@@ -5,6 +5,7 @@ import json
 import threading
 from collections.abc import Callable, Mapping
 
+import pydantic_monty
 import pytest
 from pydantic import BaseModel, JsonValue
 
@@ -43,6 +44,7 @@ from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.code_mode import sandbox
 from onyx.tools.tool_implementations.code_mode.cells import (
     PARK_REFUSED_MESSAGE,
+    PROGRAM_VERSION_MESSAGE,
     CodeCells,
 )
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
@@ -112,6 +114,8 @@ class Agents:
         self.steps = steps
         self.sent: list[JsonValue] = []
         self.parameters = parameters
+        # Builds agents without the `send` tool, as after its server is removed.
+        self.send_removed = False
         self.gate: threading.Event | None = None
         # Set once a request shows; later model steps wait for it.
         self.shown = threading.Event()
@@ -127,7 +131,11 @@ class Agents:
     def agent(self, state: AgentState | None = None) -> Agent:
         cells = CodeCells()
         tools: list[Tool] = [
-            FakeTool("send", self.send, parameters=self.parameters),
+            *(
+                []
+                if self.send_removed
+                else [FakeTool("send", self.send, parameters=self.parameters)]
+            ),
             FakeTool("wait", self.wait),
         ]
         execute = CodeModeTool(tools, cells=cells, limits=PARKING_LIMITS)
@@ -136,7 +144,10 @@ class Agents:
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id="agent",
             state=state,
-            tools=[execute.bind(ToolContext), WaitCodeTool(cells).bind(ToolContext)],
+            tools=[
+                execute.bind(ToolContext),
+                WaitCodeTool(cells, execute.program).bind(ToolContext),
+            ],
             before_tool_call=_ask_for_send,
             on_suspend=cells.suspend,
             on_finish=cells.finish,
@@ -299,13 +310,20 @@ def test_a_program_too_large_to_park_continues_without_the_call(
     ]
 
 
-def test_a_restored_call_whose_tool_changed_does_not_run() -> None:
+@pytest.mark.parametrize("change", ["parameters", "removed"])
+def test_a_restored_call_whose_tool_changed_does_not_run(change: str) -> None:
     agents = Agents(_execute("program", PROGRAM))
     run = agents.agent().start(max_steps=3, messages=[UserMessage(content="Send")])
     _suspended(run)
     checkpoint = _transferred(run)
 
-    agents.parameters = {"type": "object", "properties": {"other": {"type": "string"}}}
+    if change == "removed":
+        agents.send_removed = True
+    else:
+        agents.parameters = {
+            "type": "object",
+            "properties": {"other": {"type": "string"}},
+        }
     resumed = agents.agent(checkpoint.agent_state).resume(
         checkpoint.run_state, answers=[_answer(InputDecision.APPROVE)]
     )
@@ -332,6 +350,46 @@ def test_a_run_that_ends_while_its_program_waits_closes_the_cell() -> None:
     result = snapshot.steps[0].tools["program"].result
     assert result is not None and "before" in result.text
     assert agents.sent == []
+    ended = [event for event in events if isinstance(event, InputEndedEvent)]
+    assert [(event.request.request_id, event.answer) for event in ended] == [
+        (REQUEST_ID, None)
+    ]
+
+
+def test_a_program_parked_by_another_monty_version_stops_clearly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agents = Agents(_execute("program", PROGRAM))
+    run = agents.agent().start(max_steps=3, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    checkpoint = _transferred(run)
+
+    monkeypatch.setattr(pydantic_monty, "__version__", "0.0.0-other")
+    resumed = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state, answers=[_answer(InputDecision.APPROVE)]
+    )
+    output = resumed.result(timeout=20).output.text
+    assert resumed.wait_for_idle(10)
+
+    assert agents.sent == []
+    assert PROGRAM_VERSION_MESSAGE in output
+
+
+def test_a_park_that_runs_out_of_memory_stops_the_program_clearly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The worker's memory reads low, so the dump runs and exceeds the limit.
+    monkeypatch.setattr(sandbox, "_worker_memory_bytes", lambda _pid: 0)
+    agents = Agents(_execute("program", f"big = 'x' * (39 * 1024 * 1024)\n{PROGRAM}"))
+    events: list[AgentEvent] = []
+    run = agents.agent().start(
+        max_steps=3, messages=[UserMessage(content="Send")], on_event=events.append
+    )
+    output = run.result(timeout=30).output.text
+    assert run.wait_for_idle(10)
+
+    assert agents.sent == []
+    assert sandbox.PARK_MEMORY_MESSAGE in output
     ended = [event for event in events if isinstance(event, InputEndedEvent)]
     assert [(event.request.request_id, event.answer) for event in ended] == [
         (REQUEST_ID, None)

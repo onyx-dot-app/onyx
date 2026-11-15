@@ -37,7 +37,6 @@ from onyx.agents.runtime import (
 from onyx.agents.tools import (
     AgentControl,
     AgentLifetime,
-    HumanToolAnswer,
     PendingToolInput,
     SpawnResult,
 )
@@ -109,8 +108,8 @@ class RunOwnership(Protocol):
 class ToolApprovals(Protocol):
     """Open the requests of calls that wait for the user's approval.
 
-    Answers reach the run through `Run.submit`. The requests of a run end with
-    it, when the run store releases it.
+    Answers reach the run through `Run.submit` or `Agent.resume`. The requests
+    of a run end with it, when the run store releases it.
     """
 
     def request_approval(
@@ -122,11 +121,10 @@ class ToolApprovals(Protocol):
         `tool_call` otherwise."""
         ...
 
-    def withdraw_approval(self, request_id: str) -> HumanToolAnswer | None:
-        """A call stopped waiting for this request without an answer, because
-        its run or its program ended. Ends the request; returns the answer of a
-        decision saved before it ended, such as the user's rejection when the
-        user stopped the run, or None."""
+    def withdraw_approval(self, request_id: str) -> None:
+        """A call that a tool made for the model stopped waiting for this
+        request while its run goes on, for example because its program ended.
+        Ends the request."""
         ...
 
 

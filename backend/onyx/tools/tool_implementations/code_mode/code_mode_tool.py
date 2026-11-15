@@ -1,6 +1,8 @@
 """The execute_code and wait_code tools: model-written Python programs that call
 other tools, run as cells of the response (code_mode/cells.py)."""
 
+from collections.abc import Callable
+
 from pydantic import BaseModel, Field
 
 from onyx.agents.tools import (
@@ -130,7 +132,6 @@ class CodeModeTool(Tool):
             for tool in self._inner_tools
             if tool.execution_mode == ToolExecutionMode.SEQUENTIAL
         }
-        cells.programs = self.program
         self.resume_with_input = self._resume_with_input
 
     def program(self, code: str, limits: SandboxLimits) -> Program:
@@ -210,6 +211,7 @@ class CodeModeTool(Tool):
             invocation,
             context,
             answers,
+            programs=self.program,
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_EXECUTE_YIELD_MS),
         )
 
@@ -220,8 +222,12 @@ class WaitCodeTool(Tool):
     DESCRIPTION = "Wait for a running code cell."
     interrupted_result = INTERRUPTED_WAIT_RESULT
 
-    def __init__(self, cells: CodeCells) -> None:
+    def __init__(
+        self, cells: CodeCells, programs: Callable[[str, SandboxLimits], Program]
+    ) -> None:
         self._cells = cells
+        # Builds a saved cell's program with the current tools.
+        self._programs = programs
         self.resume_with_input = self._resume_with_input
 
     @property
@@ -275,6 +281,7 @@ class WaitCodeTool(Tool):
             invocation,
             context,
             answers,
+            programs=self._programs,
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
         )
 
@@ -302,8 +309,9 @@ def with_code_mode(tools: list[Tool]) -> tuple[list[Tool], CodeCells | None]:
     if not inner:
         return tools, None
     cells = CodeCells()
+    code_tool = CodeModeTool(inner, cells=cells, limits=SandboxLimits())
     return [
         *(tool for tool in tools if tool.code_mode_exposure is CodeModeExposure.DIRECT),
-        CodeModeTool(inner, cells=cells, limits=SandboxLimits()),
-        WaitCodeTool(cells),
+        code_tool,
+        WaitCodeTool(cells, code_tool.program),
     ], cells

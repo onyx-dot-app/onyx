@@ -7,9 +7,9 @@ from functools import cached_property
 from typing import Annotated, Literal, Self, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
-from pydantic_monty import ExcType, FunctionSnapshot, FutureSnapshot
+from pydantic_monty import FunctionSnapshot, FutureSnapshot
 
-from onyx.agents.tools import NestedInputRequest, ToolInvocation
+from onyx.agents.tools import ToolInvocation
 from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.models import Message, ToolResultMessage
 from onyx.tools.file_snapshot import SavedChatFile
@@ -429,18 +429,6 @@ class ProgramSuspended(BaseModel):
     call_ids: list[int]
 
 
-class SettledResult(BaseModel):
-    """A result that a parked program has not received yet: a value, or the
-    exception that the program sees."""
-
-    model_config = ConfigDict(frozen=True)
-
-    value: JsonValue = None
-    error: str | None = None
-    # A builtin exception type, such as ValueError; RuntimeError otherwise.
-    error_type: ExcType = "RuntimeError"
-
-
 class ProgramState(BaseModel):
     """What a parked program needs besides its dump to continue."""
 
@@ -449,25 +437,29 @@ class ProgramState(BaseModel):
     # The calls that wait for input, by sandbox call id. Resuming runs them
     # again through the handler.
     waiting: dict[int, ExternalCall]
-    # Results that ended before the program parked and that it did not await.
-    settled: dict[int, SettledResult]
     tool_calls: int
     elapsed_seconds: float
     type_check_notes: str | None = None
 
 
-class ParkedProgram(ProgramState):
+class ParkedProgram(BaseModel):
     """A program dumped while it waits only for calls that wait for the user's
-    input, so it can continue in any process (`sandbox.resume_program`)."""
+    input, so it can continue in any process (`sandbox.execute_program`)."""
 
+    model_config = ConfigDict(frozen=True)
+
+    state: ProgramState
     snapshot: bytes
 
 
-class SavedProgram(ProgramState):
+class SavedProgram(BaseModel):
     """A parked program as its cell keeps it. The dump stays in memory until
     the run's checkpoint saves it in the file store (`persist_checkpoint_files`)."""
 
+    state: ProgramState
     dump: SavedChatFile
+    # The Monty version that made the dump; another version cannot load it.
+    monty_version: str
     # The parameters schema of each waiting call's tool, by tool name; a
     # restored call runs only with an unchanged schema.
     parameters: dict[str, dict[str, JsonValue]]
@@ -578,8 +570,6 @@ class CellCallRecord(BaseModel):
     ended_in: int | None = None
     # The call's thread has not returned; a call can ignore cancellation.
     thread_alive: bool = True
-    # The open request that the call waits for, such as the user's approval.
-    request: NestedInputRequest | None = None
 
     def in_window(self, window: int) -> bool:
         """Whether the window reports the call: it ended in it, or still runs."""
@@ -632,6 +622,8 @@ class SavedCodeCell(BaseModel):
     observer_number: int
     observer_max_tokens: int
     calls: list[CellCallRecord]
+    # The input request that each waiting call waits for, by call index.
+    requests: dict[int, str]
     saved_chars: int
     # The printed text of the current window.
     stdout: str

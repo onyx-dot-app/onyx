@@ -14,14 +14,11 @@ from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import ExitStack, contextmanager, nullcontext
 from functools import partial
 from pathlib import Path
-from typing import Literal, NamedTuple, NoReturn, get_args
+from typing import Literal, NamedTuple, NoReturn
 
 import psutil
-from pydantic import JsonValue, TypeAdapter, ValidationError
 from pydantic_monty import (
-    ExcType,
     ExternalException,
-    ExternalExceptionData,
     ExternalFuture,
     ExternalModule,
     ExternalResult,
@@ -51,13 +48,13 @@ from onyx.tools.tool_implementations.code_mode.models import (
     ParkedProgram,
     PendingCall,
     ProgramCompleted,
+    ProgramState,
     ProgramStopped,
     ProgramSuspended,
     ProgramWaiting,
     SandboxLimits,
     SandboxResult,
     SandboxStatus,
-    SettledResult,
     TypeDiagnostic,
 )
 from onyx.tools.tool_implementations.code_mode.store import json_value
@@ -119,6 +116,14 @@ DUMP_MEMORY_MESSAGE = (
     "tool calls. This program's writes are discarded. Earlier tool calls may have "
     "completed; check before you retry. Keep less data in memory, for example by "
     "storing results with store() and keeping only what you need."
+)
+# A program that waits for the user's approval when its dump runs out of
+# memory. Its worker is lost, so it cannot continue without its waiting calls.
+PARK_MEMORY_MESSAGE = (
+    "The sandbox ran out of memory while pausing this program for the user's "
+    "approval, so the program stopped and its calls that needed approval did "
+    "not run. This program's writes are discarded. Make those calls from a "
+    "program that keeps less data, or outside a program."
 )
 # Tool calls of one program that run at the same time, each on its own thread.
 # Later calls wait in order for a free slot.
@@ -226,9 +231,6 @@ AWAITS_INPUT = AwaitsInput()
 # Runs on a worker thread. The return value goes to the program, except
 # AWAITS_INPUT; an Exception is raised inside the program.
 ExternalCallHandler = Callable[[ExternalCall], object]
-_JSON_VALUE = TypeAdapter(JsonValue)
-# Exception types that a settled result keeps by name.
-_EXC_TYPES: dict[str, ExcType] = {name: name for name in get_args(ExcType)}
 # How a wait of the program ends: one of its calls ended, it gives up its
 # worker, or every call it waits for waits for input.
 _Waited = Literal["ended", "yield", "park"]
@@ -1002,39 +1004,23 @@ class _Run:
         self.start_queued()
 
     def parked(self, snapshot: bytes) -> ParkedProgram | None:
-        """The parked form of a parkable program; None when a result that it
-        has not received is not JSON data."""
-        try:
-            settled = {
-                call_id: _settled_result(result)
-                for call_id, result in self.host_results.items()
-            }
-            for call_id in self.sleeps:
-                settled[call_id] = SettledResult()
-            for call_id, pending in self.calls.items():
-                if pending.awaits_input or pending.future is None:
-                    continue
-                error = pending.future.exception()
-                if error is not None and not isinstance(error, Exception):
-                    return None
-                settled[call_id] = _settled_result(
-                    ExternalReturnValue(return_value=pending.future.result())
-                    if error is None
-                    else ExternalException(exception=_sandbox_exception(error))
-                )
-        except ValidationError:
+        """The parked form of a parkable program; None when it holds a result
+        that it has not received, such as of a call that it never awaited."""
+        waiting = {
+            call_id: pending.external
+            for call_id, pending in self.calls.items()
+            if pending.awaits_input
+        }
+        if self.host_results or self.sleeps or len(waiting) < len(self.calls):
             return None
         return ParkedProgram(
+            state=ProgramState(
+                waiting=waiting,
+                tool_calls=self.tool_calls,
+                elapsed_seconds=self.elapsed,
+                type_check_notes=self.type_check_notes,
+            ),
             snapshot=snapshot,
-            waiting={
-                call_id: pending.external
-                for call_id, pending in self.calls.items()
-                if pending.awaits_input
-            },
-            settled=settled,
-            tool_calls=self.tool_calls,
-            elapsed_seconds=self.elapsed,
-            type_check_notes=self.type_check_notes,
         )
 
     def wait_for_any(
@@ -1276,11 +1262,13 @@ def _checked_out(session: MontySession) -> _Worker:
     return _Worker(session.worker_pid, _worker_memory_bytes(session.worker_pid))
 
 
-def _dump(run: _Run, waiting: ProgramWaiting, worker: _Worker) -> bytes | None:
+def _dump(
+    run: _Run, waiting: ProgramWaiting, worker: _Worker, out_of_memory: str
+) -> bytes | None:
     """Dump a waiting program; None when its worker grew too much since
     checkout to dump (MAX_DUMP_MEMORY_SHARE), or its memory cannot be read.
-    Raises `_Aborted` when the dump still runs out of memory: the worker is
-    gone, so the program cannot continue."""
+    Raises `_Aborted` with `out_of_memory` when the dump still runs out of
+    memory: the worker is gone, so the program cannot continue."""
     growth = worker.memory_growth()
     if growth is None or growth > run.limits.max_memory_bytes * MAX_DUMP_MEMORY_SHARE:
         return None
@@ -1291,7 +1279,7 @@ def _dump(run: _Run, waiting: ProgramWaiting, worker: _Worker) -> bytes | None:
             raise
         logger.warning("Code mode sandbox worker ran out of memory in a dump")
         metrics.count_worker_lost("out_of_memory")
-        raise _Aborted("failed", DUMP_MEMORY_MESSAGE) from error
+        raise _Aborted("failed", out_of_memory) from error
 
 
 def _suspend(
@@ -1306,7 +1294,7 @@ def _suspend(
     if run.last_dump_bytes > _suspended_bytes.free:
         metrics.count_suspension("over_budget")
         return None
-    snapshot = _dump(run, waiting, worker)
+    snapshot = _dump(run, waiting, worker, DUMP_MEMORY_MESSAGE)
     if snapshot is None:
         metrics.count_suspension("over_memory")
         return None
@@ -1316,18 +1304,6 @@ def _suspend(
         return None
     metrics.count_suspension("dumped")
     return ProgramSuspended(snapshot=snapshot, call_ids=waiting.call_ids)
-
-
-def _settled_result(result: ExternalSettledResult) -> SettledResult:
-    """Raises ValidationError for a value that is not JSON data."""
-    if "return_value" in result:
-        return SettledResult(value=_JSON_VALUE.validate_python(result["return_value"]))
-    error = result.get("exception")
-    if isinstance(error, BaseException):
-        name, message = type(error).__name__, str(error)
-    else:
-        name, message = str(result.get("exc_type")), str(result.get("message", ""))
-    return SettledResult(error=message, error_type=_EXC_TYPES.get(name, "RuntimeError"))
 
 
 def _offered(
@@ -1427,9 +1403,11 @@ def execute_program(
     on_print: Callable[[str], None],
     on_yield: Callable[[], None],
     park: Callable[[ParkedProgram | None], bool] | None = None,
+    parked: ParkedProgram | None = None,
     pool: Callable[[], Monty] = sandbox_pool,
 ) -> SandboxResult | ParkedProgram:
-    """Run one program in a fresh interpreter. Raises the handler's BaseException.
+    """Run one program in a fresh interpreter, or continue `parked` on a new
+    worker. Raises the handler's BaseException.
 
     `stubs` types the program's functions and includes PRELUDE_STUBS.
     `cancellation` stops the program at once, also while it computes or waits.
@@ -1447,10 +1425,12 @@ def execute_program(
     A call for which the handler returns AWAITS_INPUT waits for the user's
     input. Once the program waits only for such calls (`_Run.parkable`), it is
     dumped and offered to `park`, on the driver thread. When `park` accepts
-    it, the worker is returned and the parked program is returned, to continue
-    with `resume_program`. When `park` refuses it, or the dump is not possible
-    (`park(None)`, which refuses), those calls run again through the handler. Without `park`, such calls wait until the
-    program ends.
+    it, the worker is returned and the parked program is returned. When `park`
+    refuses it, or the dump is not possible (`park(None)`, which refuses),
+    those calls run again through the handler. Without `park`, such calls wait
+    until the program ends. A `parked` program runs its waiting calls again
+    through the handler, which now answers them, and its lifetime counts the
+    time it ran before it parked.
     """
     run = _Run(
         limits=limits,
@@ -1461,71 +1441,95 @@ def execute_program(
         cancellation=cancellation,
         on_print=on_print,
         on_yield=on_yield,
+        elapsed_seconds=parked.state.elapsed_seconds if parked is not None else 0.0,
     )
-    return _run_program(
-        run,
-        begin=partial(_start, code=code, run=run),
-        resumed=False,
-        stubs=stubs,
-        park=park,
-        pool=pool,
-    )
+    if parked is not None:
+        run.tool_calls = parked.state.tool_calls
+        run.type_check_notes = parked.state.type_check_notes
+        run.calls = {
+            call_id: PendingCall(external=external)
+            for call_id, external in parked.state.waiting.items()
+        }
+        # The answered calls start while the program waits for a worker.
+        run.start_queued()
 
-
-def resume_program(
-    parked: ParkedProgram,
-    *,
-    stubs: str,
-    function_names: Collection[str],
-    plain_functions: Mapping[str, HostFunction],
-    async_functions: Mapping[str, HostFunction],
-    handler: ExternalCallHandler,
-    cancellation: CancellationSignal,
-    limits: SandboxLimits,
-    on_print: Callable[[str], None],
-    on_yield: Callable[[], None],
-    park: Callable[[ParkedProgram | None], bool] | None = None,
-    pool: Callable[[], Monty] = sandbox_pool,
-) -> SandboxResult | ParkedProgram:
-    """Continue a parked program on a new worker, as `execute_program` runs one.
-
-    Its calls that waited for input run again through the handler, which now
-    answers them; the program receives its other results as they were. Its
-    lifetime counts the time it ran before it parked. It waits for a worker
-    until its lifetime ends.
-    """
-    run = _Run(
-        limits=limits,
-        function_names=function_names,
-        plain_functions=plain_functions,
-        async_functions=async_functions,
-        handler=handler,
-        cancellation=cancellation,
-        on_print=on_print,
-        on_yield=on_yield,
-        elapsed_seconds=parked.elapsed_seconds,
-    )
-    run.tool_calls = parked.tool_calls
-    run.type_check_notes = parked.type_check_notes
-    run.calls = {
-        call_id: PendingCall(external=external)
-        for call_id, external in parked.waiting.items()
-    }
-    run.host_results = {
-        call_id: ExternalReturnValue(return_value=settled.value)
-        if settled.error is None
-        else ExternalExceptionData(exc_type=settled.error_type, message=settled.error)
-        for call_id, settled in parked.settled.items()
-    }
-    # The answered calls start while the program waits for a worker.
-    run.start_queued()
-
-    def load(session: MontySession) -> SyncSnapshot:
+    def begin(session: MontySession) -> SyncSnapshot | ProgramStopped:
+        if parked is None:
+            return _start(session, code, run)
         return session.load_snapshot(parked.snapshot, print_callback=run.print_callback)
 
-    return _run_program(
-        run, begin=load, resumed=True, stubs=stubs, park=park, pool=pool
-    )
+    def bounded(text: str | None, label: str) -> str | None:
+        if text is None:
+            return None
+        return truncate_output(text, limits.max_output_chars, label, keep_tail=True)
+
+    def finish(
+        status: SandboxStatus,
+        *,
+        result: str | None = None,
+        error: str | None = None,
+        raised: bool = False,
+    ) -> SandboxResult:
+        return SandboxResult(
+            status=status,
+            result=bounded(result, "code mode result"),
+            error=bounded(error, "code mode error"),
+            duration_seconds=run.elapsed,
+            type_check_notes=None
+            if status == "completed"
+            else bounded(run.type_check_notes, "type checker notes"),
+            # A stop can surface as an exception that the program raises.
+            commits_store=status == "completed"
+            or (raised and run.abort_reason() is None),
+            unawaited_calls=run.unawaited_calls() if status == "completed" else (),
+            unstarted_calls=run.unstarted_calls() if status == "completed" else (),
+        )
+
+    try:
+        ended = _drive(
+            run,
+            begin=begin,
+            resumed=parked is not None,
+            stubs=stubs,
+            park=park,
+            pool=pool,
+        )
+        if isinstance(ended, ParkedProgram):
+            return ended
+        if isinstance(ended, ProgramStopped):
+            return finish(ended.status, error=ended.error, raised=ended.raised)
+    except _Aborted as aborted:
+        return finish(aborted.status, error=str(aborted))
+    except MontyCrashedError as error:
+        # `_watched` kills the worker on cancellation and at the deadline.
+        aborted = run.abort_reason()
+        if aborted is not None:
+            return finish(aborted.status, error=str(aborted))
+        logger.warning("Code mode sandbox worker crashed: %s", error)
+        metrics.count_worker_lost("crashed")
+        return finish("timed_out" if error.timed_out else "failed", error=CRASH_MESSAGE)
+    except MontyError as error:
+        logger.warning("Code mode sandbox failed: %s", error)
+        return finish("failed", error=f"{type(error).__name__}: {error}")
+    except TimeoutError:
+        metrics.SANDBOX_BUSY_REJECTIONS.labels(tenant_id=run.tenant_id).inc()
+        return finish("failed", error=BUSY_MESSAGE)
+    finally:
+        run.ended = time.monotonic()
+        if _tool_call_threads.end_program(run.wake.set):
+            logger.info(
+                "Code mode program ended with tool calls still running: %s",
+                ", ".join(run.running_call_names()),
+            )
+    if ended.output is None:
+        return finish("completed")
+    try:
+        output = json_value(
+            ended.output, "The value of the last expression", limits.max_result_bytes
+        ).value
+    except (TypeError, ValueError) as error:
+        return finish("completed", error=str(error))
+    return finish("completed", result=repr(output))
 
 
 def _drive(
@@ -1575,9 +1579,13 @@ def _drive(
                             _worker_demand.kept(run.wake.set)
                             waited = run.wait_for_any(step.call_ids, park=parks)
                         if waited == "park" and park is not None:
-                            parked = _offered(run, _dump(run, step, worker), park)
-                            if parked is not None:
-                                return parked
+                            offered = _offered(
+                                run,
+                                _dump(run, step, worker, PARK_MEMORY_MESSAGE),
+                                park,
+                            )
+                            if offered is not None:
+                                return offered
                             continue
                         step = _segment(session, run, partial(_resumed, step))
                 if not isinstance(step, ProgramWaiting):
@@ -1592,90 +1600,9 @@ def _drive(
                         == "park"
                         and park is not None
                     ):
-                        parked = _offered(run, suspended.snapshot, park)
-                        if parked is not None:
-                            return parked
+                        offered = _offered(run, suspended.snapshot, park)
+                        if offered is not None:
+                            return offered
     finally:
         if suspended is not None:
             _suspended_bytes.release(len(suspended.snapshot))
-
-
-def _run_program(
-    run: _Run,
-    *,
-    begin: Callable[[MontySession], SyncSnapshot | ProgramStopped],
-    resumed: bool,
-    stubs: str,
-    park: Callable[[ParkedProgram | None], bool] | None,
-    pool: Callable[[], Monty],
-) -> SandboxResult | ParkedProgram:
-    """Drive a program from `begin` until it ends or parks."""
-    limits = run.limits
-
-    def bounded(text: str | None, label: str) -> str | None:
-        if text is None:
-            return None
-        return truncate_output(text, limits.max_output_chars, label, keep_tail=True)
-
-    def finish(
-        status: SandboxStatus,
-        *,
-        result: str | None = None,
-        error: str | None = None,
-        raised: bool = False,
-    ) -> SandboxResult:
-        return SandboxResult(
-            status=status,
-            result=bounded(result, "code mode result"),
-            error=bounded(error, "code mode error"),
-            duration_seconds=run.elapsed,
-            type_check_notes=None
-            if status == "completed"
-            else bounded(run.type_check_notes, "type checker notes"),
-            # A stop can surface as an exception that the program raises.
-            commits_store=status == "completed"
-            or (raised and run.abort_reason() is None),
-            unawaited_calls=run.unawaited_calls() if status == "completed" else (),
-            unstarted_calls=run.unstarted_calls() if status == "completed" else (),
-        )
-
-    try:
-        ended = _drive(
-            run, begin=begin, resumed=resumed, stubs=stubs, park=park, pool=pool
-        )
-        if isinstance(ended, ParkedProgram):
-            return ended
-        if isinstance(ended, ProgramStopped):
-            return finish(ended.status, error=ended.error, raised=ended.raised)
-    except _Aborted as aborted:
-        return finish(aborted.status, error=str(aborted))
-    except MontyCrashedError as error:
-        # `_watched` kills the worker on cancellation and at the deadline.
-        aborted = run.abort_reason()
-        if aborted is not None:
-            return finish(aborted.status, error=str(aborted))
-        logger.warning("Code mode sandbox worker crashed: %s", error)
-        metrics.count_worker_lost("crashed")
-        return finish("timed_out" if error.timed_out else "failed", error=CRASH_MESSAGE)
-    except MontyError as error:
-        logger.warning("Code mode sandbox failed: %s", error)
-        return finish("failed", error=f"{type(error).__name__}: {error}")
-    except TimeoutError:
-        metrics.SANDBOX_BUSY_REJECTIONS.labels(tenant_id=run.tenant_id).inc()
-        return finish("failed", error=BUSY_MESSAGE)
-    finally:
-        run.ended = time.monotonic()
-        if _tool_call_threads.end_program(run.wake.set):
-            logger.info(
-                "Code mode program ended with tool calls still running: %s",
-                ", ".join(run.running_call_names()),
-            )
-    if ended.output is None:
-        return finish("completed")
-    try:
-        output = json_value(
-            ended.output, "The value of the last expression", limits.max_result_bytes
-        ).value
-    except (TypeError, ValueError) as error:
-        return finish("completed", error=str(error))
-    return finish("completed", result=repr(output))
