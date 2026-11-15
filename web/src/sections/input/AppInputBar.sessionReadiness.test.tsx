@@ -20,7 +20,7 @@ import { flushToolSelection } from "@/lib/tools/hooks";
 import type { ChatSessionStatus, PendingChatMessage } from "@/lib/chat/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@opal/layouts";
-import { PacketType } from "@/app/app/services/streamingModels";
+import { PacketType, StopReason } from "@/app/app/services/streamingModels";
 import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
 import { APPROVAL_PENDING_ERROR_CODE } from "@/app/app/types";
 
@@ -773,9 +773,10 @@ function interruptRequests() {
 }
 
 test.each([
-  ["a live single-model stop", { turn_index: 0, model_index: 0 }],
-  ["a replayed stop", { turn_index: 0 }],
-])("Stop is withdrawn once %s arrives", async (_case, placement) => {
+  ["a live single-model stop", { turn_index: 0, model_index: 0 }, undefined],
+  ["a replayed stop", { turn_index: 0 }, undefined],
+  ["an approval wait's stop", { turn_index: 0 }, StopReason.AWAITING_APPROVAL],
+])("Stop is withdrawn once %s arrives", async (_case, placement, reason) => {
   const user = setupUser();
   const store = useChatSessionStore.getState();
   store.updateChatState("session", "streaming");
@@ -794,7 +795,7 @@ test.each([
   const answer = tree.get(2)!;
   tree.set(2, {
     ...answer,
-    packets: [{ placement, obj: { type: "stop" } }],
+    packets: [{ placement, obj: { type: "stop", stop_reason: reason } }],
   });
   act(() => store.updateSessionMessageTree("session", tree));
   expect(send).toBeDisabled();
