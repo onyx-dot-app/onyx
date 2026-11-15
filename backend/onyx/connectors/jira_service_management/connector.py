@@ -160,12 +160,22 @@ class JiraServiceManagementConnector(JiraConnector):
                 "nothing (JSM absent or no service-desk access).",
                 issue_key,
             )
-        if request is not None:
-            request_type = (request.get("requestType") or {}).get("name")
-            if request_type:
+        if isinstance(request, dict):
+            request_type_obj = request.get("requestType")
+            request_type = (
+                request_type_obj.get("name")
+                if isinstance(request_type_obj, dict)
+                else None
+            )
+            if request_type and isinstance(request_type, str):
                 document.metadata[META_REQUEST_TYPE] = request_type
-            portal_status = (request.get("currentStatus") or {}).get("status")
-            if portal_status:
+            portal_status_obj = request.get("currentStatus")
+            portal_status = (
+                portal_status_obj.get("status")
+                if isinstance(portal_status_obj, dict)
+                else None
+            )
+            if portal_status and isinstance(portal_status, str):
                 document.metadata[META_PORTAL_STATUS] = portal_status
 
         sla = self.source_operations.get_service_desk_sla(
@@ -173,7 +183,7 @@ class JiraServiceManagementConnector(JiraConnector):
         )
         if sla is None:
             logger.debug("No JSM SLA data for %s.", issue_key)
-        if sla is not None:
+        if isinstance(sla, dict):
             summary = _sla_breached_summary(sla)
             if summary is not None:
                 document.metadata[META_SLA_BREACHED] = summary
