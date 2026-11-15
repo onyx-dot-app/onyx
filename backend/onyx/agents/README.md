@@ -774,7 +774,7 @@ It resumes the parked agent runs of its own branch whether or not that branch is
 A dispatch failure never stops the turn. Transient errors retry at a later poll. Work that cannot start becomes a failed run; if even that fails, the work is dropped.
 When child work or a parked agent run can start but no running child keeps a store scanning, `dispatch_pending_chat_messages` starts an agent host.
 The host prepares the configuration of the selected response, or of a parked run's root response, without a root run, starts the work, and holds the leases until the runs release.
-It runs on the saved model of the first parked agent that it resumes. When it cannot start for any reason other than a transient error or a conflict, it ends the agents that it would resume.
+It runs on the saved model of the first parked agent that it resumes. When it cannot start for any reason other than a transient error, a conflict or a rate limit, it ends the agents that it would resume; after a rate limit they stay parked for a later dispatch.
 Any API pod can start it; chat admission keeps hosts and turns from starting the same work.
 Every turn and agent host hands its admission to the resume of a parked root response that can continue, so the chat shows processing until that resume publishes its stream.
 A resume that fails to start for a moment retries after a backoff.

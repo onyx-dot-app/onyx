@@ -24,6 +24,8 @@ from onyx.chat.run_store import ChatRunStore
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.enums import GatedAppKind
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
@@ -321,6 +323,66 @@ def test_a_decided_agent_whose_host_cannot_start_ends(
         assert sent == []
         # Its checkpoint and its program's dump go with it.
         assert file_store.list_files_by_prefix(prefix) == []
+    finally:
+        for record in file_store.list_files_by_prefix(prefix):
+            file_store.delete_file(record.file_id, error_on_missing=False)
+
+
+def test_a_decided_agent_whose_host_is_rate_limited_stays_parked(
+    db_session: Session,
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rate limit is temporary: the agent host that it stops keeps the
+    decided agent parked with its decision, and the agent resumes once the
+    limit allows, here in another process's host."""
+    sent: list[str] = []
+    file_store = get_default_file_store()
+    prefix = f"agent-checkpoint/{chat.chat_session_id}/"
+    limited: list[bool] = []
+
+    def rate_limited(**_kwargs: object) -> None:
+        limited.append(True)
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, "The agent limit is full")
+
+    monkeypatch.setattr("onyx.chat.process_message.get_llm_for_persona", rate_limited)
+    try:
+        agent_response_id = _park_agent(db_session, chat, owned_runs, sent)
+        [row] = chat.rows(db_session)
+        chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+
+        dispatch_pending_chat_messages(chat.chat_session_id, chat.user.id)
+        until(lambda: bool(limited), timeout=30)
+        assert chat_turn_work.wait_idle(timeout=30)
+
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            response = session.get_one(ChatMessage, agent_response_id)
+            assert response.response_status == RunStatus.SUSPENDED
+            assert session.get(ChatResponseCheckpoint, agent_response_id) is not None
+        assert _has_active_subagents(chat)
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; from tests.external_dependency_unit.chat."
+                "test_parked_agent_handoff import _resume_agent_in_process; "
+                "_resume_agent_in_process(*sys.argv[1:])",
+                str(chat.chat_session_id),
+                str(chat.response_id),
+                str(agent_response_id),
+                str(chat.user.id),
+                str(chat.server.id),
+            ],
+            cwd=Path(__file__).resolve().parents[3],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert not _has_active_subagents(chat)
     finally:
         for record in file_store.list_files_by_prefix(prefix):
             file_store.delete_file(record.file_id, error_on_missing=False)

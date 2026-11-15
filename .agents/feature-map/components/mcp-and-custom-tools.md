@@ -239,7 +239,8 @@ dispatch: ChatInbox.resumable_runs (db/chat_checkpoint.py:resumable_parked_runs)
      except a transient error (RETRYABLE_START_ERRORS): dispatch retries it
      after RESUME_RETRY_DELAYS_S
   an agent host that cannot start -> fail_suspended_response for the agents
-     it would resume, except a transient error or a conflict
+     it would resume, except a transient error, a conflict or a rate limit,
+     which keep them parked for a later dispatch
 user Stop: chat/execution.py:ChatTurnExecution._poll_control
   -> ChatRunStore.reject_waiting_approvals   REJECTED by USER where decision IS
      NULL, for the root and its foreground descendants; each run takes its
@@ -503,10 +504,11 @@ calls run with no row unless the policy is now DENY.
     retries the same way, and a conflict or a rate limit, which a later
     dispatch retries: the turn that holds the chat hands it over when it
     ends. After the last retry, a status read's dispatch tries again. An
-    agent host that cannot start for any other reason than a transient error
-    or a conflict ends the decided agents that it would resume with
-    `fail_suspended_response`, and its child work as failed runs, so the
-    status stops reporting active agents. A user Stop of a live
+    agent host that cannot start saves its child work as failed runs. A rate
+    limit keeps the decided agents parked with their decisions, and a later
+    dispatch, such as a release's or a status read's, resumes them. Any other
+    error except a transient one or a conflict ends them with
+    `fail_suspended_response`, so the status stops reporting active agents. A user Stop of a live
     turn (the chat's stream Stop key, read by
     `chat/execution.py:ChatTurnExecution._poll_control`) first calls
     `ChatRunStore.reject_waiting_approvals`, which saves `REJECTED` by `USER`

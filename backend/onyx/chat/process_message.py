@@ -1125,8 +1125,7 @@ def dispatch_pending_chat_messages(
                             raise
                         # Like a queued turn's error response, failed runs keep
                         # the work from retrying on every poll; their results
-                        # reach the agents that sent it. The parked agents end
-                        # as a root response that cannot continue does.
+                        # reach the agents that sent it.
                         with get_session_with_current_tenant() as db_session:
                             for work in inbox.child_work:
                                 fail_inbox_start__no_commit(
@@ -1139,15 +1138,20 @@ def dispatch_pending_chat_messages(
                                     else START_FAILED_MESSAGE,
                                 )
                             db_session.commit()
-                        for run in hosted_agents:
-                            fail_suspended_response(
-                                cache, get_current_tenant_id(), run.response_id
-                            )
                         if (
                             isinstance(error, OnyxError)
                             and error.error_code is OnyxErrorCode.RATE_LIMITED
                         ):
+                            # The decided agents stay parked: a later dispatch,
+                            # such as a release's or a status read's, resumes
+                            # them once the limit allows.
                             return
+                        # The parked agents end as a root response that cannot
+                        # continue does.
+                        for run in hosted_agents:
+                            fail_suspended_response(
+                                cache, get_current_tenant_id(), run.response_id
+                            )
                         raise
                     host_agent_work(host_setup, user, dispatch)
                     return

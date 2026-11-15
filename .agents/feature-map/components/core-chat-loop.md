@@ -271,8 +271,9 @@ A single-model turn offers agent tools for a client that shows follow-ups
 (`SendMessageRequest.accepts_follow_ups`, which the web chat and
 server-started turns set); `run_chat_turn` clears that flag, since its callers
 read one response. An agent host that cannot start, other than for a
-transient error or a conflict, saves its child work as failed runs and ends
-the decided agents that it would resume, so it does not retry on every poll. Foreground children still drain with their parent. API shutdown
+transient error or a conflict, saves its child work as failed runs, so it
+does not retry on every poll. It ends the decided agents that it would resume,
+except after a rate limit, which keeps them parked for a later dispatch. Foreground children still drain with their parent. API shutdown
 waits up to `CHAT_EXECUTION_TIMEOUT_S` for `chat/execution.py:chat_turn_work`,
 then closes database and tracing services; it does not cancel turns. The pod's
 termination grace period is much shorter, so it ends running turns first
