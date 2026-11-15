@@ -17,8 +17,8 @@ export type SessionWait =
 
 // Whether the saved session holds what this device does not show: approval requests that opened or
 // resolved since the shown load, or a newer response, such as one that started and finished
-// between two status reads. A session with no shown load, such as a chat this device created, has
-// no approvals baseline, so any reported version counts.
+// between two status reads. The server reports "" while the chat has no approval request, so a
+// session with no shown load, such as a chat this device created, has that empty baseline.
 export function savedSessionChanged(
   sessionId: string,
   status: ChatSessionStatus,
@@ -26,7 +26,7 @@ export function savedSessionChanged(
   const session = useChatSessionStore.getState().sessions.get(sessionId);
   return (
     (status.approvals_version !== undefined &&
-      status.approvals_version !== session?.approvalsVersion) ||
+      status.approvals_version !== (session?.approvalsVersion ?? "")) ||
     (status.latest_response_id != null &&
       !getMessageByMessageId(
         session?.messageTree ?? new Map(),

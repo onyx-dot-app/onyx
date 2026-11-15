@@ -78,7 +78,17 @@ describe("session readiness", () => {
 
   it("reports approvals that the shown load does not hold", async () => {
     const status = jest.mocked(getChatSessionStatus);
-    // A chat that no load established, such as one this device created, has no baseline.
+    // A chat that no load established, such as one this device created, has the empty
+    // baseline that the server reports while the chat has no approval request.
+    status.mockResolvedValueOnce({
+      is_processing: false,
+      approvals_version: "",
+    });
+    expect(
+      await waitForSessionIdle("versioned", () => true, jest.fn()),
+    ).toEqual({ kind: "idle", stale: false, backgroundWork: false });
+
+    // An agent asked before this chat's first load.
     status.mockResolvedValueOnce({
       is_processing: false,
       approvals_version: "v1",

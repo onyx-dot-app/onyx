@@ -1140,7 +1140,7 @@ describe("useChatController", () => {
     expect(renameSessionMock).toHaveBeenCalledTimes(1);
   });
 
-  // A created chat has no approvals baseline, so its first status read also reloads the session.
+  // A created chat has the empty approvals baseline; an agent that already asked reloads it.
   it("auto-names a new session whose first status read reloads it", async () => {
     createSessionMock.mockResolvedValue("new-session");
     streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
@@ -1160,6 +1160,30 @@ describe("useChatController", () => {
     await waitFor(() =>
       expect(renameSessionMock).toHaveBeenCalledWith("new-session"),
     );
+  });
+
+  // The server reports "" while the chat has no approval request.
+  it("keeps the streamed answer of a new chat with no approval request", async () => {
+    createSessionMock.mockResolvedValue("new-session");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValue({ is_processing: false, approvals_version: "" });
+
+    const { result } = renderHook(() => useChatController(null), { wrapper });
+    await act(async () => {
+      await result.current.submit("first message");
+    });
+
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("new-session")?.chatState,
+      ).toBe("input"),
+    );
+    await waitFor(() =>
+      expect(renameSessionMock).toHaveBeenCalledWith("new-session"),
+    );
+    expect(getSessionMock).not.toHaveBeenCalled();
   });
 
   it("does not auto-name a continued (existing) session", async () => {

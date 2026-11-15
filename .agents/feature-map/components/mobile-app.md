@@ -147,8 +147,9 @@ returns to `input`. So does a send that the server refuses with
   polls. `approvalsVersion` is the version of the load that the chat shows.
   Only `state/chatSessionStore.ts:hydrateSession` sets it, when it applies a
   loaded snapshot. A status read or a load that the chat discards does not
-  change it. A chat with no applied load, such as one this device created, has
-  no baseline, so its first reported version counts as changed.
+  change it. The server reports `""` while the chat has no approval request.
+  A chat with no applied load, such as one this device created, has that empty
+  baseline, so its first poll reloads only when an agent already asked.
 - `backgroundWork` is `has_active_subagents` or `has_startable_input`. A
   finished agent's unread result makes the server report startable input
   before the root's turn processes. Then the send or recovery starts
