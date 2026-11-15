@@ -251,8 +251,9 @@ an object of headers that Onyx forwards to MCP tool calls when the answer contin
 "approve_once", "mcp_headers": {"Authorization": "Bearer <user_jwt>"}}`. Onyx does not save these headers.
 If your MCP servers need them, send the same `mcp_headers` with each decision.
 The headers reach the continuation only when this decision call starts it.
-A continuation that Onyx starts in a different way gets no headers,
-for example when a status read starts it before the decision call does, or when Onyx retries a failed start.
+A continuation that Onyx starts in a different way does not get them. A status read or a retried start sends no headers.
+An answer that continues after a running turn ends, such as a decision while another answer of the turn still ran,
+gets the headers of the request that started that turn.
 
 The response contains `approval_id`, `decision` (`APPROVED` or `REJECTED`), `continuation` (see below),
 and `decided_via`:
@@ -292,9 +293,11 @@ It also comes before the `error` or `stop` packet when the answer cannot continu
 
 When any stream ends with `awaiting_approval`,
 the new stream of an answer can start without a `continuation` in your decision response. Read the status.
-While `is_processing` is `true`, read it again until `current_stream.response_ids` includes the answer,
-then read that stream from `cursor=0`. Stop when `is_processing` is `false`.
-Do not open a second reader for a stream that you already read.
+When every request of the answer already has a decision,
+Onyx keeps `is_processing` `true` from that stop until the new stream starts,
+so the first status read after the stop shows it. While `is_processing` is `true`,
+read it again until `current_stream.response_ids` includes the answer, then read that stream from `cursor=0`.
+Stop when `is_processing` is `false`. Do not open a second reader for a stream that you already read.
 
 After a `409` or `404` from the decision call, or when you open the chat session again,
 read `GET /chat/chat-session/{chat_session_id}/status` once. While an answer runs, `is_processing` is `true`,
