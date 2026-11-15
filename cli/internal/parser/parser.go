@@ -124,6 +124,9 @@ func parsePacketObj(obj map[string]any, placement *models.Placement) models.Stre
 		}
 		return models.StopEvent{Placement: placement, StopReason: reason}
 
+	case models.EventReplayEnd:
+		return models.ReplayEndEvent{}
+
 	case "error":
 		errMsg := "Unknown error"
 		if e, ok := obj["exception"]; ok {

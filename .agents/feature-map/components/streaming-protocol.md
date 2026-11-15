@@ -300,11 +300,16 @@ its background task end ([[#pure-asgi-middleware]]).
    After a `stop` with `stop_reason` `awaiting_approval`, `cli/cmd/ask.go`
    and `cli/internal/tui/app.go` keep the approval cards and stop reading.
    They follow the stream that a decision response names in `continuation`
-   from cursor 0. After a 409 or 404 decision, they read the status once and
-   follow its `current_stream`. `ask` drops the replayed events up to the
-   first live `tool_approval_resolved` of a request that waited. The TUI keeps
-   a card until a resolution or a session load gives its outcome, and loads
-   the session again when the status reports a new `approvals_version`.
+   from cursor 0, and keep reading their stream when it is `null`. Otherwise
+   they read the status and follow a new `current_stream`. `ask` follows it
+   only when its `response_ids` include the response. `ask` drops the
+   replayed events up to the `replay_end` packet, except outcomes of requests
+   it asked. When no stream continues the response, or its buffer is gone,
+   `ask` shows the rest from the saved session. The TUI keeps a card until a
+   resolution or a session load gives its outcome, and loads the session
+   again when the status reports a new `approvals_version`. After a decision
+   on a background agent's card, it reads the status at once and again while
+   `has_active_subagents` is true.
 6. `turn-index-is-not-a-turn` **`turn_index` is not a backend turn.** It is a
    rendering block. `chat/renderer.py:ResponseLayout.next_section` gives each
    answer, reasoning or tool section its own index, so reasoning and the tool

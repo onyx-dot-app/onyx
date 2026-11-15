@@ -703,7 +703,7 @@ type sessionReadyMsg struct {
 
 func checkSessionReady(client api.ClientAPI, sessionID string, channel <-chan models.StreamEvent) tea.Cmd {
 	return func() tea.Msg {
-		time.Sleep(time.Second)
+		time.Sleep(statusPollInterval)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		status, err := client.ChatSessionStatus(ctx, sessionID)

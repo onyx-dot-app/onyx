@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -18,11 +19,16 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/overflow"
+	"github.com/onyx-dot-app/onyx/cli/internal/parser"
 	"github.com/onyx-dot-app/onyx/cli/internal/sanitize"
 	"github.com/spf13/cobra"
 )
 
 const defaultMaxOutputBytes = 50000
+
+// statusPollInterval paces the status reads that wait for a response to
+// continue.
+var statusPollInterval = time.Second
 
 func newAskCmd(ios *iostreams.IOStreams) *cobra.Command {
 	var (
@@ -142,6 +148,8 @@ waiting for another client.`,
 			}
 
 			var sessionID string
+			// The response that the message started.
+			var responseID int
 			// The stream that ch reads.
 			var streamID int
 			var lastErr error
@@ -151,9 +159,14 @@ waiting for another client.`,
 			// The stream that a decision named to continue the response.
 			var continuation *models.ChatStream
 			// A continuation first replays the response from its start. ask
-			// drops the replay up to the first live resolution of a request
-			// that waited, so it shows nothing twice.
+			// drops the replay up to its end marker, so it shows nothing twice.
 			replaying := false
+			// The server has no buffer for the stream that ch reads.
+			unavailable := false
+			// ch reads the saved response, not a stream.
+			fromSaved := false
+			// The answer text shown so far.
+			var answer strings.Builder
 			// approvalErr ends the run after a decision failed. The owner of a
 			// running stream stops its response; a waiting response keeps waiting.
 			var approvalErr error
@@ -330,12 +343,15 @@ waiting for another client.`,
 					}
 					if replaying {
 						switch e := event.(type) {
-						case models.ErrorEvent:
+						case models.ReplayEndEvent:
+							replaying = false
+							continue
+						case models.ErrorEvent, models.StreamUnavailableEvent:
 						case models.ToolApprovalResolvedEvent:
-							if _, waited := asked[e.ApprovalID]; !waited || reported[e.ApprovalID] {
+							// The outcome of a request asked here can be in the replay.
+							if _, waited := asked[e.ApprovalID]; !waited {
 								continue
 							}
-							replaying = false
 						default:
 							continue
 						}
@@ -345,11 +361,15 @@ waiting for another client.`,
 						sessionID = e.ChatSessionID
 					case models.MessageIDEvent:
 						streamID = e.ReservedAgentMessageID
+						responseID = e.ReservedAgentMessageID
 					case models.StreamCursorEvent:
 						streamID = e.StreamID
 						continue
 					case models.StreamUnavailableEvent:
+						unavailable = true
 						continue
+					case models.MessageDeltaEvent:
+						answer.WriteString(e.Content)
 					case models.StopEvent:
 						// Keep draining: the server saves the turn after it sends stop,
 						// and the rename below reads the saved history.
@@ -435,29 +455,104 @@ waiting for another client.`,
 						return exitcodes.New(exitcodes.General, sanitize.Terminal(e.Error))
 					}
 				}
-				if !awaiting || approvalErr != nil || lastErr != nil || ctx.Err() != nil {
+				if (!awaiting && !unavailable) || approvalErr != nil || lastErr != nil || ctx.Err() != nil {
 					break
 				}
 				// The response continues on the stream that a decision named.
-				// When another client's decision started it, the status names it.
+				// Otherwise the status names the stream that continues it, for
+				// example after a decision while the response still ran.
 				next := continuation
-				if next == nil || next.StreamID == streamID {
+				continuation = nil
+				if next != nil && next.StreamID == streamID {
+					next = nil
+				}
+				for next == nil {
 					status, err := client.ChatSessionStatus(ctx, sessionID)
 					if ctx.Err() != nil {
 						break
 					}
-					if err != nil {
+					if err != nil && !api.IsRetryableReadinessError(err) {
 						return fmt.Errorf("cannot follow the response after the approval decisions: %w", err)
 					}
-					next = status.CurrentStream
+					if err == nil {
+						current := status.CurrentStream
+						if current != nil && current.StreamID != streamID && slices.Contains(current.ResponseIDs, responseID) {
+							next = current
+						} else if !status.IsProcessing {
+							break
+						}
+					}
+					if next == nil {
+						select {
+						case <-ctx.Done():
+						case <-time.After(statusPollInterval):
+						}
+					}
 				}
-				if next == nil || next.StreamID == streamID {
+				if ctx.Err() != nil {
+					break
+				}
+				if next != nil {
+					streamID = next.StreamID
+					ch = client.ResumeChatStream(streamCtx, sessionID, &streamID, 0)
+					replaying, fromSaved = true, false
+					gotStop, awaiting, unavailable = false, false, false
+					continue
+				}
+				if fromSaved {
 					return exitcodes.New(exitcodes.General, "the response did not continue after the approval decisions; open the chat to see it")
 				}
-				streamID = next.StreamID
-				ch = client.ResumeChatStream(streamCtx, sessionID, &streamID, 0)
-				replaying = true
-				gotStop, awaiting = false, false
+				// No stream continues the response: the saved session shows how
+				// it went on, with the requests it still waits for.
+				detail, err := client.GetChatSession(ctx, sessionID)
+				if ctx.Err() != nil {
+					break
+				}
+				if err != nil {
+					return fmt.Errorf("cannot load the response after the approval decisions: %w", err)
+				}
+				assistant := 0
+				for _, message := range detail.Messages {
+					if message.MessageType != "assistant" {
+						continue
+					}
+					if message.MessageID == responseID && assistant < len(detail.Packets) {
+						if rest, shown := strings.CutPrefix(message.Message, answer.String()); !shown {
+							deferred = append(deferred, models.MessageDeltaEvent{Content: "\n\n" + message.Message})
+						} else if rest != "" {
+							deferred = append(deferred, models.MessageDeltaEvent{Content: rest})
+						}
+						// Like a stream, ask shows only the response's own requests.
+						requested := map[string]bool{}
+						for _, packet := range detail.Packets[assistant] {
+							switch e := parser.ParseStreamLine(string(packet)).(type) {
+							case models.ToolApprovalRequestEvent:
+								if e.AgentName == "" {
+									requested[e.ApprovalID] = true
+									deferred = append(deferred, e)
+								}
+							case models.ToolApprovalResolvedEvent:
+								if requested[e.ApprovalID] {
+									deferred = append(deferred, e)
+								}
+							case models.StopEvent:
+								deferred = append(deferred, e)
+							}
+						}
+						if message.Error != nil {
+							deferred = append(deferred, models.ErrorEvent{Error: *message.Error})
+						}
+					}
+					assistant++
+				}
+				if len(deferred) == 0 {
+					return exitcodes.New(exitcodes.General, "the response did not continue after the approval decisions; open the chat to see it")
+				}
+				saved := make(chan models.StreamEvent)
+				close(saved)
+				ch = saved
+				replaying, fromSaved = false, true
+				gotStop, awaiting, unavailable = false, false, false
 			}
 
 			if !askJSON {

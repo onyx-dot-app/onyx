@@ -67,6 +67,13 @@ func TestStreamCursor(t *testing.T) {
 	}
 }
 
+func TestReplayEnd(t *testing.T) {
+	event := ParseStreamLine(`{"placement":{"turn_index":0},"obj":{"type":"replay_end"}}`)
+	if _, ok := event.(models.ReplayEndEvent); !ok {
+		t.Fatalf("got %#v", event)
+	}
+}
+
 func TestMessageIDInfoNullUserID(t *testing.T) {
 	line := mustJSON(map[string]interface{}{
 		"user_message_id":               nil,

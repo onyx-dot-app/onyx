@@ -30,6 +30,7 @@ const (
 	EventToolApprovalResolved = "tool_approval_resolved"
 	EventStreamCursor         = "stream_cursor"
 	EventStreamUnavailable    = "stream_unavailable"
+	EventReplayEnd            = "replay_end"
 	EventUnknown              = "unknown"
 )
 
@@ -249,6 +250,12 @@ func (e StreamCursorEvent) EventType() string { return EventStreamCursor }
 type StreamUnavailableEvent struct{}
 
 func (e StreamUnavailableEvent) EventType() string { return EventStreamUnavailable }
+
+// ReplayEndEvent ends the replayed prefix of a stream that continues a
+// response. The events after it are new.
+type ReplayEndEvent struct{}
+
+func (e ReplayEndEvent) EventType() string { return EventReplayEnd }
 
 // UnknownEvent is a catch-all for unrecognized stream data.
 type UnknownEvent struct {

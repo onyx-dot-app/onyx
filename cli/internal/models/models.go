@@ -70,8 +70,9 @@ type ChatSessionStatus struct {
 	// ApprovalsVersion changes when the session's waiting approval requests
 	// change. A session load shows the requests of the version.
 	ApprovalsVersion string
-	// HasActiveSubagents reports background agents that run or have queued
-	// work. A parked agent, which waits for a decision, does not count.
+	// HasActiveSubagents reports background agents that run, have queued
+	// work, or have their decisions and wait to resume. An agent that waits
+	// for a decision does not count.
 	HasActiveSubagents bool
 }
 

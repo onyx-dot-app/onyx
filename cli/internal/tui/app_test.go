@@ -1,12 +1,19 @@
 package tui
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 )
+
+// TestMain runs the status reads that wait for the server without delay.
+func TestMain(m *testing.M) {
+	statusPollInterval = 0
+	os.Exit(m.Run())
+}
 
 func TestWithSessionAgent(t *testing.T) {
 	cfg := config.OnyxCliConfig{DefaultAgentID: 7}

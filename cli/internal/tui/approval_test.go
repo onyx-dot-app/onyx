@@ -937,9 +937,6 @@ func (c *pollingClient) GetChatSession(context.Context, string) (*models.ChatSes
 // every command that the decision starts until none is left.
 func watchAgentDecision(t *testing.T, client *pollingClient) Model {
 	t.Helper()
-	interval := approvalsPollInterval
-	approvalsPollInterval = 0
-	t.Cleanup(func() { approvalsPollInterval = interval })
 	m := NewModel(config.DefaultConfig(), client)
 	updated, _ := m.Update(SessionResumedMsg{Detail: client.sessions["v1"], Status: models.ChatSessionStatus{ApprovalsVersion: "v0"}})
 	m = updated.(Model)
@@ -980,29 +977,27 @@ func agentAsks(id string) map[string]any {
 	return map[string]any{"type": "tool_approval_request", "approval_id": id, "tool_name": "create_issue", "display_name": "Create issue", "agent_name": "triage"}
 }
 
-func TestAgentDecisionWatchStopsAfterReadsThatNeverSeeTheAgentRun(t *testing.T) {
+func TestAgentDecisionReadsTheStatusOnceWhenNoAgentWaits(t *testing.T) {
 	client := &pollingClient{
 		resumingClient: &resumingClient{},
 		statuses:       []models.ChatSessionStatus{{ApprovalsVersion: "v1"}},
 		sessions:       map[string]*models.ChatSessionDetailResponse{"v1": agentSession(t, "v1", agentAsks("b1"))},
 	}
 	watchAgentDecision(t, client)
-	if client.reads != approvalsPollUnseenReads {
-		t.Fatalf("reads = %d, want %d", client.reads, approvalsPollUnseenReads)
+	if client.reads != 1 {
+		t.Fatalf("reads = %d, want 1", client.reads)
 	}
 }
 
-func TestAgentDecisionWatchFollowsTheResumedAgentUntilItSettles(t *testing.T) {
+func TestAgentDecisionPollsWhileTheAgentRuns(t *testing.T) {
 	resolved := map[string]any{"type": "tool_approval_resolved", "approval_id": "b1", "outcome": "approved"}
 	client := &pollingClient{
 		resumingClient: &resumingClient{},
 		statuses: []models.ChatSessionStatus{
-			// The decision changes the version before the agent host starts.
-			{ApprovalsVersion: "v2"},
+			// The decided agent counts as active before its host starts.
 			{ApprovalsVersion: "v2", HasActiveSubagents: true},
-			// The resumed agent asks again, then parks.
+			// The resumed agent asks again, then waits for that decision.
 			{ApprovalsVersion: "v3", HasActiveSubagents: true},
-			{ApprovalsVersion: "v3"},
 			{ApprovalsVersion: "v3"},
 		},
 		sessions: map[string]*models.ChatSessionDetailResponse{
@@ -1012,8 +1007,8 @@ func TestAgentDecisionWatchFollowsTheResumedAgentUntilItSettles(t *testing.T) {
 		},
 	}
 	m := watchAgentDecision(t, client)
-	if client.reads != 4 {
-		t.Fatalf("reads = %d, want the watch to stop once the agent that ran settled", client.reads)
+	if client.reads != 3 {
+		t.Fatalf("reads = %d, want reads until no agent is active", client.reads)
 	}
 	if got := approvalEntry(t, m, "b1"); got != "● Approved: Create issue" {
 		t.Fatalf("b1 = %q, want the server's outcome", got)
