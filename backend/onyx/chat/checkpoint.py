@@ -6,6 +6,7 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
+from onyx.agents.compaction import is_input_context
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
@@ -17,6 +18,7 @@ from onyx.agents.models import (
 from onyx.agents.tools import HumanToolAnswer
 from onyx.chat.models import (
     ChatCodeModeResult,
+    ChatInputMetadata,
     ChatMessageMetadata,
     ChatSearchResult,
     CheckpointBinding,
@@ -41,6 +43,7 @@ _SAVED_IMAGES = TypeAdapter(list[SavedLoadedFile])
 
 CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
     "agent.input.v1": InputMessageMetadata,
+    "chat.input.v1": ChatInputMetadata,
     "prompt.metadata.v1": PromptMetadata,
     "chat.metadata.v1": ChatMessageMetadata,
     "chat.rendering.v1": MessageRendering,
@@ -182,9 +185,13 @@ def _response_digest(response: ResponseRecord) -> str:
                 "steps": [step.model_dump(mode="json") for step in response.steps],
                 "answer_step_index": response.answer_step_index,
                 "input": [
-                    # The question is durable; attachment and request context live in the checkpoint.
+                    # The question is durable; attachment, skill and request context live in the checkpoint.
                     item.model_dump(mode="json")
-                    for item in response.input_messages[-1:]
+                    for item in [
+                        message
+                        for message in response.input_messages
+                        if not is_input_context(message)
+                    ][-1:]
                 ],
             },
             sort_keys=True,

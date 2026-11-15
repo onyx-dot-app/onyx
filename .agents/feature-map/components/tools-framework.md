@@ -32,8 +32,9 @@ The interface is `tools/interface.py:Tool`, which returns
   gives the tools to `chat/agent.py:ChatAgent` or
   `deep_research/agent.py:DeepResearchAgent`. `ChatAgent` binds them with its
   own `ToolContext`.
-- **The sub-agents** run on the same runtime. `DeepResearchAgent` does not bind
-  the tools. It passes them to each
+- **The sub-agents** run on the same runtime. `DeepResearchAgent` binds only
+  `skills_read`, in its research phase, so it can read the rest of a picked
+  skill. It passes the tools to each
   `deep_research/research_agent.py:ResearchAgent` child, which binds them with
   its own `ToolContext`. `coding_agent/agent.py:CodingAgent` calls `BashTool.run` from its own
   `AgentTool`, so `Tool.run` error handling applies but no construction gate
@@ -463,9 +464,9 @@ Their control functions, such as `think_tool`, `generate_report` and
   7. Add its ID to `web/src/lib/tools/constants.ts` and
      `mobile/src/chat/tools.ts`.
   8. Deep research uses only the tools whose names are in the allowed set of
-     `deep_research/research_agent.py:ResearchAgent.__init__`. Add a search tool
-     there if deep research must use it. Nothing reports a tool that is left
-     out.
+     `deep_research/research_agent.py:ResearchAgent.__init__`, which includes
+     `skills_read`. Add a search tool there if deep research must use it.
+     Nothing reports a tool that is left out.
 - `gate-a-tool` **Gate a tool.** Pick the narrowest gate that matches who decides:
 
   | Who decides | Gate |

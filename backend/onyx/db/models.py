@@ -62,6 +62,7 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.auth.schemas import UserRole
+from onyx.chat.mention_models import Mention, PickedSkillMessage, RecordedMention
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
@@ -3698,6 +3699,22 @@ class ChatMessage(Base):
     files: Mapped[list[FileDescriptor] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # What the user tagged in the question, as the turn accepted it. A skill
+    # keeps the version the user ran.
+    mentions: Mapped[list[RecordedMention]] = mapped_column(
+        PydanticListType(RecordedMention),
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    # The `<skill>` message of each picked skill, which follows the question
+    # in history; empty in a row that keeps no conversation content. Only
+    # the history the model gets loads it.
+    skill_messages: Mapped[list[PickedSkillMessage]] = mapped_column(
+        PydanticListType(PickedSkillMessage),
+        default=list,
+        server_default=text("'[]'::jsonb"),
+        deferred=True,
+    )
 
     # Maps the citation numbers to a SearchDoc id
     citations: Mapped[dict[int, int] | None] = mapped_column(
@@ -3775,13 +3792,21 @@ class ChatMessage(Base):
     )
 
 
-class AcceptedChatInput(BaseModel):
-    """A message a model generation accepted, with its provenance."""
+class AcceptedChatInputRecord(BaseModel):
+    """A message a model generation accepted, with its provenance and the
+    records of what a user message picked."""
 
     id: str
     source: InputSource
     source_run_id: str | None = None
     content: str
+    mentions: list[RecordedMention] = Field(default_factory=list)
+
+
+class AcceptedChatInput(AcceptedChatInputRecord):
+    """An accepted message as stored, with the `<skill>` message of each pick."""
+
+    skill_messages: list[PickedSkillMessage] = Field(default_factory=list)
 
 
 class ChatResponseItem(Base):
@@ -3910,6 +3935,11 @@ class ChatInput(Base):
     # The model the composer showed when a queued or interrupting message was sent.
     llm_override: Mapped[LLMOverride | None] = mapped_column(
         PydanticType(LLMOverride), nullable=True
+    )
+    # What the user tagged in a queued or interrupting message; its turn
+    # resolves the mentions when it accepts the message.
+    mentions: Mapped[list[Mention]] = mapped_column(
+        PydanticListType(Mention), default=list, server_default=text("'[]'::jsonb")
     )
     max_steps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_timeout_s: Mapped[float | None] = mapped_column(Float, nullable=True)

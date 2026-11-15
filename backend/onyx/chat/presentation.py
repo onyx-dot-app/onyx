@@ -36,6 +36,7 @@ from onyx.chat.models import (
     ResponseRecord,
     ToolHistorySnapshot,
     ToolReplayData,
+    recorded_mentions,
 )
 from onyx.chat.renderer import (
     HIDDEN_TOOLS,
@@ -390,7 +391,11 @@ def user_message_packets(
         packets.append(
             Packet(
                 placement=layout.next_section(parent),
-                obj=UserMessagePacket(id=message.id, message=message.text),
+                obj=UserMessagePacket(
+                    id=message.id,
+                    message=message.text,
+                    mentions=recorded_mentions(message),
+                ),
             )
         )
     return packets

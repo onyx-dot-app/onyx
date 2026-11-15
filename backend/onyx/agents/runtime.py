@@ -23,6 +23,7 @@ from onyx.agents.compaction import (
     context_budget,
     count_tokens,
     history_boundaries,
+    is_input_context,
     messages_after_compaction,
     request_tokens,
     working_messages,
@@ -1629,6 +1630,7 @@ def _advance_step(
     # Compaction tells the task question from later input by this metadata.
     if any(
         not isinstance(message.metadata, InputMessageMetadata)
+        and not is_input_context(message)
         for message in prepared.input_messages or []
     ):
         raise ValueError("Between-step input needs InputMessageMetadata")
@@ -1640,11 +1642,12 @@ def _advance_step(
                 # History keeps provenance only; content metadata served preparation.
                 "metadata": message.metadata.model_copy(
                     update={"content_metadata": None}
-                ),
+                )
+                if isinstance(message.metadata, InputMessageMetadata)
+                else message.metadata,
             },
         )
         for index, message in enumerate(prepared.input_messages or [])
-        if isinstance(message.metadata, InputMessageMetadata)
     ]
     source = [
         *run._history.messages,

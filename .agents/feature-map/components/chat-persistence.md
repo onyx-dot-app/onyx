@@ -182,7 +182,7 @@ one place at any moment. The delivery and the reader decide its path:
 
 | Message | Path |
 | --- | --- |
-| `send` that a running step reads | `chat_input` row → deleted when the step accepts it → `chat_response_item.inputs` of the reading step, in the same transaction |
+| `send` that a running step reads | `chat_input` row → deleted when the step accepts it → `chat_response_item.inputs` of the reading step, in the same transaction, with the skills it picked at the versions that acceptance resolved |
 | `queue`, `interrupt`, or a `send` that no step can read | `chat_input` row → deleted when a turn accepts it → a USER `chat_message` that starts the new turn, in the same transaction |
 
 Agent messages follow the same two paths. Child results go into the

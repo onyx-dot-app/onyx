@@ -32,6 +32,7 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.chat.errors import chat_error
+from onyx.chat.mention_models import PickedSkillMessage, RecordedMention
 from onyx.chat.models import (
     ChatBranch,
     HistoryLink,
@@ -1129,6 +1130,8 @@ def create_new_chat_message(
     message_type: MessageType,
     db_session: Session,
     files: list[FileDescriptor] | None = None,
+    mentions: list[RecordedMention] | None = None,
+    skill_messages: list[PickedSkillMessage] | None = None,
     error: str | None = None,
     commit: bool = True,
     reserved_message_id: int | None = None,
@@ -1146,6 +1149,8 @@ def create_new_chat_message(
         existing_message.token_count = token_count
         existing_message.message_type = message_type
         existing_message.files = files
+        existing_message.mentions = mentions or []
+        existing_message.skill_messages = skill_messages or []
         existing_message.error = error
         existing_message.reasoning_tokens = reasoning_tokens
         new_chat_message = existing_message
@@ -1159,6 +1164,8 @@ def create_new_chat_message(
             token_count=token_count,
             message_type=message_type,
             files=files,
+            mentions=mentions or [],
+            skill_messages=skill_messages or [],
             error=error,
             reasoning_tokens=reasoning_tokens,
         )
@@ -1395,6 +1402,7 @@ def translate_db_message_to_chat_message_detail(
         citations=converted_citations,
         time_sent=chat_message.time_sent,
         files=chat_message.files or [],
+        mentions=chat_message.mentions,
         error=error_info.error if error_info is not None else None,
         error_info=error_info,
         response_status=chat_message.response_status,
@@ -1660,6 +1668,15 @@ def load_message_branch(
                 selectinload(ChatMessage.search_docs),
                 selectinload(ChatMessage.tool_calls),
             )
+        ).all()
+    # History gives the model the skill messages of picked skills, which
+    # other reads of a chat leave unloaded.
+    picking_ids = [message.id for message in history if message.mentions]
+    if picking_ids:
+        db_session.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.id.in_(picking_ids))
+            .options(load_only(ChatMessage.id, ChatMessage.skill_messages))
         ).all()
     return history, parent
 

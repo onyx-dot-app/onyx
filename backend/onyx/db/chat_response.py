@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import delete, inspect, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
-from onyx.agents.compaction import count_tokens
+from onyx.agents.compaction import count_tokens, is_input_context
 from onyx.agents.execution_records import run_input_message_id
 from onyx.agents.models import (
     AgentInfo,
@@ -16,16 +16,21 @@ from onyx.agents.models import (
     ToolExecutionRecord,
     agent_result_message_id,
 )
+from onyx.chat.mention_models import PickedSkillMessage
 from onyx.chat.models import (
     ChatExecutionRecord,
     ChatResponseSnapshot,
     MessageRendering,
+    PromptMetadata,
     ResponseRecord,
     ResponseReplayData,
     ResponseStatus,
     SavedResponse,
     ToolRecordReference,
     ToolReplayData,
+    accepted_input_messages,
+    recorded_mentions,
+    skill_message_id,
 )
 from onyx.chat.response import restore_response_sources
 from onyx.configs.constants import DocumentSource, MessageType
@@ -849,14 +854,16 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
             raise ValueError("Response assistant identity or step is invalid")
         step = StepRecord(
             input_messages=[
-                UserMessage(
-                    id=item.id,
-                    content=item.content,
-                    metadata=InputMessageMetadata(
-                        source=item.source, source_run_id=item.source_run_id
-                    ),
-                )
+                message
                 for item in row.inputs
+                for message in accepted_input_messages(
+                    message_id=item.id,
+                    content=item.content,
+                    source=item.source,
+                    source_run_id=item.source_run_id,
+                    mentions=item.mentions,
+                    skill_messages=item.skill_messages,
+                )
             ],
             message=row.message.model_copy(deep=True),
             generation_status=row.generation_status,
@@ -904,11 +911,32 @@ def _invoking_message_id(invocation: ToolCall) -> str:
 
 
 def _accepted_inputs(messages: list[UserMessage]) -> list[AcceptedChatInput]:
+    # A picked skill's message is saved with the input that picked it.
+    skills = {message.id: message for message in messages if is_input_context(message)}
     inputs: list[AcceptedChatInput] = []
     for message in messages:
+        if is_input_context(message):
+            continue
         if message.id is None or not isinstance(message.content, str):
             raise ValueError("Saved response inputs require an identity and text")
         origin = message.metadata
+        mentions = recorded_mentions(message)
+        skill_messages: list[PickedSkillMessage] = []
+        for mention in mentions:
+            skill = skills.get(skill_message_id(message.id, mention.version_id))
+            if (
+                skill is None
+                or not isinstance(skill.metadata, PromptMetadata)
+                or skill.metadata.token_count is None
+            ):
+                raise ValueError("Each picked skill needs its skill message")
+            skill_messages.append(
+                PickedSkillMessage(
+                    version_id=mention.version_id,
+                    content=sanitize_string(skill.text),
+                    token_count=skill.metadata.token_count,
+                )
+            )
         inputs.append(
             AcceptedChatInput(
                 id=sanitize_string(message.id),
@@ -919,6 +947,8 @@ def _accepted_inputs(messages: list[UserMessage]) -> list[AcceptedChatInput]:
                 if isinstance(origin, InputMessageMetadata)
                 else None,
                 content=sanitize_string(message.content),
+                mentions=mentions,
+                skill_messages=skill_messages,
             )
         )
     if len({item.id for item in inputs}) != len(inputs):

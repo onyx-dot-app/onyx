@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from enum import Enum
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -19,6 +19,8 @@ from onyx.agents.models import (
     AgentInfo,
     CompactionCheckpoint,
     CompactionMetadata,
+    InputMessageMetadata,
+    InputSource,
     MessageDelivery,
     RunFailure,
     RunFailureKind,
@@ -29,6 +31,7 @@ from onyx.agents.models import (
 from onyx.agents.tools import InputDecision
 from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
+from onyx.chat.mention_models import Mentions, PickedSkillMessage, RecordedMention
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -87,6 +90,7 @@ class PendingChatMessage(BaseModel):
     target_response_id: int | None
     deep_research: bool = False
     llm_override: LLMOverride | None = None
+    mentions: Mentions
 
 
 class QueuedChatTurn(BaseModel):
@@ -103,6 +107,77 @@ class PromptMetadata(CompactionMetadata):
     should_cache: bool = False
     file_id: str | None = None
     is_reminder: bool = False
+
+
+class ChatInputMetadata(InputMessageMetadata):
+    """A user message accepted between steps, with the records of what it
+    picked. The `<skill>` message of each pick follows it in history."""
+
+    mentions: list[RecordedMention] = Field(default_factory=list)
+
+
+def recorded_mentions(message: Message) -> list[RecordedMention]:
+    """What a message accepted between steps picked."""
+    return (
+        message.metadata.mentions
+        if isinstance(message.metadata, ChatInputMetadata)
+        else []
+    )
+
+
+def skill_message_id(message_id: str, version_id: UUID) -> str:
+    """The id of the `<skill>` message that a message's pick of a skill
+    version gives the model."""
+    return f"{message_id}:skill:{version_id}"
+
+
+def picked_skill_messages(
+    message_id: str,
+    mentions: Sequence[RecordedMention],
+    skill_messages: Sequence[PickedSkillMessage],
+) -> list[UserMessage]:
+    """The `<skill>` messages that follow a message in history, in the order
+    it picked the skills."""
+    by_version = {message.version_id: message for message in skill_messages}
+    if by_version.keys() != {mention.version_id for mention in mentions}:
+        raise ValueError("Each picked skill needs its saved skill message")
+    return [
+        UserMessage(
+            id=skill_message_id(message_id, mention.version_id),
+            content=by_version[mention.version_id].content,
+            metadata=PromptMetadata(
+                token_count=by_version[mention.version_id].token_count,
+                is_input_context=True,
+            ),
+        )
+        for mention in mentions
+    ]
+
+
+def accepted_input_messages(
+    *,
+    message_id: str,
+    content: str,
+    source: InputSource,
+    source_run_id: str | None,
+    mentions: list[RecordedMention],
+    skill_messages: list[PickedSkillMessage],
+) -> list[UserMessage]:
+    """A user message accepted between steps and the `<skill>` messages of
+    its picks, as the run accepted it and as its saved record restores it."""
+    return [
+        UserMessage(
+            id=message_id,
+            content=content,
+            # Only a message that picked skills has the chat metadata.
+            metadata=ChatInputMetadata(
+                source=source, source_run_id=source_run_id, mentions=mentions
+            )
+            if mentions
+            else InputMessageMetadata(source=source, source_run_id=source_run_id),
+        ),
+        *picked_skill_messages(message_id, mentions, skill_messages),
+    ]
 
 
 class FileContextResult(BaseModel):
@@ -444,6 +519,8 @@ class ChatHistoryMessage(BaseModel):
     token_count: int
     files: list[FileDescriptor]
     is_clarification: bool
+    # The `<skill>` messages of the skills a question picked.
+    skill_messages: list[UserMessage]
     response_messages: list[Message]
     checkpoint: CompactionCheckpoint | None = None
 
@@ -762,6 +839,8 @@ class ChatTurnSetup(BaseModel):
     checkpoint: CompactionCheckpoint | None
     # Child-result delivery has no new user message.
     user_message_id: int | None
+    # The mentions recorded on the question, for its ID packet.
+    mentions: list[RecordedMention]
     user_identity: LLMUserIdentity
     responses: list[ReservedChatResponse]
     messages: list[Message]
@@ -782,6 +861,9 @@ class ChatTurnSetup(BaseModel):
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext
+    # The turn offers the skill tools when the user had custom skills as it
+    # started; the tools and each agent's catalog read the current skills.
+    has_chat_skills: bool
     # For deep research: was the last assistant message a clarification request?
     skip_clarification: bool
     cache: CacheBackend
