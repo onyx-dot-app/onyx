@@ -652,6 +652,99 @@ describe("with stubbed server checks", () => {
     expect(resumeStream).not.toHaveBeenCalled();
   });
 
+  test("incognito shows a parked answer's saved waiting request after its stream dropped", async () => {
+    const lost: Message = {
+      ...message(2, "error", ""),
+      messageId: 75,
+      parentNodeId: 1,
+      errorMessage: "network error",
+      streamLost: true,
+    };
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "unconfirmed",
+      incognito: true,
+      messageTree: new Map<number, Message>([
+        [
+          1,
+          {
+            ...message(1, "user", "Private question"),
+            childrenNodeIds: [2],
+            latestChildNodeId: 2,
+          },
+        ],
+        [2, lost],
+      ]),
+    });
+    jest.mocked(processRawChatHistory).mockReturnValue(
+      new Map([
+        [
+          9,
+          {
+            ...message(9, "assistant", ""),
+            messageId: 75,
+            responseStatus: "suspended" as const,
+            packets: [approvalRequest("parked")],
+          },
+        ],
+      ])
+    );
+
+    await settle("recovery");
+
+    const settled = useChatSessionStore.getState().sessions.get("session")!;
+    expect(settled.chatState).toBe("input");
+    expect(settled.messageTree.get(2)).toMatchObject({
+      nodeId: 2,
+      parentNodeId: 1,
+      type: "assistant",
+    });
+    expect(waitingApprovalIds()).toEqual(["parked"]);
+  });
+
+  test("incognito closes a lost answer that the server did not park", async () => {
+    const lost: Message = {
+      ...message(2, "assistant", "Partial"),
+      messageId: 76,
+      parentNodeId: 1,
+      packets: [
+        {
+          placement: { turn_index: 0, tab_index: 0 },
+          obj: { type: "message_delta", content: "Partial" },
+        },
+      ],
+    };
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "unconfirmed",
+      incognito: true,
+      messageTree: new Map<number, Message>([
+        [
+          1,
+          {
+            ...message(1, "user", "Private question"),
+            childrenNodeIds: [2],
+            latestChildNodeId: 2,
+          },
+        ],
+        [2, lost],
+      ]),
+    });
+    // A usage-only chat saves only usage rows.
+    jest
+      .mocked(processRawChatHistory)
+      .mockReturnValue(
+        new Map([[9, { ...message(9, "assistant", ""), messageId: 76 }]])
+      );
+
+    await settle("recovery");
+
+    const answer = useChatSessionStore
+      .getState()
+      .sessions.get("session")!
+      .messageTree.get(2)!;
+    expect(answer.message).toBe("Partial");
+    expect(answer.packets.at(-1)?.obj.type).toBe("stop");
+  });
+
   test("an old rejected attempt does not hide the latest saved answer", async () => {
     const user = {
       ...message(1, "user", "Question"),
@@ -1096,6 +1189,61 @@ describe("with a scripted fetch", () => {
     });
   });
 
+  test("an older stream's late batch does not overwrite an answer that its continuation took over", async () => {
+    const answer = {
+      ...message(2, "assistant", ""),
+      messageId: 84,
+      parentNodeId: 1,
+    };
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "streaming",
+      messageTree: new Map<number, Message>([
+        [1, message(1, "user", "Question")],
+        [2, answer],
+      ]),
+    });
+    jest
+      .spyOn(global, "fetch")
+      .mockImplementation(() => new Promise<Response>(() => {}));
+    const late = Promise.withResolvers<void>();
+    const asked: Packet = approvalRequest("first");
+    const stale: Packet = {
+      placement: { turn_index: 1 },
+      obj: { type: "message_delta", content: "Stale" },
+    };
+    const continued: Packet = {
+      placement: { turn_index: 2 },
+      obj: { type: "message_delta", content: "Continued" },
+    };
+    jest
+      .mocked(resumeStream)
+      .mockImplementation(async function* (_session, streamId) {
+        if (streamId === 980) {
+          yield asked;
+          yield { stream_id: 980, next_cursor: 1, replay_complete: true };
+          await late.promise;
+          yield stale;
+          yield { stream_id: 980, next_cursor: 2, replay_complete: true };
+          await new Promise<never>(() => {});
+        }
+        yield continued;
+        yield { stream_id: 981, next_cursor: 1, replay_complete: true };
+        await new Promise<never>(() => {});
+      });
+    const packets = () =>
+      useChatSessionStore.getState().sessions.get("session")!.messageTree.get(2)
+        ?.packets;
+
+    followChatStream("session", stream(980, [84]), errorMessage);
+    await waitFor(() => expect(packets()).toEqual([asked]));
+    followChatStream("session", stream(981, [84]), errorMessage);
+    await waitFor(() => expect(packets()).toEqual([continued]));
+    late.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(packets()).toEqual([continued]);
+  });
+
   // Readers left open by earlier tests keep their streams, so this test uses
   // its own stream IDs.
   test("a stream that stops for an approval hands its response to the next stream from cursor 0", async () => {
@@ -1389,6 +1537,9 @@ describe("with a scripted fetch", () => {
     jest.spyOn(global, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith("/status")) return Response.json(statuses.shift());
+      // The saved answer was not parked.
+      if (url.includes("/get-chat-session/"))
+        return Response.json(savedSession(raw, null));
       return Response.json(
         { detail: "No resumable stream for this chat session" },
         { status: 404 }

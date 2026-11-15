@@ -9,14 +9,11 @@ import { getModelIcon } from "@/lib/languageModels/utils";
 import type { MultiModelResponse } from "@/app/app/message/types";
 import { FetchError } from "@/lib/fetcher";
 import { postChatApprovalDecision } from "@/lib/chat/svc";
-import { followChatStream } from "@/lib/chat/settleChatSession";
+import { followChatStream, savedAnswers } from "@/lib/chat/settleChatSession";
 import {
-  fetchSettledChatSession,
   readChatSessionStatus,
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
-import { processRawChatHistory } from "@/app/app/services/lib";
-import { getMessageByMessageId } from "@/app/app/services/messageTree";
 import type { ChatStream } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -116,33 +113,29 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
         followChatStream(sessionId, next, tReadiness("checkFailed"));
         return;
       }
-      const saved = await fetchSettledChatSession(sessionId);
-      const store = useChatSessionStore.getState();
-      const tree = store.sessions.get(sessionId)?.messageTree;
       // Only the answer that holds this request takes its saved copy.
-      const local = [...(tree?.values() ?? [])].find((message) =>
+      const local = [
+        ...(useChatSessionStore
+          .getState()
+          .sessions.get(sessionId)
+          ?.messageTree.values() ?? []),
+      ].find((message) =>
         readToolApprovals(message.packets).entries.some(
           (entry) => entry.request.approval_id === request.approval_id
         )
       );
-      const savedAnswer =
-        local?.messageId == null
-          ? undefined
-          : getMessageByMessageId(
-              processRawChatHistory(saved.messages, saved.packets),
-              local.messageId
-            );
-      if (!tree || !local || !savedAnswer) return;
-      store.updateSessionMessageTree(
-        sessionId,
-        new Map(tree).set(local.nodeId, {
-          ...savedAnswer,
-          nodeId: local.nodeId,
-          parentNodeId: local.parentNodeId,
-          childrenNodeIds: local.childrenNodeIds,
-          latestChildNodeId: local.latestChildNodeId,
-        })
-      );
+      if (!local) return;
+      const saved = (await savedAnswers(sessionId, [local])).get(local.nodeId);
+      const tree = useChatSessionStore
+        .getState()
+        .sessions.get(sessionId)?.messageTree;
+      if (!saved || !tree) return;
+      useChatSessionStore
+        .getState()
+        .updateSessionMessageTree(
+          sessionId,
+          new Map(tree).set(local.nodeId, saved)
+        );
     } else void mutate(SWR_KEYS.chatSessionStatus(sessionId));
   }
 

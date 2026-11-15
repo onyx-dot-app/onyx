@@ -506,7 +506,8 @@ test.each([
       ],
       packetCount: 1,
     });
-    expect(fetchSettledChatSession).not.toHaveBeenCalled();
+    // One read looks for a parked answer; an answer it did not park stays local.
+    expect(fetchSettledChatSession).toHaveBeenCalledTimes(1);
   }
 );
 

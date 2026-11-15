@@ -82,7 +82,9 @@
   follows that stream from cursor 0 into the rows that its `response_ids`
   name, unless this browser already reads it (the send reader and every
   replay reader claim their stream, `claimStreamReader`) or those rows are
-  not loaded. Without a `continuation`, an incognito chat, which has no
+  not loaded. A claim also takes over the stream's answers: an older reader
+  of an answer skips it (`writesAnswer`), and a replay reader writes its
+  answers into the current tree. Without a `continuation`, an incognito chat, which has no
   status subscriber, waits for the next stream (`waitForChatResponseEnd`)
   and follows it. When none comes because the continuation already ended,
   the card replaces the answer that holds the request with its saved copy.
@@ -433,9 +435,12 @@ history. `preserveFailedMessages` keeps a local error unless the saved row's
 or files when the field is absent), so a parked answer shows its saved
 waiting requests. It keeps the local `streamLost` mark only while the saved
 row is `running`. After a clean send, the streamed tree stays. Settlement
-never reloads history for an incognito session, in either record mode; on a
-reload or recovery it only adds a stop packet to each answer of the latest
-turn (`getLatestTurn`) that has none, and clears their `streamLost` marks. A failed or timed-out (10 s) readiness request sets `unconfirmed`.
+never reloads the whole history of an incognito session, in either record
+mode. On a reload or recovery, each answer of the latest turn
+(`getLatestTurn`) that lost its stream takes its saved copy if the server
+parked it (`savedAnswers`; only a chat that saves content parks an answer).
+Each other lost answer gets a stop packet if it has none, and loses its
+`streamLost` mark. A failed or timed-out (10 s) readiness request sets `unconfirmed`.
 A newly active stream during reload transfers to the same replay reader. Recovery comes
 from the input bar's manual check or from loading the session again (see
 Resume).

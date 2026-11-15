@@ -35,6 +35,7 @@ import {
   BackendMessage,
   ChatFileType,
   CitationMap,
+  ChatStream,
   FileChatDisplay,
   FileDescriptor,
   Message,
@@ -88,6 +89,7 @@ import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 import {
   claimStreamReader,
   releaseStreamReader,
+  writesAnswer,
   settleChatSession,
 } from "@/lib/chat/settleChatSession";
 import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
@@ -986,8 +988,14 @@ export default function useChatController({
           ];
         }
 
+        // A newer stream of an answer, such as its continuation, writes it.
+        const streamId = claimedStream?.stream_id ?? null;
         currentMessageTreeLocal = upsertToCompleteMessageTree({
-          messages: messagesToUpsert,
+          messages: messagesToUpsert.filter(
+            (message) =>
+              message.type === "user" ||
+              writesAnswer(streamId, message.messageId)
+          ),
           completeMessageTreeOverride: currentMessageTreeLocal,
           chatSessionId: frozenSessionId!,
         });
@@ -1023,7 +1031,7 @@ export default function useChatController({
       });
       // The send reads its own stream, so a decision that names it as the
       // continuation does not start a second reader.
-      let claimedStreamId: number | null = null;
+      let claimedStream: ChatStream | null = null;
       let readerDone = false;
 
       try {
@@ -1070,8 +1078,8 @@ export default function useChatController({
         });
         stack.acknowledged.then(
           (stream) => {
-            if (stream && !readerDone && claimStreamReader(stream.stream_id))
-              claimedStreamId = stream.stream_id;
+            if (stream && !readerDone && claimStreamReader(stream))
+              claimedStream = stream;
           },
           () => {}
         );
@@ -1544,7 +1552,7 @@ export default function useChatController({
         } finally {
           controller.signal.removeEventListener("abort", discardUnsentTurn);
           readerDone = true;
-          if (claimedStreamId !== null) releaseStreamReader(claimedStreamId);
+          if (claimedStream !== null) releaseStreamReader(claimedStream);
           resolveReaderFinished();
         }
       }

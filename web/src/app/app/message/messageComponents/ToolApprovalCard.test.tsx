@@ -14,14 +14,12 @@ import {
 } from "@/app/app/services/streamingModels";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { followChatStream } from "@/lib/chat/settleChatSession";
+import { followChatStream, savedAnswers } from "@/lib/chat/settleChatSession";
 import {
-  fetchSettledChatSession,
   readChatSessionStatus,
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
-import { processRawChatHistory } from "@/app/app/services/lib";
-import type { BackendChatSession, Message } from "@/app/app/types";
+import type { Message } from "@/app/app/types";
 import type { ChatSessionStatus } from "@/lib/chat/types";
 import type { ChatStream } from "@/app/app/types";
 import messages from "@/i18n/messages/en.json";
@@ -30,15 +28,11 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 
 jest.mock("@/lib/chat/settleChatSession", () => ({
   followChatStream: jest.fn(),
+  savedAnswers: jest.fn(),
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
-  fetchSettledChatSession: jest.fn(),
   readChatSessionStatus: jest.fn(),
   waitForChatResponseEnd: jest.fn(),
-}));
-jest.mock("@/app/app/services/lib", () => ({
-  ...jest.requireActual("@/app/app/services/lib"),
-  processRawChatHistory: jest.fn(),
 }));
 
 const continuation: ChatStream = { stream_id: 900, response_ids: [82] };
@@ -226,17 +220,9 @@ describe("Continuation", () => {
       messageTree: new Map([[2, answer([asked])]]),
     });
     jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
-    jest.mocked(fetchSettledChatSession).mockResolvedValue({
-      messages: [],
-      packets: [],
-    } as unknown as BackendChatSession);
     jest
-      .mocked(processRawChatHistory)
-      .mockReturnValue(
-        new Map([
-          [7, { ...answer([asked, finalText]), nodeId: 7, parentNodeId: 6 }],
-        ])
-      );
+      .mocked(savedAnswers)
+      .mockResolvedValue(new Map([[2, answer([asked, finalText])]]));
     respond(200, decided("APPROVED", "USER", null));
     render(<Harness />);
 

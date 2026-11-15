@@ -1,5 +1,5 @@
 import type { BackendChatSession, ChatStream, Message } from "@/app/app/types";
-import { resumeStream } from "@/app/app/services/lib";
+import { processRawChatHistory, resumeStream } from "@/app/app/services/lib";
 import {
   getLatestMessageChain,
   getLatestTurn,
@@ -170,6 +170,35 @@ function mergeSavedHistory(
         ? null
         : (messageTree.get(selectedMessageId)?.nodeId ?? null),
   };
+}
+
+/**
+ * The saved copies of `answers`, by node ID, linked where the answers sit in
+ * the local tree. Incognito reads saved answers only where a chat that saves
+ * content must have them, such as an answer that asked for approval.
+ */
+export async function savedAnswers(
+  sessionId: string,
+  answers: Message[]
+): Promise<Map<number, Message>> {
+  const page = await fetchSettledChatSession(sessionId);
+  const saved = processRawChatHistory(page.messages, page.packets);
+  const copies = new Map<number, Message>();
+  for (const answer of answers) {
+    const copy =
+      answer.messageId == null
+        ? undefined
+        : getMessageByMessageId(saved, answer.messageId);
+    if (copy)
+      copies.set(answer.nodeId, {
+        ...copy,
+        nodeId: answer.nodeId,
+        parentNodeId: answer.parentNodeId,
+        childrenNodeIds: answer.childrenNodeIds,
+        latestChildNodeId: answer.latestChildNodeId,
+      });
+  }
+  return copies;
 }
 
 // One refresh per session, so overlapping status checks share it.
@@ -377,20 +406,35 @@ export async function settleChatSession({
         });
       } else {
         // Content-free history cannot close a lost stream. Confirmed idle can.
-        const messageTree = new Map(current.messageTree);
+        // A parked answer, which only a chat that saves content has, takes
+        // its saved copy with its waiting requests.
+        const lost = getLatestTurn(current.messageTree).filter(
+          (response) =>
+            (response.type === "assistant" || response.type === "error") &&
+            (response.streamLost ||
+              !response.packets.some((packet) => packet.obj.type === "stop"))
+        );
+        const saved =
+          lost.length > 0
+            ? await savedAnswers(sessionId, lost)
+            : new Map<number, Message>();
+        if (!ownsSettlement()) return;
+        const latest = useChatSessionStore.getState().sessions.get(sessionId);
+        if (!latest) return;
+        const messageTree = new Map(latest.messageTree);
         let closed = false;
-        for (const response of getLatestTurn(current.messageTree)) {
+        for (const response of lost) {
+          const parked = saved.get(response.nodeId);
+          if (parked?.responseStatus === "suspended") {
+            messageTree.set(response.nodeId, parked);
+            closed = true;
+            continue;
+          }
+          if (response.type === "error" && response.packets.length === 0)
+            continue;
           const stopped = response.packets.some(
             (packet) => packet.obj.type === "stop"
           );
-          if (
-            !(
-              response.type === "assistant" ||
-              (response.type === "error" && response.packets.length > 0)
-            ) ||
-            (stopped && !response.streamLost)
-          )
-            continue;
           const packets: Message["packets"] = stopped
             ? response.packets
             : [
@@ -408,7 +452,10 @@ export async function settleChatSession({
           });
           closed = true;
         }
-        if (closed) store.updateSessionMessageTree(sessionId, messageTree);
+        if (closed)
+          useChatSessionStore
+            .getState()
+            .updateSessionMessageTree(sessionId, messageTree);
       }
     }
     const store = useChatSessionStore.getState();
@@ -434,16 +481,34 @@ export async function settleChatSession({
 // Streams this browser reads: a send's own stream or a replay. A stream has
 // one reader even if a send, navigation, refresh and decisions overlap.
 const streamReaders = new Set<number>();
+// The stream that writes each answer, by message ID. A newer stream of an
+// answer, such as its continuation, takes it over from an older reader.
+const answerWriters = new Map<number, number>();
 
-/** Claims the stream for one reader; false when another reader has it. */
-export function claimStreamReader(streamId: number): boolean {
-  if (streamReaders.has(streamId)) return false;
-  streamReaders.add(streamId);
+/** Claims the stream and its answers for one reader; false when another
+ * reader has the stream. */
+export function claimStreamReader(stream: ChatStream): boolean {
+  if (streamReaders.has(stream.stream_id)) return false;
+  streamReaders.add(stream.stream_id);
+  for (const responseId of stream.response_ids)
+    answerWriters.set(responseId, stream.stream_id);
   return true;
 }
 
-export function releaseStreamReader(streamId: number): void {
-  streamReaders.delete(streamId);
+export function releaseStreamReader(stream: ChatStream): void {
+  streamReaders.delete(stream.stream_id);
+  for (const responseId of stream.response_ids)
+    if (answerWriters.get(responseId) === stream.stream_id)
+      answerWriters.delete(responseId);
+}
+
+/** Whether the reader of `streamId` still writes the answer `messageId`. */
+export function writesAnswer(
+  streamId: number | null,
+  messageId: number | undefined
+): boolean {
+  if (streamId === null || messageId === undefined) return true;
+  return (answerWriters.get(messageId) ?? streamId) === streamId;
 }
 
 /**
@@ -514,7 +579,7 @@ export async function followChatSession({
   const responses = streamResponses(messageMap, stream)?.map((response) => ({
     ...response,
   }));
-  if (!responses || !claimStreamReader(streamId)) {
+  if (!responses || !claimStreamReader(stream)) {
     return;
   }
   // Each answer of a multi-model turn has its model index in the packets.
@@ -541,12 +606,17 @@ export async function followChatSession({
       session.chatState !== "input"
     );
   };
+  // Writes only the answers that this stream still writes into the current
+  // tree, so a newer stream's rows and other changes stay.
   const publishResponses = (nodes: Message[]) => {
-    if (!ownsStream()) return;
-    for (const node of nodes) messageMap.set(node.nodeId, node);
-    useChatSessionStore
-      .getState()
-      .updateSessionMessageTree(sessionId, new Map(messageMap));
+    const store = useChatSessionStore.getState();
+    const tree = store.sessions.get(sessionId)?.messageTree;
+    if (!tree || !ownsStream()) return;
+    const updated = new Map(tree);
+    for (const node of nodes)
+      if (writesAnswer(streamId, node.messageId))
+        updated.set(node.nodeId, node);
+    store.updateSessionMessageTree(sessionId, updated);
   };
   const abortController = new AbortController();
   // Only a 404 means the stream has no buffer; a new stream can follow it.
@@ -640,7 +710,7 @@ export async function followChatSession({
       // A lost tail must not discard earlier acknowledged cache batches.
       if (pendingRestore) publishResponses(pendingRestore);
     } finally {
-      releaseStreamReader(streamId);
+      releaseStreamReader(stream);
       resolveReaderFinished();
       void settleChatSession({
         sessionId,
