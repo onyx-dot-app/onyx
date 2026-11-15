@@ -165,8 +165,9 @@ and `skills_read` (`tools/tool_implementations/skills/skill_tools.py`) to the
 chat agent's configured tools when the turn's user has a chat skill
 ([[skills]]): the agent's tools and the request's `allowed_tool_ids` do not
 remove them. Restored and child agents receive them with the other configured
-tools. `skills_read` checks that the user can still see the skill and returns
-the whole SKILL.md, frontmatter included. The Deep Research orchestrator binds
+tools. The tools hold only the user and read the user's current chat skills
+on each call; `skills_read` checks that the user can still see the skill and
+returns the whole SKILL.md, frontmatter included. The Deep Research orchestrator binds
 both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
 tool catalog rows, are `DIRECT` in code mode, and render as generic tool cards with

@@ -197,18 +197,23 @@ chat gets: one query over the same predicates as
 and a version the user runs that is not invalid), less built-in skills and
 skills of an external app, with the name, description,
 `metadata.short-description` and id of the version the user runs. Anonymous
-users get none. `chat/process_message.py:prepare_chat_turn` reads it once per
-turn, and the `@` picker reads it through
+users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
+turn's picks and reservation, each agent reads it once when it is built (for
+its catalog), each skill tool call reads it, and so does each accepted
+mid-run message with picks. The `@` picker reads it through
 `server/features/skill/api.py:list_chat_skills_for_current_user`, which
 returns `description` and `short_description`. `skills/models.py:ChatSkill`
 makes each description one line (runs of whitespace become one space), and a
 blank short description counts as none. Only the catalog and the picker
 prefer the short description; `skills_list` shows the full one.
 `skills/chat.py:render_skills_catalog` renders the catalog with Codex's
-limits (2% of the context window, counted in UTF-8 bytes; 1,024 characters
-for one description). Only the 1,024-character cut adds `...`; a cut to fit
-the budget adds no ellipsis. If names alone do not fit, the last skills are
-omitted and counted. `tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`
+limits: 2% of the context window in tokens, where each line, newline
+included, costs one token per 4 UTF-8 bytes, rounded up; 1,024 characters for
+one description. If every line fits, descriptions are whole; else description
+characters go to each skill in turn. Only the 1,024-character cut adds `...`;
+a cut to fit the budget adds no ellipsis. If even the names do not fit, the
+catalog keeps each name that still fits, in order, and ends with a line that
+counts the omitted skills; if not even that line fits, there is no catalog. `tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`
 is the one builder of the catalog message for chat, Deep Research and
 research agents. A pick is structured input,
 as in Codex's mentions: a mention (`chat/mention_models.py`) is a
@@ -238,11 +243,12 @@ load for model history, loads `skill_messages`. Chat loads for display,
 shared views and exports do not. A row of a content-free session stores no
 skill messages; temporary history holds them. A send into a running response
 is accepted when the run accepts it
-(`chat/run_store.py:ChatRunStore.receive_inputs`), against the running
-response's skill list (`setup.chat_skills`), and its picks apply in that
-response. The accepted input (`ChatResponseItem.inputs`,
-`AcceptedChatInput`) stores its `mentions` and `skill_messages`; EE query
-history clears `skill_messages` before it returns accepted inputs. API
+(`chat/run_store.py:ChatRunStore.receive_inputs`), against the user's
+current chat skills, and its picks apply in that response. The accepted input (`ChatResponseItem.inputs`,
+`AcceptedChatInput`) stores its `mentions` and `skill_messages`. Loading a
+chat for display reads this column, so it parses the skill text of sends with
+picks and drops it; that is accepted because such sends are rare. EE query
+history returns its own type (`AcceptedInputSnapshot`) with the records only. API
 fields and packets carry only the records, so no client gets the text. The
 turn's ID packet and the message detail carry the records
 (`ChatTurnSetup.mentions`), and the `user_message` packet of an accepted
@@ -280,12 +286,16 @@ of skills the user can see at acceptance: the pinned version decides the
 content, and current access decides whether it is read.
 `chat/execution.py:create_chat_agent` adds `skills_list` and `skills_read`
 (`tools/tool_implementations/skills/skill_tools.py`) when the user has a chat
-skill, whatever the agent's tool selection; restored and child agents get them
-with the other configured tools. The Deep Research orchestrator binds both in
-its research phase, and its research agents bind both. `skills_read` reads
-the whole SKILL.md, frontmatter included, of the version the user runs now,
-with the same access check. Each agent builds the catalog from its
-`skills_list` tool's skill list for its own model's window.
+skill when the turn starts (`ChatTurnSetup.has_chat_skills`), whatever the
+agent's tool selection; restored and child agents get them with the other
+configured tools. The Deep Research orchestrator binds both in its research
+phase, and its research agents bind both. The tools hold only the user: each
+call reads the user's current chat skills (`list_chat_skills`), and
+`skills_read` reads the whole SKILL.md, frontmatter included, of the version
+the user runs now, with the same access check. The catalog is a snapshot:
+each agent loads the user's chat skills once, when it is built
+(`tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`), and renders it for its own
+model's window, so the catalog stays the same across the agent's steps.
 
 The library preview of an external-app skill calls the same renderer
 (`server/features/skill/response_helpers.py:skill_preview_response`). The

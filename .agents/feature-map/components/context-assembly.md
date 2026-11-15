@@ -134,8 +134,8 @@ Compaction controls history growth; starting a new user turn does not rewrite
 previous evidence. A code mode result keeps what a later turn needs in its own
 content ([[chat-persistence#code-mode-replay-content]]).
 The skills catalog is per user, so it is a separate message and not part of
-the shared system prompt. Each agent builds it from its `skills_list` tool's
-skill list for its own model's window
+the shared system prompt. Each agent reads the user's current chat skills
+once, when it is built, and renders the catalog for its own model's window
 (`tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`);
 a change to the user's skills changes the prefix from the catalog on.
 Mentioned skills are recorded history. When a message is accepted, each
@@ -322,8 +322,8 @@ counts what is sent, not the stored token counts.
     as input context, and the summarizer sees it but compaction never takes it
     as the task; `prepare_chat_turn` adds the current input's skill messages to
     the reservation; a usage-only session keeps the skill messages in temporary history
-    while its content-free rows keep the picks without text; a resumed turn
-    rebuilds the catalog from its restored skill tools. Add request-only context through
+    while its content-free rows keep the picks without text; a restored agent
+    reads the user's current chat skills for its catalog. Add request-only context through
     `prepare_prompt`, outside recorded history. Compaction cutoffs identify
     recorded messages; they must not reference request-only context. A resumed turn rebuilds `ChatAgent` only from
     `chat/models.py:ChatFeatureState` (`chat/restoration.py:restore_chat_agent`),
