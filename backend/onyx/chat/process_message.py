@@ -1172,12 +1172,22 @@ def dispatch_pending_chat_messages(
                             # such as a release's or a status read's, resumes
                             # them once the limit allows.
                             return
-                        # The parked agents end as a root response that cannot
-                        # continue does.
+                        # The parked agents saved with the settings that the host
+                        # tried end, as a root response that cannot continue
+                        # does; others wait for a host with their own settings.
                         for run in hosted_agents:
-                            fail_suspended_response(
-                                cache, get_current_tenant_id(), run.response_id
-                            )
+                            if (
+                                run.model_configuration_id,
+                                run.temperature,
+                                run.tool_selection,
+                            ) == (
+                                hosted_agents[0].model_configuration_id,
+                                hosted_agents[0].temperature,
+                                hosted_agents[0].tool_selection,
+                            ):
+                                fail_suspended_response(
+                                    cache, get_current_tenant_id(), run.response_id
+                                )
                         raise
                     host_agent_work(host_setup, user, dispatch)
                     return

@@ -1025,9 +1025,22 @@ def handle_send_chat_message(
     )
 
     # Check before streaming starts, so the client gets a status, not a packet.
+    # Only the session's owner learns that it waits; the turn reports any
+    # other caller's access error.
     if chat_message_req.chat_session_id is not None:
         with get_session_with_current_tenant() as db_session:
-            _reject_while_approval_waits(db_session, chat_message_req.chat_session_id)
+            try:
+                get_chat_session_by_id(
+                    chat_session_id=chat_message_req.chat_session_id,
+                    user_id=user.id,
+                    db_session=db_session,
+                )
+            except ValueError:
+                pass
+            else:
+                _reject_while_approval_waits(
+                    db_session, chat_message_req.chat_session_id
+                )
 
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(

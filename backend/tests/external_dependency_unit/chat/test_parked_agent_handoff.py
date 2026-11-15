@@ -52,6 +52,7 @@ from tests.external_dependency_unit.chat.test_chat_tool_approvals import (
     ACTION,
     ApprovalChat,
     OwnedRun,
+    _inbox,
     _replies,
     _start,
     chat,
@@ -435,6 +436,89 @@ def test_a_decided_agent_whose_host_cannot_start_ends(
     finally:
         for record in file_store.list_files_by_prefix(prefix):
             file_store.delete_file(record.file_id, error_on_missing=False)
+
+
+def test_a_host_that_cannot_start_ends_only_the_agents_of_its_model(
+    db_session: Session,
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two decided agents parked on different models. A host that cannot
+    start on the first agent's model ends that agent only; the other stays
+    parked for a host on its own model."""
+    sent: list[str] = []
+    tool = _gated(chat.server.id, sent)
+    owned = _start(
+        chat,
+        owned_runs,
+        reply=_replies(
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id=f"spawn-{name}",
+                        name=SpawnAgentTool.name,
+                        arguments={"name": name, "instruction": "Email the team"},
+                    )
+                    for name in ("mailer", "notifier")
+                ]
+            )
+        ),
+        tools=[
+            SpawnAgentTool(lambda: _agent(tool, None), max_steps=3).bind(ToolContext)
+        ],
+        gated=[tool],
+    )
+
+    def parked_agents() -> list[int]:
+        owned.owner.poll_control()
+        agent_ids = sorted(row.chat_message_id for row in chat.rows(db_session))
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            return [
+                agent_id
+                for agent_id in agent_ids
+                if session.get(ChatResponseCheckpoint, agent_id) is not None
+            ]
+
+    until(lambda: len(parked_agents()) == 2, timeout=30)
+    first, second = parked_agents()
+    assert owned.run.result(timeout=10).output.text == "done"
+    owned.run.cancel()
+    assert owned.coordinator.close(timeout=10)
+    owned_runs.remove(owned)
+    with get_session_with_tenant(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    ) as session:
+        for agent_id, model in ((first, 4242), (second, 5151)):
+            checkpoint = session.get_one(ChatResponseCheckpoint, agent_id)
+            checkpoint.state = {**checkpoint.state, "model_configuration_id": model}
+        session.commit()
+    for row in chat.rows(db_session):
+        chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+    requested: list[int | None] = []
+
+    def model_gone(*, llm_override: LLMOverride | None, **_kwargs: object) -> None:
+        requested.append(llm_override.model_configuration_id if llm_override else None)
+        raise ValueError("The model is no longer available")
+
+    monkeypatch.setattr("onyx.chat.process_message.get_llm_for_persona", model_gone)
+
+    def status(agent_id: int) -> RunStatus | None:
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            return session.get_one(ChatMessage, agent_id).response_status
+
+    dispatch_pending_chat_messages(chat.chat_session_id, chat.user.id)
+    until(lambda: status(first) == RunStatus.ERROR, timeout=30)
+    assert chat_turn_work.wait_idle(timeout=30)
+    assert requested == [4242]
+    # The other agent stays decided and parked, for a host on its own model.
+    assert status(second) == RunStatus.SUSPENDED
+    assert [run.response_id for run in _inbox(chat).resumable_runs] == [second]
+    assert sent == []
 
 
 def test_a_decided_agent_whose_host_is_rate_limited_stays_parked(

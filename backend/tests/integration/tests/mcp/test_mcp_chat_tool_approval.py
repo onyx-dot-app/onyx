@@ -772,6 +772,7 @@ def test_a_waiting_chat_blocks_new_messages_and_its_wait_is_not_thought_time(
     connected_mcp_server: ConnectedMCPServer,
     new_chat: NewChat,
     admin_user: DATestUser,
+    basic_user: DATestUser,
     mock_llm: MockLLMScript,
     streaming_api: str,
 ) -> None:
@@ -784,6 +785,7 @@ def test_a_waiting_chat_blocks_new_messages_and_its_wait_is_not_thought_time(
     )
     chat_session_id = new_chat()
     blocked: list[httpx.Response] = []
+    foreign: list[httpx.Response] = []
     held_seconds = 3.0
 
     def on_request(
@@ -803,6 +805,18 @@ def test_a_waiting_chat_blocks_new_messages_and_its_wait_is_not_thought_time(
                 cookies=admin_user.cookies,
             )
         )
+        # Another user does not learn that the chat waits.
+        foreign.append(
+            client.post(
+                f"{API_SERVER_URL}/chat/send-chat-message",
+                json=_request(chat_session_id, "Another question.").model_dump(
+                    mode="json"
+                )
+                | {"parent_message_id": -1},
+                headers=basic_user.headers,
+                cookies=basic_user.cookies,
+            )
+        )
         time.sleep(held_seconds)
         return _decide(
             admin_user, request.approval_id, "approve_once"
@@ -815,6 +829,8 @@ def test_a_waiting_chat_blocks_new_messages_and_its_wait_is_not_thought_time(
     [rejected] = blocked
     assert rejected.status_code == 409
     assert rejected.json()["error_code"] == "APPROVAL_PENDING"
+    [other] = foreign
+    assert "APPROVAL_PENDING" not in other.text
     # Once decided, the chat accepts messages again.
     accepted = ChatSessionManager.send_message(
         chat_session_id=chat_session_id,
