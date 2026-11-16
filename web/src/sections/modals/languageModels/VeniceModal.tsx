@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
@@ -10,6 +10,7 @@ import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
+  ModelConfiguration,
 } from "@/lib/languageModels/types";
 import { fetchVeniceModels } from "@/lib/languageModels/svc";
 import {
@@ -63,10 +64,25 @@ function VeniceModalInternals({
     formikProps.setValues(withFetchedModels(models));
   };
 
+  // Refetched metadata isn't a user edit, so it becomes the form's baseline
+  // and doesn't enable Update on its own.
+  const applyRefetchedModels = useEffectEvent(
+    (models: ModelConfiguration[]) => {
+      const refetched = withFetchedModels<VeniceModalValues>(models)(
+        formikProps.values
+      );
+      if (formikProps.dirty) {
+        formikProps.setValues(refetched);
+      } else {
+        formikProps.resetForm({ values: refetched });
+      }
+    }
+  );
+
   // Saved providers load from the DB without the per-model context window and
   // capability flags, so refetch once on open to match the "add" view.
-  // Best-effort: ignore errors so the modal still works when Venice is
-  // unreachable.
+  // Best-effort: a failed refetch is logged and the modal keeps the saved
+  // list, so it still works when Venice is unreachable.
   const autoRefetched = useRef(false);
   useEffect(() => {
     if (autoRefetched.current || !existingLlmProvider?.id) return;
@@ -77,13 +93,16 @@ function VeniceModalInternals({
       api_key: formikProps.values.api_key || undefined,
       provider_id: existingLlmProvider.id,
     })
-      .then(({ models }) => {
-        if (models.length > 0) {
-          formikProps.setValues(withFetchedModels(models));
+      .then(({ models, error }) => {
+        if (error) {
+          console.warn("Failed to refetch Venice models", error);
+        } else if (models.length > 0) {
+          applyRefetchedModels(models);
         }
       })
-      .catch(() => undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      .catch((error) => {
+        console.warn("Failed to refetch Venice models", error);
+      });
   }, []);
 
   return (

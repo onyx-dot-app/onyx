@@ -975,6 +975,9 @@ export const fetchVeniceModels = async (
 
     return { models };
   } catch (error) {
+    if (!params.signal?.aborted) {
+      console.warn("Failed to fetch Venice models", error);
+    }
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     return { models: [], error: errorMessage };
