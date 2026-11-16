@@ -126,11 +126,12 @@ The request waits until you decide, also after the answer that started the subag
 You can send new messages while it waits. After your decision, the subagent continues in the background.
 
 The Onyx web app, the mobile app, the website widget, and the Onyx CLI show approval requests.
-The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.
-Incognito chats can block approvals, if your admin sets them to keep no content. There,
-a tool that needs approval does not run, and the agent is told why.
+The Slack and Discord bots cannot show approval requests, so they do not get tools that need approval,
+except the tools that their agent had before this release. Incognito chats can block approvals,
+if your admin sets them to keep no content. There, a tool that needs approval does not run, and the agent is told why.
 
-OpenAPI plugin tools and MCP tools with the **Auto-approve** policy run without a card.
+Tools with the **Auto-approve** policy run without a card. An OpenAPI `GET` operation runs without a card,
+and the OpenAPI plugins that existed before this release keep running without a card.
 Check the result in the service after a change.
 
 <Note>

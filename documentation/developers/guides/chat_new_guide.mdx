@@ -338,7 +338,9 @@ and its `tool_approval_request` packets without a resolution are the requests th
 A new message to the session gets a `409` with `APPROVAL_PENDING` while the answer waits for approval.
 
 <Note>
-  The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.
+  The Slack and Discord bots cannot show approval requests, so a tool with the **Ask** policy is not available to them.
+  They can use the tools of their agent that run without approval.
+  Each tool that the agent of a bot had before this release keeps running without approval.
   They cannot use tools with the **Disabled** policy.
 </Note>
 

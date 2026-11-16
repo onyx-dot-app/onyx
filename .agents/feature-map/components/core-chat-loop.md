@@ -86,7 +86,9 @@
 - **Bots.** The Slack bot runs the same turn in-process
   (`onyxbot/slack/handlers/handle_regular_answer.py`). The Discord bot calls the
   HTTP endpoint (`onyxbot/discord/api_client.py`). A change here reaches both.
-  Both run Ask tools without approval for now (`ChatTurnSetup.ask_for_approval`).
+  Neither has an approver (`ChatTurnSetup.approval_mode` is `NO_APPROVER`), so
+  an action that is still Ask is not offered
+  ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]).
 
 ---
 

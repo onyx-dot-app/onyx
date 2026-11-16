@@ -37,11 +37,12 @@
   A down MCP server gives "Tool execution failed" with the reason. An OpenAPI
   tool says that it could not reach its server. Only that call fails; the turn
   continues.
-- **A user in the web chat approves an MCP call.** Each MCP tool has an action
-  policy: Auto-approve, Ask or Disabled. When unset it is Auto-approve for a
-  tool the server marks read-only, else Ask, as in Craft
-  (`db/action_policy.py:mcp_tool_default_policy`). A Disabled tool
-  is not offered to the model. For an Ask tool the chat shows an approval
+- **A user in the web chat approves an MCP or OpenAPI call.** Since U4a, chat
+  reads the integration tables. Each action of an integration has a policy:
+  Allow, Ask or Blocked, from `integrations/policy.py:resolve_action_policies`
+  (see "Policy order" under Chat approvals). When no row sets it, a read-only
+  MCP tool and an OpenAPI GET are Allow, and each other action is Ask. A
+  Blocked action is not offered to the model. For an Ask tool the chat shows an approval
   card with the call's arguments, and when nothing but such
   requests remains, the response stops: its stream ends with the stop reason
   `awaiting_approval`, and the response waits, saved, with no server holding
@@ -52,8 +53,10 @@
   response continues in a new stream, on any server, and the answer continues.
   A policy change applies from the next message.
   Web, mobile, the widget, the CLI and API callers all show requests; a
-  non-streaming API call returns them when the response stops. The Slack and
-  Discord bots run Ask tools without asking for now. Usage-only incognito
+  non-streaming API call returns them when the response stops. A Slack bot run
+  and a run of the Discord bot's service key have no approver, so an action
+  that is still Ask is not offered. Evals run Ask actions with no question.
+  Usage-only incognito
   chats and anonymous users cannot wait: an Ask call gives the model an error
   that names the cause. Agent runs, foreground or background, ask and park as
   the root does
@@ -101,15 +104,14 @@ Its neighbours own:
 ## Architecture
 
 ```
-Admin config                                Turn time (tools/tool_constructor.py)
-MCPServer --1:N--> Tool (mcp_server_id,      resolve_mcp_credentials(server, user)
-   |               mcp_input_schema,           once per server -> one MCPTool per
-   |               mcp_output_schema)
-   +--admin_connection_config (shared)          saved Tool row, schema from the DB
-   +--MCPConnectionConfig per user_email
-Tool (openapi_schema) ---------------------> build_custom_tools_from_openapi_schema_
-   +--oauth_config_id -> OAuthConfig           and_headers: one CustomTool per
-                                               operationId, all with the same Tool.id
+Admin config                                Turn time (integrations/chat_tools.py)
+Plugin --plugin__integration--> Integration   resolve_call_credentials(integration, user)
+   |                               |            once per integration; a problem
+persona__plugin (action_settings)  +--integration_action (schemas, defaults)
+                                   +--integration_connection / oauth_client
+                                   +--kind row: mcp_server | OpenAPI tool
+MCP server kind  -> one MCPTool per offered action (mcp__<integration id>__...)
+OpenAPI kind     -> one CustomTool per offered operation (custom__<integration id>__...)
 ```
 
 **Staged MCP setup.** `server/features/mcp/api.py:setup_mcp_server` handles both
@@ -219,27 +221,42 @@ whose template needs values that the user did not save is Not connected. Every s
 `set_oauth_client_credentials__no_commit`) saves the new format and clears the
 tag; a status-only change keeps it. There is no import job.
 
-Chat, the sandbox proxy and the old MCP, OAuth config and external app routes
-read and write the old tables (`mcp_connection_config`, `oauth_user_token`,
-`external_app_user_credential`) with the old refresh functions.
+Chat reads only the integration tables. The sandbox proxy and the old MCP,
+OAuth config and external app routes read and write the old tables
+(`mcp_connection_config`, `oauth_user_token`, `external_app_user_credential`)
+with the old refresh functions.
 
-**Credential scope.** `server/features/mcp/credentials.py:resolve_mcp_credentials`
-turns `auth_type`, `auth_performer` and the calling user into the credential.
-The admin's choice at setup decides the scope, and the `MCPServer` row shows it:
-- `API_TOKEN` with `ADMIN`: one shared token in `admin_connection_config`. Every
-  user with access to the server uses it.
-- `API_TOKEN` or `OAUTH` with `PER_USER`: the caller's own `MCPConnectionConfig`
-  row, keyed by `user_email`. A user with no row cannot authenticate.
-- `PT_OAUTH`: the caller's Onyx login token (`user.live_oauth_token`).
-- `NONE`: no credential. A header template with required fields asks each user
-  for values (`web/src/lib/mcp/auth.ts:getMcpAuthenticationFlow`).
+**Chat on integrations (U4a).** `db/tools.py:capture_persona_tool_configuration`
+copies the agent's built-in tools and its `persona__plugin` links (plugin id
+and `action_settings`). `integrations/chat_tools.py:build_integration_chat_tools`
+then picks the integrations:
+- A non-default agent: each link whose plugin the user can see
+  (`db/plugin_access.py:load_user_plugin_states`). The user's on/off choice,
+  `can_run` and the skill limits do not apply.
+- The default agent (id 0): each plugin the user runs (visible and enabled),
+  with the settings of its persona 0 link when one exists (the bot freeze).
+- An anonymous user (a Slack channel): only Organization library plugins, and
+  only integrations with no sign-in or shared sign-in.
+- Only integrations with `enabled = true`. When several links hold one
+  integration, the strictest result of each action wins.
 
-`_construct_tools_impl` and `MCPTool._run` both use
-`ResolvedMCPCredentials.can_authenticate_with_headers`. Construction excludes
-servers with missing or rejected credentials before exposing tools to the model.
-Refreshable OAuth tokens remain available. Request-supplied headers can replace
-missing credentials, but denylisted headers and grants that need reauthentication
-cannot pass this gate. Resolution errors also exclude the server and log a warning.
+For each integration, `integrations/call_credentials.py:resolve_call_credentials`
+calls `resolve_connection` and renders the `header_template` (an OAuth2 or Onyx
+login token with no template goes in `Authorization: Bearer`). A problem means
+no action of the integration is offered. `MCPTool._run` calls the same check
+again through `resolve_call_credentials_by_id`, and for OAuth2 on a
+non-SSE transport passes `make_integration_oauth_provider` with
+`IntegrationTokenStorage`. A 401 on an API key connection sets it to Needs
+reconnect (`mark_api_key_rejected`). Request MCP headers no longer stand in for
+a missing connection. The kind handler (`build_chat_tools`) builds the tools:
+`MCPTool` for an MCP server, one `CustomTool` per operation for an OpenAPI spec,
+and none for a preset or custom app. Tool names use the integration id
+(`mcp__<id>__<name>__<tool>`, `custom__<id>__<operationId>`), and each tool has
+`id = None`. Chat no longer reads `persona__tool` MCP or OpenAPI rows,
+`ToolUserPreference`, `MCPServerUserPreference`, `user_can_access_mcp_server`,
+`resolve_mcp_credentials`, `OAuthTokenManager`, `tool.custom_headers`,
+`passthrough_auth` or `oauth_config_id`
+(`tests/unit/onyx/integrations/test_chat_reads_no_old_sign_in.py`).
 
 **Outbound safety.** `server/features/mcp/ssrf.py:mcp_ssrf_httpx_client_factory`
 checks every request the MCP SDK makes, redirects included, at the admin SSRF
@@ -260,16 +277,15 @@ gate below read the same policies.
 **Chat approvals.**
 
 ```
-tools/tool_constructor.py:_construct_tools_impl   resolve_user_action_policies once per turn
-  (db/action_policy.py: one batched core, _resolve_policies, with resolve_action_policies)
-  (defaults: mcp_tool_default_policy(ToolConfiguration.mcp_read_only))
-  DENY -> tool not offered    ASK -> MCPTool.approval = ToolApprovalScope
+integrations/chat_tools.py:build_integration_chat_tools   once per model response
+  (integrations/policy.py:resolve_action_policies for each integration and link)
+  Blocked -> tool not offered    Ask -> tool.approval = ToolApprovalScope(integration_id, action_id)
   Tool.bind -> AgentTool.approval_required
 agents/tool_execution.py:ToolBatch.decide_call   (direct calls, and program calls
   through ToolInvocation.nested_calls, a NestedCallGate)
   -> coordinator ToolApprovals = chat/run_store.py:ChatRunStore.request_approval
      -> chat/tool_approvals.py:open_tool_approval
-        session grant (current_action_policy not DENY) -> run
+        session grant (action_now_blocked is false) -> run
         signed out -> error result
         else ApprovalRequest row (display name, the call's arguments)
           -> PendingToolInput(display_name)
@@ -328,25 +344,43 @@ session load: db/chat_response.py:read_response_replay_data (ended and
 
 A decision row is the only channel between the API pod that takes the
 decision and the pod that owns the run. The `approval_request` row holds the
-session, the waiting response (`chat_message_id`), the `GatedApp`, the action
-ID, the decision, and for the saved record the step's call that shows the card
+session, the waiting response (`chat_message_id`), the `integration_id`, the
+action key, the decision, and for the saved record the step's call that shows the card
 (`tool_call_id`), the tool name, its display name and the call's arguments as
 the card shows them, so a live card and a replayed card are the same. Craft's proxy keeps its own `action_approval` table
 ([[craft-external-apps]]). The table, the decision route and the card are
 general, so future sandbox-proxy network approvals can reuse them. An
 "approve_session" decision is a session grant: it also approves the action's
-other pending rows in the chat session, and `has_session_grant` lets later
-calls run with no row unless the policy is now DENY.
+other pending rows of that integration and action in the chat session, and
+`has_session_grant` lets later calls run with no row unless the policy is now
+Blocked. A new row also writes `gated_app_id`: the `gated_app` row that the U1
+migration kept with the same id, or NULL for an integration made after the
+upgrade (`db/approval_request.py:get_legacy_gated_app_id`). Deleting an
+integration sets `integration_id` to NULL; an approval of that row saves a
+rejection by the policy.
+
+**Policy order** (`integrations/policy.py`):
+(1) the admin value: the admin row of the action, else the admin default row
+(action `''`), else `integration_action.default_policy`, else Allow for a
+read-only action and Ask otherwise; Auto counts as Ask. (2) The admin value is
+locked when it is Blocked or `users_can_save_always_allow` is false. (3) The
+link setting of the agent or task: Blocked blocks; Ask asks unless the admin
+blocks; Allow allows unless locked; Inherit keeps the admin value. (4) The
+user's Always allow turns Ask into Allow unless locked. (5) A chat grant turns
+Ask into Allow. (6) `ApprovalMode.NO_APPROVER` turns Ask into Blocked;
+`RUN_WITHOUT_ASKING` turns Ask into Allow. The approval re-check
+(`chat/tool_approvals.py:action_now_blocked`, also in the decision route) uses
+the chat's agent links and no chat grant.
 
 ---
 
 ## Contracts and traps
 
-1. `credential-resolution-single-point` **`resolve_mcp_credentials` is the only
-   place that picks a credential.** A new auth type or performer must be
-   handled in `server/features/mcp/credentials.py:resolve_mcp_credentials`.
-   An unhandled combination must fail, not fall back to the shared admin
-   credential.
+1. `credential-resolution-single-point` **`resolve_connection` is the only
+   place that picks a credential.** Chat construction and MCP execution reach
+   it through `integrations/call_credentials.py:resolve_call_credentials`; the
+   sandbox proxy still uses `server/features/mcp/credentials.py:resolve_mcp_credentials`
+   until U4c. A mode never falls back to the other one.
 2. `oauth-always-per-user` **OAuth is always per user.**
    `server/features/mcp/models.py:MCPToolCreateRequest.validate_auth_configuration`
    rejects OAuth with any performer other than `PER_USER`. The OAuth client
@@ -389,11 +423,11 @@ calls run with no row unless the policy is now DENY.
 7. `mcp-tool-user-id-none` **`Tool.user_id` is `None` for MCP tools.** Ownership
    is on `MCPServer.owner`. Check rights with `db/tools.py:can_manage_tool`,
    never with `tool.user_id == user.id`.
-8. `access-grants-default-chat-only` **Server access grants gate attachment and
-   Default Chat only.** `_construct_tools_impl` calls
-   `backend/onyx/db/mcp.py:user_can_access_mcp_server` only for the default
-   assistant. A custom agent that already has the server's tools keeps them
-   for every user of that agent, after a grant is removed.
+8. `access-grants-default-chat-only` **Plugin visibility gates chat, not server
+   grants.** Chat offers an integration's actions to each user who can use the
+   agent and can see a plugin of the agent that holds the integration
+   (`integrations/chat_tools.py`). `backend/onyx/db/mcp.py:user_can_access_mcp_server`
+   still gates attachment in the old routes only.
 9. `destination-change-deletes-credentials` **A changed URL or auth scheme
    deletes user credentials.** `server/features/mcp/api.py:_upsert_mcp_server`
    calls `_invalidate_mcp_user_credentials` when the URL, auth scheme or header
@@ -462,13 +496,12 @@ calls run with no row unless the policy is now DENY.
     whole stream: `chat/process_message.py:gather_stream_full` returns the
     requests that the stream asked and did not resolve when its last stop is
     `awaiting_approval`, in `ChatFullResponse.pending_tool_approvals`. The
-    Slack and Discord bots do not ask for approval, so
-    their turns build no approval scope (`ChatTurnSetup.ask_for_approval`,
-    `construct_tools(ask_for_approval=...)`); Disabled tools stay unbuilt.
-    Only server-side callers set it: the Slack handler and evals pass it to
-    `run_chat_turn`, and
-    `server/query_and_chat/chat_backend.py:handle_send_chat_message` sets it
-    for the Discord bot's service API key. Authentication marks that key
+    run's `ApprovalMode` (`ChatTurnSetup.approval_mode`,
+    `construct_tools(approval_mode=...)`) decides what Ask does: the Slack
+    handler passes `NO_APPROVER` (Ask is Blocked and not built), evals pass
+    `RUN_WITHOUT_ASKING` (Ask runs), and
+    `server/query_and_chat/chat_backend.py:handle_send_chat_message` passes
+    `NO_APPROVER` for the Discord bot's service API key. Authentication marks that key
     (`db/api_key.py:ApiKeyAuthResult.is_discord_bot`: no owner and the bot's
     name, which no key can be renamed to) on `request.state`, so the send
     route opens no extra session. The client-supplied
@@ -616,8 +649,8 @@ calls run with no row unless the policy is now DENY.
     parked response. The checkpoint owns only its programs' dumps: a parked
     program's staged files are its documents' connector files, saved by
     reference, not copied. An approval of a tool whose current
-    policy (`db/action_policy.py:current_action_policy`, also used by the
-    session grant) is DENY saves `REJECTED` with `decided_via` `POLICY` and
+    policy (`chat/tool_approvals.py:action_now_blocked`, also used by the
+    session grant) is Blocked saves `REJECTED` with `decided_via` `POLICY` and
     returns 200; the model reads that the tool is disabled, and the card's
     outcome is `disabled`. A decision that repeats the saved one returns 200
     with the row's `decided_via`, also after the response ends or the policy
@@ -666,11 +699,11 @@ calls run with no row unless the policy is now DENY.
     `tools/tool_implementations/code_mode/cells.py:PARK_REFUSED_MESSAGE` and
     continues; the request ends `cancelled`. The events carry `nested_call`.
 19. `policy-fixed-per-turn` **The policy is read once per turn.**
-    `tools/tool_constructor.py:_construct_tools_impl` resolves every MCP tool's
-    policy when it builds the turn's tools. A change applies from the next
-    message; within the turn, only a session grant rechecks for DENY
+    `integrations/chat_tools.py:build_integration_chat_tools` resolves every
+    action's policy when it builds the response's tools. A change applies from
+    the next response; within it, only a session grant rechecks for Blocked
     (`chat/tool_approvals.py:open_tool_approval`), and the decision route
-    rejects an approval of a now-disabled tool.
+    rejects an approval of a now-blocked action.
 20. `waiting-approval-blocks-send` **A chat that waits for an approval starts
     no user turn.** `server/query_and_chat/chat_backend.py:_reject_while_approval_waits`
     rejects `send-chat-message` and the pending-message submit and interrupt
@@ -705,9 +738,13 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 
 ## Known issues
 
-- The Slack and Discord bots run Ask tools without approval until they get
-  approval buttons (TODOs in `onyxbot/slack/handlers/handle_regular_answer.py`
-  and `server/query_and_chat/chat_backend.py:handle_send_chat_message`).
+- The Slack and Discord bots have no approval buttons, so they get no Ask
+  action. An admin sets an action to Allow, or the agent sets it to Allow, to
+  let a bot run it.
+- Until U4b, `allowed_tool_ids` narrows only built-in tools, and a preferred
+  tool id cannot name an integration action: integration actions have no tool
+  id. Until U6, an MCP server or OpenAPI tool made through the old routes has
+  no integration, so chat offers none of its actions.
 
 - Schema placeholders are a plain string replace.
   `build_custom_tools_from_openapi_schema_and_headers` replaces
@@ -800,11 +837,13 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   `DISABLED` (or `MCP_SERVER_ALLOW_LOOPBACK` seeds it). Use `127.0.0.1`, not
   `localhost`: `localhost` is in `utils/url.py:BLOCKED_HOSTNAMES` and fails at
   every level.
-- `investigate-missing-mcp-tools` **Investigate "my MCP tools are missing in chat".** In order: the API server
-  log has an `MCPCredentialsError` warning when the user has no usable
-  credential; on the default assistant, `user_can_access_mcp_server` must pass
-  and the user's `MCPServerUserPreference` must not turn the server off
-  ([[plugins]]); `Tool.enabled` must be true; and a tool that the remote
+- `investigate-missing-mcp-tools` **Investigate "my MCP tools are missing in chat".** In order: the server
+  must have an integration (`mcp_server.integration_id`) with `enabled` true;
+  a plugin that holds it must be linked to the agent (`persona__plugin`), or on
+  the default assistant be visible and turned on for the user ([[plugins]]);
+  `integration_status` must be connected for the user (a debug log "Skipping
+  integration" names the problem); the policy must not be Blocked by the admin
+  or the agent; a bot run also drops Ask actions; and a tool that the remote
   server added or renamed exists only after a sync ([[#mcp-schema-from-db]]).
 - `investigate-stuck-approval` **Investigate "I approved, but the call did not
   run".** Query `approval_request` for the response (`chat_message_id`). A

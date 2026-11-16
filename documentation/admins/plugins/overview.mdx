@@ -133,13 +133,14 @@ Turn on **Let users manage approval settings** to let users choose a stricter or
 the admin did not disable. For MCP plugins, users can change personal approval settings with or without Craft.
 For Craft Apps, users need Craft.
 
-The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval. In some other chats,
-a tool call cannot wait for approval, and an MCP tool with the **Ask** policy does not run.
+The Slack and Discord bots cannot show approval requests, so a tool with the **Ask** policy is not available to them.
+Each tool that the agent of a bot had before this release keeps running without approval. In some other chats,
+a tool call cannot wait for approval, and a tool with the **Ask** policy does not run.
 See [Approvals in Chat](/admins/plugins/mcp#approvals-in-chat).
 
 <Warning>
-  OpenAPI plugins have no approval policies. In Chat and custom agents,
-  an agent calls OpenAPI tools without an approval prompt. Turn off tools in Chat that must not run without review.
+  OpenAPI plugins follow the same policies. A `GET` operation runs without a prompt, and each other operation asks.
+  The OpenAPI plugins that existed before this release keep running without a prompt.
 </Warning>
 
 ## Next steps
