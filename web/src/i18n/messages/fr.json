@@ -10163,6 +10163,7 @@
         },
         "title": "Supprimer l'utilisateur",
         "toasts": {
+          "blockedBySkills": "Impossible de supprimer cet utilisateur",
           "openSkills": "Ouvrir les compétences pour les transférer",
           "success": "Utilisateur supprimé"
         }

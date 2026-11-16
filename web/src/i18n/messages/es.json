@@ -10163,6 +10163,7 @@
         },
         "title": "Eliminar al usuario",
         "toasts": {
+          "blockedBySkills": "No se puede eliminar este usuario",
           "openSkills": "Abrir habilidades para transferirlas",
           "success": "Usuario eliminado"
         }

@@ -10163,6 +10163,7 @@
         },
         "title": "사용자 삭제",
         "toasts": {
+          "blockedBySkills": "이 사용자를 삭제할 수 없습니다",
           "openSkills": "스킬을 열어 이전하기",
           "success": "사용자를 삭제했습니다"
         }

@@ -88,11 +88,29 @@ describe("DeleteUserModal", () => {
 
     await waitFor(() => expect(errorToast).toHaveBeenCalled());
     const [message, options] = errorToast.mock.calls[0]!;
-    expect(message).toBe(conflictDetail);
+    expect(message).toBe("Can't delete this user");
+    expect(options?.description).toBe(conflictDetail);
     expect(options?.duration).toBe(Infinity);
+    const dismiss = jest.spyOn(toast, "dismiss");
     options?.action?.onClick();
+    expect(dismiss).toHaveBeenCalledWith(options?.id);
     expect(mockGo).toHaveBeenCalledWith("/admin/skills");
     errorToast.mockRestore();
+    dismiss.mockRestore();
+  });
+
+  it("closes the private-skills toast when the delete succeeds", async () => {
+    mockDeleteUser.mockResolvedValue();
+    const dismiss = jest.spyOn(toast, "dismiss");
+    const user = setupUser();
+    renderModal();
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(dismiss).toHaveBeenCalledWith("delete-user-private-skills")
+    );
+    dismiss.mockRestore();
   });
 
   it("shows no action for other delete errors", async () => {

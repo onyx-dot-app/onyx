@@ -13,7 +13,7 @@ import {
   SvgKey,
 } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { toast, type ToastAction } from "@opal/layouts";
+import { toast } from "@opal/layouts";
 import { useNavigation } from "@opal/navigation";
 import { FetchError } from "@/lib/fetcher";
 import {
@@ -34,7 +34,8 @@ async function runAction(
   errorMessage: string,
   onDone: () => void,
   setIsSubmitting: (v: boolean) => void,
-  errorAction?: (err: unknown) => ToastAction | undefined
+  /** Shows a custom toast for `err` and returns true, or returns false. */
+  showErrorToast?: (err: unknown) => boolean
 ) {
   setIsSubmitting(true);
   try {
@@ -42,11 +43,9 @@ async function runAction(
     onDone();
     toast.success(successMessage);
   } catch (err) {
-    const toastAction = errorAction?.(err);
-    toast.error(err instanceof Error ? err.message : errorMessage, {
-      action: toastAction,
-      duration: toastAction ? Infinity : undefined,
-    });
+    if (!showErrorToast?.(err)) {
+      toast.error(err instanceof Error ? err.message : errorMessage);
+    }
   } finally {
     setIsSubmitting(false);
   }
@@ -81,15 +80,24 @@ export function CancelInviteModal({
   const navigation = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function skillsAction(err: unknown): ToastAction | undefined {
+  function showPrivateSkillsToast(err: unknown): boolean {
     if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
-      return undefined;
+      return false;
     }
-    return {
-      icon: SvgArrowUpRight,
-      label: t("deleteModal.toasts.openSkills"),
-      onClick: () => navigation.go("/admin/skills"),
-    };
+    toast.error(t("deleteModal.toasts.blockedBySkills"), {
+      id: PRIVATE_SKILLS_TOAST_ID,
+      description: err.message,
+      duration: Infinity,
+      action: {
+        icon: SvgArrowUpRight,
+        label: t("deleteModal.toasts.openSkills"),
+        onClick: () => {
+          toast.dismiss(PRIVATE_SKILLS_TOAST_ID);
+          navigation.go("/admin/skills");
+        },
+      },
+    });
+    return true;
   }
 
   return (
@@ -153,15 +161,24 @@ export function DeactivateUserModal({
   const navigation = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function skillsAction(err: unknown): ToastAction | undefined {
+  function showPrivateSkillsToast(err: unknown): boolean {
     if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
-      return undefined;
+      return false;
     }
-    return {
-      icon: SvgArrowUpRight,
-      label: t("deleteModal.toasts.openSkills"),
-      onClick: () => navigation.go("/admin/skills"),
-    };
+    toast.error(t("deleteModal.toasts.blockedBySkills"), {
+      id: PRIVATE_SKILLS_TOAST_ID,
+      description: err.message,
+      duration: Infinity,
+      action: {
+        icon: SvgArrowUpRight,
+        label: t("deleteModal.toasts.openSkills"),
+        onClick: () => {
+          toast.dismiss(PRIVATE_SKILLS_TOAST_ID);
+          navigation.go("/admin/skills");
+        },
+      },
+    });
+    return true;
   }
 
   return (
@@ -266,6 +283,8 @@ export function ActivateUserModal({
 // Delete User Modal
 // ---------------------------------------------------------------------------
 
+const PRIVATE_SKILLS_TOAST_ID = "delete-user-private-skills";
+
 interface DeleteUserModalProps {
   email: string;
   onClose: () => void;
@@ -282,15 +301,24 @@ export function DeleteUserModal({
   const navigation = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function skillsAction(err: unknown): ToastAction | undefined {
+  function showPrivateSkillsToast(err: unknown): boolean {
     if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
-      return undefined;
+      return false;
     }
-    return {
-      icon: SvgArrowUpRight,
-      label: t("deleteModal.toasts.openSkills"),
-      onClick: () => navigation.go("/admin/skills"),
-    };
+    toast.error(t("deleteModal.toasts.blockedBySkills"), {
+      id: PRIVATE_SKILLS_TOAST_ID,
+      description: err.message,
+      duration: Infinity,
+      action: {
+        icon: SvgArrowUpRight,
+        label: t("deleteModal.toasts.openSkills"),
+        onClick: () => {
+          toast.dismiss(PRIVATE_SKILLS_TOAST_ID);
+          navigation.go("/admin/skills");
+        },
+      },
+    });
+    return true;
   }
 
   return (
@@ -310,11 +338,12 @@ export function DeleteUserModal({
               t("deleteModal.toasts.success"),
               t("modals.toasts.error"),
               () => {
+                toast.dismiss(PRIVATE_SKILLS_TOAST_ID);
                 onMutate();
                 onClose();
               },
               setIsSubmitting,
-              skillsAction
+              showPrivateSkillsToast
             )
           }
         >
