@@ -79,9 +79,13 @@ export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {
 }
 
 function chatStepStatus(step: TransformedStep): TimelineEntryStatus {
-  if (step.packets.some((packet) => packet.obj.type === PacketType.ERROR)) {
-    return "error";
-  }
+  // An error packet fails a step, and so does Python output on stderr.
+  const failed = step.packets.some(
+    (packet) =>
+      packet.obj.type === PacketType.ERROR ||
+      (packet.obj.type === PacketType.PYTHON_TOOL_DELTA && !!packet.obj.stderr)
+  );
+  if (failed) return "error";
   return step.packets.some(isGroupEndPacket) ? "done" : "streaming";
 }
 

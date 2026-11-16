@@ -148,14 +148,15 @@ mounted but hidden and `inert`, so switching tabs does not fetch them again.
 into rail blocks (consecutive tool calls and thinking) and inline items
 (messages, notices), in arrival order. An entry is keyed by tool-call id or
 part id, so a late update changes it in place.
-`web/src/lib/timeline/craft/components/CraftTimeline.tsx` draws a block on the rail that
-chat uses (`web/src/lib/timeline/`, [[chat-frontend]]), with chat's layout:
-each block is a card, with the shared run header (`RunHeaderRow`) across its
-top. Each step's header is a `Content` (icon and title); the rail is a line
-that `StepContainer` places absolutely from one step's icon to the next. Answer
-text (`AnswerText`) lines up with the run header's text. Every block folds,
-even with one entry, once a text reply follows. Chat's `AgentTimeline`
-follows the same open and fold rules.
+Both products draw a block with the same components in
+`web/src/lib/timeline/components/` ([[chat-frontend]]): `RunCard` is the card
+(run header, fold, timer, Done or Stopped row) and `RunStep` is a step (its
+status sets the spinner, the alert icon and the failed tint). `CraftTimeline`
+and chat's `AgentTimeline` only map their steps onto them. A step's header is
+a `Content` (icon and title); the rail is a line that `StepContainer` places
+absolutely from one step's icon to the next. Answer text (`AnswerText`) lines
+up with the run header's text. Every block folds, even with one entry, once
+a text reply follows.
 
 ---
 

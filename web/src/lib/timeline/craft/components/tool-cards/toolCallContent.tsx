@@ -139,17 +139,10 @@ export function hasToolCallBody(toolCall: ToolCallState): boolean {
   }
 }
 
-/** The rail icon: the status while running or failed, else the kind's icon. */
-export function getToolCallStepIcon(
+/** The step kind's icon; `RunStep` shows the status while running or failed. */
+export function getToolCallIcon(
   toolCall: ToolCallState
 ): IconFunctionComponent {
-  if (toolCall.status === "pending" || toolCall.status === "in_progress") {
-    return STEP_ICONS.running;
-  }
-  // A stopped call must not look finished.
-  if (toolCall.status === "failed" || toolCall.status === "cancelled") {
-    return STEP_ICONS.failed;
-  }
   if (isSkillInvocation(toolCall)) return STEP_ICONS.skill;
   if (toolCall.toolName === "websearch") return STEP_ICONS.webSearch;
   if (toolCall.toolName === "webfetch") return STEP_ICONS.fetch;

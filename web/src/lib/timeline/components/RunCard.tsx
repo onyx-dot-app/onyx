@@ -1,0 +1,170 @@
+"use client";
+
+import React, { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Collapsible } from "@opal/components";
+import { STEP_ICONS } from "@/lib/timeline/icons";
+import { StepContainer } from "@/lib/timeline/components/StepContainer";
+import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
+import { RunHeaderRow } from "@/lib/timeline/components/primitives/TimelineHeaderRow";
+import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
+import {
+  CompletedHeader,
+  type CompletedHeaderProps,
+} from "@/lib/timeline/components/headers/CompletedHeader";
+import { StoppedHeader } from "@/lib/timeline/components/headers/StoppedHeader";
+import type {
+  TimelineEntryStatus,
+  TimelineStepPosition,
+} from "@/lib/timeline/types";
+
+export interface RunCardStep {
+  id: string;
+  status: TimelineEntryStatus;
+}
+
+/** What the finished header can add: generated images, a memory change. */
+export type RunCardSummary = Pick<
+  CompletedHeaderProps,
+  | "generatedImageCount"
+  | "isMemoryOnly"
+  | "memoryText"
+  | "memoryOperation"
+  | "memoryId"
+  | "memoryIndex"
+>;
+
+export interface RunCardProps<S extends RunCardStep> {
+  /** The run's steps, in arrival order. */
+  steps: S[];
+  renderStep: (step: S, position: TimelineStepPosition) => React.ReactNode;
+  /** Header text while the run works. */
+  workingText: string;
+  /**
+   * Whether the run still works. Defaults to a step that streams; a run can
+   * also work between steps, such as while it waits for an approval.
+   */
+  isActive?: boolean;
+  /** Whether the user stopped the run. Defaults to a stopped step. */
+  isStopped?: boolean;
+  /** Fold the run closed once text follows it. */
+  autoCollapse?: boolean;
+  /** When the run started, for the live timer. Defaults to its first render. */
+  streamingStartTime?: number;
+  /** How long the run took, when the server knows. Otherwise it is timed. */
+  durationSeconds?: number;
+  summary?: RunCardSummary;
+}
+
+/**
+ * One run of steps as a card, the same in chat and Craft: the run header
+ * across the top (working, finished or stopped), and the steps below it on
+ * the rail. Every run folds; it is open while it works and folds once text
+ * follows it. A settled run ends with a Done or Stopped row.
+ */
+export function RunCard<S extends RunCardStep>({
+  steps,
+  renderStep,
+  workingText,
+  isActive,
+  isStopped,
+  autoCollapse = false,
+  streamingStartTime,
+  durationSeconds,
+  summary,
+}: RunCardProps<S>) {
+  const t = useTranslations("chat.messages.timeline");
+  const isRunning =
+    isActive ?? steps.some((step) => step.status === "streaming");
+  const stopped =
+    !isRunning &&
+    (isStopped ?? steps.some((step) => step.status === "stopped"));
+  const [isOpen, setIsOpen] = useState(isRunning);
+  const toggle = () => setIsOpen((prev) => !prev);
+
+  // Fold closed once text follows; fire once so a manual re-open sticks.
+  const didAutoCollapse = useRef(false);
+  useEffect(() => {
+    if (autoCollapse && !didAutoCollapse.current) {
+      didAutoCollapse.current = true;
+      setIsOpen(false);
+    }
+  }, [autoCollapse]);
+
+  // A run that works here is timed; a saved run has no duration.
+  const [startedAt] = useState<number | undefined>(() =>
+    isRunning ? (streamingStartTime ?? Date.now()) : undefined
+  );
+  const [timedSeconds, setTimedSeconds] = useState(0);
+  useEffect(() => {
+    if (!isRunning && startedAt !== undefined) {
+      setTimedSeconds(Math.max(1, Math.round((Date.now() - startedAt) / 1000)));
+    }
+  }, [isRunning, startedAt]);
+
+  if (steps.length === 0 && !isRunning) return null;
+
+  // The end row folds with the steps, so it does not depend on `isOpen`.
+  const showEndRow = !isRunning && steps.length > 0;
+  const foldable = steps.length > 0;
+
+  return (
+    <TimelineRoot>
+      <RunHeaderRow
+        interactive={foldable}
+        tinted={isRunning || isOpen}
+        roundedBottom={!isOpen || !foldable}
+      >
+        {isRunning ? (
+          <StreamingHeader
+            headerText={workingText}
+            collapsible={foldable}
+            isExpanded={isOpen}
+            onToggle={toggle}
+            streamingStartTime={startedAt}
+            toolProcessingDuration={durationSeconds}
+          />
+        ) : stopped ? (
+          <StoppedHeader
+            totalSteps={steps.length}
+            collapsible
+            isExpanded={isOpen}
+            onToggle={toggle}
+          />
+        ) : (
+          <CompletedHeader
+            totalSteps={steps.length}
+            collapsible
+            isExpanded={isOpen}
+            onToggle={toggle}
+            processingDurationSeconds={durationSeconds ?? timedSeconds}
+            {...summary}
+          />
+        )}
+      </RunHeaderRow>
+      {foldable && (
+        <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
+          <Collapsible.Content>
+            {steps.map((step, index) => (
+              <React.Fragment key={step.id}>
+                {renderStep(step, {
+                  isFirst: index === 0,
+                  isLast: index === steps.length - 1 && !showEndRow,
+                })}
+              </React.Fragment>
+            ))}
+            {showEndRow && (
+              <StepContainer
+                stepIcon={stopped ? STEP_ICONS.stopped : STEP_ICONS.done}
+                header={t(stopped ? "stoppedStep.header" : "doneStep.header")}
+                isLastStep
+              />
+            )}
+          </Collapsible.Content>
+        </Collapsible.Root>
+      )}
+    </TimelineRoot>
+  );
+}
+
+export default RunCard;

@@ -1,7 +1,8 @@
 import React, { FunctionComponent } from "react";
 import { useTranslations } from "next-intl";
-import { IconProps } from "@opal/types";
-import { StepContainer } from "@/lib/timeline/components/StepContainer";
+import type { IconFunctionComponent, IconProps } from "@opal/types";
+import { RunStep } from "@/lib/timeline/components/RunStep";
+import type { TimelineEntryStatus } from "@/lib/timeline/types";
 import {
   TimelineRendererOutput,
   TimelineRendererResult,
@@ -20,13 +21,13 @@ export interface TimelineStepComposerProps {
   getCollapsedIcon?: (
     result: TimelineRendererResult
   ) => FunctionComponent<IconProps> | undefined;
-  /** Replaces the first row's icon, for a running or failed step. */
-  statusIcon?: FunctionComponent<IconProps>;
+  /** The step's status; it decides the first row's icon and failed tint. */
+  status?: TimelineEntryStatus;
 }
 
 /**
  * TimelineStepComposer renders renderer results into either raw content blocks
- * or StepContainer-wrapped timeline rows based on the layout contract.
+ * or shared run steps (`RunStep`), based on the layout contract.
  */
 export function TimelineStepComposer({
   results,
@@ -34,7 +35,7 @@ export function TimelineStepComposer({
   isFirstStep,
   collapsible = true,
   getCollapsedIcon,
-  statusIcon,
+  status = "done",
 }: TimelineStepComposerProps) {
   const t = useTranslations("chat.messages.timeline");
   return (
@@ -43,33 +44,34 @@ export function TimelineStepComposer({
         result.timelineLayout === "content" ? (
           <React.Fragment key={index}>{result.content}</React.Fragment>
         ) : (
-          <StepContainer
+          <RunStep
             key={index}
-            stepIcon={
-              (index === 0 ? statusIcon : undefined) ??
-              (result.icon as FunctionComponent<IconProps> | undefined)
-            }
-            header={result.status ?? undefined}
-            isExpanded={result.isExpanded}
-            onToggle={result.onToggle}
+            status={index === 0 ? status : "done"}
+            position={{
+              isFirst: index === 0 && isFirstStep,
+              isLast: index === results.length - 1 && isLastStep,
+            }}
+            icon={result.icon as IconFunctionComponent | undefined}
+            title={result.status ?? undefined}
             toggleLabel={t(
               result.isExpanded
                 ? "collapseButton.ariaLabel"
                 : "expandButton.ariaLabel"
             )}
-            collapsible={collapsible}
-            supportsCollapsible={result.supportsCollapsible}
-            isLastStep={index === results.length - 1 && isLastStep}
-            isFirstStep={index === 0 && isFirstStep}
+            // A chat body changes (full or compact) rather than hides.
+            isExpanded={result.isExpanded}
+            onToggle={result.onToggle}
+            expandable={collapsible && !!result.supportsCollapsible}
             collapsedIcon={
-              getCollapsedIcon ? getCollapsedIcon(result) : undefined
+              (getCollapsedIcon?.(result) as
+                | IconFunctionComponent
+                | undefined) ?? undefined
             }
             noPaddingRight={result.noPaddingRight ?? false}
             isHover={result.isHover}
             surfaceBackground={result.surfaceBackground}
-          >
-            {result.content}
-          </StepContainer>
+            body={result.content}
+          />
         )
       )}
     </>
