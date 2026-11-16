@@ -102,6 +102,7 @@ class Seeded:
     owner: UUID
     other: UUID
     admin: UUID
+    inactive: UUID
     group: int
     default_group: int
     persona: int
@@ -137,7 +138,7 @@ def _insert(conn: Connection, sql: str, **params: Any) -> Any:
 def _seed(conn: Connection) -> Seeded:
     s = uuid4().hex[:8]
     users: dict[str, UUID] = {}
-    for key in ("owner", "other", "admin"):
+    for key in ("owner", "other", "admin", "inactive"):
         users[key] = _insert(
             conn,
             'INSERT INTO "user" (id, email, hashed_password, is_active, '
@@ -146,6 +147,10 @@ def _seed(conn: Connection) -> Seeded:
             id=uuid4(),
             email=f"u1-{key}-{s}@example.com",
         )
+    conn.execute(
+        text('UPDATE "user" SET is_active = false WHERE id = :id'),
+        {"id": users["inactive"]},
+    )
     group = _insert(
         conn,
         "INSERT INTO user_group (name, is_up_to_date, is_up_for_deletion) "
@@ -280,10 +285,48 @@ def _seed(conn: Connection) -> Seeded:
     conn.execute(
         text(
             "INSERT INTO external_app_user_credential (external_app_id, user_id, "
+            "user_credentials, granted_scopes) VALUES "
+            "(:a, :u, CAST(:secret AS bytea), ARRAY['read'])"
+        ),
+        {"a": app_user_key, "u": users["other"], "secret": b"user-key"},
+    )
+    # A credential of a deactivated user is not copied.
+    conn.execute(
+        text(
+            "INSERT INTO external_app_user_credential (external_app_id, user_id, "
             "user_credentials) VALUES (:a, :u, '\\x00'::bytea)"
         ),
-        {"a": app_user_key, "u": users["other"]},
+        {"a": app_user_key, "u": users["inactive"]},
     )
+
+    def mcp_config(server: int | None, email: str, secret: bytes, day: int) -> int:
+        return _insert(
+            conn,
+            "INSERT INTO mcp_connection_config (mcp_server_id, user_email, config, "
+            "created_at, updated_at) VALUES (:server, :email, :secret, "
+            "TIMESTAMPTZ '2026-10-01 00:00:00+00', "
+            "TIMESTAMPTZ '2026-10-01 00:00:00+00' + make_interval(days => :day)) "
+            "RETURNING id",
+            server=server,
+            email=email,
+            secret=secret,
+            day=day,
+        )
+
+    for server, secret in (
+        (mcp_public, b"public-admin"),
+        (mcp_private, b"private-admin"),
+    ):
+        conn.execute(
+            text("UPDATE mcp_server SET admin_connection_config_id = :c WHERE id = :s"),
+            {"c": mcp_config(server, "", secret, 0), "s": server},
+        )
+    other_email = f"u1-other-{s}@example.com"
+    # The newer of two configs of a user wins; the email matches in any case.
+    mcp_config(mcp_public, other_email.upper(), b"other-old", 1)
+    mcp_config(mcp_public, other_email, b"other-new", 2)
+    # No active user has this email.
+    mcp_config(mcp_public, f"u1-gone-{s}@example.com", b"gone", 3)
 
     gated: dict[str, int] = {}
     for key, column, target in (
@@ -308,8 +351,11 @@ def _seed(conn: Connection) -> Seeded:
         conn,
         "INSERT INTO oauth_config (name, authorization_url, token_url, client_id, "
         "client_secret, scopes, supports_pkce) VALUES (:name, "
-        "'https://o.example.com/a', 'https://o.example.com/t', '\\x00'::bytea, "
-        "'\\x00'::bytea, CAST('[\"read\"]' AS jsonb), true) RETURNING id",
+        "'https://o.example.com/a', 'https://o.example.com/t', "
+        "CAST(:client_id AS bytea), CAST(:client_secret AS bytea), "
+        "CAST('[\"read\"]' AS jsonb), true) RETURNING id",
+        client_id=b"oauth-client-id",
+        client_secret=b"oauth-client-secret",
         name=f"u1-oauth-{s}",
     )
 
@@ -338,7 +384,17 @@ def _seed(conn: Connection) -> Seeded:
     )
     custom_shared = custom(f"u1-custom-shared-{s}", None, None)
     custom_default = custom(f"u1-custom-default-{s}", None, None)
-    custom_oauth = custom(f"u1-custom-oauth-{s}", None, oauth_config)
+    custom_oauth = custom(
+        f"u1-custom-oauth-{s}", [{"key": "X-Team", "value": "platform"}], oauth_config
+    )
+    for user_key, secret in (("other", b"oauth-token"), ("inactive", b"gone")):
+        conn.execute(
+            text(
+                "INSERT INTO oauth_user_token (oauth_config_id, user_id, token_data) "
+                "VALUES (:o, :u, :secret)"
+            ),
+            {"o": oauth_config, "u": users[user_key], "secret": secret},
+        )
     # Turned off for the default agent; a custom agent still has it.
     custom_disabled = custom(f"u1-custom-disabled-{s}", None, None, enabled=False)
 
@@ -553,6 +609,7 @@ def _seed(conn: Connection) -> Seeded:
         owner=users["owner"],
         other=users["other"],
         admin=users["admin"],
+        inactive=users["inactive"],
         group=group,
         default_group=default_group,
         persona=other_persona,
@@ -636,6 +693,22 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
         {"p": seeded.bot_persona},
     )
     conn.execute(text("DELETE FROM tool WHERE id = ANY(:ids)"), {"ids": custom_tools})
+    servers = [seeded.mcp_public, seeded.mcp_private, seeded.mcp_orphan]
+    conn.execute(
+        text(
+            "UPDATE mcp_server SET admin_connection_config_id = NULL "
+            "WHERE id = ANY(:ids)"
+        ),
+        {"ids": servers},
+    )
+    conn.execute(
+        text("DELETE FROM mcp_connection_config WHERE mcp_server_id = ANY(:ids)"),
+        {"ids": servers},
+    )
+    conn.execute(
+        text("DELETE FROM oauth_user_token WHERE user_id = ANY(:ids)"),
+        {"ids": [seeded.other, seeded.inactive]},
+    )
     conn.execute(
         text("DELETE FROM mcp_server WHERE id = ANY(:ids)"),
         {"ids": [seeded.mcp_public, seeded.mcp_private, seeded.mcp_orphan]},
@@ -666,7 +739,7 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
     )
     conn.execute(
         text('DELETE FROM "user" WHERE id = ANY(:ids)'),
-        {"ids": [seeded.owner, seeded.other, seeded.admin]},
+        {"ids": [seeded.owner, seeded.other, seeded.admin, seeded.inactive]},
     )
     conn.execute(
         text("DELETE FROM user_group WHERE id = ANY(:ids)"),
@@ -773,11 +846,32 @@ def _oauth_client(conn: Connection, integration_id: int) -> dict[str, Any] | Non
         text(
             "SELECT provider_mode, authorization_url, token_url, scopes, "
             "additional_params, pkce, cimd_enabled, client_id, client_secret, "
-            "registration FROM integration_oauth_client WHERE integration_id = :id"
+            "registration, legacy_format FROM integration_oauth_client "
+            "WHERE integration_id = :id"
         ),
         {"id": integration_id},
     ).one_or_none()
-    return dict(row._mapping) if row else None
+    if row is None:
+        return None
+    return {
+        key: bytes(value) if isinstance(value, memoryview) else value
+        for key, value in row._mapping.items()
+    }
+
+
+def _connections(conn: Connection, integration_id: int) -> dict[Any, Any]:
+    """Each connection by user (None: the organization), as (secret, tag,
+    granted scopes)."""
+    return {
+        row.user_id: (bytes(row.secret), row.legacy_format, row.granted_scopes)
+        for row in conn.execute(
+            text(
+                "SELECT user_id, secret, legacy_format, granted_scopes "
+                "FROM integration_connection WHERE integration_id = :id"
+            ),
+            {"id": integration_id},
+        )
+    }
 
 
 def _settings(conn: Connection, table: str, key: str, owner: Any, plugin: UUID) -> Any:
@@ -901,7 +995,9 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             "cimd_enabled": True,
             "client_id": None,
             "client_secret": None,
-            "registration": None,
+            # The OAuth client of an MCP server is in its admin configuration.
+            "registration": b"public-admin",
+            "legacy_format": "mcp_config",
         }
         mcp_action = {
             "source": "mcp",
@@ -946,7 +1042,8 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             "cimd_enabled": False,
             "client_id": None,
             "client_secret": None,
-            "registration": None,
+            "registration": b"\x00",
+            "legacy_format": "external_app_org",
         }
         # The provider catalog is code; the U3 sync writes its actions.
         assert _actions(conn, slack.id) == []
@@ -984,13 +1081,49 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             "additional_params": None,
             "pkce": True,
             "cimd_enabled": False,
-            "client_id": None,
-            "client_secret": None,
+            # The bytes of oauth_config, in the same encrypted string format.
+            "client_id": b"oauth-client-id",
+            "client_secret": b"oauth-client-secret",
             "registration": None,
+            "legacy_format": None,
         }
+
+        # Credentials: each secret is copied as its bytes, with its old format.
+        # A user who is not active, or an email that no active user has, gets
+        # no connection.
+        assert _connections(conn, public.id) == {
+            None: (b"public-admin", "mcp_config", None),
+            seeded.other: (b"other-new", "mcp_config", None),
+        }
+        assert _connections(conn, private.id) == {
+            None: (b"private-admin", "mcp_config", None),
+        }
+        assert _connections(conn, org_key.id) == {
+            None: (b"\x00", "external_app_org", None),
+        }
+        assert _connections(conn, user_key.id) == {
+            None: (b"\x00", "external_app_org", None),
+            seeded.other: (b"user-key", "external_app_user", ["read"]),
+        }
+        assert _connections(conn, slack.id) == {}
+        assert _connections(conn, app_custom.id) == {}
+        assert _connections(conn, custom["oauth"].id) == {
+            seeded.other: (b"oauth-token", "oauth_user_token", None),
+        }
+        # The plain headers of a shared OpenAPI tool, as plain UTF-8 bytes.
+        headers = _connections(conn, custom["private"].id)
+        assert list(headers) == [None]
+        assert json.loads(headers[None][0]) == [{"key": "X-Key", "value": "secret"}]
+        assert headers[None][1] == "tool_headers"
+        # Static headers of an OpenAPI tool that signs in with OAuth become
+        # literal values of the header template.
+        assert custom["oauth"].header_template == {"X-Team": "platform"}
         assert (
             conn.execute(
-                text("SELECT count(*) FROM integration_connection")
+                text(
+                    "SELECT count(*) FROM integration_connection "
+                    "WHERE status <> 'connected' OR expires_at IS NOT NULL"
+                )
             ).scalar_one()
             == 0
         )
@@ -1235,6 +1368,7 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
         "persona__plugin",
         "scheduled_task__plugin",
         "plugin__integration",
+        "integration_connection",
         "plugin",
         "plugin_version",
         "plugin__user",
@@ -1247,11 +1381,43 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
     )
     first = _fingerprint(engine, new_tables)
     old = _fingerprint(engine, OLD_TABLES, ignore="integration_id")
+    # An approval of an integration made after the upgrade has no gated_app.
+    no_gated_app = uuid4()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO approval_request (id, chat_session_id, chat_message_id, "
+                "gated_app_id, integration_id, action_id, tool_call_id, tool_name, "
+                "display_name, arguments) SELECT :id, chat_session_id, "
+                "chat_message_id, NULL, integration_id, action_id, 'call_2', "
+                "tool_name, display_name, arguments FROM approval_request "
+                "WHERE gated_app_id = :g"
+            ),
+            {"id": no_gated_app, "g": seeded.gated["mcp_public"]},
+        )
 
     _migrate("downgrade", PREVIOUS_REVISION)
     with engine.connect() as conn:
         assert (
             conn.execute(text("SELECT to_regclass('integration')")).scalar_one() is None
+        )
+        # The downgrade deletes it, then gated_app_id is required again.
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM approval_request WHERE id = :id"),
+                {"id": no_gated_app},
+            ).scalar_one()
+            == 0
+        )
+        assert (
+            conn.execute(
+                text(
+                    "SELECT is_nullable FROM information_schema.columns "
+                    "WHERE table_name = 'approval_request' "
+                    "AND column_name = 'gated_app_id'"
+                )
+            ).scalar_one()
+            == "NO"
         )
         assert (
             conn.execute(

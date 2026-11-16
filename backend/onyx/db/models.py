@@ -3665,8 +3665,10 @@ class ApprovalRequest(Base):
     chat_message_id: Mapped[int] = mapped_column(
         ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=False
     )
-    gated_app_id: Mapped[int] = mapped_column(
-        ForeignKey("gated_app.id", ondelete="CASCADE"), nullable=False
+    # NULL for an approval of an integration made after the integration
+    # tables, which has no gated_app.
+    gated_app_id: Mapped[int | None] = mapped_column(
+        ForeignKey("gated_app.id", ondelete="CASCADE"), nullable=True
     )
     integration_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -6249,6 +6251,10 @@ class IntegrationOAuthClient(Base):
     registration: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
         EncryptedJson(), nullable=True
     )
+    # The old format of a secret that the migration copied as it was, such as
+    # mcp_config. Read it with the old shape; a write saves the new format and
+    # clears it. NULL: the new format.
+    legacy_format: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -6306,6 +6312,10 @@ class IntegrationConnection(Base):
         server_default=IntegrationConnectionStatus.CONNECTED.value,
     )
     status_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The old format of a secret that the migration copied as it was, such as
+    # mcp_config. Read it with the old shape; a write saves the new format and
+    # clears it. NULL: the new format.
+    legacy_format: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -3,9 +3,10 @@ OpenAPI custom tool into them. Each integration stands alone. A plugin holds
 it through plugin__integration, and the copy makes one such plugin for each.
 
 The old tables stay the tables of each kind: mcp_server, external_app and the
-OpenAPI tool row each get an integration_id. That is the only change to them,
-and a rollback drops it. The migration is SQL only and imports no app code. It
-moves no secret: the credential import (U3) does that in app code.
+OpenAPI tool row each get an integration_id. The old tables only get new
+columns, and approval_request.gated_app_id becomes nullable; a rollback undoes
+both. The migration is SQL only and imports no app code. It
+moves no secret in clear: each credential is copied as its encrypted bytes.
 
 Revision ID: 730bce2814a0
 Revises: ff11c4042c42
@@ -124,6 +125,11 @@ def _alter_old_tables() -> None:
         "chat_session", sa.Column("tool_options", postgresql.JSONB(), nullable=True)
     )
 
+    # An approval for an integration made after the upgrade has no gated_app.
+    op.alter_column(
+        "approval_request", "gated_app_id", existing_type=sa.Integer(), nullable=True
+    )
+
     for table in RECORD_TABLES:
         op.add_column(table, sa.Column("integration_id", sa.Integer(), nullable=True))
         # NOT VALID: no scan of the old rows under the ALTER TABLE lock. The
@@ -240,6 +246,10 @@ def _create_tables() -> None:
         sa.Column("client_id", sa.LargeBinary(), nullable=True),
         sa.Column("client_secret", sa.LargeBinary(), nullable=True),
         sa.Column("registration", sa.LargeBinary(), nullable=True),
+        # The old format of a secret that the migration copied as it was, such
+        # as mcp_config. The credential code reads it, and writes the new
+        # format on its next write. NULL: the new format.
+        sa.Column("legacy_format", sa.String(), nullable=True),
         *_timestamps(),
         # A SQL migration can write a value outside the enum (see integration).
         sa.CheckConstraint(
@@ -269,6 +279,10 @@ def _create_tables() -> None:
         sa.Column("granted_scopes", postgresql.ARRAY(sa.String()), nullable=True),
         sa.Column("status", sa.String(), server_default="connected", nullable=False),
         sa.Column("status_reason", sa.Text(), nullable=True),
+        # The old format of a secret that the migration copied as it was, such
+        # as mcp_config. The credential code reads it, and writes the new
+        # format on its next write. NULL: the new format.
+        sa.Column("legacy_format", sa.String(), nullable=True),
         *_timestamps(),
         # A SQL migration can write a value outside the enum (see integration).
         sa.CheckConstraint(
@@ -845,6 +859,158 @@ _INSERT_MCP_ACTIONS = """
     ON CONFLICT DO NOTHING
 """
 
+# Credentials. The old columns use the same encryption as the new ones, so
+# each secret is copied as its bytes, never decrypted: the migration cannot
+# know the edition or the key the app runs with. legacy_format names the old
+# format, which the credential code reads.
+
+# The configuration of an MCP server that the admin set up.
+_INSERT_MCP_ORGANIZATION_CONNECTIONS = """
+    INSERT INTO integration_connection (
+        integration_id, user_id, secret, legacy_format, status,
+        created_at, updated_at
+    )
+    SELECT m.integration_id, NULL, c.config, 'mcp_config', 'connected',
+        c.created_at, c.updated_at
+    FROM mcp_server m
+    JOIN mcp_connection_config c ON c.id = m.admin_connection_config_id
+    WHERE m.integration_id IS NOT NULL
+    ORDER BY m.integration_id
+    ON CONFLICT DO NOTHING
+"""
+
+# The configuration of each user, keyed by email today. A user row is made
+# only when exactly one active user has that email; the newest wins.
+_INSERT_MCP_USER_CONNECTIONS = """
+    INSERT INTO integration_connection (
+        integration_id, user_id, secret, legacy_format, status,
+        created_at, updated_at
+    )
+    SELECT DISTINCT ON (m.integration_id, u.id)
+        m.integration_id, u.id, c.config, 'mcp_config', 'connected',
+        c.created_at, c.updated_at
+    FROM mcp_connection_config c
+    JOIN mcp_server m ON m.id = c.mcp_server_id
+    JOIN "user" u ON lower(u.email) = lower(c.user_email) AND u.is_active
+    WHERE m.integration_id IS NOT NULL
+      AND c.id IS DISTINCT FROM m.admin_connection_config_id
+      AND (
+          SELECT count(*) FROM "user" o
+          WHERE lower(o.email) = lower(c.user_email) AND o.is_active
+      ) = 1
+    ORDER BY m.integration_id, u.id, c.updated_at DESC, c.id DESC
+    ON CONFLICT DO NOTHING
+"""
+
+# The OAuth client of an MCP server is inside the admin configuration.
+_SET_MCP_OAUTH_REGISTRATIONS = """
+    UPDATE integration_oauth_client o
+    SET registration = c.config, legacy_format = 'mcp_config'
+    FROM mcp_server m
+    JOIN mcp_connection_config c ON c.id = m.admin_connection_config_id
+    WHERE o.integration_id = m.integration_id
+"""
+
+# A built-in app holds its OAuth client in the organization credentials.
+_SET_EXTERNAL_APP_OAUTH_REGISTRATIONS = """
+    UPDATE integration_oauth_client o
+    SET registration = a.organization_credentials,
+        legacy_format = 'external_app_org'
+    FROM external_app a
+    WHERE o.integration_id = a.integration_id AND a.app_type <> 'CUSTOM'
+"""
+
+# A custom app with a header template: the values the organization filled.
+# In individual mode they are only the defaults that a user's values override.
+_INSERT_EXTERNAL_APP_ORGANIZATION_CONNECTIONS = """
+    INSERT INTO integration_connection (
+        integration_id, user_id, secret, legacy_format, status,
+        created_at, updated_at
+    )
+    SELECT i.id, NULL, a.organization_credentials, 'external_app_org',
+        'connected', a.created_at, a.updated_at
+    FROM external_app a
+    JOIN integration i ON i.id = a.integration_id
+    WHERE a.app_type = 'CUSTOM' AND i.auth_method = 'api_key'
+    ORDER BY i.id
+    ON CONFLICT DO NOTHING
+"""
+
+_INSERT_EXTERNAL_APP_USER_CONNECTIONS = """
+    INSERT INTO integration_connection (
+        integration_id, user_id, secret, legacy_format, granted_scopes,
+        status, created_at, updated_at
+    )
+    SELECT a.integration_id, c.user_id, c.user_credentials,
+        'external_app_user', c.granted_scopes::varchar[], 'connected',
+        c.created_at, c.updated_at
+    FROM external_app_user_credential c
+    JOIN external_app a ON a.id = c.external_app_id
+    JOIN "user" u ON u.id = c.user_id AND u.is_active
+    WHERE a.integration_id IS NOT NULL
+    ORDER BY a.integration_id, c.user_id
+    ON CONFLICT DO NOTHING
+"""
+
+# The OAuth token of each user for each OpenAPI tool of that OAuth config.
+_INSERT_OAUTH_USER_CONNECTIONS = """
+    INSERT INTO integration_connection (
+        integration_id, user_id, secret, legacy_format, status,
+        created_at, updated_at
+    )
+    SELECT t.integration_id, k.user_id, k.token_data, 'oauth_user_token',
+        'connected', k.created_at, k.updated_at
+    FROM oauth_user_token k
+    JOIN tool t ON t.oauth_config_id = k.oauth_config_id
+    JOIN "user" u ON u.id = k.user_id AND u.is_active
+    WHERE t.integration_id IS NOT NULL
+    ORDER BY t.integration_id, k.user_id
+    ON CONFLICT DO NOTHING
+"""
+
+# The headers of a shared OpenAPI tool are plain JSON today. The decrypt path
+# of each edition reads plain UTF-8 bytes, so they are copied as such.
+_INSERT_TOOL_HEADER_CONNECTIONS = f"""
+    INSERT INTO integration_connection (
+        integration_id, user_id, secret, legacy_format, status,
+        created_at, updated_at
+    )
+    SELECT i.id, NULL, convert_to(t.custom_headers::text, 'UTF8'),
+        'tool_headers', 'connected',
+        TIMESTAMPTZ '{FALLBACK_CREATED_AT}', TIMESTAMPTZ '{FALLBACK_CREATED_AT}'
+    FROM tool t
+    JOIN integration i ON i.id = t.integration_id
+    WHERE i.auth_method = 'api_key'
+    ORDER BY i.id
+    ON CONFLICT DO NOTHING
+"""
+
+# An OpenAPI tool that signs in with OAuth or the Onyx login and also sends
+# static headers: the headers become literal values of the header template.
+_SET_TOOL_HEADER_TEMPLATES = """
+    UPDATE integration i
+    SET header_template = headers.value
+    FROM tool t
+    CROSS JOIN LATERAL (
+        SELECT jsonb_object_agg(h ->> 'key', h ->> 'value') AS value
+        FROM jsonb_array_elements(t.custom_headers) h
+        WHERE h ->> 'key' IS NOT NULL
+    ) headers
+    WHERE t.integration_id = i.id
+      AND i.auth_method IN ('oauth2', 'onyx_login')
+      AND jsonb_typeof(t.custom_headers) = 'array'
+      AND headers.value IS NOT NULL
+"""
+
+# oauth_config holds the client in the same encrypted string format.
+_SET_OPENAPI_OAUTH_CLIENTS = """
+    UPDATE integration_oauth_client o
+    SET client_id = c.client_id, client_secret = c.client_secret
+    FROM tool t
+    JOIN oauth_config c ON c.id = t.oauth_config_id
+    WHERE o.integration_id = t.integration_id
+"""
+
 _SET_INTEGRATION_SEQUENCE = """
     SELECT setval(
         pg_get_serial_sequence('integration', 'id'),
@@ -1105,6 +1271,16 @@ def _copy_integrations() -> None:
         _SET_INTEGRATION_SEQUENCE,
         *_SET_KIND_INTEGRATIONS,
         _INSERT_OAUTH_CLIENTS,
+        _INSERT_MCP_ORGANIZATION_CONNECTIONS,
+        _INSERT_MCP_USER_CONNECTIONS,
+        _SET_MCP_OAUTH_REGISTRATIONS,
+        _SET_EXTERNAL_APP_OAUTH_REGISTRATIONS,
+        _INSERT_EXTERNAL_APP_ORGANIZATION_CONNECTIONS,
+        _INSERT_EXTERNAL_APP_USER_CONNECTIONS,
+        _INSERT_OAUTH_USER_CONNECTIONS,
+        _INSERT_TOOL_HEADER_CONNECTIONS,
+        _SET_TOOL_HEADER_TEMPLATES,
+        _SET_OPENAPI_OAUTH_CLIENTS,
         _INSERT_MCP_ACTIONS,
         _CREATE_TOOL_INTEGRATIONS,
         _INSERT_MCP_USER_SHARES,
@@ -1150,6 +1326,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # An approval made after the upgrade with no gated_app cannot stay.
+    op.execute("DELETE FROM approval_request WHERE gated_app_id IS NULL")
+    op.alter_column(
+        "approval_request", "gated_app_id", existing_type=sa.Integer(), nullable=False
+    )
     op.drop_column("assistant__user_specific_config", "disabled_plugin_ids")
     for table in reversed(RECORD_TABLES):
         op.drop_column(table, "integration_id")
