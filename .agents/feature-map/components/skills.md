@@ -614,14 +614,13 @@ The library preview of an external-app skill calls the same renderer
     `plugin__user_group` and `user_plugin_preference` (`db/models.py:Plugin`
     and its neighbours), and fills them from each custom skill. Built-in
     skills get no plugin. A plugin and the legacy skill row share one id,
-    except the home plugin of an integration (`integration.plugin_id`,
+    except a plugin that holds only integrations (`plugin__integration`,
     migration `730bce2814a0`): its version has no bundle and no
-    `plugin_skill` row, and no skill row has its id. One case differs: an
-    external app whose only skill was a custom skill has the plugin of that
-    skill as its home plugin, and a delete of that plugin removes the
-    integration (`ON DELETE CASCADE`). A join from `plugin` to
+    `plugin_skill` row, and no skill row has its id. An integration stands
+    alone: several plugins can hold it, and a plugin delete does not delete
+    it. A join from `plugin` to
     `plugin_skill` or `skill` must be an outer join or filter on purpose. A
-    name held by a home plugin does not block a skill publish or transfer:
+    name held by such a plugin does not block a skill publish or transfer:
     the skill's plugin label takes a free name
     (`db/plugin.py:_move_plugin__no_commit`), unless another skill of the
     marketplace already has that skill name. No foreign key checks the

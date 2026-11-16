@@ -27,7 +27,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, and_, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -43,9 +43,9 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import (
-    Integration,
     Marketplace,
     Plugin,
+    Plugin__Integration,
     Plugin__User,
     Plugin__UserGroup,
     PluginSkill,
@@ -683,6 +683,18 @@ def lock_skill_plugin__no_commit(skill: Skill, db_session: Session) -> Plugin:
     return plugin
 
 
+def _holds_only_integrations() -> ColumnElement[bool]:
+    """True for a plugin that holds an integration and no skill."""
+    return and_(
+        select(Plugin__Integration.plugin_id)
+        .where(Plugin__Integration.plugin_id == Plugin.id)
+        .exists(),
+        ~select(PluginSkill.id)
+        .where(PluginSkill.plugin_version_id == Plugin.current_version_id)
+        .exists(),
+    )
+
+
 def _skill_name_is_taken(
     marketplace_id: UUID, skill_name: str, plugin_id: UUID, db_session: Session
 ) -> bool:
@@ -738,25 +750,17 @@ def _move_plugin__no_commit(
             )
         )
         if holder_id is not None:
-            # A home plugin that holds no skill does not clash with a skill
-            # name; the label takes a free name. A home plugin that an app
-            # took from its skill holds that skill, and clashes as a skill.
+            # A plugin that holds only integrations has no skill name, so
+            # it does not clash with one; the label takes a free name.
             holder_is_integration = (
                 db_session.scalar(
-                    select(Integration.id)
-                    .join(Plugin, Plugin.id == Integration.plugin_id)
-                    .where(
-                        Integration.plugin_id == holder_id,
-                        ~select(PluginSkill.id)
-                        .where(
-                            PluginSkill.plugin_version_id == Plugin.current_version_id
-                        )
-                        .exists(),
+                    select(Plugin.id).where(
+                        Plugin.id == holder_id, _holds_only_integrations()
                     )
                 )
                 is not None
             )
-            # Behind that home plugin, a skill with this name can hold a
+            # Behind that plugin, a skill with this name can hold a
             # "-2" label, and that skill does clash.
             if on_name_clash == "raise" and (
                 not holder_is_integration
@@ -792,7 +796,7 @@ def release_private_integrations__no_commit(user_id: UUID, db_session: Session) 
         .where(
             Marketplace.kind == MarketplaceKind.USER_UPLOADS,
             Marketplace.owner_user_id == user_id,
-            Plugin.id.in_(select(Integration.plugin_id)),
+            _holds_only_integrations(),
         )
         .order_by(Plugin.id)
         .with_for_update(of=Plugin)

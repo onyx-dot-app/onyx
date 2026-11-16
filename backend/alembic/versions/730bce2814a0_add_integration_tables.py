@@ -1,5 +1,6 @@
 """Add the integration tables and copy each MCP server, external app and
-OpenAPI custom tool into them, with a home plugin for each.
+OpenAPI custom tool into them. Each integration stands alone. A plugin holds
+it through plugin__integration, and the copy makes one such plugin for each.
 
 The old tables stay the tables of each kind: mcp_server, external_app and the
 OpenAPI tool row each get an integration_id. That is the only change to them,
@@ -58,12 +59,12 @@ def _create_tables() -> None:
         sa.Column("kind", sa.String(), nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
+        # The person who added the integration. NULL: an admin manages it.
         sa.Column(
-            "plugin_id",
+            "author_user_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("plugin.id", ondelete="CASCADE"),
-            nullable=False,
-            unique=True,
+            sa.ForeignKey("user.id", ondelete="SET NULL"),
+            nullable=True,
         ),
         sa.Column(
             "enabled", sa.Boolean(), server_default=sa.text("true"), nullable=False
@@ -309,7 +310,7 @@ def _create_tables() -> None:
         ["plugin_id"],
     )
 
-    # An integration that a plugin uses, other than as its home plugin.
+    # The integrations that a plugin holds. Several plugins can hold one.
     op.create_table(
         "plugin__integration",
         sa.Column(
@@ -443,6 +444,7 @@ _CREATE_SOURCES = f"""
                 AS users_can_save_always_allow,
             'organization_library' AS placement,
             NULL::uuid AS author_user_id,
+            NULL::uuid AS creator_user_id,
             -- An app keeps its state: on is available, off is not.
             CASE WHEN NOT a.enabled THEN 'NOT_AVAILABLE' END
                 AS installation_policy,
@@ -503,6 +505,7 @@ _CREATE_SOURCES = f"""
                 WHEN NOT (m.is_public OR m.shared_with_basic)
                     THEN m.owner_user_id
             END,
+            m.owner_user_id,
             CASE
                 WHEN NOT (m.is_public OR m.shared_with_basic)
                     AND m.owner_user_id IS NULL
@@ -558,6 +561,7 @@ _CREATE_SOURCES = f"""
                     THEN 'organization_library'
                 ELSE 'user_uploads'
             END,
+            t.user_id,
             t.user_id,
             CASE WHEN is_default.value THEN 'DEFAULT' END,
             TIMESTAMPTZ '{FALLBACK_CREATED_AT}',
@@ -620,9 +624,9 @@ _CREATE_SOURCES = f"""
             candidates.*
         FROM candidates
     ) numbered
-    -- An app whose only skill is a custom skill takes the plugin of that
-    -- skill as its home plugin, so one plugin holds the skill and the
-    -- integration. A built-in skill has no plugin.
+    -- An app whose only skill is a custom skill gets no plugin of its own:
+    -- the plugin of that skill holds the skill and the integration. A
+    -- built-in skill has no plugin.
     LEFT JOIN LATERAL (
         SELECT p.id AS plugin_id
         FROM external_app__skill es
@@ -723,15 +727,22 @@ _INSERT_VERSIONS = """
 
 _INSERT_INTEGRATIONS = """
     INSERT INTO integration (
-        id, kind, name, description, plugin_id, enabled, auth_mode,
+        id, kind, name, description, author_user_id, enabled, auth_mode,
         auth_method, header_template, users_can_save_always_allow,
         created_at, updated_at
     )
     SELECT
-        id, kind, name, description, plugin_id, enabled, auth_mode,
+        id, kind, name, description, creator_user_id, enabled, auth_mode,
         auth_method, header_template, users_can_save_always_allow,
         created_at, updated_at
     FROM integration_source
+"""
+
+# The plugin that holds each integration: the plugin that the copy made, or
+# the plugin of the one custom skill of an app.
+_INSERT_FIRST_PLUGIN_INTEGRATIONS = """
+    INSERT INTO plugin__integration (plugin_id, integration_id)
+    SELECT plugin_id, id FROM integration_source ORDER BY id
 """
 
 _SET_KIND_INTEGRATIONS = [
@@ -894,8 +905,8 @@ _INSERT_OPENAPI_DEFAULT_POLICIES = """
     ORDER BY src.id
 """
 
-# A skill that needs an external app becomes a plugin that uses the
-# integration of that app, unless it is the home plugin of that integration.
+# A skill that needs an external app becomes a plugin that holds the
+# integration of that app. The one skill of an app has its row already.
 _INSERT_PLUGIN_INTEGRATIONS = """
     INSERT INTO plugin__integration (plugin_id, integration_id)
     SELECT p.id, src.id
@@ -1036,6 +1047,7 @@ def _copy_integrations() -> None:
         _INSERT_PLUGINS,
         _INSERT_VERSIONS,
         _INSERT_INTEGRATIONS,
+        _INSERT_FIRST_PLUGIN_INTEGRATIONS,
         _SET_INTEGRATION_SEQUENCE,
         *_SET_KIND_INTEGRATIONS,
         _INSERT_OAUTH_CLIENTS,
@@ -1099,14 +1111,12 @@ def downgrade() -> None:
         "integration_action",
     ):
         op.drop_table(table)
-    # Each home plugin that the upgrade made goes with its integration. The
-    # plugin of a skill that an app took as its home plugin stays.
+    # Each plugin that the upgrade made goes. The plugin of a skill stays.
     op.execute(
         """
         DELETE FROM plugin p
         USING integration i
-        WHERE p.id = i.plugin_id
-          AND p.id = md5('integration_plugin:' || i.id::text)::uuid
+        WHERE p.id = md5('integration_plugin:' || i.id::text)::uuid
         """
     )
     op.drop_table("integration")

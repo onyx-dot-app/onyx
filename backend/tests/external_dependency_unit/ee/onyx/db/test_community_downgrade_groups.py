@@ -39,6 +39,7 @@ from onyx.db.models import (
     Persona__UserFile,
     Persona__UserGroup,
     Plugin,
+    Plugin__Integration,
     Plugin__UserGroup,
     PluginVersion,
     Skill,
@@ -369,7 +370,7 @@ def test_group_shared_skill_is_published_with_a_free_name_on_a_clash(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_group_shared_integration_is_published(db_session: Session) -> None:
-    """The home plugin of an integration has no skill row. Shared with a
+    """A plugin that holds only integrations has no skill row. Shared with a
     group, it is published too, so the members keep the integration."""
     try:
         owner = _make_user(db_session, in_basic=True)
@@ -391,13 +392,15 @@ def test_group_shared_integration_is_published(db_session: Session) -> None:
         db_session.add(
             PluginVersion(id=plugin_id, plugin_id=plugin_id, version_number=1)
         )
+        integration = Integration(
+            kind=IntegrationKind.MCP_SERVER,
+            name="downgrade-mcp",
+            auth_mode=IntegrationAuthMode.NONE,
+        )
+        db_session.add(integration)
+        db_session.flush()
         db_session.add(
-            Integration(
-                kind=IntegrationKind.MCP_SERVER,
-                name="downgrade-mcp",
-                plugin_id=plugin_id,
-                auth_mode=IntegrationAuthMode.NONE,
-            )
+            Plugin__Integration(plugin_id=plugin_id, integration_id=integration.id)
         )
         db_session.add(
             Plugin__UserGroup(
@@ -447,13 +450,15 @@ def test_group_shared_library_integration_becomes_available(
         db_session.add(
             PluginVersion(id=plugin_id, plugin_id=plugin_id, version_number=1)
         )
+        integration = Integration(
+            kind=IntegrationKind.MCP_SERVER,
+            name="downgrade-mcp",
+            auth_mode=IntegrationAuthMode.NONE,
+        )
+        db_session.add(integration)
+        db_session.flush()
         db_session.add(
-            Integration(
-                kind=IntegrationKind.MCP_SERVER,
-                name="downgrade-mcp",
-                plugin_id=plugin_id,
-                auth_mode=IntegrationAuthMode.NONE,
-            )
+            Plugin__Integration(plugin_id=plugin_id, integration_id=integration.id)
         )
         db_session.add(
             Plugin__UserGroup(

@@ -1,5 +1,5 @@
 """Migration 730bce2814a0 copies each MCP server, external app and OpenAPI
-custom tool into the integration tables, with a home plugin for each. The
+custom tool into the integration tables, with a plugin that holds each. The
 rows are seeded at the revision before it, then the chain upgrades."""
 
 import hashlib
@@ -593,9 +593,11 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
     if conn.execute(text("SELECT to_regclass('integration')")).scalar_one():
         conn.execute(
             text(
-                "DELETE FROM plugin WHERE id IN (SELECT plugin_id FROM integration "
-                "WHERE id = ANY(:gated) OR id IN "
-                "(SELECT integration_id FROM tool WHERE id = ANY(:tools)) OR id IN "
+                "DELETE FROM plugin WHERE id IN (SELECT plugin_id "
+                "FROM plugin__integration WHERE integration_id = ANY(:gated) "
+                "OR integration_id IN "
+                "(SELECT integration_id FROM tool WHERE id = ANY(:tools)) "
+                "OR integration_id IN "
                 "(SELECT integration_id FROM external_app WHERE id = ANY(:apps)))"
             ),
             {
@@ -708,16 +710,25 @@ class Copied:
     users_can_save_always_allow: bool
 
 
+# The plugin that the copy gave an integration: the plugin that the copy
+# made, or the plugin of the one custom skill of an app.
+FIRST_PLUGIN = (
+    "coalesce((SELECT id FROM plugin WHERE id = "
+    "md5('integration_plugin:' || i.id::text)::uuid), "
+    "(SELECT plugin_id FROM plugin__integration WHERE integration_id = i.id))"
+)
+
+
 def _copied(conn: Connection, where: str, **params: Any) -> Copied:
     row = conn.execute(
         text(
-            "SELECT i.id, i.kind, i.name, i.plugin_id, p.name AS plugin_name, "
+            "SELECT i.id, i.kind, i.name, p.id AS plugin_id, p.name AS plugin_name, "
             "p.marketplace_id, m.kind AS marketplace_kind, p.author_user_id, "
             "p.published_version_id IS NOT NULL AS published, "
             "p.installation_policy, i.auth_mode, "
             "i.auth_method, i.header_template, "
             "i.users_can_save_always_allow "
-            "FROM integration i JOIN plugin p ON p.id = i.plugin_id "
+            f"FROM integration i JOIN plugin p ON p.id = {FIRST_PLUGIN} "
             f"JOIN plugin_marketplace m ON m.id = p.marketplace_id WHERE {where}"
         ),
         params,
@@ -806,7 +817,8 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         ).scalar_one()
         assert next_id > max(c.id for c in custom.values())
 
-        # Each home plugin has one version with no bundle and no skill.
+        # Each plugin that the copy made has one version, with no bundle and
+        # no skill.
         for copied in (public, private, orphan, slack, app_custom, *custom.values()):
             version = conn.execute(
                 text(
@@ -1036,21 +1048,35 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
                 {"ids": [c.id for c in custom.values()]},
             )
         } == {(c.id, "", None, "allow") for c in custom.values()}
-        # An app with one custom skill takes the plugin of that skill as its
-        # home plugin: one plugin holds the skill and the integration.
+        # An app with one custom skill gets no plugin of its own: the plugin
+        # of that skill holds the skill and the integration.
         assert user_key.plugin_id == seeded.only_skill
-        # An app with two skills gets a home plugin, and each skill uses it.
+        # An app with two skills gets a plugin of its own, and the plugin of
+        # each skill holds the integration too.
         assert org_key.plugin_id not in seeded.shared_skills
         assert {
             (row.plugin_id, row.integration_id)
             for row in conn.execute(
                 text(
                     "SELECT plugin_id, integration_id FROM plugin__integration "
-                    "WHERE plugin_id = ANY(:p)"
+                    "WHERE integration_id = ANY(:i)"
                 ),
-                {"p": [seeded.only_skill, *seeded.shared_skills]},
+                {"i": [org_key.id, user_key.id, slack.id]},
             )
-        } == {(skill_id, org_key.id) for skill_id in seeded.shared_skills}
+        } == {
+            (seeded.only_skill, user_key.id),
+            (org_key.plugin_id, org_key.id),
+            *((skill_id, org_key.id) for skill_id in seeded.shared_skills),
+            (slack.plugin_id, slack.id),
+        }
+        # The person who added an integration is its author.
+        assert (
+            conn.execute(
+                text("SELECT author_user_id FROM integration WHERE id = :id"),
+                {"id": private.id},
+            ).scalar_one()
+            == seeded.owner
+        )
 
         # Choices of users.
         preferences = {
@@ -1230,7 +1256,7 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
             ).scalar_one()
             == 0
         )
-        # The plugin of a skill that an app took as its home plugin stays.
+        # The plugin of a skill stays, also when it holds an integration.
         assert (
             conn.execute(
                 text("SELECT count(*) FROM plugin WHERE id = :id"),
@@ -1255,12 +1281,14 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
     assert _fingerprint(engine, new_tables) == first
 
 
-def test_share_publish_and_delete_a_home_plugin(engine: Engine, seeded: Seeded) -> None:
+def test_share_publish_and_delete_an_integration_plugin(
+    engine: Engine, seeded: Seeded
+) -> None:
     _migrate("upgrade", "head")
     with engine.connect() as conn:
         integration_id = seeded.gated["mcp_private"]
         plugin_id = conn.execute(
-            text("SELECT plugin_id FROM integration WHERE id = :id"),
+            text(f"SELECT {FIRST_PLUGIN} FROM integration i WHERE i.id = :id"),
             {"id": integration_id},
         ).scalar_one()
 
@@ -1300,21 +1328,28 @@ def test_share_publish_and_delete_a_home_plugin(engine: Engine, seeded: Seeded) 
         )
 
         conn.execute(text("DELETE FROM plugin WHERE id = :id"), {"id": plugin_id})
-        # The MCP server stays; old code still reads it.
-        assert _kind_integration(conn, "mcp_server", seeded.mcp_private) is None
-        for table in (
-            "integration",
-            "integration_action",
-            "integration_action_policy",
-        ):
-            column = "id" if table == "integration" else "integration_id"
+        # The integration stands alone: it stays, with its actions and
+        # policies. Only the row that put it in the plugin goes.
+        assert _kind_integration(conn, "mcp_server", seeded.mcp_private) == (
+            integration_id
+        )
+        for table in ("integration_action", "integration_action_policy"):
             assert (
                 conn.execute(
-                    text(f"SELECT count(*) FROM {table} WHERE {column} = :id"),
+                    text(f"SELECT count(*) FROM {table} WHERE integration_id = :id"),
                     {"id": integration_id},
                 ).scalar_one()
-                == 0
+                > 0
             )
+        assert (
+            conn.execute(
+                text(
+                    "SELECT count(*) FROM plugin__integration WHERE integration_id = :id"
+                ),
+                {"id": integration_id},
+            ).scalar_one()
+            == 0
+        )
 
 
 def test_user_delete_keeps_private_integrations_for_their_people(
@@ -1337,7 +1372,8 @@ def test_user_delete_keeps_private_integrations_for_their_people(
                     "SELECT p.marketplace_id, p.installation_policy, "
                     "p.published_version_id = p.current_version_id AS published, "
                     "p.author_user_id FROM integration i "
-                    f"JOIN plugin p ON p.id = i.plugin_id WHERE {TOOL_INTEGRATION}"
+                    f"JOIN plugin p ON p.id = {FIRST_PLUGIN} "
+                    f"WHERE {TOOL_INTEGRATION}"
                 ),
                 {"t": tool_id},
             ).one()
@@ -1349,13 +1385,15 @@ def test_user_delete_keeps_private_integrations_for_their_people(
 def test_publishing_a_skill_named_like_an_integration(
     engine: Engine, seeded: Seeded
 ) -> None:
-    """A home plugin holds no skill, so a skill with its name still publishes.
+    """A plugin that holds only integrations has no skill, so a skill with its
+    name still publishes.
     Only the plugin label takes a free name."""
     _migrate("upgrade", "head")
     with engine.connect() as conn:
         integration_name = conn.execute(
             text(
-                "SELECT p.name FROM integration i JOIN plugin p ON p.id = i.plugin_id "
+                "SELECT p.name FROM integration i "
+                f"JOIN plugin p ON p.id = {FIRST_PLUGIN} "
                 f"WHERE {TOOL_INTEGRATION}"
             ),
             {"t": seeded.custom_shared},

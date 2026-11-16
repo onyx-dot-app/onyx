@@ -6025,8 +6025,9 @@ class UserPluginPreference(Base):
 
 
 class Integration(Base):
-    """A connection from Onyx to one service: an MCP server or an HTTP API. Its
-    home plugin gives its owner, scope and access. The settings of each kind
+    """A connection from Onyx to one service: an MCP server or an HTTP API. It
+    stands alone: a plugin holds it through ``plugin__integration``, and that
+    plugin gives the access and the install setting. The settings of each kind
     stay on the kind's own table (``mcp_server``, ``external_app``, or the
     OpenAPI ``tool`` row), which points here through ``integration_id``.
 
@@ -6049,11 +6050,11 @@ class Integration(Base):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    plugin_id: Mapped[UUID] = mapped_column(
+    # The person who added the integration. NULL: an admin manages it.
+    author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("plugin.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
     )
     enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
@@ -6409,9 +6410,10 @@ class Persona__Plugin(Base):
 
 
 class Plugin__Integration(Base):
-    """An integration that a plugin uses, such as the app that its skills
-    call. The home plugin of an integration is ``Integration.plugin_id``, not
-    a row here."""
+    """An integration that a plugin holds. Several plugins can hold one
+    integration. A person reaches an integration through a plugin that holds
+    it, so the plugin gives the access, the install setting and the on/off
+    choice."""
 
     __tablename__ = "plugin__integration"
 

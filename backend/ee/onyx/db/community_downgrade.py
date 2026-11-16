@@ -266,7 +266,7 @@ def _make_group_shared_resources_public__no_commit(
             plugin_id,
             published_name,
         )
-    # A plugin with no skill row, such as the home plugin of an integration.
+    # A plugin with no skill row, such as one that holds only integrations.
     other_plugin_ids: Sequence[UUID] = db_session.scalars(
         select(Plugin.id)
         .where(
