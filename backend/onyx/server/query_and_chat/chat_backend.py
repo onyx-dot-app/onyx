@@ -1895,8 +1895,10 @@ def decide_approval(
         and approval.decided_via == ApprovalDecidedVia.USER
     )
     if approval.decision is None or upgrades_to_grant:
+        # An approval with no gated_app has no policy here, so it is refused.
         blocked = (
-            current_action_policy(
+            approval.gated_app_id is None
+            or current_action_policy(
                 db_session,
                 user_id=user.id,
                 gated_app_id=approval.gated_app_id,
