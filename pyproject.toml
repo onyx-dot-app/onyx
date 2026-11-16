@@ -74,7 +74,7 @@ backend = [
     "msal==1.37.0",
     "msoffcrypto-tool==6.0.0",
     "Office365-REST-Python-Client==2.6.2",
-    "oauthlib==4.0.0",
+    "oauthlib==4.0.1",
     # NOTE: This is frozen to avoid https://foss.heptapod.net/openpyxl/openpyxl/-/issues/2147
     "openpyxl==3.0.10",
     "opensearch-py==3.2.0",
@@ -223,6 +223,10 @@ override-dependencies = [
     # explicit so a future resolver change can't drop back to the <=6.4.2 that
     # mitmproxy 11.x capped to (CVE-2025-47287, multipart logging DoS).
     "tornado>=6.5.0,<7.0",
+    # mitmproxy 12.2.3 caps urwid at 3.0.5, below the 4.0.7 fix for
+    # GHSA-cp25-j9x5-p5xm (request-handling DoS). Only its console UI imports
+    # urwid, and the sandbox proxy never runs it.
+    "urwid>=4.0.7,<5.0",
     "msgpack>=1.0.0,<2.0",
 ]
 
