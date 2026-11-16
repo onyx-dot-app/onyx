@@ -1,11 +1,13 @@
 """Tests for pruning-specific Prometheus metrics."""
 
+from unittest.mock import patch
+
 import pytest
 
+from onyx.server.metrics import pruning_metrics
 from onyx.server.metrics.pruning_metrics import (
     PRUNING_DIFF_DURATION,
     PRUNING_ENUMERATION_DURATION,
-    PRUNING_FAILURES,
     PRUNING_RATE_LIMIT_ERRORS,
     inc_pruning_failure,
     inc_pruning_rate_limit_error,
@@ -133,26 +135,24 @@ class TestIncPruningRateLimitError:
 
 
 class TestIncPruningFailure:
-    def test_increments_counter(self) -> None:
-        before = PRUNING_FAILURES.labels(connector_type="s3")._value.get()
+    def test_increments_with_tenant_and_connector_type(self) -> None:
+        with patch.object(pruning_metrics, "PRUNING_FAILURES") as counter:
+            inc_pruning_failure("tenant_a", "s3")
 
-        inc_pruning_failure("s3")
-
-        after = PRUNING_FAILURES.labels(connector_type="s3")._value.get()
-        assert after == before + 1
+        counter.labels.assert_called_once_with(
+            tenant_id="tenant_a", connector_type="s3"
+        )
+        counter.labels.return_value.inc.assert_called_once_with()
 
     def test_empty_connector_type_is_unknown(self) -> None:
-        before = PRUNING_FAILURES.labels(connector_type="unknown")._value.get()
+        with patch.object(pruning_metrics, "PRUNING_FAILURES") as counter:
+            inc_pruning_failure("tenant_a", "")
 
-        inc_pruning_failure("")
-
-        after = PRUNING_FAILURES.labels(connector_type="unknown")._value.get()
-        assert after == before + 1
-
-    def test_does_not_raise_on_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            PRUNING_FAILURES,
-            "labels",
-            lambda **_: (_ for _ in ()).throw(RuntimeError("boom")),
+        counter.labels.assert_called_once_with(
+            tenant_id="tenant_a", connector_type="unknown"
         )
-        inc_pruning_failure("s3")
+
+    def test_does_not_raise_on_exception(self) -> None:
+        with patch.object(pruning_metrics, "PRUNING_FAILURES") as counter:
+            counter.labels.side_effect = RuntimeError("boom")
+            inc_pruning_failure("tenant_a", "s3")

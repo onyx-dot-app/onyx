@@ -887,7 +887,7 @@ def connector_pruning_generator_task(
             f"Pruning exceptioned: cc_pair={cc_pair_id} connector={connector_id} payload_id={payload_id}"
         )
 
-        inc_pruning_failure(connector_type)
+        inc_pruning_failure(tenant_id, connector_type)
 
         # Back off so a failing prune isn't re-dispatched on the next beat.
         redis_connector.prune.set_failure_backoff()
