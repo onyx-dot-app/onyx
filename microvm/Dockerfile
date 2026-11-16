@@ -42,7 +42,7 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/host-agent ./cmd/host-agent
 
-FROM ${BASE_IMAGE_REGISTRY}/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS xfsprogs
+FROM ${BASE_IMAGE_REGISTRY}/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS xfsprogs
 ARG DEBIAN_FRONTEND=noninteractive
 # /out gets mkfs.xfs, the libraries it links that the base image does not have,
 # and the dpkg records (status.d, as distroless images do) and copyright files
@@ -68,7 +68,7 @@ RUN set -eu; \
       cp "/usr/share/doc/${pkg}/copyright" "/out/usr/share/doc/${pkg}/"; \
     done
 
-FROM ${BASE_IMAGE_REGISTRY}/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+FROM ${BASE_IMAGE_REGISTRY}/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 ARG DEBIAN_FRONTEND=noninteractive
 # ca-certificates: the node key registration calls the api_server (--api-server-url).
 # e2fsprogs: mkfs.ext4 -d for the managed drive images.
