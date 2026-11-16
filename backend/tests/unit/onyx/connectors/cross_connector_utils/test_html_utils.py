@@ -47,3 +47,23 @@ def test_markdown_link_ends_at_anchor(
     assert parse_html_page_basic(html) == (
         "See [this link](https://example.com) now.\nNext paragraph."
     )
+
+
+def test_links_and_tables_apply_to_nested_elements(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        html_utils,
+        "HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY",
+        HtmlBasedConnectorTransformLinksStrategy.MARKDOWN,
+    )
+    html = (
+        '<p><a href="https://example.com/a"><b>bold</b></a></p>'
+        '<table><tr><td><a href="https://example.com/b"><i>cell</i></a></td>'
+        "<td><table><tr><td>inner</td></tr></table></td></tr></table>"
+        '<p><a href="https://example.com/c">after</a></p>'
+    )
+
+    assert parse_html_page_basic(html) == (
+        "[bold](https://example.com/a)\n\tcell\t\n\tinner\n[after](https://example.com/c)"
+    )
