@@ -153,10 +153,10 @@ Both products draw a block with the same components in
 (run header, fold, timer, Done or Stopped row) and `RunStep` is a step (its
 status sets the spinner, the alert icon and the failed tint). `CraftTimeline`
 and chat's `AgentTimeline` only map their steps onto them. Each step is an
-Opal `Line` (the base of the connector check card's `LogLine`): icon, a
-full-width title (Craft puts the command or path in it as a code span), and
-trailing content with the chevron; the whole line folds the step's body, and a
-failed step is an `error-heavy` line. Every block folds, even with one entry, once
+Opal `Line` (it shares its base row with the connector check card's `Log`):
+icon, a full-width title (Craft puts the command or path in it as a code span),
+and trailing content with the chevron; only the row folds the step's body, so
+a click or a text selection in the body never folds it, and a failed step is an `error-heavy` line. Every block folds, even with one entry, once
 a text reply follows. A whole response is laid out by the shared `Response`
 (`web/src/lib/timeline/components/Response.tsx`): `BuildMessageList` and chat's
 `AgentMessage` only build its items (runs, text, cards) in arrival order, and

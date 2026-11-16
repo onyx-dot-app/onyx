@@ -1,11 +1,10 @@
 "use client";
 
-import "@opal/components/lines/line/styles.css";
+import "@opal/components/cards/line-base/styles.css";
 import { Section } from "@opal/layouts/general/components";
-import { Text } from "@opal/components/text/components";
 import { Fold } from "@opal/components/fold/components";
 import { Interactive } from "@opal/core";
-import type { IconFunctionComponent, RichStr, StatusColor } from "@opal/types";
+import type { IconFunctionComponent, StatusColor } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,7 +27,8 @@ type LineVariant =
   | "default"
   | `${Exclude<LineStatus, "default">}-${LineWeight}`;
 
-type LineCommonProps = {
+/** The props every line shares: `Line` and `Log`. */
+type LineBaseProps = {
   /** Colours the icon; a heavy variant also tints the line and its body. */
   variant?: LineVariant;
   /**
@@ -46,26 +46,7 @@ type LineCommonProps = {
    * button there is nearer the edge. Not padded.
    */
   rightChildren?: React.ReactNode;
-  /**
-   * Makes the line interactive: the line and its body hover and press as
-   * one, and a click anywhere on them, except on a link, calls this. A button
-   * inside (e.g. a chevron) is its keyboard target; that button's click
-   * reaches this too.
-   */
-  onClick?: () => void;
 };
-
-type LineContentProps =
-  | {
-      /** What the line is about. Fills the row, on one line. */
-      title: string | RichStr;
-      children?: never;
-    }
-  | {
-      /** A row of your own between the icon and `rightChildren`. */
-      children: React.ReactNode;
-      title?: never;
-    };
 
 type LineExpandableProps =
   | { expandable?: false; expanded?: never; expandedContent?: never }
@@ -77,8 +58,6 @@ type LineExpandableProps =
       /** The body, aligned under the content. */
       expandedContent: React.ReactNode;
     };
-
-type LineProps = LineCommonProps & LineContentProps & LineExpandableProps;
 
 const VARIANTS: Record<
   LineVariant,
@@ -96,33 +75,50 @@ const VARIANTS: Record<
 };
 
 // ---------------------------------------------------------------------------
-// Line
+// LineRoot
 // ---------------------------------------------------------------------------
 
-/**
- * One line of a list, a log or a timeline: an icon, a title (or a row of your
- * own) and trailing content, 1.75rem tall plus its padding. The variant
- * colours the icon; a heavy variant also tints the line, and its body when
- * expanded. A title too long for the row shows in full in a tooltip.
- *
- * With `onClick`, the line is interactive. With `expandable`, a body opens
- * below it while `expanded`.
- */
-function Line({
-  variant = "default",
-  padding = 1,
-  icon: Icon,
-  title,
-  children,
-  rightChildren,
-  onClick,
-  expandable,
-  expanded,
-  expandedContent,
-}: LineProps) {
-  const { status, weight } = VARIANTS[variant];
+interface LineRootProps {
+  variant: LineVariant;
+  padding: 0 | 1;
+  children: React.ReactNode;
+}
 
-  const line = (
+/** The line's frame: its rounding, status colours and heavy tint. */
+function LineRoot({ variant, padding, children }: LineRootProps) {
+  const { status, weight } = VARIANTS[variant];
+  return (
+    <div
+      className="opal-line"
+      data-opal-line-status={status}
+      data-opal-line-weight={weight}
+      data-opal-line-padding={padding}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LineRow
+// ---------------------------------------------------------------------------
+
+interface LineRowProps {
+  padding: 0 | 1;
+  icon: IconFunctionComponent;
+  rightChildren?: React.ReactNode;
+  /** The content between the icon and `rightChildren`. */
+  children: React.ReactNode;
+}
+
+/** The line itself: the icon, the content and the trailing content. */
+function LineRow({
+  padding,
+  icon: Icon,
+  rightChildren,
+  children,
+}: LineRowProps) {
+  return (
     <Section
       flexDirection="row"
       justifyContent="start"
@@ -145,80 +141,70 @@ function Line({
         <Section width="fit" height="fit" padding={0.5}>
           <Icon size={16} className="opal-line-icon" />
         </Section>
-
-        {children ?? (
-          <Section
-            flexDirection="row"
-            justifyContent="start"
-            height="fit"
-            className="min-w-0 flex-1"
-          >
-            <Text
-              maxLines={1}
-              overflowTooltip
-              font="secondary-action"
-              color="text-03"
-            >
-              {title}
-            </Text>
-          </Section>
-        )}
+        {children}
       </Section>
 
       {rightChildren}
     </Section>
   );
+}
 
-  const body = expandable && (
+// ---------------------------------------------------------------------------
+// LineBody
+// ---------------------------------------------------------------------------
+
+interface LineBodyProps {
+  expanded: boolean;
+  children: React.ReactNode;
+}
+
+/** The body that opens below the line, indented to start under the content. */
+function LineBody({ expanded, children }: LineBodyProps) {
+  return (
     <Fold open={expanded}>
-      <div className="opal-line-body">{expandedContent}</div>
+      <div className="opal-line-body">{children}</div>
     </Fold>
   );
+}
 
+// ---------------------------------------------------------------------------
+// LineSurface
+// ---------------------------------------------------------------------------
+
+interface LineSurfaceProps {
+  /** Called on a click anywhere in the surface, except on a link. */
+  onClick: () => void;
+  children: React.ReactNode;
+}
+
+/** A `tertiary` stateless surface that hovers, presses and clicks as one. */
+function LineSurface({ onClick, children }: LineSurfaceProps) {
   return (
-    <div
-      className="opal-line"
-      data-opal-line-status={status}
-      data-opal-line-weight={weight}
-      data-opal-line-padding={padding}
+    <Interactive.Stateless
+      variant="default"
+      prominence="tertiary"
+      onClick={(event: React.MouseEvent) => {
+        if (event.target instanceof Element && event.target.closest("a")) {
+          return;
+        }
+        onClick();
+      }}
     >
-      {onClick ? (
-        // The whole line is one surface: the line and its body hover and
-        // press together, and a click anywhere toggles it. A link inside
-        // keeps its own click.
-        <Interactive.Stateless
-          variant="default"
-          prominence="tertiary"
-          onClick={(event: React.MouseEvent) => {
-            if (event.target instanceof Element && event.target.closest("a")) {
-              return;
-            }
-            onClick();
-          }}
-        >
-          <Interactive.Container rounding={2} size="fit" width="full">
-            {/* The container centres a flex child; this one fills it and may
-                shrink, so the line truncates instead of overflowing. */}
-            <div className="w-full min-w-0">
-              {line}
-              {body}
-            </div>
-          </Interactive.Container>
-        </Interactive.Stateless>
-      ) : (
-        <>
-          {line}
-          {body}
-        </>
-      )}
-    </div>
+      <Interactive.Container rounding={2} size="fit" width="full">
+        {/* The container centres a flex child; this one fills it and may
+            shrink, so the line truncates instead of overflowing. */}
+        <div className="w-full min-w-0">{children}</div>
+      </Interactive.Container>
+    </Interactive.Stateless>
   );
 }
 
 export {
-  Line,
-  type LineProps,
-  type LineCommonProps,
+  LineBody,
+  LineRoot,
+  LineRow,
+  LineSurface,
+  type LineBaseProps,
   type LineExpandableProps,
   type LineStatus,
   type LineVariant,

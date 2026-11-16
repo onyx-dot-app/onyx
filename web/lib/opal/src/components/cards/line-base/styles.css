@@ -1,10 +1,10 @@
 @reference "#reference.css";
 
-/* ── Line ────────────────────────────────────────────────────────────────────
+/* ── Line and Log ────────────────────────────────────────────────────────────
    The status colours the icon (icons stroke with `currentColor`, so a `text-*`
    colour sets it), and the heavy weight tints the line and its body. A row of
    your own brings its own colours. An interactive line takes its hover and
-   press colours from `Interactive.Stateless`. */
+   press colours from `Interactive.Stateless` (`LineSurface`). */
 
 .opal-line {
   @apply rounded-08;

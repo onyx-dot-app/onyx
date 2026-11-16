@@ -2,10 +2,13 @@
 
 **Import:** `import { Line } from "@opal/components";`
 
-One line of a list, a log or a timeline: an icon, a title (or a row of your
-own) and trailing content. A line is plain unless it gets `onClick`, and it can
-open a body below it with `expandable`. [`LogLine`](../log-line/README.md) is a
-`Line` with a log's column layout.
+One line of a list or a timeline: an icon, a title and trailing content. A
+line is plain unless it gets `onClick`, and it can open a body below it with
+`expandable`. Like an expandable [`SelectCard`](../select-card/README.md), only
+the row is interactive: clicks and text selection in the body never reach
+`onClick`. [`Log`](../../log/README.md) shares the same row (from the internal
+[`line-base`](../line-base/README.md)) with a log's column layout, and makes
+its body interactive too.
 
 ## Props
 
@@ -15,9 +18,8 @@ open a body below it with `expandable`. [`LogLine`](../log-line/README.md) is a
 | `padding`         | `0 \| 1`                | `1`         | The outer padding, as a spacing step (`N / 4` rem). `0` for a line inside a container that pads it already          |
 | `icon`            | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                                                                 |
 | `title`           | `string \| RichStr`     | —           | `secondary-action` in `text-03`. Fills the row, on one line, cut with an ellipsis and shown in full in a tooltip     |
-| `children`        | `ReactNode`             | —           | A row of your own in place of `title`, between the icon and `rightChildren`. Give one of `title` and `children`     |
 | `rightChildren`   | `ReactNode`             | —           | Trailing content at the very end (a tag, actions, a fold chevron), outside the line's inner padding; not padded     |
-| `onClick`         | `() => void`            | —           | Makes the whole line interactive (`Interactive.Stateless`, `tertiary`)                                              |
+| `onClick`         | `() => void`            | —           | Makes the row interactive (`Interactive.Stateless`, `tertiary`); the body never calls it                            |
 | `expandable`      | `true`                  | —           | Enables `expanded` and `expandedContent`                                                                            |
 | `expanded`        | `boolean`               | —           | Whether the body is open; controlled, the caller owns the state                                                     |
 | `expandedContent` | `ReactNode`             | —           | The body, opened in a `Fold` and aligned under the content                                                          |
@@ -44,13 +46,15 @@ that fits the state (for example a spinner or an alert).
 - A row `Section`, 1.75rem tall plus `padding` on each side. Everything but
   `rightChildren` sits in an inner row with another 0.25rem and a 0.25rem gap,
   so tall trailing content cannot stretch the line.
-- With `onClick`, the line and its body hover and press as one `tertiary`
-  stateless surface, and a click anywhere on it but a link calls `onClick`. Put
-  a button in `rightChildren` (e.g. a chevron) as its keyboard target: that
-  button's click reaches `onClick` too. A button with its own action stops its
-  click from bubbling.
-- With `expandable`, the body opens below the line in a `Fold`, indented to
-  start under the content. A heavy variant tints the body too.
+- With `onClick`, the row hovers and presses as a `tertiary` stateless
+  surface, and a click anywhere on it but a link calls `onClick`. Put a button
+  in `rightChildren` (e.g. a chevron) as its keyboard target: that button's
+  click reaches `onClick` too. A button with its own action stops its click
+  from bubbling.
+- With `expandable`, the body opens below the row in a `Fold`, indented to
+  start under the content. It sits outside the row's surface: it does not
+  hover, and its clicks and text selection stay its own. A heavy variant tints
+  the body too.
 
 ## Usage
 
