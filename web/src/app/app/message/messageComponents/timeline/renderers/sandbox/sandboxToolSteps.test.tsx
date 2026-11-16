@@ -281,7 +281,11 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
   const rejected = at({ turn_index: 1, tab_index: 0 });
   const view = render(
     renderMessage([
-      applied({ type: PacketType.APPLY_PATCH_START, patch: PATCH }),
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "apply_patch",
+      }),
       applied({
         type: PacketType.APPLY_PATCH_END,
         files: [
@@ -291,7 +295,11 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
         error: null,
       }),
       applied(sectionEnd),
-      rejected({ type: PacketType.APPLY_PATCH_START, patch: PATCH }),
+      rejected({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "apply_patch",
+      }),
       rejected({
         type: PacketType.APPLY_PATCH_END,
         files: [],
@@ -309,10 +317,39 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
     // The card lays out only the head of each patch.
     expect(screen.getAllByText(/\+print\('hi'\)/)).toHaveLength(2);
     expect(screen.queryByText(/\+a = 2/)).not.toBeInTheDocument();
-    expect(screen.getByText("Patch failed")).toBeInTheDocument();
+    expect(screen.getByText("Edit failed")).toBeInTheDocument();
     expect(
       screen.getByText("Failed to find expected lines in old.py")
     ).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("parallel edit and write calls are titled by their file tool", async () => {
+  const edited = at({ turn_index: 0, tab_index: 0 });
+  const written = at({ turn_index: 0, tab_index: 1 });
+  const view = render(
+    renderMessage([
+      edited({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "edit",
+      }),
+      edited(sectionEnd),
+      written({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "write",
+      }),
+      written(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("Edit File")).toBeInTheDocument();
+    expect(screen.getByText("Write File")).toBeInTheDocument();
   } finally {
     view.unmount();
   }
@@ -335,7 +372,11 @@ test("a cut patch head keeps a line past the view when the next line is blank", 
   const applied = at({ turn_index: 0, tab_index: 0 });
   const view = render(
     renderMessage([
-      applied({ type: PacketType.APPLY_PATCH_START, patch }),
+      applied({
+        type: PacketType.APPLY_PATCH_START,
+        patch,
+        tool_name: "apply_patch",
+      }),
       applied({
         type: PacketType.APPLY_PATCH_END,
         files: [{ path: "a.py", change: "update", move_path: null }],
@@ -380,7 +421,11 @@ test("sandbox calls of a code mode program show as their own steps", async () =>
         error: null,
       }),
       command(sectionEnd),
-      patch({ type: PacketType.APPLY_PATCH_START, patch: PATCH }),
+      patch({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "apply_patch",
+      }),
       patch({
         type: PacketType.APPLY_PATCH_END,
         files: [{ path: "gone.py", change: "delete", move_path: null }],
@@ -547,7 +592,11 @@ test("a call the user stopped shows as stopped, not as a result", async () => {
       }),
       command({ type: PacketType.EXEC_OUTPUT_DELTA, text: "waiting\n" }),
       command(sectionEnd),
-      patch({ type: PacketType.APPLY_PATCH_START, patch: PATCH }),
+      patch({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "apply_patch",
+      }),
       patch(sectionEnd),
       at({ turn_index: 2, tab_index: 0 })({
         type: PacketType.STOP,

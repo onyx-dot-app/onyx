@@ -13256,7 +13256,9 @@
           "tool": "도구",
           "webSearch": "웹 검색",
           "terminal": "터미널",
-          "applyPatch": "패치 적용"
+          "applyPatch": "패치 적용",
+          "editFile": "파일 편집",
+          "writeFile": "파일 쓰기"
         },
         "webSearch": {
           "searching": {
@@ -13296,7 +13298,7 @@
               "status": "{count, plural, one {파일 #개 편집함} other {파일 #개 편집함}}"
             },
             "failed": {
-              "status": "패치 실패"
+              "status": "편집 실패"
             },
             "title": "패치"
           },

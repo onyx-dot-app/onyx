@@ -1,10 +1,10 @@
 """Tools that run commands and edit files in the user's private sandbox
-(`server/features/build/sandbox/harness_base.py:HarnessSandbox`):
-exec_command, write_stdin and apply_patch.
+(`server/features/build/sandbox/harness_base.py:HarnessSandbox`).
+`sandbox_tools_for_model` gives the set that a turn's model gets.
 
-They have no tool row: a chat turn builds all three when it offers the
-sandbox (`chat/execution.py:create_chat_agent`), and they share a
-`SandboxTurn`. The sandbox is the isolation, so calls need no approval.
+They have no tool row: a chat turn builds them when it offers the sandbox
+(`chat/execution.py:create_chat_agent`), and they share a `SandboxTurn`. The
+sandbox is the isolation, so calls need no approval.
 """
 
 import posixpath
@@ -20,18 +20,24 @@ from onyx.agents.tools import (
     ToolInvocation,
     ToolProgress,
 )
+from onyx.llm.model_capabilities import is_claude_model
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.sandbox_tools import (
     APPLY_PATCH_DESCRIPTION,
     APPLY_PATCH_USE,
+    EDIT_DESCRIPTION,
+    EDIT_USE,
     EXEC_COMMAND_DESCRIPTION,
     EXEC_COMMAND_USE,
     SANDBOX_CODE_MODE_NOTE,
     SANDBOX_GUIDANCE,
+    WRITE_DESCRIPTION,
     WRITE_STDIN_DESCRIPTION,
     WRITE_STDIN_USE,
+    WRITE_USE,
 )
 from onyx.server.features.build.sandbox.harness_base import (
+    HarnessSandbox,
     HarnessSandboxError,
     SandboxPathError,
     session_relative_path,
@@ -58,21 +64,25 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchArguments,
     ApplyPatchFileChange,
     ApplyPatchResult,
+    EditArguments,
     ExecCommandArguments,
     ExecCommandOutput,
+    FileToolName,
     SandboxExecResult,
+    WriteArguments,
     WriteStdinArguments,
 )
 from onyx.tools.tool_implementations.sandbox.patch import (
-    APPLY_PATCH_MAX_FILE_BYTES,
-    APPLY_PATCH_MAX_INPUT_BYTES,
     APPLY_PATCH_MAX_STAGED_BYTES,
+    FILE_TOOL_MAX_FILE_BYTES,
+    FILE_TOOL_MAX_INPUT_BYTES,
     AddFile,
     DeleteFile,
     PatchError,
     PatchHunk,
     SeekBudget,
     UpdateFile,
+    edit_text,
     ensure_unique_targets,
     parse_patch,
     summarize,
@@ -99,6 +109,9 @@ _CHANGES: dict[type[PatchHunk], Literal["add", "update", "delete"]] = {
 
 _EXEC_RESULT = CodeModeResultSpec(
     kind=CodeModeResultKind.DETAILS, model=ExecCommandOutput
+)
+_FILE_TOOL_RESULT = CodeModeResultSpec(
+    kind=CodeModeResultKind.TEXT, annotation="str", returns="The result message."
 )
 
 
@@ -235,8 +248,7 @@ class WriteStdinTool(SandboxTool):
 
 
 def _verification_failed(message: str) -> ToolCallException:
-    text = f"apply_patch verification failed: {message}"
-    return ToolCallException(text, text)
+    return _tool_error(f"apply_patch verification failed: {message}")
 
 
 def _file_path(ref: HarnessSandboxRef, path: str) -> str:
@@ -248,18 +260,18 @@ def _file_path(ref: HarnessSandboxRef, path: str) -> str:
 
 
 def _check_patchable(path: str, info: SandboxPathInfo) -> None:
-    """Raise PatchError unless a patch can read and write `path` itself: it
-    does not follow a link at the path, and the path's parents must lead to
-    a place in the session directory."""
+    """Raise PatchError unless a file tool can read and write `path` itself:
+    it does not follow a link at the path, and the path's parents must lead
+    to a place in the session directory."""
     if info.is_link:
         raise PatchError(
-            f"{path} is a symbolic link to {info.link_target}; patch that path instead"
+            f"{path} is a symbolic link to {info.link_target}; edit that path instead"
         )
     if info.error == "escapes":
         raise PatchError(
             f"{path} goes through a link with an absolute target or one that "
-            "leads outside the session directory; patch the file by a path "
-            "inside the session, or edit it with exec_command"
+            "leads outside the session directory; use a path inside the "
+            "session, or change the file with exec_command"
         )
     if info.error == "loop":
         raise PatchError(f"{path} goes through too many symbolic links")
@@ -268,24 +280,105 @@ def _check_patchable(path: str, info: SandboxPathInfo) -> None:
 
 
 def _check_writable(path: str, info: SandboxPathInfo) -> None:
-    """Raise PatchError unless a patch can write a file at `path`."""
+    """Raise PatchError unless a file tool can write a file at `path`."""
     _check_patchable(path, info)
     if info.type == "directory":
         raise PatchError(f"Failed to write file {path}: it is a directory")
 
 
-class ApplyPatchTool(SandboxTool):
-    NAME = "apply_patch"
+def _read_text(
+    sandbox: HarnessSandbox, ref: HarnessSandboxRef, path: str, info: SandboxPathInfo
+) -> str:
+    """The text of the existing file at `path`, which `_check_patchable`
+    accepted. Raises PatchError unless it is a UTF-8 regular file."""
+    if info.type is None or info.mode is None:
+        raise PatchError(
+            f"Failed to read file to update {path}: No such file or directory"
+        )
+    if info.type != "file":
+        raise PatchError(
+            f"Failed to read file to update {path}: "
+            f"it is a {info.type}, not a regular file"
+        )
+    data = sandbox.read_file(ref, path, max_bytes=FILE_TOOL_MAX_FILE_BYTES)
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise PatchError(
+            f"Failed to read file to update {path}: the file is not UTF-8 text"
+        ) from error
+
+
+def _write_file(
+    sandbox: HarnessSandbox,
+    ref: HarnessSandboxRef,
+    path: str,
+    data: bytes,
+    info: SandboxPathInfo,
+) -> None:
+    """Write `path`, whose facts are `info`; an existing file keeps its mode."""
+    sandbox.write_file(
+        ref, path, data, **({} if info.mode is None else {"mode": info.mode})
+    )
+
+
+def _tool_error(message: str) -> ToolCallException:
+    return ToolCallException(message, message)
+
+
+class _FileTool(SandboxTool):
+    """What the file tools share: the order of calls."""
+
+    # File changes of one step read and write the same files, so all file
+    # tools take turns.
+    sequence_group = "sandbox_file_changes"
+
+    @property
+    def execution_mode(self) -> ToolExecutionMode:
+        return ToolExecutionMode.SEQUENTIAL
+
+
+def _change_file(
+    turn: SandboxTurn,
+    invocation: ToolInvocation,
+    file_path: str,
+    input_bytes: int,
+    contents: Callable[[Callable[[], str | None]], str],
+) -> ApplyPatchFileChange:
+    """Write one file (edit, write) after the checks that apply_patch makes,
+    and return the change. `contents` gets a reader of the file's text (None
+    when it is missing) and returns the new text."""
+    if input_bytes > FILE_TOOL_MAX_INPUT_BYTES:
+        raise _tool_error(
+            f"the input is larger than {FILE_TOOL_MAX_INPUT_BYTES} bytes; "
+            "make smaller changes"
+        )
+    sandbox = turn.sandbox
+    with _sandbox_errors_as_tool_errors():
+        ref = turn.start_call()
+        path = _file_path(ref, file_path)
+        [info] = sandbox.stat_files(ref, [path])
+        created = info.type is None
+        try:
+            _check_writable(path, info)
+            data = contents(
+                lambda: None if created else _read_text(sandbox, ref, path, info)
+            ).encode()
+        except PatchError as error:
+            raise _tool_error(str(error)) from error
+        # A Stop during the checks changes nothing.
+        invocation.cancellation.check()
+        _write_file(sandbox, ref, path, data, info)
+    return ApplyPatchFileChange(path=path, change="add" if created else "update")
+
+
+class ApplyPatchTool(_FileTool):
+    NAME: FileToolName = "apply_patch"
     USE = APPLY_PATCH_USE
     DESCRIPTION = APPLY_PATCH_DESCRIPTION
     ARGUMENTS = ApplyPatchArguments
     # Matches the web card title.
     display_name = "Apply Patch"
-
-    @property
-    def execution_mode(self) -> ToolExecutionMode:
-        # Patches of one step read and write the same files.
-        return ToolExecutionMode.SEQUENTIAL
 
     @property
     def code_mode_result(self) -> CodeModeResultSpec:
@@ -298,9 +391,9 @@ class ApplyPatchTool(SandboxTool):
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         patch = parse_tool_arguments(ApplyPatchArguments, invocation.arguments).input
-        if len(patch.encode()) > APPLY_PATCH_MAX_INPUT_BYTES:
+        if len(patch.encode()) > FILE_TOOL_MAX_INPUT_BYTES:
             raise _verification_failed(
-                f"the patch is larger than {APPLY_PATCH_MAX_INPUT_BYTES} bytes; "
+                f"the patch is larger than {FILE_TOOL_MAX_INPUT_BYTES} bytes; "
                 "split it into smaller patches"
             )
         try:
@@ -366,15 +459,13 @@ class ApplyPatchTool(SandboxTool):
                         writes.append(
                             (
                                 hunk.path,
-                                # An existing file keeps its mode.
                                 partial(
-                                    sandbox.write_file,
+                                    _write_file,
+                                    sandbox,
                                     ref,
                                     hunk.path,
                                     hunk.contents.encode(),
-                                    **(
-                                        {} if info.mode is None else {"mode": info.mode}
-                                    ),
+                                    info,
                                 ),
                             )
                         )
@@ -400,28 +491,9 @@ class ApplyPatchTool(SandboxTool):
                         )
                     else:
                         _check_patchable(hunk.path, info)
-                        if info.type is None or info.mode is None:
-                            raise PatchError(
-                                f"Failed to read file to update {hunk.path}: "
-                                "No such file or directory"
-                            )
-                        if info.type != "file":
-                            raise PatchError(
-                                f"Failed to read file to update {hunk.path}: "
-                                f"it is a {info.type}, not a regular file"
-                            )
                         if hunk.move_path is not None:
                             _check_writable(hunk.move_path, facts[hunk.move_path])
-                        data = sandbox.read_file(
-                            ref, hunk.path, max_bytes=APPLY_PATCH_MAX_FILE_BYTES
-                        )
-                        try:
-                            original = data.decode("utf-8")
-                        except UnicodeDecodeError as error:
-                            raise PatchError(
-                                f"Failed to read file to update {hunk.path}: "
-                                "the file is not UTF-8 text"
-                            ) from error
+                        original = _read_text(sandbox, ref, hunk.path, info)
                         updated = update_contents(
                             hunk.path, original, hunk.chunks, budget
                         ).encode()
@@ -435,12 +507,14 @@ class ApplyPatchTool(SandboxTool):
                         writes.append(
                             (
                                 hunk.move_path or hunk.path,
+                                # A move keeps the mode of its source.
                                 partial(
-                                    sandbox.write_file,
+                                    _write_file,
+                                    sandbox,
                                     ref,
                                     hunk.move_path or hunk.path,
                                     updated,
-                                    mode=info.mode,
+                                    info,
                                 ),
                             )
                         )
@@ -491,12 +565,91 @@ class ApplyPatchTool(SandboxTool):
         )
 
 
-# The sandbox tools that a chat turn builds, in the order the prompt names them.
-SANDBOX_TOOLS: tuple[type[SandboxTool], ...] = (
-    ExecCommandTool,
-    WriteStdinTool,
-    ApplyPatchTool,
-)
+class EditTool(_FileTool):
+    """Replaces a string in a file (`patch.edit_text`), in the shape of
+    Claude Code's Edit tool."""
+
+    NAME: FileToolName = "edit"
+    USE = EDIT_USE
+    DESCRIPTION = EDIT_DESCRIPTION
+    ARGUMENTS = EditArguments
+    # Matches the web card title.
+    display_name = "Edit File"
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return _FILE_TOOL_RESULT
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        arguments = parse_tool_arguments(EditArguments, invocation.arguments)
+        change = _change_file(
+            self._turn,
+            invocation,
+            arguments.file_path,
+            len(arguments.old_string.encode()) + len(arguments.new_string.encode()),
+            lambda read: edit_text(
+                read(),
+                arguments.old_string,
+                arguments.new_string,
+                arguments.replace_all,
+            ),
+        )
+        return ToolResult(
+            content=(
+                f"The file {change.path} has been updated. All occurrences were "
+                "successfully replaced."
+                if arguments.replace_all
+                else f"The file {change.path} has been updated successfully."
+            ),
+            details=ApplyPatchResult(files=[change]),
+        )
+
+
+class WriteTool(_FileTool):
+    """Creates or overwrites a file, in the shape of Claude Code's Write tool.
+    Claude Code's rule that a file is read before it is overwritten does not
+    apply: the sandbox tools do not track reads."""
+
+    NAME: FileToolName = "write"
+    USE = WRITE_USE
+    DESCRIPTION = WRITE_DESCRIPTION
+    ARGUMENTS = WriteArguments
+    # Matches the web card title.
+    display_name = "Write File"
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return _FILE_TOOL_RESULT
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        arguments = parse_tool_arguments(WriteArguments, invocation.arguments)
+        change = _change_file(
+            self._turn,
+            invocation,
+            arguments.file_path,
+            len(arguments.content.encode()),
+            lambda _read: arguments.content,
+        )
+        return ToolResult(
+            content=f"File created successfully at: {change.path}"
+            if change.change == "add"
+            else f"The file {change.path} has been updated successfully.",
+            details=ApplyPatchResult(files=[change]),
+        )
+
+
+def sandbox_tools_for_model(
+    model_names: Sequence[str],
+) -> tuple[type[SandboxTool], ...]:
+    """The sandbox tools of a chat turn whose model has these names
+    (model_identity_names), in the order the prompt names them: Claude models
+    edit files with edit and write, the tools they are trained on; the others
+    with apply_patch. The turn builds them, and its prompt and token estimate
+    name them."""
+    file_tools = (
+        (EditTool, WriteTool) if is_claude_model(model_names) else (ApplyPatchTool,)
+    )
+    return (ExecCommandTool, WriteStdinTool, *file_tools)
 
 
 def sandbox_guidance(

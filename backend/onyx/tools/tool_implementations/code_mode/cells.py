@@ -169,8 +169,9 @@ StopReason = Literal["cancelled", "terminated"]
 
 
 class SequentialCalls:
-    """Runs the calls to one sequential tool one at a time, as they run outside
-    programs. A waiting call ends with AgentCancelled once its cancellation is set."""
+    """Runs the calls to one sequential tool, or sequence group, one at a time,
+    as they run outside programs. A waiting call ends with AgentCancelled once
+    its cancellation is set."""
 
     def __init__(self) -> None:
         self._changed = threading.Condition()

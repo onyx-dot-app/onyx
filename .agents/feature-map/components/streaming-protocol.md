@@ -221,7 +221,12 @@ before a restore, the live stream has no tab for it, so the closing record
 follows the observation's packets and section end in a new tab. The sandbox
 tools ([[code-execution]]) start with `exec_command_start`, `write_stdin_start`
 or `apply_patch_start`, stream the command output in `exec_output_delta`, and
-end with `exec_end` or `apply_patch_end`. `exec_end.output` is the output
+end with `exec_end` or `apply_patch_end`. An `edit` or `write` call also
+renders as a patch card: `chat/renderer.py` builds `apply_patch_start.patch`
+from its arguments (`patch.display_patch`: an update of the old lines to the
+new ones, or an added file), live and on replay, and its `apply_patch_end`
+says whether `write` added or updated the file. `apply_patch_start.tool_name`
+names the file tool, which titles the call (`toolDisplayHelpers.getToolName`, as in parallel tabs). `exec_end.output` is the output
 that the model got (cut to its token budget), which replaces the streamed
 preview; `session_id` is set while the command runs, and `error` (with no
 output) when the call failed. A replayed call sends the start and `exec_end`

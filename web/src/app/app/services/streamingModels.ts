@@ -431,9 +431,14 @@ export interface ExecEnd extends BaseObj {
   error: string | null;
 }
 
+// The names of the backend's file tools (sandbox_tools.py)
+export type FileToolName = "apply_patch" | "edit" | "write";
+
 export interface ApplyPatchStart extends BaseObj {
   type: "apply_patch_start";
   patch: string;
+  // The file tool that made the change; it names the card
+  tool_name: FileToolName;
 }
 
 export interface ApplyPatchFileChange {

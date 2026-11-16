@@ -285,7 +285,8 @@ class ToolInvocation:
 
 
 class ToolExecutionMode(str, Enum):
-    """SEQUENTIAL orders calls to the same tool name within a model step."""
+    """SEQUENTIAL orders calls to the same tool name, or the same
+    sequence_group, within a model step."""
 
     PARALLEL = "parallel"
     SEQUENTIAL = "sequential"
@@ -314,6 +315,7 @@ class AgentTool:
         ]
         | None = None,
         execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
+        sequence_group: str | None = None,
         merge_arguments: Callable[
             [dict[str, JsonValue], dict[str, JsonValue]], dict[str, JsonValue] | None
         ]
@@ -330,6 +332,7 @@ class AgentTool:
         # its requests in their order; it does not repeat `execute`.
         self.resume_with_input = resume_with_input
         self.execution_mode = execution_mode
+        self.sequence_group = sequence_group
         self.merge_arguments = merge_arguments
         self.interrupted_result = interrupted_result
         self.display_name = display_name
@@ -348,6 +351,7 @@ class AgentTool:
             result_from_children=self.result_from_children,
             resume_with_input=self.resume_with_input,
             execution_mode=self.execution_mode,
+            sequence_group=self.sequence_group,
             merge_arguments=self.merge_arguments,
             interrupted_result=self.interrupted_result,
             display_name=self.display_name,

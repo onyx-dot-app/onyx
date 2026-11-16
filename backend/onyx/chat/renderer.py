@@ -93,10 +93,13 @@ from onyx.tools.tool_implementations.sandbox.models import (
     SandboxExecResult,
     WriteStdinArguments,
 )
+from onyx.tools.tool_implementations.sandbox.patch import display_patch
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ApplyPatchTool,
+    EditTool,
     ExecCommandTool,
     WriteStdinTool,
+    WriteTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -118,6 +121,8 @@ CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, CODE_MODE_TOOL_NAME})
 CODE_MODE_TOOL_NAMES = frozenset({CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME})
 # Tools whose calls end with exec_end.
 EXEC_TOOL_NAMES = frozenset({ExecCommandTool.NAME, WriteStdinTool.NAME})
+# Tools whose calls render as a patch card and end with apply_patch_end.
+PATCH_TOOL_NAMES = frozenset({ApplyPatchTool.NAME, EditTool.NAME, WriteTool.NAME})
 
 _STRING = TypeAdapter(str)
 _OPTIONAL_STRING = TypeAdapter(str | None)
@@ -658,7 +663,33 @@ class ToolRenderer:
         elif name == ApplyPatchTool.NAME:
             objects = [
                 packets.ApplyPatchStart(
-                    patch=_STRING.validate_python(args.get("input", ""))
+                    patch=_STRING.validate_python(args.get("input", "")),
+                    tool_name=ApplyPatchTool.NAME,
+                )
+            ]
+        elif name == EditTool.NAME:
+            # An empty old_string creates the file.
+            old = _STRING.validate_python(args.get("old_string", ""))
+            objects = [
+                packets.ApplyPatchStart(
+                    patch=display_patch(
+                        _STRING.validate_python(args.get("file_path", "")),
+                        old or None,
+                        _STRING.validate_python(args.get("new_string", "")),
+                    ),
+                    tool_name=EditTool.NAME,
+                )
+            ]
+        elif name == WriteTool.NAME:
+            # The end packet tells an added file from an updated one.
+            objects = [
+                packets.ApplyPatchStart(
+                    patch=display_patch(
+                        _STRING.validate_python(args.get("file_path", "")),
+                        None,
+                        _STRING.validate_python(args.get("content", "")),
+                    ),
+                    tool_name=WriteTool.NAME,
                 )
             ]
         elif name == FileReaderTool.NAME:
@@ -934,7 +965,7 @@ class ToolRenderer:
                         obj=packets.ExecEnd(error=result.text),
                     )
                 ]
-            if self.call.name == ApplyPatchTool.NAME:
+            if self.call.name in PATCH_TOOL_NAMES:
                 return [
                     packets.Packet(
                         placement=self.placement,

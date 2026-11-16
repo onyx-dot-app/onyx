@@ -226,16 +226,17 @@ class ToolBatch:
                     completed_call_ids = self._completed_call_ids()
                     if len(self.progress.finalized_tool_call_ids) == len(self.calls):
                         return True
-                    blocked_tool_names: set[str] = set()
+                    blocked_sequences: set[str] = set()
                     for index, call in enumerate(self.calls):
                         if call.id in self.progress.finalized_tool_call_ids:
                             continue
                         tool = self.tools.get(call.name)
                         if tool and tool.execution_mode == ToolExecutionMode.SEQUENTIAL:
-                            if call.name in blocked_tool_names:
+                            sequence = tool.sequence_group or call.name
+                            if sequence in blocked_sequences:
                                 continue
                             # Pending input and child waits retain their place in order.
-                            blocked_tool_names.add(call.name)
+                            blocked_sequences.add(sequence)
                         if call.id in completed_call_ids or call.id in self.futures:
                             continue
                         with self.run.execution_lock:

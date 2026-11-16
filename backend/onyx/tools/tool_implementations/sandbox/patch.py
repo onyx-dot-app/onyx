@@ -1,10 +1,11 @@
-"""Parse and apply patches in the apply_patch patch format.
+"""Parse and apply patches in the apply_patch patch format, and the string
+replacements of the edit tool.
 
 Pure functions, no I/O. Every `PatchError` message is model-facing.
 """
 
 import re
-from collections.abc import Callable, Hashable
+from collections.abc import Callable, Hashable, Iterator
 
 from pydantic import BaseModel, Field
 
@@ -43,10 +44,11 @@ _SEEK_PASSES: tuple[Callable[[str], str], ...] = (
     lambda line: line.strip().translate(_PUNCTUATION_TO_ASCII),
 )
 
-# Largest apply_patch input, in UTF-8 bytes.
-APPLY_PATCH_MAX_INPUT_BYTES = 1 << 20
-# Largest file that apply_patch reads to update it.
-APPLY_PATCH_MAX_FILE_BYTES = 10 << 20
+# Largest input of a file tool call (a patch, the strings of an edit, or the
+# contents of a write), in UTF-8 bytes.
+FILE_TOOL_MAX_INPUT_BYTES = 1 << 20
+# Largest file that the file tools read to update it, and that an edit makes.
+FILE_TOOL_MAX_FILE_BYTES = 10 << 20
 # Largest total of updated file contents that one patch holds before it
 # writes: the server keeps them in memory.
 APPLY_PATCH_MAX_STAGED_BYTES = 32 << 20
@@ -61,7 +63,8 @@ Replacement = tuple[int, int, list[str]]
 
 
 class PatchError(Exception):
-    """A patch that cannot be parsed or applied. The message is model-facing."""
+    """A patch or edit that cannot be parsed or applied. The message is
+    model-facing."""
 
 
 class SeekBudget:
@@ -524,6 +527,30 @@ def update_contents(
     return "".join(output)
 
 
+def display_patch(path: str, old: str | None, new: str) -> str:
+    """A patch that shows an edit or a write of `path`: an added file of `new`
+    when `old` is None, else an update of `old` lines to `new` lines."""
+
+    def lines(prefix: str, text: str) -> list[str]:
+        return (
+            [prefix + line for line in text.removesuffix("\n").split("\n")]
+            if text
+            else []
+        )
+
+    body = (
+        [ADD_FILE_MARKER + path, *lines("+", new)]
+        if old is None
+        else [
+            UPDATE_FILE_MARKER + path,
+            EMPTY_CHANGE_CONTEXT_MARKER,
+            *lines("-", old),
+            *lines("+", new),
+        ]
+    )
+    return "\n".join([BEGIN_PATCH_MARKER, *body, END_PATCH_MARKER])
+
+
 def summarize(hunks: list[PatchHunk]) -> str:
     """The success text: added, then modified (a move lists its destination), then deleted."""
     added = [f"A {hunk.path}\n" for hunk in hunks if isinstance(hunk, AddFile)]
@@ -534,3 +561,94 @@ def summarize(hunks: list[PatchHunk]) -> str:
     ]
     deleted = [f"D {hunk.path}\n" for hunk in hunks if isinstance(hunk, DeleteFile)]
     return SUMMARY_HEADER + "\n" + "".join(added + modified + deleted)
+
+
+def edit_text(original: str | None, old: str, new: str, replace_all: bool) -> str:
+    """The contents of a file after the edit tool replaces `old` with `new`.
+    `original` is None for a missing file; an empty `old` creates a file, or
+    fills an empty one, with `new`.
+
+    The match is exact text; only line breaks may differ (CRLF, CR or LF).
+    Unchanged text keeps its line breaks, and `new` gets the file's first one
+    (LF if none), as an apply_patch update does.
+    """
+    if old == new:
+        raise PatchError(
+            "No changes to make: old_string and new_string are exactly the same."
+        )
+    if original is None:
+        if old:
+            raise PatchError("File does not exist.")
+        return new
+    if not old:
+        if original.strip():
+            raise PatchError("Cannot create new file - file already exists.")
+        return new
+    # Search a copy with LF for every line break, where a CRLF is one
+    # character, and map each match back to `original`. str.find keeps the
+    # search linear in the size of the file.
+    text = _SOURCE_LINE_ENDING.sub("\n", original)
+    target = _SOURCE_LINE_ENDING.sub("\n", old)
+    # Removing whole lines also removes the last one's line break.
+    takes_line_break = not new and not target.endswith("\n")
+
+    def matches() -> Iterator[tuple[int, int]]:
+        """The span in `original` of each match, left to right, without overlaps."""
+        # The index in `text` of each CRLF.
+        crlf_indexes = (
+            crlf.start() - crlfs_before
+            for crlfs_before, crlf in enumerate(re.finditer("\r\n", original))
+        )
+        next_crlf = next(crlf_indexes, None)
+        crlfs_before = 0
+
+        def original_index(index: int) -> int:
+            nonlocal next_crlf, crlfs_before
+            while next_crlf is not None and next_crlf < index:
+                crlfs_before += 1
+                next_crlf = next(crlf_indexes, None)
+            return index + crlfs_before
+
+        start = text.find(target)
+        while start != -1:
+            end = start + len(target)
+            if (
+                takes_line_break
+                and text.startswith("\n", end)
+                and (start == 0 or text[start - 1] == "\n")
+            ):
+                end += 1
+            yield original_index(start), original_index(end)
+            start = text.find(target, end)
+
+    first_break = _SOURCE_LINE_ENDING.search(original)
+    replacement = _SOURCE_LINE_ENDING.sub(
+        first_break.group() if first_break else _DEFAULT_LINE_ENDING, new
+    )
+    count = 0
+    removed_bytes = 0
+    for start, end in matches():
+        count += 1
+        removed_bytes += len(original[start:end].encode())
+    if not count:
+        raise PatchError(f"String to replace not found in file.\nString: {old}")
+    if count > 1 and not replace_all:
+        raise PatchError(
+            f"Found {count} matches of the string to replace, but "
+            "replace_all is false. To replace all occurrences, set replace_all "
+            "to true. To replace only one occurrence, please provide more "
+            f"context to uniquely identify the instance.\nString: {old}"
+        )
+    size = len(original.encode()) - removed_bytes + count * len(replacement.encode())
+    if size > FILE_TOOL_MAX_FILE_BYTES:
+        raise PatchError(
+            f"The edit would make the file {size} bytes, larger than "
+            f"{FILE_TOOL_MAX_FILE_BYTES} bytes; make a smaller edit"
+        )
+    pieces: list[str] = []
+    kept_from = 0
+    for start, end in matches():
+        pieces += (original[kept_from:start], replacement)
+        kept_from = end
+    pieces.append(original[kept_from:])
+    return "".join(pieces)

@@ -159,8 +159,8 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   provider context-limit error before any output streams compacts and retries
   once.
 - `backend/onyx/agents/tool_execution.py:ToolBatch` runs a step's calls in
-  parallel. `ToolExecutionMode.SEQUENTIAL` serializes calls to one tool name,
-  and `merge_arguments` merges compatible calls into one worker. It records
+  parallel. `ToolExecutionMode.SEQUENTIAL` serializes calls to one tool name, or
+  to the tools of one `sequence_group`, and `merge_arguments` merges compatible calls into one worker. It records
   results as they complete. Each pass of `ToolBatch.execute` then ends the
   completed calls in call order, and model history replays them in call order. A step with more than `MAX_TOOL_CALLS_PER_STEP` (64) calls or a
   repeated call ID fails the whole run.

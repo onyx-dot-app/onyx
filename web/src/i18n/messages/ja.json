@@ -13256,7 +13256,9 @@
           "tool": "ツール",
           "webSearch": "ウェブ検索",
           "terminal": "ターミナル",
-          "applyPatch": "パッチを適用"
+          "applyPatch": "パッチを適用",
+          "editFile": "ファイルを編集",
+          "writeFile": "ファイルを書き込む"
         },
         "webSearch": {
           "searching": {
@@ -13296,7 +13298,7 @@
               "status": "{count, plural, one {# 個のファイルを編集しました} other {# 個のファイルを編集しました}}"
             },
             "failed": {
-              "status": "パッチが失敗しました"
+              "status": "編集に失敗しました"
             },
             "title": "パッチ"
           },

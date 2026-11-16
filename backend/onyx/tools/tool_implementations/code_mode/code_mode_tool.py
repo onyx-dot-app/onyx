@@ -129,8 +129,11 @@ class CodeModeTool(Tool):
         self._limits = limits
         self._stubs = build_tool_stubs(self._inner_tools)
         # Calls to a sequential tool run one at a time, as they do outside programs.
+        sequences: dict[str, SequentialCalls] = {}
         self._sequential_calls = {
-            tool.name: SequentialCalls()
+            tool.name: sequences.setdefault(
+                tool.sequence_group or tool.name, SequentialCalls()
+            )
             for tool in self._inner_tools
             if tool.execution_mode == ToolExecutionMode.SEQUENTIAL
         }

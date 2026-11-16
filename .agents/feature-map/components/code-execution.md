@@ -47,13 +47,15 @@
   times out, the user sees the error output and the turn continues.
 - **With harness sandboxes** (`SANDBOX_RUNTIME=firecracker` and
   `SANDBOX_FC_TEMPLATE`), every chat agent gives the model `exec_command`,
-  `write_stdin` and `apply_patch`, except in anonymous,
+  `write_stdin` and file tools: `edit` and `write` for Claude models (in
+  the shapes of Claude Code's Edit and Write), `apply_patch` for all other
+  models. This applies except in anonymous,
   incognito and multi-model turns and in Slack and Discord bot turns (bots
   get service-account sandboxes later). Admins cannot turn them off
   per agent, and users cannot pick or force them. Commands run in the user's
   private VM, in the chat's session directory, whose files stay for later
   turns. The user sees each command and its output as it streams, and the
-  files that each patch changed.
+  files that each patch, edit or write changed, on the same patch card.
 
 ---
 
@@ -64,7 +66,7 @@ its version gates, the one-row settings table with its admin API and page, the
 meaning of `BASH_TOOL_SENTINEL_ID`, and code mode: its sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
-`apply_patch`). Code mode's packets and replay belong to [[streaming-protocol]], and
+`apply_patch`, `edit`, `write`). Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
 It does not own:
@@ -206,7 +208,7 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch (no tool row; Tool.id is None)
+exec_command / write_stdin / apply_patch | edit + write (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
                                         and not for anonymous users (one VM per user), in
                                         incognito or when the request selects more than
@@ -214,9 +216,16 @@ exec_command / write_stdin / apply_patch (no tool row; Tool.id is None)
                                         Slack or Discord bot turns (MessageOrigin
                                         SLACKBOT / DISCORDBOT; the chat route sets
                                         DISCORDBOT from the bot's service API key)
-  chat/execution.py:create_chat_agent   builds the three tools with one SandboxTurn for every
+  chat/execution.py:create_chat_agent   builds the tools with one SandboxTurn for every
                                         agent, as it adds the skill tools; a durable resume
-                                        prepares the turn again and builds them the same way
+                                        prepares the turn again and builds them the same way.
+                                        sandbox_tools_for_model(model names) owns the set and
+                                        its order: EditTool and WriteTool when any of the turn
+                                        LLM's names (model_identity_names) contains "claude"
+                                        (model_capabilities.is_claude_model, the one rule that
+                                        LLM requests and prompt caching use too), else
+                                        ApplyPatchTool; never both. The reserved-token prompt
+                                        (calculate_reserved_tokens) names the same set
   prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
                                         (sandbox_tools.py:sandbox_guidance): one use per
                                         SandboxTool that the turn offers, in order, named
@@ -242,7 +251,7 @@ exec_command / write_stdin / apply_patch (no tool row; Tool.id is None)
                                         and inode, or its directory's and its name
                                         (patch.ensure_unique_targets). Add, Update and Move
                                         onto a link fail ("<path> is a symbolic link to
-                                        <target>; patch that path instead"); a link out of
+                                        <target>; edit that path instead"); a link out of
                                         the session or with an absolute target, a link loop,
                                         or the directory itself fails; every file is read and
                                         every result computed (at most
@@ -255,6 +264,23 @@ exec_command / write_stdin / apply_patch (no tool row; Tool.id is None)
                                         goes, not its target). No lock spans runs: a patch
                                         whose context changed fails verification, and two
                                         runs that patch one file at once can lose an edit
+  EditTool / WriteTool (SEQUENTIAL)     sandbox_tools._change_file: one stat_files call; the
+                                        same checks, read (_read_text) and mode-keeping write
+                                        (_write_file) as apply_patch, and the same size caps
+                                        (patch.FILE_TOOL_MAX_INPUT_BYTES / _MAX_FILE_BYTES;
+                                        an edit whose result passes the file cap fails before
+                                        it is built). edit: patch.edit_text, exact text with
+                                        no fuzzy passes; only line breaks may differ. Unchanged
+                                        text keeps its line breaks; new text gets the file's
+                                        first one, as an apply_patch update does. An empty
+                                        old_string creates a file, or fills an empty one;
+                                        on a file with content it fails ("Cannot create new
+                                        file - file already exists."). Errors and results use
+                                        Claude Code's texts. write creates or overwrites
+                                        (parents created); no read-first rule, as reads are
+                                        not tracked. Both save ApplyPatchResult.
+                                        The three file tools share one sequence_group:
+                                        their calls of one step run one at a time
   Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
                                         root chat agent only (bind_run_store: also to a
                                         restored root), not to subagents or deep research
@@ -724,10 +750,11 @@ health calls are not retried.
     details as the spec's model declares them (`ExecCommandOutput`, a base of
     the saved `SandboxExecResult`, so `type` and `truncated` stay out), while
     the model reads the exec header text. A tool whose program value is not its
-    content uses this kind; do not special-case a tool name. All three sandbox
+    content uses this kind; do not special-case a tool name. All sandbox
     tools set `interrupted_result`, and a patch that fails verification writes
     nothing; a sandbox error during the writes can leave some files changed,
-    and the error names them and the file that failed.
+    and the error names them and the file that failed. `edit` and `write`
+    change one file, after all checks pass.
 
 ---
 

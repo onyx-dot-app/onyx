@@ -13256,7 +13256,9 @@
           "tool": "أداة",
           "webSearch": "البحث في الويب",
           "terminal": "الطرفية",
-          "applyPatch": "تطبيق التصحيح"
+          "applyPatch": "تطبيق التصحيح",
+          "editFile": "تعديل ملف",
+          "writeFile": "كتابة ملف"
         },
         "webSearch": {
           "searching": {
@@ -13296,7 +13298,7 @@
               "status": "{count, plural, zero {لم يتم تعديل أي ملف} one {تم تعديل ملف واحد} two {تم تعديل ملفين} few {تم تعديل # ملفات} many {تم تعديل # ملفًا} other {تم تعديل # ملف}}"
             },
             "failed": {
-              "status": "فشل التصحيح"
+              "status": "فشل التعديل"
             },
             "title": "التصحيح"
           },

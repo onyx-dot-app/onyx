@@ -10,7 +10,10 @@ from onyx.server.features.build.sandbox.models import ExecCompletionName
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
 from onyx.tools.tool_implementations.code_mode.models import CodeModeStatus
-from onyx.tools.tool_implementations.sandbox.models import ApplyPatchFileChange
+from onyx.tools.tool_implementations.sandbox.models import (
+    ApplyPatchFileChange,
+    FileToolName,
+)
 
 
 class StreamingError(BaseModel):
@@ -542,6 +545,8 @@ class ExecEnd(BaseObj):
 class ApplyPatchStart(BaseObj):
     type: Literal["apply_patch_start"] = StreamingType.APPLY_PATCH_START.value
     patch: str
+    # The file tool that made the change; it names the card.
+    tool_name: FileToolName
 
 
 class ApplyPatchEnd(BaseObj):

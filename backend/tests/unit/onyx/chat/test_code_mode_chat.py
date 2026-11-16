@@ -17,7 +17,7 @@ from onyx.agents.models import (
 from onyx.chat.agent import ChatAgent
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES, CheckpointSerializer
 from onyx.chat.presentation import project_response
-from onyx.chat.prompt_utils import build_system_prompt
+from onyx.chat.prompt_utils import build_system_prompt, calculate_reserved_tokens
 from onyx.chat.renderer import tool_renderer
 from onyx.configs.chat_configs import CODE_MODE_MAX_LLM_CYCLES, MAX_LLM_CYCLES
 from onyx.context.search.models import SearchDocsResponse
@@ -70,6 +70,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ApplyPatchTool,
     ExecCommandTool,
     WriteStdinTool,
+    sandbox_tools_for_model,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -361,7 +362,10 @@ def test_the_sandbox_section_names_the_turn_s_sandbox_tools(code_mode: bool) -> 
 
 def test_the_token_reservation_counts_code_mode_guidance() -> None:
     reserved = build_system_prompt(
-        "base", include_all_guidance=True, include_user_info=False
+        "base",
+        include_all_guidance=True,
+        include_user_info=False,
+        all_guidance_sandbox_tools=sandbox_tools_for_model(["gpt-5.1"]),
     )
     assert CODE_MODE_GUIDANCE in reserved
     assert "## Sandbox" in reserved
@@ -618,3 +622,31 @@ def test_live_stdout_cut_at_the_limit_is_replaced_by_the_saved_stdout() -> None:
     )
     assert isinstance(replayed, packets.CodeModeDelta)
     assert (replayed.stdout, replayed.replace_stdout) == (saved, False)
+
+
+@pytest.mark.parametrize(
+    ("model_name", "named", "unnamed"),
+    [
+        ("claude-opus-4-5", ["`edit`", "`write`"], "`apply_patch`"),
+        ("gpt-5.1", ["`apply_patch`"], "`edit`"),
+    ],
+)
+def test_the_token_estimate_names_the_model_s_sandbox_tools(
+    model_name: str, named: list[str], unnamed: str
+) -> None:
+    prompts: list[str] = []
+
+    def count(text: str) -> int:
+        prompts.append(text)
+        return len(text)
+
+    calculate_reserved_tokens(
+        db_session=MagicMock(),
+        persona_system_prompt="",
+        base_system_prompt="base",
+        token_counter=count,
+        sandbox_tools=sandbox_tools_for_model([model_name]),
+    )
+    [estimate] = prompts
+    assert all(name in estimate for name in named)
+    assert unnamed not in estimate
