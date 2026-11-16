@@ -59,10 +59,10 @@ def _create_tables() -> None:
         sa.Column("kind", sa.String(), nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        # The person who added the integration: a record, not a right. NULL
-        # when not known.
+        # The person who set up the integration: a record, not a right. NULL
+        # when not known. The person who signs in is on integration_connection.
         sa.Column(
-            "author_user_id",
+            "created_by_user_id",
             postgresql.UUID(as_uuid=True),
             sa.ForeignKey("user.id", ondelete="SET NULL"),
             nullable=True,
@@ -728,7 +728,7 @@ _INSERT_VERSIONS = """
 
 _INSERT_INTEGRATIONS = """
     INSERT INTO integration (
-        id, kind, name, description, author_user_id, enabled, auth_mode,
+        id, kind, name, description, created_by_user_id, enabled, auth_mode,
         auth_method, header_template, users_can_save_always_allow,
         created_at, updated_at
     )

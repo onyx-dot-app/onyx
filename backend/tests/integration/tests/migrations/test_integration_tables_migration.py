@@ -1069,10 +1069,10 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             *((skill_id, org_key.id) for skill_id in seeded.shared_skills),
             (slack.plugin_id, slack.id),
         }
-        # The person who added an integration is its author.
+        # The integration records the person who set it up.
         assert (
             conn.execute(
-                text("SELECT author_user_id FROM integration WHERE id = :id"),
+                text("SELECT created_by_user_id FROM integration WHERE id = :id"),
                 {"id": private.id},
             ).scalar_one()
             == seeded.owner

@@ -6056,10 +6056,11 @@ class Integration(Base):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # The person who added the integration, also when an admin added it for
+    # The person who set up the integration, also when an admin set it up for
     # the organization. A record only: it gives no right to manage. NULL when
-    # not known, as for an external app made before this column.
-    author_user_id: Mapped[UUID | None] = mapped_column(
+    # not known, as for an external app made before this column. The person
+    # who signs in is ``IntegrationConnection.user_id``.
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="SET NULL"),
         nullable=True,
