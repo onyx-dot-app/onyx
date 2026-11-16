@@ -1072,11 +1072,15 @@ class IntegrationAuthMethod(str, PyEnum):
 
 
 class IntegrationActionSource(str, PyEnum):
-    """What writes an integration_action row, and rewrites it on a sync."""
+    """Where an integration_action row comes from. A sync from that source
+    rewrites it."""
 
-    MCP_SYNC = "mcp_sync"
-    OPENAPI_SPEC = "openapi_spec"
-    PRESET_CATALOG = "preset_catalog"
+    # The tool list of an MCP server.
+    MCP = "mcp"
+    # An operation of an OpenAPI spec.
+    OPENAPI = "openapi"
+    # The action catalog of a built-in external app, in code.
+    EXTERNAL_APP = "external_app"
 
 
 class IntegrationOAuthProviderMode(str, PyEnum):

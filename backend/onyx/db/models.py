@@ -6197,7 +6197,7 @@ class IntegrationAction(Base):
             "integration_id", "key", name="uq_integration_action_integration_key"
         ),
         CheckConstraint(
-            "source IN ('mcp_sync', 'openapi_spec', 'preset_catalog')",
+            "source IN ('mcp', 'openapi', 'external_app')",
             name="ck_integration_action_source",
         ),
         CheckConstraint(

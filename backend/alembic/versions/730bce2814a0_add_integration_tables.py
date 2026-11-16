@@ -208,7 +208,7 @@ def _create_tables() -> None:
         ),
         # A SQL migration can write a value outside the enum (see integration).
         sa.CheckConstraint(
-            "source IN ('mcp_sync', 'openapi_spec', 'preset_catalog')",
+            "source IN ('mcp', 'openapi', 'external_app')",
             name="ck_integration_action_source",
         ),
         sa.CheckConstraint(
@@ -836,7 +836,7 @@ _INSERT_MCP_ACTIONS = """
         input_schema, output_schema, created_at, updated_at
     )
     SELECT
-        src.id, t.name, 'mcp_sync', coalesce(nullif(t.display_name, ''), t.name),
+        src.id, t.name, 'mcp', coalesce(nullif(t.display_name, ''), t.name),
         t.description, t.mcp_read_only, t.mcp_input_schema,
         t.mcp_output_schema, src.created_at, src.updated_at
     FROM integration_source src

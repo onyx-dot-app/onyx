@@ -904,7 +904,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             "registration": None,
         }
         mcp_action = {
-            "source": "mcp_sync",
+            "source": "mcp",
             "description": "d",
             "default_policy": None,
             "input_schema": {"type": "object"},
