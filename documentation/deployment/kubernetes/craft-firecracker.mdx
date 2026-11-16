@@ -97,7 +97,11 @@ so the scheduler must keep other pods off the KVM nodes.
   It sets `cluster-autoscaler.kubernetes.io/scale-down-disabled=true` on its node,
   and removes it when the node has had no microVMs for 10 minutes (`craft.hostAgent.scaleDownGuard.grace`).
   This works with the GKE, AKS, and EKS cluster autoscalers. Karpenter does not read this annotation: with Karpenter,
-  use a fixed-size Firecracker pool.
+  use a fixed-size Firecracker pool. The host agent needs `patch` on nodes for this.
+  The chart also adds a `ValidatingAdmissionPolicy`. It lets the host agent change only its scale-down annotations,
+  and only on its own node when the service account token names that node. Kubernetes 1.30 and later serve this API.
+  The chart adds the policy only when the cluster serves it. If you render the chart with `helm template`,
+  add `--api-versions admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy`.
   See [Cluster autoscaler](/deployment/kubernetes/craft-firecracker-operations#cluster-autoscaler).
 </Note>
 

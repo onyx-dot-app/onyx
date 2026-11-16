@@ -2206,8 +2206,10 @@ craft:
     # cluster-autoscaler.kubernetes.io/scale-down-disabled=true. It removes
     # the annotation when the node has had no VMs for grace. The agent never
     # removes a value that it did not set. The chart gives the agent "get"
-    # and "patch" on nodes. false: no patch RBAC; remove an annotation that
-    # is left on a node by hand (microvm/RUNBOOKS.md).
+    # and "patch" on nodes, and a ValidatingAdmissionPolicy (when the cluster
+    # serves admissionregistration.k8s.io/v1) limits the patch to these
+    # annotations. false: no patch RBAC; remove an annotation that is left on
+    # a node by hand (microvm/RUNBOOKS.md).
     scaleDownGuard:
       enabled: true
       grace: 10m

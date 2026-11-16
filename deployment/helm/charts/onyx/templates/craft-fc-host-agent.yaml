@@ -37,7 +37,8 @@ Agent flags and node requirements: microvm/README.md.
 - Scale-down guard (craft.hostAgent.scaleDownGuard): while the node runs
   VMs, the agent sets cluster-autoscaler.kubernetes.io/scale-down-disabled
   on its own Node ("patch" on nodes), so the cluster autoscaler does not
-  remove the node.
+  remove the node. A ValidatingAdmissionPolicy limits the patch to the guard
+  annotations (rendered when the cluster serves the API).
 - Root drive (craft.hostAgent.rootfs): an init container copies the drive
   of onyxdotapp/craft-fc-artifacts:rootfs-<version> into <dataDir>/rootfs
   (skipped when it is current), and the agent builds its template from it
@@ -342,6 +343,64 @@ subjects:
     name: {{ $name }}
     namespace: {{ $ns }}
 ---
+{{- if .Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy" }}
+{{- /* RBAC cannot limit "patch" to fields. This policy lets the agent
+change only the scale-down annotations, and (when the token names its
+node) only on its own Node. */}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-annotate
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["*"]
+        operations: ["UPDATE"]
+        resources: ["nodes"]
+  matchConditions:
+    - name: host-agent
+      expression: {{ printf "request.userInfo.username == 'system:serviceaccount:%s:%s'" $ns $name | quote }}
+  variables:
+    # nodewatch.ScaleDownDisabledKey and nodewatch.GuardOwnerKey (microvm/).
+    - name: allowed
+      expression: "['cluster-autoscaler.kubernetes.io/scale-down-disabled', 'onyx.app/craft-fc-scale-down-guard']"
+    - name: oldAnn
+      expression: "oldObject.metadata.?annotations.orValue({})"
+    - name: newAnn
+      expression: "object.metadata.?annotations.orValue({})"
+    - name: nodeName
+      expression: "request.userInfo.?extra[?'authentication.kubernetes.io/node-name'].orValue([])"
+  validations:
+    - expression: "variables.nodeName.size() == 0 || variables.nodeName[0] == object.metadata.name"
+      message: "the host agent may change only its own Node"
+    - expression: >-
+        object.spec == oldObject.spec &&
+        object.metadata.?labels.orValue({}) == oldObject.metadata.?labels.orValue({}) &&
+        object.metadata.?finalizers.orValue([]) == oldObject.metadata.?finalizers.orValue([]) &&
+        object.metadata.?ownerReferences.orValue([]) == oldObject.metadata.?ownerReferences.orValue([])
+      message: "the host agent may change only the scale-down annotations of a Node"
+    - expression: >-
+        variables.newAnn.all(k, k in variables.allowed || (k in variables.oldAnn && variables.oldAnn[k] == variables.newAnn[k])) &&
+        variables.oldAnn.all(k, k in variables.allowed || k in variables.newAnn)
+      message: "the host agent may change only the scale-down annotations of a Node"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-annotate
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+spec:
+  policyName: {{ $ns }}-{{ $name }}-node-annotate
+  validationActions: [Deny]
+---
+{{- end }}
 {{- end }}
 {{- if and $metricsToken (not $metrics.authExistingSecret) }}
 apiVersion: v1

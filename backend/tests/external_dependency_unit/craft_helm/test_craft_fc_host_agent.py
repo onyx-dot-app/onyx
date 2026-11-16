@@ -5,12 +5,14 @@ Firecracker sandbox nodes with the host access it needs, and its pods may reach
 sandbox-proxy. A wrong render here fails only at runtime on a KVM node."""
 
 import json
+import re
 from typing import Any
 
 import pytest
 import yaml
 
 from tests.external_dependency_unit.craft_helm.rendering import (
+    CHART_DIR,
     render_chart,
     skip_or_fail,
 )
@@ -239,6 +241,71 @@ def test_scale_down_guard_grace_and_off() -> None:
     }
     assert not [a for a in args if "scale-down" in a]
     assert "--watch-node-drain" in args
+
+
+_VAP_API = [
+    "--api-versions",
+    "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy",
+]
+
+
+def _guard_annotation_keys() -> set[str]:
+    guard = (CHART_DIR.parents[3] / "microvm/internal/nodewatch/guard.go").read_text()
+    keys = dict(
+        re.findall(r'(ScaleDownDisabledKey|GuardOwnerKey)\s*=\s*"([^"]+)"', guard)
+    )
+    assert len(keys) == 2
+    return set(keys.values())
+
+
+def test_node_patch_policy_allows_only_guard_annotations() -> None:
+    """RBAC grants cluster-wide "patch" on nodes; the admission policy limits
+    the agent to the annotations that nodewatch.ScaleDownGuard sets."""
+    docs = _render([*_FIRECRACKER, *_VAP_API])
+    policy = _by_kind(docs, "ValidatingAdmissionPolicy")
+    binding = _by_kind(docs, "ValidatingAdmissionPolicyBinding")
+    account = _by_kind(docs, "ServiceAccount")["metadata"]["name"]
+    spec = policy["spec"]
+    variables = {v["name"]: v["expression"] for v in spec["variables"]}
+    validations = " ".join(v["expression"] for v in spec["validations"])
+
+    assert binding["spec"] == {
+        "policyName": policy["metadata"]["name"],
+        "validationActions": ["Deny"],
+    }
+    assert spec["failurePolicy"] == "Fail"
+    assert spec["matchConstraints"]["resourceRules"] == [
+        {
+            "apiGroups": [""],
+            "apiVersions": ["*"],
+            "operations": ["UPDATE"],
+            "resources": ["nodes"],
+        }
+    ]
+    assert spec["matchConditions"][0]["expression"] == (
+        f"request.userInfo.username == 'system:serviceaccount:{_AGENT_NS}:{account}'"
+    )
+    assert set(re.findall(r"'([^']+)'", variables["allowed"])) == (
+        _guard_annotation_keys()
+    )
+    for field in ("spec", "labels", "finalizers", "ownerReferences"):
+        assert field in validations
+    assert "authentication.kubernetes.io/node-name" in variables["nodeName"]
+
+
+@pytest.mark.parametrize(
+    "extra_args",
+    [
+        [],
+        [*_VAP_API, "--set", "craft.hostAgent.scaleDownGuard.enabled=false"],
+    ],
+)
+def test_node_patch_policy_needs_api_and_guard(extra_args: list[str]) -> None:
+    kinds = {d["kind"] for d in _render([*_FIRECRACKER, *extra_args])}
+    assert not kinds & {
+        "ValidatingAdmissionPolicy",
+        "ValidatingAdmissionPolicyBinding",
+    }
 
 
 def test_scale_down_guard_without_drain_watch_can_read_nodes() -> None:
