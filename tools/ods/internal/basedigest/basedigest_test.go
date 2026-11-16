@@ -2,7 +2,9 @@ package basedigest
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -51,6 +53,48 @@ func TestFindRefsParsesPrefixedAndBareReferences(t *testing.T) {
 	}
 	if got, want := refs[1].Query(), "ghcr.io/astral-sh/uv:0.11.25"; got != want {
 		t.Errorf("Query() = %q, want %q", got, want)
+	}
+}
+
+// The guest image bases are bake variable defaults in docker-bake.hcl, so the
+// updater must read HCL files as well as Dockerfiles and CI YAML.
+func TestTrackedFilesIncludesBakeFiles(t *testing.T) {
+	root := t.TempDir()
+	files := []string{
+		"backend/Dockerfile",
+		"deployment/craft-runtime/docker-bake.hcl",
+		".github/workflows/build.yml",
+		"README.md",
+		"deployment/values.yaml",
+	}
+	for _, name := range files {
+		full := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		if err := os.WriteFile(full, nil, 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+	for _, args := range [][]string{{"init", "-q"}, {"add", "."}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	got, err := TrackedFiles(root)
+	if err != nil {
+		t.Fatalf("TrackedFiles: %v", err)
+	}
+	want := []string{
+		".github/workflows/build.yml",
+		"backend/Dockerfile",
+		"deployment/craft-runtime/docker-bake.hcl",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("TrackedFiles = %v, want %v", got, want)
 	}
 }
 
