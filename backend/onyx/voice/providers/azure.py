@@ -58,6 +58,11 @@ DEFAULT_LOCALE = "en-US"
 MAX_STT_LANGUAGES = 10
 MAX_AT_START_STT_LANGUAGES = 4
 
+# Silence that ends a recognized phrase. Each phrase end reaches the client as a final
+# transcript, and with auto-send on that stops recording and sends the message. Azure's
+# 500 ms default ends a phrase on a short breath. Azure accepts 100-5000 ms.
+STT_SEGMENTATION_SILENCE_TIMEOUT_MS = 1500
+
 
 def _normalize_stt_language(raw: str) -> str:
     """Canonicalize casing (en-us -> en-US) so Azure always gets exact locales."""
@@ -187,6 +192,11 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
                 subscription=self.api_key,
                 region=self.region,
             )
+
+        speech_config.set_property(
+            speechsdk.PropertyId.Speech_SegmentationSilenceTimeoutMs,
+            str(STT_SEGMENTATION_SILENCE_TIMEOUT_MS),
+        )
 
         auto_detect_config = None
         if multilingual:
