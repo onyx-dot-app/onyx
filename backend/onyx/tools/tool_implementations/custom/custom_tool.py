@@ -1,6 +1,7 @@
 import csv
 import json
 import uuid
+from collections.abc import Callable
 from io import BytesIO, StringIO
 from typing import Any, Dict, List
 
@@ -25,6 +26,7 @@ from onyx.tools.models import (
     CustomToolErrorInfo,
     CustomToolUserFileSnapshot,
     DynamicSchemaInfo,
+    ToolApprovalScope,
     ToolCallException,
     ToolContext,
 )
@@ -89,8 +91,10 @@ class CustomTool(Tool):
         base_url: str,
         custom_headers: list[HeaderItemDict] | None = None,
         user_oauth_token: str | None = None,
+        approval: ToolApprovalScope | None = None,
     ) -> None:
 
+        self.approval = approval
         self._base_url = base_url
         self._method_spec = method_spec
         self._user_oauth_token = user_oauth_token
@@ -345,6 +349,7 @@ def build_custom_tools_from_openapi_schema_and_headers(
     custom_headers: list[HeaderItemDict] | None = None,
     dynamic_schema_info: DynamicSchemaInfo | None = None,
     user_oauth_token: str | None = None,
+    approval_for: Callable[[str], ToolApprovalScope | None] | None = None,
 ) -> list[CustomTool]:
     """Build CustomTool instances from an OpenAPI schema.
 
@@ -362,6 +367,9 @@ def build_custom_tools_from_openapi_schema_and_headers(
     are left untouched in the schema rather than substituted with an empty
     string. Substitution only happens inside the OpenAPI schema; static
     ``custom_headers`` are not templated.
+
+    ``approval_for`` gives the approval scope of each operation, by its
+    operationId.
     """
     if dynamic_schema_info:
         schema_str = json.dumps(openapi_schema)
@@ -388,6 +396,7 @@ def build_custom_tools_from_openapi_schema_and_headers(
             base_url=url,
             custom_headers=custom_headers,
             user_oauth_token=user_oauth_token,
+            approval=approval_for(method_spec.raw_name) if approval_for else None,
         )
         for method_spec in method_specs
     ]

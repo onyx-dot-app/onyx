@@ -1,0 +1,560 @@
+"""The action sync of each integration kind against a real Postgres.
+
+For each kind, ``discover_actions`` must give what the old code exposes, and
+``sync_integration_actions__no_commit`` must write ``integration_action`` rows
+that a second run leaves alone."""
+
+import datetime
+from collections.abc import Callable, Generator
+from copy import deepcopy
+from typing import Any
+from uuid import uuid4
+
+import pytest
+from mcp.types import Tool as MCPLibTool
+from mcp.types import ToolAnnotations
+from sqlalchemy import delete
+from sqlalchemy.orm import Session
+
+from onyx.db.enums import (
+    ActionPolicy,
+    ExternalAppType,
+    IntegrationActionPolicyValue,
+    IntegrationActionSource,
+    IntegrationAuthMode,
+    IntegrationKind,
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPTransport,
+)
+from onyx.db.integration import (
+    list_integration_actions,
+    replace_integration_actions__no_commit,
+)
+from onyx.db.mcp import create_mcp_server__no_commit
+from onyx.db.models import (
+    ExternalApp,
+    Integration,
+    IntegrationAction,
+    MCPServer,
+    Tool,
+    User,
+)
+from onyx.db.tools import create_tool__no_commit, get_tools_by_mcp_server_id
+from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.integrations.models import IntegrationActionSpec
+from onyx.integrations.registry import get_kind_handler
+from onyx.integrations.sync import (
+    sync_actions_for_integration_id__no_commit,
+    sync_all_integration_actions__no_commit,
+    sync_integration_actions__no_commit,
+)
+from onyx.server.features.mcp import api as mcp_api
+from onyx.server.features.tool import api as tool_api
+from onyx.server.features.tool.models import CustomToolCreate, CustomToolUpdate
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_method_specs,
+)
+from tests.external_dependency_unit.conftest import MakeTestUser
+
+Snapshot = dict[str, tuple[int, datetime.datetime, str | None]]
+
+
+def _openapi_spec(host: str) -> dict[str, Any]:
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "Orders", "description": "Orders API", "version": "1"},
+        "servers": [{"url": f"https://{host}/v1"}],
+        "paths": {
+            "/orders": {
+                "get": {"operationId": "listOrders", "summary": "List orders"},
+                "post": {"operationId": "createOrder", "summary": "Create an order"},
+            },
+            "/orders/{order_id}": {
+                "delete": {
+                    "operationId": "deleteOrder",
+                    "summary": "Delete an order",
+                    "parameters": [
+                        {
+                            "name": "order_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string"},
+                        }
+                    ],
+                },
+            },
+        },
+    }
+
+
+class Created:
+    """Rows a test made, deleted at teardown."""
+
+    def __init__(self) -> None:
+        self.integration_ids: list[int] = []
+        self.tool_ids: list[int] = []
+        self.mcp_server_ids: list[int] = []
+        self.external_app_ids: list[int] = []
+
+
+@pytest.fixture
+def created(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[Created, None, None]:
+    rows = Created()
+    yield rows
+    db_session.rollback()
+    if rows.tool_ids:
+        db_session.execute(delete(Tool).where(Tool.id.in_(rows.tool_ids)))
+    if rows.mcp_server_ids:
+        db_session.execute(
+            delete(Tool).where(Tool.mcp_server_id.in_(rows.mcp_server_ids))
+        )
+        db_session.execute(
+            delete(MCPServer).where(MCPServer.id.in_(rows.mcp_server_ids))
+        )
+    if rows.external_app_ids:
+        db_session.execute(
+            delete(ExternalApp).where(ExternalApp.id.in_(rows.external_app_ids))
+        )
+    if rows.integration_ids:
+        db_session.execute(
+            delete(Integration).where(Integration.id.in_(rows.integration_ids))
+        )
+    db_session.commit()
+
+
+def _integration(
+    db_session: Session, created: Created, kind: IntegrationKind
+) -> Integration:
+    integration = Integration(
+        kind=kind,
+        name=f"sync-{uuid4().hex[:8]}",
+        auth_mode=IntegrationAuthMode.NONE,
+    )
+    db_session.add(integration)
+    db_session.flush()
+    created.integration_ids.append(integration.id)
+    return integration
+
+
+def _mcp_server(db_session: Session, created: Created) -> tuple[Integration, MCPServer]:
+    integration = _integration(db_session, created, IntegrationKind.MCP_SERVER)
+    server = create_mcp_server__no_commit(
+        owner_email="admin@example.com",
+        name=f"sync-{uuid4().hex[:8]}",
+        description=None,
+        server_url=f"https://sync-{uuid4().hex[:8]}.example.com/mcp",
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        transport=MCPTransport.STREAMABLE_HTTP,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+        db_session=db_session,
+    )
+    server.integration_id = integration.id
+    created.mcp_server_ids.append(server.id)
+    db_session.commit()
+    return integration, server
+
+
+def _openapi_tool(
+    db_session: Session, created: Created, user_id: Any = None
+) -> tuple[Integration, Tool]:
+    integration = _integration(db_session, created, IntegrationKind.API)
+    tool = create_tool__no_commit(
+        name=f"orders-{uuid4().hex[:8]}",
+        description="Orders",
+        openapi_schema=_openapi_spec(f"orders-{uuid4().hex[:8]}.example.com"),
+        custom_headers=None,
+        user_id=user_id,
+        db_session=db_session,
+        passthrough_auth=False,
+    )
+    tool.integration_id = integration.id
+    created.tool_ids.append(tool.id)
+    db_session.commit()
+    return integration, tool
+
+
+def _external_app(
+    db_session: Session,
+    created: Created,
+    app_type: ExternalAppType,
+    patterns: list[str],
+) -> tuple[Integration, ExternalApp]:
+    integration = _integration(db_session, created, IntegrationKind.API)
+    app = ExternalApp(
+        name=f"app-{uuid4().hex[:8]}",
+        app_type=app_type,
+        upstream_url_patterns=patterns,
+        integration_id=integration.id,
+    )
+    db_session.add(app)
+    db_session.flush()
+    created.external_app_ids.append(app.id)
+    db_session.commit()
+    return integration, app
+
+
+def _snapshot(db_session: Session, integration_id: int) -> Snapshot:
+    db_session.expire_all()
+    return {
+        a.key: (a.id, a.updated_at, a.description)
+        for a in list_integration_actions(integration_id, db_session)
+    }
+
+
+def _sync(db_session: Session, integration: Integration) -> None:
+    sync_integration_actions__no_commit(integration, db_session)
+    db_session.commit()
+
+
+def _assert_idempotent(db_session: Session, integration: Integration) -> Snapshot:
+    _sync(db_session, integration)
+    first = _snapshot(db_session, integration.id)
+    _sync(db_session, integration)
+    assert _snapshot(db_session, integration.id) == first
+    return first
+
+
+def _discovered(tools: list[tuple[str, str, bool | None]]) -> list[MCPLibTool]:
+    return [
+        MCPLibTool(
+            name=name,
+            description=description,
+            inputSchema={"type": "object", "properties": {"q": {"type": "string"}}},
+            annotations=None
+            if read_only is None
+            else ToolAnnotations(readOnlyHint=read_only),
+        )
+        for name, description, read_only in tools
+    ]
+
+
+# MCP server
+
+
+def test_mcp_discover_actions_equal_the_tool_rows(
+    db_session: Session, created: Created
+) -> None:
+    integration, server = _mcp_server(db_session, created)
+    mcp_api._sync_mcp_server_tools(
+        server.id,
+        _discovered([("search", "Find", True), ("create", "Make", False)]),
+        db_session,
+    )
+
+    specs = get_kind_handler(IntegrationKind.MCP_SERVER).discover_actions(
+        integration, db_session
+    )
+
+    rows = get_tools_by_mcp_server_id(server.id, db_session, order_by_id=True)
+    assert [
+        (s.key, s.display_name, s.description, s.read_only, s.input_schema)
+        for s in specs
+    ] == [
+        (t.name, t.display_name, t.description, t.mcp_read_only, t.mcp_input_schema)
+        for t in rows
+    ]
+    assert [s.default_policy for s in specs] == [
+        IntegrationActionPolicyValue.ALLOW,
+        IntegrationActionPolicyValue.ASK,
+    ]
+
+
+def test_mcp_tool_sync_route_path_writes_actions(
+    db_session: Session, created: Created
+) -> None:
+    integration, server = _mcp_server(db_session, created)
+
+    mcp_api._sync_mcp_server_tools(
+        server.id,
+        _discovered([("search", "Find", True), ("create", "Make", False)]),
+        db_session,
+    )
+    first = _snapshot(db_session, integration.id)
+    actions = {a.key: a for a in list_integration_actions(integration.id, db_session)}
+    assert set(actions) == {"search", "create"}
+    assert actions["search"].source is IntegrationActionSource.MCP_SYNC
+    assert actions["search"].default_policy is IntegrationActionPolicyValue.ALLOW
+    assert actions["create"].default_policy is IntegrationActionPolicyValue.ASK
+    assert actions["search"].input_schema == {
+        "type": "object",
+        "properties": {"q": {"type": "string"}},
+    }
+
+    # Same tools: no write. A changed description updates in place. A gone
+    # tool loses its action.
+    mcp_api._sync_mcp_server_tools(
+        server.id,
+        _discovered([("search", "Find", True), ("create", "Make", False)]),
+        db_session,
+    )
+    assert _snapshot(db_session, integration.id) == first
+    mcp_api._sync_mcp_server_tools(
+        server.id, _discovered([("search", "Find things", True)]), db_session
+    )
+    after = _snapshot(db_session, integration.id)
+    assert set(after) == {"search"}
+    assert after["search"][0] == first["search"][0]
+    assert after["search"][2] == "Find things"
+    assert after["search"][1] > first["search"][1]
+
+
+def test_mcp_tool_sync_without_integration_writes_no_actions(
+    db_session: Session, created: Created
+) -> None:
+    integration, server = _mcp_server(db_session, created)
+    server.integration_id = None
+    db_session.commit()
+
+    mcp_api._sync_mcp_server_tools(
+        server.id, _discovered([("search", "Find", True)]), db_session
+    )
+
+    assert list_integration_actions(integration.id, db_session) == []
+
+
+# OpenAPI tool
+
+
+def test_openapi_discover_actions_equal_the_method_specs(
+    db_session: Session, created: Created
+) -> None:
+    integration, tool = _openapi_tool(db_session, created)
+    if tool.openapi_schema is None:
+        raise AssertionError("tool has no schema")
+
+    specs = get_kind_handler(IntegrationKind.API).discover_actions(
+        integration, db_session
+    )
+
+    method_specs = openapi_to_method_specs(tool.openapi_schema)
+    assert [(s.key, s.description, s.http_method, s.path_template) for s in specs] == [
+        (m.raw_name, m.summary, m.method.upper(), m.path) for m in method_specs
+    ]
+
+
+def test_openapi_sync_writes_updates_and_deletes(
+    db_session: Session, created: Created
+) -> None:
+    integration, tool = _openapi_tool(db_session, created)
+
+    first = _assert_idempotent(db_session, integration)
+    assert set(first) == {"listOrders", "createOrder", "deleteOrder"}
+    policies = {
+        a.key: a.default_policy
+        for a in list_integration_actions(integration.id, db_session)
+    }
+    assert policies == {
+        "listOrders": IntegrationActionPolicyValue.ALLOW,
+        "createOrder": IntegrationActionPolicyValue.ASK,
+        "deleteOrder": IntegrationActionPolicyValue.ASK,
+    }
+
+    schema = deepcopy(tool.openapi_schema)
+    if schema is None:
+        raise AssertionError("tool has no schema")
+    del schema["paths"]["/orders/{order_id}"]
+    schema["paths"]["/orders"]["get"]["summary"] = "List all orders"
+    tool.openapi_schema = schema
+    db_session.commit()
+    _sync(db_session, integration)
+
+    after = _snapshot(db_session, integration.id)
+    assert set(after) == {"listOrders", "createOrder"}
+    assert after["listOrders"][0] == first["listOrders"][0]
+    assert after["listOrders"][2] == "List all orders"
+    assert after["createOrder"] == first["createOrder"]
+
+
+def test_openapi_update_route_writes_actions(
+    db_session: Session, created: Created, make_test_user: MakeTestUser
+) -> None:
+    admin: User = make_test_user("sync_admin", is_admin=True)
+    integration, tool = _openapi_tool(db_session, created, user_id=admin.id)
+    host = f"orders-{uuid4().hex[:8]}.example.com"
+
+    tool_api.update_custom_tool(
+        tool_id=tool.id,
+        tool_data=CustomToolUpdate(definition=_openapi_spec(host)),
+        db_session=db_session,
+        user=admin,
+    )
+
+    assert set(_snapshot(db_session, integration.id)) == {
+        "listOrders",
+        "createOrder",
+        "deleteOrder",
+    }
+
+
+def test_openapi_create_route_syncs_the_integration_of_the_tool(
+    db_session: Session,
+    created: Created,
+    make_test_user: MakeTestUser,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The old create route makes no integration (U6 adds that), so give the
+    new tool one to prove the route syncs it."""
+    admin: User = make_test_user("sync_admin", is_admin=True)
+    integration = _integration(db_session, created, IntegrationKind.API)
+    db_session.commit()
+    real_create: Callable[..., Tool] = tool_api.create_tool__no_commit
+
+    def create_with_integration(**kwargs: Any) -> Tool:
+        tool = real_create(**kwargs)
+        tool.integration_id = integration.id
+        created.tool_ids.append(tool.id)
+        return tool
+
+    monkeypatch.setattr(tool_api, "create_tool__no_commit", create_with_integration)
+
+    tool_api.create_custom_tool(
+        tool_data=CustomToolCreate(
+            name=f"orders-{uuid4().hex[:8]}",
+            definition=_openapi_spec(f"orders-{uuid4().hex[:8]}.example.com"),
+            passthrough_auth=False,
+        ),
+        db_session=db_session,
+        user=admin,
+    )
+
+    assert set(_snapshot(db_session, integration.id)) == {
+        "listOrders",
+        "createOrder",
+        "deleteOrder",
+    }
+
+
+# External apps
+
+
+def test_preset_discover_actions_equal_the_catalog(
+    db_session: Session, created: Created
+) -> None:
+    integration, _app = _external_app(
+        db_session, created, ExternalAppType.LINEAR, [r"https://api\.linear\.app/.*"]
+    )
+
+    specs = get_kind_handler(IntegrationKind.API).discover_actions(
+        integration, db_session
+    )
+
+    catalog = get_endpoint_catalog(ExternalAppType.LINEAR)
+    assert [(s.key, s.display_name, s.description) for s in specs] == [
+        (e.id.value, e.normalised_name, e.description) for e in catalog
+    ]
+    assert [s.read_only for s in specs] == [
+        e.default_policy is ActionPolicy.ALWAYS for e in catalog
+    ]
+
+
+def test_preset_sync_is_idempotent(db_session: Session, created: Created) -> None:
+    integration, _app = _external_app(
+        db_session, created, ExternalAppType.LINEAR, [r"https://api\.linear\.app/.*"]
+    )
+
+    first = _assert_idempotent(db_session, integration)
+
+    assert set(first) == {
+        e.id.value for e in get_endpoint_catalog(ExternalAppType.LINEAR)
+    }
+    assert all(
+        a.source is IntegrationActionSource.PRESET_CATALOG
+        for a in list_integration_actions(integration.id, db_session)
+    )
+
+
+def test_custom_app_sync_writes_one_whole_domain_action(
+    db_session: Session, created: Created
+) -> None:
+    integration, _app = _external_app(
+        db_session, created, ExternalAppType.CUSTOM, ["https://internal.example.com/**"]
+    )
+
+    first = _assert_idempotent(db_session, integration)
+
+    assert list(first) == ["unspecified"]
+    (action,) = list_integration_actions(integration.id, db_session)
+    assert action.display_name == integration.name
+    assert action.default_policy is IntegrationActionPolicyValue.ASK
+
+
+# The replace function
+
+
+def _spec(key: str, description: str) -> IntegrationActionSpec:
+    return IntegrationActionSpec(
+        key=key,
+        source=IntegrationActionSource.OPENAPI_SPEC,
+        display_name=key,
+        description=description,
+        read_only=None,
+        default_policy=IntegrationActionPolicyValue.ASK,
+    )
+
+
+def test_replace_keeps_other_sources_and_first_duplicate(
+    db_session: Session, created: Created
+) -> None:
+    integration = _integration(db_session, created, IntegrationKind.API)
+    db_session.add(
+        IntegrationAction(
+            integration_id=integration.id,
+            key="from_mcp",
+            source=IntegrationActionSource.MCP_SYNC,
+            display_name="from_mcp",
+        )
+    )
+    db_session.commit()
+
+    replace_integration_actions__no_commit(
+        integration.id,
+        IntegrationActionSource.OPENAPI_SPEC,
+        [_spec("a", "first"), _spec("a", "second")],
+        db_session,
+    )
+    db_session.commit()
+
+    actions = {a.key: a for a in list_integration_actions(integration.id, db_session)}
+    assert set(actions) == {"from_mcp", "a"}
+    assert actions["a"].description == "first"
+
+
+def test_replace_rejects_a_spec_of_another_source(
+    db_session: Session, created: Created
+) -> None:
+    integration = _integration(db_session, created, IntegrationKind.API)
+    with pytest.raises(ValueError):
+        replace_integration_actions__no_commit(
+            integration.id,
+            IntegrationActionSource.MCP_SYNC,
+            [_spec("a", "x")],
+            db_session,
+        )
+
+
+def test_sync_by_id_and_sync_all(db_session: Session, created: Created) -> None:
+    preset, _ = _external_app(
+        db_session, created, ExternalAppType.GITHUB, [r"https://api\.github\.com/.*"]
+    )
+    custom, _ = _external_app(
+        db_session, created, ExternalAppType.CUSTOM, ["https://internal.example.com/**"]
+    )
+    # An integration with no kind row is logged and skipped.
+    _integration(db_session, created, IntegrationKind.API)
+    db_session.commit()
+
+    sync_actions_for_integration_id__no_commit(None, db_session)
+    sync_actions_for_integration_id__no_commit(preset.id, db_session)
+    db_session.commit()
+    assert set(_snapshot(db_session, preset.id)) == {
+        e.id.value for e in get_endpoint_catalog(ExternalAppType.GITHUB)
+    }
+    assert _snapshot(db_session, custom.id) == {}
+
+    sync_all_integration_actions__no_commit(db_session)
+    db_session.commit()
+    assert set(_snapshot(db_session, custom.id)) == {"unspecified"}
