@@ -12691,6 +12691,11 @@
           "text": "Gerando imagem..."
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Copiar tabela"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Pergunta"

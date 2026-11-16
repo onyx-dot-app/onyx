@@ -12691,6 +12691,11 @@
           "text": "画像を生成中..."
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "表をコピー"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "質問"
