@@ -14,15 +14,6 @@ import GenericBody from "@/lib/timeline/craft/components/tool-cards/GenericBody"
 import { isSkillInvocation } from "@/lib/timeline/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
-/**
- * Plain-text fallback for the step's primary content (skill, task, generic…).
- * The actual detail leads ("List Slack Channels for lookup", "Spawning
- * subagent: …") — not a bare generic verb.
- */
-function primaryText(toolCall: ToolCallState): string {
-  return toolCall.description || toolCall.title;
-}
-
 /** Text that inline markdown shows as written. */
 function plain(text: string): string {
   return text.replace(/[\\`*_~[\]<>#|]/g, "\\$&");
@@ -43,33 +34,61 @@ function verbWithCode(verb: string, chip: string): RichStr {
   return markdown(`${plain(verb)} ${code(chip)}`);
 }
 
+/** The finished form of each running verb and tool title. */
+const PAST_TENSE: Record<string, string> = {
+  Running: "Ran",
+  "Searching for": "Searched for",
+  "Using skill": "Used skill",
+  Reading: "Read",
+  Writing: "Wrote",
+  Editing: "Edited",
+  "Searching files": "Searched files",
+  "Searching content": "Searched content",
+  "Running command": "Ran command",
+  "Running task": "Ran task",
+  "Updating todos": "Updated todos",
+  "Fetching web content": "Fetched web content",
+  "Searching web": "Searched web",
+  "Checking code": "Checked code",
+  "Applying patch": "Applied patch",
+  "Running skill": "Ran skill",
+  "Listing files": "Listed files",
+  Asking: "Asked",
+  Validating: "Validated",
+  Searching: "Searched",
+  "Running tool": "Ran tool",
+};
+
 /**
  * The step's title. Bash/execute, search, skills and read/edit lead with a
  * verb, then the actual command, pattern, skill or file path in a code span;
- * everything else is plain text.
+ * everything else is plain text. `done` puts the verb in the past tense.
  */
 export function renderToolCallHeader(
-  toolCall: ToolCallState
+  toolCall: ToolCallState,
+  done = false
 ): string | RichStr {
+  const verb = (text: string): string =>
+    done ? (PAST_TENSE[text] ?? text) : text;
   if (toolCall.kind === "execute" && toolCall.command) {
     if (toolCall.skillName && toolCall.description) {
       return toolCall.description;
     }
-    return verbWithCode("Running", toolCall.command);
+    return verbWithCode(verb("Running"), toolCall.command);
   }
   if (toolCall.kind === "search" && toolCall.description) {
-    return verbWithCode("Searching for", toolCall.description);
+    return verbWithCode(verb("Searching for"), toolCall.description);
   }
   if (toolCall.toolName === "skill" && toolCall.skillName) {
-    return verbWithCode("Using skill", toolCall.skillName);
+    return verbWithCode(verb("Using skill"), toolCall.skillName);
   }
   if (
     (toolCall.kind === "read" || toolCall.kind === "edit") &&
     toolCall.description
   ) {
-    return verbWithCode(toolCall.title, toolCall.description);
+    return verbWithCode(verb(toolCall.title), toolCall.description);
   }
-  return primaryText(toolCall);
+  return toolCall.description || verb(toolCall.title);
 }
 
 export function renderToolCallBody(toolCall: ToolCallState): ReactNode {

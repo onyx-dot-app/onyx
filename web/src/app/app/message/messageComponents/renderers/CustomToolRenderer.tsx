@@ -119,7 +119,10 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     }
   }, [isComplete, onComplete]);
 
-  const status = useMemo(() => {
+  // A failed or stopped step keeps the running title; a done one says how it
+  // ended, the tool's own errors included.
+  const status = t("customTool.runningStatus.text", { toolName });
+  const doneStatus = useMemo(() => {
     if (isComplete) {
       if (error) {
         if (error.is_unreachable)
@@ -142,9 +145,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         return t("customTool.fileStatus.text", { toolName });
       return t("customTool.completedStatus.text", { toolName });
     }
-    if (isRunning) return t("customTool.runningStatus.text", { toolName });
     return null;
-  }, [toolName, responseType, error, isComplete, isRunning, t]);
+  }, [toolName, responseType, error, isComplete, t]);
 
   const icon = STEP_ICONS.tool;
 
@@ -281,6 +283,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       {
         icon,
         status,
+        doneStatus,
         supportsCollapsible: false,
         surfaceBackground: "error" as const,
         content,
@@ -294,6 +297,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       {
         icon,
         status,
+        doneStatus,
         supportsCollapsible: true,
         content,
       },
@@ -305,6 +309,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     {
       icon,
       status,
+      doneStatus,
       supportsCollapsible: true,
       content: (
         <ShadowDiv

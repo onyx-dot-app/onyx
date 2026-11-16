@@ -12264,9 +12264,6 @@
         "emptyState": {
           "text": "未生成图片"
         },
-        "failedStatus": {
-          "text": "图片生成失败"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {已生成 # 张图片} other {已生成 # 张图片}}"
         },
@@ -12418,6 +12415,9 @@
         "fetch": {
           "reading": {
             "status": "正在读取"
+          },
+          "read": {
+            "status": "已读取"
           }
         },
         "fileReader": {
@@ -12502,7 +12502,9 @@
           },
           "header": {
             "default": "正在搜索内部文档",
+            "doneDefault": "已搜索内部文档",
             "sources": "正在搜索 {sources}",
+            "doneSources": "已搜索 {sources}",
             "sourcesOverflow": "{sources} 及另外 {count} 个",
             "withTimeWindow": "{header}({timeWindow})"
           },
@@ -12524,6 +12526,9 @@
           },
           "updating": {
             "status": "正在更新记忆"
+          },
+          "updated": {
+            "status": "已更新记忆"
           },
           "viewMemoriesButton": {
             "tooltip": "查看记忆"
@@ -12589,20 +12594,8 @@
           }
         },
         "python": {
-          "completed": {
-            "status": "Python 执行完成"
-          },
-          "default": {
-            "status": "Python 执行"
-          },
           "error": {
             "label": "错误："
-          },
-          "executing": {
-            "status": "正在执行 Python 代码..."
-          },
-          "failed": {
-            "status": "Python 执行失败"
           },
           "generatedFiles": {
             "label": "{count, plural, one {已生成 # 个文件} other {已生成 # 个文件}}"
@@ -12612,6 +12605,12 @@
           },
           "output": {
             "label": "输出："
+          },
+          "running": {
+            "status": "正在运行 Python"
+          },
+          "ran": {
+            "status": "已运行 Python"
           },
           "runningCode": {
             "label": "正在运行代码..."
@@ -12626,6 +12625,9 @@
           },
           "thinking": {
             "status": "思考中"
+          },
+          "thought": {
+            "status": "已思考"
           }
         },
         "researchAgent": {
@@ -12679,6 +12681,9 @@
         "webSearch": {
           "searching": {
             "status": "正在搜索网页"
+          },
+          "searched": {
+            "status": "已搜索网络"
           }
         },
         "sandbox": {

@@ -151,7 +151,9 @@ part id, so a late update changes it in place.
 Both products draw a block with the same components in
 `web/src/lib/timeline/components/` ([[chat-frontend]]): `RunCard` is the card
 (run header, fold, timer, Done or Stopped row) and `RunStep` is a step (its
-status sets the spinner, the alert icon and the failed tint). `CraftTimeline`
+status sets the spinner, the alert icon and red tint of a failed step, or
+the red stop icon of a stopped one; a step that did not finish keeps its
+running title, and a done step shows its finished title). `CraftTimeline`
 and chat's `AgentTimeline` only map their steps onto them. Each step is an
 Opal `Line` (it shares its base row with the connector check card's `Log`):
 icon, a full-width title (Craft puts the command or path in it as a code span),

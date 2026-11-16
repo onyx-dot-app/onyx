@@ -98,6 +98,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
 
   // Determine status text
   const statusLabel = t("memory.updating.status");
+  const doneStatusLabel = t("memory.updated.status");
 
   const memoryContent = (
     <div className="flex flex-col">
@@ -160,6 +161,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
     {
       icon: STEP_ICONS.edit,
       status: statusLabel,
+      doneStatus: doneStatusLabel,
       supportsCollapsible: false,
       timelineLayout: "timeline",
       content: memoryContent,

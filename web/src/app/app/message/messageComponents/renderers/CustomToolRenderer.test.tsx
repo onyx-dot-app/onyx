@@ -61,7 +61,8 @@ function renderStatus(
               data-surface={result.surfaceBackground}
               data-collapsible={String(result.supportsCollapsible)}
             >
-              {result.status}
+              {/* The header a done step shows. */}
+              {result.doneStatus ?? result.status}
               {result.content}
             </div>
           ))}

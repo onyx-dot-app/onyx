@@ -58,20 +58,18 @@ export const ImageToolRenderer: MessageRenderer<
     (packet) => packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
   );
   const isComplete = packets.some(isGroupEndPacket);
-  const failed = packets.some((p) => p.obj.type === PacketType.ERROR);
   const isRunning = !isComplete && !stopPacketSeen;
 
-  // A final result can be empty. A call with no result packet was stopped, by
-  // Stop or by an interrupted code mode program.
-  const status = failed
-    ? t("imageTool.failedStatus.text")
-    : isRunning
-      ? t("imageTool.generatingStatus.text")
-      : images.length > 0
-        ? t("imageTool.generatedStatus.text", { count: images.length })
-        : hasResult
-          ? t("imageTool.emptyState.text")
-          : t("imageTool.stoppedStatus.text");
+  // A failed or stopped step keeps the running title. A final result can be
+  // empty. A call with no result packet was stopped, by Stop or by an
+  // interrupted code mode program.
+  const status = t("imageTool.generatingStatus.text");
+  const doneStatus =
+    images.length > 0
+      ? t("imageTool.generatedStatus.text", { count: images.length })
+      : hasResult
+        ? t("imageTool.emptyState.text")
+        : t("imageTool.stoppedStatus.text");
 
   const revisedPrompts = Array.from(
     new Set(images.map((image) => image.revised_prompt).filter(Boolean))
@@ -97,6 +95,7 @@ export const ImageToolRenderer: MessageRenderer<
     {
       icon: STEP_ICONS.image,
       status,
+      doneStatus,
       supportsCollapsible: false,
       content,
     },

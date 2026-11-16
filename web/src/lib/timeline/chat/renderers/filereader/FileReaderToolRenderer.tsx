@@ -76,9 +76,10 @@ export const FileReaderToolRenderer: MessageRenderer<
     total: state.totalChars,
   };
 
-  const statusText = state.fileName
+  const statusText = t("fileReader.reading.status");
+  const doneStatusText = state.fileName
     ? t("fileReader.read.status", { fileName: state.fileName, ...charRange })
-    : t("fileReader.reading.status");
+    : statusText;
 
   const isCompact = renderType === RenderType.COMPACT;
 
@@ -87,6 +88,7 @@ export const FileReaderToolRenderer: MessageRenderer<
       {
         icon: STEP_ICONS.read,
         status: statusText,
+        doneStatus: doneStatusText,
         supportsCollapsible: true,
         timelineLayout: "timeline",
         content: <></>,
@@ -100,6 +102,7 @@ export const FileReaderToolRenderer: MessageRenderer<
     {
       icon: STEP_ICONS.read,
       status: statusText,
+      doneStatus: doneStatusText,
       supportsCollapsible: true,
       timelineLayout: "timeline",
       content: (

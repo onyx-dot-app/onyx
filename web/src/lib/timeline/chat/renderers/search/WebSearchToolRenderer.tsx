@@ -55,12 +55,14 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   const isInline = renderType === RenderType.INLINE;
 
   const queriesHeader = t("webSearch.searching.status");
+  const queriesDoneHeader = t("webSearch.searched.status");
 
   if (queries.length === 0) {
     return children([
       {
         icon: STEP_ICONS.webSearch,
         status: queriesHeader,
+        doneStatus: queriesDoneHeader,
         content: <div />,
         supportsCollapsible: false,
         timelineLayout: "timeline",
@@ -128,6 +130,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     {
       icon: STEP_ICONS.webSearch,
       status: queriesHeader,
+      doneStatus: queriesDoneHeader,
       content: (
         <RetrievalBody
           queries={queries}

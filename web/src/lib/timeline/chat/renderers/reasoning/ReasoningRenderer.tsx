@@ -48,6 +48,7 @@ export const ReasoningRenderer: MessageRenderer<
 > = ({ packets, onComplete, animate, children }) => {
   const t = useTranslations("chat.messages.timeline");
   const thinkingStatus = t("reasoning.thinking.status");
+  const thoughtStatus = t("reasoning.thought.status");
 
   const { hasStart, hasEnd, content } = useMemo(
     () => constructCurrentReasoningState(packets),
@@ -128,6 +129,8 @@ export const ReasoningRenderer: MessageRenderer<
     {
       icon: STEP_ICONS.thinking,
       status: displayStatus,
+      // A title from the reasoning itself stays; the default turns past tense.
+      doneStatus: title || thoughtStatus,
       content: reasoningContent,
       expandedText: reasoningContent,
     },

@@ -41,7 +41,10 @@ export interface FullChatState {
 
 export interface RendererResult {
   icon: IconFunctionComponent | null;
+  /** The header while the step runs, and after it fails or is stopped. */
   status: string | null;
+  /** The header once the step is done. Defaults to `status`. */
+  doneStatus?: string | null;
   content: JSX.Element;
 
   // can be used to override the look on the "expanded" view

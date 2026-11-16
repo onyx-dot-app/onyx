@@ -44,7 +44,7 @@ test("the timeline counts unique images across repeated deltas", () => {
       animate={false}
       stopPacketSeen
     >
-      {(steps) => <>{steps[0]?.status}</>}
+      {(steps) => <>{steps[0]?.doneStatus ?? steps[0]?.status}</>}
     </ImageToolRenderer>
   );
   expect(screen.getByText("Generated 1 image")).toBeInTheDocument();
@@ -84,7 +84,7 @@ test.each([
         animate={false}
         stopPacketSeen
       >
-        {(steps) => <>{steps[0]?.status}</>}
+        {(steps) => <>{steps[0]?.doneStatus ?? steps[0]?.status}</>}
       </ImageToolRenderer>
     );
     expect(screen.getByText(expectedStatus)).toBeInTheDocument();
