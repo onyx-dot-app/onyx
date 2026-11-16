@@ -270,6 +270,10 @@ def should_index(
         # print(f"Not indexing cc_pair={cc_pair.id}: NOT_APPLICABLE source")
         return False
 
+    # User Library files are stored directly; there is no connector to fetch with.
+    if connector.source == DocumentSource.CRAFT_FILE:
+        return False
+
     # User can still manually create single indexing attempts via the UI for the
     # currently in use index
     if DISABLE_INDEX_UPDATE_ON_SWAP:

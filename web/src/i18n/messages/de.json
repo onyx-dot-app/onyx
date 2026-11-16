@@ -12691,6 +12691,11 @@
           "text": "Bild wird generiert..."
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Tabelle kopieren"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Frage"

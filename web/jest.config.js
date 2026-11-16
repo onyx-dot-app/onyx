@@ -165,6 +165,7 @@ module.exports = {
       testMatch: [
         // Pure unit tests that don't need DOM
         "**/src/**/codeUtils.test.ts",
+        "**/src/**/tableCopyUtils.test.ts",
         "**/src/lib/**/*.test.ts",
         "**/src/app/**/services/*.test.ts",
         "**/src/app/**/utils/*.test.ts",
