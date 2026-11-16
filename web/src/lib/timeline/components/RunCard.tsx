@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Fold, Presence } from "@opal/components";
+import { Button, Fold, Presence, Text } from "@opal/components";
+import { SvgExpand, SvgFold } from "@opal/icons";
+import { formatDurationSeconds } from "@opal/time";
+import { useTranslations } from "next-intl";
+import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { Section } from "@opal/layouts";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import {
@@ -74,6 +78,7 @@ export function RunCard<S extends RunCardStep>({
   durationSeconds,
   summary,
 }: RunCardProps<S>) {
+  const t = useTranslations("chat.messages.timeline");
   const isRunning =
     isActive ?? steps.some((step) => step.status === "streaming");
   const stopped =
@@ -98,6 +103,13 @@ export function RunCard<S extends RunCardStep>({
   const [startedAt] = useState<number | undefined>(() =>
     isRunning ? (streamingStartTime ?? Date.now()) : undefined
   );
+  // The live timer; the server's duration, when it has one, stops it.
+  const elapsedSeconds = useStreamingDuration(
+    durationSeconds === undefined,
+    startedAt,
+    durationSeconds
+  );
+
   const [timedSeconds, setTimedSeconds] = useState(0);
   useEffect(() => {
     if (!isRunning && startedAt !== undefined) {
@@ -121,32 +133,49 @@ export function RunCard<S extends RunCardStep>({
             height="auto"
             className="transition-[row-gap] duration-150"
           >
-            <TimelineHeaderRow>
+            <TimelineHeaderRow onClick={foldable ? toggle : undefined}>
               {isRunning ? (
-                <StreamingHeader
-                  headerText={workingText}
-                  collapsible={foldable}
-                  isExpanded={isOpen}
-                  onToggle={toggle}
-                  streamingStartTime={startedAt}
-                  toolProcessingDuration={durationSeconds}
-                />
+                <StreamingHeader headerText={workingText} />
               ) : stopped ? (
-                <StoppedHeader
-                  totalSteps={steps.length}
-                  collapsible
-                  isExpanded={isOpen}
-                  onToggle={toggle}
-                />
+                <StoppedHeader />
               ) : (
                 <CompletedHeader
-                  totalSteps={steps.length}
-                  collapsible
                   isExpanded={isOpen}
-                  onToggle={toggle}
                   processingDurationSeconds={durationSeconds ?? timedSeconds}
                   {...summary}
                 />
+              )}
+              {foldable && (
+                <>
+                  {/* The timer is plain text beside the button: a button
+                      label animates its changes, so each tick would flash. */}
+                  <Presence
+                    show={isRunning && isOpen && elapsedSeconds > 0}
+                    from="end"
+                    width="fit"
+                  >
+                    <div className="px-(--padding-text-4)">
+                      <Text
+                        as="p"
+                        font="secondary-body"
+                        color="text-03"
+                        wordWrap="whitespace-nowrap"
+                      >
+                        {formatDurationSeconds(elapsedSeconds)}
+                      </Text>
+                    </div>
+                  </Presence>
+                  {/* One fold button in every state, so its step count
+                      animates as it changes. Its click reaches the row. */}
+                  <Button
+                    prominence="tertiary"
+                    size="md"
+                    rightIcon={isOpen ? SvgFold : SvgExpand}
+                    aria-expanded={isOpen}
+                  >
+                    {t("stepsButton.label", { count: steps.length })}
+                  </Button>
+                </>
               )}
             </TimelineHeaderRow>
             {steps.map((step, index) => (

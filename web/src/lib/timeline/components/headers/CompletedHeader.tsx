@@ -1,15 +1,12 @@
 "use client";
 
-import React from "react";
 import { useTranslations } from "next-intl";
-import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
+import { SvgAddLines, SvgMaximize2 } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Tooltip } from "@opal/components";
 import { ContentAction, Section } from "@opal/layouts";
 import { formatDurationSeconds } from "@opal/time";
-import { noProp } from "@/lib/utils";
-import { clickOnKeyDown } from "@opal/utils";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@opal/components";
 
@@ -103,10 +100,8 @@ function MemoryTagWithTooltip({
 // =============================================================================
 
 export interface CompletedHeaderProps {
-  totalSteps: number;
-  collapsible: boolean;
+  /** The run is open: the duration shows instead of the image count. */
   isExpanded: boolean;
-  onToggle: () => void;
   processingDurationSeconds?: number;
   generatedImageCount?: number;
   isMemoryOnly?: boolean;
@@ -116,12 +111,9 @@ export interface CompletedHeaderProps {
   memoryIndex?: number | null;
 }
 
-/** Header when completed - handles both collapsed and expanded states */
-export const CompletedHeader = React.memo(function CompletedHeader({
-  totalSteps,
-  collapsible,
+/** The finished run's title: how long it took, or what it produced. */
+export function CompletedHeader({
   isExpanded,
-  onToggle,
   processingDurationSeconds = 0,
   generatedImageCount = 0,
   isMemoryOnly = false,
@@ -134,27 +126,13 @@ export const CompletedHeader = React.memo(function CompletedHeader({
 
   if (isMemoryOnly) {
     return (
-      <div className="flex w-full justify-between">
-        <div className="flex flex-1 min-w-0 items-center px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-          <MemoryTagWithTooltip
-            memoryText={memoryText}
-            memoryOperation={memoryOperation}
-            memoryId={memoryId}
-            memoryIndex={memoryIndex}
-          />
-        </div>
-        {collapsible && totalSteps > 0 && isExpanded && (
-          <Button
-            prominence="tertiary"
-            size="md"
-            onClick={noProp(onToggle)}
-            rightIcon={isExpanded ? SvgFold : SvgExpand}
-            aria-label={t("expandButton.ariaLabel")}
-            aria-expanded={isExpanded}
-          >
-            {t("stepsButton.label", { count: totalSteps })}
-          </Button>
-        )}
+      <div className="flex flex-1 min-w-0 items-center px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+        <MemoryTagWithTooltip
+          memoryText={memoryText}
+          memoryOperation={memoryOperation}
+          memoryId={memoryId}
+          memoryIndex={memoryIndex}
+        />
       </div>
     );
   }
@@ -170,7 +148,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
       ? t("generatedImages.label", { count: generatedImageCount })
       : null;
 
-  const summary = (
+  return (
     <div className="flex flex-1 min-w-0 items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
       <Text as="p" font="main-ui-action" color="text-03">
         {isExpanded ? durationText : (imageText ?? durationText)}
@@ -185,37 +163,4 @@ export const CompletedHeader = React.memo(function CompletedHeader({
       )}
     </div>
   );
-
-  const className = "flex items-center justify-between w-full";
-
-  // Without a toggle target the row must not announce itself as a button.
-  if (!collapsible || totalSteps === 0) {
-    return <div className={className}>{summary}</div>;
-  }
-
-  return (
-    // The row holds its own expand button, so it stays a div with button
-    // semantics rather than a <button> wrapping a <button>.
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label={t("toggleRow.ariaLabel")}
-      onKeyDown={clickOnKeyDown(onToggle)}
-      onClick={onToggle}
-      className={className}
-    >
-      {summary}
-
-      <Button
-        prominence="tertiary"
-        size="md"
-        onClick={noProp(onToggle)}
-        rightIcon={isExpanded ? SvgFold : SvgExpand}
-        aria-label={t("expandButton.ariaLabel")}
-        aria-expanded={isExpanded}
-      >
-        {t("stepsButton.label", { count: totalSteps })}
-      </Button>
-    </div>
-  );
-});
+}

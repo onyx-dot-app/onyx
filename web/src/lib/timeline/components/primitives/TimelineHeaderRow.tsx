@@ -2,6 +2,8 @@ import React from "react";
 import { cn } from "@opal/utils";
 
 export interface TimelineHeaderRowProps {
+  /** Folds the run: a click anywhere on the row toggles it. */
+  onClick?: () => void;
   children?: React.ReactNode;
 }
 
@@ -9,9 +11,21 @@ export interface TimelineHeaderRowProps {
  * A run's header row: the header text and its fold button. Its height comes
  * from them: the fold button is 28px.
  */
-export function TimelineHeaderRow({ children }: TimelineHeaderRowProps) {
+export function TimelineHeaderRow({
+  onClick,
+  children,
+}: TimelineHeaderRowProps) {
   return (
-    <div className="flex w-full items-center justify-between">{children}</div>
+    <div
+      role="presentation"
+      className={cn(
+        "flex w-full items-center justify-between",
+        onClick && "cursor-pointer select-none"
+      )}
+      onClick={onClick}
+    >
+      {children}
+    </div>
   );
 }
 
