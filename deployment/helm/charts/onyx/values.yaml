@@ -2117,8 +2117,8 @@ craft:
     # Idle guests give memory back, so the agent can start more VMs than the
     # node holds. When they use it again, the kernel then kills a VM inside
     # the slice, not kubelet or containerd. Keep the rest for kubelet,
-    # containerd, the host agent and the system. 0: the agent leaves the
-    # slice as it is.
+    # containerd, the host agent and the system. 0: no limit (the agent
+    # removes a limit of an earlier start).
     sliceMemoryPercent: 85
     # Comma-separated DNS or URI SANs; the client certificate must have one.
     # Empty = the client certificate name with chart-made certificates, or

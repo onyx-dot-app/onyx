@@ -606,7 +606,7 @@ safe. A Firecracker that grows past the limit is OOM-killed; the kernel kills th
 shows it as `EXITED` and cleans it up. `io.max` is not set.
 
 At start the agent sets `MemoryMax` of the slice (`systemctl set-property --runtime <slice>`) to
-`--slice-memory-percent` of `MemTotal` (default 85; 0 leaves the slice as it is). Admission counts what
+`--slice-memory-percent` of `MemTotal` (default 85; 0 sets `MemoryMax=infinity` and only logs a failure). Admission counts what
 running guests use, and idle guests give memory back, so the VMs can together ask for more memory than the
 node has. With the cap the kernel OOM killer acts inside the slice and kills a VM, not kubelet or
 containerd. kubelet does not see VM memory, so it cannot evict anything for it.

@@ -56,6 +56,10 @@ func TestSliceMemoryMax(t *testing.T) {
 	if got := c.SliceMemoryMaxArgv(55705 << 20); !slices.Equal(got, want) {
 		t.Fatalf("argv\n got %q\nwant %q", got, want)
 	}
+	want[len(want)-1] = "MemoryMax=infinity"
+	if got := c.SliceMemoryMaxArgv(0); !slices.Equal(got, want) {
+		t.Fatalf("argv\n got %q\nwant %q", got, want)
+	}
 }
 
 func TestVMLimits(t *testing.T) {

@@ -157,9 +157,13 @@ func SliceMemoryMax(memTotalMiB uint64, percent uint) uint64 {
 }
 
 // SliceMemoryMaxArgv returns the systemctl command that sets MemoryMax of
-// the VM slice until the next boot.
+// the VM slice until the next boot. 0 removes the limit.
 func (c Command) SliceMemoryMaxArgv(bytes uint64) []string {
-	return c.SystemctlArgv("set-property", "--runtime", c.Slice, "MemoryMax="+strconv.FormatUint(bytes, 10))
+	value := "infinity"
+	if bytes > 0 {
+		value = strconv.FormatUint(bytes, 10)
+	}
+	return c.SystemctlArgv("set-property", "--runtime", c.Slice, "MemoryMax="+value)
 }
 
 // SystemctlArgv returns a systemctl command line that runs in the same mount

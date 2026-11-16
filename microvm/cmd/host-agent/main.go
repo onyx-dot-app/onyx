@@ -179,7 +179,7 @@ func main() {
 	flag.IntVar(&f.managedFiles, "managed-max-files", managed.DefaultLimits.MaxEntries, "most files and directories in a managed bundle")
 	flag.IntVar(&f.managedBuilds, "managed-max-builds", 1, "most managed bundle uploads that receive and build at once")
 	flag.DurationVar(&f.swapTimeout, "managed-swap-timeout", 30*time.Second, "limit for the managed drive swap of one VM")
-	flag.UintVar(&f.slicePercent, "slice-memory-percent", jailer.DefaultSliceMemoryPercent, "memory.max of --slice in percent of the node's MemTotal, set at start (10 to 100; 0: leave the slice as it is)")
+	flag.UintVar(&f.slicePercent, "slice-memory-percent", jailer.DefaultSliceMemoryPercent, "memory.max of --slice in percent of the node's MemTotal, set at start (10 to 100; 0: no limit)")
 	flag.UintVar(&f.memOverhead, "vm-mem-overhead-mib", jailer.DefaultMemOverheadMiB, "memory each VM scope gets on top of the guest memory (cgroup memory.max = mem_mib + this)")
 	flag.BoolVar(&f.watchDrain, "watch-node-drain", false, "read this pod's Node (--node-id) and drain while it has a --drain-taints taint; needs RBAC get on nodes")
 	flag.StringVar(&f.drainTaints, "drain-taints", strings.Join(nodewatch.DefaultTaintKeys, ","), "comma-separated taint keys that drain the node")
@@ -1042,9 +1042,15 @@ func splitList(s string) []string {
 
 // capVMSlice sets MemoryMax of the VM slice to percent of MemTotal.
 // kubelet does not see VM memory, so without the cap an overcommitted node
-// runs out of memory outside the slice.
+// runs out of memory outside the slice. percent 0 removes a limit of an
+// earlier start; a failure then only logs, so 0 also works where systemctl
+// set-property does not.
 func capVMSlice(c jailer.Command, percent uint, stats hostinfo.Stats, log *slog.Logger) error {
 	if percent == 0 {
+		argv := c.SliceMemoryMaxArgv(0)
+		if out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput(); err != nil {
+			log.Warn("VM slice memory limit not removed", "slice", c.Slice, "err", err, "output", strings.TrimSpace(string(out)))
+		}
 		return nil
 	}
 	total, _, err := stats.MemInfo()
