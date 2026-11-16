@@ -1,13 +1,8 @@
 import { redirect } from "@opal/navigation";
-import {
-  legacyMcpListHref,
-  type PluginSearchParams,
-} from "@/lib/plugins/routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<PluginSearchParams>;
-}) {
-  redirect(legacyMcpListHref(await searchParams));
+/** An old plugin or action URL. Its id is not an integration id, so it opens
+ * the integration list. */
+export default function Page() {
+  redirect(ADMIN_ROUTES.INTEGRATIONS.path);
 }

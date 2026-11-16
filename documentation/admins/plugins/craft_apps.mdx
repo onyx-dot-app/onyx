@@ -5,7 +5,7 @@ icon: "hammer"
 ---
 
 <Note>
-  In Onyx 5.0, Craft Apps moved from **Admin Panel → Craft → Apps** to **Admin Panel → Plugins**.
+  Craft Apps moved from **Admin Panel → Craft → Apps** to **Admin Panel → Integrations**.
   See [Where things moved](/admins/plugins/overview#where-things-moved-in-onyx-5).
 </Note>
 
@@ -14,7 +14,7 @@ Each user connects their own account. Craft then calls the application's API as 
 
 Craft can only reach content that the connected account can access in the application.
 
-Admins add Craft Apps in **Admin Panel → Plugins**. Users connect their accounts in **Plugins** in Craft or Chat.
+Admins add Craft Apps in **Admin Panel → Integrations**. Users connect their accounts in **Plugins** in Craft or Chat.
 
 <Note>
   Craft Apps work only in [Craft](/overview/core_features/craft). Main Chat does not support them.
@@ -73,7 +73,7 @@ A [custom App](#custom-apps) gives Craft credentials and network access for any 
   </Step>
 
   <Step title="Set the configuration">
-    Go to **Admin Panel → Plugins**, click **Add**, select **Craft Apps**, then select the provider.
+    Go to **Admin Panel → Integrations**, click **Add**, select **App**, then select the preset.
     On the **Configuration** tab, set:
 
     | Setting | Effect |
@@ -92,7 +92,7 @@ A [custom App](#custom-apps) gives Craft credentials and network access for any 
   <Step title="Review action policies">
     On the **Tools** tab, set a policy for each action. Review every write, send, delete, and publish action.
 
-    <img className="rounded-image" src="/assets/admins/plugins/craft_app_slack_tools.webp" alt="The Slack Tools tab with Auto-approve, Ask, and Disabled for each action"/>
+    <img className="rounded-image" src="/assets/admins/plugins/craft_app_slack_tools.webp" alt="The Slack Tools tab with Allow, Ask, and Blocked for each action"/>
   </Step>
 
   <Step title="Add the App">
@@ -202,15 +202,15 @@ Each action in a built-in App has one workspace policy:
 
 | Policy | Effect | Typical use |
 | --- | --- | --- |
-| **Auto-approve** | Craft runs the action without a prompt. | Narrow, low-risk reads |
+| **Allow** | Craft runs the action without a prompt. | Narrow, low-risk reads |
 | **Ask** | Craft stops before the request and shows the user an approval card. | Sends, creates, edits, and broad reads |
-| **Disabled** | The proxy blocks the action. Users and scheduled tasks cannot override it. | Destructive or prohibited actions |
+| **Blocked** | The proxy blocks the action. Users and scheduled tasks cannot override it. | Destructive or prohibited actions |
 
-Built-in Apps start with defaults: most reads are **Auto-approve**, and most changes are **Ask**.
+Built-in Apps start with defaults: most reads are **Allow**, and most changes are **Ask**.
 
 <Info>
-  If one request matches more than one action, the strictest policy applies: **Disabled**, then **Ask**,
-  then **Auto-approve**. A request that does not match a cataloged action uses **Ask**.
+  If one request matches more than one action, the strictest policy applies: **Blocked**, then **Ask**, then **Allow**.
+  A request that does not match a cataloged action uses **Ask**.
 </Info>
 
 ### User approvals
@@ -219,7 +219,7 @@ When an action uses **Ask**, the user can approve once, approve for the session,
 **Approve for session** applies only to matching actions in that session. It does not change the workspace policy.
 
 If **Let users manage approval settings** is on, users can change the policy for their own account.
-They cannot turn on an action that you set to **Disabled**.
+They cannot turn on an action that you set to **Blocked**.
 
 ### Scheduled Tasks
 
@@ -230,7 +230,7 @@ A run can use only the integrations of those plugins. Each action starts with th
 and the owner can set it to **Allow**, **Ask** or **Blocked** for that task only.
 
 - If users cannot save **Always allow** on the integration, **Allow** in a task does not change your setting.
-- Task settings cannot override **Disabled**.
+- Task settings cannot override **Blocked**.
 - If a run reaches an action that needs approval, the run stops with the **Awaiting approval** status.
   The owner must change the action settings of the task, then run the task again.
 
@@ -254,7 +254,7 @@ A custom App gives Craft credentials and network access for the API. It does not
 
 <Steps>
   <Step title="Set the configuration">
-    Go to **Admin Panel → Plugins**, click **Add**, select **Craft Apps**, then select **Custom app**.
+    Go to **Admin Panel → Integrations**, click **Add**, then select **Custom app**.
     Enter a **Name** and one or more **Upstream URL patterns**. Type each pattern and press Enter.
     The proxy injects credentials only into requests that match these patterns.
   </Step>
@@ -325,7 +325,7 @@ the sandbox proxy injects the rendered headers on the way out.
 
 <Warning>
   A custom App has no action catalog. Every request that matches its URL patterns requires approval.
-  You cannot set a custom App request to **Auto-approve** or **Disabled**. To stop all use of a custom App,
+  You cannot set a custom App request to **Allow** or **Blocked**. To stop all use of a custom App,
   turn off **Enable for Craft**.
 </Warning>
 
@@ -353,13 +353,13 @@ Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enable for Craft**
 
   <Accordion title="A user connected successfully but an action is blocked">
     Check the action's admin policy and the scopes or capabilities granted by the external account.
-    A **Disabled** policy cannot be overridden.
+    A **Blocked** policy cannot be overridden.
     An Ask request can also fail if the user rejects it or the approval expires.
   </Accordion>
 
   <Accordion title="A Scheduled Task is awaiting approval">
     Confirm that the task owner is still connected to the app and that a plugin of the task holds the app.
-    Then check for a **Disabled** policy, or a different app than the prompt was expected to use.
+    Then check for a **Blocked** policy, or a different app than the prompt was expected to use.
     Correct the task and use **Run now**. The blocked run does not resume automatically.
   </Accordion>
 </AccordionGroup>

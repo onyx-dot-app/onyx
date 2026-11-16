@@ -706,13 +706,13 @@
     },
     "policyToggle": {
       "always": {
-        "label": "自动批准"
+        "label": "允许"
       },
       "ask": {
         "label": "询问"
       },
       "deny": {
-        "label": "已禁用"
+        "label": "已阻止"
       }
     },
     "switchList": {
@@ -2384,7 +2384,7 @@
           "title": "编程智能体"
         },
         "description": "对话可以使用的工具和能力。此项不适用于智能体。",
-        "pluginsNote": "在[插件]({url})中配置默认聊天使用的 MCP 服务器和 OpenAPI 插件。",
+        "pluginsNote": "在[集成]({url})中管理 MCP 服务器和 OpenAPI 应用。",
         "imageGeneration": {
           "description": "使用 AI 工具生成和处理图像。",
           "disabledTooltip": "图像生成需要已配置的模型。请在“配置 > 图像生成”中设置一个，或联系管理员。",
@@ -11231,6 +11231,307 @@
           "tooltip": "编辑"
         }
       }
+    },
+    "plugins": {
+      "title": "插件",
+      "description": "插件为用户提供技能和集成。此页面显示包含集成的插件。",
+      "search": "搜索插件",
+      "loadFailed": "无法加载插件。",
+      "manageIntegrations": "管理集成",
+      "columns": {
+        "name": "插件",
+        "library": "库",
+        "installation": "安装设置",
+        "integrations": "集成"
+      },
+      "library": {
+        "organization": "组织库",
+        "personal": "{owner} 的“我的上传”"
+      },
+      "installation": "{policy, select, REQUIRED {必需} DEFAULT {默认开启} AVAILABLE {可用} NOT_AVAILABLE {不可用} other {无}}",
+      "openIntegration": "打开 {name}",
+      "empty": {
+        "title": "没有包含集成的插件",
+        "description": "添加集成后，Onyx 会创建一个包含它的插件。"
+      }
+    },
+    "integrations": {
+      "title": "集成",
+      "description": "连接 MCP 服务器和应用。每个集成都包含在一个插件中，由插件为用户提供访问权限。",
+      "search": "搜索集成",
+      "open": "打开 {name}",
+      "loadFailed": "无法加载集成。",
+      "add": {
+        "label": "添加",
+        "title": "添加集成",
+        "description": "选择集成类型。",
+        "created": "已添加 {name}。",
+        "createFailed": "无法添加集成。",
+        "formTitle": {
+          "mcp_server": "添加 MCP 服务器",
+          "openapi": "添加 OpenAPI 应用",
+          "preset": "从预设添加应用",
+          "custom": "添加自定义应用"
+        },
+        "kindDescription": {
+          "mcp_server": "通过 URL 连接远程 MCP 服务器。",
+          "openapi": "根据 OpenAPI 架构创建操作。",
+          "preset": "连接内置应用，例如 GitHub 或 Slack。",
+          "custom": "允许 Craft 调用与 URL 模式匹配的 HTTP 服务。"
+        },
+        "openapi": {
+          "title": "添加 OpenAPI 应用"
+        },
+        "preset": {
+          "title": "预设",
+          "placeholder": "选择预设",
+          "required": "请选择预设。",
+          "loadFailed": "无法加载预设。",
+          "instructions": "设置说明",
+          "credentialRequired": "请填写此值。"
+        },
+        "name": {
+          "title": "名称",
+          "placeholder": "添加名称",
+          "required": "请添加名称。"
+        },
+        "descriptionField": {
+          "title": "描述",
+          "placeholder": "添加描述"
+        },
+        "custom": {
+          "patterns": {
+            "title": "URL 模式",
+            "description": "每行填写一个 URL 模式，例如 https://api.example.com/*。",
+            "placeholder": "https://api.example.com/*",
+            "required": "请至少添加一个 URL 模式。"
+          }
+        },
+        "mcp": {
+          "url": {
+            "title": "服务器 URL",
+            "placeholder": "https://example.com/mcp",
+            "error": "请输入有效的服务器 URL。"
+          },
+          "probe": {
+            "checking": "正在检查服务器…",
+            "public": "找到 {count, plural, one {# 个工具} other {# 个工具}}。该服务器无需登录。",
+            "oauth": "该服务器使用 OAuth 登录。",
+            "authUnknown": "该服务器需要登录。请添加 API 密钥请求头或 OAuth。",
+            "unreachable": "Onyx 无法访问此服务器。请检查 URL。"
+          },
+          "transport": {
+            "title": "传输方式",
+            "streamableHttp": "可流式 HTTP",
+            "sse": "服务器发送事件 (SSE)"
+          },
+          "suggested": "推荐的服务器"
+        },
+        "owner": {
+          "title": "所有者",
+          "personal": "仅供我使用",
+          "organization": "供组织使用",
+          "personalDescription": "Onyx 会将集成放入“我的上传”中的一个插件。您之后可以共享该插件。",
+          "organizationDescription": "Onyx 会将集成放入组织库中的一个插件。"
+        },
+        "back": "返回",
+        "submit": "添加",
+        "adding": "正在添加…"
+      },
+      "filters": {
+        "label": "集成类型",
+        "all": "全部",
+        "mcp_server": "MCP 服务器",
+        "api": "应用"
+      },
+      "columns": {
+        "name": "名称",
+        "type": "类型",
+        "signIn": "登录",
+        "access": "访问权限",
+        "status": "状态"
+      },
+      "empty": {
+        "title": "没有集成",
+        "description": "添加 MCP 服务器或应用，为智能体提供新的操作。",
+        "noResults": "未找到集成",
+        "noResultsDescription": "请尝试其他名称或类型。"
+      },
+      "shape": {
+        "mcp_server": "MCP 服务器",
+        "openapi": "OpenAPI 应用",
+        "preset": "应用",
+        "custom": "自定义应用"
+      },
+      "signInSummary": "{mode, select, none {无需登录} shared {{method, select, oauth2 {组织账户 (OAuth)} api_key {组织 API 密钥} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {组织账户}}} individual {{method, select, oauth2 {每个用户 (OAuth)} api_key {每个用户 (API 密钥)} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {每个用户}}} other {未知}}",
+      "access": {
+        "none": "不在任何插件中",
+        "many": "{count, plural, one {# 个插件} other {# 个插件}}",
+        "organization": "{plugin}（组织库）",
+        "personal": "{plugin}（{owner} 的“我的上传”）"
+      },
+      "status": {
+        "needsSetup": "需要设置",
+        "off": "已关闭",
+        "needsReconnect": "需要重新连接",
+        "movingCredentials": "正在迁移凭据",
+        "ready": "就绪"
+      },
+      "signIn": {
+        "mode": {
+          "title": "登录模式",
+          "description": "选择由谁登录该服务。",
+          "none": "无需登录",
+          "shared": "组织共用一个账户",
+          "individual": "每个用户各自登录"
+        },
+        "method": {
+          "title": "登录方式",
+          "oauth2": "OAuth",
+          "apiKey": "API 密钥",
+          "onyxLogin": "Onyx 登录",
+          "managed": "由 Onyx 管理"
+        },
+        "header": {
+          "name": {
+            "title": "请求头名称",
+            "placeholder": "添加请求头名称",
+            "error": "请添加请求头名称。"
+          },
+          "value": {
+            "title": "请求头值",
+            "description": "将每个凭据放在花括号中，例如 {example}。每个占位符都会成为一个凭据字段。",
+            "placeholder": "例如：{example}",
+            "error": "请至少添加一个占位符，例如 {example}。"
+          }
+        },
+        "oauth": {
+          "providerMode": {
+            "title": "OAuth 客户端",
+            "manual": "输入客户端详细信息",
+            "discovery": "自动注册客户端",
+            "preset": "使用预设的客户端"
+          },
+          "authorizationUrl": "授权 URL",
+          "tokenUrl": "令牌 URL",
+          "urlPlaceholder": "https://",
+          "urlError": "请输入有效的 URL。",
+          "clientId": "客户端 ID",
+          "clientIdPlaceholder": "添加客户端 ID",
+          "clientIdError": "请添加客户端 ID。",
+          "clientSecret": "客户端密钥",
+          "clientSecretPlaceholder": "添加客户端密钥",
+          "clientSecretSaved": "已保存。输入新密钥可替换它。",
+          "scopes": {
+            "title": "权限范围",
+            "description": "用空格分隔各个权限范围。",
+            "placeholder": "例如：read write"
+          }
+        }
+      },
+      "detail": {
+        "title": "集成",
+        "back": "所有集成",
+        "notFound": "此集成不存在，或者您无权查看。",
+        "loadFailed": "无法加载此集成。",
+        "tabs": {
+          "overview": "概览",
+          "configuration": "配置",
+          "actions": "操作"
+        },
+        "overview": {
+          "readOnly": "您可以查看此集成，但无法更改。",
+          "noDescription": "无描述",
+          "type": "类型",
+          "signIn": "登录",
+          "createdBy": "添加者",
+          "needsSetup": "需要设置",
+          "needsSetupDefault": "请在“配置”选项卡中完成登录设置。",
+          "plugins": {
+            "title": "插件",
+            "description": "用户通过这些插件使用此集成。",
+            "organization": "{policy, select, REQUIRED {组织库，必需} DEFAULT {组织库，默认开启} AVAILABLE {组织库，可用} NOT_AVAILABLE {组织库，不可用} other {组织库}}",
+            "personal": "{owner} 的“我的上传”",
+            "manage": "管理插件"
+          },
+          "enabled": {
+            "title": "已启用",
+            "description": "关闭后，任何智能体或用户都无法使用此集成。"
+          },
+          "delete": {
+            "title": "删除集成",
+            "description": "从每个插件中移除此集成，并删除其连接和操作设置。",
+            "label": "删除",
+            "confirmTitle": "删除 {name}？",
+            "confirmDescription": "Onyx 会从每个插件中移除此集成，并删除其连接和操作设置。此操作无法撤销。",
+            "confirm": "删除"
+          },
+          "deleted": "已删除 {name}。",
+          "deleteFailed": "无法删除集成。",
+          "saveFailed": "无法保存更改。"
+        },
+        "configuration": {
+          "readOnly": "您可以查看此集成，但无法更改。",
+          "connection": {
+            "title": "连接",
+            "serverUrl": "服务器 URL",
+            "serverUrlError": "请输入有效的服务器 URL。",
+            "urlPatterns": "URL 模式",
+            "urlPatternsDescription": "每行填写一个 URL 模式。"
+          },
+          "signIn": {
+            "title": "登录",
+            "description": "如果更改登录方式、客户端、URL 或权限范围，每个用户都必须重新连接。"
+          },
+          "alwaysAllow": {
+            "title": "用户可保存“始终允许”",
+            "description": "允许每个用户跳过设为“询问”的操作的批准提示。"
+          },
+          "save": "保存",
+          "saving": "正在保存…",
+          "saved": "已保存配置。",
+          "saveFailed": "无法保存配置。",
+          "organization": {
+            "title": "组织连接",
+            "description": "每个用户都使用此账户执行操作。",
+            "state": "{state, select, connected {已连接} not_connected {未连接} needs_reconnect {需要重新连接} not_set_up {未设置} other {未知}}",
+            "connect": "连接",
+            "disconnect": "断开连接",
+            "connected": "已连接组织账户。",
+            "disconnected": "已断开组织账户。",
+            "failed": "无法更改组织连接。"
+          }
+        },
+        "actions": {
+          "loadFailed": "无法加载操作。",
+          "retry": "重试",
+          "search": "搜索操作",
+          "refresh": "刷新",
+          "refreshed": "已刷新操作。",
+          "refreshFailed": "无法刷新操作。",
+          "save": "保存",
+          "saving": "正在保存…",
+          "saved": "已保存操作设置。",
+          "saveFailed": "无法保存操作设置。",
+          "default": {
+            "title": "新操作的默认值",
+            "description": "没有单独设置的操作会使用此值。集成以后添加的操作也会使用此值。",
+            "unset": "未设置。每个操作使用自己的默认值。",
+            "clear": "清除"
+          },
+          "usesDefault": "使用默认值",
+          "setByAdmin": "由管理员设置",
+          "useDefaults": "使用默认值",
+          "readOnly": "只读操作 ({count})",
+          "write": "写入操作 ({count})",
+          "empty": "此集成没有操作。",
+          "connectFirst": {
+            "title": "请先连接服务器",
+            "description": "MCP 服务器连接后，Onyx 才会加载其操作。",
+            "open": "打开配置"
+          }
+        }
+      }
     }
   },
   "agents": {
@@ -14733,10 +15034,10 @@
         },
         "permissions": {
           "askOption": "询问",
-          "autoApproveOption": "自动批准",
+          "autoApproveOption": "允许",
           "customOption": "自定义",
           "defaultOption": "默认",
-          "description": "选择智能体可以执行的操作。“询问”会在每个操作前请求批准；“自动批准”则无需提示即可运行。",
+          "description": "选择智能体可以执行的操作。“询问”会在每个操作前请求批准；“允许”则无需提示即可运行。",
           "title": "权限"
         },
         "savingButton": "正在保存…",
@@ -16864,9 +17165,6 @@
         "customAnalytics": {
           "label": "自定义分析"
         },
-        "discordIntegration": {
-          "label": "Discord 集成"
-        },
         "documentSets": {
           "label": "文档集"
         },
@@ -16900,12 +17198,6 @@
         "plugins": {
           "label": "插件"
         },
-        "mcpActions": {
-          "label": "MCP 操作"
-        },
-        "openapiActions": {
-          "label": "OpenAPI 操作"
-        },
         "plansAndBilling": {
           "label": "套餐与账单"
         },
@@ -16920,9 +17212,6 @@
         },
         "serviceAccounts": {
           "label": "服务账号"
-        },
-        "slackIntegration": {
-          "label": "Slack 集成"
         },
         "ssoProviders": {
           "label": "SSO 提供商"
@@ -16950,20 +17239,23 @@
         },
         "spendingLimits": {
           "label": "支出上限"
+        },
+        "integrations": {
+          "label": "集成"
+        },
+        "slackBot": {
+          "label": "Slack 机器人"
+        },
+        "discordBot": {
+          "label": "Discord 机器人"
         }
       },
       "sections": {
-        "agentsAndActions": {
-          "label": "智能体与操作"
-        },
         "craft": {
           "label": "Craft"
         },
         "documentsAndKnowledge": {
           "label": "文档与知识"
-        },
-        "integrations": {
-          "label": "集成"
         },
         "organization": {
           "label": "组织"
@@ -16973,6 +17265,12 @@
         },
         "usage": {
           "label": "用量"
+        },
+        "agentsAndPlugins": {
+          "label": "智能体与插件"
+        },
+        "channels": {
+          "label": "频道"
         }
       }
     },

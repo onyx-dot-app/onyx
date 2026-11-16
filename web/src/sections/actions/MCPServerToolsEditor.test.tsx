@@ -430,7 +430,7 @@ it("disables both bulk and per-tool policies without edit permission", async () 
     })
   ).toBeDisabled();
   for (const button of screen.getAllByRole("button", {
-    name: /^(Auto-approve|Ask|Disabled)$/,
+    name: /^(Allow|Ask|Blocked)$/,
   })) {
     expect(button).toBeDisabled();
   }
@@ -509,9 +509,10 @@ it("shows the server default for a tool without a stored policy", async () => {
     screen.getByRole("tab", { name: messages.actions.mcpTools.policiesTab })
   );
   const row = screen.getByRole("group", { name: "Display tool" });
-  expect(
-    within(row).getByRole("button", { name: "Auto-approve" })
-  ).toHaveAttribute("aria-pressed", "true");
+  expect(within(row).getByRole("button", { name: "Allow" })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
   expect(within(row).getByRole("button", { name: "Ask" })).toHaveAttribute(
     "aria-pressed",
     "false"
@@ -534,7 +535,7 @@ it("shows a refreshed default after the server drops a saved default choice", as
   );
   const row = () => screen.getByRole("group", { name: "Display tool" });
   await user.click(within(row()).getByRole("button", { name: "Ask" }));
-  await user.click(within(row()).getByRole("button", { name: "Auto-approve" }));
+  await user.click(within(row()).getByRole("button", { name: "Allow" }));
   await user.click(
     screen.getByRole("button", {
       name: messages.actions.addMcpModal.submitButton.saveLabel,

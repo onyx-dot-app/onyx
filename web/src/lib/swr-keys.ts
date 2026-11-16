@@ -265,6 +265,14 @@ export const SWR_KEYS = {
   mcpServersCraft: "/api/mcp/servers/craft",
   agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
 
+  // ── Integrations ──────────────────────────────────────────────────────────
+  adminIntegrations: "/api/admin/integrations",
+  adminIntegrationPresets: "/api/admin/integrations/presets",
+  adminIntegration: (integrationId: number) =>
+    `/api/admin/integrations/${integrationId}`,
+  adminIntegrationActions: (integrationId: number) =>
+    `/api/admin/integrations/${integrationId}/actions`,
+
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",
   chatSkills: "/api/skills/chat",

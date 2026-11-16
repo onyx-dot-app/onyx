@@ -63,7 +63,7 @@ test("keeps saved overrides when saving without an edit", async () => {
   const { onSave } = await renderEditor({ write: "DENY" });
   expect(
     within(screen.getByRole("group", { name: "Write" })).getByRole("button", {
-      name: "Disabled",
+      name: "Blocked",
     })
   ).toHaveAttribute("aria-pressed", "true");
   await setupUser().click(screen.getByRole("button", { name: "Save" }));

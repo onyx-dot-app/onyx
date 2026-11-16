@@ -5,7 +5,7 @@ icon: "server"
 ---
 
 <Note>
-  In Onyx 5.0, MCP servers moved from their own admin page to **Admin Panel → Plugins**.
+  MCP servers moved from their own admin page to **Admin Panel → Integrations**.
   See [Where things moved](/admins/plugins/overview#where-things-moved-in-onyx-5).
 </Note>
 
@@ -24,7 +24,7 @@ or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the appli
 
 <Steps>
   <Step title="Open the MCP catalog">
-    Go to **Admin Panel → Plugins**, click **Add**, then select **MCP**.
+    Go to **Admin Panel → Integrations**, click **Add**, then select **MCP server**.
 
     <img className="rounded-image" src="/assets/admins/plugins/add_mcp_catalog.webp" alt="The MCP catalog with Linear, Notion, Sentry, Atlassian, and Add custom MCP server"/>
 
@@ -125,7 +125,7 @@ and in Craft.
 
 <Warning>
   **Upgrade note.** Before this release, approval policies applied only in Craft.
-  The upgrade sets **Auto-approve** for the tools that exist at upgrade time, so they keep running without a prompt,
+  The upgrade sets **Allow** for the tools that exist at upgrade time, so they keep running without a prompt,
   on these MCP servers:
 
   - all servers, if no one in the workspace has used Craft
@@ -142,15 +142,15 @@ and in Craft.
   such as the Onyx web app. Upgrade these clients.
 </Warning>
 
-<img className="rounded-image" src="/assets/admins/plugins/mcp_tools_approval.webp" alt="Approval settings with Auto-approve, Ask, and Disabled for each tool"/>
+<img className="rounded-image" src="/assets/admins/plugins/mcp_tools_approval.webp" alt="Approval settings with Allow, Ask, and Blocked for each tool"/>
 
 | Policy | Effect in Chat and custom agents | Effect in Craft |
 | --- | --- | --- |
-| **Auto-approve** | The tool runs without a prompt. | The tool runs without a prompt. |
+| **Allow** | The tool runs without a prompt. | The tool runs without a prompt. |
 | **Ask** | The answer pauses until the user approves the call. See [Approvals in Chat](#approvals-in-chat). | Craft asks the user to approve each call. |
-| **Disabled** | The agent does not get the tool. | Craft never runs the tool. |
+| **Blocked** | The agent does not get the tool. | Craft never runs the tool. |
 
-Each tool starts at **Ask**. A tool that the server marks as read-only (`readOnlyHint`) starts at **Auto-approve**.
+Each tool starts at **Ask**. A tool that the server marks as read-only (`readOnlyHint`) starts at **Allow**.
 Onyx cannot confirm that a tool is read-only. If you do not trust the server, set its tools to **Ask**.
 Onyx reads the marks when it loads the tools. To read them again now, click **Refresh tools**.
 Onyx saves a setting only when it is different from the tool's default.
@@ -160,7 +160,7 @@ examine the tools and set **Ask** again where necessary.
 Tool availability and approval policies are separate.
 A tool that you turn off in **Available tools** is not available anywhere. In Chat,
 a policy change applies from the next message. An answer in progress keeps the policies it started with,
-with one exception: a tool that you set to **Disabled** does not run, even if the user approved it for the chat.
+with one exception: a tool that you set to **Blocked** does not run, even if the user approved it for the chat.
 
 ### Approvals in Chat
 
@@ -194,7 +194,7 @@ the agent sees that the user rejected the call. After the answer stops to wait f
 To end the wait, the user rejects the call. An API client that sends a stop there does not end the wait.
 The stop pauses the chat's queued messages until the user sends a new message.
 
-If a tool becomes **Disabled** while its card waits, an approval saves a rejection. The call does not run,
+If a tool becomes **Blocked** while its card waits, an approval saves a rejection. The call does not run,
 the record shows **Disabled**, and the agent is told that the tool is disabled.
 If the tool is removed or its parameters change while the card waits, the call does not run after the decision.
 The agent is told that the tool is no longer available, and the answer continues.
@@ -222,7 +222,7 @@ See [Send a decision](/developers/guides/chat_new_guide#send-a-decision).
   The Slack and Discord bots cannot show approval requests, so a tool with the **Ask** policy is not available to them.
   They can use the tools of their agent that run without approval.
   Each tool that the agent of a bot had before integrations were added keeps running without approval.
-  They cannot use tools with the **Disabled** policy.
+  They cannot use tools with the **Blocked** policy.
 </Note>
 
 In some chats, a tool call cannot wait for approval. There, a tool with the **Ask** policy does not run,

@@ -13,14 +13,18 @@ Group or user restriction needs EE.
 
 ## User experience
 
-- **An admin** opens Admin > Plugins and sees the MCP servers and OpenAPI
-  actions in one directory. A global action manager sees all of them. A scoped
-  manager sees those they own, and can view without editing those that an
-  agent shared with or owned by one of their groups uses. A full admin also
-  sees Craft apps. The admin adds a plugin from a catalog of
-  suggested MCP servers, a custom MCP URL, or an OpenAPI schema. Edits stay as
-  drafts until Save. Leaving a saved plugin with unsaved edits asks for
-  confirmation.
+- **An admin** opens the Agents & Plugins sidebar section. Admin >
+  Integrations (`/admin/integrations`) lists the MCP servers and apps from
+  `GET /admin/integrations`, with Name, Type, Sign-in, Access and Status, a
+  kind filter, search and "Needs setup". "Add" asks for the kind (MCP server,
+  OpenAPI app, app from a preset, custom app; the last two only with Craft),
+  then posts the kind's form to `POST /admin/integrations`. Only a global
+  action manager sees "For the organization"; everyone else adds "For me".
+  Admin > Plugins (`/admin/plugins`) lists the plugins that hold integrations,
+  built from the `plugins` refs of that list. The detail page
+  `/admin/integrations/[id]` has Overview, Configuration (sign-in settings and
+  the organization connection) and Actions ("Default for new actions", then
+  Read-only and Write actions, each Allow, Ask or Blocked).
 - **A full admin turns a plugin on for Default Chat.** Default Chat is the chat
   with no custom agent. The switch on the plugin and the tool list in Admin >
   Chat Preferences change the same selection, so a change in one shows in the
@@ -62,15 +66,18 @@ Its neighbours own:
 
 ## Architecture
 
-**Admin flow.** `PluginsPage` lists plugins. The setup modal
-(`sections/actions/modals/MCPPluginSetupModal.tsx`) probes the URL through
-`POST /admin/mcp/probe` and then calls `/admin/mcp/setup`. The detail page
-(`sections/actions/MCPServerDetailPage.tsx`) uses the same setup call for
-authentication edits, through
-`sections/actions/modals/MCPAuthenticationPage.tsx`. The setup call saves
-nothing until sign-in and tool discovery succeed ([[mcp-and-custom-tools]]
-owns that flow). `web/src/app/admin/plugins/layout.tsx` keeps the directory
-behind every detail modal, including after an OAuth return.
+**Admin flow.** `web/src/sections/integrations/IntegrationsPage.tsx` lists
+integrations. `web/src/lib/integrations/hooks.ts`, `web/src/lib/integrations/svc.ts`
+and `web/src/lib/integrations/types.ts` follow the U6 integration API. The add dialog
+(`sections/integrations/AddIntegrationModal.tsx`) still probes an MCP URL
+through `POST /admin/mcp/probe` to suggest the sign-in, and reuses
+`AddOpenAPIActionModal` as the schema step. The Actions tab
+(`sections/integrations/IntegrationActionsTab.tsx`) is built from
+`PolicyEditor` and `PolicyToggle` and converts the API values
+`allow|ask|blocked` to their `ALWAYS|ASK|DENY` at the edge
+(`lib/integrations/utils.ts`). The old detail components
+(`MCPServerDetailPage`, `OpenAPIPluginDetailPage`, `ExternalAppPluginDetail`)
+have no route now.
 
 **Member flow.** `lib/plugins/member.ts:useMemberPlugins` reads only member
 endpoints (MCP servers, tools, the user's OAuth token status and Craft apps),
@@ -172,12 +179,13 @@ only the configuration of a chat that does not exist yet.
 9. `member-directory-no-admin-endpoints` **The member directory must not call
    admin endpoints.** A scoped manager or a member cannot read them, and Craft
    app admin records are for full admins only.
-10. `old-admin-routes-redirect` **`/admin/mcp-actions` and
-    `/admin/openapi-actions` only redirect.** Their pages map to the plugin
-    routes through the helpers in `web/src/lib/plugins/routes.ts` and keep query
-    parameters. New links go to `/admin/plugins`.
+10. `old-admin-routes-redirect` **Old admin plugin URLs only redirect.**
+    `/admin/mcp-actions*`, `/admin/openapi-actions`, `/admin/craft/apps` and
+    `/admin/plugins/{mcp,openapi,external-app}/[id]` open `/admin/integrations`.
+    A server, tool or app id is not an integration id, so they go to the list,
+    not a detail. New links go to `/admin/integrations`.
 11. `action-policies-mcp-and-craft` **Action policies apply to Craft and to MCP
-    and OpenAPI tools in Chat.** The Auto-approve, Ask and Disabled
+    and OpenAPI tools in Chat.** The Allow, Ask and Blocked
     settings in the plugin editors go to the Craft proxy
     ([[craft-external-apps]]) and to the chat approval gate
     ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]).
@@ -223,11 +231,11 @@ only the configuration of a chat that does not exist yet.
 
 ## Recipes
 
-- `suggested-mcp-server` **A suggested MCP server.** Copy the `linear` entry in
-  `web/src/lib/plugins/catalog.ts:SUGGESTED_MCP_PLUGINS`; that array is the
-  current set. Add the id to the `SuggestedMCPPlugin` id union. Selecting the
-  entry only fills the setup form. It creates no credentials. List only
-  servers that connect in one click, so each must support DCR or CIMD.
+- `integration-kind-form` **An add form for a new integration kind.** Add the
+  shape to `IntegrationShape` in `web/src/lib/integrations/types.ts`, its
+  `config` to `IntegrationConfig`, and a branch in
+  `web/src/sections/integrations/AddIntegrationModal.tsx:config`. Add its label under
+  `admin.integrations.shape` in all nine locales.
 - `plugin-kind` **A plugin kind.** Copy the `openapi` kind; list the kinds in
   `PluginReference` in `web/src/lib/plugins/types.ts`. Extend the `MemberPlugin`
   union and its connection helper in `web/src/lib/plugins/member.ts`, and the

@@ -30,13 +30,13 @@ test("shows per-action permissions immediately without an Advanced disclosure", 
   await setupUser().click(
     within(screen.getByRole("group", { name: "Search messages" })).getByRole(
       "button",
-      { name: "Disabled" }
+      { name: "Blocked" }
     )
   );
   expect(
     within(screen.getByRole("group", { name: "Search messages" })).getByRole(
       "button",
-      { name: "Disabled" }
+      { name: "Blocked" }
     )
   ).toHaveAttribute("aria-pressed", "true");
 });
@@ -113,7 +113,7 @@ test("bulk changes only matching editable actions and reset delegates to the own
   expect(
     within(screen.getByRole("group", { name: "Read secrets" })).getByRole(
       "button",
-      { name: "Auto-approve" }
+      { name: "Allow" }
     )
   ).toBeDisabled();
   await user.click(screen.getByRole("combobox", { name: "Set permissions" }));

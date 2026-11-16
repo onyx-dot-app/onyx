@@ -1275,6 +1275,20 @@ export class OnyxApiClient {
     return success;
   }
 
+  async deleteIntegration(integrationId: number): Promise<boolean> {
+    const response = await this.request.delete(
+      `${this.baseUrl}/admin/integrations/${integrationId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete integration ${integrationId}`
+    );
+    if (success) {
+      this.log(`Deleted integration ${integrationId}`);
+    }
+    return success;
+  }
+
   async listOpenApiTools(): Promise<
     Array<{
       id: number;

@@ -706,13 +706,13 @@
     },
     "policyToggle": {
       "always": {
-        "label": "自動承認"
+        "label": "許可"
       },
       "ask": {
         "label": "確認"
       },
       "deny": {
-        "label": "無効"
+        "label": "ブロック"
       }
     },
     "switchList": {
@@ -2384,7 +2384,7 @@
           "title": "コーディングエージェント"
         },
         "description": "チャットで使用できるツールと機能です。エージェントには適用されません。",
-        "pluginsNote": "デフォルトのチャットで使用する MCP サーバーと OpenAPI プラグインは、[プラグイン]({url})で設定できます。",
+        "pluginsNote": "MCP サーバーと OpenAPI アプリは[連携]({url})で管理します。",
         "imageGeneration": {
           "description": "AI ツールを使用して画像を生成・加工します。",
           "disabledTooltip": "画像生成にはモデルの設定が必要です。「構成 > 画像生成」で設定するか、管理者に依頼してください。",
@@ -11231,6 +11231,307 @@
           "tooltip": "編集"
         }
       }
+    },
+    "plugins": {
+      "title": "プラグイン",
+      "description": "プラグインはユーザーにスキルと連携を提供します。このページには連携を含むプラグインが表示されます。",
+      "search": "プラグインを検索",
+      "loadFailed": "プラグインを読み込めませんでした。",
+      "manageIntegrations": "連携を管理",
+      "columns": {
+        "name": "プラグイン",
+        "library": "ライブラリ",
+        "installation": "インストール設定",
+        "integrations": "連携"
+      },
+      "library": {
+        "organization": "組織ライブラリ",
+        "personal": "{owner} のマイアップロード"
+      },
+      "installation": "{policy, select, REQUIRED {必須} DEFAULT {デフォルトでオン} AVAILABLE {利用可能} NOT_AVAILABLE {利用不可} other {なし}}",
+      "openIntegration": "{name} を開く",
+      "empty": {
+        "title": "連携を含むプラグインはありません",
+        "description": "連携を追加してください。Onyx がそれを含むプラグインを作成します。"
+      }
+    },
+    "integrations": {
+      "title": "連携",
+      "description": "MCP サーバーとアプリを接続します。各連携はプラグインに含まれ、プラグインがユーザーにアクセスを提供します。",
+      "search": "連携を検索",
+      "open": "{name} を開く",
+      "loadFailed": "連携を読み込めませんでした。",
+      "add": {
+        "label": "追加",
+        "title": "連携を追加",
+        "description": "連携の種類を選択してください。",
+        "created": "{name} を追加しました。",
+        "createFailed": "連携を追加できませんでした。",
+        "formTitle": {
+          "mcp_server": "MCP サーバーを追加",
+          "openapi": "OpenAPI アプリを追加",
+          "preset": "プリセットからアプリを追加",
+          "custom": "カスタムアプリを追加"
+        },
+        "kindDescription": {
+          "mcp_server": "URL を指定してリモート MCP サーバーに接続します。",
+          "openapi": "OpenAPI スキーマからアクションを作成します。",
+          "preset": "GitHub や Slack などの組み込みアプリに接続します。",
+          "custom": "URL パターンに一致する HTTP サービスを Craft から呼び出せるようにします。"
+        },
+        "openapi": {
+          "title": "OpenAPI アプリを追加"
+        },
+        "preset": {
+          "title": "プリセット",
+          "placeholder": "プリセットを選択",
+          "required": "プリセットを選択してください。",
+          "loadFailed": "プリセットを読み込めませんでした。",
+          "instructions": "セットアップ手順",
+          "credentialRequired": "この値を入力してください。"
+        },
+        "name": {
+          "title": "名前",
+          "placeholder": "名前を入力",
+          "required": "名前を入力してください。"
+        },
+        "descriptionField": {
+          "title": "説明",
+          "placeholder": "説明を入力"
+        },
+        "custom": {
+          "patterns": {
+            "title": "URL パターン",
+            "description": "1 行に 1 つの URL パターンを入力します（例: https://api.example.com/*）。",
+            "placeholder": "https://api.example.com/*",
+            "required": "URL パターンを 1 つ以上入力してください。"
+          }
+        },
+        "mcp": {
+          "url": {
+            "title": "サーバー URL",
+            "placeholder": "https://example.com/mcp",
+            "error": "有効なサーバー URL を入力してください。"
+          },
+          "probe": {
+            "checking": "サーバーを確認しています…",
+            "public": "{count, plural, one {# 個のツール} other {# 個のツール}}が見つかりました。このサーバーはログイン不要です。",
+            "oauth": "このサーバーは OAuth ログインを使用します。",
+            "authUnknown": "このサーバーにはログインが必要です。API キーのヘッダーまたは OAuth を追加してください。",
+            "unreachable": "Onyx はこのサーバーに接続できません。URL を確認してください。"
+          },
+          "transport": {
+            "title": "トランスポート",
+            "streamableHttp": "Streamable HTTP",
+            "sse": "Server-Sent Events (SSE)"
+          },
+          "suggested": "おすすめのサーバー"
+        },
+        "owner": {
+          "title": "所有者",
+          "personal": "自分用",
+          "organization": "組織用",
+          "personalDescription": "Onyx は連携をマイアップロード内のプラグインに追加します。プラグインは後で共有できます。",
+          "organizationDescription": "Onyx は連携を組織ライブラリ内のプラグインに追加します。"
+        },
+        "back": "戻る",
+        "submit": "追加",
+        "adding": "追加しています…"
+      },
+      "filters": {
+        "label": "連携の種類",
+        "all": "すべて",
+        "mcp_server": "MCP サーバー",
+        "api": "アプリ"
+      },
+      "columns": {
+        "name": "名前",
+        "type": "種類",
+        "signIn": "ログイン",
+        "access": "アクセス",
+        "status": "ステータス"
+      },
+      "empty": {
+        "title": "連携はありません",
+        "description": "MCP サーバーまたはアプリを追加して、エージェントに新しいアクションを提供します。",
+        "noResults": "連携が見つかりません",
+        "noResultsDescription": "別の名前または種類で試してください。"
+      },
+      "shape": {
+        "mcp_server": "MCP サーバー",
+        "openapi": "OpenAPI アプリ",
+        "preset": "アプリ",
+        "custom": "カスタムアプリ"
+      },
+      "signInSummary": "{mode, select, none {ログインなし} shared {{method, select, oauth2 {組織アカウント (OAuth)} api_key {組織の API キー} onyx_login {Onyx ログイン} managed {Onyx が管理} other {組織アカウント}}} individual {{method, select, oauth2 {各ユーザー (OAuth)} api_key {各ユーザー (API キー)} onyx_login {Onyx ログイン} managed {Onyx が管理} other {各ユーザー}}} other {不明}}",
+      "access": {
+        "none": "プラグインに含まれていません",
+        "many": "{count, plural, one {# 個のプラグイン} other {# 個のプラグイン}}",
+        "organization": "{plugin}（組織ライブラリ）",
+        "personal": "{plugin}（{owner} のマイアップロード）"
+      },
+      "status": {
+        "needsSetup": "要セットアップ",
+        "off": "オフ",
+        "needsReconnect": "要再接続",
+        "movingCredentials": "認証情報を移動中",
+        "ready": "準備完了"
+      },
+      "signIn": {
+        "mode": {
+          "title": "ログインモード",
+          "description": "サービスにログインするユーザーを選択します。",
+          "none": "ログインなし",
+          "shared": "組織で 1 つのアカウント",
+          "individual": "各ユーザーがログイン"
+        },
+        "method": {
+          "title": "ログイン方法",
+          "oauth2": "OAuth",
+          "apiKey": "API キー",
+          "onyxLogin": "Onyx ログイン",
+          "managed": "Onyx が管理"
+        },
+        "header": {
+          "name": {
+            "title": "ヘッダー名",
+            "placeholder": "ヘッダー名を入力",
+            "error": "ヘッダー名を入力してください。"
+          },
+          "value": {
+            "title": "ヘッダー値",
+            "description": "各認証情報を波かっこで囲みます（例: {example}）。各プレースホルダーが認証情報の入力欄になります。",
+            "placeholder": "例: {example}",
+            "error": "プレースホルダーを 1 つ以上追加してください（例: {example}）。"
+          }
+        },
+        "oauth": {
+          "providerMode": {
+            "title": "OAuth クライアント",
+            "manual": "クライアント情報を入力",
+            "discovery": "クライアントを自動登録",
+            "preset": "プリセットのクライアントを使用"
+          },
+          "authorizationUrl": "認可 URL",
+          "tokenUrl": "トークン URL",
+          "urlPlaceholder": "https://",
+          "urlError": "有効な URL を入力してください。",
+          "clientId": "クライアント ID",
+          "clientIdPlaceholder": "クライアント ID を入力",
+          "clientIdError": "クライアント ID を入力してください。",
+          "clientSecret": "クライアントシークレット",
+          "clientSecretPlaceholder": "クライアントシークレットを入力",
+          "clientSecretSaved": "保存済みです。置き換えるには新しいシークレットを入力してください。",
+          "scopes": {
+            "title": "スコープ",
+            "description": "スコープはスペースで区切ります。",
+            "placeholder": "例: read write"
+          }
+        }
+      },
+      "detail": {
+        "title": "連携",
+        "back": "すべての連携",
+        "notFound": "この連携は存在しないか、表示する権限がありません。",
+        "loadFailed": "この連携を読み込めませんでした。",
+        "tabs": {
+          "overview": "概要",
+          "configuration": "設定",
+          "actions": "アクション"
+        },
+        "overview": {
+          "readOnly": "この連携は表示できますが、変更はできません。",
+          "noDescription": "説明なし",
+          "type": "種類",
+          "signIn": "ログイン",
+          "createdBy": "追加したユーザー",
+          "needsSetup": "要セットアップ",
+          "needsSetupDefault": "「設定」タブでログイン設定を完了してください。",
+          "plugins": {
+            "title": "プラグイン",
+            "description": "ユーザーはこれらのプラグインを通じてこの連携を利用します。",
+            "organization": "{policy, select, REQUIRED {組織ライブラリ、必須} DEFAULT {組織ライブラリ、デフォルトでオン} AVAILABLE {組織ライブラリ、利用可能} NOT_AVAILABLE {組織ライブラリ、利用不可} other {組織ライブラリ}}",
+            "personal": "{owner} のマイアップロード",
+            "manage": "プラグインを管理"
+          },
+          "enabled": {
+            "title": "有効",
+            "description": "オフにすると、エージェントもユーザーもこの連携を使用できません。"
+          },
+          "delete": {
+            "title": "連携を削除",
+            "description": "各プラグインから連携を削除し、その接続とアクション設定を削除します。",
+            "label": "削除",
+            "confirmTitle": "{name} を削除しますか？",
+            "confirmDescription": "Onyx は各プラグインから連携を削除し、その接続とアクション設定を削除します。この操作は元に戻せません。",
+            "confirm": "削除"
+          },
+          "deleted": "{name} を削除しました。",
+          "deleteFailed": "連携を削除できませんでした。",
+          "saveFailed": "変更を保存できませんでした。"
+        },
+        "configuration": {
+          "readOnly": "この連携は表示できますが、変更はできません。",
+          "connection": {
+            "title": "接続",
+            "serverUrl": "サーバー URL",
+            "serverUrlError": "有効なサーバー URL を入力してください。",
+            "urlPatterns": "URL パターン",
+            "urlPatternsDescription": "1 行に 1 つの URL パターンを入力します。"
+          },
+          "signIn": {
+            "title": "ログイン",
+            "description": "ログイン方法、クライアント、URL、スコープを変更すると、各ユーザーは再接続する必要があります。"
+          },
+          "alwaysAllow": {
+            "title": "ユーザーによる「常に許可」の保存",
+            "description": "「確認」に設定されたアクションについて、各ユーザーが承認プロンプトを省略できるようにします。"
+          },
+          "save": "保存",
+          "saving": "保存しています…",
+          "saved": "設定を保存しました。",
+          "saveFailed": "設定を保存できませんでした。",
+          "organization": {
+            "title": "組織の接続",
+            "description": "各ユーザーはこのアカウントで操作します。",
+            "state": "{state, select, connected {接続済み} not_connected {未接続} needs_reconnect {要再接続} not_set_up {未設定} other {不明}}",
+            "connect": "接続",
+            "disconnect": "接続を解除",
+            "connected": "組織アカウントを接続しました。",
+            "disconnected": "組織アカウントの接続を解除しました。",
+            "failed": "組織の接続を変更できませんでした。"
+          }
+        },
+        "actions": {
+          "loadFailed": "アクションを読み込めませんでした。",
+          "retry": "再試行",
+          "search": "アクションを検索",
+          "refresh": "更新",
+          "refreshed": "アクションを更新しました。",
+          "refreshFailed": "アクションを更新できませんでした。",
+          "save": "保存",
+          "saving": "保存しています…",
+          "saved": "アクション設定を保存しました。",
+          "saveFailed": "アクション設定を保存できませんでした。",
+          "default": {
+            "title": "新しいアクションのデフォルト",
+            "description": "個別の設定がないアクションはこの値を使用します。連携が後で追加するアクションにも適用されます。",
+            "unset": "未設定です。各アクションは独自のデフォルトを使用します。",
+            "clear": "クリア"
+          },
+          "usesDefault": "デフォルトを使用",
+          "setByAdmin": "管理者が設定",
+          "useDefaults": "デフォルトを使用",
+          "readOnly": "読み取りアクション ({count})",
+          "write": "書き込みアクション ({count})",
+          "empty": "この連携にはアクションがありません。",
+          "connectFirst": {
+            "title": "まずサーバーに接続してください",
+            "description": "Onyx は MCP サーバーの接続後にそのアクションを読み込みます。",
+            "open": "設定を開く"
+          }
+        }
+      }
     }
   },
   "agents": {
@@ -14733,10 +15034,10 @@
         },
         "permissions": {
           "askOption": "確認する",
-          "autoApproveOption": "自動承認",
+          "autoApproveOption": "許可",
           "customOption": "カスタム",
           "defaultOption": "デフォルト",
-          "description": "エージェントに許可する操作を選択します。「確認する」は各アクションの前に承認を求め、「自動承認」は確認なしで実行します。",
+          "description": "エージェントに許可する操作を選択します。「確認」は各アクションの前に承認を求め、「許可」は確認なしで実行します。",
           "title": "権限"
         },
         "savingButton": "保存中…",
@@ -16864,9 +17165,6 @@
         "customAnalytics": {
           "label": "カスタム分析"
         },
-        "discordIntegration": {
-          "label": "Discord 連携"
-        },
         "documentSets": {
           "label": "ドキュメントセット"
         },
@@ -16900,12 +17198,6 @@
         "plugins": {
           "label": "プラグイン"
         },
-        "mcpActions": {
-          "label": "MCP アクション"
-        },
-        "openapiActions": {
-          "label": "OpenAPI アクション"
-        },
         "plansAndBilling": {
           "label": "プランと請求"
         },
@@ -16920,9 +17212,6 @@
         },
         "serviceAccounts": {
           "label": "サービスアカウント"
-        },
-        "slackIntegration": {
-          "label": "Slack 連携"
         },
         "ssoProviders": {
           "label": "SSO プロバイダー"
@@ -16950,20 +17239,23 @@
         },
         "spendingLimits": {
           "label": "支出上限"
+        },
+        "integrations": {
+          "label": "連携"
+        },
+        "slackBot": {
+          "label": "Slack ボット"
+        },
+        "discordBot": {
+          "label": "Discord ボット"
         }
       },
       "sections": {
-        "agentsAndActions": {
-          "label": "エージェントとアクション"
-        },
         "craft": {
           "label": "Craft"
         },
         "documentsAndKnowledge": {
           "label": "ドキュメントとナレッジ"
-        },
-        "integrations": {
-          "label": "連携"
         },
         "organization": {
           "label": "組織"
@@ -16973,6 +17265,12 @@
         },
         "usage": {
           "label": "使用状況"
+        },
+        "agentsAndPlugins": {
+          "label": "エージェントとプラグイン"
+        },
+        "channels": {
+          "label": "チャンネル"
         }
       }
     },

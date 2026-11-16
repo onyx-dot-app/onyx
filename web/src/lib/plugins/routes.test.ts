@@ -1,5 +1,4 @@
 import {
-  legacyMcpListHref,
   parsePluginId,
   pluginDetailHref,
   withPluginSearchParams,
@@ -43,41 +42,7 @@ describe("route ID boundary", () => {
   });
 });
 
-describe("legacy query strings", () => {
-  test("opens the canonical detail and keeps repeated query values", () => {
-    expect(
-      legacyMcpListHref({
-        server_id: "7",
-        tab: "authentication",
-        trigger_fetch: "true",
-        message: "oauth_connected",
-        filter: ["one", "two"],
-        missing: undefined,
-      })
-    ).toBe(
-      "/admin/plugins/mcp/7?server_id=7&tab=authentication&trigger_fetch=true&message=oauth_connected&filter=one&filter=two"
-    );
-  });
-
-  test("uses the first server ID without dropping repeated IDs", () => {
-    expect(legacyMcpListHref({ server_id: ["7", "8"] })).toBe(
-      "/admin/plugins/mcp/7?server_id=7&server_id=8"
-    );
-  });
-
-  test.each(["0", "7invalid", "9007199254740992"])(
-    "keeps invalid legacy ID %s on the directory query",
-    (serverId) => {
-      expect(legacyMcpListHref({ server_id: serverId, tab: "tools" })).toBe(
-        `/admin/plugins?server_id=${serverId}&tab=tools`
-      );
-    }
-  );
-
-  test("redirects an empty legacy list to the directory", () => {
-    expect(legacyMcpListHref({})).toBe("/admin/plugins");
-  });
-
+describe("query strings", () => {
   test("keeps create intent and encodes the existing query", () => {
     expect(
       withPluginSearchParams(

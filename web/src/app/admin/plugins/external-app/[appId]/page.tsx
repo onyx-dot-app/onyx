@@ -1,14 +1,8 @@
-import { notFound } from "@opal/navigation";
-import { parsePluginId } from "@/lib/plugins/routes";
-import ExternalAppPluginDetail from "@/sections/plugins/ExternalAppPluginDetail";
+import { redirect } from "@opal/navigation";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-export default async function Page({
-  params,
-}: {
-  params: Promise<{ appId: string }>;
-}) {
-  const { appId: value } = await params;
-  const appId = parsePluginId(value);
-  if (appId === null) notFound();
-  return <ExternalAppPluginDetail appId={appId} />;
+/** An old plugin or action URL. Its id is not an integration id, so it opens
+ * the integration list. */
+export default function Page() {
+  redirect(ADMIN_ROUTES.INTEGRATIONS.path);
 }

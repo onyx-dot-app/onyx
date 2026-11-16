@@ -1,14 +1,8 @@
-import { notFound } from "@opal/navigation";
-import { parsePluginId } from "@/lib/plugins/routes";
-import OpenAPIPluginDetailPage from "@/sections/plugins/OpenAPIPluginDetailPage";
+import { redirect } from "@opal/navigation";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-export default async function Page({
-  params,
-}: {
-  params: Promise<{ toolId: string }>;
-}) {
-  const { toolId: value } = await params;
-  const toolId = parsePluginId(value);
-  if (toolId === null) notFound();
-  return <OpenAPIPluginDetailPage key={toolId} toolId={toolId} />;
+/** An old plugin or action URL. Its id is not an integration id, so it opens
+ * the integration list. */
+export default function Page() {
+  redirect(ADMIN_ROUTES.INTEGRATIONS.path);
 }

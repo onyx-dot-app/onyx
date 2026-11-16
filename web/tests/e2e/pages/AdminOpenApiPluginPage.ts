@@ -1,5 +1,6 @@
 import { type Locator, type Page, expect } from "@playwright/test";
-import { AdminPluginsPage } from "@tests/e2e/pages/AdminPluginsPage";
+import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
+import { AdminIntegrationDetailPage } from "@tests/e2e/pages/AdminIntegrationDetailPage";
 
 interface OAuthSettings {
   authorizationUrl: string;
@@ -9,118 +10,84 @@ interface OAuthSettings {
   scopes: string;
 }
 
+/** An OpenAPI app on the integration pages: the Add flow and the sign-in
+ * settings of its Configuration tab. */
 export class AdminOpenApiPluginPage {
   readonly page: Page;
-  readonly plugins: AdminPluginsPage;
-  readonly detailDialog: Locator;
+  readonly integrations: AdminIntegrationsPage;
+  readonly detail: AdminIntegrationDetailPage;
 
   constructor(page: Page) {
     this.page = page;
-    this.plugins = new AdminPluginsPage(page);
-    this.detailDialog = page.getByRole("dialog");
+    this.integrations = new AdminIntegrationsPage(page);
+    this.detail = new AdminIntegrationDetailPage(page);
   }
 
+  /** Adds the app with no sign-in and returns its integration id. */
   async createFromSchema(schema: string, name: string): Promise<number> {
-    await this.plugins.goto();
-    await this.plugins.openAddOpenApi();
-    const dialog = this.page.getByRole("dialog", {
-      name: "Add an OpenAPI plugin",
-      exact: true,
-    });
-    await expect(dialog).toBeVisible();
-    await dialog
-      .getByPlaceholder("Enter your OpenAPI schema here")
-      .fill(schema);
-    await dialog.getByRole("button", { name: "Continue", exact: true }).click();
-    await this.page
-      .getByRole("dialog", { name: `Connect to ${name}`, exact: true })
-      .getByRole("button", { name: "Add Plugin", exact: true })
-      .click();
+    await this.integrations.goto();
+    await this.integrations.openAdd("OpenAPI app");
+    await this.integrations.fillOpenApiSchema(schema);
+    await expect(this.integrations.nameInput).toHaveValue(name);
+    const id = await this.integrations.submit();
     await this.expectDetail(name);
-    const match = new URL(this.page.url()).pathname.match(/\/openapi\/(\d+)$/);
-    if (!match?.[1])
-      throw new Error("OpenAPI plugin detail URL has no tool ID");
-    return Number(match[1]);
+    return id;
   }
 
   async expectDetail(name: string): Promise<void> {
-    await expect(this.page).toHaveURL(
-      /\/admin\/plugins\/openapi\/\d+(?:\?.*)?$/
-    );
-    await expect(
-      this.page.getByRole("dialog").getByText(name, { exact: true })
-    ).toBeVisible();
+    await expect(this.page).toHaveURL(/\/admin\/integrations\/\d+(?:\?.*)?$/);
+    await this.detail.expectLoaded(name);
+  }
+
+  field(name: string): Locator {
+    return this.page.getByLabel(name, { exact: true });
   }
 
   async configureOAuth(settings: OAuthSettings): Promise<void> {
-    const dialog = this.detailDialog;
-    await expect(dialog).toBeVisible();
-    await dialog
-      .getByRole("tab", { name: "Authentication", exact: true })
+    await this.detail.openTab("Configuration");
+    await this.page
+      .getByRole("combobox", { name: "Sign-in Mode", exact: true })
       .click();
-    await dialog.getByRole("combobox").click();
-    await this.page.getByRole("option", { name: /^OAuth Each user/ }).click();
-    await dialog
-      .getByLabel("Authorization URL", { exact: true })
-      .fill(settings.authorizationUrl);
-    await dialog
-      .getByLabel("Token URL", { exact: true })
-      .fill(settings.tokenUrl);
-    await dialog
-      .getByLabel("OAuth Client ID", { exact: true })
-      .fill(settings.clientId);
-    await dialog
-      .getByLabel("OAuth Client Secret", { exact: true })
-      .fill(settings.clientSecret);
-    await dialog.getByLabel(/^Scopes/).fill(settings.scopes);
-    const save = dialog.getByRole("button", {
-      name: "Save Changes",
-      exact: true,
-    });
-    // The save writes the OAuth config, then points the tool at it; a reload
-    // before both requests finish cancels them.
-    const configSaved = this.page.waitForResponse(
+    await this.page
+      .getByRole("option", { name: "Each user signs in", exact: true })
+      .click();
+    await this.page
+      .getByRole("combobox", { name: "Sign-in Method", exact: true })
+      .click();
+    await this.page.getByRole("option", { name: "OAuth", exact: true }).click();
+    await this.field("Authorization URL").fill(settings.authorizationUrl);
+    await this.field("Token URL").fill(settings.tokenUrl);
+    await this.field("Client ID").fill(settings.clientId);
+    await this.field("Client Secret").fill(settings.clientSecret);
+    await this.field("Scopes").fill(settings.scopes);
+    const saved = this.page.waitForResponse(
       (response) =>
-        new URL(response.url()).pathname === "/api/admin/oauth-config/create" &&
-        response.request().method() === "POST"
-    );
-    const toolSaved = this.page.waitForResponse(
-      (response) =>
-        /^\/api\/admin\/tool\/custom\/\d+$/.test(
+        /^\/api\/admin\/integrations\/\d+$/.test(
           new URL(response.url()).pathname
-        ) && response.request().method() === "PUT"
+        ) && response.request().method() === "PATCH"
     );
-    await save.click();
-    expect((await configSaved).ok()).toBeTruthy();
-    expect((await toolSaved).ok()).toBeTruthy();
-    await expect(save).toBeDisabled();
-    await expect(dialog).toBeVisible();
+    await this.page.getByRole("button", { name: "Save", exact: true }).click();
+    expect((await saved).ok()).toBeTruthy();
   }
 
   async expectOAuthPersisted(
     settings: Pick<OAuthSettings, "authorizationUrl" | "tokenUrl" | "scopes">
   ): Promise<void> {
     await this.page.reload();
-    const dialog = this.detailDialog;
-    await dialog
-      .getByRole("tab", { name: "Authentication", exact: true })
-      .click();
-    await expect(
-      dialog.getByLabel("Authorization URL", { exact: true })
-    ).toHaveValue(settings.authorizationUrl);
-    await expect(dialog.getByLabel("Token URL", { exact: true })).toHaveValue(
-      settings.tokenUrl
+    await this.detail.openTab("Configuration");
+    await expect(this.field("Authorization URL")).toHaveValue(
+      settings.authorizationUrl
     );
-    await expect(dialog.getByLabel(/^Scopes/)).toHaveValue(settings.scopes);
+    await expect(this.field("Token URL")).toHaveValue(settings.tokenUrl);
+    // Scopes come back split and joined by spaces.
+    await expect(this.field("Scopes")).toHaveValue(
+      settings.scopes
+        .split(/[\s,]+/)
+        .filter(Boolean)
+        .join(" ")
+    );
     await expect(
-      dialog.getByLabel(/^OAuth Client ID\s*\(Optional\)$/)
-    ).toHaveValue("********");
-    // The stored client secret shows as a tag; the input itself stays empty.
-    await expect(
-      dialog.getByLabel(/^OAuth Client Secret\s*\(Optional\)$/)
-    ).toHaveValue("");
-    await expect(dialog.getByText("********", { exact: true })).toBeVisible();
-    await dialog.getByRole("button", { name: "Close", exact: true }).click();
-    await expect(dialog).toBeHidden();
+      this.page.getByPlaceholder("Saved. Enter a new secret to replace it.")
+    ).toBeVisible();
   }
 }

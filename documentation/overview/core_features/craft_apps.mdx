@@ -96,9 +96,9 @@ Your organization sets one of three policies for every app action:
 
 | Policy           | What you experience                                                   |
 | ---------------- | --------------------------------------------------------------------- |
-| **Auto-approve** | Craft performs the action without pausing. Common for low-risk reads. |
+| **Allow** | Craft performs the action without pausing. Common for low-risk reads. |
 | **Ask**          | Craft pauses and shows an approval card before sending the request.   |
-| **Disabled**     | Craft cannot perform the action and reports that it was blocked.      |
+| **Blocked**     | Craft cannot perform the action and reports that it was blocked.      |
 
 When an action uses **Ask**, the approval card shows the app, action, description, request payload,
 and the time by which you must decide. Review them before deciding.
@@ -125,15 +125,15 @@ Before approving, confirm:
 
 If your admin lets users manage approval settings,
 open the app's approval settings to change the policy for your account.
-You cannot turn on an action that your admin set to **Disabled**.
+You cannot turn on an action that your admin set to **Blocked**.
 
 ## Apps in Scheduled Tasks
 
 A [Scheduled Task](/overview/core_features/craft_scheduled_tasks) runs without you present.
 In the task's **Plugins** section, enable only the apps that the task needs,
-and set the actions it must perform to **Auto-approve** in the app's **Approval settings**.
+and set the actions it must perform to **Allow** in the app's **Approval settings**.
 
-Task settings apply only to that task. An action with a **Disabled** policy stays blocked.
+Task settings apply only to that task. An action with a **Blocked** policy stays blocked.
 If a run reaches an action that needs approval, the run stops and waits for you.
 
 ## Disconnect an app
@@ -156,9 +156,8 @@ Open **Plugins**, click the app, and click **Disconnect**.
 </Accordion>
 
   <Accordion title="A Scheduled Task is awaiting approval">
-    Edit the task and confirm that the required app is enabled under **Plugins** and the action is set to
-    **Auto-approve** in its approval settings. If it is, an admin may have disabled that action,
-    or the run may need a different app.
+    Edit the task and confirm that the required app is enabled under **Plugins** and the action is set to **Allow** in
+    its approval settings. If it is, an admin may have disabled that action, or the run may need a different app.
   </Accordion>
 </AccordionGroup>
 

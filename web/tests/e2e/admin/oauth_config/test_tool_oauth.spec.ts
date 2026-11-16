@@ -2,7 +2,6 @@ import { test } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { AdminOpenApiPluginPage } from "@tests/e2e/pages/AdminOpenApiPluginPage";
-import { AgentEditorPage } from "@tests/e2e/pages/AgentEditorPage";
 
 const SIMPLE_OPENAPI_SCHEMA = `{
   "openapi": "3.0.0",
@@ -24,24 +23,18 @@ const SIMPLE_OPENAPI_SCHEMA = `{
   }
 }`;
 
-let createdAssistantId: number | null = null;
-let createdToolId: number | null = null;
+let createdIntegrationId: number | null = null;
 
 test.afterAll(async ({ browser }) => {
   const context = await browser.newContext({ storageState: "admin_auth.json" });
   const client = new OnyxApiClient(context.request);
-  if (createdAssistantId !== null) {
-    await client.deleteAgent(createdAssistantId);
-  }
-  if (createdToolId !== null) {
-    await client.deleteCustomTool(createdToolId);
+  if (createdIntegrationId !== null) {
+    await client.deleteIntegration(createdIntegrationId);
   }
   await context.close();
 });
 
-test("OpenAPI plugin OAuth persists and remains available to agents", async ({
-  page,
-}) => {
+test("OpenAPI app OAuth sign-in settings persist", async ({ page }) => {
   await page.context().clearCookies();
   await loginAs(page, "admin");
   const toolName = `Test API ${Date.now()}`;
@@ -58,18 +51,8 @@ test("OpenAPI plugin OAuth persists and remains available to agents", async ({
   );
 
   const plugin = new AdminOpenApiPluginPage(page);
-  createdToolId = await plugin.createFromSchema(schema, toolName);
+  createdIntegrationId = await plugin.createFromSchema(schema, toolName);
   await plugin.configureOAuth(oauth);
   await plugin.expectDetail(toolName);
   await plugin.expectOAuthPersisted(oauth);
-
-  const agent = new AgentEditorPage(page);
-  await agent.goto();
-  await agent.fill({
-    name: `Test Assistant ${Date.now()}`,
-    description: "Assistant with OAuth tool",
-    instructions: "Use the tool when needed",
-  });
-  await agent.enableOpenApiTool(createdToolId);
-  createdAssistantId = await agent.create();
 });

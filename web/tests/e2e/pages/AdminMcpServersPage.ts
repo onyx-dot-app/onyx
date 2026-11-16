@@ -1,10 +1,18 @@
 import { type Page, type Locator, type Route, expect } from "@playwright/test";
 import * as yup from "yup";
-import { AdminPluginsPage } from "@tests/e2e/pages/AdminPluginsPage";
+import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
+import { AdminIntegrationDetailPage } from "@tests/e2e/pages/AdminIntegrationDetailPage";
 
+/**
+ * An MCP server on the integration pages. `goto`, `openAddServerModal`,
+ * `addServer`, `openConfiguration`, `expectServerDetail` and `refreshTools`
+ * drive the integration pages. The other methods drive the setup dialog of
+ * the old plugin pages; only specs marked `fixme` until U8 still call them.
+ */
 export class AdminMcpServersPage {
   readonly page: Page;
-  readonly plugins: AdminPluginsPage;
+  readonly integrations: AdminIntegrationsPage;
+  readonly detail: AdminIntegrationDetailPage;
 
   readonly nameInput: Locator;
   readonly descriptionInput: Locator;
@@ -21,10 +29,11 @@ export class AdminMcpServersPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.plugins = new AdminPluginsPage(page);
-    this.nameInput = page.getByLabel("Server Name", { exact: true });
+    this.integrations = new AdminIntegrationsPage(page);
+    this.detail = new AdminIntegrationDetailPage(page);
+    this.nameInput = this.integrations.nameInput;
     this.descriptionInput = page.getByLabel(/^Description/);
-    this.serverUrlInput = page.getByLabel(/^MCP Server URL/);
+    this.serverUrlInput = this.integrations.serverUrlInput;
     this.accessControlSelector = page.getByRole("combobox", {
       name: "Access control",
     });
@@ -38,9 +47,7 @@ export class AdminMcpServersPage {
     this.oauthClientSecretInput = page.getByLabel(/^Client Secret/);
     this.connectButton = page.getByTestId("mcp-auth-connect-button");
 
-    this.refreshToolsButton = page.getByRole("button", {
-      name: "Refresh tools",
-    });
+    this.refreshToolsButton = this.detail.refreshActionsButton;
   }
 
   // ---------------------------------------------------------------------------
@@ -48,7 +55,20 @@ export class AdminMcpServersPage {
   // ---------------------------------------------------------------------------
 
   async goto(): Promise<void> {
-    await this.plugins.goto();
+    await this.integrations.goto();
+  }
+
+  /** Adds an MCP server and returns its integration id. */
+  async addServer(details: {
+    name: string;
+    url: string;
+    owner?: "For me" | "For the organization";
+  }): Promise<number> {
+    await this.goto();
+    await this.openAddServerModal();
+    await this.integrations.fillMcpServer(details);
+    if (details.owner) await this.integrations.chooseOwner(details.owner);
+    return this.integrations.submit();
   }
 
   // ---------------------------------------------------------------------------
@@ -56,10 +76,8 @@ export class AdminMcpServersPage {
 
   async openConfiguration(serverName: string): Promise<void> {
     await this.goto();
-    await this.plugins.openPlugin(serverName);
-    await this.page
-      .getByRole("tab", { name: "Configuration", exact: true })
-      .click();
+    await this.integrations.openIntegration(serverName);
+    await this.detail.openTab("Configuration");
     await expect(this.defaultChatToggle).toBeEnabled();
   }
 
@@ -94,7 +112,7 @@ export class AdminMcpServersPage {
   }
 
   async openAddServerModal(): Promise<void> {
-    await this.plugins.openAddMcp();
+    await this.integrations.openAdd("MCP server");
     await expect(this.serverUrlInput).toBeVisible();
   }
 
@@ -357,19 +375,15 @@ export class AdminMcpServersPage {
   // ---------------------------------------------------------------------------
 
   async expectServerDetail(serverName: string): Promise<void> {
-    await expect(this.page).toHaveURL(/\/admin\/plugins\/mcp\/\d+(?:\?.*)?$/);
-    await expect(this.page.getByRole("dialog")).toBeVisible();
-    await expect(
-      this.page.getByText(serverName, { exact: true }).first()
-    ).toBeVisible();
-    await this.page.getByRole("tab", { name: "Tools", exact: true }).click();
+    await expect(this.page).toHaveURL(/\/admin\/integrations\/\d+(?:\?.*)?$/);
+    await this.detail.expectLoaded(serverName);
+    await this.detail.openTab("Actions");
     await expect(this.refreshToolsButton).toBeEnabled();
   }
 
   async refreshTools(): Promise<void> {
     await expect(this.refreshToolsButton).toBeVisible();
-    await this.refreshToolsButton.click();
-    await expect(this.page.getByText("No tools available")).not.toBeVisible();
+    await this.detail.refreshActions();
   }
 
   toolToggle(toolName: string): Locator {

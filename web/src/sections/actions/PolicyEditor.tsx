@@ -22,10 +22,16 @@ export interface PolicyEditorItem {
   defaultPolicy: ActionPolicy;
   editable?: boolean;
   lockReason?: "workspace_disabled" | "workspace_managed" | null;
+  /** A short line under the description, for example where the value comes from. */
+  note?: string | RichStr;
 }
 
 interface PolicyEditorProps {
   showTitle?: boolean;
+  /** Replaces the default "Permissions" title. */
+  title?: string | RichStr;
+  /** `false` hides the search field, for a parent that filters `items`. */
+  searchable?: boolean;
   disabled?: boolean;
   onReset?: () => void;
   resetLabel?: string | RichStr;
@@ -36,6 +42,8 @@ interface PolicyEditorProps {
 
 export default function PolicyEditor({
   showTitle = true,
+  title,
+  searchable = true,
   disabled = false,
   onReset,
   resetLabel,
@@ -74,14 +82,18 @@ export default function PolicyEditor({
 
   return (
     <div className="flex flex-col gap-4">
-      {showTitle && <Text font="main-ui-action">{t("permissions.title")}</Text>}
-      <InputTypeIn
-        icon="search"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder={toolCopy("search")}
-        aria-label={toolCopy("search")}
-      />
+      {showTitle && (
+        <Text font="main-ui-action">{title ?? t("permissions.title")}</Text>
+      )}
+      {searchable && (
+        <InputTypeIn
+          icon="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={toolCopy("search")}
+          aria-label={toolCopy("search")}
+        />
+      )}
       {onChange && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Text font="secondary-body" color="text-03">
@@ -154,6 +166,11 @@ export default function PolicyEditor({
               >
                 {item.description}
               </Text>
+              {item.note && (
+                <Text font="secondary-body" color="text-02">
+                  {item.note}
+                </Text>
+              )}
             </div>
             <Tooltip
               tooltip={

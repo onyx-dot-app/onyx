@@ -50,6 +50,8 @@ interface SharedFormProps {
   defaultChatEnabled?: boolean;
   canManageDefaultChat?: boolean;
   defaultChatReady?: boolean;
+  /** Integrations have no Default Chat switch, so they hide it. */
+  showDefaultChat?: boolean;
   title?: string | RichStr;
   onClose?: () => void;
 }
@@ -102,6 +104,7 @@ interface FormContentProps {
   defaultChatEnabled: boolean;
   canManageDefaultChat: boolean;
   defaultChatReady: boolean;
+  showDefaultChat: boolean;
   presentation: "inline" | "content";
   footerTarget?: HTMLElement | null;
   active: boolean;
@@ -116,6 +119,7 @@ function FormContent({
   defaultChatEnabled,
   canManageDefaultChat,
   defaultChatReady,
+  showDefaultChat,
   presentation,
   footerTarget,
   active,
@@ -407,30 +411,34 @@ function FormContent({
           </Tooltip>
         </InputVertical>
         {isEditMode && definitionField}
-        <Divider paddingParallel={0} />
-        <Tooltip
-          tooltip={
-            !canManageDefaultChat
-              ? t("plugins.controls.defaultChatAdminOnly")
-              : undefined
-          }
-        >
-          <div className="w-full">
-            <PluginAvailabilitySwitch
-              surface="chat"
-              enabled={values.defaultChatEnabled ?? defaultChatEnabled}
-              onChange={(enabled) =>
-                setFieldValue(
-                  "defaultChatEnabled",
-                  enabled === defaultChatEnabled ? null : enabled
-                )
+        {showDefaultChat && (
+          <>
+            <Divider paddingParallel={0} />
+            <Tooltip
+              tooltip={
+                !canManageDefaultChat
+                  ? t("plugins.controls.defaultChatAdminOnly")
+                  : undefined
               }
-              disabled={
-                isSubmitting || !canManageDefaultChat || !defaultChatReady
-              }
-            />
-          </div>
-        </Tooltip>
+            >
+              <div className="w-full">
+                <PluginAvailabilitySwitch
+                  surface="chat"
+                  enabled={values.defaultChatEnabled ?? defaultChatEnabled}
+                  onChange={(enabled) =>
+                    setFieldValue(
+                      "defaultChatEnabled",
+                      enabled === defaultChatEnabled ? null : enabled
+                    )
+                  }
+                  disabled={
+                    isSubmitting || !canManageDefaultChat || !defaultChatReady
+                  }
+                />
+              </div>
+            </Tooltip>
+          </>
+        )}
       </Modal.Body>
 
       {presentation === "inline" ? (
@@ -486,6 +494,7 @@ export default function AddOpenAPIActionModal({
   defaultChatEnabled = false,
   canManageDefaultChat = false,
   defaultChatReady = true,
+  showDefaultChat = true,
   onConfigureAuthentication,
 }: AddOpenAPIActionModalProps) {
   const t = useTranslations("actions");
@@ -571,6 +580,7 @@ export default function AddOpenAPIActionModal({
         defaultChatEnabled={defaultChatEnabled}
         canManageDefaultChat={canManageDefaultChat}
         defaultChatReady={defaultChatReady}
+        showDefaultChat={showDefaultChat}
         presentation={presentation}
         footerTarget={footerTarget}
         active={active}

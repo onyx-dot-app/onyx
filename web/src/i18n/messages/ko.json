@@ -706,13 +706,13 @@
     },
     "policyToggle": {
       "always": {
-        "label": "자동 승인"
+        "label": "허용"
       },
       "ask": {
         "label": "확인 요청"
       },
       "deny": {
-        "label": "비활성화"
+        "label": "차단"
       }
     },
     "switchList": {
@@ -2384,7 +2384,7 @@
           "title": "코딩 에이전트"
         },
         "description": "채팅에서 사용할 수 있는 도구와 기능입니다. 에이전트에는 적용되지 않습니다.",
-        "pluginsNote": "기본 채팅에 사용할 MCP 서버와 OpenAPI 플러그인은 [플러그인]({url})에서 설정하세요.",
+        "pluginsNote": "MCP 서버와 OpenAPI 앱은 [연동]({url})에서 관리하세요.",
         "imageGeneration": {
           "description": "AI 기반 도구로 이미지를 생성하고 편집합니다.",
           "disabledTooltip": "이미지 생성에는 설정된 모델이 필요합니다. 구성 > 이미지 생성에서 모델을 설정하거나 관리자에게 문의하세요.",
@@ -11231,6 +11231,307 @@
           "tooltip": "편집"
         }
       }
+    },
+    "plugins": {
+      "title": "플러그인",
+      "description": "플러그인은 사용자에게 스킬과 연동을 제공합니다. 이 페이지에는 연동이 포함된 플러그인이 표시됩니다.",
+      "search": "플러그인 검색",
+      "loadFailed": "플러그인을 불러올 수 없습니다.",
+      "manageIntegrations": "연동 관리",
+      "columns": {
+        "name": "플러그인",
+        "library": "라이브러리",
+        "installation": "설치 설정",
+        "integrations": "연동"
+      },
+      "library": {
+        "organization": "조직 라이브러리",
+        "personal": "{owner}의 내 업로드"
+      },
+      "installation": "{policy, select, REQUIRED {필수} DEFAULT {기본적으로 켜짐} AVAILABLE {사용 가능} NOT_AVAILABLE {사용할 수 없음} other {없음}}",
+      "openIntegration": "{name} 열기",
+      "empty": {
+        "title": "연동이 포함된 플러그인이 없습니다",
+        "description": "연동을 추가하세요. Onyx가 해당 연동을 포함하는 플러그인을 만듭니다."
+      }
+    },
+    "integrations": {
+      "title": "연동",
+      "description": "MCP 서버와 앱을 연결합니다. 각 연동은 플러그인에 포함되며, 플러그인이 사용자에게 접근 권한을 제공합니다.",
+      "search": "연동 검색",
+      "open": "{name} 열기",
+      "loadFailed": "연동을 불러올 수 없습니다.",
+      "add": {
+        "label": "추가",
+        "title": "연동 추가",
+        "description": "연동 유형을 선택하세요.",
+        "created": "{name}을(를) 추가했습니다.",
+        "createFailed": "연동을 추가할 수 없습니다.",
+        "formTitle": {
+          "mcp_server": "MCP 서버 추가",
+          "openapi": "OpenAPI 앱 추가",
+          "preset": "프리셋에서 앱 추가",
+          "custom": "사용자 지정 앱 추가"
+        },
+        "kindDescription": {
+          "mcp_server": "URL로 원격 MCP 서버를 연결합니다.",
+          "openapi": "OpenAPI 스키마에서 액션을 만듭니다.",
+          "preset": "GitHub, Slack 등 기본 제공 앱을 연결합니다.",
+          "custom": "Craft가 URL 패턴과 일치하는 HTTP 서비스를 호출하도록 합니다."
+        },
+        "openapi": {
+          "title": "OpenAPI 앱 추가"
+        },
+        "preset": {
+          "title": "프리셋",
+          "placeholder": "프리셋 선택",
+          "required": "프리셋을 선택하세요.",
+          "loadFailed": "프리셋을 불러올 수 없습니다.",
+          "instructions": "설정 안내",
+          "credentialRequired": "이 값을 입력하세요."
+        },
+        "name": {
+          "title": "이름",
+          "placeholder": "이름 입력",
+          "required": "이름을 입력하세요."
+        },
+        "descriptionField": {
+          "title": "설명",
+          "placeholder": "설명 입력"
+        },
+        "custom": {
+          "patterns": {
+            "title": "URL 패턴",
+            "description": "한 줄에 URL 패턴을 하나씩 입력하세요. 예: https://api.example.com/*",
+            "placeholder": "https://api.example.com/*",
+            "required": "URL 패턴을 하나 이상 입력하세요."
+          }
+        },
+        "mcp": {
+          "url": {
+            "title": "서버 URL",
+            "placeholder": "https://example.com/mcp",
+            "error": "올바른 서버 URL을 입력하세요."
+          },
+          "probe": {
+            "checking": "서버 확인 중…",
+            "public": "{count, plural, one {도구 #개} other {도구 #개}}를 찾았습니다. 이 서버는 로그인이 필요 없습니다.",
+            "oauth": "이 서버는 OAuth 로그인을 사용합니다.",
+            "authUnknown": "이 서버는 로그인이 필요합니다. API 키 헤더 또는 OAuth를 추가하세요.",
+            "unreachable": "Onyx가 이 서버에 연결할 수 없습니다. URL을 확인하세요."
+          },
+          "transport": {
+            "title": "전송 방식",
+            "streamableHttp": "Streamable HTTP",
+            "sse": "서버 전송 이벤트(SSE)"
+          },
+          "suggested": "추천 서버"
+        },
+        "owner": {
+          "title": "소유자",
+          "personal": "나만 사용",
+          "organization": "조직용",
+          "personalDescription": "Onyx가 연동을 내 업로드의 플러그인에 넣습니다. 나중에 플러그인을 공유할 수 있습니다.",
+          "organizationDescription": "Onyx가 연동을 조직 라이브러리의 플러그인에 넣습니다."
+        },
+        "back": "뒤로",
+        "submit": "추가",
+        "adding": "추가 중…"
+      },
+      "filters": {
+        "label": "연동 유형",
+        "all": "전체",
+        "mcp_server": "MCP 서버",
+        "api": "앱"
+      },
+      "columns": {
+        "name": "이름",
+        "type": "유형",
+        "signIn": "로그인",
+        "access": "접근",
+        "status": "상태"
+      },
+      "empty": {
+        "title": "연동이 없습니다",
+        "description": "MCP 서버나 앱을 추가하여 에이전트에 새 액션을 제공하세요.",
+        "noResults": "연동을 찾을 수 없습니다",
+        "noResultsDescription": "다른 이름이나 유형으로 시도해 보세요."
+      },
+      "shape": {
+        "mcp_server": "MCP 서버",
+        "openapi": "OpenAPI 앱",
+        "preset": "앱",
+        "custom": "사용자 지정 앱"
+      },
+      "signInSummary": "{mode, select, none {로그인 없음} shared {{method, select, oauth2 {조직 계정(OAuth)} api_key {조직 API 키} onyx_login {Onyx 로그인} managed {Onyx에서 관리} other {조직 계정}}} individual {{method, select, oauth2 {각 사용자(OAuth)} api_key {각 사용자(API 키)} onyx_login {Onyx 로그인} managed {Onyx에서 관리} other {각 사용자}}} other {알 수 없음}}",
+      "access": {
+        "none": "플러그인에 없음",
+        "many": "{count, plural, one {플러그인 #개} other {플러그인 #개}}",
+        "organization": "{plugin}(조직 라이브러리)",
+        "personal": "{plugin}({owner}의 내 업로드)"
+      },
+      "status": {
+        "needsSetup": "설정 필요",
+        "off": "꺼짐",
+        "needsReconnect": "재연결 필요",
+        "movingCredentials": "자격 증명 이동 중",
+        "ready": "준비됨"
+      },
+      "signIn": {
+        "mode": {
+          "title": "로그인 모드",
+          "description": "서비스에 로그인할 주체를 선택하세요.",
+          "none": "로그인 없음",
+          "shared": "조직 공용 계정 하나",
+          "individual": "각 사용자가 로그인"
+        },
+        "method": {
+          "title": "로그인 방법",
+          "oauth2": "OAuth",
+          "apiKey": "API 키",
+          "onyxLogin": "Onyx 로그인",
+          "managed": "Onyx에서 관리"
+        },
+        "header": {
+          "name": {
+            "title": "헤더 이름",
+            "placeholder": "헤더 이름 입력",
+            "error": "헤더 이름을 입력하세요."
+          },
+          "value": {
+            "title": "헤더 값",
+            "description": "각 자격 증명을 중괄호로 감싸세요. 예: {example}. 각 자리 표시자는 자격 증명 입력란이 됩니다.",
+            "placeholder": "예: {example}",
+            "error": "자리 표시자를 하나 이상 추가하세요. 예: {example}"
+          }
+        },
+        "oauth": {
+          "providerMode": {
+            "title": "OAuth 클라이언트",
+            "manual": "클라이언트 정보 입력",
+            "discovery": "클라이언트 자동 등록",
+            "preset": "프리셋의 클라이언트 사용"
+          },
+          "authorizationUrl": "인증 URL",
+          "tokenUrl": "토큰 URL",
+          "urlPlaceholder": "https://",
+          "urlError": "올바른 URL을 입력하세요.",
+          "clientId": "클라이언트 ID",
+          "clientIdPlaceholder": "클라이언트 ID 입력",
+          "clientIdError": "클라이언트 ID를 입력하세요.",
+          "clientSecret": "클라이언트 시크릿",
+          "clientSecretPlaceholder": "클라이언트 시크릿 입력",
+          "clientSecretSaved": "저장되었습니다. 바꾸려면 새 시크릿을 입력하세요.",
+          "scopes": {
+            "title": "범위",
+            "description": "범위는 공백으로 구분하세요.",
+            "placeholder": "예: read write"
+          }
+        }
+      },
+      "detail": {
+        "title": "연동",
+        "back": "모든 연동",
+        "notFound": "이 연동이 없거나 볼 수 있는 권한이 없습니다.",
+        "loadFailed": "이 연동을 불러올 수 없습니다.",
+        "tabs": {
+          "overview": "개요",
+          "configuration": "구성",
+          "actions": "액션"
+        },
+        "overview": {
+          "readOnly": "이 연동을 볼 수는 있지만 변경할 수는 없습니다.",
+          "noDescription": "설명 없음",
+          "type": "유형",
+          "signIn": "로그인",
+          "createdBy": "추가한 사람",
+          "needsSetup": "설정 필요",
+          "needsSetupDefault": "구성 탭에서 로그인 설정을 완료하세요.",
+          "plugins": {
+            "title": "플러그인",
+            "description": "사용자는 이 플러그인을 통해 이 연동을 사용합니다.",
+            "organization": "{policy, select, REQUIRED {조직 라이브러리, 필수} DEFAULT {조직 라이브러리, 기본적으로 켜짐} AVAILABLE {조직 라이브러리, 사용 가능} NOT_AVAILABLE {조직 라이브러리, 사용할 수 없음} other {조직 라이브러리}}",
+            "personal": "{owner}의 내 업로드",
+            "manage": "플러그인 관리"
+          },
+          "enabled": {
+            "title": "사용",
+            "description": "이 설정이 꺼져 있으면 어떤 에이전트나 사용자도 이 연동을 사용할 수 없습니다."
+          },
+          "delete": {
+            "title": "연동 삭제",
+            "description": "각 플러그인에서 연동을 제거하고 연결 및 액션 설정을 삭제합니다.",
+            "label": "삭제",
+            "confirmTitle": "{name}을(를) 삭제할까요?",
+            "confirmDescription": "Onyx가 각 플러그인에서 연동을 제거하고 연결 및 액션 설정을 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
+            "confirm": "삭제"
+          },
+          "deleted": "{name}을(를) 삭제했습니다.",
+          "deleteFailed": "연동을 삭제할 수 없습니다.",
+          "saveFailed": "변경 사항을 저장할 수 없습니다."
+        },
+        "configuration": {
+          "readOnly": "이 연동을 볼 수는 있지만 변경할 수는 없습니다.",
+          "connection": {
+            "title": "연결",
+            "serverUrl": "서버 URL",
+            "serverUrlError": "올바른 서버 URL을 입력하세요.",
+            "urlPatterns": "URL 패턴",
+            "urlPatternsDescription": "한 줄에 URL 패턴을 하나씩 입력하세요."
+          },
+          "signIn": {
+            "title": "로그인",
+            "description": "로그인 방법, 클라이언트, URL 또는 범위를 변경하면 각 사용자가 다시 연결해야 합니다."
+          },
+          "alwaysAllow": {
+            "title": "사용자의 \"항상 허용\" 저장 허용",
+            "description": "\"확인 요청\"으로 설정된 액션에 대해 각 사용자가 승인 요청을 건너뛸 수 있도록 합니다."
+          },
+          "save": "저장",
+          "saving": "저장 중…",
+          "saved": "구성을 저장했습니다.",
+          "saveFailed": "구성을 저장할 수 없습니다.",
+          "organization": {
+            "title": "조직 연결",
+            "description": "각 사용자는 이 계정으로 작업합니다.",
+            "state": "{state, select, connected {연결됨} not_connected {연결 안 됨} needs_reconnect {재연결 필요} not_set_up {설정되지 않음} other {알 수 없음}}",
+            "connect": "연결",
+            "disconnect": "연결 해제",
+            "connected": "조직 계정을 연결했습니다.",
+            "disconnected": "조직 계정의 연결을 해제했습니다.",
+            "failed": "조직 연결을 변경할 수 없습니다."
+          }
+        },
+        "actions": {
+          "loadFailed": "액션을 불러올 수 없습니다.",
+          "retry": "다시 시도",
+          "search": "액션 검색",
+          "refresh": "새로 고침",
+          "refreshed": "액션을 새로 고쳤습니다.",
+          "refreshFailed": "액션을 새로 고칠 수 없습니다.",
+          "save": "저장",
+          "saving": "저장 중…",
+          "saved": "액션 설정을 저장했습니다.",
+          "saveFailed": "액션 설정을 저장할 수 없습니다.",
+          "default": {
+            "title": "새 액션의 기본값",
+            "description": "자체 설정이 없는 각 액션은 이 값을 사용합니다. 연동이 나중에 추가하는 액션도 이 값을 사용합니다.",
+            "unset": "설정되지 않았습니다. 각 액션은 자체 기본값을 사용합니다.",
+            "clear": "지우기"
+          },
+          "usesDefault": "기본값 사용 중",
+          "setByAdmin": "관리자가 설정함",
+          "useDefaults": "기본값 사용",
+          "readOnly": "읽기 전용 액션({count})",
+          "write": "쓰기 액션({count})",
+          "empty": "이 연동에는 액션이 없습니다.",
+          "connectFirst": {
+            "title": "먼저 서버를 연결하세요",
+            "description": "Onyx는 MCP 서버가 연결된 후 해당 서버의 액션을 불러옵니다.",
+            "open": "구성 열기"
+          }
+        }
+      }
     }
   },
   "agents": {
@@ -14733,10 +15034,10 @@
         },
         "permissions": {
           "askOption": "묻기",
-          "autoApproveOption": "자동 승인",
+          "autoApproveOption": "허용",
           "customOption": "사용자 지정",
           "defaultOption": "기본값",
-          "description": "에이전트가 할 수 있는 작업을 선택하세요. \"묻기\"는 각 작업 전에 승인을 요청하고, \"자동 승인\"은 확인 없이 실행합니다.",
+          "description": "에이전트가 할 수 있는 작업을 선택하세요. \"확인 요청\"은 각 작업 전에 승인을 요청하고, \"허용\"은 확인 없이 실행합니다.",
           "title": "권한"
         },
         "savingButton": "저장 중…",
@@ -16864,9 +17165,6 @@
         "customAnalytics": {
           "label": "사용자 지정 분석"
         },
-        "discordIntegration": {
-          "label": "Discord 연동"
-        },
         "documentSets": {
           "label": "문서 세트"
         },
@@ -16900,12 +17198,6 @@
         "plugins": {
           "label": "플러그인"
         },
-        "mcpActions": {
-          "label": "MCP 액션"
-        },
-        "openapiActions": {
-          "label": "OpenAPI 액션"
-        },
         "plansAndBilling": {
           "label": "요금제 및 결제"
         },
@@ -16920,9 +17212,6 @@
         },
         "serviceAccounts": {
           "label": "서비스 계정"
-        },
-        "slackIntegration": {
-          "label": "Slack 연동"
         },
         "ssoProviders": {
           "label": "SSO 제공자"
@@ -16950,20 +17239,23 @@
         },
         "spendingLimits": {
           "label": "지출 한도"
+        },
+        "integrations": {
+          "label": "연동"
+        },
+        "slackBot": {
+          "label": "Slack 봇"
+        },
+        "discordBot": {
+          "label": "Discord 봇"
         }
       },
       "sections": {
-        "agentsAndActions": {
-          "label": "에이전트 및 액션"
-        },
         "craft": {
           "label": "Craft"
         },
         "documentsAndKnowledge": {
           "label": "문서 및 지식"
-        },
-        "integrations": {
-          "label": "연동"
         },
         "organization": {
           "label": "조직"
@@ -16973,6 +17265,12 @@
         },
         "usage": {
           "label": "사용량"
+        },
+        "agentsAndPlugins": {
+          "label": "에이전트 및 플러그인"
+        },
+        "channels": {
+          "label": "채널"
         }
       }
     },
