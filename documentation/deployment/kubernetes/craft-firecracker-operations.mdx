@@ -200,7 +200,9 @@ For your own certificates (`existingSecret`):
 For your own relay certificates (`relayTls.existingSecret` and `relayTls.proxyExistingSecret`),
 do the same steps with the two relay Secrets. Skip the restarts:
 the host agents and the sandbox proxy read the new files at the next connection.
-The kubelet can take up to 2 minutes to update the files in the pods.
+The kubelet can take up to 2 minutes to update the files in the pods. Instead of each restart,
+wait until every host agent pod and sandbox proxy pod has the changed files. For example, wait 2 minutes,
+or compare `ca.crt` in the pods with the Secret. Do not replace the leaf certificates before all pods trust both CAs.
 
 ## Rotate the registration value
 
