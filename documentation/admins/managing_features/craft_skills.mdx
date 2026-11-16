@@ -323,6 +323,31 @@ Onyx uses one of them in this order:
 
 If the two Skills are equal in this order, Onyx uses the older one. The other Skill shows as off.
 
+### Skill limit for each user
+
+The Skills that a user has on can use at most 500 MB and 5,000 files together.
+Onyx counts the extracted size and file count of each Skill version that the user runs.
+It also counts the built-in Skills. A Skill that the user has not turned on does not count.
+
+Onyx refuses a change by a user who is within both limits when the change puts that user past either limit:
+
+| Change | Result |
+| --- | --- |
+| A user uploads, creates, or imports a Skill | Refused. The error shows the limit. |
+| A user turns on a Skill | Refused. The error shows the limit. |
+| A user edits, restores, or replaces the files of a Skill that they run, and the Skill gets larger | Refused. |
+| An admin changes an installation policy, a share, **Default Access**, or publishes, approves, or transfers a Skill | Always allowed. |
+| A user connects an App, or joins a group | Always allowed. |
+
+A change that is always allowed can put users past the limit.
+
+The API returns HTTP 413 with the code `SKILL_LIMIT_EXCEEDED`. Its `skill_limit` field gives `usage`,
+your size and file count after the change, and `max_bytes` and `max_files`.
+In an upload of many Skills or a GitHub import, each refused Skill shows the reason as text.
+
+A user who is already past a limit is not refused. That user can still upload, turn on, or enlarge Skills,
+and can turn off Skills.
+
 ## Maintain a Skill
 
 Open a custom Skill to manage its lifecycle:
@@ -408,6 +433,12 @@ Configure access once before importing the batch. Onyx reports invalid bundles s
   If it was shared during an active session, start a new turn or session and check the picker again.
   For a published Skill with no installation policy of its own, check **Default Access** under **Craft → Preferences**.
   With **Not available**, only the author and the people and groups it is shared with see it.
+</Accordion>
+
+<Accordion title="A Skill change returns SKILL_LIMIT_EXCEEDED">
+  The change would put you past 500 MB or 5,000 files of Skills.
+  See [Skill limit for each user](#skill-limit-for-each-user). Turn off Skills you do not use,
+  or make the Skill smaller.
 </Accordion>
 
 <Accordion title="A Skill is on but Craft uses a different Skill">
