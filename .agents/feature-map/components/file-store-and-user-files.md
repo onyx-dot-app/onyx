@@ -13,7 +13,8 @@
   returns at once. The file shows "processing" until indexing finishes. A file
   that is too large, has too many tokens, has a password, or has no
   extractable text is rejected with a reason. Spreadsheets over the token limit
-  are accepted but not indexed.
+  are accepted but not indexed, and so is every file of an upload sent with
+  `skip_indexing` (for example, images used only as Ingestion API references).
 - **An image** goes to the model as an image. Images inside a PDF, DOCX or
   PPTX are described by a vision model at indexing time, when an admin turns
   image analysis on. No step does OCR. A PDF image extraction failure is logged;
@@ -68,7 +69,7 @@ POST /user/projects/file/upload             server/features/projects/api.py:uplo
     create_user_files
       categorize_uploaded_files             extract text, count tokens, reject (in the request)
       upload_files(FileOrigin.USER_FILE)    blob + FileRecord
-      UserFile rows                         PROCESSING or SKIPPED, project link
+      UserFile rows                         PROCESSING, or SKIPPED (over-limit spreadsheets, skip_indexing), project link
     enqueue PROCESS_SINGLE_USER_FILE        or BackgroundTasks when DISABLE_VECTOR_DB
 process_user_file_impl                      user_file_processing/tasks.py
   consume_user_file_processing_attempt      db/user_file.py; FAILED past USER_FILE_PROCESSING_MAX_ATTEMPTS pickups
