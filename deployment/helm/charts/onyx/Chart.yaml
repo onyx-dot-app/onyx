@@ -27,6 +27,10 @@ annotations:
       description: A ValidatingAdmissionPolicy limits the Craft Firecracker
         host agent's Node patch to its scale-down annotations, on its own
         Node. The chart adds it when the cluster serves the API.
+    - kind: added
+      description: craft.hostAgent.relayMaxConnsNode (default 2048) caps the
+        egress relay connections of all microVMs on a node, so guests cannot
+        push the host agent over its memory limit.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

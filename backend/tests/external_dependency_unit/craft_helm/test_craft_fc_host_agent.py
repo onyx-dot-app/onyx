@@ -162,6 +162,7 @@ def test_agent_pod_spec() -> None:
     assert "--uid-count=65536" in args
     assert "--dial-ports=3010" in args
     assert "--relay-max-conns=256" in args
+    assert "--relay-max-conns-node=2048" in args
     assert "--dial-max-streams=64" in args
     assert "--max-vms=60" in args
     assert not [a for a in args if a.startswith("--client-allowed-sans")]

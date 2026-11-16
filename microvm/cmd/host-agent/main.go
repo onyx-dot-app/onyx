@@ -81,6 +81,7 @@ type flags struct {
 	endedRetention time.Duration
 	relayIdle      time.Duration
 	relayMaxConns  int
+	relayMaxNode   int
 	listen         string
 	tlsCert        string
 	tlsKey         string
@@ -154,6 +155,7 @@ func main() {
 	flag.DurationVar(&f.endedRetention, "ended-retention", agent.DefaultEndedRetention, "how long each state report lists a VM that exited or stopped (0 = not listed)")
 	flag.DurationVar(&f.relayIdle, "relay-idle-timeout", relay.DefaultIdleTimeout, "close a relay connection after this long without traffic (at least 180s)")
 	flag.IntVar(&f.relayMaxConns, "relay-max-conns", relay.DefaultMaxConns, "most open relay connections per VM; new ones over the cap are closed")
+	flag.IntVar(&f.relayMaxNode, "relay-max-conns-node", relay.DefaultMaxConnsNode, "most open relay connections of all VMs together (about 100 KiB of agent memory each); new ones over the cap are closed")
 	flag.StringVar(&f.listen, "listen", "", "mTLS TCP address for the api_server (for example :7443); empty: Unix socket only")
 	flag.StringVar(&f.tlsCert, "tls-cert", "", "server certificate file (PEM) for --listen")
 	flag.StringVar(&f.tlsKey, "tls-key", "", "server key file (PEM) for --listen")
@@ -731,6 +733,9 @@ func setupEgress(f flags, m *agent.Manager, log *slog.Logger) (pushers, error) {
 	if f.relayMaxConns < 1 {
 		return pushers{}, fmt.Errorf("--relay-max-conns %d must be 1 or more", f.relayMaxConns)
 	}
+	if f.relayMaxNode < 1 {
+		return pushers{}, fmt.Errorf("--relay-max-conns-node %d must be 1 or more", f.relayMaxNode)
+	}
 	_, key, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		return pushers{}, err
@@ -741,7 +746,7 @@ func setupEgress(f flags, m *agent.Manager, log *slog.Logger) (pushers, error) {
 	}
 	signer := relay.NewSigner(f.nodeID, kid, key)
 	m.UseEgress(&relay.AgentEgress{Relay: &relay.Relay{
-		Signer: signer, Upstream: f.egressProxy, TLS: upTLS, IdleTimeout: f.relayIdle, MaxConns: f.relayMaxConns, Log: log,
+		Signer: signer, Upstream: f.egressProxy, TLS: upTLS, IdleTimeout: f.relayIdle, MaxConns: f.relayMaxConns, MaxConnsNode: f.relayMaxNode, Log: log,
 	}})
 	if f.apiServerURL == "" {
 		log.Warn("no --api-server-url: the node signing key is not registered, so the proxy rejects VM egress")

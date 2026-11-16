@@ -278,7 +278,8 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --since=1h \
 
 **Meaning.** More than 10% (and at least 10) of egress relay connections on one node failed in
 10 minutes, for 10 minutes. `upstream_failed`: sandbox-proxy did not answer an accepted
-connection. `over_cap`: a VM opened more than `--relay-max-conns` connections.
+connection. `over_cap`: a VM opened more than `--relay-max-conns` connections, or all VMs on the node
+together opened more than `--relay-max-conns-node`. The agent log says which cap.
 
 **Check.**
 

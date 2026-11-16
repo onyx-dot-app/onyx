@@ -52,6 +52,12 @@ Use these numbers as a start. Watch the host agent dashboard and add nodes befor
 Size the sandbox proxy on the egress call rate, not on the number of sandboxes. Add proxy replicas,
 or raise its CPU limit under `sandboxProxy.resources`, when its pods reach their CPU limit.
 
+The host agent relays the egress of all microVMs on its node.
+It keeps at most 2048 relay connections open on a node (`craft.hostAgent.relayMaxConnsNode`)
+and 256 for one microVM (`craft.hostAgent.relayMaxConns`). It closes new connections over a cap.
+Each connection uses up to about 100 KiB of agent memory. If you raise `relayMaxConnsNode`,
+keep `craft.hostAgent.resources.limits.memory` above 256 MiB plus 100 KiB for each connection.
+
 Keep at least 50 GiB free in the data directory. The host agent refuses new microVMs below 10 GiB free.
 
 Keep at least one spare KVM node in each zone. A node failure stops every microVM on the node.
