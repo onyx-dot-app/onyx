@@ -1,0 +1,64 @@
+---
+title: "Jira Service Management"
+description: "Access tickets from Jira Service Management"
+---
+
+## How it works
+
+Onyx indexes the **customer requests** (portal tickets) in your Jira Service
+Management project. Every request becomes one searchable document in Onyx:
+its summary, description, and **public** comments. Internal agent notes are
+not indexed.
+
+Onyx pulls new and changed requests on the connector's **Refresh Every**
+schedule. The default is **30 minutes**.
+
+This connector is for Jira Service Management (Cloud) service desks. For
+Jira Software issue tracking, use the **Jira** connector instead.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Create an Atlassian API token">
+    Go to
+    [id.atlassian.com/manage-profile/security/api-tokens](https://id.atlassian.com/manage-profile/security/api-tokens),
+    select **Create API token**, and copy the token. Use an Atlassian account
+    whose JSM agent role can read the service desks you want indexed.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create an authentication account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Jira Service
+    Management**. Under **Authentication Account**, select **Create New**.
+    Enter a **Display Name**, your Atlassian site URL
+    (for example `https://your-domain.atlassian.net`), the account's **email
+    address**, and the **API token** from the previous step. Select **Create**.
+  </Step>
+
+  <Step title="Configure the connector">
+    Under **Connector Settings**, give the connector a **Display Name**. In
+    **Service Desk ID**, enter the numeric ID of one service desk to index
+    (visible in the desk's URL, for example the `7` in
+    `.../servicedesk/customer/portal/7`). Leave it empty to index every desk
+    the account can read.
+
+    Under **Document Access**, choose who can see the indexed documents.
+    **Everyone in Your Organization** shows them to all Onyx users.
+    **Specific Groups** limits them to the Onyx user groups you pick.
+    **Specific Groups** is a paid feature: the Business and Enterprise tiers
+    on Onyx Cloud, and the Enterprise Edition when self-hosted. The Jira
+    Service Management connector does not sync JSM permissions.
+
+  </Step>
+
+  <Step title="Start indexing">
+    Select **Create Connector** to save the connector and start indexing.
+    Open **Admin Panel → Indexing Status** and select the connector to follow
+    the first indexing run.
+  </Step>
+</Steps>

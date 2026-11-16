@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Gestor de issues de Atlassian"
         },
+        "jira_service_management": {
+          "description": "Jira Service Management service desk tickets"
+        },
         "productboard": {
           "description": "Gestión de producto"
         },
@@ -4252,6 +4255,15 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "fields": {
+            "service_desk_id": {
+              "label": "Service Desk ID",
+              "description": "Numeric ID of one Jira Service Management service desk (e.g. 7). Leave empty to index every desk the account can read."
+            }
+          }
+        },
         "salesforce": {
           "description": "Configurar conector de Salesforce",
           "fields": {
@@ -5326,6 +5338,7 @@
         "githubBaseUrl": "Opcional. Indica el host de tu servidor, como https://github.example.com. Déjalo en blanco para github.com.",
         "gongBaseUrl": "Opcional. Para datos fuera de EE. UU., indica el host de tu región, como https://[region].api.gong.io.",
         "jiraUserEmail": "Obligatorio para Jira Cloud.",
+        "jiraServiceManagementBaseUrl": "For example https://your-domain.atlassian.net",
         "lumappsServiceUser": "El usuario en cuyo nombre se indexa.",
         "youtrackToken": "Un token permanente de un usuario de YouTrack que puede leer todos los proyectos que se indexarán. Créelo en su perfil de YouTrack, en Seguridad de la cuenta.",
         "azureDatalakeAccountKey": "En Azure Portal, abra la cuenta de almacenamiento, luego Seguridad y redes, luego Claves de acceso.",

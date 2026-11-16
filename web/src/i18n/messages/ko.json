@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian 이슈 트래커"
         },
+        "jira_service_management": {
+          "description": "Jira Service Management service desk tickets"
+        },
         "productboard": {
           "description": "제품 관리"
         },
@@ -4252,6 +4255,15 @@
             }
           }
         },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "fields": {
+            "service_desk_id": {
+              "label": "Service Desk ID",
+              "description": "Numeric ID of one Jira Service Management service desk (e.g. 7). Leave empty to index every desk the account can read."
+            }
+          }
+        },
         "salesforce": {
           "description": "Salesforce 커넥터 구성",
           "fields": {
@@ -5326,6 +5338,7 @@
         "githubBaseUrl": "선택 사항입니다. 서버 호스트를 입력하세요(예: https://github.example.com). github.com을 사용하려면 비워 두세요.",
         "gongBaseUrl": "선택 사항입니다. 미국 외 지역의 데이터는 해당 리전의 호스트를 입력하세요(예: https://[region].api.gong.io).",
         "jiraUserEmail": "Jira Cloud에 필요합니다.",
+        "jiraServiceManagementBaseUrl": "For example https://your-domain.atlassian.net",
         "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
         "youtrackToken": "인덱싱할 모든 프로젝트를 읽을 수 있는 YouTrack 사용자의 영구 토큰입니다. YouTrack 프로필의 계정 보안에서 만드세요.",
         "azureDatalakeAccountKey": "Azure Portal에서 스토리지 계정을 열고 보안 + 네트워킹, 액세스 키를 차례로 엽니다.",

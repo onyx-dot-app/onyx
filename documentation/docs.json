@@ -257,6 +257,7 @@
                   "admins/connectors/official/hubspot",
                   "admins/connectors/official/imap",
                   "admins/connectors/official/jira",
+                  "admins/connectors/official/jira_service_management",
                   "admins/connectors/official/linear",
                   "admins/connectors/official/loopio",
                   "admins/connectors/official/lumapps",
