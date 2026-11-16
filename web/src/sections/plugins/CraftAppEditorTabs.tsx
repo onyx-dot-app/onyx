@@ -10,7 +10,6 @@ interface CraftAppEditorTabsProps {
   configuration: ReactNode;
   authentication?: ReactNode;
   tools?: ReactNode;
-  skills?: ReactNode;
   busy?: boolean;
 }
 
@@ -20,7 +19,6 @@ export default function CraftAppEditorTabs({
   configuration,
   authentication,
   tools,
-  skills,
   busy = false,
 }: CraftAppEditorTabsProps) {
   const t = useTranslations("actions");
@@ -36,11 +34,6 @@ export default function CraftAppEditorTabs({
       content: authentication,
     },
     { value: "tools" as const, label: t("mcpTools.title"), content: tools },
-    {
-      value: "skills" as const,
-      label: t("plugins.craftApp.tabs.skills"),
-      content: skills,
-    },
   ].filter((panel) => panel.content !== undefined);
 
   function pane(content: ReactNode) {

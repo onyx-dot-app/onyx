@@ -3,14 +3,13 @@
 
 External-app providers are *built-in skills* created on demand: their ``Skill``
 row carries a ``built_in_skill_id`` (e.g. ``slack``) so it renders through the
-exact same disk-backed path as a seeded built-in — there is no external-app
-special case in the push pipeline. These tests verify that an authenticated
-provider delivers its on-disk content under its stable directory, and the USE
-access policy keeps content out when credentials are incomplete.
+exact same disk-backed path as a seeded built-in. A user gets the content when
+the user runs a plugin that holds the app's integration, also before the user
+connects the app (``onyx.db.app_skill``).
 
 Uses the real Slack provider directory on disk so the wiring
-(``built_in_skill_id -> source dir``) is exercised end to end. The DB-layer
-gate itself is covered separately by ``test_external_app_skill_visibility``.
+(``built_in_skill_id -> source dir``) is exercised end to end. The rule itself
+is covered by ``test_app_skills_without_link``.
 """
 
 from __future__ import annotations
@@ -26,6 +25,7 @@ from onyx.skills.built_in import SLACK
 from onyx.skills.bundle import strip_skill_md_frontmatter
 from onyx.skills.push import build_skills_fileset_for_user
 from tests.external_dependency_unit.craft.db_helpers import (
+    make_app_plugin_for_user,
     make_external_app,
     make_user,
     make_user_credential,
@@ -66,6 +66,7 @@ def test_authenticated_provider_delivers_content_under_stable_dir(
         auth_template=_AUTH_TEMPLATE,
     )
     make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    make_app_plugin_for_user(db_session, app=app, user=user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
@@ -75,23 +76,24 @@ def test_authenticated_provider_delivers_content_under_stable_dir(
     assert f"{_SLACK_ID}/slack_api.py" in files
 
 
-def test_unauthenticated_provider_delivers_nothing(
+def test_provider_content_needs_a_running_plugin_not_a_connection(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session)
+    runner = make_user(db_session)
+    other = make_user(db_session)
     skill = _slack_skill(db_session)
-    make_external_app(
+    app = make_external_app(
         db_session,
         skill=skill,
         app_type=ExternalAppType.SLACK,
         auth_template=_AUTH_TEMPLATE,
-    )  # no user credential row
+    )  # no user credential rows
+    make_app_plugin_for_user(db_session, app=app, user=runner)
     db_session.commit()
 
-    files = build_skills_fileset_for_user(user, db_session)
-
-    assert not _has_slack_content(files)
+    assert _has_slack_content(build_skills_fileset_for_user(runner, db_session))
+    assert not _has_slack_content(build_skills_fileset_for_user(other, db_session))
 
 
 def test_denied_action_listed_as_unavailable(
@@ -110,6 +112,7 @@ def test_denied_action_listed_as_unavailable(
         action_policies={SlackAction.MESSAGES_WRITE.value: ActionPolicy.DENY},
     )
     make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    make_app_plugin_for_user(db_session, app=app, user=user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
@@ -140,6 +143,7 @@ def test_no_disabled_actions_omits_section(
         auth_template=_AUTH_TEMPLATE,
     )
     make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    make_app_plugin_for_user(db_session, app=app, user=user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
@@ -170,6 +174,7 @@ def test_zendesk_push_and_preview_share_account_and_action_policy(
         user=test_user,
         user_credentials={"access_token": "test-token"},
     )
+    make_app_plugin_for_user(db_session, app=app, user=test_user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(test_user, db_session)

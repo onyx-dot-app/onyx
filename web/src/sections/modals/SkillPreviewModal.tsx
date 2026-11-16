@@ -26,9 +26,7 @@ interface SkillPreviewModalProps {
 
 // Message keys under `skills.modals`, not copy — the literal union keeps `t()`
 // statically checked while this stays a plain helper.
-type MetadataLabelKey =
-  | "preview.metadata.createdBy.label"
-  | "preview.metadata.externalApp.label";
+type MetadataLabelKey = "preview.metadata.createdBy.label";
 
 interface MetadataRow {
   labelKey: MetadataLabelKey;
@@ -43,12 +41,6 @@ function metadataRows(preview: SkillPreview): MetadataRow[] {
     rows.push({
       labelKey: "preview.metadata.createdBy.label",
       value: preview.author_email,
-    });
-  }
-  if (preview.external_app) {
-    rows.push({
-      labelKey: "preview.metadata.externalApp.label",
-      value: preview.external_app.name,
     });
   }
   return rows;
@@ -124,15 +116,6 @@ export function SkillPreviewDetails({
   } = useSWR<SkillPreview>(swrKey, errorHandlingFetcher);
   const instructionsMarkdown =
     preview?.instructions_markdown || t("preview.noInstructions.message");
-  const dependency = preview?.external_app;
-  const dependencyUnavailableReason =
-    dependency && !dependency.ready
-      ? dependency.enabled
-        ? t("preview.unavailable.appNotConnected", { appName: dependency.name })
-        : t("preview.unavailable.appDisabled", { appName: dependency.name })
-      : null;
-  const displayedUnavailableReason =
-    unavailableReason ?? dependencyUnavailableReason;
 
   return (
     <>
@@ -154,13 +137,13 @@ export function SkillPreviewDetails({
 
       {preview && !isLoading && !error && (
         <Section gap={4} height="auto" alignItems="stretch">
-          {displayedUnavailableReason && (
+          {unavailableReason && (
             <MessageCard
               outerPadding={1}
               innerPadding={1}
               variant="warning"
               title={t("preview.unavailable.title")}
-              description={displayedUnavailableReason}
+              description={unavailableReason}
             />
           )}
 

@@ -18,7 +18,6 @@ from onyx.db.enums import (
 )
 from onyx.db.external_app import (
     get_built_in_external_app,
-    get_external_app_by_id,
 )
 from onyx.db.models import Skill, User
 from onyx.db.plugin import (
@@ -650,20 +649,10 @@ def create_custom_skill_from_editor(
     instructions_markdown: Annotated[str, Form(min_length=1)],
     upload: Annotated[UploadFile | None, File()] = None,
     auto_enable: Annotated[bool, Form()] = True,
-    external_app_id: Annotated[int | None, Form(gt=0)] = None,
     sharing: Annotated[str | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
-    if external_app_id is not None:
-        if not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "Only administrators can create a skill for an external app.",
-            )
-        if get_external_app_by_id(db_session, external_app_id) is None:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "External app not found.")
-
     share_request = _parse_skill_sharing(sharing)
 
     try:
@@ -699,7 +688,6 @@ def create_custom_skill_from_editor(
         instructions_markdown=create_request.instructions_markdown,
     )
     file_store = get_default_file_store()
-    should_auto_enable = auto_enable and external_app_id is None
     with ingested_skill_bundle(
         bundle_bytes,
         f"{canonical_name}.zip",
@@ -711,9 +699,8 @@ def create_custom_skill_from_editor(
             user,
             db_session,
             change=share_request.to_change() if share_request is not None else None,
-            external_app_id=external_app_id,
         )
-        if should_auto_enable and not enable_new_skill_if_name_available__no_commit(
+        if auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):
             raise OnyxError(
@@ -722,7 +709,7 @@ def create_custom_skill_from_editor(
             )
         db_session.commit()
 
-    if should_auto_enable or share_request is not None:
+    if auto_enable or share_request is not None:
         push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 

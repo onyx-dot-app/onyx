@@ -21,7 +21,6 @@ from sqlalchemy.orm import Session
 import onyx.configs.slack_configs as slack_configs
 import onyx.external_apps.providers.slack as slack_provider
 from onyx.db.enums import ExternalAppType
-from onyx.db.models import Skill
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.rendering import render_external_app_files
 
@@ -101,7 +100,7 @@ def test_rendered_cloud_file_names_the_configured_cloud(
         organization_credentials = SimpleNamespace(get_value=lambda **_: {})
 
     monkeypatch.setattr(
-        "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: _App()
+        "onyx.skills.rendering.get_external_app_by_id", lambda *_: _App()
     )
     monkeypatch.setattr(
         "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
@@ -109,7 +108,7 @@ def test_rendered_cloud_file_names_the_configured_cloud(
 
     rendered = render_external_app_files(
         cast(Session, None),
-        cast(Skill, SimpleNamespace(id=uuid4())),
+        1,
         ExternalAppType.SLACK,
         _SLACK_DIR,
     )

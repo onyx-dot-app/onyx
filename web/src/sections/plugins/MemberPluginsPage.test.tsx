@@ -1,5 +1,3 @@
-import { customFixture } from "@/lib/skills/__fixtures__/picker";
-import type { SkillsList } from "@/lib/skills/types";
 import { MCPAuthenticationType, MCPConnectionStatus } from "@/lib/mcp/types";
 import {
   act,
@@ -63,14 +61,12 @@ function network({
   serverError = false,
   apps = [],
   appError = false,
-  skills = { builtins: [], customs: [] },
 }: {
   servers?: MCPServer[];
   tools?: ToolSnapshot[];
   serverError?: boolean;
   apps?: ExternalAppUserResponse[];
   appError?: boolean;
-  skills?: SkillsList;
 } = {}) {
   return jest.spyOn(global, "fetch").mockImplementation(async (input) => {
     switch (String(input)) {
@@ -86,8 +82,6 @@ function network({
         return jsonResponse(tools);
       case "/api/user-oauth-token/status":
         return jsonResponse([]);
-      case "/api/skills":
-        return jsonResponse(skills);
       case "/api/build/apps/7/credentials":
         for (const app of apps) if (app.id === 7) app.authenticated = true;
         return jsonResponse({});
@@ -668,42 +662,21 @@ test("closes an approval deep link without reopening or dropping other parameter
   );
 });
 
-test.each([true, false])(
-  "external app status reflects associated skill enablement (%s)",
-  async (enabled) => {
-    network({
-      apps: [memberApp({ authenticated: true, name: "GitHub" })],
-      skills: {
-        builtins: [],
-        customs: [
-          customFixture({
-            enabled,
-            external_app: {
-              external_app_id: 7,
-              name: "GitHub",
-              enabled: true,
-              ready: true,
-            },
-          }),
-        ],
-      },
-    });
-    render(<MemberPluginsPage />);
-    const indicator = await screen.findByRole("button", {
-      name: "Connection status for GitHub",
-    });
-    await waitFor(() =>
-      expect(
-        indicator.querySelectorAll("span[aria-hidden] > span")[2]
-      ).toHaveClass(enabled ? "bg-status-success-05" : "bg-status-warning-05")
-    );
-    await setupUser().hover(indicator);
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      enabled ? "Ready to use" : "Not all associated skills are enabled."
-    );
-    expect(screen.getByText("Craft App")).toBeVisible();
-  }
-);
+test("a connected external app shows a ready Craft status", async () => {
+  network({ apps: [memberApp({ authenticated: true, name: "GitHub" })] });
+  render(<MemberPluginsPage />);
+  const indicator = await screen.findByRole("button", {
+    name: "Connection status for GitHub",
+  });
+  await waitFor(() =>
+    expect(
+      indicator.querySelectorAll("span[aria-hidden] > span")[2]
+    ).toHaveClass("bg-status-success-05")
+  );
+  await setupUser().hover(indicator);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("Ready to use");
+  expect(screen.getByText("Craft App")).toBeVisible();
+});
 
 test("a successful connection returns to the Connection tab with the same backdrop", async () => {
   const app = memberApp({
@@ -744,24 +717,9 @@ test("orders cards by status, then type, then name", async () => {
     ],
     apps: [
       memberApp({ id: 1, name: "App gray", supports_oauth: false }),
-      memberApp({ id: 2, name: "App skill warning", authenticated: true }),
       memberApp({ id: 3, name: "App active", authenticated: true }),
       memberApp({ id: 4, name: "App sign-in" }),
     ],
-    skills: {
-      builtins: [],
-      customs: [
-        customFixture({
-          enabled: false,
-          external_app: {
-            external_app_id: 2,
-            name: "App skill warning",
-            enabled: true,
-            ready: true,
-          },
-        }),
-      ],
-    },
   });
   render(<MemberPluginsPage />);
   await waitFor(() =>
@@ -775,7 +733,6 @@ test("orders cards by status, then type, then name", async () => {
       "View App active",
       "Connect MCP warning",
       "Connect App sign-in",
-      "View App skill warning",
       "View MCP gray",
       "View App gray",
     ])

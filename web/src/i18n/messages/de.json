@@ -982,7 +982,6 @@
         "emptyDescription": "Versuchen Sie einen anderen Verbindungsfilter oder bitten Sie Ihren Workspace-Admin, ein Plugin hinzuzufügen."
       },
       "detail": {
-        "issuesTitle": "Probleme",
         "noAuthentication": "Keine Authentifizierung erforderlich",
         "connection": "Verbindung",
         "tools": "Werkzeuge",
@@ -1047,17 +1046,6 @@
         "chatOnly": "Nur Chat",
         "chatOnlyDescription": "Dieses Plugin ist in Chat verfügbar, nicht in Craft."
       },
-      "appSkills": {
-        "preview": "Vorschau",
-        "search": "Skills suchen",
-        "count": "{count, plural, one {# Skill} other {# Skills}}",
-        "empty": "Mit dieser App sind keine Skills verknüpft.",
-        "noMatches": "Keine Skills entsprechen Ihrer Suche.",
-        "error": "Skills konnten nicht geladen werden.",
-        "enabled": "Aktiviert",
-        "disabled": "Deaktiviert",
-        "loading": "Skills werden geladen…"
-      },
       "externalApp": {
         "description": "Verwenden Sie Ihr Konto in Craft.",
         "craftOnly": "Nur Craft",
@@ -1099,8 +1087,7 @@
       "craftApp": {
         "tabs": {
           "configuration": "Konfiguration",
-          "permissions": "Berechtigungen",
-          "skills": "Skills"
+          "permissions": "Berechtigungen"
         }
       },
       "disableConfirmation": {
@@ -5994,7 +5981,6 @@
         },
         "deleteModal": {
           "description": "Dadurch wird die App für Ihre gesamte Organisation gelöscht: ihre Konfiguration, die Verbindung jedes Mitglieds und alle vom Anbieter verwalteten Skills.",
-          "retainedSkills": "{count, plural, =0 {Es werden keine zugehörigen benutzerdefinierten Skills gelöscht.} one {# zugehöriger benutzerdefinierter Skill bleibt erhalten, wird von dieser App getrennt und für alle deaktiviert.} other {# zugehörige benutzerdefinierte Skills bleiben erhalten, werden von dieser App getrennt und für alle deaktiviert.}}",
           "submit": {
             "label": "App löschen"
           },
@@ -12143,13 +12129,6 @@
       }
     },
     "skill": {
-      "dependency": {
-        "appDisabled": "App “{app}” ist deaktiviert",
-        "connectToEnable": "App “{app}” verbinden, um zu aktivieren",
-        "connectToUse": "App “{app}” verbinden, um sie zu nutzen",
-        "nameConflict": "Ein anderer Skill mit diesem Namen ist aktiviert",
-        "usesApp": "Verwendet App “{app}”"
-      },
       "edit": {
         "tooltip": "Skill bearbeiten"
       },
@@ -12157,9 +12136,6 @@
         "description": "Löschen Sie diesen ungültigen Skill und erstellen Sie einen neuen."
       },
       "tags": {
-        "appSkill": {
-          "label": "App-Skill"
-        },
         "builtin": {
           "label": "Integriert"
         },
@@ -12190,19 +12166,11 @@
         "disable": {
           "ariaLabel": "{name} deaktivieren"
         },
-        "disableForApp": {
-          "ariaLabel": "{name} für {app} deaktivieren"
-        },
         "enable": {
           "ariaLabel": "{name} aktivieren"
-        },
-        "enableForApp": {
-          "ariaLabel": "{name} für {app} aktivieren"
         }
       },
       "tooltips": {
-        "appDisabled": "App “{app}” wurde von einem Administrator deaktiviert.",
-        "connectApp": "Verbinden Sie die App “{app}” auf der Apps-Seite, um diesen Skill zu verwenden.",
         "invalid": "Dieser Skill ist ungültig. Löschen Sie ihn und erstellen Sie einen neuen Skill.",
         "unavailable": "Der Skill ist derzeit nicht verfügbar. Klicken Sie, um Details anzuzeigen."
       }
@@ -14555,58 +14523,6 @@
           "title": "App hinzufügen"
         }
       },
-      "associatedSkills": {
-        "associateButton": "Vorhandenen verknüpfen",
-        "create": {
-          "github": {
-            "description": "Wenn Ihre Skills in GitHub liegen, importieren Sie sie zuerst auf der Skills-Seite und verknüpfen Sie sie dann mit dieser App.",
-            "label": "Aus GitHub importieren"
-          },
-          "scratch": {
-            "description": "Schreiben Sie Anweisungen und fügen Sie unterstützende Dateien hinzu.",
-            "label": "Von Grund auf beginnen"
-          },
-          "upload": {
-            "description": "Importieren Sie eine SKILL.md-Datei, eine ZIP-Datei oder einen Skill-Ordner.",
-            "label": "Skill hochladen"
-          }
-        },
-        "createSkillButton": "Skill erstellen",
-        "description": "Skills geben Craft Anweisungen zur Nutzung dieser App. Sie gelten organisationsweit; Nutzer müssen ggf. alle aktivieren, damit die App richtig funktioniert.",
-        "editButton": "Bearbeiten",
-        "empty": {
-          "label": "Keine bearbeitbaren Skills gefunden."
-        },
-        "invalidTag": "Ungültig",
-        "loading": {
-          "label": "Skills werden geladen…"
-        },
-        "noneAssociated": {
-          "label": "Noch keine Skills verknüpft. Die App kann auch ohne gespeichert und genutzt werden."
-        },
-        "promote": {
-          "cancelButton": "Abbrechen",
-          "confirmButton": "Organisationsweit verfügbar machen",
-          "description": "Mit Apps verknüpfte Skills müssen für alle verfügbar sein. Beim Speichern der App wird der Skill in der Organisation veröffentlicht. Die Veröffentlichung kann nicht rückgängig gemacht werden.",
-          "title": "„{name}“ organisationsweit verfügbar machen?"
-        },
-        "search": {
-          "placeholder": "Bearbeitbare Skills suchen..."
-        },
-        "title": "Verknüpfte Skills",
-        "unavailable": {
-          "duplicateName": "Ein Skill namens „{name}“ ist bereits verknüpft.",
-          "invalid": "Ungültiger Skill. Beheben Sie das Problem, bevor Sie ihn verknüpfen.",
-          "otherApp": "Bereits mit der App „{name}“ verknüpft."
-        },
-        "unlink": {
-          "button": "Trennen",
-          "cancelButton": "Abbrechen",
-          "confirm": "„{name}“ von dieser App trennen?"
-        },
-        "unlinkAriaLabel": "{name} trennen",
-        "viewButton": "Ansehen"
-      },
       "configureProvider": {
         "addButton": "Hinzufügen",
         "addTitle": "{name} hinzufügen",
@@ -14669,9 +14585,6 @@
           "allowedUrl": "https://api.example.com/*"
         }
       },
-      "errors": {
-        "duplicateSkillName": "Die App „{appName}“ hat bereits einen verknüpften Skill namens „{skillName}“. Laden Sie einen Skill mit anderem Namen hoch."
-      },
       "mcpPolicy": {
         "description": "Legen Sie fest, welche Tools im Chat und in Craft automatisch ausgeführt werden, eine Freigabe anfordern oder deaktiviert sind.",
         "emptyPolicies": "Keine aktivierten Tools auf diesem Server. Aktivieren Sie Tools zuerst auf der MCP-Aktionsseite.",
@@ -14706,14 +14619,9 @@
         "loading": {
           "label": "Wird geladen…"
         },
-        "reviewSkillsButton": "Skills überprüfen",
         "status": {
           "connected": "Verbunden",
-          "connectedNeedsSkills": "Verbunden · nicht alle verknüpften Skills sind aktiviert",
-          "notAvailable": "Für Ihr Konto nicht verfügbar: Fragen Sie einen Admin",
-          "skillWarningAriaLabel": "Skill-Einrichtung erforderlich",
-          "skillWarningTooltip": "Nicht alle verknüpften Skills sind aktiviert. Diese App funktioniert möglicherweise nicht richtig.",
-          "skillWarningSummary": "Nicht alle verknüpften Skills sind aktiviert."
+          "notAvailable": "Für Ihr Konto nicht verfügbar: Fragen Sie einen Admin"
         }
       },
       "policyEditor": {
@@ -14734,16 +14642,6 @@
           "description": "Legen Sie für jede Aktion einzeln eine Richtlinie fest.",
           "title": "Erweitert"
         }
-      },
-      "skillsStep": {
-        "description": "Optional: Verknüpfen Sie vorhandene Skills oder erstellen Sie einen für diese App.",
-        "errors": {
-          "saveFailedTitle": "Speichern nicht möglich"
-        },
-        "saveButton": "Skills speichern",
-        "savingButton": "Wird gespeichert…",
-        "skipButton": "Vorerst überspringen",
-        "title": "Skills zu {name} hinzufügen"
       },
       "userCredentials": {
         "cancelButton": "Abbrechen",
@@ -17135,10 +17033,6 @@
   },
   "skills": {
     "editor": {
-      "appConflict": {
-        "description": "Die App „{appName}“ hat bereits einen zugehörigen Skill namens „{skillName}“.",
-        "title": "Wählen Sie einen anderen Skill-Namen"
-      },
       "confirmUpload": {
         "importBody": "Dieser Upload enthält SKILL.md. Wenn Sie fortfahren, werden der aktuelle Name, die Beschreibung, die Anweisungen und die Dateien durch das hochgeladene Paket ersetzt.",
         "importSubmit": {
@@ -17195,9 +17089,7 @@
         "updating": "Skill-Dateien werden aktualisiert..."
       },
       "header": {
-        "appFallbackName": "Externe App",
         "createDescription": "Erstellen Sie einen persönlichen Skill",
-        "createForAppDescription": "Fügen Sie der App „{appName}“ einen Organisations-Skill hinzu",
         "createTitle": "Skill erstellen",
         "editDescription": "Aktualisieren Sie Skill-Details und -Dateien",
         "editTitle": "Skill bearbeiten",
@@ -17418,17 +17310,12 @@
         "metadata": {
           "createdBy": {
             "label": "Erstellt von"
-          },
-          "externalApp": {
-            "label": "Externe App"
           }
         },
         "noInstructions": {
           "message": "Keine Anweisungen gefunden."
         },
         "unavailable": {
-          "appDisabled": "App “{appName}” wurde von einem Administrator deaktiviert.",
-          "appNotConnected": "Verbinden Sie die App “{appName}” auf der Apps-Seite, um diesen Skill zu verwenden.",
           "title": "Skill nicht verfügbar"
         }
       },
@@ -17443,7 +17330,6 @@
         "doneButton": {
           "label": "Fertig"
         },
-        "externalAppNotice": "Organisationsweiter Lesezugriff ist erforderlich, solange dieser Skill mit der App “{appName}” verknüpft ist.",
         "header": {
           "transferTitle": "*{name}* übertragen"
         },
@@ -17605,13 +17491,6 @@
           "title": "Noch keine benutzerdefinierten Skills",
           "description": "Erstellen oder importieren Sie einen Skill, um ihn Ihrer Bibliothek hinzuzufügen."
         }
-      },
-      "focusedApp": {
-        "description": "Aktivieren Sie alle Skills, die mit der App „{appName}“ verknüpft sind. Ohne sie funktioniert die App möglicherweise nicht richtig. Wenn ein anderer Skill mit demselben Namen aktiviert ist, wird dieser durch das Aktivieren des App-Skills für Sie deaktiviert.",
-        "showAll": {
-          "label": "Alle Skills anzeigen"
-        },
-        "title": "Skills für App „{appName}“"
       },
       "header": {
         "description": "Fähigkeitspakete, auf die Ihr Craft-Agent zugreifen kann. Diese Seite zeigt integrierte Skills, mit Ihnen geteilte Skills und Ihre persönlichen Skills.",

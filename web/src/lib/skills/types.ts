@@ -47,13 +47,6 @@ export interface SkillGroupSummary {
   installation_policy: SkillInstallationPolicy | null;
 }
 
-export interface SkillExternalAppDependency {
-  external_app_id: number;
-  name: string;
-  enabled: boolean;
-  ready: boolean;
-}
-
 export interface Skill {
   source: SkillSource;
   id: string;
@@ -93,7 +86,6 @@ export interface Skill {
   group_summaries: SkillGroupSummary[];
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
-  external_app: SkillExternalAppDependency | null;
   /** Newest plugin version of a custom skill. Edits send it back as
    * `base_version_id`, so a save over a newer version gets a 409. */
   current_version_id: string | null;
@@ -134,7 +126,6 @@ export interface SkillPreview {
   description: string;
   author_email: string | null;
   instructions_markdown: string;
-  external_app: SkillExternalAppDependency | null;
 }
 
 export type SkillEditableDetail = CustomSkill & {

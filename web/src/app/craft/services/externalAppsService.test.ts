@@ -52,19 +52,13 @@ describe("createCustomExternalApp", () => {
     );
   });
 
-  it("sends one complete custom-skill association replacement", async () => {
-    await updateExternalApp(17, {
-      name: "Acme CRM",
-      associated_skill_ids: ["skill-a", "skill-b"],
-    });
+  it("sends a partial update", async () => {
+    await updateExternalApp(17, { name: "Acme CRM" });
 
     expect(global.fetch).toHaveBeenCalledWith("/api/build/admin/apps/17", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "Acme CRM",
-        associated_skill_ids: ["skill-a", "skill-b"],
-      }),
+      body: JSON.stringify({ name: "Acme CRM" }),
     });
   });
 });

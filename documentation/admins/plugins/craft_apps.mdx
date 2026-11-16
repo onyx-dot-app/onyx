@@ -96,8 +96,7 @@ A [custom App](#custom-apps) gives Craft credentials and network access for any 
   </Step>
 
   <Step title="Add the App">
-    Click **Add**. Onyx then asks you to add skills to the App. You can skip this step.
-    See [Skills for Apps](#skills-for-apps).
+    Click **Add**.
   </Step>
 
   <Step title="Test as a user">
@@ -236,9 +235,12 @@ Each App starts with the owner's current approval settings. Changes apply only t
 
 ## Skills for Apps
 
-[Skills](/admins/managing_features/craft_skills) teach Craft how to use an App well,
-for example which Slack channels to read first.
-Open the App and select the **Skills** tab to add existing skills or create a new skill for the App.
+Each built-in App comes with a built-in [Skill](/admins/managing_features/craft_skills)
+that teaches Craft how to use it. Users get this Skill with the App, also before they connect an account.
+
+To teach Craft more about an App, for example which Slack channels to read first,
+create a custom Skill and share it with the users of the App. A custom Skill is not linked to an App. It loads,
+and counts toward the Skill limits, also for users who have not connected the App.
 
 ## Custom Apps
 
@@ -260,7 +262,7 @@ A custom App gives Craft credentials and network access for the API. It does not
 
     <img className="rounded-image" src="/assets/admins/plugins/craft_custom_app_authentication.webp" alt="The custom app Authentication tab with header patterns and Organization credentials"/>
 
-    Click **Create**. Then add skills that explain how to call the API.
+    Click **Create**. Then create a Skill that explains how to call the API. See [Skills for Apps](#skills-for-apps).
   </Step>
 </Steps>
 

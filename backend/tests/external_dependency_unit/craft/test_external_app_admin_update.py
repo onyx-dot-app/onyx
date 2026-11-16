@@ -14,10 +14,7 @@ from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
 from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import (
-    get_external_app_by_id,
-    get_skills_for_external_app,
-)
+from onyx.db.external_app import get_external_app_by_id
 from onyx.db.models import ExternalApp, Skill, User
 from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
 from tests.external_dependency_unit.craft.db_helpers import (
@@ -42,7 +39,7 @@ def _clean_slack_rows(db_session: Session) -> Generator[None, None, None]:
     db_session.commit()
 
 
-def _slack_app(db_session: Session) -> ExternalApp:
+def _slack_app(db_session: Session) -> tuple[ExternalApp, Skill]:
     skill = reset_built_in_skill_row(
         db_session, built_in_skill_id="slack", is_public=True
     )
@@ -54,7 +51,7 @@ def _slack_app(db_session: Session) -> ExternalApp:
         upstream_url_patterns=_PATTERNS,
     )
     db_session.commit()
-    return app
+    return app, skill
 
 
 def test_patch_updates_config_on_non_managed_built_in(
@@ -63,9 +60,9 @@ def test_patch_updates_config_on_non_managed_built_in(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(api, "push_skills_and_commit", _noop)
-    app = _slack_app(db_session)
+    app, original_skill = _slack_app(db_session)
     app_id = app.id
-    [original_skill] = get_skills_for_external_app(db_session, app_id)
+    skill_id = original_skill.id
     original_skill_description = original_skill.description
 
     new_patterns = ["https://slack.com/api/chat.postMessage"]
@@ -89,7 +86,8 @@ def test_patch_updates_config_on_non_managed_built_in(
     db_session.expire_all()
     stored = get_external_app_by_id(db_session, app_id)
     assert stored is not None
-    [skill] = get_skills_for_external_app(db_session, app_id)
+    skill = db_session.get(Skill, skill_id)
+    assert skill is not None
     assert stored.name == "Slack — Eng"
     assert skill.name == "slack"
     assert skill.description == original_skill_description
@@ -105,7 +103,7 @@ def test_patch_commits_before_sandbox_reconciliation(
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    app = _slack_app(db_session)
+    app, _ = _slack_app(db_session)
     app_id = app.id
     observed_names: list[str] = []
 

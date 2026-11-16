@@ -982,7 +982,6 @@
         "emptyDescription": "请尝试其他连接筛选条件，或请工作区管理员添加插件。"
       },
       "detail": {
-        "issuesTitle": "问题",
         "noAuthentication": "无需身份验证",
         "connection": "连接",
         "tools": "工具",
@@ -1047,17 +1046,6 @@
         "chatOnly": "仅限 Chat",
         "chatOnlyDescription": "此插件可用于 Chat，不能用于 Craft。"
       },
-      "appSkills": {
-        "preview": "预览",
-        "search": "搜索技能",
-        "count": "{count, plural, one {# 个技能} other {# 个技能}}",
-        "empty": "此应用没有关联的技能。",
-        "noMatches": "没有与搜索匹配的技能。",
-        "error": "无法加载技能。",
-        "enabled": "已启用",
-        "disabled": "已禁用",
-        "loading": "正在加载技能…"
-      },
       "externalApp": {
         "description": "在 Craft 中使用你的账号。",
         "craftOnly": "仅限 Craft",
@@ -1099,8 +1087,7 @@
       "craftApp": {
         "tabs": {
           "configuration": "配置",
-          "permissions": "权限",
-          "skills": "技能"
+          "permissions": "权限"
         }
       },
       "disableConfirmation": {
@@ -5994,7 +5981,6 @@
         },
         "deleteModal": {
           "description": "此操作会为整个组织删除该应用：包括它的配置、每位成员的连接，以及所有由提供商管理的技能。",
-          "retainedSkills": "{count, plural, =0 {不会删除任何关联的自定义技能。} one {将保留 # 个关联的自定义技能，解除与此应用的关联，并对所有人禁用。} other {将保留 # 个关联的自定义技能，解除与此应用的关联，并对所有人禁用。}}",
           "submit": {
             "label": "删除应用"
           },
@@ -12143,13 +12129,6 @@
       }
     },
     "skill": {
-      "dependency": {
-        "appDisabled": "应用“{app}”已禁用",
-        "connectToEnable": "连接应用“{app}”以启用",
-        "connectToUse": "连接应用“{app}”以使用",
-        "nameConflict": "已启用另一个同名技能",
-        "usesApp": "使用应用“{app}”"
-      },
       "edit": {
         "tooltip": "编辑技能"
       },
@@ -12157,9 +12136,6 @@
         "description": "删除此无效技能，然后创建一个新技能。"
       },
       "tags": {
-        "appSkill": {
-          "label": "应用技能"
-        },
         "builtin": {
           "label": "内置"
         },
@@ -12190,19 +12166,11 @@
         "disable": {
           "ariaLabel": "禁用 {name}"
         },
-        "disableForApp": {
-          "ariaLabel": "为 {app} 禁用 {name}"
-        },
         "enable": {
           "ariaLabel": "启用 {name}"
-        },
-        "enableForApp": {
-          "ariaLabel": "为 {app} 启用 {name}"
         }
       },
       "tooltips": {
-        "appDisabled": "应用“{app}”已被管理员禁用。",
-        "connectApp": "请在“应用”页面连接应用“{app}”，以使用此技能。",
         "invalid": "此技能无效。请删除它并创建新技能。",
         "unavailable": "技能当前不可用。点击查看详情。"
       }
@@ -14555,58 +14523,6 @@
           "title": "添加应用"
         }
       },
-      "associatedSkills": {
-        "associateButton": "关联现有技能",
-        "create": {
-          "github": {
-            "description": "如果您的技能在 GitHub 中，请先在技能页面导入，然后再将其与此应用关联。",
-            "label": "从 GitHub 导入"
-          },
-          "scratch": {
-            "description": "编写说明并添加辅助文件。",
-            "label": "从头开始"
-          },
-          "upload": {
-            "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
-            "label": "上传技能"
-          }
-        },
-        "createSkillButton": "创建技能",
-        "description": "技能为 Craft 提供使用此应用的说明。技能在整个组织范围内生效；用户可能需要全部启用才能让应用正常工作。",
-        "editButton": "编辑",
-        "empty": {
-          "label": "未找到可编辑的技能。"
-        },
-        "invalidTag": "无效",
-        "loading": {
-          "label": "正在加载技能…"
-        },
-        "noneAssociated": {
-          "label": "尚未关联任何技能。没有技能也可以保存并使用此应用。"
-        },
-        "promote": {
-          "cancelButton": "取消",
-          "confirmButton": "设为组织范围可用",
-          "description": "与应用关联的技能必须对所有人可用。保存应用时，该技能会发布到组织。发布后无法撤销。",
-          "title": "将“{name}”设为组织范围可用？"
-        },
-        "search": {
-          "placeholder": "搜索可编辑的技能..."
-        },
-        "title": "关联的技能",
-        "unavailable": {
-          "duplicateName": "名为“{name}”的技能已关联。",
-          "invalid": "技能无效。请先修复再关联。",
-          "otherApp": "已与应用“{name}”关联。"
-        },
-        "unlink": {
-          "button": "解除关联",
-          "cancelButton": "取消",
-          "confirm": "将“{name}”与此应用解除关联？"
-        },
-        "unlinkAriaLabel": "解除关联 {name}",
-        "viewButton": "查看"
-      },
       "configureProvider": {
         "addButton": "添加",
         "addTitle": "添加 {name}",
@@ -14669,9 +14585,6 @@
           "allowedUrl": "https://api.example.com/*"
         }
       },
-      "errors": {
-        "duplicateSkillName": "应用“{appName}”已有名为“{skillName}”的关联技能。请上传其他名称的技能。"
-      },
       "mcpPolicy": {
         "description": "选择在聊天和 Craft 中哪些工具自动运行、请求批准或被禁用。",
         "emptyPolicies": "此服务器上没有已启用的工具。请先在 MCP 操作页面启用工具。",
@@ -14706,14 +14619,9 @@
         "loading": {
           "label": "正在加载…"
         },
-        "reviewSkillsButton": "查看技能",
         "status": {
           "connected": "已连接",
-          "connectedNeedsSkills": "已连接 · 并非所有关联技能都已启用",
-          "notAvailable": "您的账户不可用，请咨询管理员",
-          "skillWarningAriaLabel": "需要设置技能",
-          "skillWarningTooltip": "并非所有关联技能都已启用。此应用可能无法正常工作。",
-          "skillWarningSummary": "并非所有关联技能都已启用。"
+          "notAvailable": "您的账户不可用，请咨询管理员"
         }
       },
       "policyEditor": {
@@ -14734,16 +14642,6 @@
           "description": "为每个操作单独设置策略。",
           "title": "高级"
         }
-      },
-      "skillsStep": {
-        "description": "可选。关联现有技能或为此应用创建一个技能。",
-        "errors": {
-          "saveFailedTitle": "无法保存"
-        },
-        "saveButton": "保存技能",
-        "savingButton": "正在保存…",
-        "skipButton": "暂时跳过",
-        "title": "为 {name} 添加技能"
       },
       "userCredentials": {
         "cancelButton": "取消",
@@ -17135,10 +17033,6 @@
   },
   "skills": {
     "editor": {
-      "appConflict": {
-        "description": "应用“{appName}”已有名为“{skillName}”的关联技能。",
-        "title": "请选择其他技能名称"
-      },
       "confirmUpload": {
         "importBody": "此上传包含 SKILL.md。继续操作会用上传的包替换当前的名称、描述、说明和文件。",
         "importSubmit": {
@@ -17195,9 +17089,7 @@
         "updating": "正在更新技能文件..."
       },
       "header": {
-        "appFallbackName": "外部应用",
         "createDescription": "构建个人技能",
-        "createForAppDescription": "为应用“{appName}”添加组织技能",
         "createTitle": "创建技能",
         "editDescription": "更新技能详情和文件",
         "editTitle": "编辑技能",
@@ -17418,17 +17310,12 @@
         "metadata": {
           "createdBy": {
             "label": "创建者"
-          },
-          "externalApp": {
-            "label": "外部应用"
           }
         },
         "noInstructions": {
           "message": "未找到指令。"
         },
         "unavailable": {
-          "appDisabled": "应用“{appName}”已被管理员禁用。",
-          "appNotConnected": "请在“应用”页面连接应用“{appName}”，才能使用此技能。",
           "title": "技能不可用"
         }
       },
@@ -17443,7 +17330,6 @@
         "doneButton": {
           "label": "完成"
         },
-        "externalAppNotice": "只要此技能与应用“{appName}”关联，就必须开放全组织的查看权限。",
         "header": {
           "transferTitle": "转移 *{name}*"
         },
@@ -17605,13 +17491,6 @@
           "title": "暂无自定义技能",
           "description": "创建或导入技能，将其添加到技能库。"
         }
-      },
-      "focusedApp": {
-        "description": "启用与应用“{appName}”关联的所有技能。缺少这些技能时应用可能无法正常工作。如果已启用同名的其他技能，启用应用关联技能会为您停用另一个技能。",
-        "showAll": {
-          "label": "显示全部技能"
-        },
-        "title": "应用“{appName}”的技能"
       },
       "header": {
         "description": "您的 Craft 智能体可调用的能力包。此页面显示内置技能、与您共享的技能以及您的个人技能。",

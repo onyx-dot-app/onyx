@@ -137,7 +137,7 @@ covers new files that match it.
 |---|---|
 | `backend/onyx/db/persona.py`, `backend/onyx/db/persona_sharing.py`, `backend/onyx/db/pinned_personas.py`, `backend/onyx/server/features/persona/`, `backend/onyx/server/features/default_assistant/`, `backend/ee/onyx/db/persona.py` | agents-personas |
 | `backend/onyx/db/projects.py`, `backend/onyx/server/features/projects/` | projects |
-| `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/db/plugin.py`, `backend/onyx/db/plugin_access.py`, `backend/onyx/db/skill_limit.py`, `backend/onyx/server/features/skill/` | skills |
+| `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/db/plugin.py`, `backend/onyx/db/plugin_access.py`, `backend/onyx/db/skill_limit.py`, `backend/onyx/db/app_skill.py`, `backend/onyx/server/features/skill/` | skills |
 | `backend/onyx/server/features/action_policies/` | craft-external-apps, plugins |
 | `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py`, `backend/ee/onyx/db/mcp.py` | mcp-and-custom-tools |
 | `backend/onyx/integrations/`, `backend/onyx/db/integration.py`, `backend/onyx/db/integration_connection.py`, `backend/onyx/server/features/integrations/` | mcp-and-custom-tools, craft-external-apps |
@@ -305,7 +305,7 @@ covers new files that match it.
 | `web/tools/prepare-pdf-assets.cjs`, `web/src/lib/readSpreadsheetPreview.ts`, `web/src/lib/spreadsheetPreview.worker.ts`, `web/src/lib/spreadsheetPreview.ts` | craft-frontend |
 | `web/src/lib/docx/`, `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
-| `web/src/app/craft/v1/apps/`, `web/src/lib/externalApps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
+| `web/src/app/craft/v1/apps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
 | `web/src/app/craft/v1/plugins/` | craft-external-apps, plugins |
 | `web/src/app/craft/v1/skills/`, `web/src/app/craft/components/SkillsStaleNotice.tsx`, `web/src/app/craft/components/SkillRuntimeNotice.tsx` | skills |
 | `web/src/app/admin/skills/` | skills |

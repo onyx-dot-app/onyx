@@ -31,7 +31,6 @@ import { MemberPluginDetailContent } from "@/sections/plugins/MemberPluginDetail
 import { MemberPluginConnectionContent } from "@/sections/plugins/MemberPluginConnectionDialog";
 import styles from "@/sections/plugins/PluginsPage.module.css";
 import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";
-import { useExternalAppsWithSkillIssues } from "@/lib/externalApps/hooks";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 
 import {
@@ -50,20 +49,16 @@ type MemberPluginDialog =
 function PluginConnectionStatus({
   plugin,
   onOpen,
-  hasSkillIssues = false,
   craftAvailable,
 }: {
   plugin: MemberPlugin;
   onOpen: () => void;
-  hasSkillIssues?: boolean;
   craftAvailable: boolean;
 }) {
   const t = useTranslations("actions.memberPlugins");
-  const skillCopy = useTranslations("craft.apps.page.status");
   const connection = plugin.connection;
   const needsAuth =
     connection.kind === "oauth" || connection.kind === "credentials";
-  const skillWarning = connection.kind === "connected" && hasSkillIssues;
   const availabilityCopy = useTranslations("actions.plugins.availability");
   const connectionLabel = needsAuth
     ? t("filters.needsSignIn")
@@ -84,24 +79,9 @@ function PluginConnectionStatus({
     return (
       <PluginStatusIcon
         {...props}
-        primary={memberPluginSurfaceStatus(
-          plugin,
-          "chat",
-          hasSkillIssues,
-          craftAvailable
-        )}
-        secondary={memberPluginSurfaceStatus(
-          plugin,
-          "agents",
-          hasSkillIssues,
-          craftAvailable
-        )}
-        tertiary={memberPluginSurfaceStatus(
-          plugin,
-          "craft",
-          hasSkillIssues,
-          craftAvailable
-        )}
+        primary={memberPluginSurfaceStatus(plugin, "chat", craftAvailable)}
+        secondary={memberPluginSurfaceStatus(plugin, "agents", craftAvailable)}
+        tertiary={memberPluginSurfaceStatus(plugin, "craft", craftAvailable)}
       />
     );
   }
@@ -122,15 +102,13 @@ function PluginConnectionStatus({
                 memberPluginSurfaceAvailability(plugin, item, craftAvailable);
               const value = !supported
                 ? t("availability.notAvailable")
-                : item === "craft" && skillWarning
-                  ? skillCopy("skillWarningSummary")
-                  : available === false
-                    ? t("availability.disabledByAdmin")
-                    : personallyEnabled === false
-                      ? t("availability.disabledByYou")
-                      : available === true
-                        ? t("status.none")
-                        : availabilityCopy("unknown");
+                : available === false
+                  ? t("availability.disabledByAdmin")
+                  : personallyEnabled === false
+                    ? t("availability.disabledByYou")
+                    : available === true
+                      ? t("status.none")
+                      : availabilityCopy("unknown");
               return (
                 <div key={item} className="contents">
                   <Text font="secondary-body" color="text-03">
@@ -165,12 +143,10 @@ function PluginConnectionStatus({
 function MemberPluginRow({
   plugin,
   craftAvailable,
-  hasSkillIssues,
   onDetails,
   onConnect,
 }: {
   plugin: MemberPlugin;
-  hasSkillIssues: boolean;
   craftAvailable: boolean;
   onDetails: () => void;
   onConnect: () => void;
@@ -223,7 +199,6 @@ function MemberPluginRow({
             <PluginConnectionStatus
               plugin={plugin}
               onOpen={onDetails}
-              hasSkillIssues={hasSkillIssues}
               craftAvailable={craftAvailable}
             />
             <Button
@@ -267,19 +242,10 @@ export default function MemberPluginsPage({
   const [filter, setFilter] = useState(initialFilter);
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<MemberPluginDialog>(null);
-  const appsWithSkillIssues = useExternalAppsWithSkillIssues(
-    plugins.some(
-      (plugin) =>
-        plugin.kind === "external-app" && plugin.connection.kind === "connected"
-    )
-  );
-  const hasSkillIssues = (plugin: MemberPlugin) =>
-    plugin.kind === "external-app" && appsWithSkillIssues.has(plugin.app.id);
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = sortPlugins(
     plugins,
-    (plugin) =>
-      memberPluginStatus(plugin, hasSkillIssues(plugin), craftAvailable),
+    (plugin) => memberPluginStatus(plugin, craftAvailable),
     memberPluginName,
     locale
   ).filter((plugin) => {
@@ -502,7 +468,6 @@ export default function MemberPluginsPage({
                       <MemberPluginRow
                         key={`${reference.kind}-${reference.id}`}
                         plugin={plugin}
-                        hasSkillIssues={hasSkillIssues(plugin)}
                         craftAvailable={craftAvailable}
                         onDetails={() => show(plugin, "details")}
                         onConnect={() => show(plugin, "connect")}

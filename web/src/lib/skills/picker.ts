@@ -50,8 +50,6 @@ export function compareByName<T extends { name: string }>(a: T, b: T): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }
 
-// Associated custom skills remain normal per-user selections, with app
-// readiness as an additional runtime requirement.
 export function toPickerSections(
   skillsData: SkillsList | undefined,
   externalApps: ExternalAppUserResponse[] | undefined,
@@ -73,13 +71,7 @@ export function toPickerSections(
   }
 
   for (const c of skillsData?.customs ?? []) {
-    if (
-      !c.enabled ||
-      c.is_valid === false ||
-      (c.external_app !== null && !c.external_app.ready)
-    ) {
-      continue;
-    }
+    if (!c.enabled || c.is_valid === false) continue;
     skills.push({
       kind: "skill",
       slug: c.name,

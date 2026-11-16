@@ -88,9 +88,6 @@ interface UpdateExternalAppBody {
   organization_credentials?: Record<string, string>;
   // Full replace when present; omit to leave stored policies untouched.
   action_policies?: Record<string, ActionPolicy>;
-  // Full replacement of the app's custom-skill associations. Provider-owned
-  // built-in skills are preserved by the backend.
-  associated_skill_ids?: string[];
 }
 
 /**

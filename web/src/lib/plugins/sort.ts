@@ -78,7 +78,6 @@ export function memberPluginSurfaceAvailability(
 export function memberPluginSurfaceStatus(
   plugin: MemberPlugin,
   surface: MemberPluginSurface,
-  hasSkillIssues = false,
   craftAvailable = true
 ): PluginStatus {
   const { supported, available, personallyEnabled } =
@@ -90,23 +89,19 @@ export function memberPluginSurfaceStatus(
       ? "issues"
       : "inactive";
   }
-  if (plugin.kind === "external-app")
-    return hasSkillIssues ? "issues" : "active";
+  if (plugin.kind === "external-app") return "active";
   if (available === false || personallyEnabled === false) return "issues";
   return available === true ? "active" : "inactive";
 }
 
 export function memberPluginStatus(
   plugin: MemberPlugin,
-  hasSkillIssues = false,
   craftAvailable = false
 ): PluginStatus {
   const statuses = MEMBER_PLUGIN_SURFACES.filter(
     (item) =>
       memberPluginSurfaceAvailability(plugin, item, craftAvailable).supported
-  ).map((item) =>
-    memberPluginSurfaceStatus(plugin, item, hasSkillIssues, craftAvailable)
-  );
+  ).map((item) => memberPluginSurfaceStatus(plugin, item, craftAvailable));
   return statuses.includes("issues")
     ? "issues"
     : statuses.length > 0 && statuses.every((status) => status === "active")
