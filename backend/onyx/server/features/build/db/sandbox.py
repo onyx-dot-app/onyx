@@ -121,6 +121,32 @@ def get_sandbox_by_user_id(db_session: Session, user_id: UUID) -> Sandbox | None
     return db_session.execute(stmt).scalar_one_or_none()
 
 
+def get_sandbox_id_by_user_id(db_session: Session, user_id: UUID) -> UUID | None:
+    return db_session.scalar(select(Sandbox.id).where(Sandbox.user_id == user_id))
+
+
+def get_or_create_sandbox(db_session: Session, user_id: UUID) -> Sandbox:
+    """The user's sandbox row, created when missing. A new row is TERMINATED,
+    with no runtime: a harness sandbox starts its VM on use, and Craft
+    provisions its own runtime when it needs one. Creation holds the user-row
+    lock that Craft's reservation holds, so the two never insert at once."""
+    sandbox = get_sandbox_by_user_id(db_session, user_id)
+    if sandbox is not None:
+        return sandbox
+    # The row lock of `fetch_user_by_id(for_update=True)`.
+    db_session.execute(
+        select(User.id)  # ty: ignore[no-matching-overload]
+        .where(User.id == user_id)
+        .with_for_update()
+    )
+    sandbox = get_sandbox_by_user_id(db_session, user_id)
+    if sandbox is None:
+        sandbox = Sandbox(user_id=user_id, status=SandboxStatus.TERMINATED)
+        db_session.add(sandbox)
+    db_session.commit()
+    return sandbox
+
+
 def begin_provisioning_attempt__no_commit(
     db_session: Session,
     sandbox: Sandbox,

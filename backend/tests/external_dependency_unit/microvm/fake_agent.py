@@ -132,6 +132,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.refuse_create_times: int | None = None
         self.next_generation = 1_000
         self.create_calls = 0
+        self.list_calls = 0
         self.stop_calls: list[tuple[str, int, int]] = []
         # (sandbox_id, attempt, sandboxd_key) of every Create.
         self.create_requests: list[tuple[str, int, str]] = []
@@ -350,6 +351,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         context: grpc.ServicerContext,  # noqa: ARG002
     ) -> hostagent_pb2.ListResponse:
         with self.lock:
+            self.list_calls += 1
             return hostagent_pb2.ListResponse(vms=list(self.vms.values()))
 
     def NodeInfo(  # noqa: N802

@@ -519,6 +519,7 @@ def build_chat_agent(
     additional_context: str | None = None,
     is_subagent: bool = False,
     depth: int = 0,
+    on_drained: Callable[[], None] | None = None,
 ) -> ChatAgent:
     """Build a chat conversation independently of the current root's feature.
 
@@ -559,6 +560,7 @@ def build_chat_agent(
         include_citations=setup.new_msg_req.include_citations,
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
+        on_drained=on_drained,
     )
 
 

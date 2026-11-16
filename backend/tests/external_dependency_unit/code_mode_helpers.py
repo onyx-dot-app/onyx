@@ -104,8 +104,10 @@ def send(
     *,
     code_mode: bool = True,
     on_part: Callable[[AnswerStreamPart], None] = lambda _part: None,
+    allowed_tool_ids: list[int] | None = None,
 ) -> list[AnswerStreamPart]:
-    """Send a message and read its stream; `on_part` sees each part as it arrives."""
+    """Send a message and read its stream; `on_part` sees each part as it arrives.
+    `allowed_tool_ids` limits the agent's tools."""
     parts: list[AnswerStreamPart] = []
     with (
         patch("onyx.chat.agent.CODE_MODE_ENABLED", code_mode),
@@ -117,7 +119,10 @@ def send(
     ):
         for part in handle_stream_message_objects(
             new_msg_req=SendMessageRequest(
-                message=message, chat_session_id=chat_session_id, stream=True
+                message=message,
+                chat_session_id=chat_session_id,
+                stream=True,
+                allowed_tool_ids=allowed_tool_ids,
             ),
             user=user,
         ):

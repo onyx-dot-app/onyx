@@ -121,10 +121,12 @@ from onyx.llm.factory import (
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride
+from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.query_and_chat.models import (
+    MessageOrigin,
     MessageResponseIDInfo,
     ModelResponseSlot,
     MultiModelMessageResponseIDInfo,
@@ -534,6 +536,18 @@ def prepare_chat_turn(
                     OnyxErrorCode.BAD_REQUEST,
                     "The Coding Agent is not available in incognito. Start a normal chat to use it.",
                 )
+            # One sandbox serves one user, and anonymous visitors share one
+            # user. Incognito cleanup does not reach the sandbox's files. Two
+            # models must not change one session directory at once. Bots
+            # get no sandbox until they have service-account sandboxes.
+            sandbox_tools = (
+                HARNESS_SANDBOX_ENABLED
+                and not user.is_anonymous
+                and new_msg_req.origin
+                not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
+                and chat_session.incognito_record_mode is None
+                and len(selected_models) == 1
+            )
             # One read serves the catalog's context reservation and the skills
             # that an accepted question picked.
             chat_skills = list_chat_skills(db_session, user)
@@ -877,6 +891,7 @@ def prepare_chat_turn(
             persona=persona_prompt,
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
+            sandbox_tools=sandbox_tools,
             research_tool_id=research_tool_id,
             checkpoint=checkpoint,
             user_message_id=user_message_id,
