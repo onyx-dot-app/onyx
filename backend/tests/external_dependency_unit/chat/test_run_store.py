@@ -2461,7 +2461,7 @@ def test_chat_parent_works_while_its_child_runs_and_reads_the_result(
                         id="work",
                         name="execute_code",
                         arguments={
-                            "code": "print(await echo(value='x'))",
+                            "code": "print(await tools.echo(value='x'))",
                             "yield_time_ms": 30000,
                         },
                     )

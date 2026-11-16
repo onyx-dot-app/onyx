@@ -119,12 +119,12 @@ def test_closing_searches_get_their_own_citations_and_reach_later_turns(
     user = make_test_user("code_mode_closing_search")
     session = create_chat_session(db_session, user)
     program = (
-        "await web_search(queries=['alpha topic'])\n"
+        "await tools.web_search(queries=['alpha topic'])\n"
         "print('first')\n"
         "yield_control()\n"
-        "await web_search(queries=['beta topic'])\n"
+        "await tools.web_search(queries=['beta topic'])\n"
         "print('second')\n"
-        "await web_search(queries=['latch'])\n"
+        "await tools.web_search(queries=['latch'])\n"
     )
     latch_started, latch_release = threading.Event(), threading.Event()
     # The answer starts after the second search ended, so only the closing reports it.

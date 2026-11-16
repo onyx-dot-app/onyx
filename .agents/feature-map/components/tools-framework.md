@@ -151,6 +151,9 @@ receives); see [[code-execution]]. A tool that must not run twice sets
 that a lost execution owner left running (`agents/tools.py:AgentTool`).
 `inner_tools` lists the tools that run inside a tool's calls, such as the
 functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
+`inner_call_hint` answers a call of such a tool as a tool of its own: the
+result says how to call it through the offered tool
+(`agents/tool_execution.py`).
 
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error

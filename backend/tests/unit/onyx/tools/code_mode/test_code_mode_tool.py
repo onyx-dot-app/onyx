@@ -135,8 +135,8 @@ def test_parallel_searches_get_separate_citation_blocks_and_merge() -> None:
     result, details, events = _run(
         tool,
         "import asyncio\n"
-        "a, b = await asyncio.gather(web_search(queries=['x']), "
-        "web_search(queries=['y']))\n"
+        "a, b = await asyncio.gather(tools.web_search(queries=['x']), "
+        "tools.web_search(queries=['y']))\n"
         "for doc in a['results'] + b['results']:\n"
         "    print(doc['document'], doc['title'])\n",
         ToolContext(next_citation_num=5),
@@ -162,7 +162,9 @@ def test_parallel_searches_get_separate_citation_blocks_and_merge() -> None:
 
     # Nothing is in flight now: the next call starts after the highest used number.
     _, later, _ = _run(
-        tool, "await web_search(queries=['z'])\n", ToolContext(next_citation_num=5)
+        tool,
+        "await tools.web_search(queries=['z'])\n",
+        ToolContext(next_citation_num=5),
     )
     assert sorted(_sources(later).citations) == [
         7 + CITATIONS_PER_TOOL_CALL,
@@ -183,7 +185,7 @@ def test_parallel_searches_get_separate_citation_blocks_and_merge() -> None:
 def test_progress_events_follow_call_order() -> None:
     _, details, events = _run(
         _make_tool(),
-        "print('start')\nr = await web_search(queries=['q'])\nprint('end')\n",
+        "print('start')\nr = await tools.web_search(queries=['q'])\nprint('end')\n",
     )
     kinds = [
         (
@@ -215,7 +217,7 @@ def test_progress_events_follow_call_order() -> None:
 
 
 def test_untyped_tool_returns_parsed_json_and_records_the_call() -> None:
-    result, details, _ = _run(_make_tool(), "(await echo(value='hi'))['echo']\n")
+    result, details, _ = _run(_make_tool(), "(await tools.echo(value='hi'))['echo']\n")
     assert details.result == "'hi'"
     assert "Result:\n'hi'" in result.content
     [call] = details.calls
@@ -230,7 +232,7 @@ def test_tool_errors_are_raised_in_the_program() -> None:
     result, details, _ = _run(
         tool,
         "try:\n"
-        "    await broken(value='x')\n"
+        "    await tools.broken(value='x')\n"
         "except Exception as error:\n"
         "    print('caught', error)\n",
     )
@@ -261,7 +263,7 @@ def test_a_tool_that_waits_for_child_runs_fails_inside_the_program() -> None:
     )
     _, details, _ = _run(
         tool,
-        "try:\n    await waits(value='x')\nexcept Exception as e:\n    print(e)\n",
+        "try:\n    await tools.waits(value='x')\nexcept Exception as e:\n    print(e)\n",
     )
     assert "returned no result inside a program" in details.stdout
     # The call ended with the exception, before the program did.
@@ -300,7 +302,7 @@ def test_only_sequential_tools_do_not_overlap(
     _, details, _ = _run(
         tool,
         "import asyncio\n"
-        "await asyncio.gather(*[add_memory(value=str(i)) for i in range(3)])\n",
+        "await asyncio.gather(*[tools.add_memory(value=str(i)) for i in range(3)])\n",
     )
     assert details.status == "completed"
     assert overlap is overlaps
@@ -322,7 +324,7 @@ def test_cancellation_stops_calls_and_raises() -> None:
 
     tool = CodeModeTool([FakeTool("slow", slow)], cells=CodeCells(), limits=LIMITS)
     invocation = Invocation(
-        "import asyncio\nawait asyncio.gather(slow(value='a'), slow(value='b'))\n"
+        "import asyncio\nawait asyncio.gather(tools.slow(value='a'), tools.slow(value='b'))\n"
     )
 
     def cancel_once_both_run() -> None:
@@ -406,7 +408,7 @@ def test_cell_and_nested_tool_spans_carry_code_mode_attributes() -> None:
             _run(
                 _make_tool(),
                 "import asyncio\n"
-                "await asyncio.gather(echo(value='a'), echo(value='b'))\n",
+                "await asyncio.gather(tools.echo(value='a'), tools.echo(value='b'))\n",
             )
             until(
                 lambda: any(
@@ -526,14 +528,14 @@ def test_mcp_like_stub_runs_and_type_checks_its_arguments() -> None:
     )
     _, details, _ = _run(
         tool,
-        "r = await github_list_issues(repo_name='onyx', state='open', class_=True)\n"
+        "r = await tools.github_list_issues(repo_name='onyx', state='open', class_=True)\n"
         "r['issues'][0]['number']\n",
     )
     assert details.status == "completed", details.error
     assert details.result == "1"
 
     _, rejected, _ = _run(
-        tool, "await github_list_issues(repo_name='onyx', state='x')\n"
+        tool, "await tools.github_list_issues(repo_name='onyx', state='x')\n"
     )
     assert rejected.status == "failed"
     assert rejected.error is not None
@@ -564,7 +566,7 @@ def test_preferences_name_a_tool_as_its_program_function() -> None:
         limits=LIMITS,
     )
     assert tool.operation_names(7) == [
-        "list_issues (a function in `execute_code` programs; find its stub with "
+        "tools.list_issues (a function in `execute_code` programs; find its stub with "
         "`await tool_search(query)`)"
     ]
     assert tool.operation_names(8) == []
@@ -581,12 +583,13 @@ def test_a_deferred_function_found_with_tool_search_is_type_checked() -> None:
     tool = _make_tool(FakeMCPTool("list-tickets", _list_tickets, _TICKET_PARAMETERS))
     _, found, _ = _run(tool, "print((await tool_search('tickets'))[0]['name'])\n")
     assert found.stdout == "mcp__1__acme__list_tickets\n", found
-    _, wrong, _ = _run(tool, "await mcp__1__acme__list_tickets(servise='a')\n")
+    _, wrong, _ = _run(tool, "await tools.mcp__1__acme__list_tickets(servise='a')\n")
     assert wrong.status == "failed"
     assert "Type check failed" in (wrong.error or ""), wrong.error
     assert wrong.calls == []
     _, right, _ = _run(
-        tool, "print((await mcp__1__acme__list_tickets(service='a'))['tickets'][0])\n"
+        tool,
+        "print((await tools.mcp__1__acme__list_tickets(service='a'))['tickets'][0])\n",
     )
     assert right.stdout == "{'id': 1, 'service': 'a'}\n", right
 
@@ -596,8 +599,8 @@ def test_non_citing_calls_do_not_reserve_citation_numbers() -> None:
     _, details, _ = _run(
         tool,
         "import asyncio\n"
-        "t, s = await asyncio.gather(mcp__1__acme__list_tickets(service='a'), "
-        "web_search(queries=['x']))\n",
+        "t, s = await asyncio.gather(tools.mcp__1__acme__list_tickets(service='a'), "
+        "tools.web_search(queries=['x']))\n",
         ToolContext(next_citation_num=1),
     )
     assert sorted(_sources(details).citations) == [1, 2]
@@ -612,7 +615,7 @@ def test_calls_record_tool_ids_and_search_planning() -> None:
         return result.model_copy(update={"metadata": planning})
 
     tool = CodeModeTool([FakeWebSearchTool(search)], cells=CodeCells(), limits=LIMITS)
-    _, details, events = _run(tool, "await web_search(queries=['x'])\n")
+    _, details, events = _run(tool, "await tools.web_search(queries=['x'])\n")
     [call] = details.calls
     assert (call.tool_id, call.metadata) == (3, planning)
     [started] = [event for event in events if isinstance(event, CodeModeCallStarted)]
@@ -640,7 +643,7 @@ def test_saved_calls_are_bounded_per_call_and_per_execution(
         tool,
         "total = 0\n"
         "for _ in range(6):\n"
-        "    r = await large(value='a')\n"
+        "    r = await tools.large(value='a')\n"
         "    total += len(r['text'])\n"
         "print(total)\n",
     )
@@ -685,14 +688,14 @@ SHORT_LIMITS = SandboxLimits(
 def test_failed_program_lists_each_call_and_warns_about_effects() -> None:
     result, details, _ = _run(
         _make_tool(FakeTool("broken", _broken)),
-        "await echo(value='a')\n"
-        "try:\n    await broken(value='b')\nexcept Exception:\n    pass\n"
+        "await tools.echo(value='a')\n"
+        "try:\n    await tools.broken(value='b')\nexcept Exception:\n    pass\n"
         "1 / 0\n",
     )
     assert details.status == "failed"
     assert "[0] echo: ok\n[1] broken: error\n" in result.content
     assert "may have had effects" in result.content
-    completed, _, _ = _run(_make_tool(), "await echo(value='a')\n")
+    completed, _, _ = _run(_make_tool(), "await tools.echo(value='a')\n")
     assert "[0] echo" not in completed.content
 
 
@@ -711,7 +714,9 @@ def test_timeout_stops_nested_work_and_marks_it_unfinished() -> None:
         limits=SHORT_LIMITS,
     )
     started = time.monotonic()
-    result, details, _ = _run(tool, "await echo(value='a')\nawait waits(value='b')\n")
+    result, details, _ = _run(
+        tool, "await tools.echo(value='a')\nawait tools.waits(value='b')\n"
+    )
     assert details.status == "timed_out"
     assert "[0] echo: ok\n[1] waits: unfinished\n" in result.content
     # The nested call ran in the program's cancellation scope, so it stops too;
@@ -732,7 +737,7 @@ def test_a_call_that_outlives_its_cell_keeps_the_run_busy() -> None:
     tool = CodeModeTool(
         [FakeTool("slow", slow)], cells=CodeCells(), limits=SHORT_LIMITS
     )
-    invocation = Invocation("await slow(value='a')\n")
+    invocation = Invocation("await tools.slow(value='a')\n")
     work = ExecutionWork()
     invocation.invocation.run_work = work
     try:
@@ -764,7 +769,7 @@ def test_unawaited_calls_are_cancelled_and_reported() -> None:
     )
     started = time.monotonic()
     result, details, _ = _run(
-        tool, "waits(value='a')\nawait echo(value='b')\nprint('end')\n"
+        tool, "tools.waits(value='a')\nawait tools.echo(value='b')\nprint('end')\n"
     )
     assert details.status == "completed"
     assert not result.is_error
@@ -796,10 +801,11 @@ def test_arguments_that_are_not_json_fail_before_the_tool_runs() -> None:
     tool = CodeModeTool([FakeTool("echo", record)], cells=CodeCells(), limits=LIMITS)
     # An untyped helper keeps the type checker from rejecting the call first.
     result, details, _ = _run(
-        tool, "def call(f, **kw):\n    return f(**kw)\nawait call(echo, value={1, 2})\n"
+        tool,
+        "def call(f, **kw):\n    return f(**kw)\nawait call(tools.echo, value={1, 2})\n",
     )
     assert details.status == "failed"
-    assert "The argument dict of echo() must be JSON data" in result.content
+    assert "The argument dict of tools.echo() must be JSON data" in result.content
     assert "found set at ['value']" in result.content
     assert received == []
     assert details.calls == []
@@ -816,9 +822,9 @@ def test_the_tool_gets_whole_arguments_and_the_saved_call_a_bounded_copy() -> No
     _, details, _ = _run(
         tool,
         "big = 'x' * 100_000\n"
-        "await echo(value=big)\n"
+        "await tools.echo(value=big)\n"
         "try:\n"
-        "    await echo(value=big * 3)\n"
+        "    await tools.echo(value=big * 3)\n"
         "except ValueError as error:\n"
         "    print(error)\n",
     )
@@ -827,7 +833,7 @@ def test_the_tool_gets_whole_arguments_and_the_saved_call_a_bounded_copy() -> No
     [call] = details.calls
     assert len(json_text(call.arguments)) < 2 * MAX_SAVED_CALL_CHARS
     assert details.stdout.startswith(
-        "The argument dict of echo() exceeds the limit of 262144 bytes as JSON"
+        "The argument dict of tools.echo() exceeds the limit of 262144 bytes as JSON"
     )
 
 
@@ -871,9 +877,9 @@ def test_files_that_a_search_finds_reach_a_later_python_call(
     )
     _, details, _ = _run(
         tool,
-        "await run_python(value='before')\n"
-        "await web_search(queries=['q'])\n"
-        "await run_python(value='after')\n",
+        "await tools.run_python(value='before')\n"
+        "await tools.web_search(queries=['q'])\n"
+        "await tools.run_python(value='after')\n",
         ToolContext(chat_files=[ChatFile(filename="upload.txt", content=b"")]),
     )
     assert details.status == "completed", details

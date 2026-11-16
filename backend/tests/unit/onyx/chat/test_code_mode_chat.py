@@ -2,6 +2,7 @@
 
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 from pydantic import BaseModel
@@ -38,6 +39,7 @@ from onyx.llm.models import (
 from onyx.prompts.tool_prompts import (
     CODE_MODE_GUIDANCE,
     INTERNAL_SEARCH_GUIDANCE,
+    MEMORY_GUIDANCE,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
 )
 from onyx.server.query_and_chat import streaming_models as packets
@@ -63,13 +65,20 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeStdout,
     StoreCommit,
 )
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    ApplyPatchTool,
+    ExecCommandTool,
+    WriteStdinTool,
+)
+from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.postgres_sanitization import sanitize_json_like
 from tests.unit.onyx.agents.fakes import EchoTool, ScriptedLLM, run_agent
 from tests.unit.onyx.tools.code_mode.fakes import search_doc
 
 PLACEMENT = Placement(turn_index=1, tab_index=0)
-CODE = "r = await internal_search(queries=['q'])\nprint(r)"
+CODE = "r = await tools.internal_search(queries=['q'])\nprint(r)"
 
 
 DOC_A = search_doc("alpha")
@@ -318,8 +327,36 @@ def test_direct_search_prompt_has_no_code_mode_guidance() -> None:
     search.name = SearchTool.NAME
     direct = build_system_prompt("base", tools=[search], include_user_info=False)
     assert CODE_MODE_GUIDANCE not in direct
-    assert INTERNAL_SEARCH_GUIDANCE in direct
+    assert INTERNAL_SEARCH_GUIDANCE.format(name=SearchTool.NAME) in direct
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in direct
+
+
+@pytest.mark.parametrize("code_mode", [False, True])
+def test_tool_sections_name_a_tool_as_the_model_calls_it(code_mode: bool) -> None:
+    memory: list[Tool] = [MemoryTool(tool_id=1, llm=MagicMock())]
+    offered = with_code_mode(memory)[0] if code_mode else memory
+    prompt = build_system_prompt("base", tools=offered, include_user_info=False)
+    name = "tools.add_memory" if code_mode else "add_memory"
+    assert MEMORY_GUIDANCE.format(name=name) in prompt
+
+
+@pytest.mark.parametrize("code_mode", [False, True])
+def test_the_sandbox_section_names_the_turn_s_sandbox_tools(code_mode: bool) -> None:
+    def prompt(tools: list[Tool]) -> str:
+        offered = with_code_mode(tools)[0] if code_mode else tools
+        return build_system_prompt("base", tools=offered, include_user_info=False)
+
+    turn = SandboxTurn(tenant_id="t", user_id=uuid4(), chat_session_id=uuid4())
+    prefix = "tools." if code_mode else ""
+    assert "## Sandbox" not in prompt([EchoTool()])
+    assert (
+        f"Run commands with `{prefix}exec_command`, use `{prefix}write_stdin` for "
+        f"commands that are still running and edit files with `{prefix}apply_patch`."
+    ) in prompt([ExecCommandTool(turn), WriteStdinTool(turn), ApplyPatchTool(turn)])
+    only_exec = prompt([ExecCommandTool(turn)])
+    assert f"Run commands with `{prefix}exec_command`." in only_exec
+    assert "apply_patch" not in only_exec
+    assert ("Call them from `execute_code` programs." in only_exec) is code_mode
 
 
 def test_the_token_reservation_counts_code_mode_guidance() -> None:
@@ -327,6 +364,7 @@ def test_the_token_reservation_counts_code_mode_guidance() -> None:
         "base", include_all_guidance=True, include_user_info=False
     )
     assert CODE_MODE_GUIDANCE in reserved
+    assert "## Sandbox" in reserved
 
 
 class _DirectOnlyTool(EchoTool):
@@ -408,7 +446,7 @@ def _offered(request: dict[str, Any]) -> list[str]:
     ("preferred_tool_id", "operation"),
     [
         # A function runs only inside programs, so the preference names it so.
-        (EchoTool().id, "echo (a function in `execute_code` programs)"),
+        (EchoTool().id, "tools.echo (a function in `execute_code` programs)"),
         (_DirectOnlyTool().id, "send_email"),
     ],
 )

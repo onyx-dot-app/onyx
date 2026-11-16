@@ -162,8 +162,8 @@ YIELD_CONTROL_STUB = '''def yield_control() -> None:
 # ValueError are raised inside the program.
 HostFunction = Callable[..., object]
 
-# Standard library modules that every program has imported, as it has its tool
-# functions; explicit imports of them also work. `os`, `sys` and `pathlib`
+# Standard library modules that every program has imported, as it has `tools`;
+# explicit imports of them also work. `os`, `sys` and `pathlib`
 # import, but their file system, environment and process functions are denied.
 IMPORTABLE_MODULES: tuple[str, ...] = (
     "asyncio",
@@ -187,22 +187,33 @@ IMPORTABLE_MODULES: tuple[str, ...] = (
     "typing",
 )
 
+# The module that holds the tool functions of a program: programs call
+# `await tools.f(...)`. Bare names stay free for the program's own functions and
+# do not read as tools that the model can call directly. Its stub is the
+# `class tools` of the program's stubs, so the type checker checks each call.
+TOOLS_NAMESPACE = "tools"
+# An explicit import of `tools` stops the program when the type checker asks
+# for the module's stubs, before the program runs: the module has none, and
+# the `class tools` stub types only the global.
+TOOLS_IMPORT_MESSAGE = (
+    f"`{TOOLS_NAMESPACE}` is already available in every program; remove the "
+    "import. The program did not run."
+)
 # Fed without a type check before each new program in the same session, so the
 # modules are globals while the program's line numbers stay its own.
-_PRELUDE = f"import {', '.join(IMPORTABLE_MODULES)}"
+_PRELUDE = f"import {', '.join((*IMPORTABLE_MODULES, TOOLS_NAMESPACE))}"
 # The same names for the type checker; each program's stubs include them.
 PRELUDE_STUBS = "\n".join(f"import {name} as {name}" for name in IMPORTABLE_MODULES)
 _SYNC_SLEEP = "system.sleep"
-# The module that also holds every function of a program, so
-# `from functions import f` and `functions.f(...)` work like the globals.
-FUNCTIONS_MODULE = "functions"
-# Global names the sandbox gives every program; tool functions must not shadow them.
+# Global names the sandbox gives every program; the result types that the stubs
+# declare must not shadow them.
 SANDBOX_NAMES: frozenset[str] = frozenset(
-    {*IMPORTABLE_MODULES, FUNCTIONS_MODULE, YIELD_CONTROL_FUNCTION}
+    {*IMPORTABLE_MODULES, TOOLS_NAMESPACE, YIELD_CONTROL_FUNCTION}
 )
 # OS calls of an import: the type checker's stub request and the import itself.
 # Monty answers them from the session's external modules.
-_IMPORT_CALLS: frozenset[str] = frozenset({"import", "import_stubs"})
+_IMPORT_STUBS = "import_stubs"
+_IMPORT_CALLS: frozenset[str] = frozenset({"import", _IMPORT_STUBS})
 _ASYNC_SLEEP = "system.async_sleep"
 # Monty's own message when a segment exceeds `max_feed_duration_secs`.
 _COMPUTE_LIMIT_MESSAGE = re.compile(r"feed time limit exceeded: \S+ > \S+")
@@ -342,6 +353,8 @@ def parse_type_diagnostics(text: str) -> list[TypeDiagnostic]:
 def is_fatal_diagnostic(
     diagnostic: TypeDiagnostic, function_names: Collection[str]
 ) -> bool:
+    """`function_names` are the names that the type checker gives the checked
+    functions, such as `tools.search` and `store`."""
     if diagnostic.code == "invalid-syntax":
         return True
     if diagnostic.code not in _FATAL_CALL_DIAGNOSTICS:
@@ -775,10 +788,12 @@ class _Run:
         }
         # Results of async host function calls, until the program awaits them.
         self.host_results: dict[int, ExternalSettledResult] = {}
-        # Every name a program can call; the type checker stops calls to these
-        # with wrong arguments.
-        self.callable_names = (
-            self.function_names | frozenset(functions) | frozenset(async_functions)
+        # The global names of the host functions, such as `store`.
+        self.host_names = frozenset(functions) | frozenset(async_functions)
+        # Every function a program can call, as the type checker names it; it
+        # stops calls to these with wrong arguments.
+        self.checked_names = self.host_names | frozenset(
+            f"{TOOLS_NAMESPACE}.{name}" for name in self.function_names
         )
         self.handler = handler
         self.cancellation = cancellation
@@ -844,11 +859,16 @@ class _Run:
                 name = state.variable_name
                 state = (
                     state.resume(value=_function_reference(name))
-                    if name in self.callable_names
+                    if name in self.host_names
                     else state.resume()
                 )
             elif isinstance(state, FunctionSnapshot):
                 if state.is_os_function and state.function_name in _IMPORT_CALLS:
+                    if (
+                        state.function_name == _IMPORT_STUBS
+                        and TOOLS_NAMESPACE in state.args[0]
+                    ):
+                        raise _Aborted("failed", TOOLS_IMPORT_MESSAGE)
                     state = state.resume_auto()
                 elif state.is_os_function and state.function_name == _SYNC_SLEEP:
                     # A resumed program announces the same sleep call again.
@@ -879,8 +899,6 @@ class _Run:
                     f"{name} is not available in this sandbox; use the tool functions."
                 )
             )
-        # A call through the module, such as `functions.f(...)`, is a call of `f`.
-        name = name.removeprefix(f"{FUNCTIONS_MODULE}.")
         if name in self.plain_functions:
             return _call_host(name, *self.plain_functions[name], call)
         if name in self.async_functions:
@@ -888,15 +906,23 @@ class _Run:
                 name, *self.async_functions[name], call
             )
             return ExternalFuture(future=...)
-        if name not in self.function_names:
+        # A call of a `tools` function arrives as `tools.<name>`, and a call of
+        # an undefined name as that name.
+        prefix, _, name = name.rpartition(".")
+        if prefix != TOOLS_NAMESPACE or name not in self.function_names:
+            hint = (
+                f"; call the tool function as {TOOLS_NAMESPACE}.{name}(...)"
+                if not prefix and name in self.function_names
+                else ""
+            )
             return ExternalException(
-                exception=NameError(f"name '{name}' is not defined")
+                exception=NameError(f"name '{name}' is not defined{hint}")
             )
         if call.args:
             return ExternalException(
                 exception=TypeError(
-                    f"{name}() takes keyword arguments only, for example "
-                    f"{name}(argument=value)"
+                    f"{TOOLS_NAMESPACE}.{name}() takes keyword arguments only, for "
+                    f"example {TOOLS_NAMESPACE}.{name}(argument=value)"
                 )
             )
         if self.tool_calls >= self.limits.max_tool_calls:
@@ -1191,7 +1217,7 @@ def _start(
         except MontyTypingError as error:
             diagnostics = parse_type_diagnostics(error.display())
             text = "\n".join(d.line for d in diagnostics) or error.display()
-            if any(is_fatal_diagnostic(d, run.callable_names) for d in diagnostics):
+            if any(is_fatal_diagnostic(d, run.checked_names) for d in diagnostics):
                 return ProgramStopped(
                     status="failed",
                     error="Type check failed; the program did not run.\n" + text,
@@ -1350,14 +1376,10 @@ def _offered(
     return None
 
 
-def _functions_module(run: _Run, stubs: str) -> ExternalModule:
-    """The `functions` module: every function of the program, typed by its stubs.
-
-    The pool builds it only in a session whose program imports it.
-    """
+def _tools_module(run: _Run) -> ExternalModule:
+    """The `tools` module: the tool functions of the program."""
     return ExternalModule(
-        {name: _function_reference(name) for name in run.callable_names},
-        stubs=stubs,
+        {name: _function_reference(name) for name in run.function_names}
     )
 
 
@@ -1369,7 +1391,7 @@ def _checkout(
     resumed: bool,
     stubs: str,
     limits: ResourceLimits,
-    functions: Callable[[], ExternalModule],
+    tools: Callable[[], ExternalModule],
 ) -> Iterator[MontySession]:
     """Check out a worker; stop waiting once the run is cancelled or late.
 
@@ -1402,7 +1424,7 @@ def _checkout(
                     type_check_stubs=None if resumed else stubs,
                     type_check_format="concise",
                     os_policy=_OS_POLICY,
-                    external_modules={FUNCTIONS_MODULE: functions},
+                    external_modules={TOOLS_NAMESPACE: tools},
                 )
                 try:
                     stack.enter_context(
@@ -1576,7 +1598,7 @@ def _drive(
 ) -> ProgramCompleted | ProgramStopped | ParkedProgram:
     """Run the program from `begin` on workers until it ends or parks."""
     resource_limits = _resource_limits(run.limits)
-    functions = partial(_functions_module, run, stubs)
+    tools = partial(_tools_module, run)
     parks = park is not None
     # A dumped program that waits for its calls without a worker.
     suspended: ProgramSuspended | None = None
@@ -1589,7 +1611,7 @@ def _drive(
                     resumed=resumed or suspended is not None,
                     stubs=stubs,
                     limits=resource_limits,
-                    functions=functions,
+                    tools=tools,
                 ) as session:
                     run.start_clock()
                     worker = _checked_out(session)

@@ -125,7 +125,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         execute_code is offered; in both modes
                                         SearchTool._run, not the prompt, caps queries at 3
   stubs.py:build_tool_stubs             function names `<namespace>__<name>` from
-                                        Tool.code_mode_function_name (MCP: server);
+                                        Tool.code_mode_function_name (MCP: server), as
+                                        methods of `class tools` (programs call
+                                        `await tools.<name>(...)`);
                                         `listed_text` (no DEFERRED ones, in the description);
                                         `program_text(code)` types one program: the listed
                                         functions, the DEFERRED ones whose names the code
@@ -139,10 +141,12 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         tool names); the call returns at yield_time_ms, at
                                         yield_control(), or at the end
       execute_program                   sandbox.py: checkout a new Monty worker (the wait
-                                        observes Stop), feed the imports of IMPORTABLE_MODULES,
+                                        observes Stop), feed the imports of IMPORTABLE_MODULES
+                                        and of the `tools` module (_tools_module),
                                         type-check tool and store/load calls against the
                                         program's stubs, feed_start
-        FunctionSnapshot                tool call -> CodeCell._call on a thread, at most
+        FunctionSnapshot                `tools.<name>` call -> CodeCell._call on a thread
+                                        (a bare tool name is a NameError), at most
                                         MAX_CONCURRENT_TOOL_CALLS per cell and
                                         an equal share of MAX_TOOL_CALL_THREADS per process
                                         at once (the rest queue); store()/load()/yield_control() answered at
@@ -213,6 +217,12 @@ exec_command / write_stdin / apply_patch (no tool row; Tool.id is None)
   chat/execution.py:create_chat_agent   builds the three tools with one SandboxTurn for every
                                         agent, as it adds the skill tools; a durable resume
                                         prepares the turn again and builds them the same way
+  prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
+                                        (sandbox_tools.py:sandbox_guidance): one use per
+                                        SandboxTool that the turn offers, in order, named
+                                        as the model calls it (CodeModeTool.called_name in
+                                        code mode); the tool descriptions describe only
+                                        the tools
   SandboxTurn.start_call                first call: the user's Sandbox row
                                         (build/db/sandbox.py:get_or_create_sandbox); before
                                         each call: HarnessSandbox.begin_turn (an error is
@@ -491,10 +501,24 @@ health calls are not retried.
     named from `mcp__<server id>__<server>__<tool>`
     (`MCPTool.code_mode_function_name`), converted to a Python identifier
     that stays unique among the turn's functions; the description names the
-    MCP servers with deferred functions in one fixed paragraph. Every function is also an
-    attribute of the importable module `functions`
-    (`tools/tool_implementations/code_mode/sandbox.py:FUNCTIONS_MODULE`), so `from functions import f`
-    works like the global. `CodeModeResultSpec.usage` adds a code-mode-only
+    MCP servers with deferred functions in one fixed paragraph. Programs call
+    every function through the `tools` namespace, `await tools.f(...)`: a
+    module that every program imports
+    (`tools/tool_implementations/code_mode/sandbox.py:TOOLS_NAMESPACE`), which
+    the program's stubs declare as `class tools`, so the type checker checks
+    each call. Bare names stay free for the program's own functions, and a
+    model does not read the functions as tools that it can call directly.
+    `store`, `load`, `yield_control` and `tool_search` stay globals; a
+    function can take one of their names, and only the result types that the
+    stubs declare avoid them. An explicit `import tools` or
+    `from tools import f` stops the program before it runs
+    (`TOOLS_IMPORT_MESSAGE`). The system prompt's tool sections name each
+    tool as the model calls it (`CodeModeTool.called_name`). A
+    direct call of a function name, or of its tool's name, also after
+    `tools.` or `tools_`, as a tool of its own returns how to call it from a
+    program
+    (`Tool.inner_call_hint`, `agents/tool_execution.py`).
+    `CodeModeResultSpec.usage` adds a code-mode-only
     docstring note; `internal_search` uses it to ask for all queries of one
     need in one call, since each call runs its own retrieval pipeline. Image
     generation is nested: a program gets `list[ImageResult]` (`file_id`,
