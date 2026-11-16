@@ -474,7 +474,9 @@ the app from the same rule
     built-in skill of a preset when the user runs (visible and enabled in
     `load_user_plugin_states`) a plugin that holds (`plugin__integration`) an
     integration whose `external_app` row has an `app_type` in
-    `skills/built_in.py:EXTERNAL_APP_BUILT_IN_SKILL_IDS`. When the user runs
+    `skills/built_in.py:EXTERNAL_APP_BUILT_IN_SKILL_IDS`. The integration must
+    be on (`integration.enabled`); `external_app.enabled` is an old copy and is
+    not read. When the user runs
     several integrations of one preset, the lowest integration id picks the
     app that renders the skill (`db/skill.py:RuntimeSkill`, `external_app_id`).
     The runtime list, the reserved chat names, the Skills list (VIEW),

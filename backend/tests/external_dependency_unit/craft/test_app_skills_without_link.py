@@ -18,6 +18,7 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import delete_external_app
 from onyx.db.models import (
     ExternalApp,
+    Integration,
     Plugin,
     PluginVersion,
     Skill,
@@ -139,6 +140,36 @@ def test_built_in_app_skill_follows_the_plugin_the_user_runs(
         assert slack_id not in runtime(user)
         assert slack_id not in viewable(user)
         assert not skill_user_states(user, [built_in.id], session)[built_in.id].enabled
+
+
+def test_turned_off_integration_gives_no_built_in_skill(session: Session) -> None:
+    user = make_user(session)
+    slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]
+    reset_built_in_skill_row(session, built_in_skill_id=slack_id)
+    custom = make_skill(session, is_public=True)
+    app = make_external_app(
+        session,
+        skill=custom,
+        app_type=ExternalAppType.SLACK,
+        auth_template=_AUTH_TEMPLATE,
+    )
+    set_skill_enabled_for_user(
+        skill_id=custom.id, enabled=True, user=user, db_session=session
+    )
+    assert built_in_app_skills_for_user(user.id, session) == {slack_id: app.id}
+
+    integration = session.get(Integration, app.integration_id)
+    assert integration is not None
+    integration.enabled = False
+    session.flush()
+
+    assert built_in_app_skills_for_user(user.id, session) == {}
+    runtime = {
+        r.skill.id: r.name
+        for r in list_runtime_skills_for_user(db_session=session, user=user)
+    }
+    assert custom.id in runtime
+    assert slack_id not in runtime.values()
 
 
 def test_lowest_integration_id_renders_the_built_in_skill(session: Session) -> None:
