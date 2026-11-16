@@ -36,7 +36,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
-PREVIOUS_REVISION = "7c00f53ab75f"
+PREVIOUS_REVISION = "ff11c4042c42"
 REVISION = "730bce2814a0"
 ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 
@@ -124,7 +124,8 @@ class Seeded:
     custom_default: int
     custom_oauth: int
     custom_disabled: int
-    skill: UUID
+    only_skill: UUID
+    shared_skills: list[UUID]
     gated: dict[str, int]
     names: dict[str, str]
 
@@ -498,8 +499,6 @@ def _seed(conn: Connection) -> Seeded:
         {"id": uuid4(), "s": session_id, "g": gated["app_slack"]},
     )
 
-    # A published skill that needs the Slack app.
-    skill = uuid4()
     conn.execute(
         text(
             "INSERT INTO plugin_marketplace (id, kind, name, owner_user_id, "
@@ -509,47 +508,46 @@ def _seed(conn: Connection) -> Seeded:
         ),
         {"id": ORGANIZATION_LIBRARY_ID},
     )
-    conn.execute(
-        text(
-            "INSERT INTO skill (id, name, description, bundle_file_id, "
-            "bundle_sha256, author_user_id, public_permission) VALUES "
-            "(:id, :name, '', :file, :sha, :u, 'VIEWER')"
-        ),
-        {
-            "id": skill,
-            "name": f"u1-skill-{s}",
-            "file": f"u1-{skill.hex}",
-            "sha": "0" * 64,
-            "u": users["owner"],
-        },
-    )
-    conn.execute(
-        text(
-            "INSERT INTO plugin (id, name, description, marketplace_id, "
-            "author_user_id, current_version_id, published_version_id) VALUES "
-            "(:id, :name, '', :m, :u, :id, :id)"
-        ),
-        {
-            "id": skill,
-            "name": f"u1-skill-{s}",
-            "m": ORGANIZATION_LIBRARY_ID,
-            "u": users["owner"],
-        },
-    )
-    conn.execute(
-        text(
-            "INSERT INTO plugin_version (id, plugin_id, version_number) "
-            "VALUES (:id, :id, 1)"
-        ),
-        {"id": skill},
-    )
-    conn.execute(
-        text(
-            "INSERT INTO external_app__skill (external_app_id, skill_id) "
-            "VALUES (:a, :s)"
-        ),
-        {"a": app_slack, "s": skill},
-    )
+
+    def app_skill(external_app_id: int, name: str) -> UUID:
+        """A published custom skill, with its plugin, that needs the app."""
+        skill_id = uuid4()
+        params = {"id": skill_id, "name": f"u1-{name}-{s}", "u": users["owner"]}
+        conn.execute(
+            text(
+                "INSERT INTO skill (id, name, description, bundle_file_id, "
+                "bundle_sha256, author_user_id, public_permission) VALUES "
+                "(:id, :name, '', :file, :sha, :u, 'VIEWER')"
+            ),
+            {**params, "file": f"u1-{skill_id.hex}", "sha": "0" * 64},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO plugin (id, name, description, marketplace_id, "
+                "author_user_id, current_version_id, published_version_id) VALUES "
+                "(:id, :name, '', :m, :u, :id, :id)"
+            ),
+            {**params, "m": ORGANIZATION_LIBRARY_ID},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO plugin_version (id, plugin_id, version_number) "
+                "VALUES (:id, :id, 1)"
+            ),
+            {"id": skill_id},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO external_app__skill (external_app_id, skill_id) "
+                "VALUES (:a, :s)"
+            ),
+            {"a": external_app_id, "s": skill_id},
+        )
+        return skill_id
+
+    # One app has one custom skill. One app has two.
+    only_skill = app_skill(app_user_key, "only")
+    shared_skills = [app_skill(app_org_key, "one"), app_skill(app_org_key, "two")]
 
     return Seeded(
         owner=users["owner"],
@@ -577,7 +575,8 @@ def _seed(conn: Connection) -> Seeded:
         custom_default=custom_default,
         custom_oauth=custom_oauth,
         custom_disabled=custom_disabled,
-        skill=skill,
+        only_skill=only_skill,
+        shared_skills=shared_skills,
         gated=gated,
         names=names,
     )
@@ -605,8 +604,9 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
                 "apps": [seeded.app_org_key, seeded.app_user_key],
             },
         )
-    conn.execute(text("DELETE FROM plugin WHERE id = :id"), {"id": seeded.skill})
-    conn.execute(text("DELETE FROM skill WHERE id = :id"), {"id": seeded.skill})
+    skills = [seeded.only_skill, *seeded.shared_skills]
+    conn.execute(text("DELETE FROM plugin WHERE id = ANY(:ids)"), {"ids": skills})
+    conn.execute(text("DELETE FROM skill WHERE id = ANY(:ids)"), {"ids": skills})
     conn.execute(
         text("DELETE FROM persona__tool WHERE persona_id = 0 AND tool_id = ANY(:t)"),
         {"t": [seeded.custom_default, seeded.custom_disabled]},
@@ -1036,11 +1036,21 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
                 {"ids": [c.id for c in custom.values()]},
             )
         } == {(c.id, "", None, "allow") for c in custom.values()}
-        # A skill that needs an app uses the integration of that app.
-        assert conn.execute(
-            text("SELECT integration_id FROM plugin__integration WHERE plugin_id = :p"),
-            {"p": seeded.skill},
-        ).scalars().all() == [slack.id]
+        # An app with one custom skill takes the plugin of that skill as its
+        # home plugin: one plugin holds the skill and the integration.
+        assert user_key.plugin_id == seeded.only_skill
+        # An app with two skills gets a home plugin, and each skill uses it.
+        assert org_key.plugin_id not in seeded.shared_skills
+        assert {
+            (row.plugin_id, row.integration_id)
+            for row in conn.execute(
+                text(
+                    "SELECT plugin_id, integration_id FROM plugin__integration "
+                    "WHERE plugin_id = ANY(:p)"
+                ),
+                {"p": [seeded.only_skill, *seeded.shared_skills]},
+            )
+        } == {(skill_id, org_key.id) for skill_id in seeded.shared_skills}
 
         # Choices of users.
         preferences = {
@@ -1219,6 +1229,14 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
                 },
             ).scalar_one()
             == 0
+        )
+        # The plugin of a skill that an app took as its home plugin stays.
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM plugin WHERE id = :id"),
+                {"id": seeded.only_skill},
+            ).scalar_one()
+            == 1
         )
         for table in ("mcp_server", "external_app", "tool"):
             assert (

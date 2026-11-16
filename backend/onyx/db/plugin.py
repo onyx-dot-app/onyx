@@ -738,11 +738,21 @@ def _move_plugin__no_commit(
             )
         )
         if holder_id is not None:
-            # The home plugin of an integration holds no skill, so its name
-            # does not clash with a skill name; the label takes a free name.
+            # A home plugin that holds no skill does not clash with a skill
+            # name; the label takes a free name. A home plugin that an app
+            # took from its skill holds that skill, and clashes as a skill.
             holder_is_integration = (
                 db_session.scalar(
-                    select(Integration.id).where(Integration.plugin_id == holder_id)
+                    select(Integration.id)
+                    .join(Plugin, Plugin.id == Integration.plugin_id)
+                    .where(
+                        Integration.plugin_id == holder_id,
+                        ~select(PluginSkill.id)
+                        .where(
+                            PluginSkill.plugin_version_id == Plugin.current_version_id
+                        )
+                        .exists(),
+                    )
                 )
                 is not None
             )

@@ -7,7 +7,7 @@ and a rollback drops it. The migration is SQL only and imports no app code. It
 moves no secret: the credential import (U3) does that in app code.
 
 Revision ID: 730bce2814a0
-Revises: 7c00f53ab75f
+Revises: ff11c4042c42
 Create Date: 2026-11-13 14:42:45.411165
 
 """
@@ -18,7 +18,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "730bce2814a0"
-down_revision = "7c00f53ab75f"
+down_revision = "ff11c4042c42"
 branch_labels = None
 depends_on = None
 
@@ -596,7 +596,11 @@ _CREATE_SOURCES = f"""
         ) is_shared
     )
     SELECT
-        md5('integration_plugin:' || numbered.id::text)::uuid AS plugin_id,
+        coalesce(
+            adopted.plugin_id,
+            md5('integration_plugin:' || numbered.id::text)::uuid
+        ) AS plugin_id,
+        adopted.plugin_id IS NOT NULL AS adopted,
         CASE placement
             WHEN 'organization_library' THEN '{ORGANIZATION_LIBRARY_ID}'::uuid
             ELSE md5('user_uploads:' || author_user_id::text)::uuid
@@ -616,6 +620,19 @@ _CREATE_SOURCES = f"""
             candidates.*
         FROM candidates
     ) numbered
+    -- An app whose only skill is a custom skill takes the plugin of that
+    -- skill as its home plugin, so one plugin holds the skill and the
+    -- integration. A built-in skill has no plugin.
+    LEFT JOIN LATERAL (
+        SELECT p.id AS plugin_id
+        FROM external_app__skill es
+        JOIN plugin p ON p.id = es.skill_id
+        WHERE es.external_app_id = numbered.external_app_id
+          AND (
+              SELECT count(*) FROM external_app__skill every
+              WHERE every.external_app_id = numbered.external_app_id
+          ) = 1
+    ) adopted ON true
 """
 
 _INSERT_ORGANIZATION_LIBRARY = f"""
@@ -639,7 +656,7 @@ _INSERT_USER_UPLOADS = """
         marketplace_id, 'user_uploads', 'My uploads', author_user_id,
         'AVAILABLE', min(created_at)
     FROM integration_source
-    WHERE placement = 'user_uploads'
+    WHERE placement = 'user_uploads' AND NOT adopted
     GROUP BY marketplace_id, author_user_id
     ON CONFLICT DO NOTHING
 """
@@ -656,7 +673,9 @@ _INSERT_PLUGINS = """
         suffix integer;
     BEGIN
         FOR pending IN
-            SELECT * FROM integration_source ORDER BY created_at, id
+            SELECT * FROM integration_source
+            WHERE NOT adopted
+            ORDER BY created_at, id
         LOOP
             base := left(pending.name, 64);
             candidate := base;
@@ -699,6 +718,7 @@ _INSERT_VERSIONS = """
         src.created_at
     FROM integration_source src
     LEFT JOIN "user" u ON u.id = src.author_user_id
+    WHERE NOT src.adopted
 """
 
 _INSERT_INTEGRATIONS = """
@@ -875,13 +895,14 @@ _INSERT_OPENAPI_DEFAULT_POLICIES = """
 """
 
 # A skill that needs an external app becomes a plugin that uses the
-# integration of that app.
+# integration of that app, unless it is the home plugin of that integration.
 _INSERT_PLUGIN_INTEGRATIONS = """
     INSERT INTO plugin__integration (plugin_id, integration_id)
     SELECT p.id, src.id
     FROM external_app__skill es
     JOIN integration_source src ON src.external_app_id = es.external_app_id
     JOIN plugin p ON p.id = es.skill_id
+    WHERE p.id <> src.plugin_id
     ORDER BY p.id, src.id
 """
 
@@ -1078,6 +1099,14 @@ def downgrade() -> None:
         "integration_action",
     ):
         op.drop_table(table)
-    # Each home plugin goes with its integration.
-    op.execute("DELETE FROM plugin WHERE id IN (SELECT plugin_id FROM integration)")
+    # Each home plugin that the upgrade made goes with its integration. The
+    # plugin of a skill that an app took as its home plugin stays.
+    op.execute(
+        """
+        DELETE FROM plugin p
+        USING integration i
+        WHERE p.id = i.plugin_id
+          AND p.id = md5('integration_plugin:' || i.id::text)::uuid
+        """
+    )
     op.drop_table("integration")
