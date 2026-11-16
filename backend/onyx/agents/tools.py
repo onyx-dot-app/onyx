@@ -24,6 +24,7 @@ from onyx.llm.models import (
 )
 
 if TYPE_CHECKING:
+    from onyx.agents.concurrency import ExecutionWork
     from onyx.agents.models import (
         AgentInfo,
         AgentMessageReceipt,
@@ -250,6 +251,7 @@ class ToolInvocation:
         agents: AgentControl | None = None,
         trace_metadata: Mapping[str, JsonValue] | None = None,
         nested_calls: NestedCallGate | None = None,
+        run_work: "ExecutionWork | None" = None,
     ) -> None:
         self.call_id = call_id
         self.call_index = call_index
@@ -269,6 +271,10 @@ class ToolInvocation:
         # Decides the calls that the tool makes for the model, such as a
         # program's tool calls; None when no hook or approval decides calls.
         self.nested_calls = nested_calls
+        # The run's work. Work that outlives this call, such as threads it
+        # starts, joins it (`track_operation`): the run drains, calls
+        # on_drained and becomes idle only after that work.
+        self.run_work = run_work
         self._agents = agents
 
     @property

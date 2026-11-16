@@ -17,6 +17,7 @@ from onyx.file_store.models import (
 from onyx.tools.constants import FILE_READER_MAX_CHARS
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.utils.headers import HeaderItemDict
+from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
 
 
 class CustomToolErrorInfo(BaseModel):
@@ -381,28 +382,20 @@ class LlmBashExecutionResult(BaseModel):
     error: str | None = None
 
 
-def _is_none(value: object) -> bool:
-    return value is None
-
-
-# A key that the JSON leaves out when it has no value.
-_OMITTED_WHEN_NONE = Field(exclude_if=_is_none)
-
-
 class SearchResult(BaseModel):
     """One document of a search-like tool result, as the model and code mode
     programs read it."""
 
     document: int = Field(description="Citation number. Cite it in the answer as [n].")
     title: str
-    updated_at: Annotated[str | None, _OMITTED_WHEN_NONE] = None
-    authors: Annotated[list[str] | None, _OMITTED_WHEN_NONE] = None
-    source_type: Annotated[str | None, _OMITTED_WHEN_NONE] = None
-    url: Annotated[str | None, _OMITTED_WHEN_NONE] = None
-    document_identifier: Annotated[str | None, _OMITTED_WHEN_NONE] = None
-    file_name: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    updated_at: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    authors: Annotated[list[str] | None, OMITTED_WHEN_NONE] = None
+    source_type: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    url: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    document_identifier: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    file_name: Annotated[str | None, OMITTED_WHEN_NONE] = None
     content: str
-    metadata: Annotated[str | None, _OMITTED_WHEN_NONE] = Field(
+    metadata: Annotated[str | None, OMITTED_WHEN_NONE] = Field(
         default=None, description="JSON-encoded metadata of the document."
     )
 
@@ -411,8 +404,8 @@ class SearchResults(BaseModel):
     """The content of internal search, web search, and open URL results."""
 
     results: list[SearchResult]
-    note: Annotated[str | None, _OMITTED_WHEN_NONE] = None
-    message: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    note: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    message: Annotated[str | None, OMITTED_WHEN_NONE] = None
 
 
 class CodeModeExposure(str, Enum):
@@ -454,6 +447,9 @@ class CodeModeResultKind(str, Enum):
     AUTO = "auto"
     # An MCP result envelope `{"tool_result": value}`; the program gets the value.
     MCP = "mcp"
+    # The program gets the result details as JSON, as `model` (a class of the
+    # details) declares them; the content is for the model only.
+    DETAILS = "details"
 
 
 class CodeModeResultSpec(BaseModel):
@@ -464,8 +460,9 @@ class CodeModeResultSpec(BaseModel):
     kind: CodeModeResultKind
     # The stub's return annotation; the model's name when unset, else Any.
     annotation: str | None = None
-    # The model whose JSON the content is. The stub module declares it, and the
-    # models of its fields, as TypedDicts of the same names.
+    # The model of the value that the program gets. For DETAILS it is a class
+    # of the result details; otherwise the content is its JSON. The stub module
+    # declares it, and the models of its fields, as TypedDicts of the same names.
     model: type[BaseModel] | None = None
     # JSON Schema of the value, from the tool's server. The stub types the value
     # from it, and declares a top-level object as a TypedDict.
@@ -476,6 +473,12 @@ class CodeModeResultSpec(BaseModel):
     usage: str | None = None
     # The tool numbers its results for citation and needs a citation block.
     cites: bool = False
+
+    @model_validator(mode="after")
+    def details_need_model(self) -> Self:
+        if self.kind is CodeModeResultKind.DETAILS and self.model is None:
+            raise ValueError("A DETAILS result needs the model of its details")
+        return self
 
     @property
     def type_annotation(self) -> str:

@@ -7,6 +7,7 @@ import pytest
 from pydantic import BaseModel, JsonValue
 
 from onyx.agents.compaction import count_tokens
+from onyx.agents.concurrency import ExecutionWork
 from onyx.agents.tools import (
     ChildRunWait,
     ToolExecutionMode,
@@ -309,7 +310,7 @@ def test_cancellation_stops_calls_and_raises() -> None:
     started = threading.Semaphore(0)
     stopped = threading.Semaphore(0)
 
-    def slow(invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+    def slow(_invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
         started.release()
         try:
             for _ in range(500):
@@ -717,6 +718,34 @@ def test_timeout_stops_nested_work_and_marks_it_unfinished() -> None:
     # otherwise it would run for 5 seconds.
     assert finished.wait(4)
     assert time.monotonic() - started < 4
+
+
+def test_a_call_that_outlives_its_cell_keeps_the_run_busy() -> None:
+    """The program ends while a call ignores cancellation: the call is
+    unfinished, and the run's work drains only when the call returns."""
+    leave = threading.Event()
+
+    def slow(_invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+        leave.wait(10)
+        return ToolResult(content="late")
+
+    tool = CodeModeTool(
+        [FakeTool("slow", slow)], cells=CodeCells(), limits=SHORT_LIMITS
+    )
+    invocation = Invocation("await slow(value='a')\n")
+    work = ExecutionWork()
+    invocation.invocation.run_work = work
+    try:
+        outcome = tool.run(invocation.invocation, ToolContext())
+        assert isinstance(outcome, ToolResult)
+        assert isinstance(outcome.details, CodeModeExecutionResult)
+        assert outcome.details.status == "timed_out"
+        [call] = outcome.details.calls
+        assert call.state == "unfinished"
+        assert not work.tracker.wait_idle(0.2)
+    finally:
+        leave.set()
+    assert work.tracker.wait_idle(10)
 
 
 def test_unawaited_calls_are_cancelled_and_reported() -> None:

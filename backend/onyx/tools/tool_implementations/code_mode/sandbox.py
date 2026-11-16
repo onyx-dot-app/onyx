@@ -11,6 +11,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable, Collection, Iterator, Mapping
+from concurrent.futures import Future
 from contextlib import ExitStack, contextmanager, nullcontext
 from functools import partial
 from pathlib import Path
@@ -749,9 +750,11 @@ class _Run:
         cancellation: CancellationSignal,
         on_print: Callable[[str], None],
         on_yield: Callable[[], None],
+        on_call_started: Callable[[Future[object]], None] | None = None,
         elapsed_seconds: float = 0.0,
     ) -> None:
         self.limits = limits
+        self.on_call_started = on_call_started
         self.function_names = frozenset(function_names)
         self.tenant_id = metrics.current_tenant_id()
 
@@ -936,6 +939,8 @@ class _Run:
                 _tool_call_threads.release(self.wake.set)
                 raise
             pending.future.add_done_callback(lambda _future: self.wake.set())
+            if self.on_call_started is not None:
+                self.on_call_started(pending.future)
             running += 1
 
     def _call_thread(self, pending: PendingCall) -> object:
@@ -1427,6 +1432,7 @@ def execute_program(
     limits: SandboxLimits,
     on_print: Callable[[str], None],
     on_yield: Callable[[], None],
+    on_call_started: Callable[[Future[object]], None] | None = None,
     park: Callable[[ParkedProgram | None], bool] | None = None,
     parked: ParkedProgram | None = None,
     pool: Callable[[], Monty] = sandbox_pool,
@@ -1437,7 +1443,8 @@ def execute_program(
     `stubs` types the program's functions and includes PRELUDE_STUBS.
     `cancellation` stops the program at once, also while it computes or waits.
     `on_print` receives the printed text and `on_yield` each yield_control() call,
-    both on the driver thread. Nothing carries over from earlier programs; plain
+    both on the driver thread. `on_call_started` receives the future of each
+    tool call thread, on the driver thread, as the thread starts. Nothing carries over from earlier programs; plain
     functions such as load() give a program outside state.
     The program waits at each await on unfinished tool calls or sleeps, and at
     each synchronous sleep. It keeps its worker while it waits, until another
@@ -1466,6 +1473,7 @@ def execute_program(
         cancellation=cancellation,
         on_print=on_print,
         on_yield=on_yield,
+        on_call_started=on_call_started,
         elapsed_seconds=parked.state.elapsed_seconds if parked is not None else 0.0,
     )
     if parked is not None:
