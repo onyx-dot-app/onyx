@@ -27,6 +27,7 @@ from onyx.db.users import delete_user_from_db__no_commit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import UserByEmail
+from onyx.server.manage.users import delete_user
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.craft.db_helpers import make_skill, make_user
 
@@ -50,6 +51,35 @@ def test_owner_must_transfer_private_skills_before_deletion(
     delete_user_from_db__no_commit(owner, db_session)
     assert db_session.get(User, owner.id) is None
     assert skill.author_user_id == successor.id
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_admin_delete_route_returns_private_skill_conflict(
+    db_session: Session,
+) -> None:
+    admin = make_user(db_session, is_admin=True)
+    owner = make_user(db_session, standard_account=True)
+    skill = make_skill(db_session, author_user_id=owner.id)
+    owner.is_active = False
+    db_session.commit()
+    owner_id = owner.id
+    try:
+        with pytest.raises(OnyxError) as exc:
+            await delete_user(
+                UserByEmail(user_email=owner.email),
+                current_user=admin,
+                db_session=db_session,
+            )
+        assert exc.value.error_code == OnyxErrorCode.CONFLICT
+        assert "Transfer or delete" in exc.value.detail
+        assert db_session.get(User, owner_id) is not None
+    finally:
+        delete_skill(skill, db_session)
+        remaining_owner = db_session.get(User, owner_id)
+        assert remaining_owner is not None
+        delete_user_from_db__no_commit(remaining_owner, db_session)
+        delete_user_from_db__no_commit(admin, db_session)
+        db_session.commit()
 
 
 @pytest.mark.parametrize("change", ["transfer", "delete", "publish"])
