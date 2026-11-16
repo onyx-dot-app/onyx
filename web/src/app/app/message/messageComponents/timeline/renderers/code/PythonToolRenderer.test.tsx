@@ -27,6 +27,8 @@ test("escapes the code when syntax highlighting fails", () => {
   const { container } = render(
     <PythonToolRenderer
       packets={packets}
+      nestedCalls={[]}
+      streamPackets={packets}
       state={{}}
       onComplete={() => {}}
       renderType={RenderType.FULL}
