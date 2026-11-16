@@ -33,11 +33,13 @@ from onyx.db.enums import (
     IntegrationKind,
     IntegrationOAuthProviderMode,
 )
+from onyx.db.integration import (
+    get_external_app_for_integration,
+    get_mcp_server_for_integration,
+)
 from onyx.db.integration_connection import (
     delete_connection__no_commit,
     get_connection,
-    get_external_app_for_integration,
-    get_mcp_server_for_integration,
     get_oauth_client,
     mark_connection_needs_reconnect__no_commit,
     mark_integration_connections_needs_reconnect__no_commit,
@@ -615,7 +617,7 @@ def _refresh_with_token_url(
 def preset_host_values(integration: Integration, db_session: Session) -> dict[str, str]:
     """The account settings a preset needs to build its endpoints, such as
     the Zendesk subdomain. They are host settings of the kind, not secrets."""
-    app = get_external_app_for_integration(db_session, integration.id)
+    app = get_external_app_for_integration(integration.id, db_session)
     if app is None:
         return {}
     org_credentials = app.organization_credentials.get_value(apply_mask=False)
@@ -629,7 +631,7 @@ def preset_host_values(integration: Integration, db_session: Session) -> dict[st
 def preset_provider_for(
     integration: Integration, db_session: Session
 ) -> OAuthExternalAppProvider | None:
-    app = get_external_app_for_integration(db_session, integration.id)
+    app = get_external_app_for_integration(integration.id, db_session)
     if app is None:
         return None
     provider = get_provider_for_app(app)
@@ -699,7 +701,7 @@ def _refresh_with_mcp_sdk(
     oauth_client: IntegrationOAuthClient,
     db_session: Session,
 ) -> _RefreshedGrant:
-    mcp_server = get_mcp_server_for_integration(db_session, integration.id)
+    mcp_server = get_mcp_server_for_integration(integration.id, db_session)
     if mcp_server is None:
         raise _RefreshTemporaryError("the integration has no MCP server")
     storage = IntegrationTokenStorage(

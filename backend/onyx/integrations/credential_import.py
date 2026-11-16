@@ -38,8 +38,8 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
 )
+from onyx.db.integration import get_integration_by_id
 from onyx.db.integration_connection import (
-    fetch_integration,
     get_active_user_ids,
     get_oauth_client,
     get_oauth_config_by_id,
@@ -531,7 +531,7 @@ def import_legacy_credentials(db_session: Session) -> CredentialImportReport:
 
     for mcp_server in list_mcp_servers_with_integration(db_session):
         integration = (
-            fetch_integration(db_session, mcp_server.integration_id)
+            get_integration_by_id(mcp_server.integration_id, db_session)
             if mcp_server.integration_id is not None
             else None
         )
@@ -540,7 +540,7 @@ def import_legacy_credentials(db_session: Session) -> CredentialImportReport:
 
     for tool in list_openapi_tools_with_integration(db_session):
         integration = (
-            fetch_integration(db_session, tool.integration_id)
+            get_integration_by_id(tool.integration_id, db_session)
             if tool.integration_id is not None
             else None
         )
@@ -549,7 +549,7 @@ def import_legacy_credentials(db_session: Session) -> CredentialImportReport:
 
     for app in list_external_apps_with_integration(db_session):
         integration = (
-            fetch_integration(db_session, app.integration_id)
+            get_integration_by_id(app.integration_id, db_session)
             if app.integration_id is not None
             else None
         )

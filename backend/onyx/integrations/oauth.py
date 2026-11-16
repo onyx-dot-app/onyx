@@ -41,9 +41,8 @@ from onyx.db.enums import (
     MCPTransport,
     Permission,
 )
+from onyx.db.integration import get_integration_by_id, get_mcp_server_for_integration
 from onyx.db.integration_connection import (
-    fetch_integration,
-    get_mcp_server_for_integration,
     get_oauth_client,
     upsert_connection__no_commit,
 )
@@ -155,7 +154,7 @@ def integration_oauth_redirect_uri(
 
 def _sign_in_host(integration: Integration, db_session: Session) -> str | None:
     if integration.kind is IntegrationKind.MCP_SERVER:
-        mcp_server = get_mcp_server_for_integration(db_session, integration.id)
+        mcp_server = get_mcp_server_for_integration(integration.id, db_session)
         return mcp_server.server_url if mcp_server is not None else None
     host_values = preset_host_values(integration, db_session)
     return canonical_json_fingerprint(host_values) if host_values else None
@@ -245,7 +244,7 @@ def _client_id_and_secret(
 
 
 def _mcp_server_or_raise(integration: Integration, db_session: Session) -> MCPServer:
-    mcp_server = get_mcp_server_for_integration(db_session, integration.id)
+    mcp_server = get_mcp_server_for_integration(integration.id, db_session)
     if mcp_server is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, f"{integration.name} has no MCP server."
@@ -540,7 +539,7 @@ def complete_integration_oauth(
     payload = INTEGRATION_OAUTH_ATTEMPTS.consume(
         owner_id=str(user.id), state=state
     ).payload
-    integration = fetch_integration(db_session, payload.integration_id)
+    integration = get_integration_by_id(payload.integration_id, db_session)
     if integration is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "The integration no longer exists.")
     for_organization = _check_may_connect(integration, user)

@@ -22,7 +22,8 @@ from onyx.db.enums import (
     MCPAuthenticationType,
     MCPTransport,
 )
-from onyx.db.integration_connection import fetch_integration, get_connection_by_id
+from onyx.db.integration import get_integration_by_id
+from onyx.db.integration_connection import get_connection_by_id
 from onyx.db.models import ExternalApp, Integration, MCPServer, User
 from onyx.integrations.connection_models import (
     ConnectionProblemCode,
@@ -89,7 +90,7 @@ def test_two_concurrent_refreshes_make_one_call(
         try:
             with get_session_with_current_tenant() as session:
                 own_connection = get_connection_by_id(session, connection.id)
-                own_integration = fetch_integration(session, integration.id)
+                own_integration = get_integration_by_id(integration.id, session)
                 assert own_connection is not None and own_integration is not None
                 start.wait()
                 fresh = ensure_fresh_connection(

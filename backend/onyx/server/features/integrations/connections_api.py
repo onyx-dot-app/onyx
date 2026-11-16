@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.integration_connection import fetch_integration, user_can_see_integration
+from onyx.db.integration import get_integration_by_id
+from onyx.db.integration_connection import user_can_see_integration
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -45,7 +46,7 @@ def start_oauth(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> IntegrationOAuthStartResponse:
-    integration = fetch_integration(db_session, integration_id)
+    integration = get_integration_by_id(integration_id, db_session)
     if integration is None or not (
         has_global_permission(user, Permission.MANAGE_ACTIONS)
         or user_can_see_integration(db_session, integration_id, user.id)

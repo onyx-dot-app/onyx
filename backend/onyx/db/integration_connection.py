@@ -14,7 +14,6 @@ from onyx.db.enums import IntegrationConnectionStatus
 from onyx.db.models import (
     ExternalApp,
     ExternalAppUserCredential,
-    Integration,
     IntegrationConnection,
     IntegrationOAuthClient,
     MCPConnectionConfig,
@@ -26,10 +25,6 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.plugin_access import visible_plugin_ids
-
-
-def fetch_integration(db_session: Session, integration_id: int) -> Integration | None:
-    return db_session.get(Integration, integration_id)
 
 
 def user_can_see_integration(
@@ -283,22 +278,6 @@ def set_oauth_client_credentials__no_commit(
     oauth_client.client_secret = client_secret  # ty: ignore[invalid-assignment]
     oauth_client.registration = registration  # ty: ignore[invalid-assignment]
     db_session.flush()
-
-
-def get_mcp_server_for_integration(
-    db_session: Session, integration_id: int
-) -> MCPServer | None:
-    return db_session.scalars(
-        select(MCPServer).where(MCPServer.integration_id == integration_id)
-    ).one_or_none()
-
-
-def get_external_app_for_integration(
-    db_session: Session, integration_id: int
-) -> ExternalApp | None:
-    return db_session.scalars(
-        select(ExternalApp).where(ExternalApp.integration_id == integration_id)
-    ).one_or_none()
 
 
 def get_single_active_user_id_by_email(db_session: Session, email: str) -> UUID | None:
