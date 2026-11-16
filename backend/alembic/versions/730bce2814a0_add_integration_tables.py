@@ -443,8 +443,9 @@ _CREATE_SOURCES = f"""
                 AS users_can_save_always_allow,
             'organization_library' AS placement,
             NULL::uuid AS author_user_id,
-            -- An admin turns each app on again.
-            'NOT_AVAILABLE' AS installation_policy,
+            -- An app keeps its state: on is available, off is not.
+            CASE WHEN NOT a.enabled THEN 'NOT_AVAILABLE' END
+                AS installation_policy,
             a.created_at,
             a.updated_at
         FROM external_app a

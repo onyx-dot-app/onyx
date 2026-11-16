@@ -268,6 +268,11 @@ def _seed(conn: Connection) -> Seeded:
     # Same name as the public MCP server: both go to the Organization library.
     app_slack = app(names["shared"], "SLACK", {"Authorization": "Bearer {token}"})
     app_custom = app(f"u1-custom-{s}", "CUSTOM", {})
+    # The admin turned the custom app off. Each other app is on.
+    conn.execute(
+        text("UPDATE external_app SET enabled = (id <> :off) WHERE id = ANY(:ids)"),
+        {"off": app_custom, "ids": [app_slack, app_custom]},
+    )
     # The organization fills the key of one app. A user fills it for the other.
     app_org_key = app(f"u1-org-key-{s}", "CUSTOM", {"X-Key": "{api_key}"})
     app_user_key = app(f"u1-user-key-{s}", "CUSTOM", {"X-Key": "{api_key}"})
@@ -827,7 +832,8 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         # Placement.
         assert public.marketplace_id == ORGANIZATION_LIBRARY_ID and public.published
         assert slack.marketplace_kind == "organization_library" and slack.published
-        assert slack.installation_policy == "NOT_AVAILABLE"
+        # An app that is on stays available. An app that is off is not.
+        assert slack.installation_policy is None
         assert app_custom.installation_policy == "NOT_AVAILABLE"
         assert {public.plugin_name, slack.plugin_name} == {
             seeded.names["shared"],
