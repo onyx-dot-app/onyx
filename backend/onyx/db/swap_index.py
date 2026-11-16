@@ -514,7 +514,12 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
     if DISABLE_VECTOR_DB:
         return None
 
-    all_cc_pairs = get_connector_credential_pairs(db_session)
+    new_search_settings = get_secondary_search_settings(db_session)
+
+    if not new_search_settings:
+        return None
+
+    all_cc_pairs = get_connector_credential_pairs(db_session, eager_load_connector=True)
     # User Library pairs are never indexed, so they never count as complete.
     swap_counted_cc_pairs = [
         cc_pair
@@ -523,10 +528,6 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
     ]
     # Default CC-pair created for Ingestion API unused here
     cc_pair_count = max(len(swap_counted_cc_pairs) - 1, 0)
-    new_search_settings = get_secondary_search_settings(db_session)
-
-    if not new_search_settings:
-        return None
 
     # Handle switchover based on switchover_type
     switchover_type = new_search_settings.switchover_type

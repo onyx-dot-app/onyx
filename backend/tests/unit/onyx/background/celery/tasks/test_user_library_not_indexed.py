@@ -92,7 +92,7 @@ def test_legacy_swap_does_not_wait_for_user_library_pairs(
         patch(
             f"{_SWAP}.get_connector_credential_pairs",
             return_value=[ingestion_pair, normal_pair, user_library_pair],
-        ),
+        ) as get_pairs,
         patch(f"{_SWAP}.get_secondary_search_settings", return_value=future),
         # Only the normal pair finished; the User Library pair never indexes.
         patch(f"{_SWAP}.{count_fn}", return_value=1),
@@ -101,3 +101,5 @@ def test_legacy_swap_does_not_wait_for_user_library_pairs(
         assert check_and_perform_index_swap(MagicMock()) is swapped
 
     perform.assert_called_once()
+    # The source filter reads cc_pair.connector; load it in the same query.
+    assert get_pairs.call_args.kwargs["eager_load_connector"] is True
