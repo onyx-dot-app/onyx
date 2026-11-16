@@ -229,6 +229,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     finalAnswerComing,
     awaitingUser: awaitingUser !== null,
   });
+  // The end rows as when open, so they stay while the fold closes.
   const openState = useTimelineUIState({
     stopPacketSeen,
     hasPackets,
@@ -240,6 +241,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastStepHasCollapsedContent,
     lastStepIsResearchAgent,
     finalAnswerComing,
+    awaitingApproval,
   });
 
   const headerIsInteractive = useMemo(() => {
