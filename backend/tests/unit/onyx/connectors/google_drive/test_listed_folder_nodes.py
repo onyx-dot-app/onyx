@@ -261,11 +261,7 @@ def _file_in(
         drive_file["driveId"] = drive_id
     if owner is not None:
         drive_file["owners"] = [{"emailAddress": owner}]
-    return RetrievedDriveFile(
-        completion_stage=DriveRetrievalStage.MY_DRIVE_FILES,
-        drive_file=drive_file,
-        user_email=user_email,
-    )
+    return RetrievedDriveFile(drive_file=drive_file, user_email=user_email)
 
 
 def _read_as(

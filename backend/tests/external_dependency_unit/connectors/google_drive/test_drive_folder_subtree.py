@@ -190,7 +190,7 @@ def test_every_entry_point_lists_exactly_the_subtree(
     assert root_id in folder_reads
     assert len(set(folder_reads)) <= 3, folder_reads
     assert inline.final is not None and inline.final.listing is not None
-    assert inline.final.listing.unresolved_parent_emails == {}
+    assert inline.final.listing.unresolved_parents == {}
     assert inline.final.listing.total_docs == len(inline.document_ids)
     assert inline.final.unreachable_target_ids == set()
 
@@ -340,6 +340,75 @@ def test_folders_with_a_shared_drive_and_a_my_drive(
     assert (drive_id in final.incomplete_drive_ids) is not covered
     assert in_drive_root in walked
     assert final.unreachable_target_ids == set()
+
+
+@pytest.mark.usefixtures("small_calls")
+def test_a_walk_that_its_drive_covered_runs_again_when_the_drive_fails(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A requested folder in a requested shared drive. Its walk ends while
+    the drive's full listing still runs, so the walk drops the files of that
+    drive. Drive then denies the drive's listing: the folder is still
+    readable, so its walk runs again and keeps the files of that drive."""
+    own_mock_drive.set_corpus(
+        {
+            **_BASE_CORPUS,
+            "folder_trees": [{"container": "shared_drive", "index": 1, "depth": 2}],
+        }
+    )
+    summary = _summary(own_mock_drive)
+    (folder_id,) = summary["folder_tree_root_ids"]
+    drive_id = summary["shared_drive_ids"][1]
+    lock = threading.Lock()
+    last_walk_fetch = [0.0]
+    fetch_page = parallel_listing.ParallelDriveLister._fetch_page
+
+    def deny_the_drive_after_the_walk(
+        self: parallel_listing.ParallelDriveLister, shard: ListingShard
+    ) -> tuple[list[GoogleDriveFileType], str | None]:
+        kind = shard.partition.kind
+        if kind is ListingPartitionKind.SHARED_DRIVE:
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                with lock:
+                    last = last_walk_fetch[0]
+                if last and time.monotonic() - last > 1.0:
+                    break
+                time.sleep(0.05)
+            raise GoogleDriveHttpError(
+                status_code=403,
+                reasons=("insufficientFilePermissions",),
+                access_denied=True,
+                message="The user does not have sufficient permissions",
+            )
+        items, next_token = fetch_page(self, shard)
+        if kind is ListingPartitionKind.FOLDER_SUBTREE:
+            with lock:
+                last_walk_fetch[0] = time.monotonic()
+        return items, next_token
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister,
+        "_fetch_page",
+        deny_the_drive_after_the_walk,
+    )
+
+    stubs = list_with_resume(
+        _connector(
+            own_mock_drive,
+            shared_drive_urls=_folder_url(drive_id),
+            shared_folder_urls=_folder_url(folder_id),
+        )
+    )
+
+    assert stubs.failures, "the denied drive listing was not reported"
+    final = stubs.checkpoints[-1]
+    assert drive_id in final.incomplete_drive_ids
+    _assert_exact(
+        "stubs",
+        [stub.id for stub in stubs.stubs],
+        _content_ids(own_mock_drive, folder_id),
+    )
 
 
 def test_an_unreachable_requested_folder_fails_the_prune(

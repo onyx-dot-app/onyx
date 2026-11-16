@@ -641,6 +641,7 @@ class ParallelDriveLister:
         t0: int,
         t1: int,
         owner_filter: str | None = None,
+        drive_filter: str | None = None,
     ) -> int:
         """The SUBTREE shard of a requested folder itself. The caller holds
         the lock."""
@@ -652,6 +653,7 @@ class ParallelDriveLister:
             t1,
             newest_ms=None,
             owner_filter=owner_filter,
+            drive_filter=drive_filter,
             kind=ListingShardKind.SUBTREE,
             folder_id=partition.key,
         )
@@ -854,6 +856,7 @@ class ParallelDriveLister:
                     shard.t1,
                     newest_ms=None,
                     owner_filter=shard.owner_filter,
+                    drive_filter=shard.drive_filter,
                     kind=ListingShardKind.SUBTREE,
                     folder_id=folder["id"],
                     shortcut_path=path,
@@ -887,6 +890,7 @@ class ParallelDriveLister:
                     shard.t1,
                     newest_ms=None,
                     owner_filter=shard.owner_filter,
+                    drive_filter=shard.drive_filter,
                     kind=kind,
                     folder_id=shard.folder_id,
                     shortcut_path=shard.shortcut_path,
@@ -1287,10 +1291,10 @@ class ParallelDriveLister:
                     if drive_id in self._requested_shared_drive_ids:
                         self._checkpoint.unreachable_target_ids.add(drive_id)
                 if was_covered:
-                    # A shared-with listing that began dropped this drive's
-                    # files. It lists them again, and keeps only them. A new
-                    # organizer listing of the drive covers them again, and
-                    # then they are dropped as before.
+                    # A shared-with listing or a folder walk that began
+                    # dropped this drive's files. It lists them again, and
+                    # keeps only them. A new organizer listing of the drive
+                    # covers them again, and then they are dropped as before.
                     relist = [
                         self._add_shard(
                             started_partition,
@@ -1305,6 +1309,17 @@ class ParallelDriveLister:
                         if started_partition.kind
                         is ListingPartitionKind.SHARED_WITH_USER
                     ]
+                    relist.extend(
+                        self._add_walk_root(
+                            started_partition,
+                            principal,
+                            state.window_t0,
+                            state.window_t1,
+                            drive_filter=drive_id,
+                        )
+                        for started_partition, principal, _ in state.started_partitions
+                        if started_partition.kind is ListingPartitionKind.FOLDER_SUBTREE
+                    )
                     return [
                         self._page_task(shard_id) for shard_id in relist
                     ] + self._plan_tasks()
