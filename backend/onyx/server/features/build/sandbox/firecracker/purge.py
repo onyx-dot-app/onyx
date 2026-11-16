@@ -1,7 +1,7 @@
 """Delete hooks for Firecracker harness sandboxes.
 
-Onyx calls these after a Craft session, a user or a tenant is deleted. They
-do nothing unless harness sandboxes run on Firecracker
+Onyx calls these after a Craft session, a chat session, a user or a tenant
+is deleted. They do nothing unless harness sandboxes run on Firecracker
 (`SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`), and they never
 raise: a failure is logged. The heavy client stack loads only when enabled.
 
@@ -47,6 +47,38 @@ def purge_harness_session(
             "sandbox_fc_session_purge_failed sandbox=%s session=%s",
             sandbox_id,
             session_id,
+        )
+
+
+def purge_deleted_chat_sessions(user_id: UUID, session_ids: list[UUID]) -> None:
+    """After a delete of a user's chat sessions, hard or soft: no one can
+    restore a deleted chat. A delete of one chat purges before it returns, as
+    Craft's session delete does; a delete of many purges in the background,
+    since each purge can wait for a VM call."""
+    if not HARNESS_SANDBOX_ENABLED or not session_ids:
+        return
+
+    def purge_sessions() -> None:
+        try:
+            from onyx.db.engine.sql_engine import get_session_with_current_tenant
+            from onyx.server.features.build.db.sandbox import (
+                get_sandbox_id_by_user_id,
+            )
+
+            with get_session_with_current_tenant() as db_session:
+                sandbox_id = get_sandbox_id_by_user_id(db_session, user_id)
+        except Exception:
+            logger.exception("sandbox_fc_chat_purge_failed user=%s", user_id)
+            return
+        if sandbox_id is not None:
+            for session_id in session_ids:
+                purge_harness_session(sandbox_id, session_id)
+
+    if len(session_ids) == 1:
+        purge_sessions()
+    else:
+        start_thread_with_context(
+            target=purge_sessions, name="fc-session-purge", daemon=True
         )
 
 

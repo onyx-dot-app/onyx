@@ -223,6 +223,7 @@ A run that hands off in that state calls no hook: an early call could end state 
 It runs on the thread that ended that work, so it must be short. It returns nothing and cannot change results.
 Errors, including `AgentCancelled`, are logged; the run still becomes idle and reusable.
 Chat's root agent gets it from `create_chat_agent` to end per-run tool state; subagents share the root's tools and install no `on_drained` hook.
+The sandbox tools end their sandbox turn there, which starts the session save.
 
 Two optional tool callbacks cover interception and enrichment:
 

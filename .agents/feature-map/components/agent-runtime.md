@@ -141,7 +141,8 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   run end does. It cannot change results. Errors, `AgentCancelled`
   included, are logged and the run still becomes idle and reusable. Only the
   root `chat/agent.py:ChatAgent` installs it, to end per-run tool state
-  (`create_chat_agent` passes it to the root only); subagents share the root's tools and install none.
+  (`create_chat_agent` passes it to the root only), such as the sandbox turn
+  ([[code-execution]]); subagents share the root's tools and install none.
   `chat/presentation.py:ResponsePresenter` renders each amendment with
   `chat/renderer.py:ToolRenderer.amend`. A call without an ended card
   completes with the amended result. An ended card renders only what the

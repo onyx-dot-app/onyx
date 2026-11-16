@@ -102,13 +102,15 @@ def restore_chat_agent(
     tools: list[Tool],
     user_identity: LLMUserIdentity | None,
     subagent_factory: Callable[[int], Callable[[], Agent]],
+    on_root_drained: Callable[[], None] | None = None,
 ) -> Agent:
     """Build feature code and resources; Agent.resume restores saved execution state.
 
     `depth` counts the agent's levels below the root. A chat agent gets the
     agent tools when it had them: every subagent, and a root whose saved step
     declared them. Its children are one level deeper (`subagent_factory`); an
-    agent at `MAX_CHILD_DEPTH` cannot start agents.
+    agent at `MAX_CHILD_DEPTH` cannot start agents. A root chat agent gets
+    `on_root_drained` as its on_drained hook.
     """
     snapshot = checkpoint.run_state
     if snapshot.progress is None:
@@ -121,6 +123,7 @@ def restore_chat_agent(
     if isinstance(state, ChatFeatureState):
         return ChatAgent(
             is_subagent=snapshot.parent_run_id is not None,
+            on_drained=on_root_drained if snapshot.parent_run_id is None else None,
             messages=context.messages,
             tools=tools,
             code_mode=state.code_mode,

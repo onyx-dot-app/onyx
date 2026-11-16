@@ -173,6 +173,10 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.sandbox.models import (
+    ApplyPatchResult,
+    SandboxExecResult,
+)
 from onyx.tools.tool_implementations.subagents.models import (
     AgentWaitDetails,
     ChatConfiguration,
@@ -4036,7 +4040,9 @@ SavedToolResultDetails = Annotated[
     | ToolExecutionError
     | FinalImageGenerationResponse
     | CodeModeExecutionResult
-    | AgentWaitDetails,
+    | AgentWaitDetails
+    | SandboxExecResult
+    | ApplyPatchResult,
     Field(discriminator="type"),
 ]
 SAVED_TOOL_RESULT_TYPES: tuple[type[BaseModel], ...] = get_args(
