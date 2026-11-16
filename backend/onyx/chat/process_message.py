@@ -121,7 +121,10 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
-from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
+from onyx.server.query_and_chat.chat_utils import (
+    is_code_interpreter_staged_mime_type,
+    mime_type_to_chat_file_type,
+)
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
     MessageResponseIDInfo,
@@ -252,8 +255,8 @@ def _load_context_user_files_for_tools(
     user_files: list[UserFile],
     existing_filenames: set[str],
 ) -> list[ChatFile]:
-    """Stage tabular project/persona files for code-interpreter as lazy
-    ChatFile instances.
+    """Stage tabular and Office project/persona files for code-interpreter as
+    lazy ChatFile instances.
 
     Raw bytes are not read here; each ChatFile carries a loader closure that
     pulls from the file store only when PythonTool actually accesses
@@ -271,7 +274,7 @@ def _load_context_user_files_for_tools(
             continue
         seen_file_ids.add(user_file.file_id)
 
-        if not mime_type_to_chat_file_type(user_file.file_type).use_metadata_only():
+        if not is_code_interpreter_staged_mime_type(user_file.file_type):
             continue
 
         filename = _deduped_filename(
@@ -510,12 +513,16 @@ def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
         file_type=file_type,
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
     ).tool_metadata
-    # `_load_context_user_files_for_tools` only loads metadata-only files into
-    # `chat_files_for_tools`, so those are the only context files PythonTool
-    # ever receives. The rest are listed for the LLM but never staged — only
-    # read_file can fetch them.
+    # `_load_context_user_files_for_tools` only loads code-interpreter staged
+    # types into `chat_files_for_tools`, so those are the only context files
+    # PythonTool ever receives. The rest are listed for the LLM but never
+    # staged — only read_file can fetch them.
     return metadata.model_copy(
-        update={"staged_for_tools": file_type.use_metadata_only()}
+        update={
+            "staged_for_tools": is_code_interpreter_staged_mime_type(
+                user_file.file_type
+            )
+        }
     )
 
 
