@@ -82,6 +82,9 @@ This component owns:
 - MCP server access grants and the per-server and per-user credential rows;
 - chat tool approvals: the policy materialized at tool construction, the
   approval requests and their decisions.
+- integration credentials on the new tables (`integration_connection`,
+  `integration_oauth_client`): resolve, sign-in, refresh, status, lifecycle and
+  the one-time import.
 
 Its neighbours own:
 - [[tools-framework]]: the `Tool` interface and per-turn construction.
@@ -153,6 +156,51 @@ repeats the check at connect time and fails with `client_metadata_rejected`. The
 setup page then turns CIMD off and retries with DCR. The redirect URI and the
 metadata URL both come from the backend `WEB_DOMAIN`. If `WEB_DOMAIN` does not
 match the origin that users open, the provider rejects the callback.
+
+**Integration connections.** `backend/onyx/integrations/connections.py` makes,
+stores, refreshes and applies the credentials of every integration (MCP server,
+OpenAPI tool, external app). Queries are in `db/integration_connection.py`.
+- `resolve_connection(integration, acting_user)` reads `auth_mode`: `none` needs
+  no credential, `shared` reads the organization row (`user_id IS NULL`, else
+  Not set up), `individual` reads the acting user's row (else Not connected).
+  It never falls back from one mode to the other. `onyx_login` stores no row: it
+  sends the user's Onyx login token and refreshes it with no web request
+  (`auth/oauth_refresher.py:refresh_oauth_account_sync`).
+- `render_headers(header_template, secret)` fills `{placeholder}` from the token
+  values and `secret.fields`. A placeholder with no value raises, so a call
+  never goes out with a header missing.
+- `ensure_fresh_connection` is the one refresh. It holds one cache lock per
+  connection (`integrations/connection_models.py:connection_refresh_lock_name`), which the
+  MCP SDK storage also uses. A 400 or 401 or `invalid_grant` sets
+  `needs_reconnect` with a reason and keeps the row. Other errors keep the token.
+- `integration_status` gives Connected, Not connected, Needs reconnect or Not set
+  up, plus `moving_credentials` until the tenant's import is done.
+- `mark_sign_in_settings_changed` sets every connection to Needs reconnect.
+  Compare `sign_in_settings_for` before and after an edit: a change of only the
+  client secret or a label keeps the connections. Deactivation
+  (`db/user_preferences.py:deactivate_user`, the SCIM DAL) deletes the user's
+  rows. A user delete removes them by FK cascade.
+
+The one sign-in flow is `integrations/oauth.py`, served by
+`POST /integrations/{integration_id}/oauth/start` and
+`POST /integrations/oauth/callback`. The attempt store namespace is
+`integration`. Each kind keeps the redirect URI admins registered before:
+`/mcp/oauth/callback`, `/craft/v1/apps/oauth/callback` (presets) and
+`/oauth-config/callback` (manual clients). MCP servers use the SDK with
+`server/features/mcp/oauth.py:IntegrationTokenStorage`, which keeps the grant in
+`integration_connection` and the DCR or CIMD client and discovered metadata in
+`integration_oauth_client.registration`.
+
+`integrations/credential_import.py:import_legacy_credentials` copies the old
+secrets into the new tables. It skips rows that exist and imports an MCP email
+row only for exactly one active user. The light worker runs it per tenant
+(`import_integration_credentials`, queue `integration_credential_import`) until
+the KV flag `integration_credential_import_done` is set.
+
+Release N moves the readers in steps. Until U4, chat, the sandbox proxy and the
+old MCP, OAuth config and external app routes still read and write the old
+tables (`mcp_connection_config`, `oauth_user_token`,
+`external_app_user_credential`) with the old refresh functions.
 
 **Credential scope.** `server/features/mcp/credentials.py:resolve_mcp_credentials`
 turns `auth_type`, `auth_performer` and the calling user into the credential.

@@ -61,6 +61,17 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "import-integration-credentials",
+        "task": OnyxCeleryTask.IMPORT_INTEGRATION_CREDENTIALS,
+        # A no-op once the tenant's import is done.
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "queue": OnyxCeleryQueues.INTEGRATION_CREDENTIAL_IMPORT,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
         "name": "check-for-user-file-processing",
         "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_PROCESSING,
         "schedule": timedelta(seconds=20),

@@ -165,7 +165,7 @@
       "--loglevel=INFO",
       "--hostname=light@%n",
       "-Q",
-      "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,chat_ttl_deletion,capability_checks_draft",
+      "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,chat_ttl_deletion,capability_checks_draft,integration_credential_import",
     ],
     "env": {
       "LOG_LEVEL": "INFO",

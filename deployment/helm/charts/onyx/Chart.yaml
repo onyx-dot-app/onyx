@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.51
+version: 0.9.52
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,10 +20,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Raise the Craft sandbox sidecar ephemeral-storage limit from
-        2Gi to 6Gi. The sidecar now takes Skill pushes of up to 900 MiB and
-        writes them to disk, not to memory.
+    - kind: added
+      description: The light Celery worker also consumes the
+        integration_credential_import queue, which moves old integration
+        credentials into the new integration tables one time.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
