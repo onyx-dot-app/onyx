@@ -15,14 +15,12 @@ def test_import_task_scheduled_on_its_queue() -> None:
     ]
     assert len(entries) == 1
     options = entries[0]["options"]
-    assert options["queue"] == OnyxCeleryQueues.INTEGRATION_CREDENTIAL_IMPORT
+    assert options["queue"] == OnyxCeleryQueues.CHECKPOINT_CLEANUP
     assert options["expires"] > 0
 
 
 def test_light_worker_consumes_import_queue() -> None:
-    assert OnyxCeleryQueues.INTEGRATION_CREDENTIAL_IMPORT in _worker_queues(
-        "celery_worker_light"
-    )
+    assert OnyxCeleryQueues.CHECKPOINT_CLEANUP in _worker_queues("celery_worker_light")
 
 
 def test_light_worker_registers_import_task() -> None:

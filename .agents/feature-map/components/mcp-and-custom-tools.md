@@ -194,7 +194,7 @@ The one sign-in flow is `integrations/oauth.py`, served by
 `integrations/credential_import.py:import_legacy_credentials` copies the old
 secrets into the new tables. It skips rows that exist and imports an MCP email
 row only for exactly one active user. The light worker runs it per tenant
-(`import_integration_credentials`, queue `integration_credential_import`) until
+(`import_integration_credentials`, on the existing `checkpoint_cleanup` queue) until
 the KV flag `integration_credential_import_done` is set.
 
 Release N moves the readers in steps. Until U4, chat, the sandbox proxy and the

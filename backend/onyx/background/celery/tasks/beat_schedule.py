@@ -63,10 +63,11 @@ beat_task_templates: list[dict] = [
     {
         "name": "import-integration-credentials",
         "task": OnyxCeleryTask.IMPORT_INTEGRATION_CREDENTIALS,
-        # A no-op once the tenant's import is done.
+        # A no-op once the tenant's import is done. Rides a queue the light
+        # worker already reads, so the one-time import needs no deploy change.
         "schedule": timedelta(minutes=5),
         "options": {
-            "queue": OnyxCeleryQueues.INTEGRATION_CREDENTIAL_IMPORT,
+            "queue": OnyxCeleryQueues.CHECKPOINT_CLEANUP,
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
         },

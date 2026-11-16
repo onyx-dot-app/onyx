@@ -539,10 +539,6 @@ class OnyxCeleryQueues:
     # Kept off the primary "celery" queue so cleanup never starves check_for_indexing.
     CHAT_TTL_DELETION = "chat_ttl_deletion"
 
-    # One-time import of old credentials into the integration tables,
-    # consumed by the light worker.
-    INTEGRATION_CREDENTIAL_IMPORT = "integration_credential_import"
-
     # User file processing queue
     USER_FILE_PROCESSING = "user_file_processing"
     USER_FILE_PROJECT_SYNC = "user_file_project_sync"
