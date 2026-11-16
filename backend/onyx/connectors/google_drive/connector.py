@@ -1281,15 +1281,15 @@ class GoogleDriveConnector(
         # The files' folders, read up to their roots as a listing reads the
         # parents that no folder listing returned.
         parents = self.build_dummy_checkpoint()
-        parents.listing = DriveListingState(
-            window_t0=0,
-            window_t1=0,
-            unresolved_parent_emails={
-                parent_id: [retrieved.user_email]
-                for retrieved in retrieved_files
-                if (parent_id := _get_parent_id_from_file(retrieved.drive_file))
-            },
-        )
+        parents.listing = DriveListingState(window_t0=0, window_t1=0)
+        for retrieved in retrieved_files:
+            if parent_id := _get_parent_id_from_file(retrieved.drive_file):
+                parents.listing.add_parent_reader(
+                    parent_id,
+                    retrieved.user_email,
+                    drive_id=retrieved.drive_file.get("driveId"),
+                    owner=owner_email(retrieved.drive_file),
+                )
         for nodes in self._resolve_unlisted_parents(
             parents, include_permissions, add_prefix=True
         ):
