@@ -88,24 +88,28 @@ function imageAlt(node: Element): string {
 function plainText(node: ElementContent): string {
   if (node.type === "text") return node.value;
   if (node.type !== "element") return "";
-  if (node.tagName === "img") return imageAlt(node);
   return node.children.map(plainText).join("");
 }
 
-/** Text nodes only. A citation label never comes from image alt text. */
-function textNodesOnly(node: ElementContent): string {
-  if (node.type === "text") return node.value;
-  if (node.type !== "element") return "";
-  return node.children.map(textNodesOnly).join("");
+/**
+ * A citation link holds only text, as `[1]`. Links with images, math or
+ * emphasis are never citations, which matches how the chat renders them.
+ */
+function citationLabel(node: Element): string | null {
+  if (!node.children.every((child) => child.type === "text")) return null;
+  const label = node.children.map(plainText).join("").trim();
+  return CITATION_LABEL_PATTERN.test(label) ? label : null;
 }
 
-function linkFragment(link: CopyLink): CopyFragment {
+/** `labelHtml` is the converted link content; it defaults to the escaped text. */
+function linkFragment(link: CopyLink, labelHtml?: string): CopyFragment {
+  const html = labelHtml ?? escapeHtml(link.text);
   const href = copyableHref(link.href);
   if (!href) {
-    return { html: escapeHtml(link.text), text: link.text };
+    return { html, text: link.text };
   }
   return {
-    html: `<a href="${escapeHtml(href)}">${escapeHtml(link.text)}</a>`,
+    html: `<a href="${escapeHtml(href)}">${html}</a>`,
     text: link.text === href ? href : `${link.text} (${href})`,
   };
 }
@@ -140,17 +144,20 @@ function contentFragment(
   }
 
   if (node.tagName === "a") {
-    const label = plainText(node);
-    const citationLabel = textNodesOnly(node).trim();
-    if (CITATION_LABEL_PATTERN.test(citationLabel)) {
-      const source = resolveCitation(citationLabel);
+    const citation = citationLabel(node);
+    if (citation !== null) {
+      const source = resolveCitation(citation);
       return source ? linkFragment(source) : { html: "", text: "" };
     }
+    // Same conversion as cell content, so math copies as TeX.
+    const label = joinFragments(
+      node.children.map((child) => contentFragment(child, resolveCitation))
+    );
     const href = node.properties?.href;
-    return linkFragment({
-      text: label,
-      href: typeof href === "string" ? href : null,
-    });
+    return linkFragment(
+      { text: label.text, href: typeof href === "string" ? href : null },
+      label.html
+    );
   }
 
   const inner = joinFragments(

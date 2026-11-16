@@ -111,14 +111,16 @@ export function ScrollableTable({
         {getCopyContent && (
           <div className="markdown-table-copy">
             <Hoverable.Item group="markdownTable" variant="appear-on-hover">
-              <CopyButton
-                size="sm"
-                getCopyText={() => getCopyContent().tsv}
-                getHtmlContent={() => getCopyContent().html}
-                tooltip={t("markdownTable.copyButton.label")}
-                aria-label={t("markdownTable.copyButton.label")}
-                data-testid="markdown-table-copy-button"
-              />
+              <div className="markdown-table-copy-surface">
+                <CopyButton
+                  size="sm"
+                  getCopyText={() => getCopyContent().tsv}
+                  getHtmlContent={() => getCopyContent().html}
+                  tooltip={t("markdownTable.copyButton.label")}
+                  aria-label={t("markdownTable.copyButton.label")}
+                  data-testid="markdown-table-copy-button"
+                />
+              </div>
             </Hoverable.Item>
           </div>
         )}

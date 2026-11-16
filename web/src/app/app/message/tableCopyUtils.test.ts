@@ -181,4 +181,25 @@ describe("tableToCopyContent", () => {
     expect(html).toContain('<a href="https://onyx.app/figures">[1]</a>');
     expect(html).not.toContain("Quarterly Revenue Report 2026");
   });
+
+  it("copies a linked formula once, as its TeX source", () => {
+    const table = parseTable(
+      [
+        "| Formula | Mixed |",
+        "| --- | --- |",
+        "| [$x^2$](https://example.com/x) | [**Area** $a+b$](https://example.com/a) |",
+      ].join("\n")
+    );
+
+    const { html, tsv } = tableToCopyContent(table, resolveCitation);
+
+    expect(tsv).toBe(
+      "Formula\tMixed\n" +
+        "x^2 (https://example.com/x)\tArea a+b (https://example.com/a)"
+    );
+    expect(html).toContain('<a href="https://example.com/x">x^2</a>');
+    expect(html).toContain(
+      '<a href="https://example.com/a"><strong>Area</strong> a+b</a>'
+    );
+  });
 });

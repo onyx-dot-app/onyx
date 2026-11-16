@@ -361,12 +361,22 @@ pre[class*="language-"] {
   padding-inline-end: 0.75rem;
 }
 
-/* Copy button in the top inline-end corner, above the fade overlay. */
+/* Copy button in the top inline-end corner, above the fade overlay. The
+   wrapper paints nothing and takes no clicks, so the header under it stays
+   readable and selectable while the button is hidden. */
 .markdown-table-copy {
   position: absolute;
   top: 0.25rem;
   inset-inline-end: 0.25rem;
   z-index: 3;
+  pointer-events: none;
+}
+/* Hoverable sets pointer-events: none on the item while it is hidden. */
+.markdown-table-copy > * {
+  pointer-events: auto;
+}
+/* Inside the hover item, so the background hides with the button. */
+.markdown-table-copy-surface {
   border-radius: 0.5rem;
   background: var(--background-neutral-01);
 }
