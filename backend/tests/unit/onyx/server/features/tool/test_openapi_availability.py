@@ -57,12 +57,9 @@ def test_global_status_still_updates_mcp_and_builtin_tools(
     db.commit.assert_called_once()
 
 
-@pytest.mark.parametrize("persona_id", [0, 7])
-def test_legacy_disabled_openapi_is_available_only_to_custom_agents(
-    persona_id: int,
-) -> None:
+def test_legacy_disabled_openapi_snapshot_stays_enabled() -> None:
+    # Chat reads integrations now; the snapshot keeps the old flag view.
     from onyx.server.features.tool.models import ToolSnapshot
-    from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
 
     legacy = Tool(
         id=1,
@@ -71,14 +68,7 @@ def test_legacy_disabled_openapi_is_available_only_to_custom_agents(
         enabled=False,
         passthrough_auth=False,
     )
-    assert is_tool_available_for_persona(legacy, persona_id) is (persona_id != 0)
     assert ToolSnapshot.from_model(legacy).enabled is True
-    for other in [
-        Tool(enabled=False),
-        Tool(enabled=False, openapi_schema={}, mcp_server_id=1),
-        Tool(enabled=False, openapi_schema={}, in_code_tool_id="search"),
-    ]:
-        assert not is_tool_available_for_persona(other, persona_id)
 
 
 def test_default_configuration_omits_legacy_disabled_links(

@@ -289,7 +289,7 @@ def _mock_chat_preparation(
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.capture_persona_tool_configuration",
-        lambda _persona: PersonaToolConfiguration(
+        lambda _persona, _db_session: PersonaToolConfiguration(
             persona_id=1,
             persona_name="Assistant",
             tools=[],

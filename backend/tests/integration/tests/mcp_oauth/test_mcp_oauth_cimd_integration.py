@@ -6,7 +6,6 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 from onyx.db.enums import (
-    ActionPolicy,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -19,18 +18,7 @@ from tests.integration.common_utils.cimd_oauth import (
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.mock_llm import (
-    MockLLMScript,
-    tool_call_reply,
-)
-from tests.integration.common_utils.managers.persona import PersonaManager
-from tests.integration.common_utils.test_models import DATestPersona, DATestUser
-from tests.integration.mock_services.mock_llm_server.models import (
-    Reply,
-    RequestConditions,
-    ToolCall,
-)
+from tests.integration.common_utils.test_models import DATestUser
 
 MCP_SERVER_NAME = "integration-mcp-cimd"
 KNOWN_PROVIDER_SERVER_NAME = "integration-mcp-known-provider"
@@ -203,7 +191,6 @@ def test_mcp_oauth_cimd_only_flow(
     cimd_oauth_services: CimdOAuthTestServices,
     admin_user: DATestUser,
     basic_user: DATestUser,
-    mock_llm: MockLLMScript,
 ) -> None:
     discovery_response = httpx.get(
         f"{cimd_oauth_services.oidc_issuer}/.well-known/oauth-authorization-server",
@@ -219,8 +206,6 @@ def test_mcp_oauth_cimd_only_flow(
         name=MCP_SERVER_NAME,
         provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
     )
-    persona: DATestPersona | None = None
-
     try:
         first_callback = _start_oauth_flow(
             server_id,
@@ -263,77 +248,20 @@ def test_mcp_oauth_cimd_only_flow(
 
         assert MCP_TOOL_NAME in _available_tool_names(server_id, admin_user)
 
-        db_tools_response = client.get(
-            f"{API_SERVER_URL}/admin/mcp/server/{server_id}/db-tools",
-            headers=admin_user.headers,
-            cookies=admin_user.cookies,
-        )
-        db_tools_response.raise_for_status()
-        tool_id = next(
-            int(tool["id"])
-            for tool in db_tools_response.json()["tools"]
-            if tool["name"] == MCP_TOOL_NAME
-        )
-        # The tool runs without asking, so the chat call does not wait for approval.
-        client.patch(
-            f"{API_SERVER_URL}/admin/mcp/server/{server_id}",
-            json={"action_policies": {MCP_TOOL_NAME: ActionPolicy.ALWAYS.value}},
-            headers=admin_user.headers,
-            cookies=admin_user.cookies,
-        ).raise_for_status()
-        persona = PersonaManager.create(
-            name="integration-mcp-cimd-persona",
-            tool_ids=[tool_id],
-            user_performing_action=admin_user,
-        )
-
         _complete_oauth_flow(
             server_id,
             admin_user,
             cimd_oauth_services,
             force_reauthentication=True,
         )
-
-        callable_name = f"mcp__{server_id}__{MCP_SERVER_NAME}__{MCP_TOOL_NAME}"
-        mock_llm.conversation(
-            "chat",
-            tool_call_reply(
-                ToolCall(
-                    id=MCP_TOOL_CALL_ID,
-                    name=callable_name,
-                    arguments={"name": "integration-test"},
-                ),
-                tool_choice="auto",
-            ),
-            Reply(
-                text="The MCP tool ran.",
-                conditions=RequestConditions(has_results_for=[MCP_TOOL_CALL_ID]),
-            ),
-        )
-        chat_session = ChatSessionManager.create(
-            persona_id=persona.id,
-            user_performing_action=admin_user,
-        )
-        chat_response = ChatSessionManager.send_message(
-            chat_session_id=chat_session.id,
-            message="Invoke the CIMD MCP tool.",
-            user_performing_action=admin_user,
-            preferred_tool_id=tool_id,
-        )
-        assert chat_response.error is None
-        assert any(
-            tool_call.tool_name == callable_name
-            and tool_call.tool_args == {"name": "integration-test"}
-            for tool_call in chat_response.tool_call_debug
-        )
+        # Chat reads the integration tables now (U4a), so a call with this
+        # old connection is not part of this flow test.
 
         status = _mock_oidc_status(cimd_oauth_services)
         assert status.client_metadata_fetch_count >= 2
         assert status.registration_request_count == 0
         assert status.last_client_id == cimd_oauth_services.client_metadata_url
     finally:
-        if persona is not None:
-            assert PersonaManager.delete(persona, admin_user)
         _delete_mcp_server(server_id, admin_user)
 
 

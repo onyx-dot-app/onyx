@@ -2,13 +2,18 @@ import json
 from uuid import uuid4
 
 from onyx.db.enums import (
-    ActionPolicy,
+    IntegrationActionPolicyValue,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPTransport,
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.integration_rows import (
+    link_persona,
+    only_actions,
+    set_admin_policies,
+)
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -109,12 +114,10 @@ def test_mcp_json_tool_result_reaches_llm_encoded_once(
     """A tool result that the MCP server sends as JSON text reaches the LLM as
     JSON inside `tool_result`, not as an escaped string."""
     # The tool runs without asking, so the call does not wait for approval.
-    client.patch(
-        f"{API_SERVER_URL}/admin/mcp/server/{connected_mcp_server.id}",
-        json={"action_policies": {"get_ticket": ActionPolicy.ALWAYS.value}},
-        headers=admin_user.headers,
-        cookies=admin_user.cookies,
-    ).raise_for_status()
+    set_admin_policies(
+        connected_mcp_server.integration_id,
+        {"get_ticket": IntegrationActionPolicyValue.ALLOW},
+    )
     tool_id = connected_mcp_server.tool_ids["get_ticket"]
 
     callable_name = connected_mcp_server.callable_name("get_ticket")
@@ -136,6 +139,9 @@ def test_mcp_json_tool_result_reaches_llm_encoded_once(
     persona = PersonaManager.create(
         tool_ids=[tool_id], user_performing_action=admin_user
     )
+    link_persona(
+        persona.id, connected_mcp_server.plugin_id, only_actions(["get_ticket"])
+    )
     chat_session = ChatSessionManager.create(
         persona_id=persona.id, user_performing_action=admin_user
     )
@@ -143,7 +149,6 @@ def test_mcp_json_tool_result_reaches_llm_encoded_once(
         chat_session_id=chat_session.id,
         message="What is ticket 12 about?",
         user_performing_action=admin_user,
-        preferred_tool_id=tool_id,
     )
 
     tool_result = mock_llm.requests_in("chat")[-1].tool_result("call_ticket")

@@ -9,7 +9,6 @@ server key is stable + identifier-safe.
 from __future__ import annotations
 
 from collections.abc import Generator
-from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -149,55 +148,6 @@ def test_personal_preferences_are_independent_and_keep_disabled_server_visible(
     finally:
         db_session.rollback()
         delete_test_user(db_session, user, other)
-        db_session.commit()
-
-
-@pytest.mark.parametrize("persona_id", [0, 5])
-def test_chat_optout_blocks_default_chat_but_preserves_custom_agent(
-    db_session: Session,
-    craft_server: tuple[MCPServer, MCPServer],
-    monkeypatch: pytest.MonkeyPatch,
-    persona_id: int,
-) -> None:
-    from onyx.llm.interfaces import LLM
-    from onyx.tools import tool_constructor
-    from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
-    from onyx.tools.tool_implementations.search.search_tool import PersonaSearchInfo
-
-    craft, _ = craft_server
-    user = create_test_user(db_session, "mcp_chat_preferences")
-    user.enable_memory_tool = False
-    tool = next(tool for tool in craft.current_actions if tool.enabled)
-    configuration = PersonaToolConfiguration(
-        persona_id=persona_id,
-        persona_name="Test agent",
-        tools=[ToolConfiguration.model_validate(tool)],
-        search=PersonaSearchInfo(
-            document_set_names=[],
-            search_start_date=None,
-            attached_document_ids=[],
-            hierarchy_node_ids=[],
-        ),
-    )
-    monkeypatch.setattr(tool_constructor, "get_current_search_settings", MagicMock())
-    monkeypatch.setattr(tool_constructor, "get_default_document_index", MagicMock())
-    try:
-        upsert_mcp_server_user_preferences__no_commit(
-            craft.id, user.id, db_session, enabled_in_chat=False
-        )
-        result = tool_constructor._construct_tools_impl(
-            configuration,
-            db_session,
-            user,
-            MagicMock(spec=LLM),
-            allowed_tool_ids=[tool.id],
-        )
-        assert set(result) == ({tool.id} if persona_id else set())
-        if persona_id:
-            assert result[tool.id][0].code_mode_function_name.name == tool.name
-    finally:
-        db_session.rollback()
-        delete_test_user(db_session, user)
         db_session.commit()
 
 

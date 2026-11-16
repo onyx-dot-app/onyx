@@ -1,0 +1,559 @@
+"""Chat tool construction on the integration tables: which integrations an
+agent can use, what a policy does to each action, the approval scope of an
+Ask action, the credential of each call, and bot and eval runs."""
+
+from collections.abc import Generator
+from typing import Any
+from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
+
+import pytest
+from sqlalchemy import update
+from sqlalchemy.orm import Session
+
+from onyx.auth.users import get_anonymous_user
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.context.search.models import PersonaSearchInfo
+from onyx.db.approval_request import create_approval_request__no_commit
+from onyx.db.chat import delete_messages_and_files_from_chat_session
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    IntegrationActionPolicyValue,
+    IntegrationAuthMethod,
+    IntegrationAuthMode,
+    PluginInstallationPolicy,
+)
+from onyx.db.models import (
+    ApprovalRequest,
+    ChatMessage,
+    ChatSession,
+    Integration,
+    Plugin,
+    User,
+    UserPluginPreference,
+)
+from onyx.integrations.connection_models import ConnectionSecret
+from onyx.integrations.models import ActionSettings, ApprovalMode, LinkValue
+from onyx.llm.interfaces import LLM
+from onyx.tools.interface import Tool
+from onyx.tools.models import (
+    PersonaToolConfiguration,
+    PluginLinkConfiguration,
+    ToolApprovalScope,
+)
+from onyx.tools.tool_constructor import CustomToolConfig, construct_tools
+from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    hold_in_plugin,
+    make_mcp_integration,
+    make_openapi_integration,
+    set_policy,
+)
+from tests.external_dependency_unit.integrations.conftest import add_connection
+
+AGENT_ID = 7
+ALLOW = IntegrationActionPolicyValue.ALLOW
+BLOCKED = IntegrationActionPolicyValue.BLOCKED
+
+ORDERS_SPEC: dict[str, Any] = {
+    "openapi": "3.0.0",
+    "info": {"title": "Orders", "description": "Orders", "version": "1"},
+    "servers": [{"url": "https://orders.example.com"}],
+    "paths": {
+        "/orders": {
+            "get": {"operationId": "listOrders", "summary": "List orders"},
+            "post": {"operationId": "createOrder", "summary": "Create an order"},
+        }
+    },
+}
+
+
+@pytest.fixture(autouse=True)
+def _no_document_index() -> Generator[None, None, None]:
+    with (
+        patch("onyx.tools.tool_constructor.get_current_search_settings"),
+        patch("onyx.tools.tool_constructor.get_default_document_index"),
+    ):
+        yield
+
+
+@pytest.fixture
+def integration_ids(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[list[int], None, None]:
+    created: list[int] = []
+    try:
+        yield created
+    finally:
+        delete_integrations(db_session, created)
+
+
+@pytest.fixture
+def user(make_test_user: MakeTestUser) -> User:
+    member = make_test_user("chat_integration_tools")
+    member.enable_memory_tool = False
+    return member
+
+
+def _mcp(db_session: Session, created: list[int], **kwargs: Any) -> Integration:
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.com/mcp",
+        name="crm",
+        tools=kwargs.pop("tools", ("search", "update")),
+        read_only=kwargs.pop("read_only", {"search": True}),
+        **kwargs,
+    )
+    created.append(integration.id)
+    return integration
+
+
+def _openapi(db_session: Session, created: list[int], **kwargs: Any) -> Integration:
+    integration, _ = make_openapi_integration(
+        db_session, openapi_schema=ORDERS_SPEC, **kwargs
+    )
+    created.append(integration.id)
+    return integration
+
+
+def _plugin(
+    db_session: Session,
+    integrations: list[Integration],
+    policy: PluginInstallationPolicy = PluginInstallationPolicy.DEFAULT,
+) -> Plugin:
+    return hold_in_plugin(
+        db_session, integrations, published=True, installation_policy=policy
+    )
+
+
+def _configuration(
+    links: dict[UUID, dict[str, Any]], persona_id: int = AGENT_ID
+) -> PersonaToolConfiguration:
+    return PersonaToolConfiguration(
+        persona_id=persona_id,
+        persona_name="Agent",
+        tools=[],
+        search=PersonaSearchInfo(
+            document_set_names=[],
+            search_start_date=None,
+            attached_document_ids=[],
+            hierarchy_node_ids=[],
+        ),
+        plugin_links=[
+            PluginLinkConfiguration(
+                plugin_id=plugin_id,
+                action_settings=ActionSettings.model_validate(settings),
+            )
+            for plugin_id, settings in links.items()
+        ],
+    )
+
+
+def _build(
+    db_session: Session,
+    user: User,
+    configuration: PersonaToolConfiguration,
+    mode: ApprovalMode = ApprovalMode.INTERACTIVE,
+    chat_session_id: UUID | None = None,
+) -> dict[str, Tool]:
+    tools = construct_tools(
+        configuration=configuration,
+        user=user,
+        llm=MagicMock(spec=LLM),
+        db_session=db_session,
+        custom_tool_config=CustomToolConfig(chat_session_id=chat_session_id),
+        approval_mode=mode,
+    )
+    return {tool.name: tool for tool in tools}
+
+
+def test_an_agent_offers_the_mcp_and_openapi_actions_of_its_plugins(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    mcp = _mcp(db_session, integration_ids)
+    api = _openapi(db_session, integration_ids)
+    plugin = _plugin(db_session, [mcp, api])
+
+    tools = _build(db_session, user, _configuration({plugin.id: {}}))
+
+    assert set(tools) == {
+        f"mcp__{mcp.id}__crm__search",
+        f"mcp__{mcp.id}__crm__update",
+        f"custom__{api.id}__listOrders",
+        f"custom__{api.id}__createOrder",
+    }
+    assert all(tool.id is None for tool in tools.values())
+    assert isinstance(tools[f"mcp__{mcp.id}__crm__search"], MCPTool)
+    assert isinstance(tools[f"custom__{api.id}__listOrders"], CustomTool)
+    # Read-only and GET run; each other action asks, keyed by the integration.
+    approvals = {name: tool.approval for name, tool in tools.items()}
+    assert approvals == {
+        f"mcp__{mcp.id}__crm__search": None,
+        f"mcp__{mcp.id}__crm__update": ToolApprovalScope(
+            integration_id=mcp.id, action_id="update"
+        ),
+        f"custom__{api.id}__listOrders": None,
+        f"custom__{api.id}__createOrder": ToolApprovalScope(
+            integration_id=api.id, action_id="createOrder"
+        ),
+    }
+
+
+def test_blocked_by_the_agent_or_the_admin_is_not_offered(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    mcp = _mcp(db_session, integration_ids, tools=("search", "update", "delete"))
+    plugin = _plugin(db_session, [mcp])
+    set_policy(db_session, mcp.id, "delete", BLOCKED)
+
+    tools = _build(
+        db_session,
+        user,
+        _configuration({plugin.id: {"actions": {"update": "blocked"}}}),
+    )
+
+    assert set(tools) == {f"mcp__{mcp.id}__crm__search"}
+
+
+def test_an_agent_default_of_blocked_offers_only_listed_actions(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    """The shape the migration writes for an agent with some MCP tools."""
+    mcp = _mcp(db_session, integration_ids, tools=("search", "update", "delete"))
+    plugin = _plugin(db_session, [mcp])
+
+    tools = _build(
+        db_session,
+        user,
+        _configuration(
+            {plugin.id: {"default": "blocked", "actions": {"update": "inherit"}}}
+        ),
+    )
+
+    assert set(tools) == {f"mcp__{mcp.id}__crm__update"}
+
+
+def test_an_integration_with_no_usable_credential_offers_nothing(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    individual = _mcp(
+        db_session,
+        integration_ids,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Key": "{api_key}"},
+    )
+    shared = _openapi(
+        db_session,
+        integration_ids,
+        auth_mode=IntegrationAuthMode.SHARED,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Key": "{api_key}"},
+    )
+    plugin = _plugin(db_session, [individual, shared])
+    configuration = _configuration({plugin.id: {}})
+
+    assert _build(db_session, user, configuration) == {}
+
+    add_connection(
+        db_session, individual, user.id, ConnectionSecret(fields={"api_key": "mine"})
+    )
+    add_connection(
+        db_session, shared, None, ConnectionSecret(fields={"api_key": "org"})
+    )
+    tools = _build(db_session, user, configuration)
+
+    assert len(tools) == 4
+    orders = tools[f"custom__{shared.id}__listOrders"]
+    assert isinstance(orders, CustomTool)
+    assert orders.headers == {"X-Key": "org"}
+
+
+def test_a_disabled_integration_offers_nothing(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    mcp = _mcp(db_session, integration_ids)
+    mcp.enabled = False
+    db_session.commit()
+    plugin = _plugin(db_session, [mcp])
+
+    assert _build(db_session, user, _configuration({plugin.id: {}})) == {}
+
+
+def test_a_plugin_the_user_cannot_see_gives_no_actions(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    mcp = _mcp(db_session, integration_ids)
+    hidden = _plugin(db_session, [mcp], PluginInstallationPolicy.NOT_AVAILABLE)
+
+    assert _build(db_session, user, _configuration({hidden.id: {}})) == {}
+
+
+def test_an_agent_plugin_the_user_turned_off_still_gives_its_actions(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    """The on/off choice applies only to the default agent."""
+    mcp = _mcp(db_session, integration_ids)
+    plugin = _plugin(db_session, [mcp], PluginInstallationPolicy.AVAILABLE)
+
+    assert len(_build(db_session, user, _configuration({plugin.id: {}}))) == 2
+
+
+def test_ask_actions_follow_the_approval_mode(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    api = _openapi(db_session, integration_ids)
+    plugin = _plugin(db_session, [api])
+    configuration = _configuration({plugin.id: {}})
+    create = f"custom__{api.id}__createOrder"
+
+    interactive = _build(db_session, user, configuration)
+    no_approver = _build(db_session, user, configuration, ApprovalMode.NO_APPROVER)
+    evals = _build(db_session, user, configuration, ApprovalMode.RUN_WITHOUT_ASKING)
+
+    assert interactive[create].approval == ToolApprovalScope(
+        integration_id=api.id, action_id="createOrder"
+    )
+    assert create not in no_approver
+    assert evals[create].approval is None
+
+
+def test_a_new_openapi_operation_asks_while_a_migrated_one_runs(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    """The U1 migration writes an admin default allow row for each OpenAPI
+    tool that exists at the upgrade. An integration made after it has none."""
+    migrated = _openapi(db_session, integration_ids)
+    set_policy(db_session, migrated.id, "", ALLOW)
+    new = _openapi(db_session, integration_ids)
+    plugin = _plugin(db_session, [migrated, new])
+
+    tools = _build(db_session, user, _configuration({plugin.id: {}}))
+
+    assert tools[f"custom__{migrated.id}__createOrder"].approval is None
+    assert tools[f"custom__{new.id}__createOrder"].approval == ToolApprovalScope(
+        integration_id=new.id, action_id="createOrder"
+    )
+
+
+def test_a_slack_channel_run_uses_shared_sign_in_and_the_bot_freeze(
+    db_session: Session, integration_ids: list[int]
+) -> None:
+    """A Slack channel runs as the anonymous user with no approver: it offers
+    no integration with individual sign-in, and an Ask action only when the
+    agent sets it to Allow."""
+    anonymous = get_anonymous_user()
+    shared = _mcp(db_session, integration_ids, tools=("search", "update", "delete"))
+    individual = _openapi(
+        db_session,
+        integration_ids,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Key": "{api_key}"},
+    )
+    plugin = _plugin(db_session, [shared, individual])
+
+    tools = _build(
+        db_session,
+        anonymous,
+        _configuration({plugin.id: {"actions": {"update": "allow"}}}),
+        ApprovalMode.NO_APPROVER,
+    )
+
+    assert set(tools) == {
+        f"mcp__{shared.id}__crm__search",
+        f"mcp__{shared.id}__crm__update",
+    }
+    assert all(tool.approval is None for tool in tools.values())
+
+
+def test_an_anonymous_user_sees_only_organization_plugins(
+    db_session: Session,
+    # Set up first so the private plugin goes before its owner.
+    make_test_user: MakeTestUser,
+    integration_ids: list[int],
+) -> None:
+    owner = make_test_user("anonymous_private_owner")
+    mcp = _mcp(db_session, integration_ids)
+    private = hold_in_plugin(
+        db_session, [mcp], published=False, author_user_id=owner.id
+    )
+
+    assert (
+        _build(db_session, get_anonymous_user(), _configuration({private.id: {}})) == {}
+    )
+
+
+def test_the_default_agent_uses_the_plugins_the_user_runs(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    on = _mcp(db_session, integration_ids)
+    off = _openapi(db_session, integration_ids)
+    available = _openapi(db_session, integration_ids)
+    on_plugin = _plugin(db_session, [on])
+    off_plugin = _plugin(db_session, [off])
+    _plugin(db_session, [available], PluginInstallationPolicy.AVAILABLE)
+    db_session.add(
+        UserPluginPreference(user_id=user.id, plugin_id=off_plugin.id, enabled=False)
+    )
+    db_session.commit()
+
+    tools = _build(
+        db_session,
+        user,
+        # The persona 0 link holds the bot freeze of the plugin.
+        _configuration(
+            {on_plugin.id: {"actions": {"update": "blocked"}}},
+            persona_id=DEFAULT_PERSONA_ID,
+        ),
+    )
+
+    ours = {name for name in tools if f"__{on.id}__" in name}
+    assert ours == {f"mcp__{on.id}__crm__search"}
+    assert not any(f"__{off.id}__" in name for name in tools)
+    assert not any(f"__{available.id}__" in name for name in tools)
+
+
+def test_two_plugins_of_one_integration_keep_the_strictest_setting(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    mcp = _mcp(db_session, integration_ids)
+    loose = _plugin(db_session, [mcp])
+    strict = _plugin(db_session, [mcp])
+
+    tools = _build(
+        db_session,
+        user,
+        _configuration(
+            {
+                loose.id: {"actions": {"update": "allow"}},
+                strict.id: {"actions": {"update": "blocked"}},
+            }
+        ),
+    )
+
+    assert set(tools) == {f"mcp__{mcp.id}__crm__search"}
+
+
+def test_a_user_always_allow_runs_an_ask_action(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    mcp = _mcp(db_session, integration_ids)
+    plugin = _plugin(db_session, [mcp])
+    set_policy(db_session, mcp.id, "update", ALLOW, user_id=user.id)
+
+    tools = _build(db_session, user, _configuration({plugin.id: {}}))
+
+    assert tools[f"mcp__{mcp.id}__crm__update"].approval is None
+
+
+def test_an_onyx_login_integration_sends_the_login_token(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    api = _openapi(
+        db_session,
+        integration_ids,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.ONYX_LOGIN,
+    )
+    plugin = _plugin(db_session, [api])
+    configuration = _configuration({plugin.id: {}})
+
+    login_account = patch(
+        "onyx.integrations.connections._live_login_account", return_value=MagicMock()
+    )
+    with (
+        login_account,
+        patch(
+            "onyx.integrations.connections._fresh_onyx_login_token", return_value=None
+        ),
+    ):
+        assert _build(db_session, user, configuration) == {}
+    with (
+        login_account,
+        patch(
+            "onyx.integrations.connections._fresh_onyx_login_token",
+            return_value="login-token",
+        ),
+    ):
+        tools = _build(db_session, user, configuration)
+
+    orders = tools[f"custom__{api.id}__listOrders"]
+    assert isinstance(orders, CustomTool)
+    assert orders.headers == {"Authorization": "Bearer login-token"}
+
+
+def test_link_settings_parse_into_the_configuration() -> None:
+    configuration = _configuration(
+        {UUID(int=1): {"default": "blocked", "actions": {"a": "allow"}}}
+    )
+    [link] = configuration.plugin_links
+    assert link.action_settings.default is LinkValue.BLOCKED
+    assert link.action_settings.value_for("a") is LinkValue.ALLOW
+    assert link.action_settings.value_for("b") is LinkValue.BLOCKED
+
+
+def test_a_chat_grant_saved_with_the_integration_still_applies(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    """ "Approve for this chat" before the turn, keyed by integration_id as the
+    U1 migration fills it, runs the action in that chat only."""
+    mcp = _mcp(db_session, integration_ids)
+    plugin = _plugin(db_session, [mcp])
+    chat_session = ChatSession(id=uuid4(), user_id=user.id, description="grant")
+    db_session.add(chat_session)
+    db_session.flush()
+    response = ChatMessage(
+        chat_session_id=chat_session.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+    )
+    db_session.add(response)
+    db_session.flush()
+    approval_id = create_approval_request__no_commit(
+        db_session,
+        chat_session_id=chat_session.id,
+        chat_message_id=response.id,
+        integration_id=mcp.id,
+        gated_app_id=None,
+        action_id="update",
+        tool_call_id="call",
+        tool_name="update",
+        display_name="Update",
+        arguments={},
+    )
+    db_session.execute(
+        update(ApprovalRequest)
+        .where(ApprovalRequest.id == approval_id)
+        .values(
+            decision=ApprovalDecision.APPROVED,
+            decided_via=ApprovalDecidedVia.SESSION_GRANT,
+        )
+    )
+    db_session.commit()
+    chat_session_id = chat_session.id
+    update_name = f"mcp__{mcp.id}__crm__update"
+    try:
+        granted = _build(
+            db_session,
+            user,
+            _configuration({plugin.id: {}}),
+            chat_session_id=chat_session_id,
+        )
+        other_chat = _build(
+            db_session, user, _configuration({plugin.id: {}}), chat_session_id=uuid4()
+        )
+    finally:
+        delete_messages_and_files_from_chat_session(chat_session_id, db_session)
+        db_session.commit()
+
+    assert granted[update_name].approval is None
+    assert other_chat[update_name].approval == ToolApprovalScope(
+        integration_id=mcp.id, action_id="update"
+    )

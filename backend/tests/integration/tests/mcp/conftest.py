@@ -5,7 +5,7 @@ import sys
 import time
 from collections.abc import Generator
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel
@@ -17,6 +17,10 @@ from onyx.db.enums import (
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.integration_rows import (
+    add_mcp_integration,
+    delete_integration,
+)
 from tests.integration.common_utils.test_models import DATestUser
 
 # The client tests do not use the Onyx MCP server, so the mock keeps its own
@@ -38,10 +42,13 @@ class ConnectedMCPServer(BaseModel):
     id: int
     name: str
     tool_ids: dict[str, int]
+    # The integration of the server and the plugin that holds it.
+    integration_id: int
+    plugin_id: UUID
 
     def callable_name(self, tool_name: str) -> str:
         """The name the LLM sees for one of the server's tools."""
-        return f"mcp__{self.id}__{self.name}__{tool_name}"
+        return f"mcp__{self.integration_id}__{self.name}__{tool_name}"
 
 
 @pytest.fixture(scope="session")
@@ -88,8 +95,8 @@ def connected_mcp_server(
     mcp_no_auth_server: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> Generator[ConnectedMCPServer, None, None]:
-    """A connected no-auth MCP server with its tools saved. Teardown deletes
-    the server with its tools, policies and approval requests."""
+    """A connected no-auth MCP server with its tools saved, and its
+    integration and plugin. Teardown deletes them."""
     name = f"integration-mcp-{uuid4().hex[:8]}"
     create_response = client.post(
         f"{API_SERVER_URL}/admin/mcp/servers/create",
@@ -124,13 +131,20 @@ def connected_mcp_server(
             cookies=admin_user.cookies,
         )
         db_tools_response.raise_for_status()
-        yield ConnectedMCPServer(
-            id=server_id,
-            name=name,
-            tool_ids={
-                tool["name"]: tool["id"] for tool in db_tools_response.json()["tools"]
-            },
-        )
+        integration_id, plugin_id = add_mcp_integration(server_id, name)
+        try:
+            yield ConnectedMCPServer(
+                id=server_id,
+                name=name,
+                tool_ids={
+                    tool["name"]: tool["id"]
+                    for tool in db_tools_response.json()["tools"]
+                },
+                integration_id=integration_id,
+                plugin_id=plugin_id,
+            )
+        finally:
+            delete_integration(integration_id, plugin_id)
     finally:
         client.delete(
             f"{API_SERVER_URL}/admin/mcp/server/{server_id}",

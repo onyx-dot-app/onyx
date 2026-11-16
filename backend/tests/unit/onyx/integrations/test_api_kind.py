@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
     ExternalAppType,
-    GatedAppKind,
     IntegrationActionPolicyValue,
     IntegrationAuthMode,
     IntegrationKind,
@@ -19,6 +18,7 @@ from onyx.db.enums import (
 from onyx.db.models import ExternalApp, Integration, IntegrationAction, Tool
 from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.integrations.call_credentials import CallCredentials
 from onyx.integrations.kinds import api as api_kind
 from onyx.integrations.kinds.api import ApiKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
@@ -335,9 +335,7 @@ def test_openapi_build_chat_tools_keeps_names_placeholders_and_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     integration = _use_openapi_tool(monkeypatch)
-    scope = ToolApprovalScope(
-        app_kind=GatedAppKind.MCP_SERVER, target_id=21, action_id="getOrder"
-    )
+    scope = ToolApprovalScope(integration_id=21, action_id="getOrder")
     actions = [
         IntegrationAction(key="getOrder"),
         IntegrationAction(key="createOrder"),
@@ -346,7 +344,8 @@ def test_openapi_build_chat_tools_keeps_names_placeholders_and_approval(
         user_id=uuid4(),
         user_email="pat@example.com",
         chat_session_id=uuid4(),
-        custom_headers={"X-Key": "secret"},
+        credentials=_credentials({"X-Key": "secret"}),
+        additional_headers={"X-Key": "request", "X-Trace": "1"},
         approval_for=lambda key: scope if key == "getOrder" else None,
     )
 
@@ -356,12 +355,14 @@ def test_openapi_build_chat_tools_keeps_names_placeholders_and_approval(
     by_key = {t.display_name: t for t in tools}
     assert set(by_key) == {"getOrder", "createOrder"}
     get_order = by_key["getOrder"]
-    assert get_order.name == "custom__5__getOrder"
+    assert get_order.name == "custom__21__getOrder"
     assert get_order.approval == scope
     assert by_key["createOrder"].approval is None
     assert get_order.description == "Get one order for pat@example.com"
     assert isinstance(get_order, CustomTool)
-    assert get_order.headers == {"X-Key": "secret"}
+    # The credential wins over a request header of the same name.
+    assert get_order.headers == {"X-Key": "secret", "X-Trace": "1"}
+    assert get_order.id is None
     assert get_order.bind(MagicMock()).approval_required == frozenset({get_order.name})
 
 
@@ -399,7 +400,22 @@ def test_openapi_build_chat_tools_with_no_actions_is_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     integration = _use_openapi_tool(monkeypatch)
-    assert HANDLER.build_chat_tools(integration, [], ChatToolContext(), DB) == []
+    assert (
+        HANDLER.build_chat_tools(
+            integration, [], ChatToolContext(credentials=_credentials({})), DB
+        )
+        == []
+    )
+
+
+def _credentials(headers: dict[str, str]) -> CallCredentials:
+    return CallCredentials(
+        integration_id=5,
+        auth_method=None,
+        connection_id=None,
+        connection_user_id=None,
+        headers=headers,
+    )
 
 
 # Presets
@@ -462,7 +478,12 @@ def test_preset_build_chat_tools_is_empty(monkeypatch: pytest.MonkeyPatch) -> No
         monkeypatch, ExternalAppType.GITHUB, [r"https://api\.github\.com/.*"]
     )
     actions = [IntegrationAction(key="github.user.read")]
-    assert HANDLER.build_chat_tools(integration, actions, ChatToolContext(), DB) == []
+    assert (
+        HANDLER.build_chat_tools(
+            integration, actions, ChatToolContext(credentials=_credentials({})), DB
+        )
+        == []
+    )
 
 
 # Custom apps

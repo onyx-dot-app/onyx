@@ -14,7 +14,6 @@ import pytest
 from sqlalchemy import select
 
 from onyx.agents.models import RunStatus
-from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.models import ChatFullResponse
 from onyx.chat.process_message import run_chat_turn
@@ -28,7 +27,12 @@ from onyx.db.discord_bot import (
     get_or_create_discord_service_api_key,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ActionPolicy, ApprovalDecidedVia, ApprovalDecision
+from onyx.db.enums import (
+    ActionPolicy,
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    IntegrationActionPolicyValue,
+)
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
@@ -37,6 +41,7 @@ from onyx.db.models import (
     User,
 )
 from onyx.file_store.file_store import get_default_file_store
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.override_models import LLMOverride
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.server.query_and_chat.models import (
@@ -61,6 +66,12 @@ from onyx.tools.tool_implementations.code_mode.stubs import function_name
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.integration_rows import (
+    link_persona,
+    only_actions,
+    save_always_allow,
+    set_admin_policies,
+)
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.mock_llm import (
@@ -104,12 +115,12 @@ def new_chat(
     chats: list[tuple[DATestChatSession, DATestPersona]] = []
 
     def create(tools: list[str] | None = None) -> UUID:
+        names = tools or ["hello"]
         persona = PersonaManager.create(
-            tool_ids=[
-                connected_mcp_server.tool_ids[name] for name in tools or ["hello"]
-            ],
+            tool_ids=[connected_mcp_server.tool_ids[name] for name in names],
             user_performing_action=admin_user,
         )
+        link_persona(persona.id, connected_mcp_server.plugin_id, only_actions(names))
         chat = ChatSessionManager.create(
             persona_id=persona.id, user_performing_action=admin_user
         )
@@ -130,15 +141,29 @@ def _request(chat_session_id: UUID, message: str = "Say hello.") -> SendMessageR
     )
 
 
+_POLICY_VALUES = {
+    ActionPolicy.ALWAYS.value: IntegrationActionPolicyValue.ALLOW,
+    ActionPolicy.ASK.value: IntegrationActionPolicyValue.ASK,
+    ActionPolicy.DENY.value: IntegrationActionPolicyValue.BLOCKED,
+}
+
+
 def _set_policies(
-    server: ConnectedMCPServer, admin_user: DATestUser, **settings: object
+    server: ConnectedMCPServer,
+    admin_user: DATestUser,  # noqa: ARG001
+    *,
+    action_policies: dict[str, str] | None = None,
+    users_can_manage_policies: bool | None = None,
 ) -> None:
-    client.patch(
-        f"{API_SERVER_URL}/admin/mcp/server/{server.id}",
-        json=settings,
-        headers=admin_user.headers,
-        cookies=admin_user.cookies,
-    ).raise_for_status()
+    """The admin's settings of the server's integration."""
+    set_admin_policies(
+        server.integration_id,
+        {
+            action: _POLICY_VALUES[value]
+            for action, value in (action_policies or {}).items()
+        },
+        users_can_save_always_allow=users_can_manage_policies,
+    )
 
 
 def _decide(user: DATestUser, approval_id: str, decision: str) -> httpx.Response:
@@ -575,13 +600,14 @@ def test_approving_a_tool_that_an_admin_disabled_meanwhile_reports_it_disabled(
     )
 
 
-def test_a_tool_removed_while_its_call_waits_is_no_longer_available(
+def test_a_tool_the_agent_blocks_while_its_call_waits_is_disabled(
     connected_mcp_server: ConnectedMCPServer,
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
     streaming_api: str,
 ) -> None:
-    """The response continues with the agent's current tools."""
+    """The agent's settings are part of the policy: an approval of an action
+    that the agent now blocks saves a rejection by the policy."""
     hello = _hello(connected_mcp_server, CALL_ID, "team")
     mock_llm.conversation(
         "chat",
@@ -592,6 +618,7 @@ def test_a_tool_removed_while_its_call_waits_is_no_longer_available(
         tool_ids=[connected_mcp_server.tool_ids["hello"]],
         user_performing_action=admin_user,
     )
+    link_persona(persona.id, connected_mcp_server.plugin_id, only_actions(["hello"]))
     chat = ChatSessionManager.create(
         persona_id=persona.id, user_performing_action=admin_user
     )
@@ -599,10 +626,8 @@ def test_a_tool_removed_while_its_call_waits_is_no_longer_available(
     def on_request(
         _packet: Packet, request: ToolApprovalRequest
     ) -> httpx.Response | None:
-        PersonaManager.edit(
-            persona,
-            user_performing_action=admin_user,
-            tool_ids=[connected_mcp_server.tool_ids["get_ticket"]],
+        link_persona(
+            persona.id, connected_mcp_server.plugin_id, only_actions(["get_ticket"])
         )
         return _decide(
             admin_user, request.approval_id, "approve_once"
@@ -616,7 +641,7 @@ def test_a_tool_removed_while_its_call_waits_is_no_longer_available(
 
     assert len(streams) == 2
     assert mock_llm.requests_in("chat")[-1].tool_result(CALL_ID) == (
-        UNAVAILABLE_CALL_MESSAGE
+        f"The {hello.name} tool is disabled, so this call did not run."
     )
 
 
@@ -662,13 +687,9 @@ def test_a_personal_always_policy_applies_only_where_users_can_manage(
     streaming_api: str,
     users_can_manage: bool,
 ) -> None:
-    """Chat users set their own policy for an MCP server without Craft."""
-    client.put(
-        f"{API_SERVER_URL}/action-policies/mcp_server/{connected_mcp_server.id}",
-        json={"action_policies": {"hello": ActionPolicy.ALWAYS.value}},
-        headers=admin_user.headers,
-        cookies=admin_user.cookies,
-    ).raise_for_status()
+    """A user's saved Always allow runs an Ask action, only where the admin
+    lets users save it."""
+    save_always_allow(connected_mcp_server.integration_id, UUID(admin_user.id), "hello")
     if not users_can_manage:
         _set_policies(connected_mcp_server, admin_user, users_can_manage_policies=False)
     name = uuid4().hex
@@ -1094,8 +1115,88 @@ def test_an_always_tool_runs_at_once(
     assert tool_result is not None and f"Hello, {name}!" in tool_result
 
 
+def _send_as(
+    sender: str,
+    persona_id: int,
+    chat_session_id: UUID,
+    admin_user: DATestUser,
+) -> ChatFullResponse:
+    """Send one non-streaming turn as `sender`."""
+    if sender == "slack_bot":
+        with get_session_with_current_tenant() as db_session:
+            user = db_session.get_one(User, UUID(admin_user.id))
+        # As onyxbot/slack/handlers/handle_regular_answer.py runs a turn.
+        return run_chat_turn(
+            new_msg_req=_request(chat_session_id),
+            user=user,
+            approval_mode=ApprovalMode.NO_APPROVER,
+        )
+    if sender.startswith("user_claiming"):
+        origin = (
+            MessageOrigin.SLACKBOT
+            if sender == "user_claiming_slack_origin"
+            else MessageOrigin.DISCORDBOT
+        )
+        sent = client.post(
+            f"{API_SERVER_URL}/chat/send-chat-message",
+            json=_request(chat_session_id).model_dump(mode="json")
+            | {"stream": False, "origin": origin.value},
+            headers=admin_user.headers,
+            cookies=admin_user.cookies,
+        )
+        sent.raise_for_status()
+        return ChatFullResponse.model_validate(sent.json())
+
+    # A key's turn runs in its own chat, as the bot's do.
+    key_request = SendMessageRequest(
+        message="Say hello.",
+        stream=False,
+        chat_session_info=ChatSessionCreationRequest(persona_id=persona_id),
+    )
+    key_id: int | None = None
+    created_bot_key = False
+    try:
+        with get_session_with_current_tenant() as db_session:
+            if sender == "discord_bot_key":
+                created_bot_key = get_discord_service_api_key(db_session) is None
+                api_key = get_or_create_discord_service_api_key(
+                    db_session, POSTGRES_DEFAULT_SCHEMA
+                )
+                db_session.commit()
+            else:
+                # As the admin API creates a key, with the bot key's groups.
+                key = insert_api_key(
+                    db_session,
+                    APIKeyArgs(name=DISCORD_SERVICE_API_KEY_NAME),
+                    UUID(admin_user.id),
+                )
+                key_id, api_key = key.api_key_id, key.api_key
+        # The bot sends this request, as onyxbot/discord/api_client.py does.
+        sent = client.post(
+            f"{API_SERVER_URL}/chat/send-chat-message",
+            json=key_request.model_dump(mode="json")
+            | {"origin": MessageOrigin.DISCORDBOT.value},
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        sent.raise_for_status()
+        response = ChatFullResponse.model_validate(sent.json())
+        assert response.chat_session_id is not None
+        with get_session_with_current_tenant() as db_session:
+            delete_chat_session(
+                None, response.chat_session_id, db_session, hard_delete=True
+            )
+        return response
+    finally:
+        with get_session_with_current_tenant() as db_session:
+            if key_id is not None:
+                remove_api_key(db_session, key_id)
+            if created_bot_key:
+                delete_discord_service_api_key(db_session)
+            db_session.commit()
+
+
 @pytest.mark.parametrize(
-    "sender, asks",
+    "sender, has_approver",
     [
         ("user_claiming_slack_origin", True),
         ("user_claiming_discord_origin", True),
@@ -1104,109 +1205,91 @@ def test_an_always_tool_runs_at_once(
         ("slack_bot", False),
     ],
 )
-def test_only_bots_that_cannot_show_requests_skip_approval(
+def test_only_bots_that_cannot_show_requests_lose_ask_actions(
     connected_mcp_server: ConnectedMCPServer,
     new_chat: NewChat,
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
     sender: str,
-    asks: bool,
+    has_approver: bool,
 ) -> None:
     """A request's origin is client-supplied and a key's name is the admin's
-    choice, so neither skips approvals. The Discord bot's own service key and
-    the Slack bot's turns run Ask tools without asking: they cannot show
-    requests."""
+    choice, so neither makes a run a bot run. The Discord bot's own service
+    key and the Slack bot's turns have no approver: an action that would ask
+    is not offered to the model."""
+    hello = _hello(connected_mcp_server, CALL_ID, uuid4().hex)
+    if has_approver:
+        mock_llm.conversation(
+            "chat",
+            Reply(
+                tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])
+            ),
+            Reply(
+                text="Done.",
+                conditions=RequestConditions(has_results_for=[CALL_ID]),
+                required=False,
+            ),
+        )
+    else:
+        mock_llm.conversation(
+            "chat",
+            Reply(
+                text="I cannot greet.",
+                conditions=RequestConditions(does_not_offer=[hello.name]),
+            ),
+        )
+    persona = PersonaManager.create(
+        tool_ids=[connected_mcp_server.tool_ids["hello"]],
+        user_performing_action=admin_user,
+    )
+    link_persona(persona.id, connected_mcp_server.plugin_id, only_actions(["hello"]))
+    try:
+        response = _send_as(sender, persona.id, new_chat(), admin_user)
+    finally:
+        PersonaManager.delete(persona, admin_user)
+
+    if has_approver:
+        [pending] = response.pending_tool_approvals
+        assert pending.tool_name == hello.name
+        return
+    assert response.pending_tool_approvals == []
+    assert response.answer == "I cannot greet."
+
+
+@pytest.mark.parametrize("sender", ["discord_bot_key", "slack_bot"])
+def test_a_bot_runs_an_action_its_agent_allows(
+    connected_mcp_server: ConnectedMCPServer,
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+    sender: str,
+) -> None:
+    """The bot freeze: an action set to Allow on the bot's agent runs with
+    no approver."""
     name = uuid4().hex
     hello = _hello(connected_mcp_server, CALL_ID, name)
     mock_llm.conversation(
         "chat",
         Reply(tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])),
-        Reply(
-            text="Done.",
-            conditions=RequestConditions(has_results_for=[CALL_ID]),
-            required=not asks,
-        ),
+        Reply(text="Done.", conditions=RequestConditions(has_results_for=[CALL_ID])),
     )
     persona = PersonaManager.create(
         tool_ids=[connected_mcp_server.tool_ids["hello"]],
         user_performing_action=admin_user,
     )
-    # A key's turn runs in its own chat, as the bot's do.
-    key_request = SendMessageRequest(
-        message="Say hello.",
-        stream=False,
-        chat_session_info=ChatSessionCreationRequest(persona_id=persona.id),
+    link_persona(
+        persona.id,
+        connected_mcp_server.plugin_id,
+        {"default": "blocked", "actions": {"hello": "allow"}},
     )
-    key_id: int | None = None
-    created_bot_key = False
-    response: ChatFullResponse | None = None
+    chat = ChatSessionManager.create(
+        persona_id=persona.id, user_performing_action=admin_user
+    )
     try:
-        if sender == "slack_bot":
-            with get_session_with_current_tenant() as db_session:
-                user = db_session.get_one(User, UUID(admin_user.id))
-            # As onyxbot/slack/handlers/handle_regular_answer.py runs a turn.
-            response = run_chat_turn(
-                new_msg_req=_request(new_chat()), user=user, ask_for_approval=False
-            )
-        elif sender.startswith("user_claiming"):
-            origin = (
-                MessageOrigin.SLACKBOT
-                if sender == "user_claiming_slack_origin"
-                else MessageOrigin.DISCORDBOT
-            )
-            sent = client.post(
-                f"{API_SERVER_URL}/chat/send-chat-message",
-                json=_request(new_chat()).model_dump(mode="json")
-                | {"stream": False, "origin": origin.value},
-                headers=admin_user.headers,
-                cookies=admin_user.cookies,
-            )
-            sent.raise_for_status()
-            response = ChatFullResponse.model_validate(sent.json())
-        else:
-            with get_session_with_current_tenant() as db_session:
-                if sender == "discord_bot_key":
-                    created_bot_key = get_discord_service_api_key(db_session) is None
-                    api_key = get_or_create_discord_service_api_key(
-                        db_session, POSTGRES_DEFAULT_SCHEMA
-                    )
-                    db_session.commit()
-                else:
-                    # As the admin API creates a key, with the bot key's groups.
-                    key = insert_api_key(
-                        db_session,
-                        APIKeyArgs(name=DISCORD_SERVICE_API_KEY_NAME),
-                        UUID(admin_user.id),
-                    )
-                    key_id, api_key = key.api_key_id, key.api_key
-            # The bot sends this request, as onyxbot/discord/api_client.py does.
-            sent = client.post(
-                f"{API_SERVER_URL}/chat/send-chat-message",
-                json=key_request.model_dump(mode="json")
-                | {"origin": MessageOrigin.DISCORDBOT.value},
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-            sent.raise_for_status()
-            response = ChatFullResponse.model_validate(sent.json())
-            assert response.chat_session_id is not None
-            with get_session_with_current_tenant() as db_session:
-                delete_chat_session(
-                    None, response.chat_session_id, db_session, hard_delete=True
-                )
+        response = _send_as(sender, persona.id, chat.id, admin_user)
     finally:
+        ChatSessionManager.delete(chat, admin_user)
         PersonaManager.delete(persona, admin_user)
-        with get_session_with_current_tenant() as db_session:
-            if key_id is not None:
-                remove_api_key(db_session, key_id)
-            if created_bot_key:
-                delete_discord_service_api_key(db_session)
-            db_session.commit()
 
-    assert response is not None
-    if asks:
-        [pending] = response.pending_tool_approvals
-        assert pending.tool_name == hello.name
-        return
     assert response.pending_tool_approvals == []
     assert response.answer == "Done."
     tool_result = mock_llm.requests_in("chat")[-1].tool_result(CALL_ID)

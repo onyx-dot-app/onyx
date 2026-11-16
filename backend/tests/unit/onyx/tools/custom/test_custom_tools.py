@@ -128,7 +128,7 @@ class TestCustomTool(unittest.TestCase):
         mock_request.return_value = mock_response
 
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,  # dummy tool id
+            integration_id=-1,
             openapi_schema=self.openapi_schema,
             dynamic_schema_info=self.dynamic_schema_info,
         )
@@ -174,7 +174,7 @@ class TestCustomTool(unittest.TestCase):
         mock_request.return_value = mock_response
 
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,  # dummy tool id
+            integration_id=-1,
             openapi_schema=self.openapi_schema,
             dynamic_schema_info=self.dynamic_schema_info,
         )
@@ -226,7 +226,7 @@ class TestCustomTool(unittest.TestCase):
             {"key": "Custom-Header", "value": "CustomValue"},
         ]
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,  # dummy tool id
+            integration_id=-1,
             openapi_schema=self.openapi_schema,
             custom_headers=custom_headers,
             dynamic_schema_info=self.dynamic_schema_info,
@@ -271,7 +271,7 @@ class TestCustomTool(unittest.TestCase):
 
         custom_headers: list[HeaderItemDict] = []
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,  # dummy tool id
+            integration_id=-1,
             openapi_schema=self.openapi_schema,
             custom_headers=custom_headers,
             dynamic_schema_info=self.dynamic_schema_info,
@@ -353,7 +353,7 @@ class TestCustomTool(unittest.TestCase):
         validate_openapi_schema(schema)
 
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,
+            integration_id=-1,
             openapi_schema=schema,
             custom_headers=[
                 {"key": "X-Onyx-User-Id", "value": "USER_ID"},
@@ -430,7 +430,7 @@ class TestCustomTool(unittest.TestCase):
         validate_openapi_schema(schema)
 
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,
+            integration_id=-1,
             openapi_schema=schema,
             dynamic_schema_info=DynamicSchemaInfo(
                 chat_session_id=None,
@@ -574,7 +574,7 @@ if __name__ == "__main__":
 @pytest.mark.parametrize("status_code", [200, 401, 403, 500])
 def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> None:
     tools = build_custom_tools_from_openapi_schema_and_headers(
-        tool_id=1,
+        integration_id=1,
         openapi_schema={
             "openapi": "3.0.0",
             "info": {"title": "Status", "version": "1.0.0"},
@@ -622,7 +622,7 @@ def test_custom_tool_file_response_is_serialized_for_llm(
     content_type: str, response_type: str
 ) -> None:
     tools = build_custom_tools_from_openapi_schema_and_headers(
-        tool_id=1,
+        integration_id=1,
         openapi_schema={
             "openapi": "3.0.0",
             "info": {"title": "Files", "version": "1.0.0"},
@@ -806,7 +806,7 @@ def test_save_rejects_invalid_server_url(servers: list[dict[str, Any]] | None) -
 
 def _run_ping(server_url: str) -> ToolResult:
     tool = build_custom_tools_from_openapi_schema_and_headers(
-        tool_id=1, openapi_schema=_schema(server_url)
+        integration_id=1, openapi_schema=_schema(server_url)
     )[0]
     response = tool.run(
         ToolInvocation(

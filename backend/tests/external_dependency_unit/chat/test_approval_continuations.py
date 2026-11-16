@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import BackgroundTasks, Request
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -36,13 +36,11 @@ from onyx.db.chat import (
     delete_messages_and_files_from_chat_session,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
     ChatResponseCheckpoint,
     ChatSession,
-    MCPServer,
     User,
 )
 from onyx.llm.cancellation import CancellationSignal
@@ -74,12 +72,19 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.models import ChatToolSelection
 from onyx.tools.tool_constructor import SearchToolConfig
-from tests.external_dependency_unit.chat.test_parked_agent_handoff import _gated
+from tests.external_dependency_unit.chat.test_parked_agent_handoff import (
+    ACTION,
+    _gated,
+)
 from tests.external_dependency_unit.chat.test_wait_agents import (
     ScriptedLLM,
     _wait_until,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    make_mcp_integration,
+)
 from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool
 
 # A status request without pass-through headers.
@@ -125,11 +130,11 @@ class ApprovalTurns:
     waits for approval. Reads and decisions use their own sessions, since
     turns read the user on their threads."""
 
-    def __init__(self, user: User, chat_session_id: UUID, server_id: int) -> None:
+    def __init__(self, user: User, chat_session_id: UUID, integration_id: int) -> None:
         self.user = user
         self.chat_session_id = chat_session_id
         self.sent: list[str] = []
-        self.tool = _gated(server_id, self.sent)
+        self.tool = _gated(integration_id, self.sent)
         # The tool limits and search filters that each turn built its tools with.
         self.tool_limits: list[tuple[list[int] | None, BaseFilters | None]] = []
 
@@ -151,11 +156,11 @@ class ApprovalTurns:
             allowed_tool_ids: list[int] | None,
             search_tool_config: SearchToolConfig,
             **_kwargs: object,
-        ) -> dict[int, list[FakeMCPTool]]:
+        ) -> list[FakeMCPTool]:
             self.tool_limits.append(
                 (allowed_tool_ids, search_tool_config.user_selected_filters)
             )
-            return {self.tool.id: [self.tool]}
+            return [self.tool]
 
         monkeypatch.setattr("onyx.chat.execution.construct_tools", construct_tools)
         model = ScriptedLLM(script.generate)
@@ -216,15 +221,11 @@ def turns(
     db_session: Session, make_test_user: MakeTestUser
 ) -> Generator[ApprovalTurns, None, None]:
     user = make_test_user("approval_continuations")
-    server = create_mcp_server__no_commit(
-        owner_email=user.email,
-        name=f"continuations_{uuid4().hex[:8]}",
-        description=None,
+    integration, _ = make_mcp_integration(
+        db_session,
         server_url="https://example.com/mcp",
-        auth_type=None,
-        transport=None,
-        auth_performer=None,
-        db_session=db_session,
+        name=f"continuations_{uuid4().hex[:8]}",
+        tools=[ACTION],
     )
     chat = ChatSession(
         id=uuid4(),
@@ -234,18 +235,16 @@ def turns(
     )
     db_session.add(chat)
     db_session.commit()
-    chat_id, server_id = chat.id, server.id
+    chat_id, integration_id = chat.id, integration.id
     try:
-        yield ApprovalTurns(user, chat_id, server_id)
+        yield ApprovalTurns(user, chat_id, integration_id)
     finally:
         try:
             assert chat_turn_work.wait_idle(timeout=30)
         finally:
             db_session.rollback()
             delete_messages_and_files_from_chat_session(chat_id, db_session)
-            # Cascades to the server's app identity and requests.
-            db_session.execute(delete(MCPServer).where(MCPServer.id == server_id))
-            db_session.commit()
+            delete_integrations(db_session, [integration_id])
 
 
 def _park_both(
@@ -366,7 +365,8 @@ def test_a_continuation_keeps_the_tools_and_search_filters_of_its_request(
     chat does not save. Its response parks for approval and continues after
     the decision with the same limits, not with every tool of the agent."""
     selection = ChatToolSelection(
-        allowed_tool_ids=[turns.tool.id],
+        # A built-in tool id: an integration action has none.
+        allowed_tool_ids=[1],
         internal_search_filters=BaseFilters(source_type=[DocumentSource.WEB]),
     )
     stops = turns.start(monkeypatch, Script(turns.tool), selection=selection)
