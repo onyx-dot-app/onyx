@@ -1,6 +1,5 @@
 "use client";
 
-import { useNavigation } from "@opal/navigation";
 import { useId, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
@@ -28,21 +27,8 @@ import {
   createCustomExternalApp,
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
-import AssociatedSkillsEditor from "@/app/craft/v1/apps/admin/AssociatedSkillsEditor";
-import ExternalAppSkillsStepModal from "@/app/craft/v1/apps/admin/ExternalAppSkillsStepModal";
-import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
-import useSkillUploadModal from "@/sections/modals/skills/useSkillUploadModal";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
-import {
-  stageSkillCreationDraft,
-  type SkillCreationDraft,
-} from "@/lib/skills/creationDraft";
-import {
-  skillEditorUrlForApp,
-  skillEditUrlForApp,
-} from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
-import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
 
 interface CreateCustomAppModalProps {
   onClose: () => void;
@@ -82,7 +68,6 @@ export default function CreateCustomAppModal({
   const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
     existingApp?.users_can_manage_policies ?? true
   );
-  const tApps = useTranslations("craft.apps");
   const isEdit = existingApp !== null;
   const savedEnabled = existingApp?.enabled ?? true;
   const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
@@ -92,13 +77,9 @@ export default function CreateCustomAppModal({
     setEnabledDraft(value === savedEnabled ? null : value);
   }
   const nameId = useId();
-  const navigation = useNavigation();
   // Focus the name field for new apps only; edits keep the natural tab order.
   const focusNameOnMount = useFocusOnMount<HTMLInputElement>(!isEdit);
 
-  const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
-    null
-  );
   const [name, setName] = useState(existingApp?.name ?? "");
   const [upstreamPatterns, setUpstreamPatterns] = useState<string[]>(
     existingApp?.upstream_url_patterns ?? []
@@ -116,21 +97,10 @@ export default function CreateCustomAppModal({
   const [isSaving, setIsSaving] = useState(false);
   const [tab, setTab] = useState("configuration");
   const [error, setError] = useState<string | null>(null);
-  const [selectedSkillIds, setSelectedSkillIds] =
-    useSyncedAssociatedSkillIds(existingApp);
-  const upload = useSkillUploadModal();
-
-  const associationDirty =
-    existingApp !== null &&
-    !isEqual(
-      new Set(selectedSkillIds),
-      new Set(existingApp.associated_skills.map((skill) => skill.id))
-    );
   const configDirty = existingApp
     ? availabilityChanged ||
       usersCanManagePolicies !== existingApp.users_can_manage_policies ||
       name !== existingApp.name ||
-      associationDirty ||
       !isEqual(upstreamPatterns, existingApp.upstream_url_patterns) ||
       !isEqual(toRecord(headers), existingApp.auth_template) ||
       !isEqual(toRecord(orgCredentials), existingApp.organization_credentials)
@@ -141,7 +111,7 @@ export default function CreateCustomAppModal({
         Object.keys(toRecord(orgCredentials)).length
       );
   const unsavedChanges = useUnsavedChangesGuard({
-    isDirty: isEdit && createdApp === null && configDirty,
+    isDirty: isEdit && configDirty,
   });
 
   // Headers and org credentials are optional; name + at least one upstream
@@ -180,14 +150,11 @@ export default function CreateCustomAppModal({
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
-          associated_skill_ids: associationDirty ? selectedSkillIds : undefined,
         };
         if (availabilityChanged) payload.enabled = enabled;
         await updateExternalApp(existingApp.id, payload);
-        onSaved();
-        onClose();
       } else {
-        const created = await createCustomExternalApp({
+        await createCustomExternalApp({
           enabled,
           users_can_manage_policies: usersCanManagePolicies,
           name: name.trim(),
@@ -195,34 +162,15 @@ export default function CreateCustomAppModal({
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
         });
-        setCreatedApp(created);
-        onSaved();
       }
+      onSaved();
+      onClose();
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       setError(detail);
     } finally {
       setIsSaving(false);
     }
-  }
-
-  function openSkillEditor(draft?: SkillCreationDraft) {
-    if (!existingApp) return;
-    unsavedChanges.requestLeave(() =>
-      navigation.go(
-        skillEditorUrlForApp(
-          existingApp,
-          draft ? stageSkillCreationDraft(draft) : undefined
-        )
-      )
-    );
-  }
-
-  function openExistingSkill(skillId: string) {
-    if (!existingApp) return;
-    unsavedChanges.requestLeave(() =>
-      navigation.go(skillEditUrlForApp(skillId, existingApp))
-    );
   }
 
   function handleDismiss(event: Event) {
@@ -233,40 +181,19 @@ export default function CreateCustomAppModal({
       unsavedChanges.cancelLeave();
       return;
     }
-    if (upload.isOpen) {
-      upload.requestDismiss();
-    } else {
-      unsavedChanges.requestLeave(onClose);
-    }
+    unsavedChanges.requestLeave(onClose);
   }
 
   function requestClose() {
     if (!isSaving) unsavedChanges.requestLeave(onClose);
   }
 
-  const confirmationOpen =
-    upload.confirmationOpen || unsavedChanges.confirmationOpen;
-  const confirmationContent = upload.confirmationOpen ? (
-    <UnsavedChangesModalContent
-      onCancel={upload.cancelDiscard}
-      onDiscard={upload.discardAndClose}
-    />
-  ) : unsavedChanges.confirmationOpen ? (
+  const confirmationContent = unsavedChanges.confirmationOpen ? (
     <UnsavedChangesModalContent
       onCancel={unsavedChanges.cancelLeave}
       onDiscard={unsavedChanges.discardAndLeave}
     />
   ) : null;
-
-  if (createdApp) {
-    return (
-      <ExternalAppSkillsStepModal
-        app={createdApp}
-        onClose={onClose}
-        onSaved={onSaved}
-      />
-    );
-  }
 
   return (
     <Modal open>
@@ -277,29 +204,7 @@ export default function CreateCustomAppModal({
         onInteractOutside={handleDismiss}
         onEscapeKeyDown={handleDismiss}
       >
-        {upload.isOpen && existingApp ? (
-          <>
-            <CreateSkillModalContent
-              hidden={confirmationOpen}
-              onRequestClose={upload.requestDismiss}
-              onBusyChange={upload.setBusy}
-              onDirtyChange={upload.setDirty}
-              preserveDraftOnContinue
-              validateDraft={(draft) =>
-                existingApp.associated_skills.some(
-                  (skill) => skill.name === draft.contents.name
-                )
-                  ? tApps("errors.duplicateSkillName", {
-                      appName: existingApp.name,
-                      skillName: draft.contents.name,
-                    })
-                  : null
-              }
-              onContinue={openSkillEditor}
-            />
-            {confirmationContent}
-          </>
-        ) : confirmationContent ? (
+        {confirmationContent ? (
           confirmationContent
         ) : (
           <>
@@ -401,18 +306,6 @@ export default function CreateCustomAppModal({
                       />
                     </InputVertical>
                   </div>
-                }
-                skills={
-                  existingApp ? (
-                    <AssociatedSkillsEditor
-                      app={existingApp}
-                      selectedSkillIds={selectedSkillIds}
-                      onChange={setSelectedSkillIds}
-                      onOpenSkill={openExistingSkill}
-                      onCreateSkill={openSkillEditor}
-                      onUploadSkill={upload.open}
-                    />
-                  ) : undefined
                 }
               />
               {error && (

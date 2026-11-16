@@ -36,6 +36,8 @@ from onyx.db.enums import (
     ConnectorManageRole,
     ExternalAppType,
     GatedAppKind,
+    IntegrationAuthMode,
+    IntegrationKind,
     PluginInstallationPolicy,
     SandboxStatus,
     SkillSharePermission,
@@ -48,7 +50,9 @@ from onyx.db.models import (
     Credential,
     ExternalApp,
     ExternalAppUserCredential,
+    Integration,
     Plugin,
+    Plugin__Integration,
     Plugin__User,
     Plugin__UserGroup,
     PluginVersion,
@@ -68,6 +72,7 @@ from onyx.db.plugin import (
     get_or_create_organization_library__no_commit,
     get_or_create_user_uploads__no_commit,
     legacy_skill_version_content,
+    set_plugin_preferences__no_commit,
 )
 from onyx.db.users import assign_user_to_default_groups__no_commit
 
@@ -308,27 +313,45 @@ def reset_built_in_skill_row(
 def make_external_app(
     db_session: Session,
     *,
-    skill: Skill,
     auth_template: dict[str, Any],
+    skill: Skill | None = None,
+    name: str | None = None,
     organization_credentials: dict[str, Any] | None = None,
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
     upstream_url_patterns: list[str] | None = None,
     action_policies: dict[str, ActionPolicy] | None = None,
     enabled: bool = True,
 ) -> ExternalApp:
-    """Insert an ``ExternalApp`` row backing ``skill``, plus any per-action
-    policy overrides in ``action_policies`` (``{action_id: policy}``)."""
+    """Insert an ``ExternalApp`` row and its integration, plus any per-action
+    policy overrides in ``action_policies`` (``{action_id: policy}``). The
+    plugin of a custom ``skill`` holds the integration, as the U1 migration
+    writes it. ``skill`` also gives the default name."""
+    app_name = name or (skill.name if skill is not None else f"app-{uuid4().hex[:8]}")
+    integration = Integration(
+        kind=IntegrationKind.API,
+        name=app_name,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        enabled=enabled,
+    )
+    db_session.add(integration)
+    db_session.flush()
     app = ExternalApp(
-        name=skill.name,
+        name=app_name,
         app_type=app_type,
         enabled=enabled,
         upstream_url_patterns=upstream_url_patterns or [],
         auth_template=auth_template,
         organization_credentials=organization_credentials or {},
-        associated_skills=[skill],
+        integration_id=integration.id,
     )
     db_session.add(app)
     db_session.flush()
+    if (
+        skill is not None
+        and skill.is_custom
+        and db_session.get(Plugin, skill.id) is not None
+    ):
+        hold_external_app(db_session, app=app, plugin_id=skill.id)
     if action_policies:
         gated_app_id = get_or_create_gated_app_id(
             db_session, GatedAppKind.EXTERNAL_APP, app.id
@@ -343,6 +366,28 @@ def make_external_app(
             )
         db_session.flush()
     return app
+
+
+def hold_external_app(
+    db_session: Session, *, app: ExternalApp, plugin_id: UUID
+) -> None:
+    """Make the plugin hold the integration of ``app``."""
+    db_session.add(
+        Plugin__Integration(plugin_id=plugin_id, integration_id=app.integration_id)
+    )
+    db_session.flush()
+
+
+def make_app_plugin_for_user(
+    db_session: Session, *, app: ExternalApp, user: User, enabled: bool = True
+) -> Plugin:
+    """A private plugin of ``user`` that holds the integration of ``app``,
+    with the user's on/off choice set to ``enabled``."""
+    plugin = make_skillless_plugin(db_session, author_user_id=user.id)
+    hold_external_app(db_session, app=app, plugin_id=plugin.id)
+    set_plugin_preferences__no_commit(user.id, [plugin.id], enabled, db_session)
+    db_session.flush()
+    return plugin
 
 
 def make_user_credential(

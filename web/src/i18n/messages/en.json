@@ -982,7 +982,6 @@
         "emptyDescription": "Try another connection filter or ask your workspace admin to add a plugin."
       },
       "detail": {
-        "issuesTitle": "Issues",
         "noAuthentication": "No authentication required",
         "connection": "Connection",
         "tools": "Tools",
@@ -1047,17 +1046,6 @@
         "chatOnly": "Chat only",
         "chatOnlyDescription": "This plugin is available in Chat, not Craft."
       },
-      "appSkills": {
-        "preview": "Preview",
-        "search": "Search skills",
-        "count": "{count, plural, one {# skill} other {# skills}}",
-        "empty": "No skills are associated with this app.",
-        "noMatches": "No skills match your search.",
-        "error": "Skills could not load.",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "loading": "Loading skills…"
-      },
       "externalApp": {
         "description": "Use your account in Craft.",
         "craftOnly": "Craft only",
@@ -1099,8 +1087,7 @@
       "craftApp": {
         "tabs": {
           "configuration": "Configuration",
-          "permissions": "Permissions",
-          "skills": "Skills"
+          "permissions": "Permissions"
         }
       },
       "disableConfirmation": {
@@ -5950,7 +5937,6 @@
         },
         "deleteModal": {
           "description": "This deletes the app for your whole organization: its configuration, every member's connection, and any provider-managed skills.",
-          "retainedSkills": "{count, plural, =0 {No associated custom skills will be deleted.} one {# associated custom skill will be kept, unlinked from this app, and disabled for everyone.} other {# associated custom skills will be kept, unlinked from this app, and disabled for everyone.}}",
           "submit": {
             "label": "Delete app"
           },
@@ -12162,13 +12148,6 @@
       }
     },
     "skill": {
-      "dependency": {
-        "appDisabled": "App “{app}” is disabled",
-        "connectToEnable": "Connect app “{app}” to enable",
-        "connectToUse": "Connect app “{app}” to use",
-        "nameConflict": "Another skill with this name is enabled",
-        "usesApp": "Uses app “{app}”"
-      },
       "edit": {
         "tooltip": "Edit skill"
       },
@@ -12176,9 +12155,6 @@
         "description": "Delete this invalid skill and create a new one."
       },
       "tags": {
-        "appSkill": {
-          "label": "App skill"
-        },
         "builtin": {
           "label": "Built-in"
         },
@@ -12209,19 +12185,11 @@
         "disable": {
           "ariaLabel": "Disable {name}"
         },
-        "disableForApp": {
-          "ariaLabel": "Disable {name} for {app}"
-        },
         "enable": {
           "ariaLabel": "Enable {name}"
-        },
-        "enableForApp": {
-          "ariaLabel": "Enable {name} for {app}"
         }
       },
       "tooltips": {
-        "appDisabled": "App “{app}” is disabled by an administrator.",
-        "connectApp": "Connect app “{app}” from the Apps page to use this skill.",
         "invalid": "This skill is invalid. Delete it and create a new skill.",
         "unavailable": "Skill is currently unavailable. Click to view details."
       }
@@ -14657,58 +14625,6 @@
           "title": "Add an app"
         }
       },
-      "associatedSkills": {
-        "associateButton": "Associate existing",
-        "create": {
-          "github": {
-            "description": "If your skills are in GitHub, import them on the Skills page first, then associate them with this app.",
-            "label": "Import from GitHub"
-          },
-          "scratch": {
-            "description": "Write instructions and add supporting files.",
-            "label": "Start from scratch"
-          },
-          "upload": {
-            "description": "Import a SKILL.md file, ZIP file, or skill folder.",
-            "label": "Upload a skill"
-          }
-        },
-        "createSkillButton": "Create skill",
-        "description": "Skills give Craft instructions for using this app. They are organization-wide; users may need to enable all of them for the app to work correctly.",
-        "editButton": "Edit",
-        "empty": {
-          "label": "No editable skills found."
-        },
-        "invalidTag": "Invalid",
-        "loading": {
-          "label": "Loading skills…"
-        },
-        "noneAssociated": {
-          "label": "No skills are associated yet. This app can still be saved and used without one."
-        },
-        "promote": {
-          "cancelButton": "Cancel",
-          "confirmButton": "Make organization-wide",
-          "description": "App-associated skills must be available to everyone. When you save the app, the skill is published to the organization. Publishing cannot be undone.",
-          "title": "Make “{name}” organization-wide?"
-        },
-        "search": {
-          "placeholder": "Search editable skills..."
-        },
-        "title": "Associated skills",
-        "unavailable": {
-          "duplicateName": "A skill named “{name}” is already associated.",
-          "invalid": "Invalid skill. Fix it before associating.",
-          "otherApp": "Already associated with app “{name}”."
-        },
-        "unlink": {
-          "button": "Unlink",
-          "cancelButton": "Cancel",
-          "confirm": "Unlink “{name}” from this app?"
-        },
-        "unlinkAriaLabel": "Unlink {name}",
-        "viewButton": "View"
-      },
       "configureProvider": {
         "addButton": "Add",
         "addTitle": "Add {name}",
@@ -14771,9 +14687,6 @@
           "allowedUrl": "https://api.example.com/*"
         }
       },
-      "errors": {
-        "duplicateSkillName": "App “{appName}” already has an associated skill named “{skillName}”. Upload a skill with a different name."
-      },
       "mcpPolicy": {
         "description": "Choose which tools run automatically, ask for approval, or are disabled in chat and Craft.",
         "emptyPolicies": "No enabled tools on this server. Enable tools on the MCP actions page first.",
@@ -14808,14 +14721,9 @@
         "loading": {
           "label": "Loading…"
         },
-        "reviewSkillsButton": "Review skills",
         "status": {
           "connected": "Connected",
-          "connectedNeedsSkills": "Connected · not all associated skills are enabled",
-          "notAvailable": "Not available for your account — ask an admin",
-          "skillWarningAriaLabel": "Skill setup required",
-          "skillWarningTooltip": "Not all associated skills are enabled. This app may not work correctly.",
-          "skillWarningSummary": "Not all associated skills are enabled."
+          "notAvailable": "Not available for your account — ask an admin"
         }
       },
       "policyEditor": {
@@ -14836,16 +14744,6 @@
           "description": "Set a policy for each action individually.",
           "title": "Advanced"
         }
-      },
-      "skillsStep": {
-        "description": "Optional — associate existing skills or create one for this app.",
-        "errors": {
-          "saveFailedTitle": "Couldn't save"
-        },
-        "saveButton": "Save skills",
-        "savingButton": "Saving…",
-        "skipButton": "Skip for now",
-        "title": "Add skills to {name}"
       },
       "userCredentials": {
         "cancelButton": "Cancel",
@@ -17237,10 +17135,6 @@
   },
   "skills": {
     "editor": {
-      "appConflict": {
-        "description": "App “{appName}” already has an associated skill named “{skillName}”.",
-        "title": "Choose a different skill name"
-      },
       "confirmUpload": {
         "importBody": "This upload includes SKILL.md. Continuing will replace the current name, description, instructions, and files with the uploaded bundle.",
         "importSubmit": {
@@ -17297,9 +17191,7 @@
         "updating": "Updating skill files..."
       },
       "header": {
-        "appFallbackName": "External app",
         "createDescription": "Build a personal skill",
-        "createForAppDescription": "Add an organization skill to app “{appName}”",
         "createTitle": "Create skill",
         "editDescription": "Update skill details and files",
         "editTitle": "Edit skill",
@@ -17520,17 +17412,12 @@
         "metadata": {
           "createdBy": {
             "label": "Created by"
-          },
-          "externalApp": {
-            "label": "External app"
           }
         },
         "noInstructions": {
           "message": "No instructions found."
         },
         "unavailable": {
-          "appDisabled": "App “{appName}” is disabled by an administrator.",
-          "appNotConnected": "Connect app “{appName}” from the Apps page to use this skill.",
           "title": "Skill unavailable"
         }
       },
@@ -17545,7 +17432,6 @@
         "doneButton": {
           "label": "Done"
         },
-        "externalAppNotice": "Organization-wide viewer access is required while this skill is associated with app “{appName}”.",
         "header": {
           "transferTitle": "Transfer *{name}*"
         },
@@ -17707,13 +17593,6 @@
           "title": "No custom skills yet",
           "description": "Create or import a skill to add it to your library."
         }
-      },
-      "focusedApp": {
-        "description": "Enable every skill associated with app “{appName}”. The app may not work correctly without them. If another skill with the same name is enabled, enabling the app-associated skill disables the other skill for you.",
-        "showAll": {
-          "label": "Show all skills"
-        },
-        "title": "Skills for app “{appName}”"
       },
       "header": {
         "description": "Capability bundles your Craft agent can reach for. This page shows built-in skills, skills shared with you, and your own personal skills.",

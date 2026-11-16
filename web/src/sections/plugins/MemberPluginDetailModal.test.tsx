@@ -10,17 +10,9 @@ import {
 import { MCPConnectionStatus } from "@/lib/mcp/types";
 import MemberPluginDetailModal from "@/sections/plugins/MemberPluginDetailModal";
 import type { AppActionPoliciesView } from "@/lib/plugins/types";
-import type { SkillsList } from "@/lib/skills/types";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
-import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
-import {
-  builtinFixture,
-  customFixture,
-} from "@/lib/skills/__fixtures__/picker";
 import {
   jsonResponse,
   memberServer,
@@ -82,7 +74,7 @@ describe.each(["mcp", "openapi", "external-app"] as const)(
   }
 );
 
-test("disabled Craft hides app-only metadata, skills recovery, and launch action", () => {
+test("disabled Craft hides app-only metadata and launch action", () => {
   mockCraftEnabled = false;
   const requests = jest.spyOn(global, "fetch");
   show({
@@ -94,7 +86,7 @@ test("disabled Craft hides app-only metadata, skills recovery, and launch action
   expect(
     screen.queryByRole("link", { name: "Open in Craft" })
   ).not.toBeInTheDocument();
-  expect(requests).not.toHaveBeenCalledWith("/api/skills");
+  expect(requests).not.toHaveBeenCalled();
 });
 
 test.each([false, undefined])(
@@ -119,15 +111,11 @@ test.each([false, undefined])(
   }
 );
 
-function mockSkillsRequests(skills: SkillsList) {
+function mockPolicyRequests() {
   return jest
     .spyOn(global, "fetch")
-    .mockImplementation(async (input) =>
-      jsonResponse(
-        String(input).includes("/action-policies/")
-          ? { ...approvalApp, actions: [] }
-          : skills
-      )
+    .mockImplementation(async () =>
+      jsonResponse({ ...approvalApp, actions: [] })
     );
 }
 
@@ -247,7 +235,7 @@ test("MCP connection card reports needs sign-in when credentials are missing", (
 test.each(["https://api.linear.app", "https://[2606:4700::1111]:8443"])(
   "Craft app details show a description instead of service origin %s",
   (origin) => {
-    const requests = mockSkillsRequests({ builtins: [], customs: [] });
+    const requests = mockPolicyRequests();
     show({
       kind: "external-app",
       app: memberApp({
@@ -272,7 +260,7 @@ test.each(["https://api.linear.app", "https://[2606:4700::1111]:8443"])(
 test.each([undefined, []])(
   "Craft app details omit missing service URLs (%s)",
   (service_urls) => {
-    const requests = mockSkillsRequests({ builtins: [], customs: [] });
+    const requests = mockPolicyRequests();
     show({
       kind: "external-app",
       app: memberApp({ name: "Linear", app_type: "LINEAR", service_urls }),
@@ -286,17 +274,8 @@ test.each([undefined, []])(
   }
 );
 
-test("Craft App details share the connection card and searchable Skills tab without admin data", async () => {
-  const skill = builtinFixture({
-    name: "GitHub workflow",
-    external_app: {
-      external_app_id: 7,
-      name: "GitHub",
-      enabled: true,
-      ready: true,
-    },
-  });
-  const requests = mockSkillsRequests({ builtins: [skill], customs: [] });
+test("Craft App details share the connection card and Tools tab without admin data", () => {
+  const requests = mockPolicyRequests();
   show({
     kind: "external-app",
     app: memberApp({ authenticated: true }),
@@ -308,23 +287,10 @@ test("Craft App details share the connection card and searchable Skills tab with
     screen.queryByText("Use your account in Craft.")
   ).not.toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Tools" })).toBeVisible();
-  await setupUser().click(screen.getByRole("tab", { name: "Skills" }));
-  expect(await screen.findByText("GitHub workflow")).toBeVisible();
+  expect(screen.queryByRole("tab", { name: "Skills" })).not.toBeInTheDocument();
   expect(
-    screen.getByRole("searchbox", { name: "Search skills" })
-  ).toBeVisible();
-  expect(screen.getByRole("link", { name: "Review skills" })).toHaveAttribute(
-    "href",
-    "/craft/v1/skills?externalAppId=7"
-  );
-  expect(
-    screen.queryByRole("button", { name: "Disconnect" })
-  ).not.toBeInTheDocument();
-  expect(
-    requests.mock.calls.every(
-      ([url]) =>
-        String(url) === "/api/skills" ||
-        String(url).includes("/action-policies/")
+    requests.mock.calls.every(([url]) =>
+      String(url).includes("/action-policies/")
     )
   ).toBe(true);
 });
@@ -352,11 +318,7 @@ test("personal external-app disconnect uses native credentials without fetching 
   const disconnected = jest.fn();
   const requests = jest
     .spyOn(global, "fetch")
-    .mockImplementation(async (input) =>
-      jsonResponse(
-        String(input) === "/api/skills" ? { builtins: [], customs: [] } : {}
-      )
-    );
+    .mockImplementation(async () => jsonResponse({}));
   show(
     {
       kind: "external-app",
@@ -366,7 +328,6 @@ test("personal external-app disconnect uses native credentials without fetching 
     disconnected
   );
   const user = setupUser();
-  await waitFor(() => expect(requests).toHaveBeenCalledWith("/api/skills"));
   requests.mockClear();
   await user.click(screen.getByRole("button", { name: "Disconnect" }));
   expect(
@@ -379,72 +340,6 @@ test("personal external-app disconnect uses native credentials without fetching 
   expect(requests).toHaveBeenCalledWith("/api/build/apps/7/credentials", {
     method: "DELETE",
   });
-});
-
-test.each(["builtin", "custom"] as const)(
-  "connected apps recover disabled associated %s skills",
-  async (source) => {
-    const skill = (source === "builtin" ? builtinFixture : customFixture)({
-      enabled: false,
-      external_app: {
-        external_app_id: 7,
-        name: "Workspace GitHub",
-        enabled: true,
-        ready: true,
-      },
-    });
-    mockSkillsRequests({
-      builtins: source === "builtin" ? [skill] : [],
-      customs: source === "custom" ? [skill] : [],
-    });
-    show({
-      kind: "external-app",
-      app: memberApp({ authenticated: true }),
-      connection: { kind: "connected", ownership: "user" },
-    });
-    expect(
-      await screen.findByText(
-        "Not all associated skills are enabled. This app may not work correctly."
-      )
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Review skills" })).toBeVisible();
-  }
-);
-
-test("enabled or unrelated skills do not mark a connected app as needing skill setup", async () => {
-  mockSkillsRequests({
-    builtins: [
-      builtinFixture({
-        enabled: true,
-        external_app: {
-          external_app_id: 7,
-          name: "Workspace GitHub",
-          enabled: true,
-          ready: true,
-        },
-      }),
-    ],
-    customs: [
-      customFixture({
-        enabled: false,
-        external_app: {
-          external_app_id: 99,
-          name: "Other app",
-          enabled: true,
-          ready: true,
-        },
-      }),
-    ],
-  });
-  show({
-    kind: "external-app",
-    app: memberApp({ authenticated: true }),
-    connection: { kind: "connected", ownership: "user" },
-  });
-  await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/api/skills"));
-  expect(
-    screen.queryByRole("button", { name: "Review skills" })
-  ).not.toBeInTheDocument();
 });
 
 test("Tools tab searches stored tools and expands full descriptions without live discovery", async () => {
@@ -1354,312 +1249,4 @@ test("retry saves only approvals after preference changes succeeded", async () =
   expect(
     requests.mock.calls.filter(([, init]) => init?.method === "PUT")
   ).toHaveLength(2);
-});
-
-test("skill enable changes stay drafts across tabs and save only on Save", async () => {
-  const skill = customFixture({
-    enabled: false,
-    external_app: {
-      external_app_id: 7,
-      name: "GitHub",
-      enabled: true,
-      ready: true,
-    },
-  });
-  const requests = jest
-    .spyOn(global, "fetch")
-    .mockImplementation(async (input, init) =>
-      jsonResponse(
-        String(input).includes("/action-policies/")
-          ? { ...approvalApp, actions: [] }
-          : init?.method === "PUT"
-            ? { ...skill, enabled: true }
-            : { builtins: [], customs: [skill] }
-      )
-    );
-  const onClose = jest.fn();
-  // Stands in for the chat input's skill list.
-  function ChatSkillsReader() {
-    useSWR(SWR_KEYS.chatSkills, errorHandlingFetcher);
-    return null;
-  }
-  const chatSkillFetches = () =>
-    requests.mock.calls.filter(([url]) => url === SWR_KEYS.chatSkills).length;
-  show(
-    {
-      kind: "external-app",
-      app: memberApp({ authenticated: true }),
-      connection: { kind: "connected", ownership: "user" },
-    },
-    jest.fn(),
-    "craft",
-    { onClose, beside: <ChatSkillsReader /> }
-  );
-  const user = setupUser();
-  await waitFor(() => expect(chatSkillFetches()).toBe(1));
-  expect(screen.getByRole("status")).toHaveTextContent("Ready to use");
-  expect(await screen.findByText("Issues")).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "Review skills" }));
-  await user.click(
-    await screen.findByRole("switch", { name: /Enable report-writer/ })
-  );
-  expect(requests.mock.calls.every(([, init]) => !init?.method)).toBe(true);
-  await user.click(screen.getByRole("tab", { name: "Connection" }));
-  await user.click(screen.getByRole("tab", { name: "Skills" }));
-  expect(await screen.findByRole("switch")).toBeChecked();
-  await user.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-  expect(requests).toHaveBeenCalledWith(
-    `/api/skills/${skill.id}/enabled`,
-    expect.objectContaining({
-      method: "PUT",
-      body: JSON.stringify({ enabled: true, replace_conflict: false }),
-    })
-  );
-  await waitFor(() => expect(chatSkillFetches()).toBe(2));
-});
-
-test("reverting a skill draft leaves Save disabled without writing", async () => {
-  const skill = customFixture({
-    external_app: {
-      external_app_id: 7,
-      name: "GitHub",
-      enabled: true,
-      ready: true,
-    },
-  });
-  const requests = mockSkillsRequests({ builtins: [], customs: [skill] });
-  show({
-    kind: "external-app",
-    app: memberApp({ authenticated: true }),
-    connection: { kind: "connected", ownership: "user" },
-  });
-  const user = setupUser();
-  await user.click(screen.getByRole("tab", { name: "Skills" }));
-  const toggle = await screen.findByRole("switch");
-  await user.click(toggle);
-  expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
-  await user.click(toggle);
-  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
-  expect(requests.mock.calls.every(([, init]) => !init?.method)).toBe(true);
-});
-
-test("skill preview replaces the same modal content and Back preserves drafts", async () => {
-  const skill = customFixture({
-    external_app: {
-      external_app_id: 7,
-      name: "GitHub",
-      enabled: true,
-      ready: true,
-    },
-  });
-  jest.spyOn(global, "fetch").mockImplementation(async (input) =>
-    jsonResponse(
-      String(input).includes("/action-policies/")
-        ? { ...approvalApp, actions: [] }
-        : String(input).endsWith("/preview")
-          ? {
-              ...skill,
-              instructions_markdown: "Write a weekly report from these notes.",
-            }
-          : { builtins: [], customs: [skill] }
-    )
-  );
-  show({
-    kind: "external-app",
-    app: memberApp({ authenticated: true }),
-    connection: { kind: "connected", ownership: "user" },
-  });
-  const user = setupUser();
-  await user.click(screen.getByRole("tab", { name: "Skills" }));
-  await user.click(await screen.findByRole("switch"));
-  const backdrop = document.querySelector(".opal-modal-overlay");
-  const dialog = screen.getByRole("dialog");
-  await user.click(screen.getByRole("button", { name: "Preview" }));
-  expect(
-    await screen.findByText("Write a weekly report from these notes.")
-  ).toBeVisible();
-  expect(screen.getAllByRole("dialog")).toEqual([dialog]);
-  expect(document.querySelectorAll(".opal-modal-overlay")).toHaveLength(1);
-  expect(document.querySelector(".opal-modal-overlay")).toBe(backdrop);
-  expect(screen.queryByRole("tab", { name: "Skills" })).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Back" }));
-  expect(screen.getByRole("tab", { name: "Skills" })).toHaveAttribute(
-    "aria-selected",
-    "true"
-  );
-  expect(await screen.findByRole("switch")).not.toBeChecked();
-  expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
-  await user.click(screen.getByRole("button", { name: "Preview" }));
-  await user.keyboard("{Escape}");
-  expect(screen.getByRole("tab", { name: "Skills" })).toHaveAttribute(
-    "aria-selected",
-    "true"
-  );
-});
-
-test("skill saves disable conflicts first and retry only unsaved changes", async () => {
-  const dependency = {
-    external_app_id: 7,
-    name: "GitHub",
-    enabled: true,
-    ready: true,
-  };
-  const replacement = customFixture({
-    id: "replacement",
-    enabled: false,
-    external_app: dependency,
-  });
-  const previous = customFixture({
-    id: "previous",
-    enabled: true,
-    external_app: dependency,
-  });
-  let failReplacement = true;
-  const requests = jest
-    .spyOn(global, "fetch")
-    .mockImplementation(async (input, init) => {
-      const path = String(input);
-      if (path.includes("/action-policies/"))
-        return jsonResponse({ ...approvalApp, actions: [] });
-      if (init?.method === "PUT") {
-        if (path.includes(replacement.id)) {
-          return failReplacement
-            ? jsonResponse({ detail: "Enable failed" }, 500)
-            : jsonResponse({ ...replacement, enabled: true });
-        }
-        return jsonResponse({ ...previous, enabled: false });
-      }
-      return jsonResponse({ builtins: [], customs: [replacement, previous] });
-    });
-  const onClose = jest.fn();
-  show(
-    {
-      kind: "external-app",
-      app: memberApp({ authenticated: true }),
-      connection: { kind: "connected", ownership: "user" },
-    },
-    jest.fn(),
-    "craft",
-    { onClose }
-  );
-  const skillListFetches = () =>
-    requests.mock.calls.filter(([url]) => url === SWR_KEYS.userSkills).length;
-  const user = setupUser();
-  await user.click(screen.getByRole("tab", { name: "Skills" }));
-  const enable = await screen.findByRole("switch", {
-    name: "Enable report-writer",
-  });
-  const disable = screen.getByRole("switch", { name: "Disable report-writer" });
-  await user.click(enable);
-  await user.click(disable);
-  const fetchesBeforeSave = skillListFetches();
-  await user.click(screen.getByRole("button", { name: "Save" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Enable failed");
-  expect(onClose).not.toHaveBeenCalled();
-  // The disable that succeeded before the failure refreshes the skill lists.
-  await waitFor(() => expect(skillListFetches()).toBe(fetchesBeforeSave + 1));
-  expect(
-    requests.mock.calls
-      .filter(([, init]) => init?.method === "PUT")
-      .map(([input]) => String(input))
-  ).toEqual([
-    "/api/skills/previous/enabled",
-    "/api/skills/replacement/enabled",
-  ]);
-  failReplacement = false;
-  await user.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-  expect(
-    requests.mock.calls
-      .filter(([, init]) => init?.method === "PUT")
-      .map(([input]) => String(input))
-  ).toEqual([
-    "/api/skills/previous/enabled",
-    "/api/skills/replacement/enabled",
-    "/api/skills/replacement/enabled",
-  ]);
-});
-
-test("skill conflicts can be confirmed without losing remaining drafts", async () => {
-  const dependency = {
-    external_app_id: 7,
-    name: "GitHub",
-    enabled: true,
-    ready: true,
-  };
-  const replacement = customFixture({
-    id: "replacement",
-    enabled: false,
-    external_app: dependency,
-  });
-  const other = customFixture({
-    id: "other",
-    name: "another-skill",
-    enabled: false,
-    external_app: dependency,
-  });
-  const requests = jest
-    .spyOn(global, "fetch")
-    .mockImplementation(async (input, init) => {
-      const path = String(input);
-      if (path.includes("/action-policies/"))
-        return jsonResponse({ ...approvalApp, actions: [] });
-      if (init?.method === "PUT") {
-        if (path.includes(replacement.id)) {
-          const body = JSON.parse(String(init.body));
-          return body.replace_conflict
-            ? jsonResponse({ ...replacement, enabled: true })
-            : jsonResponse(
-                { detail: "Name conflict", error_code: "SKILL_NAME_CONFLICT" },
-                409
-              );
-        }
-        return jsonResponse({ ...other, enabled: true });
-      }
-      return jsonResponse({ builtins: [], customs: [replacement, other] });
-    });
-  const onClose = jest.fn();
-  show(
-    {
-      kind: "external-app",
-      app: memberApp({ authenticated: true }),
-      connection: { kind: "connected", ownership: "user" },
-    },
-    jest.fn(),
-    "craft",
-    { onClose }
-  );
-  const user = setupUser();
-  await user.click(screen.getByRole("tab", { name: "Skills" }));
-  await user.click(
-    await screen.findByRole("switch", { name: "Enable report-writer" })
-  );
-  await user.click(
-    screen.getByRole("switch", { name: "Enable another-skill" })
-  );
-  const dialog = screen.getByRole("dialog");
-  await user.click(screen.getByRole("button", { name: "Save" }));
-  await screen.findByRole("button", { name: "Switch skill" });
-  expect(screen.getByRole("dialog")).toBe(dialog);
-  expect(onClose).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "Back" }));
-  expect(
-    screen.getByRole("switch", { name: "Disable another-skill" })
-  ).toBeChecked();
-  await user.click(screen.getByRole("button", { name: "Save" }));
-  await user.click(await screen.findByRole("button", { name: "Switch skill" }));
-  await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-  expect(requests).toHaveBeenCalledWith(
-    "/api/skills/replacement/enabled",
-    expect.objectContaining({
-      body: JSON.stringify({ enabled: true, replace_conflict: true }),
-    })
-  );
-  expect(requests).toHaveBeenCalledWith(
-    "/api/skills/other/enabled",
-    expect.objectContaining({
-      body: JSON.stringify({ enabled: true, replace_conflict: false }),
-    })
-  );
 });

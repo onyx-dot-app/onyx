@@ -89,7 +89,6 @@ const app: ExternalAppAdminResponse = {
   organization_credentials: {},
   credential_placeholder_keys: [],
   actions: [],
-  associated_skills: [],
   is_onyx_managed: false,
   users_can_manage_policies: true,
 };

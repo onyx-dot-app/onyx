@@ -59,7 +59,7 @@ describe("CraftAppEditorTabs", () => {
         value="configuration"
         onValueChange={jest.fn()}
         configuration={<DraftField />}
-        skills={<InputTypeIn aria-label="Skill" />}
+        tools={<InputTypeIn aria-label="Permission" />}
         busy
       />
     );

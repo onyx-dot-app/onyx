@@ -1,6 +1,5 @@
 "use client";
 
-import { useNavigation } from "@opal/navigation";
 import isEqual from "lodash/isEqual";
 import { useId, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
@@ -21,13 +20,11 @@ import type {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { AppActionPoliciesView } from "@/lib/plugins/types";
-import { SkillPreviewContent } from "@/sections/modals/SkillPreviewModal";
 import PolicyEditor from "@/sections/actions/PolicyEditor";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import MemberMCPToolsList from "@/sections/plugins/MemberMCPToolsList";
-import MemberCraftAppSkills from "@/sections/plugins/MemberCraftAppSkills";
 import OpenAPIEndpointList from "@/sections/plugins/OpenAPIEndpointList";
 import { SvgCodeFile } from "@opal/icons";
 import MemberMCPPreferences from "@/sections/plugins/MemberMCPPreferences";
@@ -40,11 +37,6 @@ import {
   getActionIcon,
 } from "@/lib/tools/utils";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
-import { useExternalAppSkillIssues } from "@/lib/externalApps/hooks";
-import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
-import useUserSkills from "@/hooks/useUserSkills";
-import { refreshSkillLists } from "@/lib/skills/cache";
-import type { Skill, SkillsList } from "@/lib/skills/types";
 import { useSettings } from "@/lib/settings/hooks";
 import {
   saveMemberActionPolicies,
@@ -79,7 +71,8 @@ interface MemberDetailTabsProps {
   onTabChange: (value: string) => void;
   connection: ReactNode;
   capabilities: ReactNode;
-  secondaryTab?: "tools" | "skills";
+  /** The Tools tab shows only the approvals, with no tool list tab. */
+  approvalsOnly?: boolean;
   approvals?: ReactNode;
   approvalsLoading: boolean;
   availableActions?: ReactNode;
@@ -91,14 +84,13 @@ function MemberDetailTabs({
   onTabChange,
   connection,
   capabilities,
-  secondaryTab = "tools",
+  approvalsOnly = false,
   approvals,
   approvalsLoading,
   availableActions,
 }: MemberDetailTabsProps) {
   const t = useTranslations("actions.memberPlugins");
   const toolCopy = useTranslations("actions.mcpTools");
-  const craftTabs = useTranslations("actions.plugins.craftApp.tabs");
   if (!enabled)
     return (
       <>
@@ -107,10 +99,9 @@ function MemberDetailTabs({
       </>
     );
   const toolsTab = tab === "approvals" ? "tools" : tab;
-  const availableTools =
-    secondaryTab === "tools"
-      ? capabilities || availableActions
-      : availableActions;
+  const availableTools = approvalsOnly
+    ? availableActions
+    : capabilities || availableActions;
   return (
     <Tabs
       value={toolsTab}
@@ -123,9 +114,6 @@ function MemberDetailTabs({
         {(availableTools || approvals) && (
           <Tabs.Trigger value="tools">{t("detail.tools")}</Tabs.Trigger>
         )}
-        {secondaryTab === "skills" && capabilities && (
-          <Tabs.Trigger value="skills">{craftTabs("skills")}</Tabs.Trigger>
-        )}
       </Tabs.List>
       <Tabs.Content
         value="connection"
@@ -135,7 +123,7 @@ function MemberDetailTabs({
         <div className="flex flex-col gap-6">{connection}</div>
       </Tabs.Content>
       <Tabs.Content value="tools">
-        {secondaryTab === "skills" ? (
+        {approvalsOnly ? (
           approvals
         ) : approvals ? (
           <Tabs
@@ -166,42 +154,7 @@ function MemberDetailTabs({
           availableTools
         )}
       </Tabs.Content>
-      {secondaryTab === "skills" && (
-        <Tabs.Content value="skills">{capabilities}</Tabs.Content>
-      )}
     </Tabs>
-  );
-}
-
-function ExternalAppSkillRecovery({
-  appId,
-  onReview,
-}: {
-  appId: number;
-  onReview: () => void;
-}) {
-  const t = useTranslations("craft.apps.page");
-  const detailCopy = useTranslations("actions.memberPlugins.detail");
-  const needsSkills = useExternalAppSkillIssues(appId);
-  if (!needsSkills) return null;
-  return (
-    <Card border="solid" padding={4}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <span
-            aria-hidden
-            className="size-2 shrink-0 rounded-full bg-status-warning-05"
-          />
-          <div className="flex min-w-0 flex-col gap-1">
-            <Text font="main-ui-action">{detailCopy("issuesTitle")}</Text>
-            <Text font="secondary-body" color="text-03">
-              {t("status.skillWarningTooltip")}
-            </Text>
-          </div>
-        </div>
-        <Button onClick={onReview}>{t("reviewSkillsButton")}</Button>
-      </div>
-    </Card>
   );
 }
 
@@ -227,16 +180,8 @@ export function MemberPluginDetailContent({
 }: MemberPluginDetailModalProps) {
   const t = useTranslations("actions.memberPlugins");
   const { describeError } = useSkillLimitCopy();
-  const navigation = useNavigation();
   const craftEnabled = useSettings().onyx_craft_enabled === true;
   const actions = useTranslations("actions");
-  const switchCopy = useTranslations("skills.page.switchModal");
-  const { data: skills } = useUserSkills(
-    craftEnabled && plugin.kind === "external-app"
-  );
-  const [skillConflict, setSkillConflict] = useState<Skill | null>(null);
-  const craftCopy = useTranslations("craft.apps.page");
-  const [preview, setPreview] = useState<Skill | null>(null);
   const [action, setAction] = useState<DetailAction>({ kind: "details" });
   // MCP approvals apply to chat and Craft; external apps exist only in Craft.
   const supportsApprovals =
@@ -326,34 +271,16 @@ export function MemberPluginDetailContent({
   const [preferences, setPreferences] = useState(initialPreferences);
   const preferencesDirty = !isEqual(preferences, initialPreferences);
   const policiesDirty = !isEqual(policies, initialPolicies);
-  const [skillChanges, setSkillChanges] = useState<Record<string, boolean>>({});
-  const dirty =
-    preferencesDirty || policiesDirty || Object.keys(skillChanges).length > 0;
-  function changeSkill(skill: Skill, enabled: boolean) {
-    setSkillChanges((current) => {
-      const next = { ...current };
-      if (enabled === skill.enabled) delete next[skill.id];
-      else next[skill.id] = enabled;
-      return next;
-    });
-  }
+  const dirty = preferencesDirty || policiesDirty;
   const guard = useUnsavedChangesGuard({
     isDirty: dirty,
     onDiscard: () => {
       setPolicies(initialPolicies);
       setPreferences(initialPreferences);
-      setSkillChanges({});
     },
   });
 
-  function reviewSkills() {
-    if (plugin.kind !== "external-app" || saving) return;
-    guard.requestLeave(() =>
-      navigation.go(`/craft/v1/skills?externalAppId=${plugin.app.id}`)
-    );
-  }
-
-  async function saveChanges(replaceSkillId?: string) {
+  async function saveChanges() {
     if (
       saving ||
       !dirty ||
@@ -362,7 +289,6 @@ export function MemberPluginDetailContent({
       return;
     setSaving(true);
     setSaveError(null);
-    let skillChanged = false;
     try {
       if (preferencesDirty) {
         if (plugin.kind === "mcp") {
@@ -395,58 +321,10 @@ export function MemberPluginDetailContent({
         );
         setInitialPolicies(policies);
       }
-      // Save disables first so switching between skills with the same name works.
-      const changes = Object.entries(skillChanges).sort(
-        (a, b) => Number(a[1]) - Number(b[1])
-      );
-      for (const [skillId, enabled] of changes) {
-        let updated: Skill;
-        try {
-          updated = await setSkillEnabled(
-            skillId,
-            enabled,
-            skillId === replaceSkillId
-          );
-        } catch (error) {
-          const skill = [
-            ...(skills?.builtins ?? []),
-            ...(skills?.customs ?? []),
-          ].find((item) => item.id === skillId);
-          if (enabled && isSkillNameConflict(error) && skill) {
-            setSkillConflict(skill);
-            return;
-          }
-          throw error;
-        }
-        skillChanged = true;
-        if (skillId === replaceSkillId) setSkillConflict(null);
-        const updateSkill = (skill: Skill): Skill =>
-          skill.id === updated.id
-            ? updated
-            : enabled && skill.name === updated.name
-              ? { ...skill, enabled: false }
-              : skill;
-        await mutate<SkillsList>(
-          SWR_KEYS.userSkills,
-          (current) =>
-            current && {
-              builtins: current.builtins.map(updateSkill),
-              customs: current.customs.map(updateSkill),
-            },
-          { revalidate: false }
-        );
-        setSkillChanges((current) => {
-          const next = { ...current };
-          delete next[skillId];
-          return next;
-        });
-      }
       onClose();
     } catch (error) {
       setSaveError(describeError(error, t("defaults.saveFailed")));
     } finally {
-      // Other skill lists must see the changes saved before a failure too.
-      if (skillChanged) void refreshSkillLists(mutate);
       setSaving(false);
     }
   }
@@ -555,10 +433,7 @@ export function MemberPluginDetailContent({
   }
 
   function dismiss() {
-    if (saving) return;
-    if (skillConflict) setSkillConflict(null);
-    else if (preview) setPreview(null);
-    else close();
+    if (!saving) close();
   }
 
   return (
@@ -574,359 +449,268 @@ export function MemberPluginDetailContent({
         dismiss();
       }}
     >
-      {skillConflict ? (
-        <>
-          <Modal.Header
-            title={switchCopy("title", { name: skillConflict.name })}
-            description={switchCopy("description", {
-              name: skillConflict.name,
-            })}
-            onClose={saving ? undefined : () => setSkillConflict(null)}
-          />
-          <Modal.Body>
-            <Text>{switchCopy("body")}</Text>
-            {saveError && (
-              <Text role="alert" color="status-error-05">
-                {saveError}
-              </Text>
-            )}
-          </Modal.Body>
-          <Modal.Footer>
-            <Button
-              prominence="secondary"
-              disabled={saving}
-              onClick={() => setSkillConflict(null)}
-            >
-              {actions("mcpSetup.back")}
-            </Button>
-            <Button
-              disabled={saving}
-              onClick={() => void saveChanges(skillConflict.id)}
-            >
-              {switchCopy(saving ? "submit.pendingLabel" : "submit.label")}
-            </Button>
-          </Modal.Footer>
-        </>
-      ) : preview ? (
-        <SkillPreviewContent
-          skillId={preview.id}
-          fallbackTitle={preview.name}
-          unavailableReason={preview.unavailable_reason}
-          closeLabel={actions("mcpSetup.back")}
-          onClose={() => setPreview(null)}
+      <>
+        <Modal.Header
+          icon={icon}
+          title={confirming ? t("detail.disconnectTitle", { name }) : name}
+          description={
+            confirming ? t("detail.disconnectDescription") : description
+          }
+          onClose={close}
+          gap={!confirming ? 1 : undefined}
         />
-      ) : (
-        <>
-          <Modal.Header
-            icon={icon}
-            title={confirming ? t("detail.disconnectTitle", { name }) : name}
-            description={
-              confirming ? t("detail.disconnectDescription") : description
-            }
-            onClose={close}
-            gap={!confirming ? 1 : undefined}
-          />
-          <Modal.Body twoTone={false} alignItems="stretch">
-            {confirming ? (
-              <>
-                {plugin.kind === "openapi" && (
-                  <Text as="p" font="main-ui-body" color="text-03">
-                    {t("detail.oauthDisconnectWarning")}
+        <Modal.Body twoTone={false} alignItems="stretch">
+          {confirming ? (
+            <>
+              {plugin.kind === "openapi" && (
+                <Text as="p" font="main-ui-body" color="text-03">
+                  {t("detail.oauthDisconnectWarning")}
+                </Text>
+              )}
+              {action.kind === "disconnectError" && (
+                <div role="alert">
+                  <Text color="status-error-05">
+                    {t("detail.disconnectFailed")}
                   </Text>
-                )}
-                {action.kind === "disconnectError" && (
-                  <div role="alert">
-                    <Text color="status-error-05">
-                      {t("detail.disconnectFailed")}
-                    </Text>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <MemberDetailTabs
-                  enabled={hasTabs}
-                  secondaryTab={
-                    plugin.kind === "external-app" ? "skills" : "tools"
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <MemberDetailTabs
+                enabled={hasTabs}
+                approvalsOnly={plugin.kind === "external-app"}
+                tab={activeTab}
+                onTabChange={(next) => {
+                  if (!pending) {
+                    setTab(next);
                   }
-                  tab={activeTab}
-                  onTabChange={(next) => {
-                    if (!pending) {
-                      setTab(next);
-                    }
-                  }}
-                  availableActions={
-                    showApprovals ? (
-                      <div className="flex flex-col gap-4">
-                        {policyApp ? (
-                          <MemberMCPToolsList
-                            tools={policyApp.actions
-                              .filter(
-                                (item) => item.effective_policy !== "DENY"
-                              )
-                              .map((item) => ({
-                                id: item.action_id,
-                                name: item.normalised_name,
-                                display_name: item.normalised_name,
-                                description: item.description,
-                              }))}
-                          />
-                        ) : (
-                          policyLoadState
-                        )}
-                      </div>
-                    ) : undefined
-                  }
-                  approvalsLoading={!policyApp && !policyLoadError}
-                  approvals={
-                    showApprovals ? (
-                      <div className="flex flex-col gap-4">
-                        {policyApp ? (
-                          <PolicyEditor
-                            showTitle={false}
-                            items={policyApp.actions.map((item) => ({
+                }}
+                availableActions={
+                  showApprovals ? (
+                    <div className="flex flex-col gap-4">
+                      {policyApp ? (
+                        <MemberMCPToolsList
+                          tools={policyApp.actions
+                            .filter((item) => item.effective_policy !== "DENY")
+                            .map((item) => ({
                               id: item.action_id,
                               name: item.normalised_name,
+                              display_name: item.normalised_name,
                               description: item.description,
-                              defaultPolicy: item.editable
-                                ? item.workspace_policy
-                                : item.effective_policy,
-                              editable: item.editable,
-                              lockReason: item.lock_reason ?? undefined,
                             }))}
-                            policies={policies}
-                            onChange={setPolicies}
-                            onReset={() => setPolicies({})}
-                            resetLabel={approvalCopy("resetAll")}
-                            disabled={
-                              saving || !policyApp.users_can_manage_policies
-                            }
+                        />
+                      ) : (
+                        policyLoadState
+                      )}
+                    </div>
+                  ) : undefined
+                }
+                approvalsLoading={!policyApp && !policyLoadError}
+                approvals={
+                  showApprovals ? (
+                    <div className="flex flex-col gap-4">
+                      {policyApp ? (
+                        <PolicyEditor
+                          showTitle={false}
+                          items={policyApp.actions.map((item) => ({
+                            id: item.action_id,
+                            name: item.normalised_name,
+                            description: item.description,
+                            defaultPolicy: item.editable
+                              ? item.workspace_policy
+                              : item.effective_policy,
+                            editable: item.editable,
+                            lockReason: item.lock_reason ?? undefined,
+                          }))}
+                          policies={policies}
+                          onChange={setPolicies}
+                          onReset={() => setPolicies({})}
+                          resetLabel={approvalCopy("resetAll")}
+                          disabled={
+                            saving || !policyApp.users_can_manage_policies
+                          }
+                        />
+                      ) : (
+                        policyLoadState
+                      )}
+                    </div>
+                  ) : undefined
+                }
+                connection={
+                  <>
+                    <Card border="solid" padding={4}>
+                      <div className="flex items-center justify-between gap-4">
+                        <div
+                          role="status"
+                          className="flex min-w-0 flex-1 items-center gap-3"
+                        >
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "size-2 shrink-0 rounded-full",
+                              connection.kind === "connected"
+                                ? "bg-status-success-05"
+                                : canConnect ||
+                                    connection.kind === "unconfigured"
+                                  ? "bg-status-warning-05"
+                                  : "bg-text-03"
+                            )}
                           />
-                        ) : (
-                          policyLoadState
+                          <div className="flex min-w-0 flex-col gap-1">
+                            <Text font="main-ui-action">{connectionTitle}</Text>
+                            {connection.kind === "connected" && (
+                              <Text font="secondary-body" color="text-03">
+                                {connection.ownership === "none"
+                                  ? t("detail.noAuthentication")
+                                  : connectionLabel}
+                              </Text>
+                            )}
+                          </div>
+                        </div>
+                        {canDisconnect && (
+                          <Button
+                            prominence="secondary"
+                            disabled={pending}
+                            onClick={() =>
+                              guard.requestLeave(() =>
+                                setAction({ kind: "confirmDisconnect" })
+                              )
+                            }
+                          >
+                            {t("detail.disconnect")}
+                          </Button>
+                        )}
+                        {canConnect && (
+                          <Button
+                            disabled={pending}
+                            onClick={() => guard.requestLeave(onConnect)}
+                          >
+                            {t("connection.connect")}
+                          </Button>
                         )}
                       </div>
-                    ) : undefined
-                  }
-                  connection={
-                    <>
-                      <Card border="solid" padding={4}>
-                        <div className="flex items-center justify-between gap-4">
-                          <div
-                            role="status"
-                            className="flex min-w-0 flex-1 items-center gap-3"
-                          >
-                            <span
-                              aria-hidden
-                              className={cn(
-                                "size-2 shrink-0 rounded-full",
-                                connection.kind === "connected"
-                                  ? "bg-status-success-05"
-                                  : canConnect ||
-                                      connection.kind === "unconfigured"
-                                    ? "bg-status-warning-05"
-                                    : "bg-text-03"
-                              )}
-                            />
-                            <div className="flex min-w-0 flex-col gap-1">
-                              <Text font="main-ui-action">
-                                {connectionTitle}
-                              </Text>
-                              {connection.kind === "connected" && (
-                                <Text font="secondary-body" color="text-03">
-                                  {connection.ownership === "none"
-                                    ? t("detail.noAuthentication")
-                                    : connectionLabel}
-                                </Text>
-                              )}
-                            </div>
-                          </div>
-                          {canDisconnect && (
-                            <Button
-                              prominence="secondary"
-                              disabled={pending}
-                              onClick={() =>
-                                guard.requestLeave(() =>
-                                  setAction({ kind: "confirmDisconnect" })
-                                )
-                              }
-                            >
-                              {t("detail.disconnect")}
-                            </Button>
-                          )}
-                          {canConnect && (
-                            <Button
-                              disabled={pending}
-                              onClick={() => guard.requestLeave(onConnect)}
-                            >
-                              {t("connection.connect")}
-                            </Button>
-                          )}
-                        </div>
-                      </Card>
-                      {plugin.kind !== "external-app" &&
-                        (surface !== "craft" ||
-                          (plugin.kind === "mcp" && craftEnabled)) && (
-                          <Divider
-                            paddingParallel={0}
-                            paddingPerpendicular={0}
-                          />
-                        )}
-                      {plugin.kind === "mcp" && (
-                        <MemberMCPPreferences
-                          server={plugin.server}
-                          surface={surface}
-                          values={preferences}
-                          onChange={(changes) =>
-                            setPreferences((current) => ({
-                              ...current,
-                              ...changes,
-                            }))
-                          }
-                          disabled={pending}
-                        />
+                    </Card>
+                    {plugin.kind !== "external-app" &&
+                      (surface !== "craft" ||
+                        (plugin.kind === "mcp" && craftEnabled)) && (
+                        <Divider paddingParallel={0} paddingPerpendicular={0} />
                       )}
-                      {plugin.kind === "openapi" && (
-                        <>
-                          {surface !== "craft" && (
-                            <MemberOpenAPIPreferences
-                              tool={openAPITool ?? plugin.tool}
-                              values={preferences}
-                              onChange={(changes) =>
-                                setPreferences((current) => ({
-                                  ...current,
-                                  ...changes,
-                                }))
-                              }
-                              disabled={pending}
-                            />
-                          )}
-                        </>
-                      )}
-                      {plugin.kind === "external-app" &&
-                        craftEnabled &&
-                        connection.kind === "connected" && (
-                          <ExternalAppSkillRecovery
-                            appId={plugin.app.id}
-                            onReview={() => setTab("skills")}
-                          />
-                        )}
-                    </>
-                  }
-                  capabilities={
-                    hasTabs &&
-                    (surface !== "craft" || plugin.kind === "external-app") &&
-                    (plugin.kind === "external-app" ? (
-                      <MemberCraftAppSkills
-                        appId={plugin.app.id}
-                        onPreview={setPreview}
-                        changes={skillChanges}
-                        onChange={changeSkill}
+                    {plugin.kind === "mcp" && (
+                      <MemberMCPPreferences
+                        server={plugin.server}
+                        surface={surface}
+                        values={preferences}
+                        onChange={(changes) =>
+                          setPreferences((current) => ({
+                            ...current,
+                            ...changes,
+                          }))
+                        }
                         disabled={pending}
                       />
-                    ) : plugin.kind === "mcp" ? (
-                      <MemberMCPToolsList tools={plugin.tools} />
-                    ) : (
-                      <div className="flex flex-col gap-4">
-                        <InputTypeIn
-                          icon="search"
-                          value={endpointSearch}
-                          onChange={(event) =>
-                            setEndpointSearch(event.target.value)
-                          }
-                          placeholder={actions("mcpTools.search")}
-                          aria-label={actions("mcpTools.search")}
-                        />
-
-                        <Text font="secondary-body" color="text-03">
-                          {t("detail.toolCount", {
-                            count: visibleEndpoints.length,
-                          })}
-                        </Text>
-
-                        {visibleEndpoints.length ? (
-                          <OpenAPIEndpointList methods={visibleEndpoints} />
-                        ) : (
-                          <Text font="secondary-body" color="text-03">
-                            {endpoints.length
-                              ? actions("toolsList.empty.searchMessage")
-                              : t("detail.noTools")}
-                          </Text>
+                    )}
+                    {plugin.kind === "openapi" && (
+                      <>
+                        {surface !== "craft" && (
+                          <MemberOpenAPIPreferences
+                            tool={openAPITool ?? plugin.tool}
+                            values={preferences}
+                            onChange={(changes) =>
+                              setPreferences((current) => ({
+                                ...current,
+                                ...changes,
+                              }))
+                            }
+                            disabled={pending}
+                          />
                         )}
-                      </div>
-                    ))
-                  }
-                />
-                {saveError && (
-                  <Text role="alert" color="status-error-05">
-                    {saveError}
-                  </Text>
-                )}
-              </>
-            )}
-          </Modal.Body>
-          <Modal.Footer wrap>
-            {confirming ? (
-              <>
-                <Button
-                  prominence="secondary"
-                  disabled={pending}
-                  onClick={() => setAction({ kind: "details" })}
-                >
-                  {t("detail.cancel")}
-                </Button>
-                <Button
-                  variant="danger"
-                  disabled={pending}
-                  onClick={() => void disconnect()}
-                >
-                  {t(pending ? "detail.disconnecting" : "detail.disconnect")}
-                </Button>
-              </>
-            ) : (
-              <>
-                {plugin.kind === "external-app" &&
-                  craftEnabled &&
-                  activeTab === "skills" && (
-                    <div className="flex flex-1">
-                      <Button
-                        prominence="tertiary"
-                        href={
-                          navigation.linkTo(
-                            `/craft/v1/skills?externalAppId=${plugin.app.id}`
-                          ).href
+                      </>
+                    )}
+                  </>
+                }
+                capabilities={
+                  hasTabs &&
+                  surface !== "craft" &&
+                  (plugin.kind === "external-app" ? null : plugin.kind ===
+                    "mcp" ? (
+                    <MemberMCPToolsList tools={plugin.tools} />
+                  ) : (
+                    <div className="flex flex-col gap-4">
+                      <InputTypeIn
+                        icon="search"
+                        value={endpointSearch}
+                        onChange={(event) =>
+                          setEndpointSearch(event.target.value)
                         }
-                        onClick={(event) => {
-                          event.preventDefault();
-                          reviewSkills();
-                        }}
-                      >
-                        {craftCopy("reviewSkillsButton")}
-                      </Button>
+                        placeholder={actions("mcpTools.search")}
+                        aria-label={actions("mcpTools.search")}
+                      />
+
+                      <Text font="secondary-body" color="text-03">
+                        {t("detail.toolCount", {
+                          count: visibleEndpoints.length,
+                        })}
+                      </Text>
+
+                      {visibleEndpoints.length ? (
+                        <OpenAPIEndpointList methods={visibleEndpoints} />
+                      ) : (
+                        <Text font="secondary-body" color="text-03">
+                          {endpoints.length
+                            ? actions("toolsList.empty.searchMessage")
+                            : t("detail.noTools")}
+                        </Text>
+                      )}
                     </div>
-                  )}
-                <Button
-                  prominence="secondary"
-                  disabled={pending}
-                  onClick={close}
-                >
-                  {t("detail.cancel")}
-                </Button>
-                <Button
-                  disabled={
-                    pending ||
-                    !dirty ||
-                    (policiesDirty && !policyApp?.users_can_manage_policies)
-                  }
-                  onClick={() => void saveChanges()}
-                >
-                  {approvalCopy("save")}
-                </Button>
-              </>
-            )}
-          </Modal.Footer>
-        </>
-      )}
+                  ))
+                }
+              />
+              {saveError && (
+                <Text role="alert" color="status-error-05">
+                  {saveError}
+                </Text>
+              )}
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer wrap>
+          {confirming ? (
+            <>
+              <Button
+                prominence="secondary"
+                disabled={pending}
+                onClick={() => setAction({ kind: "details" })}
+              >
+                {t("detail.cancel")}
+              </Button>
+              <Button
+                variant="danger"
+                disabled={pending}
+                onClick={() => void disconnect()}
+              >
+                {t(pending ? "detail.disconnecting" : "detail.disconnect")}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button prominence="secondary" disabled={pending} onClick={close}>
+                {t("detail.cancel")}
+              </Button>
+              <Button
+                disabled={
+                  pending ||
+                  !dirty ||
+                  (policiesDirty && !policyApp?.users_can_manage_policies)
+                }
+                onClick={() => void saveChanges()}
+              >
+                {approvalCopy("save")}
+              </Button>
+            </>
+          )}
+        </Modal.Footer>
+      </>
     </PluginModalContent>
   );
 }

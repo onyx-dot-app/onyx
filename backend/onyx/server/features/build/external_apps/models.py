@@ -1,5 +1,4 @@
 from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -62,18 +61,9 @@ class UpdateExternalAppRequest(BaseModel):
     upstream_url_patterns: list[str] | None = None
     auth_template: dict[str, Any] | None = None
     organization_credentials: dict[str, str] | None = None
-    # When present, atomically replaces only the app's custom-skill
-    # associations. System-managed built-in associations are preserved.
-    associated_skill_ids: list[UUID] | None = None
     # Full-replace stored overrides when present (empty clears); None leaves them.
     action_policies: dict[str, ActionPolicy] | None = None
     users_can_manage_policies: bool | None = None
-
-
-class ExternalAppAssociatedSkill(BaseModel):
-    id: UUID
-    name: str
-    is_valid: bool | None
 
 
 class ExternalAppAdminResponse(BaseModel):
@@ -91,7 +81,6 @@ class ExternalAppAdminResponse(BaseModel):
     # The merged approval policy view (built-in apps; empty for custom).
     actions: list[ActionPolicyView]
     users_can_manage_policies: bool = True
-    associated_skills: list[ExternalAppAssociatedSkill]
     # Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked above;
     # admin may only set availability and policies. UI hides the rest.
     is_onyx_managed: bool = False

@@ -1,9 +1,7 @@
 "use client";
 
-import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import isEqual from "lodash/isEqual";
 import ActionPolicyEditorModal, {
   EditorField,
 } from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
@@ -17,20 +15,6 @@ import {
   createBuiltInExternalApp,
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
-import AssociatedSkillsEditor from "@/app/craft/v1/apps/admin/AssociatedSkillsEditor";
-import ExternalAppSkillsStepModal from "@/app/craft/v1/apps/admin/ExternalAppSkillsStepModal";
-import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
-import useSkillUploadModal from "@/sections/modals/skills/useSkillUploadModal";
-import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
-import {
-  stageSkillCreationDraft,
-  type SkillCreationDraft,
-} from "@/lib/skills/creationDraft";
-import {
-  skillEditorUrlForApp,
-  skillEditUrlForApp,
-} from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
-import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
 
 // Field key for the instance name; prefixed so it can never collide with a
 // descriptor-declared credential key.
@@ -54,8 +38,6 @@ export default function ConfigureProviderModal({
 }: ConfigureProviderModalProps) {
   const t = useTranslations("craft.apps.configureProvider");
   const pluginCopy = useTranslations("actions.memberPlugins.externalApp");
-  const tApps = useTranslations("craft.apps");
-  const navigation = useNavigation();
   const savedEnabled = existingApp?.enabled ?? true;
   const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
   const enabled = enabledDraft ?? savedEnabled;
@@ -66,21 +48,6 @@ export default function ConfigureProviderModal({
   const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
     existingApp?.users_can_manage_policies ?? true
   );
-  const upload = useSkillUploadModal();
-  const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
-    null
-  );
-  const [selectedSkillIds, setSelectedSkillIds] =
-    useSyncedAssociatedSkillIds(existingApp);
-  const existingAssociationDirty =
-    existingApp !== null &&
-    !isEqual(
-      new Set(selectedSkillIds),
-      new Set(existingApp.associated_skills.map((skill) => skill.id))
-    );
-  const associationPatch = existingAssociationDirty
-    ? { associated_skill_ids: selectedSkillIds }
-    : {};
   // Managed built-ins (cloud): Onyx owns creds/config, so the modal only edits
   // policies — cred fields are hidden and the backend ignores them anyway.
   const managed = existingApp?.is_onyx_managed ?? false;
@@ -137,7 +104,6 @@ export default function ConfigureProviderModal({
       const payload: Parameters<typeof updateExternalApp>[1] = {
         action_policies: policies,
         users_can_manage_policies: usersCanManagePolicies,
-        ...associationPatch,
       };
       if (availabilityChanged) payload.enabled = enabled;
       await updateExternalApp(existingApp.id, payload);
@@ -163,95 +129,33 @@ export default function ConfigureProviderModal({
             ...existingApp.organization_credentials,
             ...credentialValues,
           },
-          ...associationPatch,
         };
         if (availabilityChanged) payload.enabled = enabled;
         await updateExternalApp(existingApp.id, payload);
       } else {
-        const created = await createBuiltInExternalApp({
+        await createBuiltInExternalApp({
           ...shared,
           enabled,
           app_type: descriptor.app_type,
           organization_credentials: credentialValues,
         });
-        setCreatedApp(created);
       }
     }
     onSaved();
   }
 
-  function navigateToSkillEditor(draftId?: string) {
-    if (!existingApp) return;
-    navigation.go(skillEditorUrlForApp(existingApp, draftId));
-  }
-
-  function navigateToExistingSkill(skillId: string) {
-    if (!existingApp) return;
-    navigation.go(skillEditUrlForApp(skillId, existingApp));
-  }
-
-  function validateUploadedSkill(draft: SkillCreationDraft): string | null {
-    return existingApp?.associated_skills.some(
-      (skill) => skill.name === draft.contents.name
-    )
-      ? tApps("errors.duplicateSkillName", {
-          appName: existingApp.name,
-          skillName: draft.contents.name,
-        })
-      : null;
-  }
-
-  if (createdApp) {
-    return (
-      <ExternalAppSkillsStepModal
-        app={createdApp}
-        onClose={onClose}
-        onSaved={onSaved}
-      />
-    );
-  }
-
   return (
     <ActionPolicyEditorModal
-      alternateContent={
-        upload.isOpen && existingApp
-          ? ({ requestLeave, hidden }) => (
-              <>
-                <CreateSkillModalContent
-                  hidden={hidden || upload.confirmationOpen}
-                  onRequestClose={upload.requestDismiss}
-                  onBusyChange={upload.setBusy}
-                  onDirtyChange={upload.setDirty}
-                  preserveDraftOnContinue
-                  validateDraft={validateUploadedSkill}
-                  onContinue={(draft) => {
-                    requestLeave(() =>
-                      navigateToSkillEditor(stageSkillCreationDraft(draft))
-                    );
-                  }}
-                />
-                {upload.confirmationOpen && (
-                  <UnsavedChangesModalContent
-                    onCancel={upload.cancelDiscard}
-                    onDiscard={upload.discardAndClose}
-                  />
-                )}
-              </>
-            )
-          : undefined
-      }
-      alternateContentConfirmationOpen={upload.confirmationOpen}
       enabled={enabled}
       onEnabledChange={setEnabled}
       usersCanManagePolicies={usersCanManagePolicies}
       onUsersCanManagePoliciesChange={setUsersCanManagePolicies}
       isAdditionalContentDirty={
         availabilityChanged ||
-        existingAssociationDirty ||
         usersCanManagePolicies !==
           (existingApp?.users_can_manage_policies ?? true)
       }
-      onClose={upload.isOpen ? upload.requestDismiss : onClose}
+      onClose={onClose}
       title={existingApp?.name ?? descriptor.name}
       description={pluginCopy(
         enabled ? "craftOnlyDescription" : "craftDisabledDescription"
@@ -275,26 +179,7 @@ export default function ConfigureProviderModal({
       autoFocusFirstField={existingApp === null}
       allowPristineSave={existingApp === null}
       onSave={save}
-      closeAfterSave={existingApp !== null}
       discardOnClose={existingApp === null}
-      skillsContent={
-        existingApp
-          ? (requestLeave) => (
-              <AssociatedSkillsEditor
-                app={existingApp}
-                selectedSkillIds={selectedSkillIds}
-                onChange={setSelectedSkillIds}
-                onOpenSkill={(skillId) =>
-                  requestLeave(() => navigateToExistingSkill(skillId))
-                }
-                onCreateSkill={() =>
-                  requestLeave(() => navigateToSkillEditor())
-                }
-                onUploadSkill={upload.open}
-              />
-            )
-          : undefined
-      }
     />
   );
 }

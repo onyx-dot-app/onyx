@@ -15,9 +15,10 @@
   skill's instructions, and turn custom skills on or off.
 - **Built-in skills** are always on. A built-in that depends on an unavailable
   service, such as image generation with no provider or the browser with
-  `ENABLE_BROWSER` off, is hidden. A skill for an external app is ready only
-  after the user connects that app. Until then the user cannot turn it on, and
-  the library says why.
+  `ENABLE_BROWSER` off, is hidden. The built-in skill of a preset app, such
+  as Slack or Linear, shows and loads only for a user who runs a plugin that
+  holds that app ([[#built-in-app-skill-rule]]). A custom skill written for an
+  app is an ordinary custom skill: it loads before the user connects the app.
 - **Authoring.** A user writes a skill in the browser editor, uploads a `.zip`
   or a single SKILL.md, or imports skills from a GitHub repository after a
   preview of every SKILL.md found. A private repository needs the user's
@@ -96,8 +97,7 @@
   there, with a note that tells the model to continue with `skills_read`. History keeps that text, so a later edit, a deletion or lost access
   does not change what earlier turns see. A skill that cannot be read when
   the message is accepted is not applied. Built-in skills
-  and skills of an external app do not reach chat, because they need the
-  Craft sandbox. Chat cannot open a skill's other files or run its scripts.
+  do not reach chat, because they need the Craft sandbox. Chat cannot open a skill's other files or run its scripts.
   In the chat input, `@` at the start of a word opens a picker of these
   skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
   filtered by name prefix without case. A row shows the skill's short
@@ -207,7 +207,7 @@ session start: sandbox_lifecycle.py:build_managed_content_payload
 rows in one transaction. Every read of a custom skill uses the plugin rows
 (`db/plugin_access.py`, [[#plugin-tables]]): access, names, validity, bundles
 and content. Built-in skills have no plugin. Each access
-write in `db/skill.py`, `db/external_app.py` and
+write in `db/skill.py` and
 `ee/onyx/db/community_downgrade.py` calls one `db/plugin.py` helper that
 mirrors it. Lock order: the skill row, then the plugin row; many in id order.
 A skill switch locks its target skill `FOR NO KEY UPDATE`: another user's
@@ -216,16 +216,17 @@ a `FOR UPDATE` blocks that foreign-key check into a deadlock.
 
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
 a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement
-and the name order (`_user_skill_selection`), app readiness, bundle validity
-(`is_valid` of the version the user runs not false) and built-in availability
+and the name order (`_user_skill_selection`), bundle validity
+(`is_valid` of the version the user runs not false), the built-in app skills
+the user gets ([[#built-in-app-skill-rule]]) and built-in availability
 (`_exclude_unavailable_built_in_skills`). These inputs stay independent. A
-required skill still needs a ready app and a valid bundle.
+required skill still needs a valid bundle. No input checks an app connection.
 
 **Enablement.** `db/plugin_access.py:load_user_plugin_states` is the one rule
 for API responses, toggles, the write limit, the runtime gate and the admin
 list. One query gives, for many users and plugins, the install setting,
 visibility, the version the user runs, its skill names, whether it can run
-(valid version, ready app), its recorded size, the keep key and the user's
+(enabled and a version that is not invalid), its recorded size, the keep key and the user's
 choice under the setting: required is on, default is on until an opt-out,
 available is on after an opt-in, a hidden plugin is off and its saved choice
 stays. Built-ins are on.
@@ -253,14 +254,15 @@ and triggers the same reload.
 
 **Templates.** A built-in with a SKILL.md.template is rendered per user in
 `skills/push.py:_render_template`. `company-search` lists the user's connected
-sources. External-app skills fill app values, cloud-only blocks, and a list of
-actions the admin denied (`skills/rendering.py:render_external_app_skill`).
+sources. Built-in app skills fill app values, cloud-only blocks, and a list of
+actions the admin denied (`skills/rendering.py:render_external_app_skill`), for
+the app that the rule picks (`RuntimeSkill.external_app_id`). Custom skills are
+never rendered.
 **Chat.** `db/skill.py:list_chat_skills` is the one definition of the skills
 chat gets: the custom skills the sandbox loads for the user
 (`_UserSkillSelection.loaded`, the same selection as
 `list_runtime_skills_for_user`: install settings, the user's choice, the name
-order and a version that is not invalid), less skills of an external app,
-with the name, description,
+order and a version that is not invalid), with the name, description,
 `metadata.short-description` and id of the version the user runs. Anonymous
 users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
 turn's picks and reservation, each agent reads it once when it is built (for
@@ -363,7 +365,8 @@ each agent loads the user's chat skills once, when it is built
 (`tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`), and renders it for its own
 model's window, so the catalog stays the same across the agent's steps.
 
-The library preview of an external-app skill calls the same renderer
+The library preview of a built-in app skill calls the same renderer, with
+the app from the same rule
 (`server/features/skill/response_helpers.py:skill_preview_response`). The
 `company-search` preview shows the unrendered template.
 
@@ -464,23 +467,27 @@ The library preview of an external-app skill calls the same renderer
    renderer only logs a warning, so the skill ships no SKILL.md.
 9. `unresolved-marker-fails` **An unresolved `{{` marker fails the render.**
    `skills/rendering.py:render_external_app_skill` raises rather than send broken instructions.
-   Other `.template` files in an app skill get only `{{APP:...}}` values and no
+   Other `.template` files in a built-in app skill get only `{{APP:...}}` values and no
    such check.
-10. `app-skill-org-visible` **An app skill stays visible to the
-    organization.** `db/skill.py:_ensure_external_app_skill_stays_public`
-    accepts only `VIEWER` for a custom or built-in skill linked to an external
-    app. The app link
-    (`db/external_app.py:associate_custom_skill_with_external_app__no_commit`,
-    `replace_custom_skill_associations__no_commit`) publishes the skill through
-    `db/plugin.py:publish_plugin__no_commit`, and a name clash in the
-    Organization library returns `CONFLICT`. A newly linked skill with no own
-    setting gets an explicit `AVAILABLE`
-    (`db/plugin.py:make_plugins_available_by_default__no_commit`), so Default
-    Access Not available does not hide it. Publishing is one-way, so an
-    unlinked skill stays published. A private custom skill must have an
-    owner: `ck_private_skill_has_owner` rejects a private skill with no
-    author, so transfer or delete private skills before their owner is
-    removed.
+10. `built-in-app-skill-rule` **One rule decides who gets a built-in app
+    skill.** `db/app_skill.py:built_in_app_skills_by_user` gives a user the
+    built-in skill of a preset when the user runs (visible and enabled in
+    `load_user_plugin_states`) a plugin that holds (`plugin__integration`) an
+    integration whose `external_app` row has an `app_type` in
+    `skills/built_in.py:EXTERNAL_APP_BUILT_IN_SKILL_IDS`. When the user runs
+    several integrations of one preset, the lowest integration id picks the
+    app that renders the skill (`db/skill.py:RuntimeSkill`, `external_app_id`).
+    The runtime list, the reserved chat names, the Skills list (VIEW),
+    `db/skill.py:skill_user_states` (on only for a user who gets it, never
+    toggled) and the preview read it. Do not add a second check, and do not
+    check the app connection. Nothing links a skill to an app: no code reads
+    or writes `external_app__skill` or `ExternalApp.associated_skills`, which
+    stay only for rollback.
+    `backend/tests/unit/onyx/db/test_no_external_app_skill_link.py` fails on
+    a new use. A custom skill written for an app is an ordinary plugin: it
+    keeps its owner and shares, loads, counts for the limits and reaches chat.
+    `db/external_app.py:associate_built_in_skill__no_commit` makes or reuses
+    the built-in `Skill` row and refuses a second app of one built-in type.
 11. `push-holds-row-locks` **The push holds row locks during network I/O.**
     `skills/push.py:push_skills_for_users` locks the target `Sandbox` rows, then builds
     and sends them in parallel batches while the transaction is open. The hash write is a savepoint,
@@ -512,9 +519,7 @@ The library preview of an external-app skill calls the same renderer
     (`has_global_permission`; never `has_permission`, which accepts a scoped
     grant). In `SkillShareRequest`, a missing `installation_policy` changes
     nothing, null means the marketplace default, and a value (AVAILABLE too)
-    is the skill's own setting. A newly linked app skill gets an explicit
-    AVAILABLE (`db/plugin.py:make_plugins_available_by_default__no_commit`),
-    so a stricter Default access does not hide it. A group
+    is the skill's own setting. A group
     keeps its install setting when the change does not set one, also when its
     share is removed (the row stays with no permission). Group settings come
     only from `group_settings` and need global `MANAGE_PLUGINS` (else 403); a
@@ -551,7 +556,10 @@ The library preview of an external-app skill calls the same renderer
     a published or a required skill
     (`db/skill.py:delete_skill_for_user__no_commit`); the card, bulk menu and
     editor hide Delete to match. A transfer moves a private plugin to the new
-    owner's "My uploads", and a name clash there returns `CONFLICT`.
+    owner's "My uploads", and a name clash there returns `CONFLICT`. A
+    private custom skill must have an owner: `ck_private_skill_has_owner`
+    rejects a private skill with no author, so transfer or delete private
+    skills before their owner is removed.
     Agents apply a looser form of the rule
     ([[agents-personas#group-share-needs-manage-agents]]).
     `POST /skills/bulk` sharing applies one change to every skill the user
@@ -670,8 +678,7 @@ The library preview of an external-app skill calls the same renderer
     push, session start and the hash take the version each user runs
     (`db/plugin_access.py:version_user_runs`). The editor and the edits read
     the current version. The preview and `is_valid` in responses read the
-    version the user runs. External-app association checks the current
-    version, and the app admin list shows the version the organization runs.
+    version the user runs.
     Content of a version comes from one function,
     `skills/content.py:read_version_contents`: `plugin_version.file_manifest`
     and `plugin_skill.skill_md` from the database, and the bundle only when
@@ -725,8 +732,8 @@ The library preview of an external-app skill calls the same renderer
     only. `db/plugin.py:publish_or_request_review__no_commit` is the one place
     `Settings.plugin_publishing` (`OPEN`, `REQUIRES_REVIEW`, `OFF`) applies; a
     failed settings read stops the publish. Global `MANAGE_PLUGINS` and a
-    system write (`actor` None: external app link, community downgrade,
-    approve) always publish. Every publish path calls it: the access-change
+    system write (`actor` None: community downgrade, approve) always
+    publish. Every publish path calls it: the access-change
     write path for a private plugin, `POST /skills/custom/{id}/publish` and
     approve. A save never moves `published_version_id`. Review state is two
     pointers on `plugin`: a request sets `pending_version_id` (a newer request
@@ -794,9 +801,8 @@ The library preview of an external-app skill calls the same renderer
     `db/skill_limit.py:users_past_write_limit`) lists active users past the
     write limit with their usage and the omission count of their sandbox. An
     SQL sum of enabled, not invalid plugins
-    (`db/plugin_access.py:users_with_usage_past`) picks the candidates; app
-    readiness can only lower usage, so the exact per-user read then runs for
-    those users only.
+    (`db/plugin_access.py:users_with_usage_past`) picks the candidates, and
+    the per-user read then runs for those users only.
 
 ---
 
@@ -812,10 +818,11 @@ The library preview of an external-app skill calls the same renderer
   `/workspace/managed/skills` link at once, so a turn that is running can read
   the new files of a Skill. The previous tree stays readable until the next
   push to that mount or for 60 seconds.
-- **App lifecycle keeps user intent.** Disconnecting an app deletes the user's
-  enabled selections for its skills and keeps opt-outs
-  (`db/external_app.py`). Deleting an app resets its custom skills to
-  available and deletes their preferences. Its built-in skill row is deleted.
+- **App lifecycle keeps skill settings.** Disconnecting an app deletes only
+  the user's credentials (`db/external_app.py:disconnect_external_app_for_user`).
+  Deleting an app keeps the skills of its plugins with their settings and
+  choices (`db/external_app.py:delete_external_app`). The built-in skill row
+  goes only when no other app of the same `app_type` remains.
 
 ---
 
@@ -839,6 +846,10 @@ The library preview of an external-app skill calls the same renderer
   drops every failure ([[#push-holds-row-locks]]), so the change commits
   anyway. If that commit fails, the sandboxes hold files that the database
   does not.
+- **A new app gives its built-in skill to nobody.** Creating an external app
+  does not create an integration or a plugin that holds it, so
+  [[#built-in-app-skill-rule]] finds no user for that app. Apps that existed
+  at migration `730bce2814a0` got their integration and plugin from it.
 
 ---
 
@@ -847,7 +858,8 @@ The library preview of an external-app skill calls the same renderer
 - [[craft-sandboxes]]: `push_to_sandbox` and the managed volume.
 - [[craft-sessions]]: the stale check and the reload that apply a push to a
   live runtime.
-- [[craft-external-apps]]: app readiness and action policy views. GitHub
+- [[craft-external-apps]]: the app rows behind built-in app skills, the
+  connectable-apps list and action policy views. GitHub
   import and preview authenticate with the user's GitHub app credential
   (`server/features/skill/api.py:_github_authorization_header`).
 - [[authorization]]: `MANAGE_PLUGINS` and the scoped-manager group check
@@ -880,8 +892,9 @@ The library preview of an external-app skill calls the same renderer
 - `investigate-skill-missing` **Investigate "my skill is not in the sandbox".** Check the inputs of
   `list_runtime_skills_for_user` one at a time for that user: visibility,
   `load_user_plugin_states` (setting and choice), the name order
-  (`order_skill_names`: another skill may hold the name), app readiness, `plugin_version.is_valid` of the
-  version the user runs (`version_user_runs`), and built-in availability. Then compare `Sandbox.skills_hash` with
+  (`order_skill_names`: another skill may hold the name), `plugin_version.is_valid` of the
+  version the user runs (`version_user_runs`), and built-in availability.
+  For a built-in app skill, check `db/app_skill.py:built_in_app_skills_for_user`. Then compare `Sandbox.skills_hash` with
   `BuildSession.skills_hash`: equal means the runtime loaded the last push;
   different means the session waits for a reload. Search the API server log
   for `Skill push failed` for a failed push.

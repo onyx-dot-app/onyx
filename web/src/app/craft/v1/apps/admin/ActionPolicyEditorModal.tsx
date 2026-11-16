@@ -38,14 +38,6 @@ export interface EditorField {
 }
 
 interface ActionPolicyEditorModalProps {
-  /** Alternate view rendered inside the same modal surface. It remains
-   * mounted while the discard confirmation is visible so local draft state
-   * survives cancellation. */
-  alternateContent?: (context: {
-    requestLeave: (navigate: () => void) => void;
-    hidden: boolean;
-  }) => React.ReactNode;
-  alternateContentConfirmationOpen?: boolean;
   isAdditionalContentDirty?: boolean;
   enabled?: boolean;
   onEnabledChange?: (enabled: boolean) => void;
@@ -71,21 +63,14 @@ interface ActionPolicyEditorModalProps {
     fieldValues: Record<string, string>,
     policies: Record<string, ActionPolicy>
   ) => Promise<void>;
-  skillsContent?: (
-    requestLeave: (navigate: () => void) => void
-  ) => React.ReactNode;
   autoFocusFirstField?: boolean;
   /** Allow create flows to persist valid defaults without an artificial edit. */
   allowPristineSave?: boolean;
-  /** Keep the modal mounted when save advances its caller to another step. */
-  closeAfterSave?: boolean;
   discardOnClose?: boolean;
 }
 
 /** Built-in app editor. Mount only while open; initial values are read once. */
 export default function ActionPolicyEditorModal({
-  alternateContent,
-  alternateContentConfirmationOpen = false,
   isAdditionalContentDirty = false,
   enabled,
   onEnabledChange,
@@ -104,10 +89,8 @@ export default function ActionPolicyEditorModal({
   emptyPoliciesMessage,
   saveLabel,
   onSave,
-  skillsContent,
   autoFocusFirstField = true,
   allowPristineSave = false,
-  closeAfterSave = true,
   discardOnClose = false,
 }: ActionPolicyEditorModalProps) {
   const t = useTranslations("craft.apps.policyEditor");
@@ -132,8 +115,6 @@ export default function ActionPolicyEditorModal({
   const unsavedChanges = useUnsavedChangesGuard({
     isDirty: !discardOnClose && isDirty,
   });
-  const confirmationOpen =
-    alternateContentConfirmationOpen || unsavedChanges.confirmationOpen;
   const canSave =
     fieldsFilled &&
     policyItems !== undefined &&
@@ -145,7 +126,7 @@ export default function ActionPolicyEditorModal({
     setError(null);
     try {
       await onSave(fieldValues, policies);
-      if (closeAfterSave) onClose();
+      onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -155,8 +136,7 @@ export default function ActionPolicyEditorModal({
 
   function requestClose() {
     if (isSaving) return;
-    if (alternateContent) onClose();
-    else unsavedChanges.requestLeave(onClose);
+    unsavedChanges.requestLeave(onClose);
   }
 
   function handleDismiss(event: Event) {
@@ -217,15 +197,7 @@ export default function ActionPolicyEditorModal({
         onInteractOutside={handleDismiss}
         onEscapeKeyDown={handleDismiss}
       >
-        {alternateContent ? (
-          <>
-            {alternateContent({
-              requestLeave: unsavedChanges.requestLeave,
-              hidden: confirmationOpen,
-            })}
-            {confirmationContent}
-          </>
-        ) : confirmationContent ? (
+        {confirmationContent ? (
           confirmationContent
         ) : (
           <>
@@ -308,7 +280,6 @@ export default function ActionPolicyEditorModal({
                       )}
                     </>
                   }
-                  skills={skillsContent?.(unsavedChanges.requestLeave)}
                 />
 
                 {error && (

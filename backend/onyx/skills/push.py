@@ -138,7 +138,7 @@ def _add_static_builtin(
 
 def _render_template(
     files: FileSet,
-    skill: Skill,
+    runtime_skill: RuntimeSkill,
     definition: BuiltInSkillDefinition,
     db_session: Session,
     user: User,
@@ -146,6 +146,7 @@ def _render_template(
     """Overwrite ``{name}/SKILL.md`` with a per-user rendering. company-search
     and external-app built-ins have renderers; any other templated built-in logs
     a warning and ships the static siblings as-is."""
+    skill = runtime_skill.skill
     if definition.built_in_skill_id == COMPANY_SEARCH.built_in_skill_id:
         rendered = render_company_search_skill(
             db_session, user, definition.source_dir.parent
@@ -156,7 +157,7 @@ def _render_template(
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
     if app_type is not None:
         rendered = render_external_app_files(
-            db_session, skill, app_type, definition.source_dir
+            db_session, runtime_skill.external_app_id, app_type, definition.source_dir
         )
         for name, content in rendered.items():
             files[f"{skill.name}/{name}"] = content.encode("utf-8")
@@ -344,7 +345,9 @@ def _assemble_skills(
                 continue
             _add_static_builtin(skill_files, skill, definition)
             if definition.has_template:
-                _render_template(skill_files, skill, definition, db_session, user)
+                _render_template(
+                    skill_files, runtime_skill, definition, db_session, user
+                )
         if not _resolve_skill_dir(skill_files, name):
             continue
         size = _larger(size, _usage_of(skill_files))

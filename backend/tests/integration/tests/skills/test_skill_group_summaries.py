@@ -9,18 +9,15 @@ import httpx
 import pytest
 
 from onyx.db.enums import (
-    ExternalAppType,
     PluginInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.server.features.skill.models import (
-    SkillEditableDetailResponse,
     SkillGroupSummary,
     SkillResponse,
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -224,58 +221,3 @@ def test_explicit_available_overrides_a_not_available_default(
     inherited = _share(admin_user, skill.id, {"installation_policy": None})
     assert inherited.installation_policy is None
     assert skill.id not in _listed(other)
-
-
-def _create_app(admin: DATestUser) -> int:
-    app = ExternalAppManager.create(
-        user_performing_action=admin,
-        name=unique_name("G6 app"),
-        upstream_url_patterns=["https://api.example.com/*"],
-        auth_template={"Authorization": "Bearer {access_token}"},
-        organization_credentials={},
-        app_type=ExternalAppType.CUSTOM,
-    )
-    return app.id
-
-
-def test_app_skills_stay_visible_under_a_not_available_default(
-    admin_user: DATestUser,
-) -> None:
-    """Both app link paths give the skill an explicit Available setting."""
-    member = UserManager.create(name=unique_name("app_member"))
-    _set_default(admin_user, "NOT_AVAILABLE").raise_for_status()
-    app_id = _create_app(admin_user)
-    try:
-        linked = SkillManager.create_custom(admin_user)
-        client.patch(
-            f"{API_SERVER_URL}/build/admin/apps/{app_id}",
-            json={"associated_skill_ids": [str(linked.id)]},
-            headers=admin_user.headers,
-        ).raise_for_status()
-
-        name = unique_name("app-created")
-        created = client.post(
-            f"{API_SERVER_URL}/skills/custom/editor",
-            data={
-                "name": name,
-                "description": "An app skill.",
-                "instructions_markdown": "Use the app.",
-                "external_app_id": str(app_id),
-            },
-            headers={
-                key: value
-                for key, value in admin_user.headers.items()
-                if key.lower() != "content-type"
-            },
-        )
-        created.raise_for_status()
-        created_id = SkillEditableDetailResponse.model_validate(created.json()).id
-
-        listed = _listed(member)
-        for skill_id in (linked.id, created_id):
-            assert skill_id in listed
-            assert listed[skill_id].installation_policy == (
-                PluginInstallationPolicy.AVAILABLE
-            )
-    finally:
-        ExternalAppManager.delete(admin_user, app_id)

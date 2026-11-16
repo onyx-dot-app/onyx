@@ -79,11 +79,7 @@ export default function ExternalAppLifecycleMenu({
               {t("card.deleteModal.submit.label")}
             </Button>
           }
-        >
-          {t("card.deleteModal.retainedSkills", {
-            count: app.associated_skills.length,
-          })}
-        </ConfirmationModalLayout>
+        />
       </confirmModal.Provider>
     </>
   );

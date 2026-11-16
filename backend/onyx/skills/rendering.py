@@ -14,8 +14,8 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user,
 )
 from onyx.db.enums import ActionPolicy, ExternalAppType, GatedAppKind
-from onyx.db.external_app import get_external_app_by_skill_id
-from onyx.db.models import ExternalApp, Skill, User
+from onyx.db.external_app import get_external_app_by_id
+from onyx.db.models import ExternalApp, User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
     action_policy_views,
@@ -225,15 +225,23 @@ def _app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
 
 def render_external_app_files(
     db_session: Session,
-    skill: Skill,
+    external_app_id: int | None,
     app_type: ExternalAppType,
     source_dir: Path,
 ) -> dict[str, str]:
     """Every rendered file for an external-app built-in, keyed by its path in
     the sandbox: ``SKILL.md`` plus any other ``*.template`` sibling, which is
     how a bundled helper gets the connected account baked in rather than taking
-    it as an argument it could only ever be given one value for."""
-    external_app = get_external_app_by_skill_id(db_session, skill.id)
+    it as an argument it could only ever be given one value for.
+
+    ``external_app_id``: the app whose settings and policies fill the
+    templates, from the plugin the user runs (``onyx.db.app_skill``). None
+    renders unconfigured placeholders."""
+    external_app = (
+        get_external_app_by_id(db_session, external_app_id)
+        if external_app_id is not None
+        else None
+    )
     stored = (
         get_workspace_action_policies(
             db_session, GatedAppKind.EXTERNAL_APP, external_app.id

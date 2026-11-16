@@ -7,10 +7,7 @@ from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
 from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import (
-    get_external_app_by_skill_id,
-    get_external_app_user_credential,
-)
+from onyx.db.external_app import get_external_app_user_credential
 from onyx.db.models import ExternalApp, Skill, User, UserSkillPreference
 from onyx.db.skill import list_runtime_skills_for_user, set_skill_enabled_for_user
 from onyx.server.features.build.external_apps.models import (
@@ -19,6 +16,7 @@ from onyx.server.features.build.external_apps.models import (
     UpsertUserCredentialsRequest,
 )
 from tests.external_dependency_unit.craft.db_helpers import (
+    make_app_plugin_for_user,
     make_built_in_skill_row,
     make_external_app,
     make_sandbox,
@@ -63,25 +61,20 @@ def test_credential_upsert_refreshes_only_the_calling_user(
     assert calls == [{user.id}]
 
 
-def test_disconnect_clears_associated_skill_preferences_only(
+def test_disconnect_removes_only_the_credential(
     db_session: Session,
     test_user: User,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = make_user(db_session)
-    associated_skill = make_skill(
+    app_skill = make_skill(
         db_session,
         is_public=True,
-        name=f"disconnect-associated-{uuid4().hex[:8]}",
-    )
-    unrelated_skill = make_skill(
-        db_session,
-        is_public=True,
-        name=f"disconnect-unrelated-{uuid4().hex[:8]}",
+        name=f"disconnect-app-{uuid4().hex[:8]}",
     )
     app = make_external_app(
         db_session,
-        skill=associated_skill,
+        skill=app_skill,
         auth_template={"Authorization": "Bearer {token}"},
     )
     make_user_credential(
@@ -90,13 +83,12 @@ def test_disconnect_clears_associated_skill_preferences_only(
         user=user,
         user_credentials={"token": "t"},
     )
-    for skill in (associated_skill, unrelated_skill):
-        set_skill_enabled_for_user(
-            skill_id=skill.id,
-            user=user,
-            enabled=True,
-            db_session=db_session,
-        )
+    set_skill_enabled_for_user(
+        skill_id=app_skill.id,
+        user=user,
+        enabled=True,
+        db_session=db_session,
+    )
     db_session.commit()
 
     calls: list[set[UUID]] = []
@@ -120,20 +112,20 @@ def test_disconnect_clears_associated_skill_preferences_only(
         )
         is None
     )
+    # The skill choice stays, and the skill still loads.
     assert (
         db_session.get(
             UserSkillPreference,
-            {"user_id": user.id, "skill_id": associated_skill.id},
-        )
-        is None
-    )
-    assert (
-        db_session.get(
-            UserSkillPreference,
-            {"user_id": user.id, "skill_id": unrelated_skill.id},
+            {"user_id": user.id, "skill_id": app_skill.id},
         )
         is not None
     )
+    assert app_skill.id in {
+        runtime_skill.skill.id
+        for runtime_skill in list_runtime_skills_for_user(
+            user=user, db_session=db_session
+        )
+    }
 
 
 def test_create_refreshes_the_created_skill(
@@ -205,12 +197,8 @@ def test_admin_toggle_updates_app_and_refreshes_affected_sandboxes(
         app_type=ExternalAppType.SLACK,
         auth_template={"Authorization": "Bearer {token}"},
     )
-    second_skill = make_built_in_skill_row(
-        db_session,
-        built_in_skill_id=f"toggle-push-second-{uuid4().hex[:8]}",
-        is_public=True,
-    )
-    app.associated_skills.append(second_skill)
+    # The users who run a plugin of the app get the push.
+    make_app_plugin_for_user(db_session, app=app, user=test_user)
     db_session.commit()
 
     calls: list[set[UUID]] = []
@@ -232,7 +220,7 @@ def test_admin_toggle_updates_app_and_refreshes_affected_sandboxes(
     assert calls == [{test_user.id}]
 
 
-def test_delete_removes_provider_skill_and_refreshes_affected_users(
+def test_delete_refreshes_the_users_who_run_its_plugins(
     db_session: Session,
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
@@ -250,8 +238,8 @@ def test_delete_removes_provider_skill_and_refreshes_affected_users(
         app_type=ExternalAppType.SLACK,
         auth_template={"Authorization": "Bearer {token}"},
     )
+    make_app_plugin_for_user(db_session, app=app, user=user)
     app_id = app.id
-    skill_id = skill.id
     db_session.commit()
 
     calls: list[set[UUID]] = []
@@ -266,13 +254,11 @@ def test_delete_removes_provider_skill_and_refreshes_affected_users(
         db_session=db_session,
     )
 
-    assert len(calls) == 1
-    assert user.id in calls[0]
+    assert calls == [{user.id}]
     assert api.get_external_app_by_id(db_session, app_id) is None
-    assert db_session.get(Skill, skill_id) is None
 
 
-def test_delete_detaches_custom_skill_and_clears_enablement(
+def test_delete_keeps_the_custom_skill_and_its_choice(
     db_session: Session,
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
@@ -295,14 +281,6 @@ def test_delete_detaches_custom_skill_and_clears_enablement(
     skill_id = skill.id
     db_session.commit()
 
-    assert skill_id in {
-        runtime_skill.skill.id
-        for runtime_skill in list_runtime_skills_for_user(
-            user=test_user,
-            db_session=db_session,
-        )
-    }
-
     calls: list[set[UUID]] = []
     monkeypatch.setattr(api, "MULTI_TENANT", False)
     monkeypatch.setattr(
@@ -316,19 +294,16 @@ def test_delete_detaches_custom_skill_and_clears_enablement(
     )
 
     db_session.expire_all()
-    assert len(calls) == 1
-    assert test_user.id in calls[0]
     assert api.get_external_app_by_id(db_session, app_id) is None
     assert db_session.get(Skill, skill_id) is not None
-    assert get_external_app_by_skill_id(db_session, skill_id) is None
     assert (
         db_session.get(
             UserSkillPreference,
             {"user_id": test_user.id, "skill_id": skill_id},
         )
-        is None
+        is not None
     )
-    assert skill_id not in {
+    assert skill_id in {
         runtime_skill.skill.id
         for runtime_skill in list_runtime_skills_for_user(
             user=test_user,

@@ -982,7 +982,6 @@
         "emptyDescription": "別の接続フィルターを試すか、ワークスペース管理者にプラグインの追加を依頼してください。"
       },
       "detail": {
-        "issuesTitle": "問題",
         "noAuthentication": "認証は不要です",
         "connection": "接続",
         "tools": "ツール",
@@ -1047,17 +1046,6 @@
         "chatOnly": "Chat のみ",
         "chatOnlyDescription": "このプラグインは Chat で利用でき、Craft では利用できません。"
       },
-      "appSkills": {
-        "preview": "プレビュー",
-        "search": "スキルを検索",
-        "count": "{count, plural, one {# 件のスキル} other {# 件のスキル}}",
-        "empty": "このアプリに関連付けられたスキルはありません。",
-        "noMatches": "検索に一致するスキルはありません。",
-        "error": "スキルを読み込めませんでした。",
-        "enabled": "有効",
-        "disabled": "無効",
-        "loading": "スキルを読み込み中…"
-      },
       "externalApp": {
         "description": "Craftでアカウントを使用します。",
         "craftOnly": "Craftのみ",
@@ -1099,8 +1087,7 @@
       "craftApp": {
         "tabs": {
           "configuration": "設定",
-          "permissions": "権限",
-          "skills": "スキル"
+          "permissions": "権限"
         }
       },
       "disableConfirmation": {
@@ -5950,7 +5937,6 @@
         },
         "deleteModal": {
           "description": "組織全体からこのアプリを削除します。設定、すべてのメンバーの接続、プロバイダー管理のスキルがすべて削除されます。",
-          "retainedSkills": "{count, plural, =0 {削除される関連カスタムスキルはありません。} one {関連するカスタムスキル # 件は保持されますが、このアプリとのリンクが解除され、全員に対して無効になります。} other {関連するカスタムスキル # 件は保持されますが、このアプリとのリンクが解除され、全員に対して無効になります。}}",
           "submit": {
             "label": "アプリを削除"
           },
@@ -12162,13 +12148,6 @@
       }
     },
     "skill": {
-      "dependency": {
-        "appDisabled": "アプリ「{app}」は無効です",
-        "connectToEnable": "有効にするにはアプリ「{app}」を接続してください",
-        "connectToUse": "使用するにはアプリ「{app}」を接続してください",
-        "nameConflict": "同じ名前の別のスキルが有効です",
-        "usesApp": "アプリ「{app}」を使用します"
-      },
       "edit": {
         "tooltip": "スキルを編集"
       },
@@ -12176,9 +12155,6 @@
         "description": "この無効なスキルを削除して、新しいスキルを作成してください。"
       },
       "tags": {
-        "appSkill": {
-          "label": "アプリスキル"
-        },
         "builtin": {
           "label": "組み込み"
         },
@@ -12209,19 +12185,11 @@
         "disable": {
           "ariaLabel": "{name} を無効にする"
         },
-        "disableForApp": {
-          "ariaLabel": "{app} で {name} を無効にする"
-        },
         "enable": {
           "ariaLabel": "{name} を有効にする"
-        },
-        "enableForApp": {
-          "ariaLabel": "{app} で {name} を有効にする"
         }
       },
       "tooltips": {
-        "appDisabled": "アプリ「{app}」は管理者によって無効化されています。",
-        "connectApp": "このスキルを使用するには、アプリページでアプリ「{app}」を接続してください。",
         "invalid": "このスキルは無効です。削除して新しいスキルを作成してください。",
         "unavailable": "このスキルは現在利用できません。クリックすると詳細を表示します。"
       }
@@ -14657,58 +14625,6 @@
           "title": "アプリを追加"
         }
       },
-      "associatedSkills": {
-        "associateButton": "既存のスキルを関連付け",
-        "create": {
-          "github": {
-            "description": "スキルが GitHub にある場合は、まずスキルページでインポートしてから、このアプリに関連付けてください。",
-            "label": "GitHub からインポート"
-          },
-          "scratch": {
-            "description": "手順を書き、補助ファイルを追加します。",
-            "label": "最初から作成"
-          },
-          "upload": {
-            "description": "SKILL.md ファイル、ZIP ファイル、またはスキルフォルダをインポートします。",
-            "label": "スキルをアップロード"
-          }
-        },
-        "createSkillButton": "スキルを作成",
-        "description": "スキルは、このアプリの使い方を Craft に指示します。スキルは組織全体で共有され、アプリが正しく動作するにはユーザーがすべて有効にする必要がある場合があります。",
-        "editButton": "編集",
-        "empty": {
-          "label": "編集可能なスキルが見つかりません。"
-        },
-        "invalidTag": "無効",
-        "loading": {
-          "label": "スキルを読み込み中…"
-        },
-        "noneAssociated": {
-          "label": "まだスキルが関連付けられていません。スキルがなくてもこのアプリは保存して使用できます。"
-        },
-        "promote": {
-          "cancelButton": "キャンセル",
-          "confirmButton": "組織全体で利用可能にする",
-          "description": "アプリに関連付けられたスキルは全員が利用できる必要があります。アプリを保存すると、スキルが組織に公開されます。公開は取り消せません。",
-          "title": "「{name}」を組織全体で利用可能にしますか？"
-        },
-        "search": {
-          "placeholder": "編集可能なスキルを検索..."
-        },
-        "title": "関連付けられたスキル",
-        "unavailable": {
-          "duplicateName": "「{name}」という名前のスキルはすでに関連付けられています。",
-          "invalid": "無効なスキル。関連付ける前に修正してください。",
-          "otherApp": "すでにアプリ「{name}」に関連付けられています。"
-        },
-        "unlink": {
-          "button": "切り離す",
-          "cancelButton": "キャンセル",
-          "confirm": "「{name}」をこのアプリから切り離しますか？"
-        },
-        "unlinkAriaLabel": "{name} を切り離す",
-        "viewButton": "表示"
-      },
       "configureProvider": {
         "addButton": "追加",
         "addTitle": "{name} を追加",
@@ -14771,9 +14687,6 @@
           "allowedUrl": "https://api.example.com/*"
         }
       },
-      "errors": {
-        "duplicateSkillName": "アプリ「{appName}」には「{skillName}」という名前の関連スキルがすでにあります。別の名前のスキルをアップロードしてください。"
-      },
       "mcpPolicy": {
         "description": "チャットと Craft で、自動実行、承認を求める、無効にするツールを選択します。",
         "emptyPolicies": "このサーバーには有効なツールがありません。まず MCP アクションページでツールを有効にしてください。",
@@ -14808,14 +14721,9 @@
         "loading": {
           "label": "読み込み中…"
         },
-        "reviewSkillsButton": "スキルを確認",
         "status": {
           "connected": "接続済み",
-          "connectedNeedsSkills": "接続済み · 一部の関連スキルが無効です",
-          "notAvailable": "お使いのアカウントでは利用できません。管理者にお問い合わせください",
-          "skillWarningAriaLabel": "スキルの設定が必要です",
-          "skillWarningTooltip": "一部の関連スキルが無効です。このアプリは正しく動作しない可能性があります。",
-          "skillWarningSummary": "一部の関連スキルが無効です。"
+          "notAvailable": "お使いのアカウントでは利用できません。管理者にお問い合わせください"
         }
       },
       "policyEditor": {
@@ -14836,16 +14744,6 @@
           "description": "アクションごとに個別のポリシーを設定します。",
           "title": "詳細設定"
         }
-      },
-      "skillsStep": {
-        "description": "任意。既存のスキルを関連付けるか、このアプリ用に新しく作成します。",
-        "errors": {
-          "saveFailedTitle": "保存できませんでした"
-        },
-        "saveButton": "スキルを保存",
-        "savingButton": "保存中…",
-        "skipButton": "今はスキップ",
-        "title": "{name} にスキルを追加"
       },
       "userCredentials": {
         "cancelButton": "キャンセル",
@@ -17237,10 +17135,6 @@
   },
   "skills": {
     "editor": {
-      "appConflict": {
-        "description": "アプリ「{appName}」には既に「{skillName}」という名前の関連スキルがあります。",
-        "title": "別のスキル名を選択してください"
-      },
       "confirmUpload": {
         "importBody": "このアップロードにはSKILL.mdが含まれています。続行すると、現在の名前、説明、指示、ファイルがアップロードされたバンドルに置き換えられます。",
         "importSubmit": {
@@ -17297,9 +17191,7 @@
         "updating": "スキルファイルを更新中..."
       },
       "header": {
-        "appFallbackName": "外部アプリ",
         "createDescription": "個人スキルを作成",
-        "createForAppDescription": "アプリ「{appName}」に組織スキルを追加",
         "createTitle": "スキルを作成",
         "editDescription": "スキルの詳細とファイルを更新",
         "editTitle": "スキルを編集",
@@ -17520,17 +17412,12 @@
         "metadata": {
           "createdBy": {
             "label": "作成者"
-          },
-          "externalApp": {
-            "label": "外部アプリ"
           }
         },
         "noInstructions": {
           "message": "指示が見つかりません。"
         },
         "unavailable": {
-          "appDisabled": "アプリ「{appName}」は管理者によって無効にされています。",
-          "appNotConnected": "このスキルを使用するには、「アプリ」ページからアプリ「{appName}」を接続してください。",
           "title": "スキルを利用できません"
         }
       },
@@ -17545,7 +17432,6 @@
         "doneButton": {
           "label": "完了"
         },
-        "externalAppNotice": "このスキルがアプリ「{appName}」に関連付けられている間は、組織全体への閲覧者アクセスが必要です。",
         "header": {
           "transferTitle": "*{name}* を譲渡"
         },
@@ -17707,13 +17593,6 @@
           "title": "カスタムスキルはまだありません",
           "description": "スキルを作成またはインポートしてライブラリに追加してください。"
         }
-      },
-      "focusedApp": {
-        "description": "アプリ「{appName}」に関連付けられたすべてのスキルを有効にします。これらがないとアプリが正しく動作しない場合があります。同名の別のスキルが有効な場合、アプリ関連スキルを有効にするともう一方のスキルは無効になります。",
-        "showAll": {
-          "label": "すべてのスキルを表示"
-        },
-        "title": "アプリ「{appName}」のスキル"
       },
       "header": {
         "description": "Craftエージェントが利用できる機能バンドルです。このページには、組み込みスキル、共有されたスキル、あなたの個人スキルが表示されます。",

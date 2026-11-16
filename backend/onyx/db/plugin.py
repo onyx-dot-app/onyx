@@ -26,7 +26,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import ColumnElement, and_, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -492,29 +492,6 @@ def get_current_version_bundle_file_id(
     )
 
 
-def get_plugin_version_validity(
-    plugin_ids: Iterable[UUID],
-    pointer: Literal["current", "organization"],
-    db_session: Session,
-) -> dict[UUID, bool | None]:
-    """``is_valid`` of one version of each plugin: the current version, or the
-    version the organization runs (published, else current)."""
-    ids = set(plugin_ids)
-    if not ids:
-        return {}
-    version_id = (
-        Plugin.current_version_id
-        if pointer == "current"
-        else func.coalesce(Plugin.published_version_id, Plugin.current_version_id)
-    )
-    rows = db_session.execute(
-        select(Plugin.id, PluginVersion.is_valid)
-        .join(PluginVersion, PluginVersion.id == version_id)
-        .where(Plugin.id.in_(ids))
-    ).tuples()
-    return dict(rows.all())
-
-
 # --- Skill plugins and their access ----------------------------------------
 
 
@@ -891,21 +868,6 @@ def publish_or_request_review__no_commit(
     db_session.flush()
 
 
-def make_plugins_available_by_default__no_commit(
-    plugin_ids: Iterable[UUID], db_session: Session
-) -> None:
-    """Give each plugin with no own setting an explicit AVAILABLE, so a stricter
-    marketplace default does not hide it. A plugin's own setting stays."""
-    ids = sorted(set(plugin_ids))
-    if not ids:
-        return
-    db_session.execute(
-        update(Plugin)
-        .where(Plugin.id.in_(ids), Plugin.installation_policy.is_(None))
-        .values(installation_policy=PluginInstallationPolicy.AVAILABLE)
-    )
-
-
 def transfer_plugin__no_commit(
     plugin_id: UUID,
     new_author_user_id: UUID,
@@ -984,25 +946,6 @@ def set_plugin_preferences__no_commit(
             },
         )
     )
-
-
-def delete_plugin_preferences__no_commit(
-    plugin_ids: Iterable[UUID],
-    db_session: Session,
-    *,
-    user_id: UUID | None = None,
-    enabled_only: bool = False,
-) -> None:
-    """Mirror of a legacy delete of user choices."""
-    ids = sorted(set(plugin_ids))
-    if not ids:
-        return
-    stmt = delete(UserPluginPreference).where(UserPluginPreference.plugin_id.in_(ids))
-    if user_id is not None:
-        stmt = stmt.where(UserPluginPreference.user_id == user_id)
-    if enabled_only:
-        stmt = stmt.where(UserPluginPreference.enabled.is_(True))
-    db_session.execute(stmt)
 
 
 # --- Access changes ----------------------------------------------------------

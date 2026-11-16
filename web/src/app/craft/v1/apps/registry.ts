@@ -99,11 +99,6 @@ export interface ExternalAppAdminResponse {
   credential_placeholder_keys: string[];
   enabled: boolean;
   actions: ActionPolicyView[];
-  associated_skills: {
-    id: string;
-    name: string;
-    is_valid: boolean | null;
-  }[];
   // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
   // admin may only set availability and policies (the UI hides the rest).
   is_onyx_managed: boolean;

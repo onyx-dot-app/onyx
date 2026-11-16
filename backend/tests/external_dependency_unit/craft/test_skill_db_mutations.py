@@ -1053,15 +1053,15 @@ def test_ownerless_public_skill_stays_published(
 def test_required_skill_that_cannot_run_does_not_hold_its_name(
     db_session: Session,
 ) -> None:
-    """A Required app skill whose app the user has not connected does not load,
-    so the user's own skill with that name can be turned off and on again."""
+    """A Required skill whose version is not valid does not load, so the
+    user's own skill with that name can be turned off and on again."""
     user = make_user(db_session, standard_account=True)
     name = f"app-name-{uuid4().hex[:8]}"
     required = make_skill(db_session, name=name, is_public=True)
     set_skill_installation_policy(
         required, SkillInstallationPolicy.REQUIRED, db_session
     )
-    make_external_app(db_session, skill=required, auth_template={}, enabled=False)
+    set_current_version_validity(db_session, required.id, False)
     own = make_skill(db_session, name=name, author_user_id=user.id)
     set_current_version_validity(db_session, own.id, True)
 
