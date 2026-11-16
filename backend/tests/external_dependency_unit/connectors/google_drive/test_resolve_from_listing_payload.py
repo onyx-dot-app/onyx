@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from onyx.connectors.google_drive import doc_conversion
+from onyx.connectors.google_drive import doc_conversion, parallel_listing
 from onyx.connectors.google_drive.models import DriveListingPayload
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -55,7 +55,20 @@ def _files_get_calls(mock_drive: MockDrive) -> int:
     return int(ops.get("drive.files.get", {}).get("count", 0))
 
 
-@pytest.mark.usefixtures("listing_mode")
+@pytest.fixture
+def one_listing_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The listing lists one page at a time, as the inline load does.
+
+    A non-organizer lists a shared drive, so that listing is not exact. A
+    file in that drive that is also shared with the admin is then claimed
+    by the first of the two listings to reach it. The admin cannot see the
+    file's folder or read the drive's name, so the file's path changes with
+    that order. With one worker the order is fixed, and both runs list the
+    file as the same user."""
+    monkeypatch.setattr(parallel_listing, "ADAPTIVE_MAX_WORKERS", 1)
+
+
+@pytest.mark.usefixtures("listing_mode", "one_listing_worker")
 def test_payload_conversion_matches_reindex(mock_drive: MockDrive) -> None:
     connector = mock_drive.build_connector()
     listing = list_with_resume(connector)
