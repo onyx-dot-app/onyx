@@ -54,7 +54,9 @@ that fits the state (for example a spinner or an alert).
 - With `expandable`, the body opens below the row in a `Fold`, indented to
   start under the content. It sits outside the row's surface: it does not
   hover, and its clicks and text selection stay its own. A heavy variant tints
-  the body too.
+  the body too, and the row's hover fill then squares its bottom corners to
+  join the open body: they square as the body opens and round as it closes,
+  as in an expandable `SelectCard`.
 
 ## Usage
 
