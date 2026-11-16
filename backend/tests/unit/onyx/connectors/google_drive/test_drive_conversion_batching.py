@@ -87,7 +87,7 @@ class _Conversions:
         self,
         retrieved_file: RetrievedDriveFile,
         _context: object,
-        _drive_name_readers: object = (),
+        _path_readers: object = (),
     ) -> Document | None:
         file_id = str(retrieved_file.drive_file["id"])
         with self._lock:
