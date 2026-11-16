@@ -274,7 +274,7 @@ def test_every_entry_point_lists_the_same_files(mock_drive: MockDrive) -> None:
             # STUB parent.
             assert _file_id(document.id) in corpus.parent_unreadable, document.id
     assert inline.final is not None and inline.final.listing is not None
-    assert inline.final.listing.unresolved_parent_emails == {}
+    assert inline.final.listing.unresolved_parents == {}
 
 
 def _old_oauth_checkpoint(connector: GoogleDriveConnector) -> GoogleDriveCheckpoint:
