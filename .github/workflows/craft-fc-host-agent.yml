@@ -305,8 +305,9 @@ jobs:
         working-directory: tools/ods
         run: go build -o "${RUNNER_TEMP}/ods-audit" ./odsaudit
 
-      # The same gate as the other release images: an unignored critical in
-      # the image or in the guest kernel and Firecracker pins stops the tag.
+      # An unignored critical in the image stops the tag, as for the other
+      # release images. Amazon rates kernel advisories "important" (high), so
+      # the kernel and Firecracker pins gate at high.
       - name: Audit the pushed image, the guest kernel and Firecracker
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
@@ -315,7 +316,7 @@ jobs:
           set -euo pipefail
           status=0
           "${RUNNER_TEMP}/ods-audit" image "${REGISTRY_IMAGE}@${DIGEST}" --fail-on=critical --strict || status=1
-          "${RUNNER_TEMP}/ods-audit" craft-fc --fail-on=critical || status=1
+          "${RUNNER_TEMP}/ods-audit" craft-fc --fail-on=high || status=1
           exit "${status}"
 
       - name: Tag the checked image
