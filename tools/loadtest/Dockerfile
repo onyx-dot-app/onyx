@@ -14,10 +14,8 @@ RUN apt-get update && \
     apt-get clean
 USER locust
 
-# prometheus-client isn't in the base locust image. The other four ship in it
-# at versions with known vulnerabilities. All are pinned to match the versions
-# the root lockfile resolves for the `loadtest` group — bump them together
-# when the lockfile updates.
+# prometheus-client isn't in the base image. The rest ship in it at vulnerable
+# versions. Pins match the root lockfile's `loadtest` group, so bump them with it.
 RUN pip install --no-cache-dir \
     prometheus-client==0.23.1 \
     brotli==1.2.1 \
