@@ -25,6 +25,7 @@ on:
       - "microvm/**"
       - "deployment/craft-fc/**"
       - ".github/workflows/craft-fc-host-agent.yml"
+      - "!**/*.md"
   push:
     branches:
       - main
