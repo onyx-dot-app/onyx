@@ -250,7 +250,8 @@ export function buildItems(
 
   if (
     userCanAccess(Permission.FULL_ADMIN_PANEL_ACCESS) &&
-    !flags.hasSubscription
+    !flags.hasSubscription &&
+    !flags.isPlayground
   ) {
     items.push({
       sectionId: null,
