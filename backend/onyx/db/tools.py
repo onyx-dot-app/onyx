@@ -12,6 +12,7 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import MCPServerStatus, Permission, PermissionAuthority
+from onyx.db.integration_policy import list_persona_plugin_links
 from onyx.db.models import (
     MCPServer,
     OAuthConfig,
@@ -22,9 +23,14 @@ from onyx.db.models import (
     ToolUserPreference,
     User,
 )
+from onyx.integrations.policy import parse_action_settings
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
-from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
+from onyx.tools.models import (
+    PersonaToolConfiguration,
+    PluginLinkConfiguration,
+    ToolConfiguration,
+)
 from onyx.utils.headers import HeaderItemDict
 
 
@@ -59,12 +65,27 @@ def upsert_tool_user_preference__no_commit(
     ).one()
 
 
-def capture_persona_tool_configuration(persona: Persona) -> PersonaToolConfiguration:
-    """Copy loaded configuration; the caller owns the session and transaction."""
+def capture_persona_tool_configuration(
+    persona: Persona, db_session: Session
+) -> PersonaToolConfiguration:
+    """Copy loaded configuration; the caller owns the session and transaction.
+    The old MCP and OpenAPI tool rows of the agent are not copied: chat builds
+    integration actions from the plugin links."""
     return PersonaToolConfiguration(
         persona_id=persona.id,
         persona_name=persona.name,
-        tools=[ToolConfiguration.model_validate(tool) for tool in persona.tools],
+        tools=[
+            ToolConfiguration.model_validate(tool)
+            for tool in persona.tools
+            if tool.in_code_tool_id is not None
+        ],
+        plugin_links=[
+            PluginLinkConfiguration(
+                plugin_id=link.plugin_id,
+                action_settings=parse_action_settings(link.action_settings),
+            )
+            for link in list_persona_plugin_links(db_session, persona.id)
+        ],
         search=PersonaSearchInfo(
             document_set_names=[item.name for item in persona.document_sets],
             search_start_date=persona.search_start_date,

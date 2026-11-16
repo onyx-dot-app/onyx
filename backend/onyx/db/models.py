@@ -3672,11 +3672,13 @@ class ApprovalRequest(Base):
     chat_message_id: Mapped[int] = mapped_column(
         ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=False
     )
-    # NULL for an approval of an integration made after the integration
-    # tables, which has no gated_app.
+    # The old key, for a rollback. NULL for an integration with no gated_app
+    # row, such as one made after the upgrade.
     gated_app_id: Mapped[int | None] = mapped_column(
         ForeignKey("gated_app.id", ondelete="CASCADE"), nullable=True
     )
+    # The integration of the action. Keys session grants and the policy
+    # re-check. NULL after the integration is deleted.
     integration_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey(
@@ -3686,8 +3688,8 @@ class ApprovalRequest(Base):
         ),
         nullable=True,
     )
-    # The action that the request asks to run, such as an MCP tool name. It
-    # keys the action policy and session grants.
+    # The action key that the request asks to run, such as an MCP tool name
+    # or an OpenAPI operationId.
     action_id: Mapped[str] = mapped_column(String, nullable=False)
     # The call of the response's step whose card shows the request: the call
     # that waits, or the call whose tool, such as a program, made it. Places

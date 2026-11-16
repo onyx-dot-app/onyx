@@ -8,7 +8,14 @@ from sqlalchemy import and_, exists, func, insert, or_, select, union_all, updat
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
-from onyx.db.models import ApprovalRequest, ChatSession, QuestionRequest
+from onyx.db.models import (
+    ApprovalRequest,
+    ChatSession,
+    ExternalApp,
+    GatedApp,
+    MCPServer,
+    QuestionRequest,
+)
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
 
@@ -28,7 +35,8 @@ def create_approval_request__no_commit(
     *,
     chat_session_id: UUID,
     chat_message_id: int,
-    gated_app_id: int,
+    integration_id: int,
+    gated_app_id: int | None,
     action_id: str,
     tool_call_id: str,
     tool_name: str,
@@ -40,6 +48,7 @@ def create_approval_request__no_commit(
         .values(
             chat_session_id=chat_session_id,
             chat_message_id=chat_message_id,
+            integration_id=integration_id,
             gated_app_id=gated_app_id,
             action_id=action_id,
             tool_call_id=tool_call_id,
@@ -53,15 +62,33 @@ def create_approval_request__no_commit(
     ).scalar_one()
 
 
+def get_legacy_gated_app_id(db_session: Session, integration_id: int) -> int | None:
+    """The ``gated_app`` row that the upgrade kept for the integration: same
+    id, and its MCP server or external app points at the integration. None
+    for an integration made after the upgrade and for an OpenAPI tool."""
+    return db_session.scalar(
+        select(GatedApp.id)
+        .outerjoin(MCPServer, MCPServer.id == GatedApp.mcp_server_id)
+        .outerjoin(ExternalApp, ExternalApp.id == GatedApp.external_app_id)
+        .where(
+            GatedApp.id == integration_id,
+            or_(
+                MCPServer.integration_id == integration_id,
+                ExternalApp.integration_id == integration_id,
+            ),
+        )
+    )
+
+
 def has_session_grant(
-    db_session: Session, chat_session_id: UUID, gated_app_id: int, action_id: str
+    db_session: Session, chat_session_id: UUID, integration_id: int, action_id: str
 ) -> bool:
     return bool(
         db_session.scalar(
             select(
                 exists().where(
                     ApprovalRequest.chat_session_id == chat_session_id,
-                    ApprovalRequest.gated_app_id == gated_app_id,
+                    ApprovalRequest.integration_id == integration_id,
                     ApprovalRequest.action_id == action_id,
                     ApprovalRequest.decided_via == ApprovalDecidedVia.SESSION_GRANT,
                 )
@@ -110,13 +137,17 @@ def record_approval_decision__no_commit(
         .values(decision=decision, decided_via=decided_via, decided_at=func.now())
         .returning(ApprovalRequest.id)
     )
-    if decided is None or decided_via != ApprovalDecidedVia.SESSION_GRANT:
+    if (
+        decided is None
+        or decided_via != ApprovalDecidedVia.SESSION_GRANT
+        or approval.integration_id is None
+    ):
         return
     db_session.execute(
         update(ApprovalRequest)
         .where(
             ApprovalRequest.chat_session_id == approval.chat_session_id,
-            ApprovalRequest.gated_app_id == approval.gated_app_id,
+            ApprovalRequest.integration_id == approval.integration_id,
             ApprovalRequest.action_id == approval.action_id,
             ApprovalRequest.decision.is_(None),
         )
@@ -132,7 +163,7 @@ def get_approval_requests(
     db_session: Session, approval_ids: Collection[UUID]
 ) -> dict[UUID, ApprovalRequest]:
     """The saved requests by ID; a deleted request is absent. Deleting its
-    tool's server, chat, or response deletes a request."""
+    chat or response deletes a request."""
     return {
         row.id: row
         for row in db_session.scalars(

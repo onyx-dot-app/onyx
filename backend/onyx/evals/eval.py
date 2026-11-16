@@ -27,6 +27,7 @@ from onyx.evals.models import (
     evaluation_input,
 )
 from onyx.evals.provider import get_provider
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
@@ -229,7 +230,11 @@ def _get_answer_with_tools(
 
             stream_start_time = time.time()
             # Nobody answers approval requests in an eval run.
-            full = run_chat_turn(new_msg_req=request, user=user, ask_for_approval=False)
+            full = run_chat_turn(
+                new_msg_req=request,
+                user=user,
+                approval_mode=ApprovalMode.RUN_WITHOUT_ASKING,
+            )
 
             result = _chat_full_response_to_eval_result(full, stream_start_time)
 
@@ -367,7 +372,9 @@ def _get_multi_turn_answer_with_tools(
 
                 stream_start_time = time.time()
                 full = run_chat_turn(
-                    new_msg_req=request, user=user, ask_for_approval=False
+                    new_msg_req=request,
+                    user=user,
+                    approval_mode=ApprovalMode.RUN_WITHOUT_ASKING,
                 )
 
                 result = _chat_full_response_to_eval_result(full, stream_start_time)

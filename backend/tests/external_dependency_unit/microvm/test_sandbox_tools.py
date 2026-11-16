@@ -62,6 +62,7 @@ from onyx.db.sandbox import (
 )
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import DeepResearchAgent
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import (
     AgentCancelled,
     CancellationSignal,
@@ -880,7 +881,7 @@ def test_a_bot_turn_offers_no_sandbox(
             origin=origin,
         ),
         user=chat.user,
-        ask_for_approval=False,
+        approval_mode=ApprovalMode.NO_APPROVER,
     )
     [request] = llm.requests
     assert ExecCommandTool.NAME not in str(request.get("tools"))
