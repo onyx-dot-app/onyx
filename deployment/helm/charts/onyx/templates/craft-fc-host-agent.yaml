@@ -92,7 +92,7 @@ Agent flags and node requirements: microvm/README.md.
 {{- fail (printf "auth.sandboxNodeRegistration.values.%s must be at least 32 characters (for example: openssl rand -hex 32)" $regKey) }}
 {{- end }}
 {{- $slicePercent := toString (hasKey $agent "sliceMemoryPercent" | ternary $agent.sliceMemoryPercent 85) }}
-{{- if or (not (regexMatch "^[0-9]+$" $slicePercent)) (and (ne $slicePercent "0") (or (lt (atoi $slicePercent) 10) (gt (atoi $slicePercent) 100))) }}
+{{- if or (not (regexMatch "^(0|[1-9][0-9]*)$" $slicePercent)) (and (ne $slicePercent "0") (or (lt (atoi $slicePercent) 10) (gt (atoi $slicePercent) 100))) }}
 {{- fail (printf "craft.hostAgent.sliceMemoryPercent must be 0 or a whole number from 10 to 100, not %q" $slicePercent) }}
 {{- end }}
 {{- $loopStoreGiB := toString (($agent.loopStore | default dict).sizeGiB | default "") }}
