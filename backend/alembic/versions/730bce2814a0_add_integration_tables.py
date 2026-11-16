@@ -1174,4 +1174,13 @@ def downgrade() -> None:
         WHERE p.id = md5('integration_plugin:' || i.id::text)::uuid
         """
     )
+    # A "My uploads" with no plugin left goes too. The app makes it again on
+    # the first upload of its owner.
+    op.execute(
+        """
+        DELETE FROM plugin_marketplace m
+        WHERE m.kind = 'user_uploads'
+          AND NOT EXISTS (SELECT 1 FROM plugin p WHERE p.marketplace_id = m.id)
+        """
+    )
     op.drop_table("integration")

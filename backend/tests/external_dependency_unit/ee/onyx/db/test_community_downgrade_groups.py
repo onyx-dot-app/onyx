@@ -423,12 +423,12 @@ def test_group_shared_integration_is_published(db_session: Session) -> None:
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_group_shared_library_integration_becomes_available(
+def test_group_shared_library_integration_stays_not_available(
     db_session: Session,
 ) -> None:
-    """An integration whose owner was deleted is in the Organization library
-    as Not available, with its shares. The downgrade makes it available, so
-    the members of the removed group keep it."""
+    """A Not available integration in the Organization library stays Not
+    available when its groups go. The downgrade does not open it to the
+    whole organization."""
     try:
         owner = _make_user(db_session, in_basic=True)
         group = _make_group(db_session, [owner])
@@ -474,7 +474,7 @@ def test_group_shared_library_integration_becomes_available(
         plugin = db_session.get(Plugin, plugin_id)
         assert plugin is not None
         db_session.refresh(plugin)
-        assert plugin.installation_policy == PluginInstallationPolicy.AVAILABLE
+        assert plugin.installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
     finally:
         db_session.rollback()
 

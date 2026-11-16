@@ -1264,6 +1264,18 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
             ).scalar_one()
             == 0
         )
+        # The "My uploads" that the upgrade made for the owner of a private
+        # server goes, because it holds no plugin now.
+        assert (
+            conn.execute(
+                text(
+                    "SELECT count(*) FROM plugin_marketplace "
+                    "WHERE kind = 'user_uploads' AND owner_user_id = :u"
+                ),
+                {"u": seeded.owner},
+            ).scalar_one()
+            == 0
+        )
         # The plugin of a skill stays, also when it holds an integration.
         assert (
             conn.execute(

@@ -160,8 +160,8 @@ one commit (`backend/ee/onyx/db/community_downgrade.py`):
   row, is published when it has a `plugin__user_group` row with a permission
   for a removed group and no `NOT_AVAILABLE` setting; a name clash takes the
   next free name, and the log names each published plugin ([[skills]]). A
-  shared plugin with no skill row that is in the Organization library as
-  `NOT_AVAILABLE` becomes `AVAILABLE`. Members who held admin rights through
+  plugin already in the Organization library as `NOT_AVAILABLE` stays so: its
+  group members lose it. Members who held admin rights through
   a removed group join Admin, and members left in no default group join Basic.
 - `disable_paid_features__no_commit` deletes token budgets, marks hooks deleted,
   turns off standard answers, sets every SCIM token inactive and removes API keys
