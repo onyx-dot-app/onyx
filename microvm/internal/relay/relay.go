@@ -357,9 +357,11 @@ func (r *Relay) splice(p *pair, up net.Conn, vm VM) {
 					continue
 				}
 				// In TLS 1.3 the proxy refuses a client certificate after the
-				// relay's handshake ends, so the refusal comes as an alert here.
+				// relay's handshake ends: an alert, or a close (SAN pin), before
+				// the first byte.
 				var oe *net.OpError
-				if src == up && !got && errors.As(err, &oe) && oe.Op == "remote error" {
+				alert := errors.As(err, &oe) && oe.Op == "remote error"
+				if src == up && !got && (alert || (r.TLS != nil && errors.Is(err, io.EOF))) {
 					_, _ = io.WriteString(p.vm, "HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
 					r.event(EventUpstreamFailed)
 					r.Log.Warn("relay upstream refused the TLS connection", "sandbox_id", vm.SandboxID, "err", err)

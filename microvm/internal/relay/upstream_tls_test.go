@@ -65,6 +65,12 @@ func (p *tlsPKI) relayTLS(t *testing.T, trust, signer *testcerts.CA) *UpstreamTL
 // cert from clientCA, like the sandbox-proxy relay port. The channel gets
 // one value per connection that passed the handshake.
 func tlsUpstream(t *testing.T, serverCA *testcerts.CA, serverName string, clientCA *testcerts.CA) (*upstream, chan struct{}) {
+	return tlsUpstreamWith(t, serverCA, serverName, clientCA, false)
+}
+
+// tlsUpstreamWith with closeAfterHandshake drops each connection after the
+// handshake, as the proxy does for a client cert without the pinned SAN.
+func tlsUpstreamWith(t *testing.T, serverCA *testcerts.CA, serverName string, clientCA *testcerts.CA, closeAfterHandshake bool) (*upstream, chan struct{}) {
 	t.Helper()
 	cert, err := serverCA.ServerCert(serverName)
 	if err != nil {
@@ -89,6 +95,10 @@ func tlsUpstream(t *testing.T, serverCA *testcerts.CA, serverName string, client
 			}
 			go func() {
 				if err := c.(*tls.Conn).Handshake(); err != nil {
+					_ = c.Close()
+					return
+				}
+				if closeAfterHandshake {
 					_ = c.Close()
 					return
 				}
@@ -141,7 +151,10 @@ func TestUpstreamTLSRefuses(t *testing.T) {
 		trust      *testcerts.CA
 		signer     *testcerts.CA
 		plain      bool
+		pinClose   bool
 	}{
+		// The proxy closes after the handshake: the SAN is not pinned.
+		"unpinned SAN": {serverName: proxyName, trust: p.proxyCA, signer: p.relayCA, pinClose: true},
 		// The relay trusts another CA than the one of the proxy cert.
 		"bad CA": {serverName: proxyName, trust: p.otherCA, signer: p.relayCA},
 		// The proxy cert is valid but for another name.
@@ -158,7 +171,7 @@ func TestUpstreamTLSRefuses(t *testing.T) {
 			if c.plain {
 				up = newUpstream(t)
 			} else {
-				up, handshakes = tlsUpstream(t, p.proxyCA, c.serverName, p.relayCA)
+				up, handshakes = tlsUpstreamWith(t, p.proxyCA, c.serverName, p.relayCA, c.pinClose)
 			}
 			_, sock, _ := newRelay(t, up, func(r *Relay) {
 				r.TLS = p.relayTLS(t, c.trust, c.signer)
