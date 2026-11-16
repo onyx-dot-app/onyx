@@ -10,7 +10,12 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import Skill, User
-from onyx.db.plugin_access import PluginAccess, PluginGroupShare, PluginUserShare
+from onyx.db.plugin_access import (
+    PluginAccess,
+    PluginGroupRowAccess,
+    PluginGroupShare,
+    PluginUserShare,
+)
 from onyx.db.skill import ensure_can_edit_org_visibility
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.response_helpers import user_permission_for_skill
@@ -57,7 +62,15 @@ class _Case:
             description=self.skill.description,
             is_valid=True,
             user_shares=tuple(self.user_shares),
-            group_shares=tuple(self.group_shares),
+            group_rows=tuple(
+                PluginGroupRowAccess(
+                    group_id=share.group_id,
+                    group_name=share.group_name,
+                    permission=share.permission,
+                    installation_policy=None,
+                )
+                for share in self.group_shares
+            ),
         )
 
 

@@ -37,6 +37,16 @@ export interface SkillGroupShare {
   permission: SkillSharePermission;
 }
 
+/** One group row of a skill: a share, a group install setting, or both. */
+export interface SkillGroupSummary {
+  group_id: number;
+  group_name: string;
+  /** Null for a row that holds only a setting. */
+  permission: SkillSharePermission | null;
+  /** Null: the group uses the organization setting. */
+  installation_policy: SkillInstallationPolicy | null;
+}
+
 export interface SkillExternalAppDependency {
   external_app_id: number;
   name: string;
@@ -79,6 +89,8 @@ export interface Skill {
   updated_at: string | null;
   user_shares: SkillUserShare[];
   group_shares: SkillGroupShare[];
+  /** The group rows the caller may see; empty for other members. */
+  group_summaries: SkillGroupSummary[];
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
   external_app: SkillExternalAppDependency | null;

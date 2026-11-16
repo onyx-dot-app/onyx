@@ -158,6 +158,11 @@ def test_shared_group_with_not_available_is_refused(admin_user: DATestUser) -> N
     response = share_skill(admin_user, setting_first.id, share)
     assert response.status_code == 400
     assert "Ask a skill manager" in response.json()["detail"]
+    [row] = SkillManager.get_for_user(setting_first.id, admin_user).group_summaries
+    assert (row.permission, row.installation_policy) == (
+        None,
+        PluginInstallationPolicy.NOT_AVAILABLE,
+    )
 
 
 def test_member_share_is_refused_while_sharing_is_off(
