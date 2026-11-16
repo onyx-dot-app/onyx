@@ -14,7 +14,7 @@ import {
   ThinkingBody,
   splitThinkingTitle,
 } from "@/lib/timeline/components/bodies/ThinkingBody";
-import { SvgCircle } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
 
@@ -109,7 +109,7 @@ export const ReasoningRenderer: MessageRenderer<
   if (!hasStart && !hasEnd && content.length === 0) {
     return children([
       {
-        icon: SvgCircle,
+        icon: STEP_ICONS.thinking,
         status: thinkingStatus,
         content: <></>,
         noPaddingRight: true,
@@ -127,7 +127,7 @@ export const ReasoningRenderer: MessageRenderer<
 
   return children([
     {
-      icon: SvgCircle,
+      icon: STEP_ICONS.thinking,
       status: displayStatus,
       content: reasoningContent,
       expandedText: reasoningContent,

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Collapsible } from "@opal/components";
-import { SvgCircle, SvgCheckCircle, SvgStopCircle } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import { FoldableLogo } from "@/lib/app/components";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
 import { TimelineSteps } from "@/lib/timeline/components/TimelineSteps";
@@ -67,7 +67,7 @@ function CraftTimelineStep({
       );
     return (
       <StepContainer
-        stepIcon={SvgCircle}
+        stepIcon={STEP_ICONS.thinking}
         header={header}
         toggleLabel={header}
         isExpanded={isExpanded}
@@ -239,7 +239,7 @@ export default function CraftTimeline({
           />
           {showEndRow && (
             <StepContainer
-              stepIcon={isStopped ? SvgStopCircle : SvgCheckCircle}
+              stepIcon={isStopped ? STEP_ICONS.stopped : STEP_ICONS.done}
               header={tTimeline(
                 isStopped ? "stoppedStep.header" : "doneStep.header"
               )}

@@ -1,7 +1,8 @@
 import React from "react";
 import { RetrievalBody } from "@/lib/timeline/components/bodies/RetrievalBody";
 import { useTranslations } from "next-intl";
-import { SvgSearch, SvgGlobe } from "@opal/icons";
+import { SvgSearch } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -58,7 +59,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   if (queries.length === 0) {
     return children([
       {
-        icon: SvgGlobe,
+        icon: STEP_ICONS.webSearch,
         status: queriesHeader,
         content: <div />,
         supportsCollapsible: false,
@@ -125,7 +126,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   // FULL mode: return queries timeline step; the fetch step reads results
   return children([
     {
-      icon: SvgGlobe,
+      icon: STEP_ICONS.webSearch,
       status: queriesHeader,
       content: (
         <RetrievalBody

@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { SvgCircle, SvgCheckCircle, SvgBookOpen } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 
 import {
   PacketType,
@@ -256,7 +256,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       {/* Research Task - hidden in compact mode when tools/report are active */}
       {researchTask && !showOnlyReport && !showOnlyTools && (
         <StepContainer
-          stepIcon={SvgCircle}
+          stepIcon={STEP_ICONS.thinking}
           header={t("researchAgent.task.title")}
           collapsible={true}
           isLastStep={
@@ -313,7 +313,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       {/* Intermediate report - hidden when tools are active in compact mode */}
       {fullReportContent && !showOnlyTools && (
         <StepContainer
-          stepIcon={SvgBookOpen}
+          stepIcon={STEP_ICONS.agent}
           header={t("researchAgent.report.title")}
           isLastStep={!stopPacketSeen && !isComplete}
           isFirstStep={!researchTask && nestedCalls.length === 0}

@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { SvgCircle } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 
 import {
   DeepResearchPlanPacket,
@@ -70,7 +70,7 @@ export const DeepResearchPlanRenderer: MessageRenderer<
 
   return children([
     {
-      icon: SvgCircle,
+      icon: STEP_ICONS.thinking,
       status: statusText,
       content: planContent,
       noPaddingRight: true,

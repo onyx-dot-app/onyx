@@ -20,7 +20,7 @@ import {
   URLS_PER_EXPANSION,
 } from "./fetchStateUtils";
 import { Text } from "@opal/components";
-import { SvgEdit } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 
 const urlToSourceInfo = (url: string, index: number): SourceInfo => ({
   id: `url-${index}`,
@@ -69,7 +69,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   if (!hasStarted) {
     return children([
       {
-        icon: SvgEdit,
+        icon: STEP_ICONS.fetch,
         status: t("fetch.reading.status"),
         content: <div />,
         supportsCollapsible: false,
@@ -129,7 +129,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
 
   return children([
     {
-      icon: SvgEdit,
+      icon: STEP_ICONS.fetch,
       status: t("fetch.reading.status"),
       supportsCollapsible: false,
       timelineLayout: "timeline",
