@@ -114,6 +114,7 @@ from onyx.tools.tool_implementations.code_mode.stubs import (
     program_value,
     tool_arguments,
 )
+from onyx.tools.tool_implementations.sandbox.models import SandboxExecResult
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 from onyx.tools.tool_implementations.utils import truncate_output
 from onyx.tracing.framework.create import function_span
@@ -235,6 +236,14 @@ def _bounded_details(
             update={
                 "stdout": _bounded(details.stdout, max_chars),
                 "stderr": _bounded(details.stderr, max_chars),
+            }
+        )
+    if isinstance(details, SandboxExecResult):
+        output = _bounded(details.output, max_chars)
+        return details.model_copy(
+            update={
+                "output": output,
+                "truncated": details.truncated or output != details.output,
             }
         )
     if isinstance(details, FileReadResult):

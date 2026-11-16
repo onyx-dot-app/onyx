@@ -88,6 +88,12 @@ from onyx.tools.tool_constructor import (
     SearchToolConfig,
     construct_tools,
 )
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    ApplyPatchTool,
+    ExecCommandTool,
+    WriteStdinTool,
+)
+from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
     SkillsReadTool,
@@ -985,6 +991,15 @@ def create_chat_agent(
         # the other configured tools.
         if setup.has_chat_skills:
             tools += [SkillsListTool(user), SkillsReadTool(user)]
+        # Every agent gets the sandbox tools when the turn offers them; they
+        # share one sandbox turn.
+        if setup.sandbox_tools:
+            turn = SandboxTurn(
+                tenant_id=get_current_tenant_id(),
+                user_id=user.id,
+                chat_session_id=setup.chat_session_id,
+            )
+            tools += [ExecCommandTool(turn), WriteStdinTool(turn), ApplyPatchTool(turn)]
 
         preferred_tool_id = setup.preferred_tool_id
         if preferred_tool_id is not None and preferred_tool_id not in {

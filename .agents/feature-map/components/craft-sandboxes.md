@@ -305,6 +305,17 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   `SandboxFileNotFoundError`. A yield window counts from the Start or the
   write, so a slow wake does not use it up; `wall_time_seconds` covers the
   whole call.
+- The chat sandbox tools ([[code-execution]],
+  `backend/onyx/tools/tool_implementations/sandbox/sandbox_tools.py`) call it with the
+  user's `Sandbox` row and the chat session ID. The first call of a
+  response's sandbox tools gets or creates the row
+  (`backend/onyx/server/features/build/db/sandbox.py:get_or_create_sandbox`,
+  safe against a race on the unique `user_id`; a new row is `TERMINATED`,
+  with no pod runtime). Chat and the new Craft harness share one VM per
+  user, in separate session directories. The row's
+  `provisioning_attempt_number` counts Craft's pods; harness calls do not
+  read it: the harness's own attempt record (`harness_state.last_attempt`)
+  fences VMs.
 - `.../sandbox/firecracker/harness_sandbox.py:FirecrackerHarnessSandbox`
   implements it on the microvm code: wake on the first call (capacity
   retry for 10 s), Init only when `Health.initialized` is false or the
@@ -355,8 +366,11 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   commit): a Craft session delete
   (`backend/onyx/server/features/build/session/api.py:delete_session`)
   deletes that session's save, its directory on the running VM and its
-  exec records; its artifacts stay. A session the harness has no record of
-  (save, instance mark or exec record) costs only cache reads. A user delete (`delete_user_from_db`
+  exec records; its artifacts stay. A chat session delete, hard or soft
+  (`backend/onyx/db/chat.py:delete_chat_session`; `delete_all_chat_sessions_for_user`
+  purges in a background thread) does the same for the chat session: no one
+  can restore a soft-deleted chat. A session the harness has no record of (save, instance
+  mark or exec record) costs only cache reads. A user delete (`delete_user_from_db`
   in a background thread, `UserManager.delete`) and the last-admin tenant
   delete stop the VM and delete every save, artifact and record of the
   sandbox. A purge mark makes a save in progress drop its

@@ -380,7 +380,8 @@ pending set (`retry_incognito_teardowns`).
 **Deletion and retention.** Soft delete sets `deleted` and ends the chat's
 parked responses, which nothing can decide anymore
 (`server/query_and_chat/chat_backend.py:_end_parked_responses`): their
-requests, checkpoints and program dumps go. Hard delete
+requests, checkpoints and program dumps go. Both deletes purge the chat's
+sandbox directory and saves (`purge_harness_session`). Hard delete
 (`HARD_DELETE_CHATS` or the `hard_delete` parameter) runs
 `db/chat.py:delete_messages_and_files_from_chat_session` over the session and
 its child sessions: message files, checkpoint blobs, then messages (tool calls,

@@ -5,6 +5,7 @@ from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
@@ -111,6 +112,30 @@ def get_sandbox_by_user_id(db_session: Session, user_id: UUID) -> Sandbox | None
     """Get sandbox by user ID (primary lookup method)."""
     stmt = select(Sandbox).where(Sandbox.user_id == user_id)
     return db_session.execute(stmt).scalar_one_or_none()
+
+
+def get_sandbox_id_by_user_id(db_session: Session, user_id: UUID) -> UUID | None:
+    return db_session.scalar(select(Sandbox.id).where(Sandbox.user_id == user_id))
+
+
+def get_or_create_sandbox(db_session: Session, user_id: UUID) -> Sandbox:
+    """The user's sandbox row, created when missing. Safe when concurrent
+    calls race: the unique user_id keeps one row. A new row is TERMINATED,
+    with no runtime: a harness sandbox starts its VM on use, and Craft
+    provisions its own runtime when it needs one."""
+    sandbox = get_sandbox_by_user_id(db_session, user_id)
+    if sandbox is not None:
+        return sandbox
+    db_session.execute(
+        pg_insert(Sandbox)
+        .values(user_id=user_id, status=SandboxStatus.TERMINATED)
+        .on_conflict_do_nothing(index_elements=[Sandbox.user_id])
+    )
+    db_session.commit()
+    sandbox = get_sandbox_by_user_id(db_session, user_id)
+    if sandbox is None:
+        raise RuntimeError(f"No sandbox row for user {user_id} after its insert")
+    return sandbox
 
 
 def begin_provisioning_attempt__no_commit(

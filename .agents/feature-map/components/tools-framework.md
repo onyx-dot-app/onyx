@@ -151,6 +151,11 @@ receives); see [[code-execution]]. A tool that must not run twice sets
 that a lost execution owner left running (`agents/tools.py:AgentTool`).
 `inner_tools` lists the tools that run inside a tool's calls, such as the
 functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
+`end_run` ends state that a tool keeps for one run, such as the sandbox turn:
+`chat/agent.py:ChatAgent` calls each configured tool's `end_run` once from
+`Agent.on_release`, which `agents/runtime.py:Run` calls after each finish or
+suspension, once the run's work (its tool threads and its children's work)
+has drained.
 
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error
@@ -174,6 +179,15 @@ both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
 tool catalog rows, are `DIRECT` in code mode, and render as generic tool cards with
 a short JSON summary, not the SKILL.md text.
+
+**Chat sandbox tools.** `chat/execution.py:create_chat_agent` also adds
+`exec_command`, `write_stdin` and `apply_patch` ([[code-execution]]) when
+`ChatTurnSetup.sandbox_tools` is set. `chat/process_message.py:prepare_chat_turn`
+sets it in one expression: harness sandboxes run
+(`microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the user is not anonymous, the
+chat is not incognito, and the turn has one response. The agent's tools and
+`allowed_tool_ids` do not remove them. They have no tool catalog rows, so no
+admin switch, picker entry or forced-tool request reaches them.
 
 **Argument models.** A tool declares its arguments as one Pydantic
 `*Arguments` model. `parse_tool_arguments` validates calls with it, and

@@ -125,6 +125,15 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
     **Code Execution**
     - `python_tool_start` and `python_tool_delta`
 
+    **Sandbox**
+    - `exec_command_start` (with `cmd` and `workdir`) or `write_stdin_start` (with `session_id` and `chars`) starts a
+    command call. `exec_output_delta` streams a preview of its output. `exec_end` ends the call.
+    Its `output` is the final output, which replaces the preview. `session_id` is set while the command runs,
+    and `error` is set when the call failed. A replayed call has no `exec_output_delta`
+    - `apply_patch_start` and `apply_patch_end` show a file edit and the files it changed
+    - A stopped call has no end packet. This applies to a top-level call that the user stopped, and to a call in a
+    code mode program that stopped with its program. Stopping a command call also stops the command
+
     **File Reading and Memory**
     - `file_reader_start`, `file_reader_result`, `memory_tool_start`, `memory_tool_delta`, and `memory_tool_no_access`
 

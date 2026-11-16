@@ -402,6 +402,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
             )
         )
     setup.incognito_record_mode = None
+    setup.sandbox_tools = False
     setup.mentions = []
     setup.has_chat_skills = False
     setup.resumed_response_id = None

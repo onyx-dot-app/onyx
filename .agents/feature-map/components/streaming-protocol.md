@@ -218,7 +218,17 @@ an amendment added (`_amendment_packets`) after the section end, and
 `ToolResultAmendedEvent` after the answer, before the stop. The client adds
 packets of an ended tab to that tab. When the observation was recorded
 before a restore, the live stream has no tab for it, so the closing record
-follows the observation's packets and section end in a new tab. Other tools show their
+follows the observation's packets and section end in a new tab. The sandbox
+tools ([[code-execution]]) start with `exec_command_start`, `write_stdin_start`
+or `apply_patch_start`, stream the command output in `exec_output_delta`, and
+end with `exec_end` or `apply_patch_end`. `exec_end.output` is the output
+that the model got (cut to its token budget), which replaces the streamed
+preview; `session_id` is set while the command runs, and `error` (with no
+output) when the call failed. A replayed call sends the start and `exec_end`
+only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A call that a Stop
+ended has no end packet; the client shows it as stopped. A program's sandbox
+call that its cell's end stopped (state `unfinished`) has none either
+(`CodeModeRenderer._complete_child`). Other tools show their
 arguments when they start. `chat/renderer.py:ToolRenderer.start` emits
 `ToolCallDebug` before the start packet, only with `INTEGRATION_TESTS_MODE`.
 

@@ -71,6 +71,12 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride, PromptOverride
+from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
+from onyx.server.features.build.db.sandbox import get_sandbox_id_by_user_id
+from onyx.server.features.build.sandbox.firecracker.purge import (
+    purge_harness_session,
+    purge_harness_sessions_in_background,
+)
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
     ChatMessageDetail,
@@ -471,6 +477,14 @@ def update_chat_session(
     return chat_session
 
 
+def _sandbox_id_to_purge(db_session: Session, user_id: UUID | None) -> UUID | None:
+    """The user's sandbox, whose VM keeps a directory per chat session that
+    used the sandbox tools; None when harness sandboxes do not run here."""
+    if user_id is None or not HARNESS_SANDBOX_ENABLED:
+        return None
+    return get_sandbox_id_by_user_id(db_session, user_id)
+
+
 def delete_all_chat_sessions_for_user(
     user: User, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
 ) -> None:
@@ -486,6 +500,7 @@ def delete_all_chat_sessions_for_user(
         .all()
     )
 
+    sandbox_id = _sandbox_id_to_purge(db_session, user_id)
     if hard_delete:
         for chat_session in chat_sessions:
             delete_messages_and_files_from_chat_session(chat_session.id, db_session)
@@ -508,6 +523,12 @@ def delete_all_chat_sessions_for_user(
         )
 
     db_session.commit()
+    # After the commit, so that a rolled-back delete keeps the files. A soft
+    # delete purges them too: no one can restore a deleted chat.
+    if sandbox_id is not None:
+        purge_harness_sessions_in_background(
+            sandbox_id, [chat_session.id for chat_session in chat_sessions]
+        )
 
 
 def delete_chat_session(
@@ -527,6 +548,7 @@ def delete_chat_session(
     if chat_session.deleted and not include_deleted:
         raise ValueError("Cannot delete an already deleted chat session")
 
+    sandbox_id = _sandbox_id_to_purge(db_session, chat_session.user_id)
     if hard_delete:
         delete_messages_and_files_from_chat_session(chat_session_id, db_session)
         db_session.execute(delete(ChatSession).where(ChatSession.id == chat_session_id))
@@ -537,6 +559,10 @@ def delete_chat_session(
         chat_session.deleted = True
 
     db_session.commit()
+    # After the commit, so that a rolled-back delete keeps the files. A soft
+    # delete purges them too: no one can restore a deleted chat.
+    if sandbox_id is not None:
+        purge_harness_session(sandbox_id, chat_session_id)
 
 
 def get_chat_sessions_older_than(
@@ -1014,6 +1040,25 @@ def reserve_chat_response_ids(
 
     db_session.commit()
     return [message.id for message in reserved]
+
+
+def count_turn_responses(db_session: Session, response_id: int) -> int:
+    """The responses that one turn reserved together with `response_id`, the
+    response included: one reservation saves them in one transaction, so they
+    share its time_sent. A regeneration is another turn."""
+    response = aliased(ChatMessage)
+    return (
+        db_session.scalar(
+            select(func.count(ChatMessage.id))
+            .join(
+                response,
+                (ChatMessage.parent_message_id == response.parent_message_id)
+                & (ChatMessage.time_sent == response.time_sent),
+            )
+            .where(response.id == response_id)
+        )
+        or 0
+    )
 
 
 def set_response_model_names__no_commit(
