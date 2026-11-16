@@ -53,6 +53,7 @@ OLD_TABLES = (
     "tool_user_preference",
     "persona__tool",
     "workspace_action_policy",
+    "external_app__skill",
     "user_action_policy",
     "scheduled_task_enabled_app",
     "scheduled_task_action_policy",
@@ -121,6 +122,7 @@ class Seeded:
     custom_default: int
     custom_oauth: int
     custom_disabled: int
+    skill: UUID
     gated: dict[str, int]
     names: dict[str, str]
 
@@ -211,6 +213,14 @@ def _seed(conn: Connection) -> Seeded:
     mcp_public = mcp(names["shared"], owner_email, True, "OAUTH", "PER_USER")
     mcp_private = mcp(names["private"], owner_email, False, "API_TOKEN", "ADMIN")
     mcp_orphan = mcp(names["orphan"], f"gone-{s}@example.com", False, "NONE", "ADMIN")
+    # Only the public server is available in Craft.
+    conn.execute(
+        text(
+            "UPDATE mcp_server SET available_in_craft = (id = :public) "
+            "WHERE id = ANY(:ids)"
+        ),
+        {"public": mcp_public, "ids": [mcp_public, mcp_private, mcp_orphan]},
+    )
     conn.execute(
         text(
             "UPDATE mcp_server SET oauth_scopes_override = "
@@ -320,6 +330,8 @@ def _seed(conn: Connection) -> Seeded:
         (own_persona, custom_private),
         (own_persona, tool_read),
         (own_persona, tool_write),
+        (own_persona, tool_selected),
+        (own_persona, tool_unselected),
         (bot_persona, tool_write),
         (bot_persona, custom_oauth),
         (0, custom_default),
@@ -346,7 +358,9 @@ def _seed(conn: Connection) -> Seeded:
 
     for gated_app_id, action, policy in (
         (gated["mcp_public"], "create_issue", "ASK"),
+        (gated["mcp_public"], "list_issues", "ALWAYS"),
         (gated["mcp_private"], "drop_table", "ALWAYS"),
+        (gated["mcp_private"], "query", "ALWAYS"),
         (gated["app_slack"], "slack.messages.write", "DENY"),
     ):
         conn.execute(
@@ -467,6 +481,59 @@ def _seed(conn: Connection) -> Seeded:
         {"id": uuid4(), "s": session_id, "g": gated["app_slack"]},
     )
 
+    # A published skill that needs the Slack app.
+    skill = uuid4()
+    conn.execute(
+        text(
+            "INSERT INTO plugin_marketplace (id, kind, name, owner_user_id, "
+            "default_installation_policy, created_at) VALUES (:id, "
+            "'organization_library', 'Organization library', NULL, 'AVAILABLE', "
+            "TIMESTAMPTZ '2026-11-11 00:00:00+00') ON CONFLICT DO NOTHING"
+        ),
+        {"id": ORGANIZATION_LIBRARY_ID},
+    )
+    conn.execute(
+        text(
+            "INSERT INTO skill (id, name, description, bundle_file_id, "
+            "bundle_sha256, author_user_id, public_permission) VALUES "
+            "(:id, :name, '', :file, :sha, :u, 'VIEWER')"
+        ),
+        {
+            "id": skill,
+            "name": f"u1-skill-{s}",
+            "file": f"u1-{skill.hex}",
+            "sha": "0" * 64,
+            "u": users["owner"],
+        },
+    )
+    conn.execute(
+        text(
+            "INSERT INTO plugin (id, name, description, marketplace_id, "
+            "author_user_id, current_version_id, published_version_id) VALUES "
+            "(:id, :name, '', :m, :u, :id, :id)"
+        ),
+        {
+            "id": skill,
+            "name": f"u1-skill-{s}",
+            "m": ORGANIZATION_LIBRARY_ID,
+            "u": users["owner"],
+        },
+    )
+    conn.execute(
+        text(
+            "INSERT INTO plugin_version (id, plugin_id, version_number) "
+            "VALUES (:id, :id, 1)"
+        ),
+        {"id": skill},
+    )
+    conn.execute(
+        text(
+            "INSERT INTO external_app__skill (external_app_id, skill_id) "
+            "VALUES (:a, :s)"
+        ),
+        {"a": app_slack, "s": skill},
+    )
+
     return Seeded(
         owner=users["owner"],
         other=users["other"],
@@ -491,6 +558,7 @@ def _seed(conn: Connection) -> Seeded:
         custom_default=custom_default,
         custom_oauth=custom_oauth,
         custom_disabled=custom_disabled,
+        skill=skill,
         gated=gated,
         names=names,
     )
@@ -513,6 +581,8 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
             ),
             {"gated": list(seeded.gated.values()), "tools": custom_tools},
         )
+    conn.execute(text("DELETE FROM plugin WHERE id = :id"), {"id": seeded.skill})
+    conn.execute(text("DELETE FROM skill WHERE id = :id"), {"id": seeded.skill})
     conn.execute(
         text("DELETE FROM persona__tool WHERE persona_id = 0 AND tool_id = ANY(:t)"),
         {"t": [seeded.custom_default, seeded.custom_disabled]},
@@ -896,12 +966,40 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         }
         assert policies == {
             (public.id, "create_issue", None): "ask",
+            # Available in Craft: the admin Always allow stays an admin value.
+            (public.id, "list_issues", None): "allow",
             # The admin did not select drop_table: blocked wins over its
             # saved Always allow.
             (private.id, "drop_table", None): "blocked",
+            # Not available in Craft: the Always allow of "query" was set for
+            # chat only, so it makes no admin value.
             (slack.id, "slack.messages.write", None): "blocked",
             (public.id, "list_issues", seeded.other): "allow",
         }
+        # Each agent with "query" keeps it with no question. The tool that the
+        # admin did not select gets no allow.
+        assert _settings(
+            conn, "persona__plugin", "persona_id", seeded.own_persona, private.plugin_id
+        ) == {
+            "default": "blocked",
+            "actions": {"query": "allow", "drop_table": "inherit"},
+        }
+        # Chat runs a custom tool with no question: the default row is allow.
+        assert {
+            (row.integration_id, row.action, row.user_id, row.policy)
+            for row in conn.execute(
+                text(
+                    "SELECT integration_id, action, user_id, policy "
+                    "FROM integration_action_policy WHERE integration_id = ANY(:ids)"
+                ),
+                {"ids": [c.id for c in custom.values()]},
+            )
+        } == {(c.id, "", None, "allow") for c in custom.values()}
+        # A skill that needs an app uses the integration of that app.
+        assert conn.execute(
+            text("SELECT integration_id FROM plugin__integration WHERE plugin_id = :p"),
+            {"p": seeded.skill},
+        ).scalars().all() == [slack.id]
 
         # Choices of users.
         preferences = {
@@ -1051,6 +1149,7 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
         "integration_action_policy",
         "persona__plugin",
         "scheduled_task__plugin",
+        "plugin__integration",
         "plugin",
         "plugin_version",
         "plugin__user",

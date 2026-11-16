@@ -3581,6 +3581,10 @@ class ChatSession(Base):
     tool_selection: Mapped[ChatToolSelection | None] = mapped_column(
         PydanticType(ChatToolSelection), nullable=True
     )
+    # The tools and plugins the user last selected. Replaces tool_selection.
+    tool_options: Mapped[dict[str, Any] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
     # When the user stopped the chat; queued turns wait until the next turn starts.
     queue_paused_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -6407,6 +6411,25 @@ class Persona__Plugin(Base):
     )
 
     __table_args__ = (Index("ix_persona__plugin_plugin_id", "plugin_id"),)
+
+
+class Plugin__Integration(Base):
+    """An integration that a plugin uses, such as the app that its skills
+    call. The home plugin of an integration is ``Integration.plugin_id``, not
+    a row here."""
+
+    __tablename__ = "plugin__integration"
+
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    __table_args__ = (Index("ix_plugin__integration_integration_id", "integration_id"),)
 
 
 class ScheduledTask__Plugin(Base):

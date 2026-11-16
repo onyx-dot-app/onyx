@@ -309,6 +309,33 @@ def _create_tables() -> None:
         ["plugin_id"],
     )
 
+    # An integration that a plugin uses, other than as its home plugin.
+    op.create_table(
+        "plugin__integration",
+        sa.Column(
+            "plugin_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("plugin.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "integration_id",
+            sa.Integer(),
+            sa.ForeignKey("integration.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+    )
+    op.create_index(
+        "ix_plugin__integration_integration_id",
+        "plugin__integration",
+        ["integration_id"],
+    )
+
+    # No default: the column is added with no rewrite of chat_session.
+    op.add_column(
+        "chat_session", sa.Column("tool_options", postgresql.JSONB(), nullable=True)
+    )
+
     for table in RECORD_TABLES:
         op.add_column(table, sa.Column("integration_id", sa.Integer(), nullable=True))
         # NOT VALID: no scan of the old rows under the ALTER TABLE lock. The
@@ -737,7 +764,18 @@ _SET_INTEGRATION_SEQUENCE = """
 _CREATE_TOOL_INTEGRATIONS = """
     CREATE TEMP TABLE tool_integration ON COMMIT DROP AS
     SELECT t.id AS tool_id, t.name AS tool_name, src.id AS integration_id,
-        src.plugin_id, src.kind
+        src.plugin_id, src.kind,
+        -- An Always allow that was set for chat only: the server is not
+        -- available in Craft. Each agent keeps it; no admin value is made.
+        t.enabled AND EXISTS (
+            SELECT 1
+            FROM workspace_action_policy w
+            JOIN mcp_server m ON m.id = src.mcp_server_id
+            WHERE w.gated_app_id = src.gated_app_id
+              AND w.action_id = t.name
+              AND w.policy = 'ALWAYS'
+              AND NOT m.available_in_craft
+        ) AS chat_only_allow
     FROM integration_source src
     JOIN tool t
       ON t.id = src.tool_id OR t.mcp_server_id = src.mcp_server_id
@@ -806,8 +844,36 @@ _INSERT_ADMIN_POLICIES = f"""
         {_POLICY_VALUE.format(column="w.policy")},
         w.created_at, w.updated_at
     FROM workspace_action_policy w
+    LEFT JOIN integration_source src ON src.id = w.gated_app_id
+    LEFT JOIN mcp_server m ON m.id = src.mcp_server_id
+    -- An admin value applies in chat and in Craft. Always allow on a server
+    -- that is not available in Craft was set for chat only, so it goes to
+    -- the agent links (chat_only_allow), not here.
+    WHERE NOT (w.policy = 'ALWAYS' AND m.available_in_craft IS FALSE)
     ORDER BY w.gated_app_id, w.action_id
     ON CONFLICT DO NOTHING
+"""
+
+# Chat runs a custom tool with no question today. The default row of the
+# organization keeps that for each operation of an OpenAPI integration.
+_INSERT_OPENAPI_DEFAULT_POLICIES = """
+    INSERT INTO integration_action_policy
+        (integration_id, action, user_id, policy, created_at, updated_at)
+    SELECT src.id, '', NULL, 'allow', src.created_at, src.updated_at
+    FROM integration_source src
+    WHERE src.tool_id IS NOT NULL
+    ORDER BY src.id
+"""
+
+# A skill that needs an external app becomes a plugin that uses the
+# integration of that app.
+_INSERT_PLUGIN_INTEGRATIONS = """
+    INSERT INTO plugin__integration (plugin_id, integration_id)
+    SELECT p.id, src.id
+    FROM external_app__skill es
+    JOIN integration_source src ON src.external_app_id = es.external_app_id
+    JOIN plugin p ON p.id = es.skill_id
+    ORDER BY p.id, src.id
 """
 
 _INSERT_USER_POLICIES = f"""
@@ -869,7 +935,8 @@ _BOT_PERSONAS = """
     WHERE persona_override_id IS NOT NULL
 """
 
-# An agent keeps the MCP tools it has (inherit, or allow for a bot agent).
+# An agent keeps the MCP tools it has (inherit, or allow for a bot agent and
+# for a chat-only Always allow).
 # Each other tool, now or added later, is blocked by the default. An agent
 # with a custom tool gets empty settings, or allow for a bot agent.
 _INSERT_PERSONA_PLUGINS = f"""
@@ -882,7 +949,7 @@ _INSERT_PERSONA_PLUGINS = f"""
                 'default', 'blocked',
                 'actions', jsonb_object_agg(
                     ti.tool_name,
-                    CASE WHEN bot.persona_id IS NOT NULL
+                    CASE WHEN bot.persona_id IS NOT NULL OR ti.chat_only_allow
                         THEN 'allow' ELSE 'inherit' END
                 )
             )
@@ -948,11 +1015,13 @@ def _copy_integrations() -> None:
         _INSERT_MCP_GROUP_SHARES,
         _INSERT_UNSELECTED_MCP_TOOLS,
         _INSERT_ADMIN_POLICIES,
+        _INSERT_OPENAPI_DEFAULT_POLICIES,
         _INSERT_USER_POLICIES,
         _INSERT_PREFERENCES,
         _SET_DISABLED_PLUGINS,
         _INSERT_PERSONA_PLUGINS,
         _INSERT_TASK_PLUGINS,
+        _INSERT_PLUGIN_INTEGRATIONS,
         *_SET_RECORD_INTEGRATIONS,
         "DROP TABLE tool_integration",
         "DROP TABLE integration_source",
@@ -989,7 +1058,9 @@ def downgrade() -> None:
         op.drop_column(table, "integration_id")
     for table in reversed(KIND_TABLES):
         op.drop_column(table, "integration_id")
+    op.drop_column("chat_session", "tool_options")
     for table in (
+        "plugin__integration",
         "scheduled_task__plugin",
         "persona__plugin",
         "integration_action_policy",
