@@ -66,6 +66,7 @@ def test_listed_targets_convert_without_reindex() -> None:
         file: dict,
         _callback: object,
         folder_path: list[str] | None,
+        _drive_name_readers: object = (),
     ) -> Document:
         assert folder_path == ["My Drive", "Projects"]
         calls.append((file["id"], retriever_emails))

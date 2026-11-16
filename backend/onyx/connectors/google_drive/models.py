@@ -343,7 +343,8 @@ class DriveListingState(BaseModel):
     # A stub's folder path comes from it. Its size follows the folders.
     folder_names: dict[str, tuple[str, str | None]] = {}
     # Shared drive id -> name, and user -> My Drive root id: the roots of a
-    # folder path. Read once for each drive and user.
+    # folder path. Read once for each drive and user. A drive's name is kept
+    # only when a user could read it, never the "Shared Drive <id>" fallback.
     drive_names: dict[str, str] = {}
     my_drive_root_ids: dict[str, str] = {}
     # Shared drive id -> its direct user members in the domain. Any of them
