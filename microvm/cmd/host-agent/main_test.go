@@ -39,6 +39,8 @@ func TestCheckRanges(t *testing.T) {
 		"managed builds 0":    func(f *flags) { f.managedBuilds = 0 },
 		"managed swap time 0": func(f *flags) { f.swapTimeout = 0 },
 		"vm overhead 0":       func(f *flags) { f.memOverhead = 0 },
+		"slice percent low":   func(f *flags) { f.slicePercent = 5 },
+		"slice percent high":  func(f *flags) { f.slicePercent = 101 },
 		"vm overhead huge":    func(f *flags) { f.memOverhead = 1 << 20 },
 		"transfer parallel 0": func(f *flags) { f.transferPar = 0 },
 		"image gc negative":   func(f *flags) { f.imageGCEvery = -time.Minute },

@@ -145,6 +145,23 @@ func (c Command) Argv(id string, uid uint32, lim Limits) ([]string, error) {
 	return argv, nil
 }
 
+// DefaultSliceMemoryPercent is the default memory.max of the VM slice, in
+// percent of the node's MemTotal. Free page reporting lets admission start
+// more VMs than the node holds; the cap keeps the OOM killer inside the
+// slice, away from kubelet and containerd.
+const DefaultSliceMemoryPercent = 85
+
+// SliceMemoryMax returns percent of memTotalMiB in bytes.
+func SliceMemoryMax(memTotalMiB uint64, percent uint) uint64 {
+	return (memTotalMiB * uint64(percent) / 100) << 20
+}
+
+// SliceMemoryMaxArgv returns the systemctl command that sets MemoryMax of
+// the VM slice until the next boot.
+func (c Command) SliceMemoryMaxArgv(bytes uint64) []string {
+	return c.SystemctlArgv("set-property", "--runtime", c.Slice, "MemoryMax="+strconv.FormatUint(bytes, 10))
+}
+
 // SystemctlArgv returns a systemctl command line that runs in the same mount
 // namespace as the launch command.
 func (c Command) SystemctlArgv(args ...string) []string {

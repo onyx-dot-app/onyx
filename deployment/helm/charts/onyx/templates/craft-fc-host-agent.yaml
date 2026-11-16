@@ -507,6 +507,7 @@ spec:
             - --relay-max-conns-node={{ $agent.relayMaxConnsNode | default 2048 | int64 }}
             - --dial-max-streams={{ $agent.dialMaxStreams | default 64 | int64 }}
             - --max-vms={{ (hasKey $agent "maxVms" | ternary $agent.maxVms 60) | int64 }}
+            - --slice-memory-percent={{ (hasKey $agent "sliceMemoryPercent" | ternary $agent.sliceMemoryPercent 85) | int64 }}
             {{- with $allowedSans }}
             - --client-allowed-sans={{ . }}
             {{- end }}

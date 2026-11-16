@@ -2112,6 +2112,14 @@ craft:
     # 2 vCPU make random running VMs fail, so the default is 60. On bare
     # metal, raise it or set 0 (no cap).
     maxVms: 60
+    # memory.max of the host slice of all VMs (fcvms.slice), in percent of
+    # the node's memory; the agent sets it at start (--slice-memory-percent).
+    # Idle guests give memory back, so the agent can start more VMs than the
+    # node holds. When they use it again, the kernel then kills a VM inside
+    # the slice, not kubelet or containerd. Keep the rest for kubelet,
+    # containerd, the host agent and the system. 0: the agent leaves the
+    # slice as it is.
+    sliceMemoryPercent: 85
     # Comma-separated DNS or URI SANs; the client certificate must have one.
     # Empty = the client certificate name with chart-made certificates, or
     # any certificate that the client CA (tls ca.crt) signed with existingSecret.

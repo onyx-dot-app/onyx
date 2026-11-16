@@ -24,6 +24,12 @@ So memory limits how many microVMs start at the same time more than how many run
 
 Kubelet does not count microVM memory. Do not run other workloads on KVM nodes.
 
+All microVMs of a node run in one host cgroup slice.
+At start the host agent limits the slice to 85% of the node memory (`craft.hostAgent.sliceMemoryPercent`).
+The rest stays free for kubelet, the container runtime, the host agent, and the system.
+If the microVMs use more memory than the limit, the kernel stops one microVM.
+Set the value to `0` to keep the slice without a limit.
+
 ## Measured limits
 
 Onyx measured these numbers on Amazon EKS with `m8i.4xlarge` nodes (16 vCPUs, 64 GiB, nested virtualization)

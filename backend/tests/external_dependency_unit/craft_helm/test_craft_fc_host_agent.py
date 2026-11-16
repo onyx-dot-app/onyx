@@ -165,6 +165,7 @@ def test_agent_pod_spec() -> None:
     assert "--relay-max-conns-node=2048" in args
     assert "--dial-max-streams=64" in args
     assert "--max-vms=60" in args
+    assert "--slice-memory-percent=85" in args
     assert not [a for a in args if a.startswith("--client-allowed-sans")]
     # The agent joins $POD_IP and the listen port itself (it brackets IPv6).
     assert not [a for a in args if a.startswith("--advertise-address")]
@@ -558,14 +559,18 @@ def test_agent_overrides() -> None:
     assert "--advertise-address=agent.example:7443" in args
 
 
-@pytest.mark.parametrize("max_vms", ["0", "120"])
-def test_max_vms_override_keeps_zero(max_vms: str) -> None:
-    docs = _render([*_FIRECRACKER, "--set", f"craft.hostAgent.maxVms={max_vms}"])
+@pytest.mark.parametrize(
+    ("key", "flag"),
+    [("maxVms", "max-vms"), ("sliceMemoryPercent", "slice-memory-percent")],
+)
+@pytest.mark.parametrize("value", ["0", "90"])
+def test_override_keeps_zero(key: str, flag: str, value: str) -> None:
+    docs = _render([*_FIRECRACKER, "--set", f"craft.hostAgent.{key}={value}"])
     args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
         "args"
     ]
 
-    assert f"--max-vms={max_vms}" in args
+    assert f"--{flag}={value}" in args
 
 
 def test_headless_service_targets_agent_pods() -> None:

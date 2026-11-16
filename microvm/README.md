@@ -605,6 +605,12 @@ guest OOM killer acts. Keep the default overhead unless a test of the VM shape s
 safe. A Firecracker that grows past the limit is OOM-killed; the kernel kills that VM only, and the agent
 shows it as `EXITED` and cleans it up. `io.max` is not set.
 
+At start the agent sets `MemoryMax` of the slice (`systemctl set-property --runtime <slice>`) to
+`--slice-memory-percent` of `MemTotal` (default 85; 0 leaves the slice as it is). Admission counts what
+running guests use, and idle guests give memory back, so the VMs can together ask for more memory than the
+node has. With the cap the kernel OOM killer acts inside the slice and kills a VM, not kubelet or
+containerd. kubelet does not see VM memory, so it cannot evict anything for it.
+
 **Admission.** Create needs `MemAvailable` (measured, `/proc/meminfo`) >= guest memory of the VMs that are
 starting + `mem_mib` + `--min-free-mem-mib` (default 2048). Starting VMs count at their full size because
 their memory is not in use yet; running VMs count at what they use, because the balloon returns what the
