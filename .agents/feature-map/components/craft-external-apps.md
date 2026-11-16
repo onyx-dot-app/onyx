@@ -85,7 +85,8 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
  2 destinations     resolve_destination: public, or the exact ONYX_SERVER_URL
                     host:port, or a Craft MCP origin the user can reach with
                     tenant SSRF settings that allow it; server_connect pins
-                    the validated IPs (no second DNS lookup)
+                    the validated IPs (no second DNS lookup); a
+                    /microvm/ path on the API host -> 403 (host-agent routes)
  3 identity         signed `Proxy-Authorization: Bearer` on the connection's
                     first request -> SignedIdentityVerifier, bound to the
                     client connection; else IdentityResolver.resolve_sandbox
