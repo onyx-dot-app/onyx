@@ -13,7 +13,7 @@ root="${1:?usage: check-artifacts.sh <export dir>}/craft-fc"
 fc_version="$(sed -n 's/^ARG FC_VERSION=//p' "${here}/Dockerfile.artifacts")"
 fc_tarball_sha256="$(sed -n 's/^ARG FC_TARBALL_SHA256=//p' "${here}/Dockerfile.artifacts")"
 kernel_tag="$(sed -n 's/^ARG KERNEL_TAG=//p' "${here}/Dockerfile.artifacts")"
-kernel_release="${kernel_tag#microvm-kernel-}"
+kernel_release="$(sed -E 's/^(microvm-)?kernel[0-9.]*-//' <<<"${kernel_tag}")"
 kernel_release="${kernel_release%%-*}"
 fragment="${here}/kernel/config-fragment"
 failed=0

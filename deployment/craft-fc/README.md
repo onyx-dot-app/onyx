@@ -2,11 +2,12 @@
 
 This directory builds the files that a Craft Firecracker host needs:
 
-- `vmlinux`: the guest kernel, Amazon Linux microVM kernel 6.18;
+- `vmlinux`: the guest kernel, the Amazon Linux 2023 kernel 6.18 source with the
+  Firecracker microVM config;
 - `firecracker` and `jailer`: unmodified Firecracker release binaries.
 
 The output is one OCI image, `onyxdotapp/craft-fc-artifacts:<kernel>-fc<firecracker>`
-(for example `6.18.25-57.115-fc1.17.0`). The image is `FROM scratch` and is not
+(for example `6.18.62-127.179-fc1.17.0`). The image is `FROM scratch` and is not
 runnable. The host agent image (`microvm/Dockerfile`,
 `onyxdotapp/craft-fc-host-agent`) copies its files to `/opt/craft-fc/`. Its
 `ARTIFACTS_TAG` build arg must match the versions in `Dockerfile.artifacts`;
@@ -27,9 +28,9 @@ runnable. The host agent image (`microvm/Dockerfile`,
 
 All versions and hashes are `ARG` values at the top of `Dockerfile.artifacts`:
 
-- Kernel source: tag `microvm-kernel-6.18.25-57.115.amzn2023` of
-  `github.com/amazonlinux/linux`. The build fails if the tag does not point to
-  the pinned commit.
+- Kernel source: tag `kernel6.18-6.18.62-127.179.amzn2023` of
+  `github.com/amazonlinux/linux`, the source of the AL2023 `kernel6.18` package.
+  The build fails if the tag does not point to the pinned commit.
 - Base config: `resources/guest_configs/microvm-kernel-ci-x86_64-6.18.config` from
   Firecracker `v1.17.0`, pinned by SHA256.
 - Our changes: `kernel/config-fragment`. The build fails if a line of the
@@ -60,7 +61,7 @@ docker buildx build --platform linux/amd64 -f Dockerfile.artifacts \
 
 `check-artifacts.sh` downloads the Firecracker release again and compares the
 binaries with its `SHA256SUMS`. It also checks the vmlinux ELF header, the
-kernel release (`6.18.25`, with no `+`), the license files and the config
+kernel release (`6.18.62`, with no `+`), the license files and the config
 fragment.
 
 ## CI and publishing
@@ -99,7 +100,13 @@ Do not copy `vmlinux` to another registry, bucket or release page without its
 ## Change a version
 
 1. Change the `ARG` values in `Dockerfile.artifacts`. Update every matching
-   SHA256 and the kernel commit.
+   SHA256 and the kernel commit. For the kernel, use the newest tag of the series
+   in `amazonlinux/linux`: a `kernel6.18-<version>` tag (the AL2023 package
+   source, released with each kernel advisory) or a `microvm-kernel` tag, if one
+   is newer. List them with
+   `git ls-remote --tags https://github.com/amazonlinux/linux.git 'refs/tags/*kernel*6.18*'`.
+   `KERNEL_COMMIT` is the commit of the tag (the `^{}` line for an annotated tag).
+   Set `ARTIFACTS_TAG` in `microvm/Dockerfile` to the new tag.
 2. Build locally and run `check-artifacts.sh`.
 3. Do a boot test on a KVM host. See below.
 4. Merge, then run the workflow on `main` to publish.
@@ -116,7 +123,7 @@ instance, or a `c8i`/`m8i`/`r8i` instance with nested virtualization.
    `boot_args` to `console=ttyS0 reboot=k panic=1`. Use an ext4 root drive with
    an init that you can log in to or that prints to the console.
 3. In the guest, check:
-   - `uname -r` prints `6.18.25`;
+   - `uname -r` prints the kernel release of `KERNEL_TAG` (for example `6.18.62`);
    - `zcat /proc/config.gz` has every line of `kernel/config-fragment`;
    - `misc` is in `/proc/cgroups`;
    - the console shows no `panic`, `Oops` or `BUG`.
