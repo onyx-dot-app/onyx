@@ -231,8 +231,9 @@ override-dependencies = [
     # explicit so a future resolver change can't drop back to the <=6.4.2 that
     # mitmproxy 11.x capped to (CVE-2025-47287, multipart logging DoS).
     "tornado>=6.5.0,<7.0",
-    # mitmproxy 12.2.3 caps urwid at 3.0.5. Only its console UI imports urwid,
-    # and the sandbox proxy never runs it.
+    # mitmproxy 12.2.3 caps urwid at 3.0.5, below the 4.0.7 fix for
+    # GHSA-cp25-j9x5-p5xm (request-handling DoS). Only its console UI imports
+    # urwid, and the sandbox proxy never runs it.
     "urwid>=4.0.7,<5.0",
     "msgpack>=1.0.0,<2.0",
 ]
