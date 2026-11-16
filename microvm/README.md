@@ -235,8 +235,8 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
 - With `--egress-proxy-tls-ca`, `--egress-proxy-tls-cert` and `--egress-proxy-tls-key`, every proxy
   connection uses mTLS (TLS 1.3): the relay checks the proxy certificate against the CA and
   `--egress-proxy-tls-server-name` (default: the `--egress-proxy` host), and shows its client certificate.
-  A failed handshake gets a 502, and so does a TLS alert from the proxy before its first byte (TLS 1.3
-  refuses a client certificate after the client handshake ends); the relay never falls back to plain TCP. A partial or unloadable setup
+  A failed handshake gets a 502, and so does a proxy alert, close or reset before the proxy's first byte
+  (TLS 1.3 refuses a client certificate after the client handshake ends); the relay never falls back to plain TCP. A partial or unloadable setup
   stops the agent at start. The relay reads the files again on the next connection after they change.
   The Helm chart turns this on with Firecracker (`craft.hostAgent.relayTls`, proxy port 8443).
 - The relay reads one request head per connection, with strict parsing (no bare LF, no obs-fold, at most

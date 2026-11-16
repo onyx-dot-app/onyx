@@ -328,7 +328,9 @@ func TestEgressKVM(t *testing.T) {
 	if verifiedA < 9 || refusedB < 1 || rejectedA != 0 {
 		t.Errorf("proxy identity checks failed; see %s", proxy.log)
 	}
-	if countLines(proxy.log, "relay mTLS listening") != 1 || countLines(proxy.log, "relay_tls_rejected") != 0 {
+	// waitTCP's plain probe is one expected reason=handshake rejection.
+	if countLines(proxy.log, "relay mTLS listening") != 1 || countLines(proxy.log, "relay_tls_rejected reason=san") != 0 ||
+		countLines(proxy.log, "relay_tls_rejected reason=handshake") > 1 {
 		t.Errorf("relay traffic did not use the mTLS port; see %s", proxy.log)
 	}
 	if countLines(reg.log, "sandbox_node_signing_key_registered node="+nodeID) < 1 {

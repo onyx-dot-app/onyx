@@ -89,6 +89,12 @@ func (p *pair) close() {
 	}
 }
 
+func (p *pair) isClosed() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.closed
+}
+
 // setUp stores the upstream connection. It returns false if the pair is
 // already closed; the caller then closes up.
 func (p *pair) setUp(up net.Conn) bool {
@@ -300,6 +306,9 @@ func (r *Relay) handle(vmConn net.Conn, vm VM) {
 		return
 	}
 	if _, err := up.Write(head.Bytes()); err != nil {
+		if r.TLS != nil {
+			r.refused(p, vm, err)
+		}
 		return
 	}
 	// The VM may have sent body bytes after the head.
@@ -330,6 +339,14 @@ func (r *Relay) dialUpstream(ctx context.Context, dial func(ctx context.Context,
 	return tc, nil
 }
 
+// refused answers the VM when the proxy ends a TLS connection before its
+// first byte.
+func (r *Relay) refused(p *pair, vm VM, err error) {
+	_, _ = io.WriteString(p.vm, "HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
+	r.event(EventUpstreamFailed)
+	r.Log.Warn("relay upstream refused the TLS connection", "sandbox_id", vm.SandboxID, "err", err)
+}
+
 // splice copies both ways. When either side ends or fails, both sides close:
 // Firecracker vsock does not carry a half-close.
 func (r *Relay) splice(p *pair, up net.Conn, vm VM) {
@@ -357,14 +374,10 @@ func (r *Relay) splice(p *pair, up net.Conn, vm VM) {
 					continue
 				}
 				// In TLS 1.3 the proxy refuses a client certificate after the
-				// relay's handshake ends: an alert, or a close (SAN pin), before
-				// the first byte.
-				var oe *net.OpError
-				alert := errors.As(err, &oe) && oe.Op == "remote error"
-				if src == up && !got && (alert || (r.TLS != nil && errors.Is(err, io.EOF))) {
-					_, _ = io.WriteString(p.vm, "HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
-					r.event(EventUpstreamFailed)
-					r.Log.Warn("relay upstream refused the TLS connection", "sandbox_id", vm.SandboxID, "err", err)
+				// relay's handshake ends: an alert, a close (SAN pin) or a reset
+				// before the first byte.
+				if src == up && !got && r.TLS != nil && !p.isClosed() {
+					r.refused(p, vm, err)
 				}
 				return
 			}
