@@ -1056,7 +1056,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: false
-          version: "0.11.25"
+          version: "0.13.8"
 
       - name: Install ods from uv.lock
         run: uv sync --frozen --no-install-project --only-group ods

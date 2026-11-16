@@ -41,7 +41,7 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
       - uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
         with:
-          version: "0.11.25"
+          version: "0.13.8"
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
         with:
           version: v3.19.0
