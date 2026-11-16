@@ -321,16 +321,17 @@ export const OpenSearchSizingCalculator = () => {
   const limit = layoutLimit === "copies" && effectiveCopies > copies ? "search" : layoutLimit;
   // Shards are whole units, so the shard copies must divide evenly over the nodes. Then no node
   // holds more than its share of the vectors and the data. Every search runs on every primary,
-  // so raise the primary count at most 2x; past that, add nodes instead. A node count that is a
-  // multiple of the copy count always balances.
+  // so keep the primaries at most 2x what the data needs, or the count that gives every node a
+  // shard copy if that is higher; past that, add nodes. A node count that is a multiple of the
+  // copy count always balances.
   const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
   const balance = (n) => {
     const base = Math.max(primariesForSize, Math.ceil(n / effectiveCopies));
     const step = n / gcd(effectiveCopies, n);
-    return { n, base, primaries: Math.ceil(base / step) * step };
+    return { n, cap: Math.max(2 * primariesForSize, base), primaries: Math.ceil(base / step) * step };
   };
   let shardLayout = balance(layoutNodes);
-  while (shardLayout.primaries > 2 * shardLayout.base) shardLayout = balance(shardLayout.n + zones);
+  while (shardLayout.primaries > shardLayout.cap) shardLayout = balance(shardLayout.n + zones);
   const { n: nodes, primaries } = shardLayout;
   // Share of the cluster's storage, file cache and vCPUs that the data and peak search use.
   const storageUse = (indexOneCopy * effectiveCopies) / (nodeDisk * 1e9 * nodes);
