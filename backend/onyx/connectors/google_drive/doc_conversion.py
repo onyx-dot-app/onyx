@@ -111,21 +111,25 @@ def _get_folder_info(
 
 
 def _get_drive_name(
-    ops: GoogleDriveSourceOperations, user_email: str, drive_id: str
+    ops: GoogleDriveSourceOperations, reader_emails: Sequence[str], drive_id: str
 ) -> str:
-    """Fetch shared drive name."""
+    """The name of a shared drive, read as each user in order until one can
+    see the drive. Only a real name goes in the cache: a user who cannot see
+    the drive must not set the name for the users after it."""
     cache_key = f"drive_{drive_id}"
     if cache_key in _folder_cache:
         return _folder_cache[cache_key][0]
 
-    try:
-        drive_name = ops.get_shared_drive_name(user_email=user_email, drive_id=drive_id)
-    except GoogleDriveHttpError as e:
-        logger.warning("Failed to get drive name for %s: %s", drive_id, e)
-        drive_name = None
-    drive_name = drive_name or f"Shared Drive {drive_id}"
-    _folder_cache[cache_key] = (drive_name, None)
-    return drive_name
+    for email in dict.fromkeys(reader_emails):
+        try:
+            drive_name = ops.get_shared_drive_name(user_email=email, drive_id=drive_id)
+        except GoogleDriveHttpError as e:
+            logger.warning("Failed to get drive name for %s: %s", drive_id, e)
+            continue
+        if drive_name:
+            _folder_cache[cache_key] = (drive_name, None)
+            return drive_name
+    return f"Shared Drive {drive_id}"
 
 
 def build_folder_path(
@@ -133,6 +137,7 @@ def build_folder_path(
     ops: GoogleDriveSourceOperations,
     user_email: str,
     drive_id: str | None = None,
+    drive_name_readers: Sequence[str] = (),
 ) -> list[str]:
     """
     Build the full folder path for a file by walking up the parent chain.
@@ -144,8 +149,12 @@ def build_folder_path(
         user_email: The user to read the folders as. Also decides "My Drive"
             vs "Shared with me" by ownership.
         drive_id: Optional drive ID (will be extracted from file if not provided)
+        drive_name_readers: Users who can see the shared drive, for example
+            its organizer and members. The drive name is read as them first,
+            then as `user_email`.
     """
     path_parts: list[str] = []
+    name_readers = [*drive_name_readers, user_email]
 
     # Get drive_id from file if not provided
     if drive_id is None:
@@ -162,7 +171,7 @@ def build_folder_path(
     if not parents:
         # File is at root level
         if drive_id:
-            return [_get_drive_name(ops, user_email, drive_id)]
+            return [_get_drive_name(ops, name_readers, drive_id)]
         # If not in a shared drive, check if it's owned by the user
         if is_owned_by_user:
             return ["My Drive"]
@@ -184,7 +193,7 @@ def build_folder_path(
         if next_parent is None:
             # This folder's name is either the drive root, My Drive, or Shared with me
             if drive_id:
-                path_parts.insert(0, _get_drive_name(ops, user_email, drive_id))
+                path_parts.insert(0, _get_drive_name(ops, name_readers, drive_id))
             else:
                 # Not in a shared drive - determine if it's "My Drive" or "Shared with me"
                 if is_owned_by_user:
@@ -199,7 +208,7 @@ def build_folder_path(
     # If we didn't find a root, determine the root based on ownership and drive
     if not path_parts:
         if drive_id:
-            return [_get_drive_name(ops, user_email, drive_id)]
+            return [_get_drive_name(ops, name_readers, drive_id)]
         elif is_owned_by_user:
             return ["My Drive"]
         else:
@@ -675,13 +684,15 @@ def convert_drive_item_to_document(
     file: GoogleDriveFileType,
     raw_file_callback: RawFileCallback | None = None,
     folder_path: list[str] | None = None,
+    drive_name_readers: Sequence[str] = (),
 ) -> Document | ConnectorFailure | None:
     """
     Attempt to convert a drive item to a document with each retriever email
     in order. returns upon a successful retrieval or a non-403 error.
 
     `folder_path` is the path the listing built. Without it, the path is
-    built here from the file's parents.
+    built here from the file's parents. `drive_name_readers` are users who
+    can see the file's shared drive: the drive name is read as them first.
 
     We used to always get the user email from the file owners when available,
     but this was causing issues with shared folders where the owner was not included in the service account
@@ -706,6 +717,7 @@ def convert_drive_item_to_document(
             permission_sync_context,
             raw_file_callback,
             folder_path,
+            drive_name_readers,
         )
 
         # There are a variety of permissions-based errors that occasionally occur
@@ -837,6 +849,7 @@ def _convert_drive_item_to_document(
     permission_sync_context: PermissionSyncContext | None,
     raw_file_callback: RawFileCallback | None = None,
     folder_path: list[str] | None = None,
+    drive_name_readers: Sequence[str] = (),
 ) -> Document | ConnectorFailure | None:
     """
     Main entry point for converting a Google Drive file => Document object.
@@ -908,7 +921,9 @@ def _convert_drive_item_to_document(
         source_path = (
             folder_path
             if folder_path is not None
-            else build_folder_path(file, ops, retriever_email, drive_id)
+            else build_folder_path(
+                file, ops, retriever_email, drive_id, drive_name_readers
+            )
         )
 
         doc_metadata = {

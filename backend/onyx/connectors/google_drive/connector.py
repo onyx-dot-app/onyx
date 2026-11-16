@@ -6,7 +6,14 @@ import sys
 import time
 import zlib
 from collections import deque
-from collections.abc import Callable, Collection, Generator, Iterable, Iterator
+from collections.abc import (
+    Callable,
+    Collection,
+    Generator,
+    Iterable,
+    Iterator,
+    Sequence,
+)
 from contextlib import closing
 from typing import Any, NamedTuple, cast
 from urllib.parse import ParseResult, parse_qs, urlparse
@@ -799,13 +806,38 @@ class GoogleDriveConnector(
         )
         return None
 
-    def _get_shared_drive_name(self, drive_id: str, retriever_email: str) -> str | None:
-        """Fetch the name of a shared drive, trying both the retriever and admin."""
-        for email in {retriever_email, self.primary_admin_email}:
+    def _get_shared_drive_name(
+        self, drive_id: str, reader_emails: Sequence[str]
+    ) -> str | None:
+        """The name of a shared drive, read as each user in order and then as
+        the admin. None when no user can see the drive."""
+        for email in dict.fromkeys([*reader_emails, self.primary_admin_email]):
             name = self.ops.get_shared_drive_name(user_email=email, drive_id=drive_id)
             if name:
                 return name
         return None
+
+    def _drive_name_readers(
+        self, checkpoint: GoogleDriveCheckpoint, drive_id: str, lister_email: str
+    ) -> list[str]:
+        """Who reads a shared drive's name, in order: the drive's organizer,
+        its members, then the user who listed the file. That user can be a
+        user who got the file by a share and cannot see the drive."""
+        readers: list[str] = []
+        if self.is_service_account:
+            organizer = checkpoint.organizer_email_by_drive_id.get(drive_id)
+            if organizer is not None:
+                readers.append(organizer)
+            if checkpoint.listing is not None:
+                readers.extend(
+                    member
+                    for member in checkpoint.listing.drive_member_emails.get(
+                        drive_id, []
+                    )
+                    if self._may_impersonate(member, checkpoint)
+                )
+        readers.append(lister_email)
+        return list(dict.fromkeys(readers))
 
     def get_all_drive_ids(self) -> set[str]:
         return self._get_all_drives_for_user(self.primary_admin_email)
@@ -1138,6 +1170,7 @@ class GoogleDriveConnector(
                             self._convert_retrieved_file_to_document,
                             retrieved_file,
                             permission_sync_context,
+                            self._file_drive_name_readers(checkpoint, retrieved_file),
                         )
                     )
                 if len(folders_batch) + len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
@@ -1160,10 +1193,19 @@ class GoogleDriveConnector(
             )
             yield from _converted(runner.drain())
 
+    def _file_drive_name_readers(
+        self, checkpoint: GoogleDriveCheckpoint, retrieved_file: RetrievedDriveFile
+    ) -> list[str]:
+        drive_id = retrieved_file.drive_file.get("driveId")
+        if not drive_id:
+            return []
+        return self._drive_name_readers(checkpoint, drive_id, retrieved_file.user_email)
+
     def _convert_retrieved_file_to_document(
         self,
         retrieved_file: RetrievedDriveFile,
         permission_sync_context: PermissionSyncContext | None,
+        drive_name_readers: Sequence[str] = (),
     ) -> Document | ConnectorFailure | None:
         """
         Converts a single retrieved file to a document.
@@ -1173,6 +1215,7 @@ class GoogleDriveConnector(
             [retrieved_file.user_email, self.primary_admin_email]
             + get_file_owners(retrieved_file.drive_file, self.primary_admin_email),
             permission_sync_context,
+            drive_name_readers=drive_name_readers,
         )
 
     def _convert_drive_file(
@@ -1181,6 +1224,7 @@ class GoogleDriveConnector(
         retriever_emails: list[str],
         permission_sync_context: PermissionSyncContext | None,
         folder_path: list[str] | None = None,
+        drive_name_readers: Sequence[str] = (),
     ) -> Document | ConnectorFailure | None:
         try:
             return convert_drive_item_to_document(
@@ -1192,6 +1236,7 @@ class GoogleDriveConnector(
                 drive_file,
                 self.raw_file_callback,
                 folder_path,
+                drive_name_readers,
             )
         except Exception as e:
             logger.exception(
@@ -1294,10 +1339,14 @@ class GoogleDriveConnector(
         folder_path = payload.folder_path
         if folder_path is None:
             # The listing did not have every folder on the way. Build the
-            # path as the listing user, who names the root: the user that
-            # reads the content can be another one.
+            # path as the listing user: the user that reads the content can
+            # be another one. The other readers include the drive's members,
+            # who can read its name when the listing user cannot.
             folder_path = build_folder_path(
-                drive_file, self.ops, payload.retriever_email
+                drive_file,
+                self.ops,
+                payload.retriever_email,
+                drive_name_readers=payload.reader_emails,
             )
         return self._convert_drive_file(
             drive_file, readers, permission_sync_context, folder_path
@@ -1553,7 +1602,9 @@ class GoogleDriveConnector(
                                     permission_sync_context,
                                     file.user_email,
                                     *(
-                                        self._stub_listing_facts(listing, file)
+                                        self._stub_listing_facts(
+                                            checkpoint, listing, file
+                                        )
                                         if for_indexing
                                         else ()
                                     ),
@@ -1610,7 +1661,10 @@ class GoogleDriveConnector(
                 yield parent_batch
 
     def _stub_listing_facts(
-        self, listing: DriveListingState | None, file: RetrievedDriveFile
+        self,
+        checkpoint: GoogleDriveCheckpoint,
+        listing: DriveListingState | None,
+        file: RetrievedDriveFile,
     ) -> tuple[list[str] | None, list[str]]:
         """What the listing knows about a file beyond its own fields: its
         folder path, and the members of its shared drive."""
@@ -1618,25 +1672,33 @@ class GoogleDriveConnector(
             return None, []
         drive_id = file.drive_file.get("driveId")
         members = listing.drive_member_emails.get(drive_id, []) if drive_id else []
-        return self._listed_folder_path(listing, file), members
+        return self._listed_folder_path(checkpoint, listing, file), members
 
     def _listed_folder_path(
-        self, listing: DriveListingState, file: RetrievedDriveFile
+        self,
+        checkpoint: GoogleDriveCheckpoint,
+        listing: DriveListingState,
+        file: RetrievedDriveFile,
     ) -> list[str] | None:
         """The folder names from the root to the file's parent, in the form of
         `build_folder_path`, from the folders the listing returned. None when
-        a folder on the way is not listed yet. It makes one read for each
-        shared drive (its name) and each user (the My Drive root id)."""
+        a folder on the way is not listed yet. It reads each shared drive's
+        name until a user can see the drive, and each user's My Drive root id
+        once."""
         drive_file = file.drive_file
         drive_id = drive_file.get("driveId")
         if drive_id:
             root_name = listing.drive_names.get(drive_id)
             if root_name is None:
-                root_name = (
-                    self._get_shared_drive_name(drive_id, file.user_email)
-                    or f"Shared Drive {drive_id}"
+                root_name = self._get_shared_drive_name(
+                    drive_id,
+                    self._drive_name_readers(checkpoint, drive_id, file.user_email),
                 )
-                listing.drive_names[drive_id] = root_name
+                if root_name is not None:
+                    listing.drive_names[drive_id] = root_name
+                else:
+                    # Not cached: a later file's reader can see the drive.
+                    root_name = f"Shared Drive {drive_id}"
             root_id: str | None = drive_id
         else:
             owned = owner_email(drive_file) == file.user_email.lower()
@@ -1947,7 +2009,7 @@ class GoogleDriveConnector(
             return _FolderRead(None, None, None, None)
         drive_id = folder.get("driveId")
         if _is_shared_drive_root(folder):
-            drive_name = self._get_shared_drive_name(folder_id, email)
+            drive_name = self._get_shared_drive_name(folder_id, [email])
             if drive_name:
                 node.display_name = drive_name
             node.node_type = HierarchyNodeType.SHARED_DRIVE
