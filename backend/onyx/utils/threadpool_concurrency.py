@@ -874,7 +874,9 @@ ADAPTIVE_INITIAL_WORKERS = 16
 # as much as request rate. Pushback, not this cap, should stop growth.
 ADAPTIVE_MAX_WORKERS = 128
 # After a cut, hold the lower limit this long before growth starts again, so
-# one burst of pushback is not answered with a burst of new workers.
+# one burst of pushback is not answered with a burst of new workers. Pushback
+# in this time does not cut again: it comes from requests that were in flight
+# before the cut.
 ADAPTIVE_COOLDOWN_SECONDS = 5.0
 # Growth is paced by time, not by finished tasks.
 ADAPTIVE_GROW_INTERVAL_SECONDS = 0.25
@@ -883,10 +885,15 @@ ADAPTIVE_POLL_SECONDS = 0.25
 
 
 class AdaptiveConcurrency:
-    """A worker limit that grows by one per interval while the service keeps
-    up and halves on each burst of pushback. A job then settles near the rate
-    the service allows, with no fixed guess. Pass a stored ``limit`` as
-    ``initial`` to continue at the pace an earlier run learned."""
+    """A worker limit that grows by one per interval while the work uses
+    every worker and the service keeps up, and halves on pushback. A job then
+    settles near the rate the service allows, with no fixed guess. Pass a
+    stored ``limit`` as ``initial`` to continue at the pace an earlier run
+    learned.
+
+    The limit grows only when all workers are busy, so it does not climb past
+    a load the service never saw. One cut covers a cooldown: pushback from
+    requests that were already in flight at the cut does not cut again."""
 
     def __init__(
         self,
@@ -913,12 +920,16 @@ class AdaptiveConcurrency:
     def maximum(self) -> int:
         return self._maximum
 
-    def observe(self) -> None:
-        """Cut on pushback. If there is none, grow by one per interval after
-        the cooldown."""
+    def observe(self, in_flight: int) -> None:
+        """Cut on pushback, at most once per cooldown. If there is none, grow
+        by one per interval after the cooldown, but only while ``in_flight``
+        (the tasks running now) uses the whole limit."""
         hits = self._observer.take_hits()
         now = self._clock()
         with self._lock:
+            if hits and now < self._cooldown_until:
+                # The burst that caused the last cut. The cut already covers it.
+                return
             if hits:
                 self._limit = max(1, self._limit // 2)
                 self._cooldown_until = now + ADAPTIVE_COOLDOWN_SECONDS
@@ -929,7 +940,11 @@ class AdaptiveConcurrency:
                     self._limit,
                 )
                 return
-            if now < self._next_growth or self._limit >= self._maximum:
+            if (
+                now < self._next_growth
+                or self._limit >= self._maximum
+                or in_flight < self._limit
+            ):
                 return
             self._limit += 1
             self._next_growth = now + ADAPTIVE_GROW_INTERVAL_SECONDS
@@ -996,6 +1011,20 @@ class AdaptiveTaskPool:
         with self._lock:
             return self._pending.popleft() if self._pending else None
 
+    def _collect(
+        self, done: collections.abc.Iterable[Future[list[AdaptiveTask]]]
+    ) -> BaseException | None:
+        """Queues the follow-ups of finished tasks. Returns the first failure."""
+        failure: BaseException | None = None
+        for future in done:
+            error = future.exception()
+            if error is None:
+                for follow_up in future.result():
+                    self.add(follow_up)
+            else:
+                failure = failure or error
+        return failure
+
     def run(self) -> None:
         running: set[Future[list[AdaptiveTask]]] = set()
         failure: BaseException | None = None
@@ -1004,9 +1033,16 @@ class AdaptiveTaskPool:
         ) as executor:
             while True:
                 while failure is None and not self._draining.is_set():
+                    # A task that already failed stops this start.
+                    finished = {future for future in running if future.done()}
+                    if finished:
+                        running -= finished
+                        failure = self._collect(finished)
+                        if failure is not None:
+                            break
                     # Before each start, so pushback that a running task saw
                     # cuts the limit that this start reads.
-                    self._concurrency.observe()
+                    self._concurrency.observe(in_flight=len(running))
                     if len(running) >= self._concurrency.limit:
                         break
                     task = self._next_task()
@@ -1028,17 +1064,12 @@ class AdaptiveTaskPool:
                 done, _ = wait(
                     running, timeout=ADAPTIVE_POLL_SECONDS, return_when=FIRST_COMPLETED
                 )
-                for future in done:
-                    running.discard(future)
-                    error = future.exception()
-                    if error is None:
-                        for follow_up in future.result():
-                            self.add(follow_up)
-                    else:
-                        failure = failure or error
+                running -= done
+                error = self._collect(done)
+                failure = failure or error
         # A task can record pushback and then drain. No start reads that
         # pushback, so read it here: a caller that stores ``limit`` for the
         # next pool gets the cut.
-        self._concurrency.observe()
+        self._concurrency.observe(in_flight=0)
         if failure is not None:
             raise failure
