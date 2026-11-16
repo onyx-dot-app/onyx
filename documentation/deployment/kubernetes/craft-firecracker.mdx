@@ -388,6 +388,28 @@ so that an agent certificate from the same CA cannot call the other agents.
     The `key_id` must be the same as in the host agent log.
   </Step>
 
+  <Step title="Run the smoke test">
+    ```bash
+    kubectl -n onyx exec deploy/onyx-api-server -c api-server -- python -m scripts.craft_fc_smoke
+    ```
+
+    The smoke test starts a microVM for a test user and checks each step of a Craft session on Firecracker:
+    a command runs as uid 1000, a file reads back with the same SHA-256, egress goes through the sandbox proxy,
+    the session saves to the file store and the microVM stops, a new microVM restores the files,
+    and a session delete removes the saved archive. The test takes about 70 seconds. Each step prints `PASS`, `FAIL`,
+    or `SKIP`, and the last line is `RESULT PASS` or `RESULT FAIL`.
+    The exit code is 0 when all steps pass and 1 when a step fails.
+
+    The Deployment name is `<fullname>-api-server` (`onyx-api-server` for the release `onyx`).
+    The test user cannot log in and does not use a license seat. At the end, the test deletes the user, its microVM,
+    and its files, also when a step fails.
+
+    - The egress check opens `https://pypi.org/simple/`. If your egress rules block that URL, add
+    `--egress-url <url>` with an HTTPS URL that they allow. If the cluster has no internet access, add `--skip-egress`.
+    - If you stop the test before it ends, or the `cleanup` step fails, run it again with `--cleanup-leaked`.
+    This deletes the test users and microVMs that earlier runs left.
+  </Step>
+
   <Step title="Run a Craft session">
     {/* depends: harness release (D8). Name the session type that runs on a microVM. */} As a Craft user,
     start a session and send a prompt that creates a file. Then confirm that a host agent started a microVM:
