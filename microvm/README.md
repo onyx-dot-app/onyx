@@ -141,7 +141,10 @@ a URL (`internal/server/saves.go`, `internal/transfer`).
   extracts into a staging directory and replaces the session's capture roots only after the size and
   SHA-256 match. A mismatch is `ARCHIVE_MISMATCH` (agent) or `ARCHIVE_INVALID` (daemon); the session
   does not change.
-- URLs and redirect targets must be `https`, unless `--transfer-allow-http` (a test object store).
+- URLs and redirect targets must be `https`, unless `--transfer-allow-http`. The flag then allows
+  `http` to any host: the agent does not check the destination. Use it only for an object store
+  inside the cluster or a test store. The chart sets it only for the bundled in-cluster object
+  store (cluster-internal HTTP).
   `--transfer-timeout` (default 10 min) bounds one upload or one single-GET restore. A ranged restore
   uses one timeout for the whole download (all parts, queued parts included), so set it for the
   longest expected restore. Errors and logs show the URL without its query string.
@@ -748,8 +751,8 @@ go mod tidy
 
 - Unit tests: `go test -race ./...`. They use a fake VMM and run in CI.
 - KVM tests: build tag `kvm`, on a KVM host. The older tests use the kit rootfs (`onyxdotapp/sandbox`
-  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and guest
-  kernel 6.18.25. The egress and pass-through tests use the proxy harness in
+  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and the
+  pinned guest kernel. The egress and pass-through tests use the proxy harness in
   `internal/kvmtest/testdata/harness`.
 - `check-kvm.sh smoke|full ARTIFACTS_DIR SOURCE_IMAGE` (as root) prepares a host and runs them: the data
   dir, the root drives, the agent image, then one test at a time. CI
