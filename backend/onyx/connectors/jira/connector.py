@@ -4,7 +4,7 @@ import os
 import re
 from collections.abc import Callable, Generator, Iterable, Iterator
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar
 
 from more_itertools import chunked
 from typing_extensions import override
@@ -351,6 +351,8 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
+    extra_metadata: dict[str, str | list[str]] | None = None,
 ) -> Document | None:
     issue_key: str = _issue_key(issue)
     issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
@@ -437,11 +439,14 @@ def process_jira_issue(
     else:
         logger.error("Project should exist but does not for %s", issue_key)
 
+    if extra_metadata:
+        metadata_dict.update(extra_metadata)
+
     summary: Any = get_issue_field(issue, "summary")
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue_key}: {summary}",
         title=f"{issue_key} {summary}",
         doc_updated_at=time_str_to_utc(get_issue_field(issue, _FIELD_UPDATED)),
@@ -472,6 +477,9 @@ class JiraConnector(
     Resolver,
 ):
     slim_listing_honors_indexing_start = True
+    # Subclasses for Jira-hosted products (e.g. Jira Service Management)
+    # override this so their documents carry their own source.
+    document_source: ClassVar[DocumentSource] = DocumentSource.JIRA
 
     def __init__(
         self,
@@ -635,6 +643,18 @@ class JiraConnector(
         # For non-epic parents (e.g., story with subtasks),
         # the document belongs directly under the project in the hierarchy
         return project_key
+
+    def _issue_for_document(self, issue: JiraIssue) -> JiraIssue:
+        """The issue to build the document from. Subclasses can drop content
+        that must not be indexed."""
+        return issue
+
+    def _extra_issue_metadata(
+        self,
+        issue: JiraIssue,  # noqa: ARG002
+    ) -> dict[str, str | list[str]]:
+        """Product-specific metadata merged into each issue document."""
+        return {}
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._source_operations = JiraSourceOperations(
@@ -805,10 +825,12 @@ class JiraConnector(
 
         if document := process_jira_issue(
             jira_base_url=self.jira_base,
-            issue=issue,
+            issue=self._issue_for_document(issue),
             comment_email_blacklist=self.comment_email_blacklist,
             labels_to_skip=self.labels_to_skip,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            source=self.document_source,
+            extra_metadata=self._extra_issue_metadata(issue),
         ):
             # Add permission information to the document if requested
             if include_permissions:

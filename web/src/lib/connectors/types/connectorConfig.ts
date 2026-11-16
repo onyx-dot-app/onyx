@@ -78,6 +78,13 @@ export interface ConfluenceConfig {
   include_attachments?: boolean;
 }
 
+export interface JiraServiceManagementConfig {
+  jira_base_url: string;
+  project_key: string;
+  comment_email_blacklist?: string[];
+  scoped_token?: boolean;
+}
+
 export interface JiraConfig {
   jira_project_url: string;
   project_key?: string;
