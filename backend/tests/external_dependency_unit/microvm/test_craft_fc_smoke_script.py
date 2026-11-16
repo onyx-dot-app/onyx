@@ -219,10 +219,13 @@ def test_cleanup_leaked_removes_only_smoke_test_users(
 ) -> None:
     leaked_email = smoke.smoke_email()
     other_email = f"{smoke.SMOKE_EMAIL_PREFIX}keep@other.example.org"
-    leaked, other = batch_add_ext_perm_user_if_not_exists(
-        db_session, [leaked_email, other_email]
-    )
-    leaked_id, other_id = leaked.id, other.id
+    by_email = {
+        user.email: user.id
+        for user in batch_add_ext_perm_user_if_not_exists(
+            db_session, [leaked_email, other_email]
+        )
+    }
+    leaked_id, other_id = by_email[leaked_email], by_email[other_email]
     create_sandbox__no_commit(db_session, leaked_id)
     db_session.commit()
     try:
