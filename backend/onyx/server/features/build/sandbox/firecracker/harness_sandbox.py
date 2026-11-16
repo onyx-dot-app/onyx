@@ -819,12 +819,18 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
     # the call raises at the end if any step failed.
 
     def purge_session(
-        self, *, tenant_id: str, sandbox_id: UUID, session_id: UUID
+        self,
+        *,
+        tenant_id: str,
+        sandbox_id: UUID,
+        session_id: UUID,
+        retention: bool = False,
     ) -> None:
         """Delete a chat session's save, its directory on the running VM and
-        its exec records. Its published artifacts stay."""
+        its exec records. Its published artifacts stay. `retention`: see
+        `mark_purged`."""
         tenant_cache = get_cache_backend(tenant_id=tenant_id)
-        mark_purged(tenant_cache, session_id=session_id)
+        mark_purged(tenant_cache, session_id=session_id, retention=retention)
         errors: list[Exception] = []
         placed: PlacedVm | None = None
         try:
