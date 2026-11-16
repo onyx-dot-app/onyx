@@ -23,6 +23,7 @@ import {
   SvgXCircle,
   SvgCode,
   SvgWrench,
+  SvgEdit,
 } from "@opal/icons";
 
 /**
@@ -91,6 +92,11 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
     }
     case PacketType.PYTHON_TOOL_START:
       return t("toolNames.codeInterpreter");
+    case PacketType.EXEC_COMMAND_START:
+    case PacketType.WRITE_STDIN_START:
+      return t("toolNames.terminal");
+    case PacketType.APPLY_PATCH_START:
+      return t("toolNames.applyPatch");
     case PacketType.FETCH_TOOL_START:
       return t("toolNames.openUrls");
     case PacketType.CUSTOM_TOOL_START: {
@@ -129,7 +135,11 @@ export function getToolIcon(packets: Packet[]): IconFunctionComponent {
       return searchState.isInternetSearch ? SvgGlobe : SvgSearchMenu;
     }
     case PacketType.PYTHON_TOOL_START:
+    case PacketType.EXEC_COMMAND_START:
+    case PacketType.WRITE_STDIN_START:
       return SvgTerminal;
+    case PacketType.APPLY_PATCH_START:
+      return SvgEdit;
     case PacketType.FETCH_TOOL_START:
       return SvgLink;
     case PacketType.CUSTOM_TOOL_START:

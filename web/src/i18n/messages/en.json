@@ -13102,6 +13102,12 @@
           },
           "waitingForApproval": {
             "label": "Waiting for your approval"
+          },
+          "runningCommand": {
+            "label": "Running command"
+          },
+          "editingFiles": {
+            "label": "Editing files"
           }
         },
         "internalSearch": {
@@ -13231,11 +13237,54 @@
           "researchAgent": "Research agent",
           "thinking": "Thinking",
           "tool": "Tool",
-          "webSearch": "Web Search"
+          "webSearch": "Web Search",
+          "terminal": "Terminal",
+          "applyPatch": "Apply Patch"
         },
         "webSearch": {
           "searching": {
             "status": "Searching the web"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {Running command} started {Started command} failed {Command failed} done {Ran command} other {Ran command}}",
+            "workdir": {
+              "label": "In {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {Sending input to session {sessionId}} failed {Could not send input to session {sessionId}} done {Sent input to session {sessionId}} other {Sent input to session {sessionId}}}} check {{phase, select, running {Checking session {sessionId}} failed {Could not check session {sessionId}} done {Checked session {sessionId}} other {Checked session {sessionId}}}} other {Session {sessionId}}}"
+          },
+          "output": {
+            "title": "Output"
+          },
+          "exitCode": {
+            "label": "Exit code {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {Stopped by a signal} canceled {Canceled} deadline_exceeded {Stopped at its time limit} other {Ended}}"
+          },
+          "stillRunning": {
+            "label": "Still running (session {sessionId})"
+          },
+          "truncated": {
+            "label": "Output truncated"
+          },
+          "noOutput": {
+            "text": "No output"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {Edited # file} other {Edited # files}}"
+            },
+            "failed": {
+              "status": "Patch failed"
+            },
+            "title": "Patch"
+          },
+          "stopped": {
+            "status": "Stopped"
           }
         }
       },

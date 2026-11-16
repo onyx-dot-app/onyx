@@ -13102,6 +13102,12 @@
           },
           "waitingForApproval": {
             "label": "承認を待っています"
+          },
+          "runningCommand": {
+            "label": "コマンドを実行中"
+          },
+          "editingFiles": {
+            "label": "ファイルを編集中"
           }
         },
         "internalSearch": {
@@ -13231,11 +13237,54 @@
           "researchAgent": "リサーチエージェント",
           "thinking": "思考",
           "tool": "ツール",
-          "webSearch": "ウェブ検索"
+          "webSearch": "ウェブ検索",
+          "terminal": "ターミナル",
+          "applyPatch": "パッチを適用"
         },
         "webSearch": {
           "searching": {
             "status": "ウェブを検索中"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {コマンドを実行中} started {コマンドを開始しました} failed {コマンドが失敗しました} done {コマンドを実行しました} other {コマンドを実行しました}}",
+            "workdir": {
+              "label": "場所: {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {セッション {sessionId} に入力を送信中} failed {セッション {sessionId} に入力を送信できませんでした} done {セッション {sessionId} に入力を送信しました} other {セッション {sessionId} に入力を送信しました}}} check {{phase, select, running {セッション {sessionId} を確認中} failed {セッション {sessionId} を確認できませんでした} done {セッション {sessionId} を確認しました} other {セッション {sessionId} を確認しました}}} other {セッション {sessionId}}}"
+          },
+          "output": {
+            "title": "出力"
+          },
+          "exitCode": {
+            "label": "終了コード {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {シグナルで停止しました} canceled {キャンセルされました} deadline_exceeded {制限時間で停止しました} other {終了しました}}"
+          },
+          "stillRunning": {
+            "label": "実行中 (セッション {sessionId})"
+          },
+          "truncated": {
+            "label": "出力は切り詰められました"
+          },
+          "noOutput": {
+            "text": "出力なし"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {# 個のファイルを編集しました} other {# 個のファイルを編集しました}}"
+            },
+            "failed": {
+              "status": "パッチが失敗しました"
+            },
+            "title": "パッチ"
+          },
+          "stopped": {
+            "status": "停止しました"
           }
         }
       },

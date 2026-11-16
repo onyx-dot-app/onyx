@@ -13102,6 +13102,12 @@
           },
           "waitingForApproval": {
             "label": "승인을 기다리는 중"
+          },
+          "runningCommand": {
+            "label": "명령 실행 중"
+          },
+          "editingFiles": {
+            "label": "파일 편집 중"
           }
         },
         "internalSearch": {
@@ -13231,11 +13237,54 @@
           "researchAgent": "리서치 에이전트",
           "thinking": "생각 중",
           "tool": "도구",
-          "webSearch": "웹 검색"
+          "webSearch": "웹 검색",
+          "terminal": "터미널",
+          "applyPatch": "패치 적용"
         },
         "webSearch": {
           "searching": {
             "status": "웹 검색 중"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {명령 실행 중} started {명령 시작됨} failed {명령 실패} done {명령 실행됨} other {명령 실행됨}}",
+            "workdir": {
+              "label": "위치: {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {세션 {sessionId}에 입력을 보내는 중} failed {세션 {sessionId}에 입력을 보내지 못함} done {세션 {sessionId}에 입력을 보냄} other {세션 {sessionId}에 입력을 보냄}}} check {{phase, select, running {세션 {sessionId} 확인 중} failed {세션 {sessionId}을(를) 확인하지 못함} done {세션 {sessionId} 확인함} other {세션 {sessionId} 확인함}}} other {세션 {sessionId}}}"
+          },
+          "output": {
+            "title": "출력"
+          },
+          "exitCode": {
+            "label": "종료 코드 {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {신호로 중지됨} canceled {취소됨} deadline_exceeded {시간 제한으로 중지됨} other {종료됨}}"
+          },
+          "stillRunning": {
+            "label": "계속 실행 중 (세션 {sessionId})"
+          },
+          "truncated": {
+            "label": "출력이 잘림"
+          },
+          "noOutput": {
+            "text": "출력 없음"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {파일 #개 편집함} other {파일 #개 편집함}}"
+            },
+            "failed": {
+              "status": "패치 실패"
+            },
+            "title": "패치"
+          },
+          "stopped": {
+            "status": "중지됨"
           }
         }
       },
