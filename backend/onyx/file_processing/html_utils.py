@@ -1,5 +1,4 @@
 import re
-from copy import copy
 from dataclasses import dataclass
 from io import BytesIO
 from typing import IO
@@ -57,18 +56,19 @@ def format_element_text(element_text: str, link_href: str | None) -> str:
     return f"[{element_text_no_newlines}]({link_href})"
 
 
-def _get_ancestor_link_href(
-    element: bs4.element.PageElement, in_table: bool
-) -> str | None:
-    if in_table:
-        return None
-
-    link = element.find_parent(_ANCHOR_ELEMENT)
-    if not link:
+def _get_link_href(link: bs4.element.Tag | None, in_table: bool) -> str | None:
+    if in_table or link is None:
         return None
 
     href = link.get(_HREF_ATTRIBUTE)
     return href[0] if isinstance(href, list) else href
+
+
+def _tag_context(tag: bs4.element.Tag) -> tuple[bool, bs4.element.Tag | None]:
+    """Whether `tag` is or sits inside a table, and the nearest link at or above it."""
+    in_table = tag.name == _TABLE_ELEMENT or tag.find_parent(_TABLE_ELEMENT) is not None
+    link = tag if tag.name == _ANCHOR_ELEMENT else tag.find_parent(_ANCHOR_ELEMENT)
+    return in_table, link
 
 
 def parse_html_with_trafilatura(html_content: str) -> str:
@@ -103,12 +103,17 @@ def format_document_soup(
     verbatim_output = 0
     last_added_newline = False
 
+    # _tag_context() of every tag seen so far, by id(). Descendants come in
+    # document order, so an element's parent is always in here already, and
+    # one lookup replaces a find_parent() walk over all of its ancestors.
+    tag_contexts = {id(document): _tag_context(document)}
+
     for e in document.descendants:
         verbatim_output -= 1
+        in_table, link = tag_contexts[id(e.parent)]
         if isinstance(e, bs4.element.NavigableString):
             if isinstance(e, (bs4.element.Comment, bs4.element.Doctype)):
                 continue
-            in_table = e.find_parent(_TABLE_ELEMENT) is not None
             element_text = e.text
             if in_table:
                 # Tables are represented in natural language with rows separated by newlines
@@ -127,7 +132,7 @@ def format_document_soup(
                     element_text
                     if verbatim_output > 0
                     else format_element_text(
-                        element_text, _get_ancestor_link_href(e, in_table)
+                        element_text, _get_link_href(link, in_table)
                     )
                 )
 
@@ -141,7 +146,10 @@ def format_document_soup(
 
                 list_element_start = False
         elif isinstance(e, bs4.element.Tag):
-            in_table = e.find_parent(_TABLE_ELEMENT) is not None
+            tag_contexts[id(e)] = (
+                in_table or e.name == _TABLE_ELEMENT,
+                e if e.name == _ANCHOR_ELEMENT else link,
+            )
             # tr is for rows
             if e.name == "tr" and in_table:
                 text += "\n"
@@ -193,16 +201,14 @@ def web_html_cleanup(
         title_tag.extract()
 
     # Heuristics based cleaning of elements based on css classes
-    unwanted_classes = copy(WEB_CONNECTOR_IGNORED_CLASSES)
+    # One pass over the tree for all of the classes, not one pass per class.
+    unwanted_classes = set(WEB_CONNECTOR_IGNORED_CLASSES)
     if mintlify_cleanup_enabled:
-        unwanted_classes.extend(MINTLIFY_UNWANTED)
-    for undesired_element in unwanted_classes:
-        [
-            tag.extract()
-            for tag in soup.find_all(
-                class_=lambda x, cls=undesired_element: x and cls in x.split()
-            )
-        ]
+        unwanted_classes.update(MINTLIFY_UNWANTED)
+    for tag in soup.find_all(
+        class_=lambda x: x and not unwanted_classes.isdisjoint(x.split())
+    ):
+        tag.extract()
 
     for undesired_tag in WEB_CONNECTOR_IGNORED_ELEMENTS:
         [tag.extract() for tag in soup.find_all(undesired_tag)]
@@ -211,10 +217,11 @@ def web_html_cleanup(
         for undesired_tag in additional_element_types_to_discard:
             [tag.extract() for tag in soup.find_all(undesired_tag)]
 
-    soup_string = str(soup)
     page_text = ""
 
     if PARSE_WITH_TRAFILATURA:
+        # Only trafilatura needs the page back as a string.
+        soup_string = str(soup)
         try:
             page_text = parse_html_with_trafilatura(soup_string)
             if not page_text:
