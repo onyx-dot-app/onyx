@@ -1,4 +1,4 @@
-import type { InstalledPlugin, PluginReference } from "@/lib/plugins/types";
+import type { PluginReference } from "@/lib/plugins/types";
 import type { MemberPlugin } from "@/lib/plugins/member";
 
 export const MEMBER_PLUGIN_SURFACES = ["chat", "agents", "craft"] as const;
@@ -25,20 +25,6 @@ export function sortPlugins<T extends { kind: PluginReference["kind"] }>(
       kindOrder[a.kind] - kindOrder[b.kind] ||
       collator.compare(getName(a), getName(b))
   );
-}
-
-export function installedPluginStatus(
-  plugin: InstalledPlugin,
-  craftAvailable: boolean
-): PluginStatus {
-  const enabled =
-    plugin.kind === "external-app"
-      ? plugin.app.enabled
-      : plugin.kind === "openapi"
-        ? plugin.tool.default_chat_enabled
-        : plugin.server.default_chat_enabled ||
-          (craftAvailable && plugin.server.available_in_craft);
-  return enabled ? "active" : "inactive";
 }
 
 export function memberPluginSurfaceAvailability(

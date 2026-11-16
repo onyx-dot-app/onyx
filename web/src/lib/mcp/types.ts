@@ -98,30 +98,6 @@ export type MCPUserPreferencesRequest =
   | { enabled_in_chat: boolean; enabled_in_craft?: boolean }
   | { enabled_in_chat?: boolean; enabled_in_craft: boolean };
 
-export interface MCPServerCreateRequest {
-  available_in_craft?: boolean;
-  name: string;
-  description?: string;
-  server_url: string;
-  is_public: boolean;
-  groups: number[];
-  users: string[];
-}
-
-export interface MCPServerUpdateRequest {
-  name?: string;
-  description?: string;
-  server_url?: string;
-  // Omit to leave the server's existing access unchanged.
-  is_public?: boolean;
-  groups?: number[];
-  users?: string[];
-  available_in_craft?: boolean;
-  // Full replace of the stored per-tool overrides; omit to leave unchanged.
-  action_policies?: Record<string, ActionPolicy>;
-  users_can_manage_policies?: boolean;
-}
-
 export interface MCPTool {
   id: string;
   name: string;
@@ -210,17 +186,8 @@ export type MCPSetupProbeResult =
     }
   | { kind: "unreachable"; reason: "blocked" | "connection_failed" };
 
-export type MCPSetupRecommendation = Exclude<
-  MCPSetupProbeResult,
-  { kind: "unreachable" }
->;
-
 export interface MCPProbeProgress {
   type: "progress";
   stage: "contacting_server" | "authentication";
   state: "pending" | "success" | "error";
-}
-
-export interface MCPServerConfigurationValues extends MCPServerCreateRequest {
-  access_mode: "public" | "groups";
 }

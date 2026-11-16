@@ -1,4 +1,3 @@
-import { getRequiredHeaderFields } from "@/sections/actions/modals/mcpAuthForm";
 import type {
   AdminIntegrationDetail,
   AuthMethod,
@@ -55,10 +54,25 @@ export const DEFAULT_SIGN_IN: SignInDraft = {
   hasClientSecret: false,
 };
 
+/** The `{placeholder}` names in header values, without `user_email`. */
+function placeholders(headers: Record<string, string>): string[] {
+  return [
+    ...new Set(
+      Object.values(headers).flatMap((value) =>
+        [...value.matchAll(/\{([^}]+)\}/g)].flatMap((match) =>
+          match[1] && match[1] !== "user_email" ? [match[1]] : []
+        )
+      )
+    ),
+  ];
+}
+
 function credentialFields(draft: SignInDraft): CredentialField[] {
-  return getRequiredHeaderFields({ [draft.headerName]: draft.headerValue }).map(
-    (key) => ({ key, label: key.replace(/_/g, " "), secret: true })
-  );
+  return placeholders({ [draft.headerName]: draft.headerValue }).map((key) => ({
+    key,
+    label: key.replace(/_/g, " "),
+    secret: true,
+  }));
 }
 
 function isUrl(value: string): boolean {

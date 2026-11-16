@@ -1,30 +1,10 @@
 import {
-  discoverMCPOAuth,
   completeMCPUserOAuth,
-  MCPOAuthError,
   getMCPUserOAuthNavigationUrl,
   MCPUserOAuthStartResponse,
-  refreshMCPServerTools,
   streamMCPServerProbe,
-  setupMCPServer,
-  type MCPSetupRequest,
   startMCPUserOAuth,
 } from "@/lib/mcp/svc";
-
-import {
-  MCPAuthenticationType,
-  MCPAuthenticationPerformer,
-  MCPTransportType,
-} from "@/lib/mcp/types";
-const setupRequest: MCPSetupRequest = {
-  name: "Test MCP",
-  server_url: "https://mcp.example/mcp",
-  transport: MCPTransportType.SSE,
-  auth_type: MCPAuthenticationType.OAUTH,
-  auth_performer: MCPAuthenticationPerformer.PER_USER,
-  existing_server_id: 42,
-};
-
 describe("MCP OAuth start", () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -148,124 +128,6 @@ describe("MCP setup requests", () => {
     await expect(
       streamMCPServerProbe("https://mcp.example/mcp", jest.fn())
     ).rejects.toThrow();
-  });
-
-  test("staged authorization preserves credential change flags", async () => {
-    const response = {
-      status: "authorization_required",
-      authorization_url: "https://identity.example/authorize",
-    };
-    const fetchSpy = jest
-      .spyOn(global, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify(response)));
-    const payload = {
-      ...setupRequest,
-      oauth_client_id: "saved-client",
-      oauth_client_secret: "********",
-      oauth_client_id_changed: false,
-      oauth_client_secret_changed: false,
-    };
-    await expect(setupMCPServer(payload)).resolves.toEqual(response);
-    expect(fetchSpy).toHaveBeenCalledWith("/api/admin/mcp/setup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  });
-
-  test("setup preserves a safe server detail without replacing it with the fallback", async () => {
-    jest.spyOn(global, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({ detail: "This URL is blocked" }), {
-        status: 400,
-      })
-    );
-    const request = setupMCPServer(setupRequest);
-    await expect(request).rejects.toThrow("This URL is blocked");
-    await expect(request).rejects.not.toBeInstanceOf(MCPOAuthError);
-  });
-
-  test("tool discovery exposes the server error without a JSON wrapper", async () => {
-    jest.spyOn(global, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          error_code: "UNAUTHENTICATED",
-          detail: "Sign in again",
-        }),
-        { status: 401 }
-      )
-    );
-    await expect(refreshMCPServerTools(42)).rejects.toThrow("Sign in again");
-  });
-
-  test.each(Object.values(MCPAuthenticationType))(
-    "setup %s handles non-JSON proxy errors",
-    async (auth_type) => {
-      jest
-        .spyOn(global, "fetch")
-        .mockResolvedValueOnce(
-          new Response("<html>Bad gateway</html>", { status: 502 })
-        );
-      await expect(
-        setupMCPServer({ ...setupRequest, auth_type })
-      ).rejects.toMatchObject({
-        reason: "connection_failed",
-        message:
-          "Could not connect to the MCP server. Check the server settings and try again.",
-      });
-    }
-  );
-});
-
-describe("MCP OAuth capability discovery", () => {
-  afterEach(() => jest.restoreAllMocks());
-
-  test("sends only the saved server ID and preserves capability results", async () => {
-    const result = {
-      status: "metadata_found",
-      supports_automatic_registration: false,
-      supports_client_metadata: null,
-      authorization_endpoint: "https://identity.example.com/authorize",
-      token_endpoint: "https://identity.example.com/token",
-    };
-    const fetchSpy = jest
-      .spyOn(global, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify(result)));
-    await expect(discoverMCPOAuth(42)).resolves.toEqual(result);
-    expect(fetchSpy).toHaveBeenCalledWith("/api/admin/mcp/oauth/discover", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ server_id: 42 }),
-    });
-  });
-
-  test("rejects failed discovery without exposing proxy HTML", async () => {
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValueOnce(
-        new Response("<html>private proxy data</html>", { status: 502 })
-      );
-    await expect(discoverMCPOAuth(42)).rejects.toThrow(
-      "Could not check OAuth setup support"
-    );
-  });
-
-  test("keeps the registration failure reason and hides embedded provider HTML", async () => {
-    jest.spyOn(global, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          oauth_error: "client_registration_failed",
-          detail: "<html>private proxy data</html>",
-        }),
-        { status: 400 }
-      )
-    );
-    const request = setupMCPServer(setupRequest);
-    await expect(request).rejects.toBeInstanceOf(MCPOAuthError);
-    await expect(request).rejects.toMatchObject({
-      reason: "client_registration_failed",
-      message:
-        "Could not connect to the MCP server. Check the server settings and try again.",
-    });
   });
 });
 

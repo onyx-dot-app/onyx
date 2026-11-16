@@ -11,21 +11,9 @@ import type {
 } from "@/lib/mcp/types";
 import {
   MCPOAuthDiscovery,
-  MCPServer,
-  MCPServerUpdateRequest,
-  MCPServerStatus,
-  MCPAuthenticationType,
-  MCPAuthenticationPerformer,
-  MCPOAuthProviderMode,
   MCPTransportType,
-  MCPAuthTemplate,
   MCPSetupProbeResult,
 } from "@/lib/mcp/types";
-import type { ToolSnapshot } from "@/lib/tools/types";
-import {
-  updateToolsStatus,
-  type ToolStatusUpdateResponse,
-} from "@/lib/tools/svc";
 
 export async function updateMCPUserPreferences(
   serverId: number,
@@ -181,145 +169,6 @@ export async function streamMCPServerProbe(
   }
 }
 
-/**
- * Delete an MCP server
- */
-export async function deleteMCPServer(serverId: number): Promise<void> {
-  const response = await fetch(`/api/admin/mcp/server/${serverId}`, {
-    method: "DELETE",
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Failed to delete MCP server");
-  }
-}
-
-/**
- * This performs actual discovery from the MCP server and syncs to DB
- */
-export async function refreshMCPServerTools(
-  serverId: number
-): Promise<ToolSnapshot[]> {
-  // Discovers tools from MCP server, upserts to DB, and returns ToolSnapshot format
-  const response = await fetch(
-    `/api/admin/mcp/server/${serverId}/tools/snapshots?source=mcp`
-  );
-  if (!response.ok) {
-    throw new Error(await parseErrorDetail(response, "Failed to load tools"));
-  }
-
-  return await response.json();
-}
-
-/**
- * Disable all tools for a specific MCP server
- */
-export async function disableAllServerTools(
-  toolIds: number[]
-): Promise<ToolStatusUpdateResponse> {
-  return updateToolsStatus(toolIds, false);
-}
-
-/**
- * Update an existing MCP server
- */
-export async function updateMCPServer(
-  serverId: number,
-  data: MCPServerUpdateRequest
-): Promise<MCPServer> {
-  const response = await fetch(`/api/admin/mcp/server/${serverId}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Failed to update MCP server");
-  }
-
-  return await response.json();
-}
-
-/**
- * Update the status of an MCP server
- */
-export async function updateMCPServerStatus(
-  serverId: number,
-  status: MCPServerStatus
-): Promise<void> {
-  const response = await fetch(
-    `/api/admin/mcp/server/${serverId}/status?status=${status}`,
-    {
-      method: "PATCH",
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      await parseErrorDetail(response, "Failed to update MCP server status")
-    );
-  }
-}
-
-export interface MCPSetupRequest {
-  name: string;
-  description?: string;
-  server_url: string;
-  transport: string;
-  auth_type: MCPAuthenticationType;
-  auth_performer: MCPAuthenticationPerformer;
-  api_token?: string;
-  api_token_changed?: boolean;
-  oauth_setup_mode?: "automatic" | "own_client";
-  oauth_client_id?: string;
-  oauth_client_secret?: string;
-  oauth_provider_mode?: MCPOAuthProviderMode;
-  oauth_cimd_enabled?: boolean;
-  oauth_authorization_endpoint?: string;
-  oauth_token_endpoint?: string;
-  oauth_scopes_override?: string[];
-  oauth_additional_auth_params?: Record<string, string>;
-  // Mirrors the LLM-provider `api_key_changed` pattern: explicitly signal
-  // whether the OAuth credential fields were edited so the backend doesn't
-  // overwrite stored values with masked placeholders on resubmit.
-  oauth_client_id_changed?: boolean;
-  oauth_client_secret_changed?: boolean;
-  auth_template?: MCPAuthTemplate;
-  auth_template_headers_changed?: Record<string, boolean>;
-  admin_credentials?: Record<string, string>;
-  // Per-key analogue of `oauth_client_*_changed` for `admin_credentials`.
-  admin_credentials_changed?: Record<string, boolean>;
-  existing_server_id?: number;
-  is_public?: boolean;
-  groups?: number[];
-  users?: string[];
-  available_in_craft?: boolean;
-  enable_chat?: boolean;
-  users_can_manage_policies?: boolean;
-  action_policies?: MCPServerUpdateRequest["action_policies"];
-}
-
-export type MCPSetupResponse =
-  | { status: "connected"; server: MCPServer }
-  | { status: "authorization_required"; authorization_url: string };
-
-export async function setupMCPServer(
-  payload: MCPSetupRequest
-): Promise<MCPSetupResponse> {
-  const response = await fetch("/api/admin/mcp/setup", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok)
-    throw await readMCPOAuthError(response, "connection_failed");
-  return response.json();
-}
-
 // ── User-side connect flows (shared by chat and the Craft Apps page) ────────
 
 export type MCPUserOAuthStartResponse =
@@ -390,18 +239,6 @@ async function readMCPOAuthError(
   return detail === fallback
     ? new MCPOAuthError(fallback, fallbackReason)
     : new Error(detail);
-}
-
-export async function discoverMCPOAuth(
-  serverId: number
-): Promise<MCPOAuthDiscovery> {
-  const response = await fetch("/api/admin/mcp/oauth/discover", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ server_id: serverId }),
-  });
-  if (!response.ok) throw new Error("Could not check OAuth setup support");
-  return response.json();
 }
 
 /** Start OAuth or return the internal destination when already authenticated. */

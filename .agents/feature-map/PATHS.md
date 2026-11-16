@@ -350,8 +350,7 @@ covers new files that match it.
 | `web/src/app/admin/voice/`, `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
 | `web/src/app/admin/plugins/`, `web/src/app/admin/mcp-actions/`, `web/src/app/admin/openapi-actions/`, `web/src/app/admin/integrations/` | plugins |
 | `web/src/sections/integrations/`, `web/src/lib/integrations/` | plugins |
-| `web/src/sections/plugins/`, `web/src/lib/plugins/`, `web/src/sections/actions/modals/MCPPluginSetupModal.tsx` | plugins |
-| `web/src/sections/plugins/ExternalAppPluginDetail.tsx`, `web/src/sections/plugins/CraftAppEditorTabs.tsx` | craft-admin |
+| `web/src/sections/plugins/`, `web/src/lib/plugins/` | plugins |
 | `web/src/sections/actions/`, `web/src/lib/mcp/`, `web/src/app/mcp/oauth/`, `web/src/hooks/useOpenApiTools.ts`, `web/src/lib/hooks/useToolOAuthStatus.ts` | plugins, mcp-and-custom-tools |
 | `web/src/app/mcp/[[...path]]/` | mcp-server |
 | `web/src/app/admin/bots/`, `web/src/lib/updateSlackBotField.ts` | slack-bot |

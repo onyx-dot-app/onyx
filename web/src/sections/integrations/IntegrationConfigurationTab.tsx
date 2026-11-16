@@ -52,6 +52,20 @@ const METHODS: Record<AdminIntegrationDetail["shape"], readonly AuthMethod[]> =
     preset: ["oauth2", "api_key", "managed"],
   };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The schema text as an object, or `null` when it is not a JSON object. */
+function parseSpec(text: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 interface IntegrationConfigurationTabProps {
   integration: AdminIntegrationDetail;
   onChanged: () => void;
@@ -77,6 +91,11 @@ export default function IntegrationConfigurationTab({
       ? integration.config.upstream_url_patterns.join("\n")
       : ""
   );
+  const initialSpec =
+    integration.config.shape === "openapi"
+      ? JSON.stringify(integration.config.openapi_spec, null, 2)
+      : "";
+  const [specText, setSpecText] = useState(initialSpec);
   const [alwaysAllow, setAlwaysAllow] = useState(
     integration.users_can_save_always_allow
   );
@@ -102,6 +121,11 @@ export default function IntegrationConfigurationTab({
       return patterns.join("\n") === config.upstream_url_patterns.join("\n")
         ? undefined
         : { shape: "custom", upstream_url_patterns: patterns };
+    }
+    if (config.shape === "openapi") {
+      if (specText === initialSpec) return undefined;
+      const spec = parseSpec(specText);
+      return spec ? { shape: "openapi", openapi_spec: spec } : null;
     }
     return undefined;
   }
@@ -195,8 +219,7 @@ export default function IntegrationConfigurationTab({
           {t("readOnly")}
         </Text>
       )}
-      {(integration.config.shape === "mcp_server" ||
-        integration.config.shape === "custom") && (
+      {integration.config.shape !== "preset" && (
         <Card padding={4}>
           <Section gap={4} alignItems="stretch" height="auto">
             <Content font="main-ui-action" title={t("connection.title")} />
@@ -214,6 +237,24 @@ export default function IntegrationConfigurationTab({
                   value={serverUrl}
                   variant={disabled ? "disabled" : "primary"}
                   onChange={(event) => setServerUrl(event.target.value)}
+                />
+              </InputVertical>
+            ) : integration.config.shape === "openapi" ? (
+              <InputVertical
+                title={t("connection.schema")}
+                description={t("connection.schemaDescription")}
+                error={
+                  showErrors && !parseSpec(specText)
+                    ? t("connection.schemaError")
+                    : undefined
+                }
+              >
+                <InputTextArea
+                  aria-label={t("connection.schema")}
+                  value={specText}
+                  rows={12}
+                  variant={disabled ? "disabled" : "primary"}
+                  onChange={(event) => setSpecText(event.target.value)}
                 />
               </InputVertical>
             ) : (
