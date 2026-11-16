@@ -113,6 +113,8 @@ class Seeded:
     mcp_orphan: int
     app_slack: int
     app_custom: int
+    app_org_key: int
+    app_user_key: int
     tool_read: int
     tool_write: int
     tool_unselected: int
@@ -266,6 +268,16 @@ def _seed(conn: Connection) -> Seeded:
     # Same name as the public MCP server: both go to the Organization library.
     app_slack = app(names["shared"], "SLACK", {"Authorization": "Bearer {token}"})
     app_custom = app(f"u1-custom-{s}", "CUSTOM", {})
+    # The organization fills the key of one app. A user fills it for the other.
+    app_org_key = app(f"u1-org-key-{s}", "CUSTOM", {"X-Key": "{api_key}"})
+    app_user_key = app(f"u1-user-key-{s}", "CUSTOM", {"X-Key": "{api_key}"})
+    conn.execute(
+        text(
+            "INSERT INTO external_app_user_credential (external_app_id, user_id, "
+            "user_credentials) VALUES (:a, :u, '\\x00'::bytea)"
+        ),
+        {"a": app_user_key, "u": users["other"]},
+    )
 
     gated: dict[str, int] = {}
     for key, column, target in (
@@ -549,6 +561,8 @@ def _seed(conn: Connection) -> Seeded:
         mcp_orphan=mcp_orphan,
         app_slack=app_slack,
         app_custom=app_custom,
+        app_org_key=app_org_key,
+        app_user_key=app_user_key,
         tool_read=tool_read,
         tool_write=tool_write,
         tool_unselected=tool_unselected,
@@ -577,9 +591,14 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
             text(
                 "DELETE FROM plugin WHERE id IN (SELECT plugin_id FROM integration "
                 "WHERE id = ANY(:gated) OR id IN "
-                "(SELECT integration_id FROM tool WHERE id = ANY(:tools)))"
+                "(SELECT integration_id FROM tool WHERE id = ANY(:tools)) OR id IN "
+                "(SELECT integration_id FROM external_app WHERE id = ANY(:apps)))"
             ),
-            {"gated": list(seeded.gated.values()), "tools": custom_tools},
+            {
+                "gated": list(seeded.gated.values()),
+                "tools": custom_tools,
+                "apps": [seeded.app_org_key, seeded.app_user_key],
+            },
         )
     conn.execute(text("DELETE FROM plugin WHERE id = :id"), {"id": seeded.skill})
     conn.execute(text("DELETE FROM skill WHERE id = :id"), {"id": seeded.skill})
@@ -608,7 +627,14 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
     )
     conn.execute(
         text("DELETE FROM external_app WHERE id = ANY(:ids)"),
-        {"ids": [seeded.app_slack, seeded.app_custom]},
+        {
+            "ids": [
+                seeded.app_slack,
+                seeded.app_custom,
+                seeded.app_org_key,
+                seeded.app_user_key,
+            ]
+        },
     )
     conn.execute(
         text("DELETE FROM oauth_config WHERE name LIKE 'u1-oauth-%'"),
@@ -903,6 +929,15 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         assert app_custom.kind == "api"
         assert (app_custom.auth_mode, app_custom.auth_method) == ("none", None)
         assert _oauth_client(conn, app_custom.id) is None
+        # A custom app with a header template: a saved user credential shows
+        # that each user signs in. With none, the organization holds the key.
+        app_integration = (
+            "i.id = (SELECT integration_id FROM external_app WHERE id = :a)"
+        )
+        org_key = _copied(conn, app_integration, a=seeded.app_org_key)
+        user_key = _copied(conn, app_integration, a=seeded.app_user_key)
+        assert (org_key.auth_mode, org_key.auth_method) == ("shared", "api_key")
+        assert (user_key.auth_mode, user_key.auth_method) == ("individual", "api_key")
         assert custom["private"].kind == "api"
         # App code reads a spec; the action sync writes its actions.
         assert _actions(conn, custom["private"].id) == []

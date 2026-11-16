@@ -415,6 +415,14 @@ _CREATE_SOURCES = f"""
             CASE
                 WHEN a.app_type <> 'CUSTOM' THEN 'individual'
                 WHEN a.auth_template = '{{}}'::jsonb THEN 'none'
+                -- The organization credentials are encrypted, so SQL cannot
+                -- see which fields a user must fill. A saved user credential
+                -- shows that users fill some. The credential import (U3)
+                -- reads the fields and sets the final mode.
+                WHEN EXISTS (
+                    SELECT 1 FROM external_app_user_credential c
+                    WHERE c.external_app_id = a.id
+                ) THEN 'individual'
                 ELSE 'shared'
             END AS auth_mode,
             CASE
