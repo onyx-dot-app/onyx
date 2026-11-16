@@ -1,25 +1,8 @@
-import { notFound, redirect } from "@opal/navigation";
-import {
-  parsePluginId,
-  pluginDetailHref,
-  withPluginSearchParams,
-  type PluginSearchParams,
-} from "@/lib/plugins/routes";
+import { redirect } from "@opal/navigation";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-export default async function Page({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ serverId: string }>;
-  searchParams: Promise<PluginSearchParams>;
-}) {
-  const { serverId: value } = await params;
-  const serverId = parsePluginId(value);
-  if (serverId === null) notFound();
-  redirect(
-    withPluginSearchParams(
-      pluginDetailHref({ kind: "mcp", id: serverId }),
-      await searchParams
-    )
-  );
+/** An old plugin or action URL. Its id is not an integration id, so it opens
+ * the integration list. */
+export default function Page() {
+  redirect(ADMIN_ROUTES.INTEGRATIONS.path);
 }

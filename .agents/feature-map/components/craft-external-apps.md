@@ -21,7 +21,7 @@ When an action is set to Ask, the agent's call waits. An approval card appears
 in the session. The user can approve once, approve that action for the rest of
 the session, or reject. With no decision within the wait window (180 seconds
 by default), the request expires and the agent gets an error. When an action
-is Disabled, the call fails at once with a `policy_denied` error that the agent
+is Blocked, the call fails at once with a `policy_denied` error that the agent
 can read. When the app is not connected, the call fails with a message that
 asks the user to connect it. A proxy restart or deploy expires every open
 approval card, and the agent gets an error.
@@ -32,7 +32,7 @@ already has credentials. It shows Connected only after the decision succeeds,
 and stays retryable after a failure. When the user declines, the agent gets a
 rejection and can choose another way.
 
-The user can set personal Auto-approve, Ask or Disabled choices per action when
+The user can set personal Allow, Ask or Blocked choices per action when
 the admin allows it. A scheduled task has its own choices
 ([[craft-scheduled-tasks]]).
 
@@ -278,7 +278,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    upstream's 413. A streamed body (`raw_content is None`) counts as oversize,
    so a future stream opt-in cannot skip the cap. Turning on request streaming
    anywhere in the chain blocks requests with `body_too_large`.
-7. `unspecified-never-auto` **`unspecified` is never Auto-approve and never
+7. `unspecified-never-auto` **`unspecified` is never Allow and never
    session-granted on an external app.** Personal or task choices cannot make
    an off-catalog request run unattended.
    `sandbox_proxy/addons/gate.py:GateAddon._session_grant` returns false for
@@ -412,13 +412,13 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   approval row, so the session grant in `submit_decision` can cover it.
 - `investigate-app-call-failed` **Investigate "the agent's call to an app failed".** Read the
   response the agent got first: a proxy 403 carries the error code from
-  `backend/onyx/sandbox_proxy/errors.py`. A Disabled action returns
+  `backend/onyx/sandbox_proxy/errors.py`. A Blocked action returns
   `policy_denied` and writes no log line (`sandbox_proxy/addons/gate.py:GateAddon._resolve_and_match`).
   Then find the request in the `sandbox-proxy` log. An `egress_block` line
   carries the `reason`, and an `egress_allow` line carries the credential
   outcome. No response from the proxy and no log line means the request did not
   reach the proxy; check the lockdown in [[craft-sandboxes]].
-- `setup-policy-test` **Set up a policy test.** Set one action to Disabled and one to Ask. The
+- `setup-policy-test` **Set up a policy test.** Set one action to Blocked and one to Ask. The
   first returns 403 `policy_denied` with no proxy log line. The second shows an
   approval card, and after approval the proxy logs the decision as `APPROVED`.
 

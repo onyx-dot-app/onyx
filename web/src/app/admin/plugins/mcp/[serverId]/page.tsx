@@ -1,14 +1,8 @@
-import { notFound } from "@opal/navigation";
-import { parsePluginId } from "@/lib/plugins/routes";
-import MCPServerDetailPage from "@/sections/actions/MCPServerDetailPage";
+import { redirect } from "@opal/navigation";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-export default async function Page({
-  params,
-}: {
-  params: Promise<{ serverId: string }>;
-}) {
-  const { serverId: value } = await params;
-  const serverId = parsePluginId(value);
-  if (serverId === null) notFound();
-  return <MCPServerDetailPage key={serverId} serverId={serverId} />;
+/** An old plugin or action URL. Its id is not an integration id, so it opens
+ * the integration list. */
+export default function Page() {
+  redirect(ADMIN_ROUTES.INTEGRATIONS.path);
 }

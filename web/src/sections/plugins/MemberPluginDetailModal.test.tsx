@@ -975,7 +975,7 @@ test("loads a fresh approval snapshot and saves displayed choices including pers
   await user.click(
     within(screen.getByRole("group", { name: "Send report" })).getByRole(
       "button",
-      { name: "Disabled" }
+      { name: "Blocked" }
     )
   );
   await user.click(screen.getByRole("button", { name: "Save" }));

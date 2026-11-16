@@ -45,17 +45,28 @@ test("hides Plans & Billing and Upgrade Plan on the playground", () => {
   expect(links).not.toContain(ADMIN_ROUTES.BILLING.path);
 });
 
-test("shows one Plugins link for an action manager", () => {
+test("shows Plugins and Integrations to an action manager", () => {
   expect(
     buildItems([Permission.MANAGE_ACTIONS], flags, null).map((item) => ({
       nameId: item.nameId,
       link: item.link,
-      disabled: item.disabled,
+      sectionId: item.sectionId,
     }))
-  ).toEqual([{ nameId: "plugins", link: "/admin/plugins", disabled: false }]);
+  ).toEqual([
+    {
+      nameId: "plugins",
+      link: "/admin/plugins",
+      sectionId: "agentsAndPlugins",
+    },
+    {
+      nameId: "integrations",
+      link: "/admin/integrations",
+      sectionId: "agentsAndPlugins",
+    },
+  ]);
 });
 
-test("omits Plugins without action management access", () => {
+test("omits Plugins and Integrations without action management access", () => {
   const links = buildItems([Permission.MANAGE_AGENTS], flags, null).map(
     (item) => item.link
   );
@@ -80,53 +91,58 @@ test("marks only Decision Models as a beta entry", () => {
   expect(betaLinks).toEqual(["/admin/decision-models"]);
 });
 
-test("full admins see the canonical link and no legacy action links", () => {
-  const actionLinks = buildItems(
+test("Agents & Plugins holds Agents, Plugins, Integrations and Skills", () => {
+  const links = buildItems(
     [Permission.FULL_ADMIN_PANEL_ACCESS],
-    flags,
+    { ...flags, craftAvailable: true },
     null
   )
-    .filter((item) => item.sectionId === "agentsAndActions")
+    .filter((item) => item.sectionId === "agentsAndPlugins")
     .map((item) => item.link);
-  expect(actionLinks).toEqual(["/admin/agents", "/admin/plugins"]);
+  expect(links).toEqual([
+    "/admin/agents",
+    "/admin/plugins",
+    "/admin/integrations",
+    "/admin/skills",
+  ]);
 });
 
-test("Craft-enabled admins have one Plugins entry and no separate Apps entry", () => {
+test("has no MCP Actions, OpenAPI Actions or Craft Apps entries", () => {
   const links = buildItems(
     [Permission.FULL_ADMIN_PANEL_ACCESS],
     { ...flags, craftAvailable: true },
     null
   ).map((item) => item.link);
-  expect(links.filter((link) => link === "/admin/plugins")).toHaveLength(1);
+  expect(links).not.toContain("/admin/mcp-actions");
+  expect(links).not.toContain("/admin/openapi-actions");
   expect(links).not.toContain("/admin/craft/apps");
 });
 
-test.each(["/admin/plugins/external-app/7", "/admin/craft/apps"])(
-  "retains full-admin authorization for %s",
+test("Channels holds the Slack and Discord bots", () => {
+  const items = buildItems(
+    [Permission.FULL_ADMIN_PANEL_ACCESS],
+    { ...flags, tier: Tier.ENTERPRISE, hooksEnabled: true },
+    null
+  );
+  const section = (link: string) =>
+    items.find((item) => item.link === link)?.sectionId;
+  expect(
+    items
+      .filter((item) => item.sectionId === "channels")
+      .map((item) => item.nameId)
+  ).toEqual(["slackBot", "discordBot"]);
+  expect(section("/admin/service-accounts")).toBe("permissions");
+  expect(section("/admin/hooks")).toBe("organization");
+});
+
+test.each(["/admin/plugins", "/admin/integrations", "/admin/integrations/7"])(
+  "gates %s with action management permission",
   (pathname) => {
     expect(matchAdminRoute(pathname)?.requiredPermission).toBe(
-      Permission.FULL_ADMIN_PANEL_ACCESS
+      Permission.MANAGE_ACTIONS
     );
   }
 );
-
-test.each([
-  "/admin/plugins",
-  "/admin/plugins/mcp/7",
-  "/admin/plugins/openapi/7",
-  "/admin/mcp-actions",
-  "/admin/mcp-actions/new",
-  "/admin/mcp-actions/7",
-  "/admin/openapi-actions",
-])("gates %s with action management permission", (pathname) => {
-  expect(matchAdminRoute(pathname)?.requiredPermission).toBe(
-    Permission.MANAGE_ACTIONS
-  );
-});
-
-test("matches canonical plugin details to the Plugins registry entry", () => {
-  expect(matchAdminRoute("/admin/plugins/mcp/7")).toBe(ADMIN_ROUTES.PLUGINS);
-});
 
 test("shows Skills only to full admins when Craft is available", () => {
   const craftFlags = { ...flags, craftAvailable: true };

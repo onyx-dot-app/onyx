@@ -4,7 +4,6 @@ import type { PluginReference } from "@/lib/plugins/types";
 export type PluginSearchParams = Record<string, string | string[] | undefined>;
 type PluginDetailPath = `/admin/plugins/${PluginReference["kind"]}/${number}`;
 type PluginPath = typeof ADMIN_ROUTES.PLUGINS.path | PluginDetailPath;
-type PluginHref = PluginPath | `${PluginPath}?${string}`;
 
 export function pluginDetailHref(reference: PluginReference): PluginDetailPath {
   return `${ADMIN_ROUTES.PLUGINS.path}/${reference.kind}/${reference.id}`;
@@ -35,17 +34,4 @@ export function withPluginSearchParams<Path extends PluginPath>(
   }
   const queryString = query.toString();
   return queryString ? `${pathname}?${queryString}` : pathname;
-}
-
-export function legacyMcpListHref(
-  searchParams: PluginSearchParams
-): PluginHref {
-  const value = searchParams.server_id;
-  const serverId = parsePluginId(Array.isArray(value) ? value[0] : value);
-  return withPluginSearchParams(
-    serverId === null
-      ? ADMIN_ROUTES.PLUGINS.path
-      : pluginDetailHref({ kind: "mcp", id: serverId }),
-    searchParams
-  );
 }

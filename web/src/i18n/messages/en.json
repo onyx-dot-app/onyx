@@ -706,13 +706,13 @@
     },
     "policyToggle": {
       "always": {
-        "label": "Auto-approve"
+        "label": "Allow"
       },
       "ask": {
         "label": "Ask"
       },
       "deny": {
-        "label": "Disabled"
+        "label": "Blocked"
       }
     },
     "switchList": {
@@ -2428,7 +2428,7 @@
           "title": "Coding Agent"
         },
         "description": "Tools and capabilities available for chat to use. This does not apply to agents.",
-        "pluginsNote": "Configure MCP servers and OpenAPI plugins for default Chat in [Plugins]({url}).",
+        "pluginsNote": "Manage MCP servers and OpenAPI apps in [Integrations]({url}).",
         "imageGeneration": {
           "description": "Generate and manipulate images using AI-powered tools.",
           "disabledTooltip": "Image generation requires a configured model. Set one up under Configuration > Image Generation, or ask an admin.",
@@ -11229,6 +11229,307 @@
           "tooltip": "Edit"
         }
       }
+    },
+    "plugins": {
+      "title": "Plugins",
+      "description": "Plugins give people skills and integrations. This page shows the plugins that hold integrations.",
+      "search": "Search plugins",
+      "loadFailed": "Could not load the plugins.",
+      "manageIntegrations": "Manage integrations",
+      "columns": {
+        "name": "Plugin",
+        "library": "Library",
+        "installation": "Install Setting",
+        "integrations": "Integrations"
+      },
+      "library": {
+        "organization": "Organization library",
+        "personal": "My uploads of {owner}"
+      },
+      "installation": "{policy, select, REQUIRED {Required} DEFAULT {On by default} AVAILABLE {Available} NOT_AVAILABLE {Not available} other {None}}",
+      "openIntegration": "Open {name}",
+      "empty": {
+        "title": "No plugins with integrations",
+        "description": "Add an integration. Onyx makes a plugin that holds it."
+      }
+    },
+    "integrations": {
+      "title": "Integrations",
+      "description": "Connect MCP servers and apps. A plugin holds each integration and gives people access to it.",
+      "search": "Search integrations",
+      "open": "Open {name}",
+      "loadFailed": "Could not load the integrations.",
+      "add": {
+        "label": "Add",
+        "title": "Add an Integration",
+        "description": "Choose the type of integration.",
+        "created": "Added {name}.",
+        "createFailed": "Could not add the integration.",
+        "formTitle": {
+          "mcp_server": "Add an MCP Server",
+          "openapi": "Add an OpenAPI App",
+          "preset": "Add an App from a Preset",
+          "custom": "Add a Custom App"
+        },
+        "kindDescription": {
+          "mcp_server": "Connect a remote MCP server by its URL.",
+          "openapi": "Make actions from an OpenAPI schema.",
+          "preset": "Connect a built-in app, such as GitHub or Slack.",
+          "custom": "Let Craft call an HTTP service that matches URL patterns."
+        },
+        "openapi": {
+          "title": "Add an OpenAPI App"
+        },
+        "preset": {
+          "title": "Preset",
+          "placeholder": "Choose a preset",
+          "required": "Choose a preset.",
+          "loadFailed": "Could not load the presets.",
+          "instructions": "Setup instructions",
+          "credentialRequired": "Add this value."
+        },
+        "name": {
+          "title": "Name",
+          "placeholder": "Add a name",
+          "required": "Add a name."
+        },
+        "descriptionField": {
+          "title": "Description",
+          "placeholder": "Add a description"
+        },
+        "custom": {
+          "patterns": {
+            "title": "URL Patterns",
+            "description": "Put one URL pattern on each line, for example https://api.example.com/*.",
+            "placeholder": "https://api.example.com/*",
+            "required": "Add at least one URL pattern."
+          }
+        },
+        "mcp": {
+          "url": {
+            "title": "Server URL",
+            "placeholder": "https://example.com/mcp",
+            "error": "Enter a valid server URL."
+          },
+          "probe": {
+            "checking": "Checking the server…",
+            "public": "Found {count, plural, one {# tool} other {# tools}}. The server needs no sign-in.",
+            "oauth": "The server uses OAuth sign-in.",
+            "authUnknown": "The server needs sign-in. Add an API key header or OAuth.",
+            "unreachable": "Onyx cannot reach this server. Check the URL."
+          },
+          "transport": {
+            "title": "Transport",
+            "streamableHttp": "Streamable HTTP",
+            "sse": "Server-sent events (SSE)"
+          },
+          "suggested": "Suggested Servers"
+        },
+        "owner": {
+          "title": "Owner",
+          "personal": "For me",
+          "organization": "For the organization",
+          "personalDescription": "Onyx puts the integration in a plugin in your My uploads. You can share the plugin later.",
+          "organizationDescription": "Onyx puts the integration in a plugin in the Organization library."
+        },
+        "back": "Back",
+        "submit": "Add",
+        "adding": "Adding…"
+      },
+      "filters": {
+        "label": "Integration type",
+        "all": "All",
+        "mcp_server": "MCP servers",
+        "api": "Apps"
+      },
+      "columns": {
+        "name": "Name",
+        "type": "Type",
+        "signIn": "Sign-in",
+        "access": "Access",
+        "status": "Status"
+      },
+      "empty": {
+        "title": "No integrations",
+        "description": "Add an MCP server or an app to give agents new actions.",
+        "noResults": "No integrations found",
+        "noResultsDescription": "Try another name or type."
+      },
+      "shape": {
+        "mcp_server": "MCP server",
+        "openapi": "OpenAPI app",
+        "preset": "App",
+        "custom": "Custom app"
+      },
+      "signInSummary": "{mode, select, none {No sign-in} shared {{method, select, oauth2 {Organization account (OAuth)} api_key {Organization API key} onyx_login {Onyx login} managed {Managed by Onyx} other {Organization account}}} individual {{method, select, oauth2 {Each user (OAuth)} api_key {Each user (API key)} onyx_login {Onyx login} managed {Managed by Onyx} other {Each user}}} other {Unknown}}",
+      "access": {
+        "none": "Not in a plugin",
+        "many": "{count, plural, one {# plugin} other {# plugins}}",
+        "organization": "{plugin} (Organization library)",
+        "personal": "{plugin} (My uploads of {owner})"
+      },
+      "status": {
+        "needsSetup": "Needs setup",
+        "off": "Off",
+        "needsReconnect": "Needs reconnect",
+        "movingCredentials": "Moving credentials",
+        "ready": "Ready"
+      },
+      "signIn": {
+        "mode": {
+          "title": "Sign-in Mode",
+          "description": "Choose who signs in to the service.",
+          "none": "No sign-in",
+          "shared": "One account for the organization",
+          "individual": "Each user signs in"
+        },
+        "method": {
+          "title": "Sign-in Method",
+          "oauth2": "OAuth",
+          "apiKey": "API key",
+          "onyxLogin": "Onyx login",
+          "managed": "Managed by Onyx"
+        },
+        "header": {
+          "name": {
+            "title": "Header Name",
+            "placeholder": "Add a header name",
+            "error": "Add a header name."
+          },
+          "value": {
+            "title": "Header Value",
+            "description": "Put each credential in braces, for example {example}. Each placeholder becomes a credential field.",
+            "placeholder": "For example: {example}",
+            "error": "Add at least one placeholder, for example {example}."
+          }
+        },
+        "oauth": {
+          "providerMode": {
+            "title": "OAuth Client",
+            "manual": "Enter the client details",
+            "discovery": "Register a client automatically",
+            "preset": "Use the client of the preset"
+          },
+          "authorizationUrl": "Authorization URL",
+          "tokenUrl": "Token URL",
+          "urlPlaceholder": "https://",
+          "urlError": "Enter a valid URL.",
+          "clientId": "Client ID",
+          "clientIdPlaceholder": "Add the client ID",
+          "clientIdError": "Add a client ID.",
+          "clientSecret": "Client Secret",
+          "clientSecretPlaceholder": "Add the client secret",
+          "clientSecretSaved": "Saved. Enter a new secret to replace it.",
+          "scopes": {
+            "title": "Scopes",
+            "description": "Separate scopes with spaces.",
+            "placeholder": "For example: read write"
+          }
+        }
+      },
+      "detail": {
+        "title": "Integration",
+        "back": "All integrations",
+        "notFound": "This integration does not exist, or you cannot see it.",
+        "loadFailed": "Could not load this integration.",
+        "tabs": {
+          "overview": "Overview",
+          "configuration": "Configuration",
+          "actions": "Actions"
+        },
+        "overview": {
+          "readOnly": "You can see this integration. You cannot change it.",
+          "noDescription": "No description",
+          "type": "Type",
+          "signIn": "Sign-in",
+          "createdBy": "Added by",
+          "needsSetup": "Needs setup",
+          "needsSetupDefault": "Finish the sign-in settings on the Configuration tab.",
+          "plugins": {
+            "title": "Plugins",
+            "description": "People get this integration through these plugins.",
+            "organization": "{policy, select, REQUIRED {Organization library, required} DEFAULT {Organization library, on by default} AVAILABLE {Organization library, available} NOT_AVAILABLE {Organization library, not available} other {Organization library}}",
+            "personal": "My uploads of {owner}",
+            "manage": "Manage plugins"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "description": "When this is off, no agent or user can use the integration."
+          },
+          "delete": {
+            "title": "Delete Integration",
+            "description": "Remove the integration from each plugin, and delete its connections and action settings.",
+            "label": "Delete",
+            "confirmTitle": "Delete {name}?",
+            "confirmDescription": "Onyx removes the integration from each plugin and deletes its connections and action settings. You cannot undo this.",
+            "confirm": "Delete"
+          },
+          "deleted": "Deleted {name}.",
+          "deleteFailed": "Could not delete the integration.",
+          "saveFailed": "Could not save the change."
+        },
+        "configuration": {
+          "readOnly": "You can see this integration. You cannot change it.",
+          "connection": {
+            "title": "Connection",
+            "serverUrl": "Server URL",
+            "serverUrlError": "Enter a valid server URL.",
+            "urlPatterns": "URL Patterns",
+            "urlPatternsDescription": "Put one URL pattern on each line."
+          },
+          "signIn": {
+            "title": "Sign-in",
+            "description": "If you change the sign-in method, the client, the URLs or the scopes, each user must connect again."
+          },
+          "alwaysAllow": {
+            "title": "Users Can Save Always Allow",
+            "description": "Let each user skip the approval prompt for an action that asks."
+          },
+          "save": "Save",
+          "saving": "Saving…",
+          "saved": "Saved the configuration.",
+          "saveFailed": "Could not save the configuration.",
+          "organization": {
+            "title": "Organization Connection",
+            "description": "Each user acts with this account.",
+            "state": "{state, select, connected {Connected} not_connected {Not connected} needs_reconnect {Needs reconnect} not_set_up {Not set up} other {Unknown}}",
+            "connect": "Connect",
+            "disconnect": "Disconnect",
+            "connected": "Connected the organization account.",
+            "disconnected": "Disconnected the organization account.",
+            "failed": "Could not change the organization connection."
+          }
+        },
+        "actions": {
+          "loadFailed": "Could not load the actions.",
+          "retry": "Retry",
+          "search": "Search actions",
+          "refresh": "Refresh",
+          "refreshed": "Refreshed the actions.",
+          "refreshFailed": "Could not refresh the actions.",
+          "save": "Save",
+          "saving": "Saving…",
+          "saved": "Saved the action settings.",
+          "saveFailed": "Could not save the action settings.",
+          "default": {
+            "title": "Default for New Actions",
+            "description": "Each action with no setting of its own uses this value. Actions that the integration adds later use it too.",
+            "unset": "Not set. Each action uses its own default.",
+            "clear": "Clear"
+          },
+          "usesDefault": "Uses default",
+          "setByAdmin": "Set by admin",
+          "useDefaults": "Use defaults",
+          "readOnly": "Read-Only Actions ({count})",
+          "write": "Write Actions ({count})",
+          "empty": "This integration has no actions.",
+          "connectFirst": {
+            "title": "Connect the server first",
+            "description": "Onyx loads the actions of an MCP server after the server is connected.",
+            "open": "Open Configuration"
+          }
+        }
+      }
     }
   },
   "agents": {
@@ -14631,10 +14932,10 @@
         },
         "permissions": {
           "askOption": "Ask",
-          "autoApproveOption": "Auto-approve",
+          "autoApproveOption": "Allow",
           "customOption": "Custom",
           "defaultOption": "Default",
-          "description": "Choose what the agent may do. “Ask” requests approval before each action; “Auto-approve” runs without prompting.",
+          "description": "Choose what the agent may do. “Ask” requests approval before each action; “Allow” runs without prompting.",
           "title": "Permissions"
         },
         "savingButton": "Saving…",
@@ -16762,9 +17063,6 @@
         "customAnalytics": {
           "label": "Custom Analytics"
         },
-        "discordIntegration": {
-          "label": "Discord Integration"
-        },
         "documentSets": {
           "label": "Document Sets"
         },
@@ -16798,12 +17096,6 @@
         "plugins": {
           "label": "Plugins"
         },
-        "mcpActions": {
-          "label": "MCP Actions"
-        },
-        "openapiActions": {
-          "label": "OpenAPI Actions"
-        },
         "plansAndBilling": {
           "label": "Plans & Billing"
         },
@@ -16818,9 +17110,6 @@
         },
         "serviceAccounts": {
           "label": "Service Accounts"
-        },
-        "slackIntegration": {
-          "label": "Slack Integration"
         },
         "ssoProviders": {
           "label": "SSO Providers"
@@ -16848,20 +17137,23 @@
         },
         "spendingLimits": {
           "label": "Spending Limits"
+        },
+        "integrations": {
+          "label": "Integrations"
+        },
+        "slackBot": {
+          "label": "Slack Bot"
+        },
+        "discordBot": {
+          "label": "Discord Bot"
         }
       },
       "sections": {
-        "agentsAndActions": {
-          "label": "Agents & Actions"
-        },
         "craft": {
           "label": "Craft"
         },
         "documentsAndKnowledge": {
           "label": "Documents & Knowledge"
-        },
-        "integrations": {
-          "label": "Integrations"
         },
         "organization": {
           "label": "Organization"
@@ -16871,6 +17163,12 @@
         },
         "usage": {
           "label": "Usage"
+        },
+        "agentsAndPlugins": {
+          "label": "Agents & Plugins"
+        },
+        "channels": {
+          "label": "Channels"
         }
       }
     },

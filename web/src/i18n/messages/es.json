@@ -706,13 +706,13 @@
     },
     "policyToggle": {
       "always": {
-        "label": "Aprobar automáticamente"
+        "label": "Permitir"
       },
       "ask": {
         "label": "Preguntar"
       },
       "deny": {
-        "label": "Desactivada"
+        "label": "Bloqueada"
       }
     },
     "switchList": {
@@ -2428,7 +2428,7 @@
           "title": "Agente de código"
         },
         "description": "Herramientas y capacidades que el chat puede usar. Esto no se aplica a los agentes.",
-        "pluginsNote": "Configura servidores MCP y plugins OpenAPI para el chat predeterminado en [Plugins]({url}).",
+        "pluginsNote": "Administra los servidores MCP y las apps OpenAPI en [Integraciones]({url}).",
         "imageGeneration": {
           "description": "Genera y edita imágenes con herramientas de IA.",
           "disabledTooltip": "La generación de imágenes requiere un modelo configurado. Configura uno en Configuración > Generación de imágenes, o pídeselo a un administrador.",
@@ -11229,6 +11229,307 @@
           "tooltip": "Editar"
         }
       }
+    },
+    "plugins": {
+      "title": "Complementos",
+      "description": "Los complementos dan habilidades e integraciones a las personas. Esta página muestra los complementos que contienen integraciones.",
+      "search": "Buscar complementos",
+      "loadFailed": "No se pudieron cargar los complementos.",
+      "manageIntegrations": "Administrar integraciones",
+      "columns": {
+        "name": "Complemento",
+        "library": "Biblioteca",
+        "installation": "Instalación",
+        "integrations": "Integraciones"
+      },
+      "library": {
+        "organization": "Biblioteca de la organización",
+        "personal": "Mis subidas de {owner}"
+      },
+      "installation": "{policy, select, REQUIRED {Obligatorio} DEFAULT {Activado de forma predeterminada} AVAILABLE {Disponible} NOT_AVAILABLE {No disponible} other {Ninguno}}",
+      "openIntegration": "Abrir {name}",
+      "empty": {
+        "title": "No hay complementos con integraciones",
+        "description": "Agrega una integración. Onyx crea un complemento que la contiene."
+      }
+    },
+    "integrations": {
+      "title": "Integraciones",
+      "description": "Conecta servidores MCP y apps. Un complemento contiene cada integración y da acceso a ella a las personas.",
+      "search": "Buscar integraciones",
+      "open": "Abrir {name}",
+      "loadFailed": "No se pudieron cargar las integraciones.",
+      "add": {
+        "label": "Agregar",
+        "title": "Agregar una integración",
+        "description": "Elige el tipo de integración.",
+        "created": "Se agregó {name}.",
+        "createFailed": "No se pudo agregar la integración.",
+        "formTitle": {
+          "mcp_server": "Agregar un servidor MCP",
+          "openapi": "Agregar una app OpenAPI",
+          "preset": "Agregar una app desde una plantilla",
+          "custom": "Agregar una app personalizada"
+        },
+        "kindDescription": {
+          "mcp_server": "Conecta un servidor MCP remoto mediante su URL.",
+          "openapi": "Crea acciones a partir de un esquema OpenAPI.",
+          "preset": "Conecta una app integrada, como GitHub o Slack.",
+          "custom": "Permite que Craft llame a un servicio HTTP que coincida con patrones de URL."
+        },
+        "openapi": {
+          "title": "Agregar una app OpenAPI"
+        },
+        "preset": {
+          "title": "Plantilla",
+          "placeholder": "Elige una plantilla",
+          "required": "Elige una plantilla.",
+          "loadFailed": "No se pudieron cargar las plantillas.",
+          "instructions": "Instrucciones de configuración",
+          "credentialRequired": "Agrega este valor."
+        },
+        "name": {
+          "title": "Nombre",
+          "placeholder": "Agrega un nombre",
+          "required": "Agrega un nombre."
+        },
+        "descriptionField": {
+          "title": "Descripción",
+          "placeholder": "Agrega una descripción"
+        },
+        "custom": {
+          "patterns": {
+            "title": "Patrones de URL",
+            "description": "Escribe un patrón de URL por línea, por ejemplo https://api.example.com/*.",
+            "placeholder": "https://api.example.com/*",
+            "required": "Agrega al menos un patrón de URL."
+          }
+        },
+        "mcp": {
+          "url": {
+            "title": "URL del servidor",
+            "placeholder": "https://example.com/mcp",
+            "error": "Introduce una URL de servidor válida."
+          },
+          "probe": {
+            "checking": "Comprobando el servidor…",
+            "public": "Se {count, plural, one {encontró # herramienta} other {encontraron # herramientas}}. El servidor no requiere inicio de sesión.",
+            "oauth": "El servidor usa inicio de sesión con OAuth.",
+            "authUnknown": "El servidor requiere inicio de sesión. Agrega un encabezado de clave de API u OAuth.",
+            "unreachable": "Onyx no puede acceder a este servidor. Comprueba la URL."
+          },
+          "transport": {
+            "title": "Transporte",
+            "streamableHttp": "HTTP transmisible",
+            "sse": "Eventos enviados por el servidor (SSE)"
+          },
+          "suggested": "Servidores sugeridos"
+        },
+        "owner": {
+          "title": "Propietario",
+          "personal": "Para mí",
+          "organization": "Para la organización",
+          "personalDescription": "Onyx coloca la integración en un complemento de tus Mis subidas. Puedes compartir el complemento más tarde.",
+          "organizationDescription": "Onyx coloca la integración en un complemento de la Biblioteca de la organización."
+        },
+        "back": "Atrás",
+        "submit": "Agregar",
+        "adding": "Agregando…"
+      },
+      "filters": {
+        "label": "Tipo de integración",
+        "all": "Todas",
+        "mcp_server": "Servidores MCP",
+        "api": "Apps"
+      },
+      "columns": {
+        "name": "Nombre",
+        "type": "Tipo",
+        "signIn": "Inicio de sesión",
+        "access": "Acceso",
+        "status": "Estado"
+      },
+      "empty": {
+        "title": "No hay integraciones",
+        "description": "Agrega un servidor MCP o una app para dar nuevas acciones a los agentes.",
+        "noResults": "No se encontraron integraciones",
+        "noResultsDescription": "Prueba con otro nombre o tipo."
+      },
+      "shape": {
+        "mcp_server": "Servidor MCP",
+        "openapi": "App OpenAPI",
+        "preset": "App",
+        "custom": "App personalizada"
+      },
+      "signInSummary": "{mode, select, none {Sin inicio de sesión} shared {{method, select, oauth2 {Cuenta de la organización (OAuth)} api_key {Clave de API de la organización} onyx_login {Inicio de sesión de Onyx} managed {Administrado por Onyx} other {Cuenta de la organización}}} individual {{method, select, oauth2 {Cada usuario (OAuth)} api_key {Cada usuario (clave de API)} onyx_login {Inicio de sesión de Onyx} managed {Administrado por Onyx} other {Cada usuario}}} other {Desconocido}}",
+      "access": {
+        "none": "No está en ningún complemento",
+        "many": "{count, plural, one {# complemento} other {# complementos}}",
+        "organization": "{plugin} (Biblioteca de la organización)",
+        "personal": "{plugin} (Mis subidas de {owner})"
+      },
+      "status": {
+        "needsSetup": "Requiere configuración",
+        "off": "Desactivada",
+        "needsReconnect": "Requiere reconexión",
+        "movingCredentials": "Moviendo credenciales",
+        "ready": "Lista"
+      },
+      "signIn": {
+        "mode": {
+          "title": "Modo de inicio de sesión",
+          "description": "Elige quién inicia sesión en el servicio.",
+          "none": "Sin inicio de sesión",
+          "shared": "Una cuenta para la organización",
+          "individual": "Cada usuario inicia sesión"
+        },
+        "method": {
+          "title": "Método de inicio de sesión",
+          "oauth2": "OAuth",
+          "apiKey": "Clave de API",
+          "onyxLogin": "Inicio de sesión de Onyx",
+          "managed": "Administrado por Onyx"
+        },
+        "header": {
+          "name": {
+            "title": "Nombre del encabezado",
+            "placeholder": "Agrega un nombre de encabezado",
+            "error": "Agrega un nombre de encabezado."
+          },
+          "value": {
+            "title": "Valor del encabezado",
+            "description": "Pon cada credencial entre llaves, por ejemplo {example}. Cada marcador se convierte en un campo de credencial.",
+            "placeholder": "Por ejemplo: {example}",
+            "error": "Agrega al menos un marcador, por ejemplo {example}."
+          }
+        },
+        "oauth": {
+          "providerMode": {
+            "title": "Cliente OAuth",
+            "manual": "Introducir los datos del cliente",
+            "discovery": "Registrar un cliente automáticamente",
+            "preset": "Usar el cliente de la plantilla"
+          },
+          "authorizationUrl": "URL de autorización",
+          "tokenUrl": "URL del token",
+          "urlPlaceholder": "https://",
+          "urlError": "Introduce una URL válida.",
+          "clientId": "ID de cliente",
+          "clientIdPlaceholder": "Agrega el ID de cliente",
+          "clientIdError": "Agrega un ID de cliente.",
+          "clientSecret": "Secreto de cliente",
+          "clientSecretPlaceholder": "Agrega el secreto de cliente",
+          "clientSecretSaved": "Guardado. Introduce un secreto nuevo para reemplazarlo.",
+          "scopes": {
+            "title": "Ámbitos",
+            "description": "Separa los ámbitos con espacios.",
+            "placeholder": "Por ejemplo: read write"
+          }
+        }
+      },
+      "detail": {
+        "title": "Integración",
+        "back": "Todas las integraciones",
+        "notFound": "Esta integración no existe o no tienes permiso para verla.",
+        "loadFailed": "No se pudo cargar esta integración.",
+        "tabs": {
+          "overview": "Resumen",
+          "configuration": "Configuración",
+          "actions": "Acciones"
+        },
+        "overview": {
+          "readOnly": "Puedes ver esta integración, pero no puedes cambiarla.",
+          "noDescription": "Sin descripción",
+          "type": "Tipo",
+          "signIn": "Inicio de sesión",
+          "createdBy": "Agregada por",
+          "needsSetup": "Requiere configuración",
+          "needsSetupDefault": "Completa la configuración de inicio de sesión en la pestaña Configuración.",
+          "plugins": {
+            "title": "Complementos",
+            "description": "Las personas obtienen esta integración mediante estos complementos.",
+            "organization": "{policy, select, REQUIRED {Biblioteca de la organización, obligatorio} DEFAULT {Biblioteca de la organización, activado de forma predeterminada} AVAILABLE {Biblioteca de la organización, disponible} NOT_AVAILABLE {Biblioteca de la organización, no disponible} other {Biblioteca de la organización}}",
+            "personal": "Mis subidas de {owner}",
+            "manage": "Administrar complementos"
+          },
+          "enabled": {
+            "title": "Activada",
+            "description": "Si está desactivada, ningún agente ni usuario puede usar la integración."
+          },
+          "delete": {
+            "title": "Eliminar integración",
+            "description": "Quita la integración de cada complemento y elimina sus conexiones y la configuración de sus acciones.",
+            "label": "Eliminar",
+            "confirmTitle": "¿Eliminar {name}?",
+            "confirmDescription": "Onyx quita la integración de cada complemento y elimina sus conexiones y la configuración de sus acciones. Esta acción no se puede deshacer.",
+            "confirm": "Eliminar"
+          },
+          "deleted": "Se eliminó {name}.",
+          "deleteFailed": "No se pudo eliminar la integración.",
+          "saveFailed": "No se pudo guardar el cambio."
+        },
+        "configuration": {
+          "readOnly": "Puedes ver esta integración, pero no puedes cambiarla.",
+          "connection": {
+            "title": "Conexión",
+            "serverUrl": "URL del servidor",
+            "serverUrlError": "Introduce una URL de servidor válida.",
+            "urlPatterns": "Patrones de URL",
+            "urlPatternsDescription": "Escribe un patrón de URL por línea."
+          },
+          "signIn": {
+            "title": "Inicio de sesión",
+            "description": "Si cambias el método de inicio de sesión, el cliente, las URL o los ámbitos, cada usuario debe volver a conectarse."
+          },
+          "alwaysAllow": {
+            "title": "Los usuarios pueden guardar «Permitir siempre»",
+            "description": "Permite que cada usuario omita la solicitud de aprobación en una acción configurada como «Preguntar»."
+          },
+          "save": "Guardar",
+          "saving": "Guardando…",
+          "saved": "Se guardó la configuración.",
+          "saveFailed": "No se pudo guardar la configuración.",
+          "organization": {
+            "title": "Conexión de la organización",
+            "description": "Cada usuario actúa con esta cuenta.",
+            "state": "{state, select, connected {Conectada} not_connected {No conectada} needs_reconnect {Requiere reconexión} not_set_up {Sin configurar} other {Desconocido}}",
+            "connect": "Conectar",
+            "disconnect": "Desconectar",
+            "connected": "Se conectó la cuenta de la organización.",
+            "disconnected": "Se desconectó la cuenta de la organización.",
+            "failed": "No se pudo cambiar la conexión de la organización."
+          }
+        },
+        "actions": {
+          "loadFailed": "No se pudieron cargar las acciones.",
+          "retry": "Reintentar",
+          "search": "Buscar acciones",
+          "refresh": "Actualizar",
+          "refreshed": "Se actualizaron las acciones.",
+          "refreshFailed": "No se pudieron actualizar las acciones.",
+          "save": "Guardar",
+          "saving": "Guardando…",
+          "saved": "Se guardó la configuración de las acciones.",
+          "saveFailed": "No se pudo guardar la configuración de las acciones.",
+          "default": {
+            "title": "Valor predeterminado para acciones nuevas",
+            "description": "Cada acción sin configuración propia usa este valor. Las acciones que la integración agregue más tarde también lo usan.",
+            "unset": "Sin definir. Cada acción usa su propio valor predeterminado.",
+            "clear": "Borrar"
+          },
+          "usesDefault": "Usa el predeterminado",
+          "setByAdmin": "Definido por el administrador",
+          "useDefaults": "Usar predeterminados",
+          "readOnly": "Acciones de solo lectura ({count})",
+          "write": "Acciones de escritura ({count})",
+          "empty": "Esta integración no tiene acciones.",
+          "connectFirst": {
+            "title": "Conecta primero el servidor",
+            "description": "Onyx carga las acciones de un servidor MCP después de que el servidor se conecta.",
+            "open": "Abrir Configuración"
+          }
+        }
+      }
     }
   },
   "agents": {
@@ -14631,10 +14932,10 @@
         },
         "permissions": {
           "askOption": "Preguntar",
-          "autoApproveOption": "Aprobar automáticamente",
+          "autoApproveOption": "Permitir",
           "customOption": "Personalizado",
           "defaultOption": "Predeterminado",
-          "description": "Elige qué puede hacer el agente. «Preguntar» solicita aprobación antes de cada acción; «Aprobar automáticamente» la ejecuta sin preguntar.",
+          "description": "Elige qué puede hacer el agente. «Preguntar» solicita aprobación antes de cada acción; «Permitir» la ejecuta sin preguntar.",
           "title": "Permisos"
         },
         "savingButton": "Guardando…",
@@ -16762,9 +17063,6 @@
         "customAnalytics": {
           "label": "Analíticas personalizadas"
         },
-        "discordIntegration": {
-          "label": "Integración con Discord"
-        },
         "documentSets": {
           "label": "Conjuntos de documentos"
         },
@@ -16798,12 +17096,6 @@
         "plugins": {
           "label": "Plugins"
         },
-        "mcpActions": {
-          "label": "Acciones MCP"
-        },
-        "openapiActions": {
-          "label": "Acciones OpenAPI"
-        },
         "plansAndBilling": {
           "label": "Planes y facturación"
         },
@@ -16818,9 +17110,6 @@
         },
         "serviceAccounts": {
           "label": "Cuentas de servicio"
-        },
-        "slackIntegration": {
-          "label": "Integración con Slack"
         },
         "ssoProviders": {
           "label": "Proveedores de SSO"
@@ -16848,20 +17137,23 @@
         },
         "spendingLimits": {
           "label": "Límites de gasto"
+        },
+        "integrations": {
+          "label": "Integraciones"
+        },
+        "slackBot": {
+          "label": "Bot de Slack"
+        },
+        "discordBot": {
+          "label": "Bot de Discord"
         }
       },
       "sections": {
-        "agentsAndActions": {
-          "label": "Agentes y acciones"
-        },
         "craft": {
           "label": "Craft"
         },
         "documentsAndKnowledge": {
           "label": "Documentos y conocimiento"
-        },
-        "integrations": {
-          "label": "Integraciones"
         },
         "organization": {
           "label": "Organización"
@@ -16871,6 +17163,12 @@
         },
         "usage": {
           "label": "Uso"
+        },
+        "agentsAndPlugins": {
+          "label": "Agentes y complementos"
+        },
+        "channels": {
+          "label": "Canales"
         }
       }
     },

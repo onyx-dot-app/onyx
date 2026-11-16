@@ -2,17 +2,19 @@
 
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
+import { Section } from "@opal/layouts";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
 interface PolicyToggleProps {
-  value: ActionPolicy;
+  /** `null` presses no button, for a value that is not set. */
+  value: ActionPolicy | null;
   disabled?: boolean;
   label?: string;
   onChange: (value: ActionPolicy) => void;
 }
 
-/** Three-state approval policy selector, shared by per-action and
- * per-tool policy rows. */
+/** Three-state approval policy selector (Allow, Ask, Blocked), shared by
+ * per-action and per-tool policy rows. */
 export default function PolicyToggle({
   value,
   onChange,
@@ -28,7 +30,15 @@ export default function PolicyToggle({
   ];
 
   return (
-    <div className="flex gap-1 shrink-0" role="group" aria-label={label}>
+    <Section
+      flexDirection="row"
+      width="auto"
+      height="auto"
+      gap={1}
+      className="shrink-0"
+      role="group"
+      aria-label={label}
+    >
       {policyOptions.map((option) => (
         <Button
           key={option.value}
@@ -41,6 +51,6 @@ export default function PolicyToggle({
           {option.label}
         </Button>
       ))}
-    </div>
+    </Section>
   );
 }

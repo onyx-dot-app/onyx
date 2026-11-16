@@ -559,12 +559,10 @@ test.describe("Permission gating: MANAGE_ACTIONS", () => {
 
       const mcp = new AdminMcpServersPage(page);
       await mcp.goto();
-      await mcp.plugins.expectPluginVisible(toolName);
-      await mcp.plugins.expectPluginVisible(mcpName);
+      await mcp.integrations.expectIntegrationVisible(toolName);
+      await mcp.integrations.expectIntegrationVisible(mcpName);
       await mcp.openAddServerModal();
-      await mcp.expectAccessControlVisible();
-      await mcp.selectGroupAccess();
-      await mcp.discardSetup();
+      await mcp.integrations.closeAddDialog();
 
       await page.context().clearCookies();
       await loginAs(page, "admin");

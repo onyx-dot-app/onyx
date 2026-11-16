@@ -62,7 +62,7 @@
   the root does
   ([[#chat-approval-needs-waiting-client]]). The upgrade
   migration (`backend/alembic/versions/7c00f53ab75f_chat_tool_approvals.py`)
-  writes Auto-approve for tools that exist then on servers not available in
+  writes Allow for tools that exist then on servers not available in
   Craft, and on every server when the tenant has no `build_session` row (it
   never used Craft); it keeps existing policies. Craft servers of a tenant that
   used Craft keep their policies, and new tools use their default. Older clients (mobile builds, CLI versions and pinned widgets from

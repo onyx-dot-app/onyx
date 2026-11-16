@@ -1132,7 +1132,7 @@ export default function ChatPreferencesPage() {
                       variant="info"
                       title={markdown(
                         t("tools.pluginsNote", {
-                          url: ADMIN_ROUTES.PLUGINS.path,
+                          url: ADMIN_ROUTES.INTEGRATIONS.path,
                         })
                       )}
                     />

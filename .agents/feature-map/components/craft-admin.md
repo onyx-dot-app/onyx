@@ -25,7 +25,7 @@ task, the next fire records a skipped run instead of running
 
 **Plugins.** The admin sees built-in apps, custom apps and MCP servers on one
 Plugins page. For each one the admin can turn it on or off for Craft, set
-credentials, and set a policy per action: Auto-approve
+credentials, and set a policy per action: Allow
 (`ALWAYS`), Ask (`ASK`) or Disabled (`DENY`). A switch decides whether users
 may override the workspace policy with their own choices. When the agent later
 tries a Disabled action, the call fails with a policy error. When it tries an
@@ -152,9 +152,8 @@ then the chat default.
 4. `two-gates-one-policy-table` **Two permission gates write the same policy
    tables.** External-app policies need `FULL_ADMIN_PANEL_ACCESS`. MCP policies
    need `MANAGE_ACTIONS`, and a group-scoped action manager may write them for
-   its servers. `web/src/lib/plugins/hooks.ts:useInstalledPlugins` must not
-   fetch the external-app admin list (organization credentials) for a user
-   without full admin access.
+   its servers. The admin pages read apps only through
+   `GET /admin/integrations`, which returns no organization credentials.
 5. `save-paths-refresh-differently` **The save paths refresh sandboxes
    differently.** The external-app PATCH commits, then calls
    `skills/push.py:push_skills_for_users` so the skill file lists DENY actions as
