@@ -276,6 +276,11 @@ export default function BuildMessageList({
             key={block.id}
             entries={block.entries}
             autoCollapse={followedByMessage}
+            // As in chat, a run works until its end marker: anything after
+            // it, or the end of the turn. Between two calls it still works.
+            isActive={
+              opts.isCurrentStream && isStreaming && idx === blocks.length - 1
+            }
           />
         );
       }

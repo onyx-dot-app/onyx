@@ -111,12 +111,15 @@ interface CraftTimelineProps {
   entries: CraftTimelineEntry[];
   /** Fold the run closed once an assistant message follows it. */
   autoCollapse?: boolean;
+  /** The run still works: it is the live turn's last item. */
+  isActive?: boolean;
 }
 
 /** One run of a Craft turn, on the shared run card. */
 export default function CraftTimeline({
   entries,
   autoCollapse = false,
+  isActive = false,
 }: CraftTimelineProps) {
   const t = useTranslations("craft.toolCards.group");
   return (
@@ -124,6 +127,7 @@ export default function CraftTimeline({
       steps={entries}
       workingText={t("working.label")}
       autoCollapse={autoCollapse}
+      isActive={isActive || entries.some((e) => e.status === "streaming")}
       renderStep={(entry, position) => (
         <CraftTimelineStep
           entry={entry}
