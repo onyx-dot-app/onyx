@@ -961,22 +961,19 @@ def upgrade() -> None:
     if not sa.inspect(bind).has_table("integration", schema=schema):
         _create_tables()
         _copy_integrations()
-    # Validate only after the ALTER TABLE locks are released. env.py owns the
-    # transaction, so Alembic's autocommit_block cannot be used.
+    # Validate only after the ALTER TABLE locks are released.
     bind.commit()
     quoted_schema = bind.dialect.identifier_preparer.quote_identifier(schema)
-    with bind.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        conn.exec_driver_sql(f"SET lock_timeout = '{LOCK_TIMEOUT}'")
-        # A plain SET outlives the transaction on this connection. Reset it so
-        # a pooled connection does not carry the timeout to its next user.
-        try:
-            for table in RECORD_TABLES:
+    with bind.engine.connect() as conn:
+        for table in RECORD_TABLES:
+            # SET LOCAL stays with its transaction, also behind a pooler in
+            # transaction mode.
+            with conn.begin():
+                conn.exec_driver_sql(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'")
                 conn.exec_driver_sql(
                     f"ALTER TABLE {quoted_schema}.{table} "
                     f"VALIDATE CONSTRAINT fk_{table}_integration_id"
                 )
-        finally:
-            conn.exec_driver_sql("RESET lock_timeout")
 
 
 def downgrade() -> None:
