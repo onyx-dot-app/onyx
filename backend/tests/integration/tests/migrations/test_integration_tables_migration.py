@@ -32,6 +32,8 @@ from onyx.db.plugin import (
     publish_plugin__no_commit,
 )
 from onyx.db.users import delete_user_from_db__no_commit
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
 PREVIOUS_REVISION = "7c00f53ab75f"
@@ -1023,6 +1025,19 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             ).scalar_one()
             == public.id
         )
+        # Each record foreign key is validated after the copy commits.
+        assert set(
+            conn.execute(
+                text(
+                    "SELECT conname FROM pg_constraint "
+                    "WHERE conname LIKE 'fk_%_integration_id' AND convalidated"
+                )
+            ).scalars()
+        ) >= {
+            "fk_action_receipt_integration_id",
+            "fk_action_approval_integration_id",
+            "fk_approval_request_integration_id",
+        }
 
 
 def test_downgrade_then_upgrade_gives_the_same_rows(
@@ -1187,30 +1202,45 @@ def test_publishing_a_skill_named_like_an_integration(
             ),
             {"t": seeded.custom_shared},
         ).scalar_one()
-    skill_id = uuid4()
-    with Session(engine) as db_session:
-        skill = Skill(
-            id=skill_id,
-            name=integration_name,
-            description="",
-            bundle_file_id=f"u1-{skill_id.hex}",
-            bundle_sha256="0" * 64,
-            author_user_id=seeded.other,
-        )
-        db_session.add(skill)
-        db_session.flush()
-        create_skill_plugin__no_commit(
-            skill, legacy_skill_version_content(skill), None, db_session
-        )
-        publish_plugin__no_commit(skill_id, "raise", db_session)
-        db_session.commit()
+    skill_ids = [uuid4(), uuid4()]
 
-    with engine.begin() as conn:
-        plugin = conn.execute(
-            text("SELECT name, marketplace_id FROM plugin WHERE id = :id"),
-            {"id": skill_id},
-        ).one()
+    def publish(skill_id: UUID) -> None:
+        with Session(engine) as db_session:
+            skill = Skill(
+                id=skill_id,
+                name=integration_name,
+                description="",
+                bundle_file_id=f"u1-{skill_id.hex}",
+                bundle_sha256="0" * 64,
+                author_user_id=seeded.other,
+            )
+            db_session.add(skill)
+            db_session.flush()
+            create_skill_plugin__no_commit(
+                skill, legacy_skill_version_content(skill), None, db_session
+            )
+            publish_plugin__no_commit(skill_id, "raise", db_session)
+            db_session.commit()
+
+    try:
+        publish(skill_ids[0])
+        with engine.connect() as conn:
+            plugin = conn.execute(
+                text("SELECT name, marketplace_id FROM plugin WHERE id = :id"),
+                {"id": skill_ids[0]},
+            ).one()
         assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
         assert plugin.name == f"{integration_name}-2"
-        conn.execute(text("DELETE FROM plugin WHERE id = :id"), {"id": skill_id})
-        conn.execute(text("DELETE FROM skill WHERE id = :id"), {"id": skill_id})
+        # The first skill holds the name behind the "-2" label, so a second
+        # skill with the name is refused.
+        with pytest.raises(OnyxError) as refused:
+            publish(skill_ids[1])
+        assert refused.value.error_code == OnyxErrorCode.CONFLICT
+    finally:
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM plugin WHERE id = ANY(:ids)"), {"ids": skill_ids}
+            )
+            conn.execute(
+                text("DELETE FROM skill WHERE id = ANY(:ids)"), {"ids": skill_ids}
+            )

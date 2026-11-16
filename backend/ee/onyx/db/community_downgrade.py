@@ -281,6 +281,19 @@ def _make_group_shared_resources_public__no_commit(
         logger.info(
             "Community downgrade published plugin %s to the organization", plugin_id
         )
+    # A Not available integration in the Organization library reaches only
+    # its shares: its owner was deleted. Make it available, as the downgrade
+    # makes a group-shared MCP server public.
+    db_session.execute(
+        update(Plugin)
+        .where(
+            Plugin.id.in_(shared_plugin_ids),
+            Plugin.marketplace_id == library_id,
+            Plugin.installation_policy == PluginInstallationPolicy.NOT_AVAILABLE,
+            ~select(Skill.id).where(Skill.id == Plugin.id).exists(),
+        )
+        .values(installation_policy=PluginInstallationPolicy.AVAILABLE)
+    )
 
 
 def _add_to_default_group__no_commit(

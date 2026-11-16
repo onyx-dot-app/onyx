@@ -52,6 +52,7 @@ from onyx.db.models import (
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.plugin import (
     create_skill_plugin__no_commit,
+    get_or_create_organization_library__no_commit,
     get_or_create_user_uploads__no_commit,
     legacy_skill_version_content,
 )
@@ -414,6 +415,61 @@ def test_group_shared_integration_is_published(db_session: Session) -> None:
         db_session.refresh(plugin)
         assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
         assert plugin.published_version_id == plugin.current_version_id
+    finally:
+        db_session.rollback()
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_group_shared_library_integration_becomes_available(
+    db_session: Session,
+) -> None:
+    """An integration whose owner was deleted is in the Organization library
+    as Not available, with its shares. The downgrade makes it available, so
+    the members of the removed group keep it."""
+    try:
+        owner = _make_user(db_session, in_basic=True)
+        group = _make_group(db_session, [owner])
+        plugin_id = uuid4()
+        db_session.add(
+            Plugin(
+                id=plugin_id,
+                name=f"downgrade-mcp-{plugin_id.hex[:8]}",
+                description="",
+                marketplace_id=get_or_create_organization_library__no_commit(
+                    db_session
+                ),
+                installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
+                current_version_id=plugin_id,
+                published_version_id=plugin_id,
+            )
+        )
+        db_session.flush()
+        db_session.add(
+            PluginVersion(id=plugin_id, plugin_id=plugin_id, version_number=1)
+        )
+        db_session.add(
+            Integration(
+                kind=IntegrationKind.MCP_SERVER,
+                name="downgrade-mcp",
+                plugin_id=plugin_id,
+                auth_mode=IntegrationAuthMode.NONE,
+            )
+        )
+        db_session.add(
+            Plugin__UserGroup(
+                plugin_id=plugin_id,
+                user_group_id=group.id,
+                permission=SkillSharePermission.VIEWER,
+            )
+        )
+        db_session.flush()
+
+        remove_custom_user_groups__no_commit(db_session)
+
+        plugin = db_session.get(Plugin, plugin_id)
+        assert plugin is not None
+        db_session.refresh(plugin)
+        assert plugin.installation_policy == PluginInstallationPolicy.AVAILABLE
     finally:
         db_session.rollback()
 

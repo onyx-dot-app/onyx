@@ -28,6 +28,8 @@ ORGANIZATION_LIBRARY_ID = "00000000-0000-4000-8000-00000000011b"
 RECORD_TABLES = ("action_receipt", "action_approval", "approval_request")
 # The table of each kind, which points at its integration.
 KIND_TABLES = ("mcp_server", "external_app", "tool")
+# The wait for the lock of each VALIDATE CONSTRAINT.
+LOCK_TIMEOUT = "60s"
 # Created-at of a row whose source has no timestamp (tool rows have none).
 FALLBACK_CREATED_AT = "2026-11-13 00:00:00+00"
 
@@ -302,8 +304,9 @@ def _create_tables() -> None:
 
     for table in RECORD_TABLES:
         op.add_column(table, sa.Column("integration_id", sa.Integer(), nullable=True))
-        # NOT VALID: no scan of the old rows under a lock. The constraint still
-        # checks each new or changed row, so the backfill below is checked too.
+        # NOT VALID: no scan of the old rows under the ALTER TABLE lock. The
+        # constraint still checks each new or changed row, so the backfill
+        # below is checked too. upgrade() validates it after the commit.
         op.create_foreign_key(
             f"fk_{table}_integration_id",
             table,
@@ -951,8 +954,29 @@ def _copy_integrations() -> None:
 
 
 def upgrade() -> None:
-    _create_tables()
-    _copy_integrations()
+    bind = op.get_bind()
+    schema: str = bind.execute(sa.text("SELECT current_schema()")).scalar_one()
+    # The tables and the copy commit together. A retry after that commit skips
+    # them and only validates.
+    if not sa.inspect(bind).has_table("integration", schema=schema):
+        _create_tables()
+        _copy_integrations()
+    # Validate only after the ALTER TABLE locks are released. env.py owns the
+    # transaction, so Alembic's autocommit_block cannot be used.
+    bind.commit()
+    quoted_schema = bind.dialect.identifier_preparer.quote_identifier(schema)
+    with bind.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql(f"SET lock_timeout = '{LOCK_TIMEOUT}'")
+        # A plain SET outlives the transaction on this connection. Reset it so
+        # a pooled connection does not carry the timeout to its next user.
+        try:
+            for table in RECORD_TABLES:
+                conn.exec_driver_sql(
+                    f"ALTER TABLE {quoted_schema}.{table} "
+                    f"VALIDATE CONSTRAINT fk_{table}_integration_id"
+                )
+        finally:
+            conn.exec_driver_sql("RESET lock_timeout")
 
 
 def downgrade() -> None:

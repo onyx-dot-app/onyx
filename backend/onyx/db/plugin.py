@@ -26,7 +26,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -642,6 +642,32 @@ def lock_skill_plugin__no_commit(skill: Skill, db_session: Session) -> Plugin:
     return plugin
 
 
+def _skill_name_is_taken(
+    marketplace_id: UUID, skill_name: str, plugin_id: UUID, db_session: Session
+) -> bool:
+    """True when another plugin of the marketplace holds a skill with this
+    name in its current or published version."""
+    return (
+        db_session.scalar(
+            select(Plugin.id)
+            .join(
+                PluginSkill,
+                or_(
+                    PluginSkill.plugin_version_id == Plugin.current_version_id,
+                    PluginSkill.plugin_version_id == Plugin.published_version_id,
+                ),
+            )
+            .where(
+                Plugin.marketplace_id == marketplace_id,
+                Plugin.id != plugin_id,
+                PluginSkill.frontmatter["name"].astext == skill_name,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def _move_plugin__no_commit(
     *,
     plugin: Plugin,
@@ -657,11 +683,8 @@ def _move_plugin__no_commit(
             PluginSkill.plugin_version_id == plugin.current_version_id
         )
     ).all()
-    preferred = (
-        rows[0][1]
-        if is_skill_version(path for path, _ in rows) and rows[0][1]
-        else plugin.name
-    )
+    skill_name = rows[0][1] if is_skill_version(path for path, _ in rows) else None
+    preferred = skill_name or plugin.name
     # A concurrent writer can take the chosen name before this move commits.
     # "rename" then picks the next free name again.
     for attempt in range(1, _RENAME_ATTEMPTS + 1):
@@ -682,7 +705,17 @@ def _move_plugin__no_commit(
                 )
                 is not None
             )
-            if on_name_clash == "raise" and not holder_is_integration:
+            # Behind that home plugin, a skill with this name can hold a
+            # "-2" label, and that skill does clash.
+            if on_name_clash == "raise" and (
+                not holder_is_integration
+                or (
+                    skill_name is not None
+                    and _skill_name_is_taken(
+                        marketplace_id, skill_name, plugin.id, db_session
+                    )
+                )
+            ):
                 raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name))
             name = free_plugin_name(marketplace_id, name, db_session)
         try:

@@ -532,7 +532,8 @@ The library preview of an external-app skill calls the same renderer
     `plugin_skill` or `skill` must be an outer join or filter on purpose. A
     name held by a home plugin does not block a skill publish or transfer:
     the skill's plugin label takes a free name
-    (`db/plugin.py:_move_plugin__no_commit`). No foreign key checks the
+    (`db/plugin.py:_move_plugin__no_commit`), unless another skill of the
+    marketplace already has that skill name. No foreign key checks the
     version pointers (`current_version_id`, `published_version_id`,
     `pending_version_id`); write them only through `db/plugin.py`, which sets
     them to a version of the same plugin.
