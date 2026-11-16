@@ -6,6 +6,9 @@ locals {
     { "onyx.app/workload" = "sandbox" },
     local.sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
   )
+  # The Craft pools this module makes whose first workloads are DaemonSets;
+  # see initial_node_count. A caller's own pool of the same name is not one.
+  daemonset_first_pools = local.sandbox_firecracker ? concat(["sandbox"], var.enable_craft_pod_sandbox_node_pool ? ["sandboxpod"] : []) : []
   # Kubelet does not count microVM memory, so a Firecracker pool also carries
   # the onyx.app/kvm taint. Only the host agent and preflight tolerate it.
   sandbox_node_taints = concat(
@@ -264,8 +267,11 @@ resource "google_container_node_pool" "this" {
   # makes one node in each zone of an untainted pool. A tainted pool starts
   # empty: only pods that ask for it can use it, and those pods make the
   # autoscaler add a node. That keeps a regional GPU pool from asking for a
-  # GPU in every zone before it settles to one.
-  initial_node_count = length(each.value.taints) == 0 && each.value.min_count > 0 ? 1 : 0
+  # GPU in every zone before it settles to one. The Craft pools beside
+  # Firecracker are the exception: their first workloads are DaemonSets (host
+  # agent, image prepuller), which never make the autoscaler add a node, and
+  # GKE does not scale an empty pool up to its minimum.
+  initial_node_count = each.value.min_count > 0 && (length(each.value.taints) == 0 || contains(local.daemonset_first_pools, each.key)) ? 1 : 0
 
   # The totals count the whole pool. The per-zone form would triple every
   # number on a regional cluster.
