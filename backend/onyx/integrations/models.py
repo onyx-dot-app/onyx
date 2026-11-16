@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, InstanceOf
 
@@ -7,6 +8,7 @@ from onyx.db.enums import (
     ExternalAppType,
     IntegrationActionPolicyValue,
     IntegrationActionSource,
+    IntegrationAuthMethod,
     MCPTransport,
 )
 from onyx.external_apps.providers.base import ExternalAppProvider
@@ -88,3 +90,68 @@ class Preset(BaseModel):
     app_type: ExternalAppType
     name: str
     provider: InstanceOf[ExternalAppProvider]
+
+
+class LinkValue(str, Enum):
+    """The setting of one action on an agent or a task link."""
+
+    INHERIT = "inherit"
+    ALLOW = "allow"
+    ASK = "ask"
+    BLOCKED = "blocked"
+
+
+class EffectivePolicy(str, Enum):
+    """What happens when a run calls an action."""
+
+    ALLOW = "allow"
+    ASK = "ask"
+    BLOCKED = "blocked"
+
+
+# Stricter results rank higher.
+POLICY_STRICTNESS: dict[EffectivePolicy, int] = {
+    EffectivePolicy.ALLOW: 0,
+    EffectivePolicy.ASK: 1,
+    EffectivePolicy.BLOCKED: 2,
+}
+
+
+class ApprovalMode(str, Enum):
+    """Who can answer an Ask in a run."""
+
+    # A person sees the approval card.
+    INTERACTIVE = "interactive"
+    # A Slack or Discord bot run: no person can answer, so Ask is Blocked.
+    NO_APPROVER = "no_approver"
+    # An eval run: Ask runs with no question.
+    RUN_WITHOUT_ASKING = "run_without_asking"
+
+
+class ActionSettings(BaseModel):
+    """The ``action_settings`` of a ``persona__plugin`` or
+    ``scheduled_task__plugin`` row. ``{}`` inherits each action."""
+
+    model_config = ConfigDict(frozen=True)
+
+    default: LinkValue = LinkValue.INHERIT
+    actions: dict[str, LinkValue] = {}
+
+    def value_for(self, action_key: str) -> LinkValue:
+        return self.actions.get(action_key, self.default)
+
+
+class CallCredentials(BaseModel):
+    """What one call of an integration action sends."""
+
+    model_config = ConfigDict(frozen=True)
+
+    integration_id: int
+    auth_method: IntegrationAuthMethod | None
+    # The connection row the credential comes from. None for no sign-in and
+    # for the Onyx login.
+    connection_id: int | None
+    # The user of that connection; None for the organization connection.
+    connection_user_id: UUID | None
+    # The rendered header template, with the bearer token of a token method.
+    headers: dict[str, str]

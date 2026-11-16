@@ -38,6 +38,7 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     normalized_request_path,
     parse_target,
 )
+from onyx.server.features.mcp.models import merge_mcp_headers
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
@@ -237,17 +238,18 @@ class ApiKindHandler(IntegrationKindHandler):
             return []
         keys = {action.key for action in actions}
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            # The tool row id keeps the tool names of today.
-            tool_id=config.tool_id,
+            integration_id=integration.id,
             openapi_schema=config.openapi_spec,
-            custom_headers=header_dict_to_header_list(ctx.custom_headers),
+            # The credential wins over a request header of the same name.
+            custom_headers=header_dict_to_header_list(
+                merge_mcp_headers(ctx.additional_headers, ctx.credentials.headers)
+            ),
             dynamic_schema_info=DynamicSchemaInfo(
                 chat_session_id=ctx.chat_session_id,
                 message_id=ctx.message_id,
                 user_id=ctx.user_id,
                 user_email=ctx.user_email,
             ),
-            user_oauth_token=ctx.user_oauth_token,
             approval_for=ctx.approval_for,
         )
         return [tool for tool in tools if tool.action_key in keys]

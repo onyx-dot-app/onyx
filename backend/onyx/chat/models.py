@@ -45,6 +45,7 @@ from onyx.file_store.models import (
     FileDescriptor,
     FileToolMetadata,
 )
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import (
     GenerationRequestParams,
@@ -926,10 +927,10 @@ class ChatTurnSetup(BaseModel):
     litellm_additional_headers: dict[str, str] | None = None
     custom_tool_additional_headers: dict[str, str] | None
     mcp_headers: dict[str, str] | None
-    # False runs tools whose action policy asks for approval without asking,
-    # for a bot that cannot show approval requests. Only server-side callers
-    # set it; the public request has no such field.
-    ask_for_approval: bool = True
+    # Who answers an Ask: a person, nobody (a bot run, so Ask is Blocked), or
+    # nobody with no question (evals). Only server-side callers set it; the
+    # public request has no such field.
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE
     # The suspended response that this turn continues after its approvals,
     # under a new stream ID; None for a turn that starts a response.
     resumed_response_id: int | None = None

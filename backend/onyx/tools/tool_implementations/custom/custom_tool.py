@@ -89,13 +89,15 @@ _OPERATION_POSITION_KEY = "x-onyx-operation-position"
 
 
 class CustomTool(Tool):
+    """One operation of an OpenAPI integration. The caller renders the
+    credential into ``custom_headers``."""
+
     def __init__(
         self,
-        id: int,
+        integration_id: int,
         method_spec: MethodSpec,
         base_url: str,
         custom_headers: list[HeaderItemDict] | None = None,
-        user_oauth_token: str | None = None,
         approval: ToolApprovalScope | None = None,
         action_key: str | None = None,
     ) -> None:
@@ -105,11 +107,9 @@ class CustomTool(Tool):
         self.action_key = action_key or method_spec.raw_name
         self._base_url = base_url
         self._method_spec = method_spec
-        self._user_oauth_token = user_oauth_token
-        self._id = id
 
         self._name = normalize_external_tool_name(
-            f"custom__{id}__{method_spec.raw_name}"
+            f"custom__{integration_id}__{method_spec.raw_name}"
         )
         self._tool_definition = self._method_spec.to_tool_definition().model_copy(
             update={"name": self._name}
@@ -119,22 +119,10 @@ class CustomTool(Tool):
             header_list_to_header_dict(custom_headers) if custom_headers else {}
         )
 
-        # Check for both Authorization header and OAuth token
-        has_auth_header = any(
-            key.lower() == "authorization" for key in self.headers.keys()
-        )
-        if has_auth_header and self._user_oauth_token:
-            logger.warning(
-                "Tool '%s' has both an Authorization header and OAuth token set. This is likely a configuration error as the OAuth token will override the custom header.",
-                self._name,
-            )
-
-        if self._user_oauth_token:
-            self.headers["Authorization"] = f"Bearer {self._user_oauth_token}"
-
     @property
-    def id(self) -> int:
-        return self._id
+    def id(self) -> int | None:
+        # An integration action has no tool row.
+        return None
 
     @property
     def code_mode_exposure(self) -> CodeModeExposure:
@@ -352,11 +340,10 @@ class CustomTool(Tool):
 
 
 def build_custom_tools_from_openapi_schema_and_headers(
-    tool_id: int,
+    integration_id: int,
     openapi_schema: dict[str, Any],
     custom_headers: list[HeaderItemDict] | None = None,
     dynamic_schema_info: DynamicSchemaInfo | None = None,
-    user_oauth_token: str | None = None,
     approval_for: Callable[[str], ToolApprovalScope | None] | None = None,
 ) -> list[CustomTool]:
     """Build CustomTool instances from an OpenAPI schema.
@@ -410,11 +397,10 @@ def build_custom_tools_from_openapi_schema_and_headers(
         ]
         tools.append(
             CustomTool(
-                id=tool_id,
+                integration_id=integration_id,
                 method_spec=method_spec,
                 base_url=url,
                 custom_headers=custom_headers,
-                user_oauth_token=user_oauth_token,
                 approval=approval_for(action_key) if approval_for else None,
                 action_key=action_key,
             )

@@ -21,6 +21,7 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.users import get_or_create_slack_service_account, get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.models import ApprovalMode
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
 from onyx.onyxbot.slack.models import SlackMessageInfo, ThreadMessage
@@ -318,9 +319,9 @@ def handle_regular_answer(
                 user=onyx_user,
                 additional_context=slack_context_str,
                 slack_context=message_info.slack_context,
-                # TODO(wenxi-onyx): Slack cannot show approval
-                # requests yet, so its turns run the tools that would ask.
-                ask_for_approval=False,
+                # Slack cannot show approval requests, so an action that
+                # would ask is not offered.
+                approval_mode=ApprovalMode.NO_APPROVER,
             )
         finally:
             CURRENT_USER_ID_CONTEXTVAR.reset(token)

@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
+from onyx.integrations.models import CallCredentials
 from onyx.tools.models import ToolApprovalScope
 
 
@@ -17,17 +17,16 @@ class ChatToolContext(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    # The acting user; None for a caller with no user.
     user_id: UUID | None = None
     user_email: str | None = None
     chat_session_id: UUID | None = None
     message_id: int | None = None
-    # Headers for each OpenAPI request: the rendered credential and the
-    # caller's additional headers.
-    custom_headers: dict[str, str] = {}
-    # Sent as "Authorization: Bearer <token>" on each OpenAPI request.
-    user_oauth_token: str | None = None
-    # The MCP credentials of the acting user, or of the organization.
-    mcp_resolved_credentials: ResolvedMCPCredentials | None = None
+    # The rendered credential of the acting user or of the organization.
+    credentials: CallCredentials
+    # Request headers for each OpenAPI call.
+    additional_headers: dict[str, str] = {}
+    # Request headers for each MCP call.
     mcp_headers: dict[str, str] | None = None
     # The approval scope of an action that asks, None for one that runs.
     approval_for: Callable[[str], ToolApprovalScope | None] = _no_approval

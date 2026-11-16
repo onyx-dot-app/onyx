@@ -114,6 +114,7 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingPayload,
     QueryProcessingResponse,
 )
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.factory import (
     get_llm_for_persona,
     get_llm_token_counter,
@@ -283,7 +284,7 @@ def prepare_chat_turn(
     additional_context: str | None = None,
     queued_turn: QueuedChatTurn | None = None,
     agent_host: bool = False,
-    ask_for_approval: bool = True,
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
     resumed_response_id: int | None = None,
     parked_agent_response_id: int | None = None,
     handed_admission: ChatTurnAdmission | None = None,
@@ -733,7 +734,7 @@ def prepare_chat_turn(
                 datetime_aware=persona.datetime_aware,
                 replace_base_system_prompt=persona.replace_base_system_prompt,
             )
-            tool_configuration = capture_persona_tool_configuration(persona)
+            tool_configuration = capture_persona_tool_configuration(persona, db_session)
             previous_run_id = (
                 next(
                     (
@@ -915,7 +916,7 @@ def prepare_chat_turn(
             litellm_additional_headers=litellm_additional_headers,
             custom_tool_additional_headers=custom_tool_additional_headers,
             mcp_headers=mcp_headers,
-            ask_for_approval=ask_for_approval,
+            approval_mode=approval_mode,
             resumed_response_id=resumed_response_id,
         )
     except BaseException:
@@ -1284,7 +1285,7 @@ def _stream_chat_turn(
     slack_context: SlackContext | None = None,
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
-    ask_for_approval: bool = True,
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
 ) -> AnswerStream:
     """Prepare one request, then read its independently owned agent stream.
 
@@ -1306,7 +1307,7 @@ def _stream_chat_turn(
             mcp_headers=mcp_headers,
             slack_context=slack_context,
             additional_context=additional_context,
-            ask_for_approval=ask_for_approval,
+            approval_mode=approval_mode,
             on_reserved=saved_turn_packets.append,
         )
         stream = start_chat_turn(
@@ -1362,7 +1363,7 @@ def handle_stream_message_objects(
     slack_context: SlackContext | None = None,
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
-    ask_for_approval: bool = True,
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
 ) -> AnswerStream:
     """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
 
@@ -1381,7 +1382,7 @@ def handle_stream_message_objects(
         slack_context=slack_context,
         response_future=response_future,
         query_observation=query_observation,
-        ask_for_approval=ask_for_approval,
+        approval_mode=approval_mode,
     )
 
 
@@ -1395,7 +1396,7 @@ def handle_multi_model_stream(
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
     query_observation: QueryObservation | None = None,
-    ask_for_approval: bool = True,
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
 ) -> AnswerStream:
     """Stream independent responses from two or three selected models."""
     n_models = len(llm_overrides)
@@ -1421,7 +1422,7 @@ def handle_multi_model_stream(
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
-        ask_for_approval=ask_for_approval,
+        approval_mode=approval_mode,
     )
 
 
@@ -1549,7 +1550,7 @@ def run_chat_turn(
     mcp_headers: dict[str, str] | None = None,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
-    ask_for_approval: bool = True,
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
 ) -> ChatFullResponse:
     """Run one chat turn for in-process, non-streaming callers, to completion
     or until tool calls wait for the user's approval.
@@ -1566,6 +1567,6 @@ def run_chat_turn(
         additional_context=additional_context,
         slack_context=slack_context,
         response_future=response_future,
-        ask_for_approval=ask_for_approval,
+        approval_mode=approval_mode,
     )
     return gather_stream_full(packets, response_future)
