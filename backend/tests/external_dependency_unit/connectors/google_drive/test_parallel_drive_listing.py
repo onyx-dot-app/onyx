@@ -607,6 +607,69 @@ def test_files_shared_by_an_owner_whose_my_drive_fails_are_still_listed(
         assert listing.failures, "the denied listing was not reported"
 
 
+def test_shared_files_of_a_drive_that_fails_are_still_listed(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A shared-with-user listing drops a file of a shared drive whose
+    organizer listing began. If Drive then denies that listing, the drive
+    is incomplete, and the files that it shared with other users must still
+    come from their shared-with-user listings."""
+    own_mock_drive.set_corpus(_SHARDED_CORPUS)
+
+    lock = threading.Lock()
+    victim: list[str] = []
+    last_shared_with_fetch = [0.0]
+    drive_by_shared_file: dict[str, str] = {}
+    fetch_page = parallel_listing.ParallelDriveLister._fetch_page
+
+    def failing_fetch_page(
+        self: parallel_listing.ParallelDriveLister, shard: ListingShard
+    ) -> tuple[list[GoogleDriveFileType], str | None]:
+        kind = shard.partition.kind
+        if kind is ListingPartitionKind.SHARED_DRIVE:
+            with lock:
+                if not victim:
+                    victim.append(shard.partition.key)
+                is_victim = victim[0] == shard.partition.key
+            if is_victim:
+                # Fail after the shared-with-user listings read their pages.
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    with lock:
+                        last = last_shared_with_fetch[0]
+                    if last and time.monotonic() - last > 1.0:
+                        break
+                    time.sleep(0.05)
+                raise _denied_page()
+        files, next_token = fetch_page(self, shard)
+        if kind is ListingPartitionKind.SHARED_WITH_USER:
+            with lock:
+                last_shared_with_fetch[0] = time.monotonic()
+                for file in files:
+                    if file.get("driveId"):
+                        drive_by_shared_file[file["id"]] = file["driveId"]
+        return files, next_token
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister, "_fetch_page", failing_fetch_page
+    )
+    listing = list_with_resume(own_mock_drive.build_connector())
+
+    assert victim, "no shared drive partition ran"
+    shared_from_victim = {
+        file_id
+        for file_id, drive_id in drive_by_shared_file.items()
+        if drive_id == victim[0]
+    }
+    assert shared_from_victim, "the corpus shares no file of the failed drive"
+    missing = shared_from_victim - set(listing.file_ids)
+    assert not missing, (
+        f"{len(missing)} of {len(shared_from_victim)} shared files of the failed "
+        "drive were not listed"
+    )
+    assert listing.failures, "the denied listing was not reported"
+
+
 def test_a_denied_page_fails_pruning(
     mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
 ) -> None:

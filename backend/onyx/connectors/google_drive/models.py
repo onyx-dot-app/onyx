@@ -324,6 +324,10 @@ class ListingShard(BaseModel):
     # Lists only the files of this owner. Set on a shared-with-user shard
     # that lists again the files of an owner whose My Drive partition failed.
     owner_filter: str | None = None
+    # Keeps only the files of this shared drive. Set on a shared-with-user
+    # shard that lists again the files of a drive whose listing failed. Drive
+    # has no query term for it, so the filter runs on each page.
+    drive_filter: str | None = None
     # True when the shard has no upper bound: it lists every file modified at
     # t0 or later, and t1 is not used. Such a shard does not split.
     open_end: bool = False

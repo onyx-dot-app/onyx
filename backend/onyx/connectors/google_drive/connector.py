@@ -2603,6 +2603,10 @@ class GoogleDriveConnector(
                     break
                 last_pass = False
                 open_window_end(checkpoint.listing)
+                # A file that the first pass claimed and that was edited after
+                # it must be listed again, with its new permissions. The
+                # claims of the last pass still dedup inside it.
+                checkpoint.retrieved_drive_file_ids = set()
                 checkpoint.completion_stage = DriveRetrievalStage.START
             if for_pruning and checkpoint.unreachable_target_ids:
                 # Pruning deletes whatever this listing lacks, which for an
