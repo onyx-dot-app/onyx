@@ -203,6 +203,9 @@ the host agents and the sandbox proxy read the new files at the next connection.
 The kubelet can take up to 2 minutes to update the files in the pods. Instead of each restart,
 wait until every host agent pod and sandbox proxy pod has the changed files. For example, wait 2 minutes,
 or compare `ca.crt` in the pods with the Secret. Do not replace the leaf certificates before all pods trust both CAs.
+In the leaf step, keep the relay names instead of the host agent names:
+the DNS SAN that `craft.hostAgent.relayTls.serverName` names (or the sandbox proxy host) in the proxy certificate,
+and a SAN that `craft.hostAgent.relayTls.clientAllowedSans` accepts in the relay certificate.
 
 ## Rotate the registration value
 
