@@ -5,6 +5,9 @@ FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:e48f59cdba69a3cbd9ed
 
 WORKDIR /app
 
+# The pinned base image trails Debian security updates between digest bumps.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 # Keep pins in sync with the root pyproject.toml + uv.lock (reproducible builds).
 RUN pip install --no-cache-dir fastapi==0.136.3 uvicorn==0.49.0 tiktoken==0.13.0 prometheus-client==0.23.1
 
