@@ -45,6 +45,7 @@ func TestCheckRanges(t *testing.T) {
 		"transfer parallel":   func(f *flags) { f.transferPar = 65 },
 		"transfer part small": func(f *flags) { f.transferPart = 1024 },
 		"transfer part huge":  func(f *flags) { f.transferPart = 512 << 20 },
+		"guard grace":         func(f *flags) { f.guardGrace = -time.Second },
 	} {
 		f := ok
 		edit(&f)
@@ -66,6 +67,21 @@ func TestStartDrainWatchChecks(t *testing.T) {
 	} {
 		t.Setenv("KUBERNETES_SERVICE_HOST", "")
 		if _, err := startDrainWatch(context.Background(), f, nil, nil); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+func TestNewScaleDownGuardChecks(t *testing.T) {
+	if g, err := newScaleDownGuard(flags{}, nil, nil); err != nil || g != nil {
+		t.Fatalf("off: %v %v", g, err)
+	}
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	for name, f := range map[string]flags{
+		"no node name": {guardScale: true},
+		"not in a pod": {guardScale: true, nodeID: "n"},
+	} {
+		if _, err := newScaleDownGuard(f, nil, nil); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}

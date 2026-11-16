@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
@@ -187,9 +188,13 @@ type Manager struct {
 	// releases run when a VM stops or exits, after the egress detach and
 	// before the VM's vsock socket and jailer UID are freed.
 	releases []func(VM)
+	// admits run when a Create or a template build takes a VM slot.
+	admits []func()
 	// adopter rescans the processes for the doubt rules (doubt.go).
 	adopter Adopter
 	scanMu  sync.Mutex
+	// guardScan is set while a ScaleDownHolds scan runs.
+	guardScan atomic.Bool
 
 	mu      sync.Mutex
 	vms     map[string]*entry
@@ -235,6 +240,17 @@ func (m *Manager) UseEgress(e Egress) { m.egress = e }
 // OnRelease adds f to the functions that run for a VM that stops, exits or
 // fails to start. Call it before Recover and before the API serves.
 func (m *Manager) OnRelease(f func(VM)) { m.releases = append(m.releases, f) }
+
+// OnAdmit adds f to the functions that run when a Create admits a new VM
+// or a template build takes a slot. f must not block or call the Manager.
+// Call it before Recover and before the API serves.
+func (m *Manager) OnAdmit(f func()) { m.admits = append(m.admits, f) }
+
+func (m *Manager) admitted() {
+	for _, f := range m.admits {
+		f()
+	}
+}
 
 // release removes everything that names the VM: first its relay identity
 // and relay connections, then the OnRelease users (the daemon pass-through).
@@ -445,6 +461,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 		starting.Prev = t.record()
 	}
 	m.mu.Unlock()
+	m.admitted()
 
 	// The start must finish or clean up even if the caller goes away.
 	startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), m.cfg.StartTimeout)
@@ -604,6 +621,50 @@ func (m *Manager) vmSlotsUsedLocked() int {
 	n := m.liveVMsLocked() + len(m.building)
 	for _, d := range m.doubt {
 		n += max(1, len(d.uids))
+	}
+	return n
+}
+
+// scaleDownScanWait bounds how long ScaleDownHolds waits for a process scan.
+var scaleDownScanWait = 5 * time.Second
+
+// ScaleDownHolds counts what keeps the node from scale-down: the VM slots in
+// use (starting and running VMs, template build VMs and processes in
+// doubt), plus one while no process scan has worked. With processes in
+// doubt or no scan that worked, it scans the processes first, so a doubt
+// whose process exited stops holding the node. A scan that does not end
+// within scaleDownScanWait goes on in the background, and the count has one
+// more hold.
+func (m *Manager) ScaleDownHolds() int {
+	m.mu.Lock()
+	need := len(m.doubt) > 0 || m.needScan
+	m.mu.Unlock()
+	extra := 0
+	if need && m.adopter != nil && m.guardScan.CompareAndSwap(false, true) {
+		done := make(chan struct{})
+		go func() {
+			// Clear the flag first, so a caller that wakes on done can scan.
+			defer close(done)
+			defer m.guardScan.Store(false)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := m.rescan(ctx); err != nil {
+				m.log.Error("process scan for the scale-down guard failed", "err", err)
+			}
+		}()
+		select {
+		case <-done:
+		case <-time.After(scaleDownScanWait):
+			extra = 1
+		}
+	} else if need && m.adopter != nil {
+		extra = 1 // an earlier scan still runs
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := m.vmSlotsUsedLocked() + extra
+	if m.needScan {
+		n++
 	}
 	return n
 }
@@ -948,6 +1009,7 @@ func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), 
 		return 0, nil, apierr.New(pb.ErrorReason_CAPACITY_VM_SLOTS, "no free jailer UID for the template build")
 	}
 	m.building[id] = memMiB
+	m.admitted()
 	done := func(left bool) {
 		m.mu.Lock()
 		defer m.mu.Unlock()
