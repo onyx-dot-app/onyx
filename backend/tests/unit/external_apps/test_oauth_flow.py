@@ -96,7 +96,7 @@ def _configure_route(
         "upsert_external_app_user_credential",
         persist_credentials,
     )
-    monkeypatch.setattr(oauth_route, "push_skills_for_users", MagicMock())
+    monkeypatch.setattr(oauth_route, "push_skills_and_commit", MagicMock())
     return app, credentials, db_session, token_post
 
 
@@ -283,7 +283,7 @@ def test_callback_preserves_provider_exchange_and_grant(
     persist = MagicMock()
     push = MagicMock()
     monkeypatch.setattr(oauth_route, "upsert_external_app_user_credential", persist)
-    monkeypatch.setattr(oauth_route, "push_skills_for_users", push)
+    monkeypatch.setattr(oauth_route, "push_skills_and_commit", push)
     info_response = MagicMock(spec=requests.Response)
     info_response.json.return_value = {"scopes": expected_scopes}
     monkeypatch.setattr(

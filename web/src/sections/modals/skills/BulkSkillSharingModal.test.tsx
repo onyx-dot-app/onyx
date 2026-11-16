@@ -8,7 +8,11 @@ import {
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
 
 jest.mock("@/providers/UserProvider", () => ({
-  useUser: () => ({ isAdmin: true }),
+  useUser: () => ({
+    isAdmin: true,
+    permissions: ["manage:plugins"],
+    adminCapabilities: [],
+  }),
 }));
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
@@ -57,6 +61,32 @@ describe("BulkSkillSharingModal", () => {
     );
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith({ public_permission: "VIEWER" })
+    );
+  });
+  it("sets Not available for every selected skill", async () => {
+    const user = setupUser();
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    render(
+      <BulkSkillSharingModal
+        count={2}
+        canChangeOrgAccess
+        open
+        saving={false}
+        onClose={jest.fn()}
+        onSave={onSave}
+      />
+    );
+    fireEvent.click(screen.getByRole("combobox", { name: "Installation" }));
+    expect(
+      screen.getByRole("option", { name: /^Default access/ })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: /^Not available/ }));
+
+    await user.click(screen.getByRole("button", { name: "Apply to 2 skills" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        installation_policy: "NOT_AVAILABLE",
+      })
     );
   });
   it("keeps staged edits across a generic close and drops them on Cancel", async () => {

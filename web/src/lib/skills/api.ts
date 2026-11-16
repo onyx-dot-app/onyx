@@ -9,6 +9,8 @@
 import type {
   CustomSkill,
   GitHubSkillsImportResult,
+  OrganizationLibraryDefaultAccess,
+  OrganizationLibraryDefaultPolicy,
   GitHubSkillsPreview,
   Skill,
   SkillBundleContents,
@@ -196,8 +198,15 @@ export async function setSkillEnabled(
   return handle<Skill>(res);
 }
 
+export interface SkillGroupSettingPayload {
+  group_id: number;
+  /** Null: the group uses the organization setting. */
+  installation_policy: SkillInstallationPolicy | null;
+}
+
 export interface SkillShareUpdatePayload {
-  installation_policy?: SkillInstallationPolicy;
+  /** Null: no own setting, so Default access applies. */
+  installation_policy?: SkillInstallationPolicy | null;
   user_shares?: {
     user_id: string;
     permission: SkillSharePermission;
@@ -207,6 +216,7 @@ export interface SkillShareUpdatePayload {
     permission: SkillSharePermission;
   }[];
   public_permission?: SkillSharePermission | null;
+  group_settings?: SkillGroupSettingPayload[];
 }
 
 export async function uploadUserSkillFiles(
@@ -333,4 +343,16 @@ export async function deleteUserSkill(skillId: string): Promise<void> {
     method: "DELETE",
   });
   await handle<void>(res);
+}
+
+/** Set the install setting of every published skill with no own setting. */
+export async function setOrganizationLibraryDefaultAccess(
+  policy: OrganizationLibraryDefaultPolicy
+): Promise<OrganizationLibraryDefaultAccess> {
+  const res = await fetch("/api/skills/organization-library/default-access", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ installation_policy: policy }),
+  });
+  return handle<OrganizationLibraryDefaultAccess>(res);
 }

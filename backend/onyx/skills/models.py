@@ -1,5 +1,5 @@
 import re
-from typing import Annotated, Any, Final
+from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
@@ -190,3 +190,68 @@ class ChatSkill(BaseModel):
     @classmethod
     def normalize_short_description(cls, value: str | None) -> str | None:
         return (" ".join(value.split()) or None) if value is not None else None
+
+
+class SkillUsage(BaseModel):
+    """Unpacked size and file count of skills."""
+
+    model_config = ConfigDict(frozen=True)
+
+    bytes: int = 0
+    files: int = 0
+
+    def __add__(self, other: "SkillUsage") -> "SkillUsage":
+        return SkillUsage(
+            bytes=self.bytes + other.bytes, files=self.files + other.files
+        )
+
+    def __sub__(self, other: "SkillUsage") -> "SkillUsage":
+        return SkillUsage(
+            bytes=self.bytes - other.bytes, files=self.files - other.files
+        )
+
+    def grew_from(self, other: "SkillUsage") -> bool:
+        return self.bytes > other.bytes or self.files > other.files
+
+
+class SkillLimitRefusal(BaseModel):
+    """Why a write was refused: the acting user's usage after it, and the
+    write limits."""
+
+    usage: SkillUsage
+    max_bytes: int
+    max_files: int
+
+
+class SkillOmission(BaseModel):
+    """A plugin that the run-time limit left out of a sandbox."""
+
+    model_config = ConfigDict(frozen=True)
+
+    plugin_id: UUID
+    name: str
+    # Size and file count of the version the user runs.
+    bytes: int
+    files: int
+    # The limit it would break.
+    reason: Literal["bytes", "files"]
+
+
+class SandboxSkillsState(BaseModel):
+    """The skill content a sandbox got: its hash and the plugins the run-time
+    skill limit left out of it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    skills_hash: str | None
+    omissions: tuple[SkillOmission, ...]
+
+
+class UserPastWriteLimit(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    user_id: UUID
+    email: str
+    usage: SkillUsage
+    # Plugins the last push left out of the user's sandbox.
+    skills_not_loaded: int

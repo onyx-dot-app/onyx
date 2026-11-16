@@ -25,16 +25,43 @@
   shares with users or groups as viewer or editor, publishes to the
   organization, or transfers ownership.
 - **Admins** set the installation policy of a custom skill: available (the user
-  opts in), installed by default (on until the user opts out), or required (on,
-  and the user cannot turn it off). This needs organization-wide
-  `MANAGE_PLUGINS`, which only admins hold today; a group manager cannot. Only
-  the same permission deletes a required skill.
+  opts in), installed by default (on until the user opts out), required (on,
+  and the user cannot turn it off), or not available (hidden). With no own
+  setting ("Default access" in the UI) the skill follows the Organization
+  library default; an own `AVAILABLE` overrides a stricter default. This needs
+  organization-wide `MANAGE_PLUGINS`, which only admins hold today. A group
+  setting (`SkillShareRequest.group_settings`, also on a group with no share)
+  replaces the Organization setting for that group's members. It also needs
+  organization-wide `MANAGE_PLUGINS`; a group manager cannot set one. The
+  share dialog has a **Group Access** section
+  (`web/src/sections/modals/skills/SkillGroupAccess.tsx`) for those holders:
+  one row per group with its setting. The dialog keeps one list of group
+  settings; each row's share comes from the share draft
+  (`web/src/lib/skills/sharing.ts:groupAccessRows`), and Save sends the
+  changed settings. `PluginAccess.group_shares` is derived from `group_rows`.
+  Only organization-wide
+  `MANAGE_PLUGINS` deletes a skill that is required for anyone
+  (`db/plugin_access.py:plugin_required_for_anyone`: a REQUIRED company setting,
+  or a REQUIRED group setting for a group member who can see the plugin). The
+  delete route and `SkillResponse.can_delete` share one rule
+  (`db/skill.py:may_delete_skill`); the UI shows Delete from `can_delete`.
+  `required_for_user` (the setting for the caller is REQUIRED, from the company
+  or a group) shows the Required badge.
+- **Admin skill policies** on Admin Panel → Craft → Preferences: Skill
+  Publishing ([[#publishing-review]]), **Default Access** (the Organization
+  library default for published skills with no own setting: Available,
+  Installed by default or Not available; never Required) and **Sharing** (off:
+  only organization-wide managers add user or group shares).
 - **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
   support selection of custom skills, bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
-  stay selected. Search changes clear selection.
+  stay selected. Search and group filter changes clear selection.
+  `SkillResponse.group_summaries` lists the `plugin__user_group` rows (group,
+  permission or none, setting) to a caller who may edit the skill, and to a
+  scoped manager only the rows of their groups. Custom cards show them as a
+  groups line, and the list has a group filter built from them.
   Custom cards show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
   be hidden, so empty arrays do not mean a skill is personal.
@@ -102,8 +129,13 @@ When it fails:
   `.template` file is rejected with a message. A direct upload over a size or
   file count limit is rejected with a 413 that names the limit. Batch uploads
   list the Skill in `not_imported`, and a GitHub preview marks it unavailable.
-- Turning on a skill whose name another enabled skill uses returns a name
-  conflict. The client can retry with `replace_conflict` to switch skills.
+- Turning on a skill whose name another enabled skill the user can see uses
+  returns a name conflict. The client can retry with `replace_conflict` to
+  switch skills. The kept choice of a skill the user can no longer see neither
+  blocks the switch nor changes.
+- When two enabled skills still share a name, for example after a share or a
+  publish, the sandbox gets one of them by the name order. The other shows as
+  off. The push does not fail.
 - A required skill rejects a toggle.
 - If a push to a sandbox fails, the change still saves. The sandbox keeps its
   old skills until the next push, session start or reload.
@@ -137,18 +169,23 @@ Neighbours own the rest:
 skill mutation (server/features/skill/api.py)   compute affected users BEFORE the change
   -> db write, commit
   -> push_skills_for_users       skills/push.py
-       lock_sandbox_skills_hashes        SELECT ... FOR UPDATE on Sandbox rows
-       build_user_skills_payload         per sandbox user
-         list_runtime_skills_for_user    db/skill.py: the one runtime gate; each custom
-                                         skill comes with the plugin version the user
-                                         runs (version_user_runs, outer joins)
-         _assemble_fileset               built-ins from disk, custom from the FileStore
-                                         bundle of that version, in a folder named by
-                                         its frontmatter; resolves ${CLAUDE_SKILL_DIR}
+       lock_sandbox_skills_states        SELECT ... FOR UPDATE on Sandbox rows
+       per sandbox, in id order, built one at a time:
+       build_user_skills_payload         -> UserSkillsPayload (files, omissions)
+         list_runtime_skills_for_user    db/skill.py: the one runtime gate, in keep
+                                         order; each custom skill comes with the plugin
+                                         version the user runs and its recorded size
+         _assemble_skills                one fit loop: whole plugins within 900 MB and
+                                         10,000 files; built-ins from disk, custom from
+                                         the FileStore bundle of that version, in a
+                                         folder named by its frontmatter; resolves
+                                         ${CLAUDE_SKILL_DIR}
          build_connectable_apps_list     guidance for unconnected apps
-       compute_skill_runtime_hash        once per sandbox; skip sandboxes whose hash matches
-       push_to_sandboxes(SKILLS_MOUNT_PATH)
-       set_sandbox_skills_hashes__no_commit   only for successful pushes
+       compute_skill_runtime_hash        skip a sandbox whose hash matches
+       push_to_sandboxes(SKILLS_MOUNT_PATH)   parallel batches of 10 sandboxes, or
+                                         fewer when a batch reaches 900 MB of files
+       set_sandbox_skills_states__no_commit   hash + skill_omissions, only for
+                                         successful pushes (omissions also on a hash skip)
   -> commit
 session start: sandbox_lifecycle.py:build_managed_content_payload
   uses the same payload and hash, before the sandbox is RUNNING
@@ -168,15 +205,29 @@ a `FOR UPDATE` blocks that foreign-key check into a deadlock.
 
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
 a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement
-(`_is_enabled_for_user`), app readiness, bundle validity (`is_valid` of the
-version the user runs not false) and built-in availability (`_exclude_unavailable_built_in_skills`).
-These inputs stay independent. A required skill still needs a ready app and a
-valid bundle.
+and the name order (`_user_skill_selection`), app readiness, bundle validity
+(`is_valid` of the version the user runs not false) and built-in availability
+(`_exclude_unavailable_built_in_skills`). These inputs stay independent. A
+required skill still needs a ready app and a valid bundle.
 
-**Enablement.** `_is_enabled_for_user` is the one SQL rule for API responses
-and the runtime gate. Built-ins are on. A visible required skill is on and
-hides other skills with its name. Else an explicit preference wins. Else a
-default skill is on unless another visible skill with its name is selected.
+**Enablement.** `db/plugin_access.py:load_user_plugin_states` is the one rule
+for API responses, toggles, the write limit, the runtime gate and the admin
+list. One query gives, for many users and plugins, the install setting,
+visibility, the version the user runs, its skill names, whether it can run
+(valid version, ready app), its recorded size, the keep key and the user's
+choice under the setting: required is on, default is on until an opt-out,
+available is on after an opt-in, a hidden plugin is off and its saved choice
+stays. Built-ins are on.
+`db/skill.py:_user_skill_selection` reads it for one user.
+
+**Name order.** When two enabled skills of a user have one name,
+`db/plugin_access.py:order_skill_names` keeps one: a built-in name, then a
+plugin required for the user, then a published one, then the user's own,
+then a shared one. The older plugin (`plugin.created_at`, then id) wins a
+tie. It returns the one set of plugins that lose a name: they do not load and
+show as off. Only skills that can run take part, and the names of the
+built-in skills the user gets are reserved. The toggle and the auto-enable
+count a conflict by the same rule (`db/skill.py:_UserSkillSelection.other_skills_named`).
 
 **Two hashes.** `compute_skill_runtime_hash` is a SHA-256 over every rendered
 file path and its bytes, plus the connectable-apps text. `Sandbox.skills_hash`
@@ -194,10 +245,11 @@ and triggers the same reload.
 sources. External-app skills fill app values, cloud-only blocks, and a list of
 actions the admin denied (`skills/rendering.py:render_external_app_skill`).
 **Chat.** `db/skill.py:list_chat_skills` is the one definition of the skills
-chat gets: one query over the same predicates as
-`list_runtime_skills_for_user` (`_where_user_runs_skill`: visible, enabled,
-and a version the user runs that is not invalid), less built-in skills and
-skills of an external app, with the name, description,
+chat gets: the custom skills the sandbox loads for the user
+(`_UserSkillSelection.loaded`, the same selection as
+`list_runtime_skills_for_user`: install settings, the user's choice, the name
+order and a version that is not invalid), less skills of an external app,
+with the name, description,
 `metadata.short-description` and id of the version the user runs. Anonymous
 users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
 turn's picks and reservation, each agent reads it once when it is built (for
@@ -316,7 +368,8 @@ The library preview of an external-app skill calls the same renderer
 2. `affected-users-before-change` **Compute affected users before the
    change.** `db/skill.py:affected_user_ids_for_skill` finds users with a running sandbox
    who can see the skill, by the plugin visibility rule in one query
-   (`db/plugin_access.py:affected_user_ids_for_plugins`, which takes a set). It ignores preferences on purpose, so that a delete
+   (`db/plugin_access.py:affected_user_ids_for_plugins`, which takes a set and
+   reads `_user_plugin_pairs`). It ignores preferences on purpose, so that a delete
    or a disable still pushes to the users who had the skill. The delete route
    reads the audience before it deletes. The share, transfer and edit routes
    push to the union of the audience before and after. A new mutation must do
@@ -326,33 +379,49 @@ The library preview of an external-app skill calls the same renderer
    `db/skill.py:_is_editable_by_user`, through
    `db/skill.py:_skill_select_for_management_policy`. A
    query on `Skill` without them skips sharing. For a custom skill both read
-   the plugin tables through the one copy of the rule in
-   `db/plugin_access.py` (`plugin_visible_to_user`,
-   `plugin_editable_by_user`, `installation_rank_for_user`,
-   `version_user_runs`). There is no organization-wide edit: a legacy
+   the plugin tables through `db/plugin_access.py`: visibility and the install
+   setting come only from `db/plugin_access.py:_user_plugin_pairs` (through
+   `visible_plugin_ids`, `load_user_plugin_states` and
+   `affected_user_ids_for_plugins`); edits use `plugin_editable_by_user`. There is no organization-wide edit: a legacy
    organization `EDITOR` row gives view access only. A `plugin__user_group`
    row with no permission holds only a group install setting and grants
-   nothing. Built-in skills have no plugin and keep their skill rows.
+   nothing. Only such a row can be `NOT_AVAILABLE`: a row with a share and
+   `NOT_AVAILABLE` is refused (400, "Remove the group's share first"). The
+   author and a direct share get at least available, also past a group
+   `NOT_AVAILABLE`. Built-in skills have no plugin and keep their skill
+   rows. A scoped manager edits a private skill only when every group share is
+   in their groups and every user share goes to a member of those groups. One
+   SQL predicate, `db/plugin_access.py:plugin_in_managed_scope`, decides it for
+   the edit check and the response permission.
 4. `enablement-not-preference-row` **Never infer enablement from a preference
-   row.** Use `db/skill.py:_is_enabled_for_user`. It reads
+   row.** Use `db/plugin_access.py:load_user_plugin_states`. It reads
    `user_plugin_preference` and the install setting that applies to the user
-   (`db/plugin_access.py:installation_rank_for_user`: the plugin's setting or
+   (the plugin's setting or
    its marketplace default, the most open non-default group setting, and at
-   least available with a share). Disable writes `enabled=False`; it does
+   least available for the author or with a share). Disable writes `enabled=False`; it does
    not delete the row. A required policy overrides an opt-out without deleting
    it, so the opt-out returns when the policy goes back to default.
-5. `name-uniqueness-in-db` **Name uniqueness is in the database.** The partial
-   unique index `uq_user_skill_preference_name` allows one enabled choice per
-   user and name. `uq_skill_automatic_name` allows one default or required
-   skill per name in the tenant. Every write that enables a preference first
-   takes `db/skill.py:_lock_user_skill_preferences`, a `FOR NO KEY UPDATE`
-   lock on the user row. The lock orders concurrent enables of one name, so
-   the second one gets `SKILL_NAME_CONFLICT`, not an `IntegrityError`. The
+5. `name-uniqueness-in-db` **Only plugin.name is unique, per marketplace.**
+   `uq_plugin_marketplace_name`: a new plugin with a used name takes the next
+   free name (`db/plugin.py:free_plugin_name`); a concurrent create that takes
+   it first fails and the user tries again. Publish and transfer
+   refuse a clash with `CONFLICT`. Skill names repeat across plugins; never
+   compare one with `plugin.name`. The legacy index
+   `uq_skill_automatic_name` is gone: the run-time name order picks one of
+   two automatic skills with one name. The dual write stores `AVAILABLE` for
+   `NOT_AVAILABLE` and for no setting. The legacy `uq_user_skill_preference_name` allows one enabled
+   legacy choice per user and name; `db/skill.py:_write_legacy_choice__no_commit`
+   skips a legacy row it refuses, because reads use `user_plugin_preference`.
+   A toggle conflicts only with skills the user can see. Every write that
+   enables a preference first takes `db/skill_limit.py:lock_user_skill_preferences`,
+   a `FOR NO KEY UPDATE` lock on the user row. The lock orders concurrent
+   enables of one name, so the second one gets `SKILL_NAME_CONFLICT`. The
    lock does not block the `FOR KEY SHARE` locks that foreign-key checks take,
    so sharing writes that reference the user still run. A new preference
    writer, such as an auto-enable, must take the same lock.
-   `skills/push.py:_assemble_fileset` raises if two skills in one fileset share a name,
-   because the name is the sandbox directory. For a custom skill that name is
+   The run-time name order (Architecture, Name order) keeps one skill for each name,
+   because the name is the sandbox directory, so a duplicate never fails a
+   push. For a custom skill that name is
    `frontmatter->>'name'` of the version the user runs.
 6. `name-immutable` **A skill name never changes.** The frontmatter `name`,
    `Skill.name` and the bundle's wrapper directory, when there is one, must
@@ -390,22 +459,27 @@ The library preview of an external-app skill calls the same renderer
     (`db/external_app.py:associate_custom_skill_with_external_app__no_commit`,
     `replace_custom_skill_associations__no_commit`) publishes the skill through
     `db/plugin.py:publish_plugin__no_commit`, and a name clash in the
-    Organization library returns `CONFLICT`. Publishing is one-way, so an
+    Organization library returns `CONFLICT`. A newly linked skill with no own
+    setting gets an explicit `AVAILABLE`
+    (`db/plugin.py:make_plugins_available_by_default__no_commit`), so Default
+    Access Not available does not hide it. Publishing is one-way, so an
     unlinked skill stays published. A private custom skill must have an
     owner: `ck_private_skill_has_owner` rejects a private skill with no
     author, so transfer or delete private skills before their owner is
     removed.
 11. `push-holds-row-locks` **The push holds row locks during network I/O.**
-    `skills/push.py:push_skills_for_users` locks the target `Sandbox` rows, then calls the
-    sandbox push while the transaction is open. The hash write is a savepoint,
+    `skills/push.py:push_skills_for_users` locks the target `Sandbox` rows, then builds
+    and sends them in parallel batches while the transaction is open. The hash write is a savepoint,
     and the caller commits. The push catches and logs every exception, so a
     failed push never fails the API call. The next push repairs it, because
     the hash of a failed sandbox is not written.
 12. `sharing-single-entry` **Every share, publish and install setting change
     goes through `db/plugin.py:apply_plugin_access_change__no_commit`.** It
     takes a set of plugin ids, a `PluginAccessChange` (user and group grants,
-    `publish`, a three-state company install setting, and a mode: replace or
-    add-only) and the actor. A skill has no access of its own: the skills API
+    group settings with no share change (`PluginGroupSetting`: creates a
+    setting-only row; None removes the setting and deletes a row with no
+    permission), `publish`, a three-state company install setting, and a mode:
+    replace or add-only) and the actor. A skill has no access of its own: the skills API
     passes the plugin with the skill's id. The function locks the legacy skill
     rows, then the plugins, in id order; checks the rules once for the set;
     writes each plugin and its legacy rows in a savepoint, so one failure rolls
@@ -413,7 +487,8 @@ The library preview of an external-app skill calls the same renderer
     before and after. The routes then commit and push once. The skills layer
     calls it through `db/skill.py:share_skill__no_commit` (share route, editor
     create, patch visibility, imports with access settings) and
-    `db/skill.py:bulk_share_skills__no_commit` (bulk, add-only shares).
+    `db/skill.py:bulk_share_skills__no_commit` (bulk, add-only shares, no
+    group settings).
     `db/skill.py:replace_skill_shares`, `set_skill_installation_policy`,
     `set_skill_public_permission` and `transfer_skill_ownership` are thin
     callers with no actor, so they skip the permission checks. Do not write
@@ -422,12 +497,28 @@ The library preview of an external-app skill calls the same renderer
     Rules: a company install setting needs organization-wide `MANAGE_PLUGINS`
     (`has_global_permission`; never `has_permission`, which accepts a scoped
     grant). In `SkillShareRequest`, a missing `installation_policy` changes
-    nothing, and null or AVAILABLE means the marketplace default. A group
+    nothing, null means the marketplace default, and a value (AVAILABLE too)
+    is the skill's own setting. A newly linked app skill gets an explicit
+    AVAILABLE (`db/plugin.py:make_plugins_available_by_default__no_commit`),
+    so a stricter Default access does not hide it. A group
     keeps its install setting when the change does not set one, also when its
-    share is removed (the row stays with no permission). A group install
-    setting needs `MANAGE_PLUGINS` for that group on a private plugin and
-    global `MANAGE_PLUGINS` on a published one; it is then refused until group
-    settings ship. EDIT on a skill is not enough to change its groups: any
+    share is removed (the row stays with no permission). Group settings come
+    only from `group_settings` and need global `MANAGE_PLUGINS` (else 403); a
+    group manager cannot set one. A group row with a share cannot be
+    `NOT_AVAILABLE`. With `Settings.plugin_sharing`
+    off, only global `MANAGE_PLUGINS` adds a share or changes its level
+    (`db/plugin.py:check_sharing_allowed`); removing one stays allowed. A
+    transfer keeps the old owner as an editor, so it is refused too
+    (`server/features/skill/api.py:transfer_current_user_skill_ownership`). A
+    group membership change (group API, SCIM) pushes to the users who joined
+    or left in the background (`skills/push.py:enqueue_skill_push`, task
+    `push_skills_to_users` on the `sandbox` queue), so a large sync does not
+    wait for the pushes. Other routes push in the request, after their commit
+    (`skills/push.py:push_skills_and_commit`). The Organization library
+    default is written by
+    `db/plugin.py:set_organization_library_default__no_commit`, which refuses
+    `REQUIRED` and returns the users of the plugins that follow it. EDIT on a skill is not enough
+    to change its groups: any
     change to the group set or levels is a `MANAGE_PLUGINS` action within scope
     (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
     Without it, an owner could push a skill into any group manager's scope.
@@ -470,14 +561,13 @@ The library preview of an external-app skill calls the same renderer
     warning, a `skill` row whose `built_in_skill_id` is not in
     `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
 15. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
-    `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
+    `skills/push.py:_resolve_skill_dir` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
     sent bytes change. The stored bundle, its SHA-256 and other files keep the
-    placeholder. Before substitution, the push checks the predicted instruction
-    size against both the configured file limit and the receiver file limit.
-    Expansion must also fit the receiver total, including other Skills. An
-    oversized expansion skips that whole Skill, logs a warning and continues.
-    Files without placeholders keep their previous delivery behavior.
+    placeholder. A resolved SKILL.md over the per-file limit skips that whole
+    Skill with a warning. The resolved bytes count in the run-time total
+    ([[#runtime-skill-limit]]). Files without placeholders keep their previous
+    delivery behavior.
     The sent bytes feed the runtime hash. OpenCode adds the base
     folder line and the relative-path rule itself, so the push adds neither.
     `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
@@ -515,11 +605,9 @@ The library preview of an external-app skill calls the same renderer
     (`STORED_ZIP_DIRECTORY_MAX_BYTES`). Over the limit is a 413
     `zip_metadata_bytes`. `normalize_custom_bundle` finds duplicate and
     file-versus-folder paths by sorting the paths, not by building every parent
-    path. `skills/push.py:_add_bundle_bytes` skips a Skill whose declared file
-    sizes would take the push over the receiver's `MAX_BUNDLE_BYTES`, before it
-    reads the files. It also checks the resolved SKILL.md size then, so a
-    Skill that `skill-dir-placeholder` would drop never counts against later
-    Skills.
+    path. The push skips a Skill whose sent files would take the push over the
+    receiver's `MAX_BUNDLE_BYTES`; the run-time total counts its recorded size,
+    or its zip directory, before it reads the files ([[#runtime-skill-limit]]).
 19. `plugin-tables` **Access reads come from the plugin tables;
     the skill rows are still written.** Migration `cdec9dd9ca3d` adds `plugin_marketplace`,
     `plugin`, `plugin_version`, `plugin_skill`, `plugin__user`,
@@ -634,6 +722,11 @@ The library preview of an external-app skill calls the same renderer
     `created_at`, and the admin approves or denies from a view of the version
     preview. The web hook `usePublishAction` mirrors the setting for the
     share dialog and the Versions tab.
+    The **Skill Publishing** card on Admin Panel → Craft → Preferences
+    (`web/src/views/admin/CraftPreferencesPage/SkillPublishingCard.tsx`) also
+    holds **Default Access**, saved with
+    `PUT /skills/organization-library/default-access`, and **Sharing**, saved
+    as `plugin_sharing`.
 24. `chat-skills-one-definition` **Chat's skills have one definition and
     mentions are records.** Change which skills chat gets only in
     `db/skill.py:list_chat_skills`; the turn, the tools and the `@` picker all
@@ -650,6 +743,43 @@ The library preview of an external-app skill calls the same renderer
     (`db/chat.py:load_message_branch`). A content-free incognito row keeps the
     record and no skill message
     ([[chat-persistence#incognito-decision-per-field]]).
+25. `write-skill-limit` **A user's own write never moves that user past 500
+    MB or 5,000 files of skills.** Limits are `skills/limits.py` constants. A
+    user's total is the recorded size (`plugin_version.unpacked_size_bytes`,
+    `file_count`) of the version the user runs, for each plugin on for the user
+    that can run (`db/plugin_access.py:skill_usage_by_user`), plus the built-ins
+    (`skills/built_in.py:built_in_skills_usage`, read once on first use).
+    `db/skill_limit.py:check_skill_limit` takes the user row lock (`lock_user_skill_preferences`), measures the user
+    before and after the write, and refuses an under -> over move with 413
+    `SKILL_LIMIT_EXCEEDED` (`skill_limit`: `usage`, `max_bytes`, `max_files`).
+    It covers toggle on, auto-enable of an upload, create (with its own share
+    or publish, which can turn the skill on for the author), upload, import
+    and editor create, and bundle save, restore and replace. A bundle save
+    ingests with no lock; `db/skill.py:replace_skill_bundle` then takes the
+    user lock and the skill row, the toggle's order. Admin changes
+    (settings, shares, Default access, publish, approve, transfer), app connect
+    and group membership are never checked: the run-time rule and the admin
+    list handle a user they put past the limit. A user already over is not
+    refused.
+26. `runtime-skill-limit` **A sandbox gets every plugin that fits in 900 MB
+    and 10,000 files.** `skills/push.py:build_user_skills_payload` applies it,
+    so session start (`build_managed_content_payload`) and the push both do.
+    `list_runtime_skills_for_user` returns the skills in keep order: built-in,
+    Required, turned on (also Installed by default turned on again), Installed
+    by default; inside a group the most recent first, then id. One fit loop in
+    `skills/push.py:_assemble_skills` keeps whole plugins in that order. A
+    custom skill counts the larger of its recorded size and the bytes it sends
+    after `${CLAUDE_SKILL_DIR}` resolution. A skill that would pass the
+    transport cap `MAX_BUNDLE_BYTES` is skipped. Left-out plugins (`SkillOmission`:
+    id, name, bytes, files, reason) go to `sandbox.skill_omissions` together
+    with `skills_hash`, so they describe the content on that disk.
+    `GET /skills/users-over-limit` (`MANAGE_PLUGINS`,
+    `db/skill_limit.py:users_past_write_limit`) lists active users past the
+    write limit with their usage and the omission count of their sandbox. An
+    SQL sum of enabled, not invalid plugins
+    (`db/plugin_access.py:users_with_usage_past`) picks the candidates; app
+    readiness can only lower usage, so the exact per-user read then runs for
+    those users only.
 
 ---
 
@@ -687,14 +817,12 @@ The library preview of an external-app skill calls the same renderer
   drops every failure ([[#push-holds-row-locks]]), so the change commits
   anyway. If that commit fails, the sandboxes hold files that the database
   does not.
-- **Membership changes do not push.** A user added to a group that a skill is
-  shared with gets it at the next push, session start or reload.
 
 ---
 
 ## Dependencies
 
-- [[craft-sandboxes]]: `push_to_sandboxes` and the managed volume.
+- [[craft-sandboxes]]: `push_to_sandbox` and the managed volume.
 - [[craft-sessions]]: the stale check and the reload that apply a push to a
   live runtime.
 - [[craft-external-apps]]: app readiness and action policy views. GitHub
@@ -729,7 +857,8 @@ The library preview of an external-app skill calls the same renderer
   ([[#affected-users-before-change]]).
 - `investigate-skill-missing` **Investigate "my skill is not in the sandbox".** Check the inputs of
   `list_runtime_skills_for_user` one at a time for that user: visibility,
-  `_is_enabled_for_user`, app readiness, `plugin_version.is_valid` of the
+  `load_user_plugin_states` (setting and choice), the name order
+  (`order_skill_names`: another skill may hold the name), app readiness, `plugin_version.is_valid` of the
   version the user runs (`version_user_runs`), and built-in availability. Then compare `Sandbox.skills_hash` with
   `BuildSession.skills_hash`: equal means the runtime loaded the last push;
   different means the session waits for a reload. Search the API server log

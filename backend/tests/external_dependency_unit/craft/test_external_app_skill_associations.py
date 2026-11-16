@@ -324,7 +324,7 @@ def test_app_update_batches_associations_into_one_sandbox_refresh(
     app_id = _make_app(db_session)
     pushed_user_sets: list[set[UUID]] = []
     monkeypatch.setattr(
-        "onyx.server.features.build.external_apps.api.push_skills_for_users",
+        "onyx.skills.push.push_skills_for_users",
         lambda user_ids, _db: pushed_user_sets.append(user_ids),
     )
 

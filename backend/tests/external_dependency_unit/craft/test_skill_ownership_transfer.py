@@ -39,7 +39,7 @@ def _share_row(
 def push_calls(monkeypatch: pytest.MonkeyPatch) -> list[set[object]]:
     calls: list[set[object]] = []
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users",
+        "onyx.skills.push.push_skills_for_users",
         lambda user_ids, _db_session: calls.append(set(user_ids)),
     )
     return calls
