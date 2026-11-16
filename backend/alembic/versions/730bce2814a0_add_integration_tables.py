@@ -987,12 +987,17 @@ _INSERT_TOOL_HEADER_CONNECTIONS = f"""
 
 # An OpenAPI tool that signs in with OAuth or the Onyx login and also sends
 # static headers: the headers become literal values of the header template.
+# The template reads {name} as a placeholder, so each brace is doubled and the
+# value goes out unchanged.
 _SET_TOOL_HEADER_TEMPLATES = """
     UPDATE integration i
     SET header_template = headers.value
     FROM tool t
     CROSS JOIN LATERAL (
-        SELECT jsonb_object_agg(h ->> 'key', h ->> 'value') AS value
+        SELECT jsonb_object_agg(
+            h ->> 'key',
+            replace(replace(h ->> 'value', '{', '{{'), '}', '}}')
+        ) AS value
         FROM jsonb_array_elements(t.custom_headers) h
         WHERE h ->> 'key' IS NOT NULL
     ) headers

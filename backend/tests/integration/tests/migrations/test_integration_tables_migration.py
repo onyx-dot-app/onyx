@@ -385,7 +385,12 @@ def _seed(conn: Connection) -> Seeded:
     custom_shared = custom(f"u1-custom-shared-{s}", None, None)
     custom_default = custom(f"u1-custom-default-{s}", None, None)
     custom_oauth = custom(
-        f"u1-custom-oauth-{s}", [{"key": "X-Team", "value": "platform"}], oauth_config
+        f"u1-custom-oauth-{s}",
+        [
+            {"key": "X-Team", "value": "platform"},
+            {"key": "X-Literal", "value": "a{b}c"},
+        ],
+        oauth_config,
     )
     for user_key, secret in (("other", b"oauth-token"), ("inactive", b"gone")):
         conn.execute(
@@ -1116,8 +1121,12 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         assert json.loads(headers[None][0]) == [{"key": "X-Key", "value": "secret"}]
         assert headers[None][1] == "tool_headers"
         # Static headers of an OpenAPI tool that signs in with OAuth become
-        # literal values of the header template.
-        assert custom["oauth"].header_template == {"X-Team": "platform"}
+        # literal values of the header template, with each brace doubled.
+        assert custom["oauth"].header_template == {
+            "X-Team": "platform",
+            "X-Literal": "a{{b}}c",
+        }
+        assert custom["oauth"].header_template["X-Literal"].format() == "a{b}c"
         assert (
             conn.execute(
                 text(
