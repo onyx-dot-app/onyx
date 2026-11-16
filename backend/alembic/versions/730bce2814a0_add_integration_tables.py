@@ -59,7 +59,8 @@ def _create_tables() -> None:
         sa.Column("kind", sa.String(), nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        # The person who added the integration. NULL: an admin manages it.
+        # The person who added the integration: a record, not a right. NULL
+        # when not known.
         sa.Column(
             "author_user_id",
             postgresql.UUID(as_uuid=True),
