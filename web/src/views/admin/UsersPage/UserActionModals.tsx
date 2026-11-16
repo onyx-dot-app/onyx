@@ -5,9 +5,17 @@ import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { Button, CopyButton, InputTypeIn, Text } from "@opal/components";
 import { richNodes } from "@opal/utils";
-import { SvgUserPlus, SvgUserX, SvgXCircle, SvgKey } from "@opal/icons";
+import {
+  SvgArrowUpRight,
+  SvgUserPlus,
+  SvgUserX,
+  SvgXCircle,
+  SvgKey,
+} from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { toast } from "@opal/layouts";
+import { toast, type ToastAction } from "@opal/layouts";
+import { useNavigation } from "@opal/navigation";
+import { FetchError } from "@/lib/fetcher";
 import {
   deactivateUser,
   activateUser,
@@ -25,7 +33,8 @@ async function runAction(
   successMessage: string,
   errorMessage: string,
   onDone: () => void,
-  setIsSubmitting: (v: boolean) => void
+  setIsSubmitting: (v: boolean) => void,
+  errorAction?: (err: unknown) => ToastAction | undefined
 ) {
   setIsSubmitting(true);
   try {
@@ -33,7 +42,11 @@ async function runAction(
     onDone();
     toast.success(successMessage);
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : errorMessage);
+    const toastAction = errorAction?.(err);
+    toast.error(err instanceof Error ? err.message : errorMessage, {
+      action: toastAction,
+      duration: toastAction ? Infinity : undefined,
+    });
   } finally {
     setIsSubmitting(false);
   }
@@ -65,7 +78,19 @@ export function CancelInviteModal({
 }: CancelInviteModalProps) {
   const t = useTranslations("admin.users");
   const { appName } = useSettings();
+  const navigation = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function skillsAction(err: unknown): ToastAction | undefined {
+    if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
+      return undefined;
+    }
+    return {
+      icon: SvgArrowUpRight,
+      label: t("deleteModal.toasts.openSkills"),
+      onClick: () => navigation.go("/admin/skills"),
+    };
+  }
 
   return (
     <ConfirmationModalLayout
@@ -125,7 +150,19 @@ export function DeactivateUserModal({
 }: DeactivateUserModalProps) {
   const t = useTranslations("admin.users");
   const { appName } = useSettings();
+  const navigation = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function skillsAction(err: unknown): ToastAction | undefined {
+    if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
+      return undefined;
+    }
+    return {
+      icon: SvgArrowUpRight,
+      label: t("deleteModal.toasts.openSkills"),
+      onClick: () => navigation.go("/admin/skills"),
+    };
+  }
 
   return (
     <ConfirmationModalLayout
@@ -242,7 +279,19 @@ export function DeleteUserModal({
 }: DeleteUserModalProps) {
   const t = useTranslations("admin.users");
   const { appName } = useSettings();
+  const navigation = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function skillsAction(err: unknown): ToastAction | undefined {
+    if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
+      return undefined;
+    }
+    return {
+      icon: SvgArrowUpRight,
+      label: t("deleteModal.toasts.openSkills"),
+      onClick: () => navigation.go("/admin/skills"),
+    };
+  }
 
   return (
     <ConfirmationModalLayout
@@ -264,7 +313,8 @@ export function DeleteUserModal({
                 onMutate();
                 onClose();
               },
-              setIsSubmitting
+              setIsSubmitting,
+              skillsAction
             )
           }
         >

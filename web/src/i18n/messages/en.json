@@ -10163,6 +10163,7 @@
         },
         "title": "Delete User",
         "toasts": {
+          "openSkills": "Open skills to transfer them",
           "success": "User deleted"
         }
       },

@@ -10163,6 +10163,7 @@
         },
         "title": "Supprimer l'utilisateur",
         "toasts": {
+          "openSkills": "Ouvrir les compétences pour les transférer",
           "success": "Utilisateur supprimé"
         }
       },

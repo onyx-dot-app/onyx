@@ -1,16 +1,30 @@
-import { render, screen, setupUser } from "@tests/setup/test-utils";
-import { ResetPasswordModal } from "@/views/admin/UsersPage/UserActionModals";
-import { resetPassword } from "@/views/admin/UsersPage/svc";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import { toast } from "@opal/layouts";
+import { FetchError } from "@/lib/fetcher";
+import {
+  DeleteUserModal,
+  ResetPasswordModal,
+} from "@/views/admin/UsersPage/UserActionModals";
+import { deleteUser, resetPassword } from "@/views/admin/UsersPage/svc";
+
+const mockGo = jest.fn();
 
 jest.mock("@/views/admin/UsersPage/svc", () => ({
   ...jest.requireActual("@/views/admin/UsersPage/svc"),
+  deleteUser: jest.fn(),
   resetPassword: jest.fn(),
+}));
+
+jest.mock("@opal/navigation", () => ({
+  ...jest.requireActual("@opal/navigation"),
+  useNavigation: () => ({ go: mockGo }),
 }));
 
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
 }));
 
+const mockDeleteUser = deleteUser as jest.MockedFunction<typeof deleteUser>;
 const mockResetPassword = resetPassword as jest.MockedFunction<
   typeof resetPassword
 >;
@@ -42,5 +56,55 @@ describe("ResetPasswordModal", () => {
     expect(
       screen.queryByRole("button", { name: "Cancel" })
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("DeleteUserModal", () => {
+  const conflictDetail =
+    "Transfer or delete this user's private skills before deleting the user.";
+
+  function renderModal() {
+    render(
+      <DeleteUserModal
+        email="user@example.com"
+        onClose={() => {}}
+        onMutate={() => {}}
+      />
+    );
+  }
+
+  it("links to the skills page when private skills block the delete", async () => {
+    mockDeleteUser.mockRejectedValue(
+      new FetchError(conflictDetail, 409, {
+        error_code: "CONFLICT",
+        detail: conflictDetail,
+      })
+    );
+    const errorToast = jest.spyOn(toast, "error").mockReturnValue("toast-id");
+    const user = setupUser();
+    renderModal();
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(errorToast).toHaveBeenCalled());
+    const [message, options] = errorToast.mock.calls[0]!;
+    expect(message).toBe(conflictDetail);
+    expect(options?.duration).toBe(Infinity);
+    options?.action?.onClick();
+    expect(mockGo).toHaveBeenCalledWith("/admin/skills");
+    errorToast.mockRestore();
+  });
+
+  it("shows no action for other delete errors", async () => {
+    mockDeleteUser.mockRejectedValue(new Error("Error deleting user"));
+    const errorToast = jest.spyOn(toast, "error").mockReturnValue("toast-id");
+    const user = setupUser();
+    renderModal();
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(errorToast).toHaveBeenCalled());
+    expect(errorToast.mock.calls[0]![1]?.action).toBeUndefined();
+    errorToast.mockRestore();
   });
 });

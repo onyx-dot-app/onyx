@@ -10163,6 +10163,7 @@
         },
         "title": "Benutzer löschen",
         "toasts": {
+          "openSkills": "Skills zum Übertragen öffnen",
           "success": "Benutzer gelöscht"
         }
       },

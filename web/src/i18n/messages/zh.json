@@ -10163,6 +10163,7 @@
         },
         "title": "删除用户",
         "toasts": {
+          "openSkills": "打开技能以转移",
           "success": "用户已删除"
         }
       },

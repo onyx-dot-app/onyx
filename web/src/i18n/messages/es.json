@@ -10163,6 +10163,7 @@
         },
         "title": "Eliminar al usuario",
         "toasts": {
+          "openSkills": "Abrir habilidades para transferirlas",
           "success": "Usuario eliminado"
         }
       },
