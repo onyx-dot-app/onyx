@@ -164,6 +164,26 @@ export class ChatPage {
   // Message assertions
   // ---------------------------------------------------------------------------
 
+  async expectAnswerTable(headers: string[], rows: number): Promise<void> {
+    const table = this.aiMessage().getByRole("table");
+    await expect(table.getByRole("columnheader")).toHaveText(headers);
+    await expect(table.getByRole("row")).toHaveCount(rows);
+  }
+
+  /** Hovers the answer table and clicks its copy button. */
+  async copyAnswerTable(): Promise<void> {
+    const message = this.aiMessage();
+    await message.locator(".markdown-table-card").hover();
+    await message.getByTestId("markdown-table-copy-button").click();
+  }
+
+  /** Needs the clipboard-read permission. */
+  async expectClipboardText(text: string): Promise<void> {
+    await expect
+      .poll(() => this.page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(text);
+  }
+
   async expectHumanMessage(text: string, index = 0): Promise<void> {
     await expect(this.humanMessage(index)).toContainText(text);
   }

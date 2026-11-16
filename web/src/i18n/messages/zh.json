@@ -12691,6 +12691,11 @@
           "text": "正在生成图片..."
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "复制表格"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "问题"
