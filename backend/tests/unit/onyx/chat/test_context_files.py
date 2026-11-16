@@ -6,6 +6,7 @@ Covers:
 - Search filter / search_usage determination in the caller
 """
 
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -19,6 +20,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.process_message import (
     _collect_available_file_ids,
+    _load_context_user_files_for_tools,
     determine_search_params,
     extract_context_files,
     resolve_context_user_files,
@@ -26,6 +28,13 @@ from onyx.chat.process_message import (
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.models import ChatMessage, UserFile
 from onyx.db.user_file import capture_user_file_metadata
+from onyx.file_processing.file_types import (
+    PDF_MIME_TYPE,
+    PLAIN_TEXT_MIME_TYPE,
+    PRESENTATION_MIME_TYPE,
+    SPREADSHEET_MIME_TYPE,
+    WORD_PROCESSING_MIME_TYPE,
+)
 from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
 from onyx.tools.models import SearchToolUsage
 
@@ -634,8 +643,8 @@ class TestSearchFilterDetermination:
 class TestContextFileStagingFlag:
     """`staged_for_tools` must mirror what actually reaches PythonTool.
 
-    `_load_context_user_files_for_tools` loads only metadata-only files into
-    `chat_files_for_tools`, so everything else is listed for the LLM but never
+    `_load_context_user_files_for_tools` loads only tabular and Office files
+    into `chat_files_for_tools`, so everything else is listed for the LLM but never
     staged. The out-of-context file notice reads this flag to decide whether it
     may name the python tool; getting it wrong sends the model after bytes the
     tool was never handed.
@@ -659,7 +668,52 @@ class TestContextFileStagingFlag:
         meta = self._metadata_for("data.csv", "text/csv")
         assert meta.staged_for_tools is True
 
+    @pytest.mark.parametrize(
+        "name,file_type",
+        [
+            ("brief.docx", WORD_PROCESSING_MIME_TYPE),
+            ("deck.pptx", PRESENTATION_MIME_TYPE),
+        ],
+    )
+    def test_office_file_is_staged(self, name: str, file_type: str) -> None:
+        meta = self._metadata_for(name, file_type)
+        assert meta.staged_for_tools is True
+
     def test_non_metadata_only_file_is_not_staged(self) -> None:
         """A PDF is listed for the LLM but never loaded into chat_files_for_tools."""
         meta = self._metadata_for("report.pdf", "application/pdf")
         assert meta.staged_for_tools is False
+
+
+def test_office_and_tabular_context_files_are_staged_for_code_interpreter() -> None:
+    files = [
+        UserFile(
+            id=uuid4(),
+            file_id=str(uuid4()),
+            name=name,
+            file_type=mime,
+            token_count=10,
+        )
+        for name, mime in (
+            ("template.docx", WORD_PROCESSING_MIME_TYPE),
+            ("deck.pptx", PRESENTATION_MIME_TYPE),
+            ("data.xlsx", SPREADSHEET_MIME_TYPE),
+            ("report.pdf", PDF_MIME_TYPE),
+            ("notes.txt", PLAIN_TEXT_MIME_TYPE),
+        )
+    ]
+    file_store = MagicMock()
+    file_store.read_file.side_effect = lambda file_id, **_: BytesIO(file_id.encode())
+
+    with patch(
+        "onyx.chat.process_message.get_default_file_store", return_value=file_store
+    ):
+        staged = _load_context_user_files_for_tools(files, set())
+        file_store.read_file.assert_not_called()
+        contents = {chat_file.filename: chat_file.content for chat_file in staged}
+
+    assert contents == {
+        "template.docx": files[0].file_id.encode(),
+        "deck.pptx": files[1].file_id.encode(),
+        "data.xlsx": files[2].file_id.encode(),
+    }

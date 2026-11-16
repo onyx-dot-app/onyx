@@ -10,6 +10,7 @@ from onyx.chat.llm_loop import (
     _REFUSAL_FINISH_REASONS,
     EmptyLLMResponseError,
     _build_empty_llm_response_error,
+    _create_file_tool_metadata_message,
     _try_fallback_tool_extraction,
     construct_message_history,
     count_message_replay_tokens,
@@ -1467,6 +1468,23 @@ class TestForgottenFilesNoticeFollowsConstructedTools:
         notice = _notice_for_dropped_file({"run_python"})
         assert "Do not guess" in notice.message
         assert "search the web" in notice.message
+
+    def test_splits_python_staged_and_unstaged_files(self) -> None:
+        staged = _make_file_metadata("docx-id", "template.docx", 2000)
+        unstaged = _make_file_metadata(
+            "pdf-id", "report.pdf", 2000, staged_for_tools=False
+        )
+        notice = _create_file_tool_metadata_message(
+            [staged, unstaged],
+            token_counter=_simple_token_counter,
+            available_tool_names={"run_python"},
+        )
+        python_part, unreadable_part = notice.message.split(
+            "no tool here can read them"
+        )
+        assert "python tool" in python_part and "template.docx" in python_part
+        assert "report.pdf" not in python_part
+        assert "report.pdf" in unreadable_part
 
 
 class TestFallbackToolExtraction:
