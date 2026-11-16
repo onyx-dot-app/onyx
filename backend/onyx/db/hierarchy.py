@@ -929,7 +929,7 @@ def persist_stub_hierarchy_nodes_for_cc_pair(
                 HierarchyNode.raw_node_id.in_(raw_ids),
             )
             .order_by(HierarchyNode.id)
-            .with_for_update(key_share=True)
+            .with_for_update(read=True, key_share=True)
         ).scalars()
     )
     upsert_hierarchy_node_cc_pair_entries(
@@ -960,7 +960,7 @@ def link_cached_stub_nodes_for_cc_pair(
         select(HierarchyNode.id, HierarchyNode.node_type)
         .where(HierarchyNode.id.in_(node_ids))
         .order_by(HierarchyNode.id)
-        .with_for_update(key_share=True)
+        .with_for_update(read=True, key_share=True)
     ).all()
     upsert_hierarchy_node_cc_pair_entries(
         db_session=db_session,

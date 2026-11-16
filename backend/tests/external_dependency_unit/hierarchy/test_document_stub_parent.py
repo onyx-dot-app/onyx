@@ -5,29 +5,42 @@ the document keeps the right parent."""
 import threading
 import time
 from collections.abc import Generator, Iterator
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.docprocessing.tasks import check_indexing_completion
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import (
+    ConnectorFailure,
+    DocumentFailure,
+    EntityFailure,
+)
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db import hierarchy as hierarchy_module
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import HierarchyNodeType
+from onyx.db.enums import HierarchyNodeType, IndexingStatus
 from onyx.db.hierarchy import (
     ensure_source_node_exists,
     get_hierarchy_node_by_raw_id,
+    link_cached_stub_nodes_for_cc_pair,
     persist_hierarchy_nodes_for_cc_pair,
     remove_unfilled_stub_hierarchy_nodes_for_cc_pair,
     upsert_hierarchy_node_cc_pair_entries,
 )
+from onyx.db.index_attempt import create_index_attempt_error
+from onyx.db.indexing_coordination import CoordinationStatus
 from onyx.db.models import (
     ConnectorCredentialPair,
     Document,
     HierarchyNode,
     HierarchyNodeByConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptError,
 )
 from onyx.redis.redis_hierarchy import (
     evict_hierarchy_nodes_from_cache,
@@ -36,9 +49,11 @@ from onyx.redis.redis_hierarchy import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
+    make_index_attempt,
     seed_cc_pair_documents,
 )
 
@@ -522,7 +537,7 @@ def test_cleanup_sees_a_link_that_commits_while_it_waits_for_the_lock(
             linker.execute(
                 select(HierarchyNode.id)
                 .where(HierarchyNode.id == stub_id)
-                .with_for_update(key_share=True)
+                .with_for_update(read=True, key_share=True)
             )
             upsert_hierarchy_node_cc_pair_entries(
                 db_session=linker,
@@ -548,6 +563,199 @@ def test_cleanup_sees_a_link_that_commits_while_it_waits_for_the_lock(
             )
         ).scalars()
         assert set(links) == {other.connector_id}
+    finally:
+        _remove_stub(db_session, redis_client, raw_id)
+        cleanup_cc_pair(db_session, other)
+
+
+@pytest.mark.parametrize(
+    "failures, removed",
+    [
+        ([], True),
+        # One document that always fails does not keep the STUBs.
+        (["document"], True),
+        # A listing failure can mean a parent was not seen.
+        (["document", "entity"], False),
+    ],
+    ids=["success", "document_failure", "listing_failure"],
+)
+def test_cleanup_runs_when_the_listing_completed(
+    db_session: Session,
+    pair: ConnectorCredentialPair,
+    failures: list[str],
+    removed: bool,
+) -> None:
+    redis_client = get_redis_client()
+    tag = uuid4().hex[:8]
+    never_id = f"never_{tag}"
+    source_node = ensure_source_node_exists(db_session, _SOURCE)
+    (doc_id,) = seed_cc_pair_documents(db_session, pair, 1, prefix=f"done-{tag}-")
+    attempt = make_index_attempt(
+        db_session,
+        pair,
+        IndexingStatus.IN_PROGRESS,
+        started=datetime.now(timezone.utc),
+        finished=None,
+    )
+    try:
+        resolved = resolve_parent_node_ids(
+            redis_client=redis_client,
+            db_session=db_session,
+            source=_SOURCE,
+            source_node_id=source_node.id,
+            raw_parent_ids=[never_id],
+            connector_id=pair.connector_id,
+            credential_id=pair.credential_id,
+        )
+        db_session.execute(
+            update(Document)
+            .where(Document.id == doc_id)
+            .values(parent_hierarchy_node_id=resolved[never_id])
+        )
+        db_session.commit()
+        for kind in failures:
+            create_index_attempt_error(
+                attempt.id,
+                pair.id,
+                ConnectorFailure(
+                    failed_document=(
+                        DocumentFailure(document_id=f"failed-{tag}")
+                        if kind == "document"
+                        else None
+                    ),
+                    failed_entity=(
+                        EntityFailure(entity_id=f"drive-{tag}")
+                        if kind == "entity"
+                        else None
+                    ),
+                    failure_message="boom",
+                ),
+                db_session,
+            )
+
+        check_indexing_completion(
+            attempt.id,
+            CoordinationStatus(
+                found=True,
+                total_batches=0,
+                completed_batches=0,
+                total_failures=len(failures),
+                total_docs=0,
+                total_chunks=0,
+            ),
+            MagicMock(),
+            POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        )
+
+        db_session.expire_all()
+        stub = get_hierarchy_node_by_raw_id(db_session, never_id, _SOURCE)
+        parent = db_session.execute(
+            select(Document.parent_hierarchy_node_id).where(Document.id == doc_id)
+        ).scalar_one()
+        if removed:
+            assert stub is None
+            assert parent == source_node.id
+        else:
+            assert stub is not None
+            assert parent == stub.id
+    finally:
+        evict_hierarchy_nodes_from_cache(redis_client, _SOURCE, [never_id])
+        db_session.rollback()
+        db_session.execute(
+            update(Document)
+            .where(Document.id == doc_id)
+            .values(parent_hierarchy_node_id=None)
+        )
+        db_session.execute(
+            delete(HierarchyNode).where(
+                HierarchyNode.source == _SOURCE,
+                HierarchyNode.raw_node_id == never_id,
+            )
+        )
+        db_session.execute(
+            delete(IndexAttemptError).where(
+                IndexAttemptError.index_attempt_id == attempt.id
+            )
+        )
+        db_session.execute(delete(IndexAttempt).where(IndexAttempt.id == attempt.id))
+        db_session.commit()
+
+
+def test_two_pairs_that_link_the_same_stub_do_not_wait_for_each_other(
+    db_session: Session, pair: ConnectorCredentialPair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two batches that resolve the same parent take shared locks on it. The
+    second does not wait for the first to commit."""
+    redis_client = get_redis_client()
+    raw_id = f"shared_{uuid4().hex[:8]}"
+    other = make_cc_pair(db_session, source=_SOURCE)
+    source_node = ensure_source_node_exists(db_session, _SOURCE)
+    holding = threading.Event()
+    release = threading.Event()
+    errors: list[BaseException] = []
+    upsert = hierarchy_module.upsert_hierarchy_node_cc_pair_entries
+    calls = [0]
+
+    def upsert_that_holds_the_first_lock(
+        db_session: Session,
+        hierarchy_node_ids: list[int],
+        connector_id: int,
+        credential_id: int,
+        commit: bool = True,
+    ) -> None:
+        calls[0] += 1
+        if calls[0] == 1:
+            holding.set()
+            release.wait(timeout=30)
+        upsert(
+            db_session=db_session,
+            hierarchy_node_ids=hierarchy_node_ids,
+            connector_id=connector_id,
+            credential_id=credential_id,
+            commit=commit,
+        )
+
+    try:
+        resolve_parent_node_ids(
+            redis_client=redis_client,
+            db_session=db_session,
+            source=_SOURCE,
+            source_node_id=source_node.id,
+            raw_parent_ids=[raw_id],
+            connector_id=pair.connector_id,
+            credential_id=pair.credential_id,
+        )
+        stub = get_hierarchy_node_by_raw_id(db_session, raw_id, _SOURCE)
+        assert stub is not None
+        stub_id = stub.id
+        pair_ids = (pair.connector_id, pair.credential_id)
+        other_ids = (other.connector_id, other.credential_id)
+        db_session.commit()
+        monkeypatch.setattr(
+            hierarchy_module,
+            "upsert_hierarchy_node_cc_pair_entries",
+            upsert_that_holds_the_first_lock,
+        )
+
+        def first_link() -> None:
+            try:
+                with get_session_with_current_tenant() as first:
+                    link_cached_stub_nodes_for_cc_pair(first, [stub_id], *pair_ids)
+            except BaseException as error:
+                errors.append(error)
+
+        thread = threading.Thread(target=first_link)
+        thread.start()
+        try:
+            assert holding.wait(timeout=30)
+            with get_session_with_current_tenant() as second:
+                second.execute(text("SET LOCAL lock_timeout = '2s'"))
+                gone = link_cached_stub_nodes_for_cc_pair(second, [stub_id], *other_ids)
+            assert gone == set()
+        finally:
+            release.set()
+            thread.join(timeout=30)
+        assert errors == []
     finally:
         _remove_stub(db_session, redis_client, raw_id)
         cleanup_cc_pair(db_session, other)
