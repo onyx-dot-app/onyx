@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.45
+version: 0.9.48
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,24 +20,16 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: With craft.sandboxRuntime=firecracker, the host agent image,
-        the root drive (craft.hostAgent.rootfs.version) and SANDBOX_FC_TEMPLATE
-        follow the pinned global.version. A floating tag such as latest fails
-        the render.
     - kind: added
-      description: With craft.sandboxRuntime=firecracker and no existingSecret,
-        the chart makes the host agent mTLS CA and certificates and keeps them
-        on upgrade. A new set restarts the agent clients.
+      description: With craft.sandboxRuntime=firecracker, the host agent sets
+        cluster-autoscaler.kubernetes.io/scale-down-disabled=true on its Node
+        while the node runs VMs, so the cluster autoscaler does not remove it.
+        New values craft.hostAgent.scaleDownGuard.enabled and .grace (10m).
+        The agent ServiceAccount gets "patch" on nodes.
     - kind: changed
-      description: The Firecracker preflight checks craft.hostAgent.dataDir by
-        default and gives WARN, not FAIL, without reflink (the host agent then
-        makes an XFS loop store). New value craft.hostAgent.loopStore.sizeGiB.
-    - kind: fixed
-      description: With the bundled in-cluster object store, the Firecracker
-        host agent accepts its plain HTTP presigned URLs, and S3_ENDPOINT_URL
-        uses the store's FQDN (new value global.clusterDomain), so the agent
-        resolves the presigned URL host from its own namespace.
+      description: The default craft.hostAgent.drainWatch.taints also has
+        ToBeDeletedByClusterAutoscaler, so the agent drains a node that the
+        cluster autoscaler removes.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

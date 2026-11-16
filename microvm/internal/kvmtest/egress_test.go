@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -210,6 +211,16 @@ func TestEgressKVM(t *testing.T) {
 			t.Fatalf("netsetup: %q %v", out, err)
 		}
 	}
+
+	// Guest → host vsock: only the relay port accepts.
+	accepted, probe, err := vsockProbe(ctx, va, vsockProbePorts)
+	if err != nil || len(accepted) != 1 || !accepted[relay.GuestPort] {
+		t.Errorf("vsock deny-list: accepted %v, want only %d (err %v)\n%s", accepted, relay.GuestPort, err, probe)
+	}
+	if l := hostVsockListeners(t, va); len(l) != 1 || l[0] != strconv.Itoa(relay.GuestPort) {
+		t.Errorf("host vsock listeners %v, want only %d", l, relay.GuestPort)
+	}
+	t.Logf("vsock: only %d accepts; %d other guest → host ports refused", relay.GuestPort, len(vsockProbePorts)-1)
 
 	out, err := guestRun(ctx, va, "run", egressMatrix)
 	if err != nil {

@@ -30,8 +30,30 @@ and the object store).
 
     ```bash
     kubectl create namespace onyx
-    helm install onyx onyx/onyx -n onyx
+    helm install onyx onyx/onyx -n onyx -f onyx-values.yaml
     ```
+
+    A new install needs the base chart Secrets in `onyx-values.yaml`. Without them, Helm refuses to render the chart,
+    or the API server does not start:
+
+    ```yaml onyx-values.yaml
+    auth:
+      userauth:
+        enabled: true
+        values:
+          user_auth_secret: "<openssl rand -hex 32>"
+      opensearch:
+        values:
+          opensearch_admin_password: "<uppercase, lowercase, digit, and special character>"
+      objectstorage:   # the bundled object store. rootUser and rootPassword must match the S3 keys.
+        values:
+          s3_aws_access_key_id: "<access key>"
+          rootUser: "<access key>"
+          s3_aws_secret_access_key: "<secret key>"
+          rootPassword: "<secret key>"
+    ```
+
+    To keep these values in your own Secrets, see [Security Hardening](/deployment/production/security#credentials).
   </Step>
 
   <Step title="Verify the installation">
