@@ -64,7 +64,7 @@ class WriteStdinArguments(BaseModel):
 
 
 class ApplyPatchArguments(BaseModel):
-    input: str = Field(description="The entire contents of the apply_patch command")
+    input: str = Field(description="The full patch text.")
 
 
 class ExecCommandOutput(BaseModel):

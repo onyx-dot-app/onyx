@@ -62,7 +62,7 @@ from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeTool
 
 # The default memory limit: a dump fits within its share of it.
 PARKING_LIMITS = LIMITS.model_copy(update={"max_memory_bytes": 128 * 1024 * 1024})
-PROGRAM = 'print("before")\nr = await send(value="x")\nprint("sent", r)'
+PROGRAM = 'print("before")\nr = await tools.send(value="x")\nprint("sent", r)'
 REQUEST_ID = "send-approval"
 
 
@@ -229,7 +229,7 @@ def test_parking_waits_for_a_running_call_of_the_program() -> None:
     agents = Agents(
         _execute(
             "program",
-            'a, b = await asyncio.gather(wait(value="a"), send(value="b"))\nprint(a, b)',
+            'a, b = await asyncio.gather(tools.wait(value="a"), tools.send(value="b"))\nprint(a, b)',
         )
     )
     agents.gate = threading.Event()
@@ -295,7 +295,7 @@ def test_a_program_too_large_to_park_continues_without_the_call(
     agents = Agents(
         _execute(
             "program",
-            'try:\n    await send(value="x")\nexcept RuntimeError as error:\n'
+            'try:\n    await tools.send(value="x")\nexcept RuntimeError as error:\n'
             '    print("failed:", error)',
         )
     )
@@ -443,7 +443,7 @@ def test_a_restored_call_whose_function_now_names_another_tool_does_not_run() ->
         return Agent(
             FakeModelClient(
                 _reply(
-                    (_execute("program", 'print(await send_mail(value="x"))'),),
+                    (_execute("program", 'print(await tools.send_mail(value="x"))'),),
                     threading.Event(),
                 )
             ),
@@ -492,7 +492,7 @@ def test_a_program_whose_dump_exceeds_the_budget_continues_without_the_call(
     agents = Agents(
         _execute(
             "program",
-            'try:\n    await send(value="x")\nexcept RuntimeError as error:\n'
+            'try:\n    await tools.send(value="x")\nexcept RuntimeError as error:\n'
             '    print("failed:", error)',
         )
     )
@@ -639,7 +639,7 @@ def test_a_restored_call_keeps_arguments_whose_names_collide() -> None:
                     (
                         _execute(
                             "program",
-                            'print(await send(repo_name="A", repo_name_2="B"))',
+                            'print(await tools.send(repo_name="A", repo_name_2="B"))',
                         ),
                     ),
                     threading.Event(),
@@ -688,7 +688,7 @@ def test_a_park_whose_arguments_cannot_be_saved_is_refused(
     agents = Agents(
         _execute(
             "program",
-            'try:\n    await send(value="x")\nexcept RuntimeError as error:\n'
+            'try:\n    await tools.send(value="x")\nexcept RuntimeError as error:\n'
             '    print("failed:", error)',
         )
     )

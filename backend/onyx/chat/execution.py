@@ -88,11 +88,7 @@ from onyx.tools.tool_constructor import (
     SearchToolConfig,
     construct_tools,
 )
-from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
-    ApplyPatchTool,
-    ExecCommandTool,
-    WriteStdinTool,
-)
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import SANDBOX_TOOLS
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
@@ -1051,7 +1047,7 @@ def create_chat_agent(
             else None
         )
         if turn is not None:
-            tools += [ExecCommandTool(turn), WriteStdinTool(turn), ApplyPatchTool(turn)]
+            tools += [tool(turn) for tool in SANDBOX_TOOLS]
         return build_chat_agent(
             AgentState(messages=list(setup.messages), checkpoint=setup.checkpoint),
             agent_id,

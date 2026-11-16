@@ -999,8 +999,8 @@ def test_a_program_that_waits_for_approval_pauses_and_continues(
     )
     code = (
         "print('started')\n"
-        f"ticket, greeting = await asyncio.gather({ticket_function}(ticket_id=7), "
-        f"{hello_function}(name='team'))\n"
+        f"ticket, greeting = await asyncio.gather(tools.{ticket_function}(ticket_id=7), "
+        f"tools.{hello_function}(name='team'))\n"
         "print('ticket', ticket)\nprint('greeting', greeting)\n"
     )
     program = ToolCall(id="program", name="execute_code", arguments={"code": code})
@@ -1741,7 +1741,7 @@ def test_a_program_in_an_agent_parks_and_continues(
     hello_function = function_name(connected_mcp_server.callable_name("hello"))
     code = (
         "print('started')\n"
-        f"greeting = await {hello_function}(name='team')\n"
+        f"greeting = await tools.{hello_function}(name='team')\n"
         "print('greeting', greeting)\n"
     )
     mock_llm.conversation(

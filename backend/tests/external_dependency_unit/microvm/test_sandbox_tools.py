@@ -459,12 +459,12 @@ def test_a_program_gets_a_dict_from_exec_command_and_a_failed_call_raises(
     chat: SandboxChat,
 ) -> None:
     program = (
-        "r = await exec_command(cmd='echo hi')\n"
+        "r = await tools.exec_command(cmd='echo hi')\n"
         "print(sorted(r), r['output'], r['exit_code'], r['completion'])\n"
-        "print(await apply_patch(input='*** Begin Patch\\n*** Add File: a.txt\\n+x\\n"
+        "print(await tools.apply_patch(input='*** Begin Patch\\n*** Add File: a.txt\\n+x\\n"
         "*** End Patch'))\n"
         "try:\n"
-        "    await write_stdin(session_id='nope')\n"
+        "    await tools.write_stdin(session_id='nope')\n"
         "except Exception as error:\n"
         "    print('raised:', error)\n"
     )
@@ -490,7 +490,7 @@ def test_a_program_call_whose_saved_output_is_cut_is_marked_truncated(
         [
             code_step(
                 "code",
-                f"r = await exec_command(cmd='echo {'x' * 3_000}')\n"
+                f"r = await tools.exec_command(cmd='echo {'x' * 3_000}')\n"
                 "print(len(r['output']))\n",
             ),
             Delta(content="Done."),
@@ -708,7 +708,8 @@ def test_a_stop_kills_the_command_that_a_program_call_waits_on(
     llm = ChatLLM(
         [
             code_step(
-                "code", "await exec_command(cmd='say partial', yield_time_ms=30000)"
+                "code",
+                "await tools.exec_command(cmd='say partial', yield_time_ms=30000)",
             )
         ]
     )
@@ -788,7 +789,7 @@ def test_a_stop_during_a_program_patch_ends_the_turn_after_its_write(
     releaser = threading.Thread(target=copy_context().run, args=(release_later,))
     releaser.start()
     join = _stop_when(chat, writing.is_set)
-    llm = ChatLLM([code_step("code", f"await apply_patch(input={ADD_A!r})")])
+    llm = ChatLLM([code_step("code", f"await tools.apply_patch(input={ADD_A!r})")])
     try:
         parts = chat.send(llm, code_mode=True)
     finally:
@@ -988,7 +989,7 @@ def test_a_numeric_session_id_keeps_the_exec_card(chat: SandboxChat) -> None:
     llm = ChatLLM(
         [
             code_step(
-                "code", "await write_stdin(session_id='nope', yield_time_ms=1000)"
+                "code", "await tools.write_stdin(session_id='nope', yield_time_ms=1000)"
             ),
             Delta(content="Done."),
         ]

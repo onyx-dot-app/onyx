@@ -29,10 +29,12 @@ from onyx.tools.tool_implementations.code_mode.models import (
     SandboxLimits,
 )
 from onyx.tools.tool_implementations.code_mode.prompt import (
+    INNER_CALL_MESSAGE,
     WAIT_CODE_DESCRIPTION,
     code_mode_description,
     program_function_operation,
 )
+from onyx.tools.tool_implementations.code_mode.sandbox import TOOLS_NAMESPACE
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
 
 # How long a call waits for the cell before it returns the output so far.
@@ -149,10 +151,52 @@ class CodeModeTool(Tool):
 
     def operation_names(self, tool_id: int) -> list[str]:
         return [
-            program_function_operation(name, deferred=function.deferred)
-            for name, function in self._stubs.functions.items()
+            program_function_operation(function.called_name, deferred=function.deferred)
+            for function in self._stubs.functions.values()
             if function.tool.id == tool_id
         ]
+
+    def called_name(self, tool_name: str) -> str:
+        """The name that the model calls the tool named `tool_name` by:
+        `tools.<function>` for a function of this tool's programs, else the
+        tool's own name."""
+        function = next(
+            (
+                function
+                for function in self._stubs.functions.values()
+                if function.tool.name == tool_name
+            ),
+            None,
+        )
+        return tool_name if function is None else function.called_name
+
+    def inner_call_hint(self, name: str) -> str | None:
+        """`name` is a function name, as the description lists it, or the
+        name of its tool, also after `tools.` or `tools_`."""
+        candidates = [
+            name,
+            name.removeprefix(f"{TOOLS_NAMESPACE}."),
+            name.removeprefix(f"{TOOLS_NAMESPACE}_"),
+        ]
+        function = next(
+            (
+                function
+                for candidate in candidates
+                for function in self._stubs.functions.values()
+                if candidate in (function.function_name, function.tool.name)
+            ),
+            None,
+        )
+        if function is None:
+            return None
+        return INNER_CALL_MESSAGE.format(
+            name=name,
+            called_name=function.called_name,
+            arguments=", ".join(
+                f"{argument}=..." for argument in sorted(function.required_arguments)
+            )
+            or "...",
+        )
 
     @property
     def id(self) -> None:

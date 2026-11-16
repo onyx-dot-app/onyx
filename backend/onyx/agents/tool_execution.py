@@ -397,10 +397,20 @@ class ToolBatch:
                 and call.name != options.tool_choice.name
             )
         ):
-            return ToolResult(
-                content=f"Tool {call.name} is unavailable for this step.",
-                is_error=True,
-            )
+            content = f"Tool {call.name} is unavailable for this step."
+            # A call of a tool that runs only inside an offered tool's calls,
+            # such as a code mode function, says how to call it there.
+            if tool is None and options.tool_choice != ToolChoiceOptions.NONE:
+                for offered in self.tools.values():
+                    hint = (
+                        offered.inner_call_hint(call.name)
+                        if offered.inner_call_hint is not None
+                        else None
+                    )
+                    if hint is not None:
+                        content = hint
+                        break
+            return ToolResult(content=content, is_error=True)
         if (
             call.argument_error
             or not call.arguments_complete

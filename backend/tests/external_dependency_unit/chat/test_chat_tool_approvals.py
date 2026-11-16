@@ -980,7 +980,9 @@ def test_a_stopped_program_call_ends_its_request_and_its_card_closes(
         waits, stop the program's cell."""
         last = request.messages[-1] if request.messages else None
         if not isinstance(last, ToolResultMessage):
-            code = f"yield_control()\nawait mcp__1__acme__{ACTION}(value='team')\n"
+            code = (
+                f"yield_control()\nawait tools.mcp__1__acme__{ACTION}(value='team')\n"
+            )
             return AssistantMessage(
                 content=[
                     ToolCall(
@@ -1037,7 +1039,7 @@ def _program(
 ) -> OwnedRun:
     """A chat response whose code mode program calls the gated tool."""
     tool = _gated_function(chat, sent)
-    code = f"await mcp__1__acme__{ACTION}(value='team')\n"
+    code = f"await tools.mcp__1__acme__{ACTION}(value='team')\n"
     owner = _store(chat, [tool])
     coordinator = AgentCoordinator()
     agent = chat_agent(
@@ -1198,7 +1200,7 @@ def test_a_park_refused_for_its_size_ends_the_request_and_does_not_block_sends(
                         id="program",
                         name="execute_code",
                         arguments={
-                            "code": f"await mcp__1__acme__{ACTION}(value='team')\n"
+                            "code": f"await tools.mcp__1__acme__{ACTION}(value='team')\n"
                         },
                     )
                 ]
