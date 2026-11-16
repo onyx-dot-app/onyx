@@ -8,7 +8,7 @@ sandboxes with `SANDBOX_RUNTIME=firecracker`.
 import threading
 from typing import TYPE_CHECKING
 
-from onyx.microvm.configs import FIRECRACKER_ENABLED, SANDBOX_FC_TEMPLATE
+from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED, SANDBOX_FC_TEMPLATE
 from onyx.microvm.lifecycle import (
     NoCheckpointSupport,
     SandboxActivityProbe,
@@ -36,7 +36,7 @@ class HarnessSandboxUnavailableError(Exception):
 
 def _firecracker_sandbox() -> "FirecrackerHarnessSandbox":
     global _instance
-    if not FIRECRACKER_ENABLED or not SANDBOX_FC_TEMPLATE:
+    if not HARNESS_SANDBOX_ENABLED:
         raise HarnessSandboxUnavailableError(
             "Harness sandboxes need SANDBOX_RUNTIME=firecracker and SANDBOX_FC_TEMPLATE"
         )

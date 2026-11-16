@@ -98,8 +98,8 @@ def test_retention_purges_the_saves_it_no_longer_keeps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     purged = _record_purges(monkeypatch)
-    monkeypatch.setattr(purge_module, "HARNESS_PURGE_ENABLED", True)
-    monkeypatch.setattr(ttl_tasks, "HARNESS_PURGE_ENABLED", True)
+    monkeypatch.setattr(purge_module, "HARNESS_SANDBOX_ENABLED", True)
+    monkeypatch.setattr(ttl_tasks, "HARNESS_SANDBOX_ENABLED", True)
     tenant_id = get_current_tenant_id()
     tenant_cache = get_cache_backend(tenant_id=tenant_id)
     user = make_user(db_session, standard_account=True)
@@ -191,8 +191,8 @@ def test_retention_purges_nothing_when_firecracker_is_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     purged = _record_purges(monkeypatch)
-    monkeypatch.setattr(purge_module, "HARNESS_PURGE_ENABLED", False)
-    monkeypatch.setattr(ttl_tasks, "HARNESS_PURGE_ENABLED", False)
+    monkeypatch.setattr(purge_module, "HARNESS_SANDBOX_ENABLED", False)
+    monkeypatch.setattr(ttl_tasks, "HARNESS_SANDBOX_ENABLED", False)
     tenant_id = get_current_tenant_id()
     tenant_cache = get_cache_backend(tenant_id=tenant_id)
     user = make_user(db_session, standard_account=True)
@@ -221,7 +221,7 @@ def test_a_session_used_again_during_the_sweep_keeps_its_save(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(purge_module, "HARNESS_PURGE_ENABLED", True)
+    monkeypatch.setattr(purge_module, "HARNESS_SANDBOX_ENABLED", True)
     tenant_cache = get_cache_backend(tenant_id=get_current_tenant_id())
     user = make_user(db_session, standard_account=True)
     user_id = user.id

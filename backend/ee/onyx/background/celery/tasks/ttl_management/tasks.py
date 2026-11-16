@@ -14,11 +14,9 @@ from onyx.configs.constants import (
 )
 from onyx.db.chat import delete_chat_session, get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.server.features.build.sandbox.firecracker.purge import (
-    HARNESS_PURGE_ENABLED,
-)
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -165,7 +163,7 @@ def perform_ttl_management_task(
             _release_chain_if_owned(redis_client, chain_token)
             raise
     else:
-        if HARNESS_PURGE_ENABLED:
+        if HARNESS_SANDBOX_ENABLED:
             _send_harness_retention_purge(self, tenant_id)
         _release_chain_if_owned(redis_client, chain_token)
 
