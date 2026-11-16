@@ -83,48 +83,43 @@ chat/presentation.py:ResponsePresenter       tool events -> chat/renderer.py:Too
 ```
 
 **Captured configuration.** `db/tools.py:capture_persona_tool_configuration`
-copies the agent's `Tool` rows into frozen `ToolConfiguration` models before the
-run starts. `construct_tools` opens its own short DB session, so no session
-stays open for a turn that can last minutes. MCP tool schemas come from the
-captured `mcp_input_schema`, not from a live MCP call.
+copies the agent's built-in `Tool` rows into frozen `ToolConfiguration` models,
+and its `persona__plugin` rows into `PluginLinkConfiguration` models (plugin id
+and parsed `action_settings`), before the run starts. The old MCP and OpenAPI
+`Tool` rows of the agent are not copied. `construct_tools` opens its own short
+DB session, so no session stays open for a turn that can last minutes.
 
 **Construction per model.** `chat/execution.py:create_chat_agent` calls
 `construct_tools` for each model response, so a multi-model turn has separate
-tool instances. `tools/tool_constructor.py:_construct_tools_impl` walks the
-captured tools in order and applies these gates:
+tool instances. `construct_tools` returns a flat list. For built-in tools,
+`tools/tool_constructor.py:_construct_tools_impl` walks the captured tools in
+order and applies these gates:
 
-1. `server/features/tool/tool_visibility.py:is_tool_available_for_persona`. An
-   MCP or built-in tool with `enabled=False` is skipped for every agent. An
-   OpenAPI tool with `enabled=False` is skipped only in Default Chat.
-2. `allowed_tool_ids`, the per-message list that the web client sends.
-3. For a built-in tool, `is_available(db_session)`. An exception counts as "not
-   available" and is logged.
+1. A tool with `enabled=False` is skipped.
+2. `allowed_tool_ids`, the per-message list that the web client sends. It
+   narrows only built-in tools: an integration action has no tool id.
+3. `is_available(db_session)`. An exception counts as "not available" and is
+   logged.
 4. A class-specific branch builds the instance, and some branches skip the
    tool with no error:
    - `SearchTool` is skipped when the search usage setting from
      `chat/files.py:determine_search_params` is `DISABLED`.
    - `OpenURLTool` is skipped when web search is off for the message and
      `DISABLE_VECTOR_DB` is set ([[web-search]]).
-   - An OpenAPI tool with `oauth_config_id` or `passthrough_auth` is skipped
-     for an anonymous user, with only a warning in the log.
-   - OpenAPI and MCP rows go through their own branches
-     ([[mcp-and-custom-tools]]). Both first apply the user's plugin
-     preferences ([[plugins]]), which exist only for Default Chat
-     (`DEFAULT_PERSONA_ID`). The MCP branch then applies
-     `user_can_access_mcp_server` in Default Chat only
-     ([[mcp-and-custom-tools#access-grants-default-chat-only]]), resolves
-     credentials once per server, including unavailable servers, and applies
-     the same `can_authenticate_with_headers` gate
-     as execution before building `MCPTool` instances from the captured rows.
-     Missing or rejected credentials exclude the server's tools; refreshable
-     OAuth grants and request-supplied credentials remain usable
-     ([[mcp-and-custom-tools]]).
 
-Two tools are added outside this loop. `SearchTool` is added when the request
-forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is off, and
-the loop did not build it. `MemoryTool` is added when `user.enable_memory_tool`
-is set ([[#memory-tool-bypasses-filters]]). MCP and OpenAPI tools receive stable
-qualified names at construction, independent of the other selected tools.
+Then `integrations/chat_tools.py:build_integration_chat_tools` adds the MCP and
+OpenAPI actions of the integrations that the agent can use, through the
+integration tables ([[mcp-and-custom-tools]]). It drops each action that the
+policy function (`integrations/policy.py:resolve_action_policies`) blocks, and
+each integration whose credential does not resolve.
+
+Two tools are added outside the built-in loop. `SearchTool` is added when the
+request forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is
+off, and the loop did not build it. `MemoryTool` is added when
+`user.enable_memory_tool` is set ([[#memory-tool-bypasses-filters]]). MCP and
+OpenAPI actions receive stable qualified names with the integration id
+(`mcp__<integration id>__<name>__<tool>`, `custom__<integration id>__<operationId>`),
+independent of the other selected tools, and have `id = None`.
 
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
