@@ -5,8 +5,8 @@ import { createContext, useContext, useId, useState } from "react";
 import { Slot } from "@radix-ui/react-slot";
 import type { RichStr, Spacing } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
-import { ContentAction, Section } from "@opal/layouts";
-import { Button, type BadgeProps } from "@opal/components";
+import { Content, Section } from "@opal/layouts";
+import { Button, type BadgeProps, type ButtonProps } from "@opal/components";
 import { Fold } from "@opal/components/fold/components";
 import { SvgExpand, SvgFold } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
@@ -51,7 +51,7 @@ function CollapsibleSection({
       defaultOpen={defaultOpen}
       disabled={disabled}
     >
-      <CollapsibleSectionLayout disabled={disabled} {...props} />
+      <CollapsibleSectionLayout {...props} />
     </CollapsibleProvider>
   );
 }
@@ -66,24 +66,14 @@ function CollapsibleSectionLayout({
   title,
   description,
   tag,
-  disabled = false,
   rightChildren,
   children,
 }: CollapsibleSectionLayoutProps) {
-  const strings = useOpalStrings();
-  const { open, toggle, contentId } = useCollapsibleContext("Section");
-  const [hovered, setHovered] = useState(false);
-  const [focusVisible, setFocusVisible] = useState(false);
+  const { open, disabled } = useCollapsibleContext("Section");
   // The body renders from the first open and then stays mounted, so a closed
   // section does no work until it is opened and later closes still animate.
   const [hasOpened, setHasOpened] = useState(open);
   if (open && !hasOpened) setHasOpened(true);
-
-  const label = open ? strings.collapsibleFold : strings.collapsibleExpand;
-  const plainTitle = toPlainString(title);
-  const accessibleLabel = open
-    ? strings.collapsibleFoldSection(plainTitle)
-    : strings.collapsibleExpandSection(plainTitle);
 
   return (
     <div
@@ -91,71 +81,14 @@ function CollapsibleSectionLayout({
       data-state={open ? "open" : "closed"}
       data-disabled={disabled || undefined}
     >
-      {/* Pointer convenience only: the whole row toggles. The Button is the
-          keyboard control and toggles itself, as its wrapper stops clicks. */}
-      <div
-        role="presentation"
-        className="opal-collapsible-header"
-        onClick={toggle}
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
-      >
-        <ContentAction
+      <CollapsibleHeader name={title} rightChildren={rightChildren}>
+        <Content
           font="main-content-emphasis"
           title={title}
           description={description}
           badge={tag}
-          padding={0}
-          center
-          rightChildren={
-            <Section
-              flexDirection="row"
-              width="fit"
-              height="fit"
-              gap={1}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Its own controls, so the fold button does not light up. */}
-              {rightChildren !== undefined && rightChildren !== false && (
-                <Section
-                  flexDirection="row"
-                  width="fit"
-                  height="fit"
-                  gap={1}
-                  onPointerEnter={() => setHovered(false)}
-                  onPointerLeave={() => setHovered(true)}
-                >
-                  {rightChildren}
-                </Section>
-              )}
-              {/* The one control whose keyboard focus shows as hover. */}
-              <Section
-                width="fit"
-                height="fit"
-                className="opal-collapsible-fold"
-              >
-                <Button
-                  icon={open ? SvgFold : SvgExpand}
-                  prominence="tertiary"
-                  interaction={
-                    !disabled && (hovered || focusVisible) ? "hover" : "rest"
-                  }
-                  disabled={disabled}
-                  tooltip={label}
-                  aria-label={accessibleLabel}
-                  aria-expanded={open}
-                  aria-controls={contentId}
-                  onClick={toggle}
-                  onFocus={(e) =>
-                    setFocusVisible(e.currentTarget.matches(":focus-visible"))
-                  }
-                  onBlur={() => setFocusVisible(false)}
-                />
-              </Section>
-            </Section>
-          }
         />
-      </div>
+      </CollapsibleHeader>
       <CollapsibleContent paddingTop={3} keepMounted>
         {hasOpened && children}
       </CollapsibleContent>
@@ -294,6 +227,112 @@ function CollapsibleTrigger({
   );
 }
 
+interface CollapsibleHeaderProps {
+  /** The header's content, such as a `Content` with an icon and a title. */
+  children?: React.ReactNode;
+  /**
+   * The section's name, for the fold button's accessible name ("Expand
+   * <name>"). Without it, the button reads "Expand" or "Fold".
+   */
+  name?: string | RichStr;
+  /** Controls before the fold button, such as an edit action. Clicks there do not toggle. */
+  rightChildren?: React.ReactNode;
+  /** The fold button's size. @default Button's default */
+  size?: ButtonProps["size"];
+}
+
+/**
+ * The header row of a collapsible, ready to use: the whole row toggles and
+ * shows the pointer, and the fold button lights up while the pointer is on the
+ * row. The fold button is the keyboard control: Tab reaches it, its keyboard
+ * focus shows as its hover state, and Enter or Space toggles. Put it inside
+ * `Collapsible.Root`, above `Collapsible.Content`.
+ */
+function CollapsibleHeader({
+  children,
+  name,
+  rightChildren,
+  size,
+}: CollapsibleHeaderProps) {
+  const strings = useOpalStrings();
+  const { open, disabled, toggle, contentId } = useCollapsibleContext("Header");
+  const [hovered, setHovered] = useState(false);
+  const [focusVisible, setFocusVisible] = useState(false);
+
+  const label = open ? strings.collapsibleFold : strings.collapsibleExpand;
+  const plainName = name === undefined ? undefined : toPlainString(name);
+  const accessibleLabel =
+    plainName === undefined
+      ? label
+      : open
+        ? strings.collapsibleFoldSection(plainName)
+        : strings.collapsibleExpandSection(plainName);
+
+  return (
+    // Pointer convenience only: the whole row toggles. The Button is the
+    // keyboard control and toggles itself, as its wrapper stops clicks.
+    <div
+      role="presentation"
+      className="opal-collapsible-header"
+      data-disabled={disabled || undefined}
+      onClick={toggle}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+    >
+      <Section
+        flexDirection="row"
+        alignItems="center"
+        justifyContent="between"
+        height="fit"
+      >
+        <div className="opal-collapsible-header-content">{children}</div>
+        <Section
+          flexDirection="row"
+          width="fit"
+          height="fit"
+          gap={1}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Its own controls, so the fold button does not light up. */}
+          {rightChildren !== undefined && rightChildren !== false && (
+            <Section
+              flexDirection="row"
+              width="fit"
+              height="fit"
+              gap={1}
+              onPointerEnter={() => setHovered(false)}
+              onPointerLeave={() => setHovered(true)}
+            >
+              {rightChildren}
+            </Section>
+          )}
+          {/* The one control whose keyboard focus shows as hover. */}
+          <Section width="fit" height="fit" className="opal-collapsible-fold">
+            <Button
+              icon={open ? SvgFold : SvgExpand}
+              prominence="tertiary"
+              size={size}
+              interaction={
+                !disabled && (hovered || focusVisible) ? "hover" : "rest"
+              }
+              disabled={disabled}
+              tooltip={label}
+              aria-label={accessibleLabel}
+              aria-expanded={open}
+              aria-controls={contentId}
+              onClick={toggle}
+              onFocus={(e) =>
+                setFocusVisible(e.currentTarget.matches(":focus-visible"))
+              }
+              onBlur={() => setFocusVisible(false)}
+            />
+          </Section>
+        </Section>
+      </Section>
+    </div>
+  );
+}
+
 interface CollapsibleContentProps {
   /**
    * Space above the content, as a spacing step (`N / 4` rem). It is inside
@@ -323,6 +362,7 @@ function CollapsibleContent({
 const Collapsible = Object.assign(CollapsibleSection, {
   Root: CollapsibleRoot,
   Trigger: CollapsibleTrigger,
+  Header: CollapsibleHeader,
   Content: CollapsibleContent,
 });
 
@@ -331,5 +371,6 @@ export {
   type CollapsibleProps,
   type CollapsibleRootProps,
   type CollapsibleTriggerProps,
+  type CollapsibleHeaderProps,
   type CollapsibleContentProps,
 };

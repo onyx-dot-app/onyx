@@ -228,6 +228,7 @@ export {
   type CollapsibleProps,
   type CollapsibleRootProps,
   type CollapsibleTriggerProps,
+  type CollapsibleHeaderProps,
   type CollapsibleContentProps,
 } from "@opal/components/collapsible/components";
 
