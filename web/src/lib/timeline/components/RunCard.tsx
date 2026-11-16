@@ -1,11 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
 import { Fold } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { STEP_ICONS } from "@/lib/timeline/icons";
-import { StepContainer } from "@/lib/timeline/components/StepContainer";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import {
   RunCardSurface,
@@ -64,7 +61,7 @@ export interface RunCardProps<S extends RunCardStep> {
  * One run of steps as a card, the same in chat and Craft: the run header
  * across the top (working, finished or stopped), and the steps below it on
  * the rail. Every run folds; it is open while it works and folds once text
- * follows it. A settled run ends with a Done or Stopped row.
+ * follows it.
  */
 export function RunCard<S extends RunCardStep>({
   steps,
@@ -77,7 +74,6 @@ export function RunCard<S extends RunCardStep>({
   durationSeconds,
   summary,
 }: RunCardProps<S>) {
-  const t = useTranslations("chat.messages.timeline");
   const isRunning =
     isActive ?? steps.some((step) => step.status === "streaming");
   const stopped =
@@ -108,14 +104,12 @@ export function RunCard<S extends RunCardStep>({
 
   if (steps.length === 0 && !isRunning) return null;
 
-  // The end row folds with the steps, so it does not depend on `isOpen`.
-  const showEndRow = !isRunning && steps.length > 0;
   const foldable = steps.length > 0;
 
   return (
     <TimelineRoot>
       <RunCardSurface interactive={foldable} tinted={isRunning || isOpen}>
-        {/* Flat: the header, then each step and the end row, 0.25rem apart.
+        {/* Flat: the header, then each step, 0.25rem apart.
             The gap closes with the folds, so a folded card keeps none. */}
         <Section
           alignItems="stretch"
@@ -155,19 +149,10 @@ export function RunCard<S extends RunCardStep>({
             <Fold key={step.id} open={isOpen}>
               {renderStep(step, {
                 isFirst: index === 0,
-                isLast: index === steps.length - 1 && !showEndRow,
+                isLast: index === steps.length - 1,
               })}
             </Fold>
           ))}
-          {showEndRow && (
-            <Fold open={isOpen}>
-              <StepContainer
-                stepIcon={stopped ? STEP_ICONS.stopped : STEP_ICONS.done}
-                header={t(stopped ? "stoppedStep.header" : "doneStep.header")}
-                isLastStep
-              />
-            </Fold>
-          )}
         </Section>
       </RunCardSurface>
     </TimelineRoot>

@@ -12412,9 +12412,6 @@
             "status": "正在生成计划"
           }
         },
-        "doneStep": {
-          "header": "完成"
-        },
         "expandButton": {
           "ariaLabel": "展开时间线"
         },
@@ -12649,9 +12646,6 @@
         },
         "stepsButton": {
           "label": "{count, plural, one {# 个步骤} other {# 个步骤}}"
-        },
-        "stoppedStep": {
-          "header": "已停止"
         },
         "thoughtDuration": {
           "label": "思考了 {duration}"

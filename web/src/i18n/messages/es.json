@@ -12412,9 +12412,6 @@
             "status": "Generando plan"
           }
         },
-        "doneStep": {
-          "header": "Listo"
-        },
         "expandButton": {
           "ariaLabel": "Expandir la línea de tiempo"
         },
@@ -12649,9 +12646,6 @@
         },
         "stepsButton": {
           "label": "{count, plural, one {# paso} other {# pasos}}"
-        },
-        "stoppedStep": {
-          "header": "Detenido"
         },
         "thoughtDuration": {
           "label": "Pensó durante {duration}"
