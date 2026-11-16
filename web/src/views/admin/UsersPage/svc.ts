@@ -1,4 +1,8 @@
-import { parseErrorDetail } from "@/lib/fetcher";
+import {
+  fetchErrorDetail,
+  fetchErrorFrom,
+  parseErrorDetail,
+} from "@/lib/fetcher";
 
 export async function deactivateUser(email: string): Promise<void> {
   const res = await fetch("/api/manage/admin/deactivate-user", {
@@ -29,7 +33,9 @@ export async function deleteUser(email: string): Promise<void> {
     body: JSON.stringify({ user_email: email }),
   });
   if (!res.ok) {
-    throw new Error(await parseErrorDetail(res, "Failed to delete user"));
+    const error = await fetchErrorFrom(res, "Failed to delete user");
+    error.message = fetchErrorDetail(error) ?? error.message;
+    throw error;
   }
 }
 

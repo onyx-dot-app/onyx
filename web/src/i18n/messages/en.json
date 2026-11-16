@@ -10163,6 +10163,8 @@
         },
         "title": "Delete User",
         "toasts": {
+          "blockedBySkills": "Can't delete this user",
+          "openSkills": "Open skills to transfer them",
           "success": "User deleted"
         }
       },

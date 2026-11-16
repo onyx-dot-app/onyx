@@ -10163,6 +10163,8 @@
         },
         "title": "Benutzer löschen",
         "toasts": {
+          "blockedBySkills": "Dieser Benutzer kann nicht gelöscht werden",
+          "openSkills": "Skills zum Übertragen öffnen",
           "success": "Benutzer gelöscht"
         }
       },

@@ -10163,6 +10163,8 @@
         },
         "title": "Excluir usuário",
         "toasts": {
+          "blockedBySkills": "Não é possível excluir este usuário",
+          "openSkills": "Abrir habilidades para transferi-las",
           "success": "Usuário excluído"
         }
       },
