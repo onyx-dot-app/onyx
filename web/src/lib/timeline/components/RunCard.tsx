@@ -134,17 +134,28 @@ export function RunCard<S extends RunCardStep>({
             className="transition-[row-gap] duration-150"
           >
             <TimelineHeaderRow onClick={foldable ? toggle : undefined}>
-              {isRunning ? (
-                <StreamingHeader headerText={workingText} />
-              ) : stopped ? (
-                <StoppedHeader />
-              ) : (
-                <CompletedHeader
-                  isExpanded={isOpen}
-                  processingDurationSeconds={durationSeconds ?? timedSeconds}
-                  {...summary}
-                />
-              )}
+              {/* Working, finished and stopped titles swap through one
+                  animation instead of flashing. A new activity in the
+                  working title keeps its key, so it only resizes. */}
+              <div className="flex-1 min-w-0">
+                <Presence.Swap
+                  swapKey={isRunning ? "working" : stopped ? "stopped" : "done"}
+                >
+                  {isRunning ? (
+                    <StreamingHeader headerText={workingText} />
+                  ) : stopped ? (
+                    <StoppedHeader />
+                  ) : (
+                    <CompletedHeader
+                      isExpanded={isOpen}
+                      processingDurationSeconds={
+                        durationSeconds ?? timedSeconds
+                      }
+                      {...summary}
+                    />
+                  )}
+                </Presence.Swap>
+              </div>
               {foldable && (
                 <>
                   {/* The timer is plain text beside the button: a button
