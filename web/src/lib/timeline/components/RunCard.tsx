@@ -80,6 +80,9 @@ export function RunCard<S extends RunCardStep>({
     !isRunning &&
     (isStopped ?? steps.some((step) => step.status === "stopped"));
   const [isOpen, setIsOpen] = useState(isRunning);
+  // A card that arrives while its run works rises in; a saved run's card
+  // appears at once.
+  const [arrivedLive] = useState(isRunning);
   const toggle = () => setIsOpen((prev) => !prev);
 
   // Fold closed once text follows; fire once so a manual re-open sticks.
@@ -107,60 +110,62 @@ export function RunCard<S extends RunCardStep>({
   const foldable = steps.length > 0;
 
   return (
-    <TimelineRoot>
-      <RunCardSurface interactive={foldable} tinted={isRunning || isOpen}>
-        {/* Flat: the header, then each step, 0.25rem apart.
+    <Presence appear={arrivedLive} grow>
+      <TimelineRoot>
+        <RunCardSurface interactive={foldable} tinted={isRunning || isOpen}>
+          {/* Flat: the header, then each step, 0.25rem apart.
             The gap closes with the folds, so a folded card keeps none. */}
-        <Section
-          alignItems="stretch"
-          gap={isOpen ? 1 : 0}
-          height="auto"
-          className="transition-[row-gap] duration-150"
-        >
-          <TimelineHeaderRow>
-            {isRunning ? (
-              <StreamingHeader
-                headerText={workingText}
-                collapsible={foldable}
-                isExpanded={isOpen}
-                onToggle={toggle}
-                streamingStartTime={startedAt}
-                toolProcessingDuration={durationSeconds}
-              />
-            ) : stopped ? (
-              <StoppedHeader
-                totalSteps={steps.length}
-                collapsible
-                isExpanded={isOpen}
-                onToggle={toggle}
-              />
-            ) : (
-              <CompletedHeader
-                totalSteps={steps.length}
-                collapsible
-                isExpanded={isOpen}
-                onToggle={toggle}
-                processingDurationSeconds={durationSeconds ?? timedSeconds}
-                {...summary}
-              />
-            )}
-          </TimelineHeaderRow>
-          {steps.map((step, index) => (
-            <Fold key={step.id} open={isOpen}>
-              {/* A step that streams in rises in, after the card opens room
+          <Section
+            alignItems="stretch"
+            gap={isOpen ? 1 : 0}
+            height="auto"
+            className="transition-[row-gap] duration-150"
+          >
+            <TimelineHeaderRow>
+              {isRunning ? (
+                <StreamingHeader
+                  headerText={workingText}
+                  collapsible={foldable}
+                  isExpanded={isOpen}
+                  onToggle={toggle}
+                  streamingStartTime={startedAt}
+                  toolProcessingDuration={durationSeconds}
+                />
+              ) : stopped ? (
+                <StoppedHeader
+                  totalSteps={steps.length}
+                  collapsible
+                  isExpanded={isOpen}
+                  onToggle={toggle}
+                />
+              ) : (
+                <CompletedHeader
+                  totalSteps={steps.length}
+                  collapsible
+                  isExpanded={isOpen}
+                  onToggle={toggle}
+                  processingDurationSeconds={durationSeconds ?? timedSeconds}
+                  {...summary}
+                />
+              )}
+            </TimelineHeaderRow>
+            {steps.map((step, index) => (
+              <Fold key={step.id} open={isOpen}>
+                {/* A step that streams in rises in, after the card opens room
                   for it. Steps already there when the card mounts (a saved
                   run) appear at once. */}
-              <Presence appear={isRunning} grow>
-                {renderStep(step, {
-                  isFirst: index === 0,
-                  isLast: index === steps.length - 1,
-                })}
-              </Presence>
-            </Fold>
-          ))}
-        </Section>
-      </RunCardSurface>
-    </TimelineRoot>
+                <Presence appear={isRunning} grow>
+                  {renderStep(step, {
+                    isFirst: index === 0,
+                    isLast: index === steps.length - 1,
+                  })}
+                </Presence>
+              </Fold>
+            ))}
+          </Section>
+        </RunCardSurface>
+      </TimelineRoot>
+    </Presence>
   );
 }
 
