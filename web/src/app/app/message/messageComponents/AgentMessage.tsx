@@ -765,7 +765,9 @@ function packetTurn(group: TurnGroup): number {
  * form one run. Interim text shows once every earlier step is revealed, so
  * text never appears ahead of the steps before it. Only the section's own
  * steps count: an earlier section's steps never gate its text. The list always
- * ends with a run, which holds the live header while later steps arrive.
+ * ends with a run, which holds the live header while later steps arrive. A
+ * response that starts with text starts with an empty run, which shows only
+ * the avatar, as Craft starts with its logo row.
  */
 function buildRunSegments(
   pacedTurnGroups: TurnGroup[],
@@ -811,6 +813,9 @@ function buildRunSegments(
         key: item.group.steps[0]?.key ?? String(item.turn),
         turnGroups: [item.group],
       });
+  }
+  if (segments[0]?.kind === "text") {
+    segments.unshift({ kind: "run", key: "lead", turnGroups: [] });
   }
   if (segments[segments.length - 1]?.kind !== "run") {
     segments.push({ kind: "run", key: "live", turnGroups: [] });
