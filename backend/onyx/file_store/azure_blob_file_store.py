@@ -18,7 +18,10 @@ if TYPE_CHECKING:
         UserDelegationKey,
     )
 
-from onyx.configs.app_configs import FILE_STORE_PRESIGN_MAX_TTL_SECONDS
+from onyx.configs.app_configs import (
+    FILE_STORE_PRESIGN_MAX_TTL_SECONDS,
+    FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES,
+)
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
@@ -35,6 +38,7 @@ from onyx.db.file_record import (
 )
 from onyx.db.models import FileRecord
 from onyx.file_store.file_store import (
+    TRANSIENT_STORAGE_STATUS,
     PresignableFileStore,
     PresignedUrlsNotSupportedError,
     content_byte_size,
@@ -62,6 +66,11 @@ class AzureBlobBackedFileStore(PresignableFileStore):
 
     The container name maps to the generic `bucket_name` column of `file_record`.
     """
+
+    # One Put Blob takes at most 5000 MiB, less than the 5 GiB default.
+    _presign_max_upload_bytes = min(
+        FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES, 5000 * 1024 * 1024
+    )
 
     def __init__(
         self,
@@ -176,6 +185,19 @@ class AzureBlobBackedFileStore(PresignableFileStore):
         if len(key) == 1024:
             logger.info("File name was too long and was truncated: %s", file_name)
         return key
+
+    def is_transient_error(self, error: Exception) -> bool:
+        from azure.core.exceptions import (
+            HttpResponseError,
+            ServiceRequestError,
+            ServiceResponseError,
+        )
+
+        # A request that did not reach the service, or got no response, retries.
+        return isinstance(error, (ServiceRequestError, ServiceResponseError)) or (
+            isinstance(error, HttpResponseError)
+            and error.status_code in TRANSIENT_STORAGE_STATUS
+        )
 
     def initialize(self) -> None:
         """Initialize the Azure file store by ensuring the container exists."""
@@ -531,8 +553,9 @@ class AzureBlobBackedFileStore(PresignableFileStore):
                 except HttpResponseError as e:
                     if e.status_code == 403:
                         raise PresignedUrlsNotSupportedError(
-                            "An Azure user delegation SAS needs the Storage Blob "
-                            "Delegator role on the storage account"
+                            "An Azure user delegation SAS needs a role with "
+                            "generateUserDelegationKey on the storage account, "
+                            "such as Storage Blob Data Contributor"
                         ) from e
                     raise
                 self._user_delegation_key_expiry = expiry

@@ -45,8 +45,9 @@ func newFakeHost(t *testing.T, pidFile string) *fakeHost {
 			"if [ \"$1\" = kill ] && [ -e %[1]s/vm.pid ]; then kill -9 \"$(cat %[1]s/vm.pid)\"; fi\n", dir),
 		"jailer": fmt.Sprintf("#!/bin/sh\nwhile [ \"$1\" != -- ]; do\n"+
 			"  case \"$1\" in --id) id=$2;; --chroot-base-dir) base=$2;; esac; shift\ndone\n"+
-			"sleep 300 </dev/null >/dev/null 2>&1 &\necho $! > %s/vm.pid\n"+
-			"echo %s > \"$base/firecracker/$id/root/firecracker.pid\"\n", dir, pidFile),
+			"readlink /proc/self/ns/net > %[1]s/netns\n"+
+			"sleep 300 </dev/null >/dev/null 2>&1 &\necho $! > %[1]s/vm.pid\n"+
+			"echo %[2]s > \"$base/firecracker/$id/root/firecracker.pid\"\n", dir, pidFile),
 	}
 	for name, body := range scripts {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o755); err != nil {
@@ -103,6 +104,22 @@ func TestSpawnStopsTheScopeWhenItFailsBeforeAProc(t *testing.T) {
 	}
 	if _, err := os.Stat(h.l.Cmd.Layout.ChrootDir(testID)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("chroot not removed: %v", err)
+	}
+}
+
+func TestSpawnStartsTheJailerInANewNetworkNamespace(t *testing.T) {
+	h := newFakeHost(t, "not-a-pid")
+	_, _ = h.l.Spawn(context.Background(), testID, 1000000, nil, jailer.Limits{})
+	raw, err := os.ReadFile(filepath.Join(h.dir, "netns"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	own, err := os.Readlink("/proc/self/ns/net")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(raw)); got == "" || got == own {
+		t.Fatalf("jailer network namespace %q, want a new one (agent %q)", got, own)
 	}
 }
 

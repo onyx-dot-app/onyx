@@ -47,7 +47,8 @@ const requests = [
   },
   {
     name: "resume",
-    request: (signal: AbortSignal) => resumeChatMessage("s1", 0, signal).next(),
+    request: (signal: AbortSignal) =>
+      resumeChatMessage("s1", 2, 0, signal).next(),
   },
 ];
 

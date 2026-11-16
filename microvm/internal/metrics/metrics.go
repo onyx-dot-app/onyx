@@ -102,7 +102,7 @@ func New(src Source) (*Metrics, error) {
 		reg: prometheus.NewRegistry(),
 		createSeconds: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Namespace: namespace, Name: "create_duration_seconds",
-			Help:    "Create latency. result: created (a VM started), existing (idempotent repeat), refused, failed.",
+			Help:    "Create latency. result: created (a VM started), existing (idempotent repeat), refused, failed, canceled (by the caller or its deadline).",
 			Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60},
 		}, []string{"result"}),
 		admissions: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -213,6 +213,8 @@ const (
 	CreateExisting = "existing"
 	CreateRefused  = "refused"
 	CreateFailed   = "failed"
+	// CreateCanceled: the caller canceled, or its deadline passed.
+	CreateCanceled = "canceled"
 )
 
 // ObserveCreate records one Create: its latency by result, and the admission

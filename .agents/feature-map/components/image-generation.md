@@ -69,7 +69,8 @@ chat turn
   ImageGenerationTool.is_available               generation.py:is_image_generation_configured
   tool_constructor.py:_get_image_generation_config   default config -> credentials
   ImageGenerationTool._run
-    _resolve_reference_image_file_ids            dedupe, cap, reject if unsupported
+    ImageGenerationArguments                     strip and dedupe reference IDs
+    _resolve_reference_image_file_ids            cap, reject if unsupported
     worker thread: generate_images_with_provider tool thread polls for cancellation,
                                                  then waits for started provider calls
     save_files(base64, chat_session_id)          -> FinalImageGenerationResponse details

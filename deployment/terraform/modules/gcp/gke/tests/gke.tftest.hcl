@@ -376,6 +376,11 @@ run "the_sandbox_pool_runs_pods_by_default" {
     ]
     error_message = "Pod-runtime sandbox pools carry only the workload taint, so pod sandboxes still land there."
   }
+
+  assert {
+    condition     = google_container_node_pool.this["sandbox"].initial_node_count == 0
+    error_message = "A pod-runtime sandbox pool starts empty: sandbox pods make the autoscaler add a node."
+  }
 }
 
 run "firecracker_turns_on_nested_virtualization" {
@@ -423,6 +428,148 @@ run "firecracker_turns_on_nested_virtualization" {
     condition     = length(google_container_node_pool.this["main"].node_config[0].advanced_machine_features) == 0
     error_message = "Only the sandbox pool gets nested virtualization."
   }
+
+  assert {
+    condition     = !contains(keys(google_container_node_pool.this), "sandboxpod")
+    error_message = "The pod sandbox pool is opt-in."
+  }
+
+  # Only the host agent DaemonSet runs here, and DaemonSets never make the
+  # autoscaler add a node.
+  assert {
+    condition     = google_container_node_pool.this["sandbox"].initial_node_count == 1
+    error_message = "The Firecracker pool must start with a node, or the host agent never gets one."
+  }
+}
+
+run "firecracker_with_pod_sandbox_pool" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool           = true
+    craft_sandbox_runtime              = "firecracker"
+    enable_craft_pod_sandbox_node_pool = true
+  }
+
+  assert {
+    condition = (
+      google_container_node_pool.this["sandboxpod"].node_config[0].labels == tomap({ "onyx.app/workload" = "sandbox" }) &&
+      [for t in google_container_node_pool.this["sandboxpod"].node_config[0].taint : "${t.key}=${t.value}:${t.effect}"] == ["workload=sandbox:NO_SCHEDULE"]
+    )
+    error_message = "The pod sandbox pool must match the chart's sandboxPod selector and toleration, with no onyx.app/kvm label or taint."
+  }
+
+  assert {
+    condition = (
+      google_container_node_pool.this["sandboxpod"].node_config[0].machine_type == "n2-standard-4" &&
+      one(google_container_node_pool.this["sandboxpod"].autoscaling).total_min_node_count == 1 &&
+      one(google_container_node_pool.this["sandboxpod"].autoscaling).total_max_node_count == 2 &&
+      google_container_node_pool.this["sandboxpod"].node_config[0].disk_size_gb == 200
+    )
+    error_message = "The pod sandbox pool defaults to n2-standard-4, 1 to 2 nodes, with the sandbox disk size."
+  }
+
+  assert {
+    condition = (
+      length(google_container_node_pool.this["sandboxpod"].node_config[0].advanced_machine_features) == 0 &&
+      length(google_container_node_pool.this["sandboxpod"].node_config[0].linux_node_config) == 0 &&
+      length(google_container_node_pool.this["sandboxpod"].node_config[0].sandbox_config) == 0
+    )
+    error_message = "The pod sandbox pool gets no nested virtualization, no Firecracker sysctls and no gVisor."
+  }
+
+  assert {
+    condition = (
+      one(one(google_container_node_pool.this["sandboxpod"].node_config).workload_metadata_config).mode == "GKE_METADATA" &&
+      one(one(google_container_node_pool.this["sandboxpod"].node_config).shielded_instance_config).enable_secure_boot
+    )
+    error_message = "The pod sandbox pool keeps the hardening of every other pool."
+  }
+
+  assert {
+    condition = (
+      google_container_node_pool.this["sandbox"].node_config[0].labels["onyx.app/kvm"] == "true" &&
+      [for t in google_container_node_pool.this["sandbox"].node_config[0].taint : "${t.key}=${t.value}:${t.effect}"] == [
+        "workload=sandbox:NO_SCHEDULE",
+        "onyx.app/kvm=true:NO_SCHEDULE",
+      ]
+    )
+    error_message = "The Firecracker pool keeps its own label and taint next to the pod pool."
+  }
+
+  assert {
+    condition     = google_container_node_pool.this["sandboxpod"].initial_node_count == 1
+    error_message = "The pod sandbox pool must start with a node for the image prepuller DaemonSet."
+  }
+}
+
+run "the_pod_sandbox_pool_can_be_sized" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool            = true
+    craft_sandbox_runtime               = "firecracker"
+    enable_craft_pod_sandbox_node_pool  = true
+    craft_pod_sandbox_node_machine_type = "n2-standard-8"
+    craft_pod_sandbox_node_min_count    = 0
+    craft_pod_sandbox_node_max_count    = 4
+  }
+
+  assert {
+    condition = (
+      google_container_node_pool.this["sandboxpod"].node_config[0].machine_type == "n2-standard-8" &&
+      one(google_container_node_pool.this["sandboxpod"].autoscaling).total_min_node_count == 0 &&
+      one(google_container_node_pool.this["sandboxpod"].autoscaling).total_max_node_count == 4
+    )
+    error_message = "The pod sandbox pool should take the given machine type and counts."
+  }
+
+  assert {
+    condition     = google_container_node_pool.this["sandboxpod"].initial_node_count == 0
+    error_message = "A pod sandbox pool with min 0 starts empty."
+  }
+}
+
+run "a_caller_pool_named_sandboxpod_still_starts_empty" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+    node_pools = {
+      main = {}
+      sandboxpod = {
+        taints = [{ key = "workload", value = "sandbox", effect = "NO_SCHEDULE" }]
+      }
+    }
+  }
+
+  assert {
+    condition     = google_container_node_pool.this["sandboxpod"].initial_node_count == 0
+    error_message = "Only the module's own pod sandbox pool starts with a node; a caller's tainted pool starts empty."
+  }
+}
+
+run "pod_sandbox_pool_needs_firecracker" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool           = true
+    enable_craft_pod_sandbox_node_pool = true
+  }
+
+  expect_failures = [var.enable_craft_pod_sandbox_node_pool]
+}
+
+run "pod_sandbox_pool_needs_the_sandbox_pool" {
+  command = plan
+
+  variables {
+    craft_sandbox_runtime              = "firecracker"
+    enable_craft_pod_sandbox_node_pool = true
+  }
+
+  expect_failures = [var.enable_craft_pod_sandbox_node_pool]
 }
 
 run "firecracker_accepts_c3" {
@@ -1021,6 +1168,33 @@ run "rejects_a_sandbox_pool_that_would_replace_a_defined_one" {
   }
 
   expect_failures = [var.enable_sandbox_node_pool]
+}
+
+run "rejects_a_pod_sandbox_pool_that_would_replace_a_defined_one" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool           = true
+    craft_sandbox_runtime              = "firecracker"
+    enable_craft_pod_sandbox_node_pool = true
+    node_pools = {
+      main       = {}
+      sandboxpod = {}
+    }
+  }
+
+  expect_failures = [var.enable_craft_pod_sandbox_node_pool]
+}
+
+run "rejects_a_pod_sandbox_pool_whose_max_is_below_its_min" {
+  command = plan
+
+  variables {
+    craft_pod_sandbox_node_min_count = 3
+    craft_pod_sandbox_node_max_count = 2
+  }
+
+  expect_failures = [var.craft_pod_sandbox_node_max_count]
 }
 
 run "rejects_a_sandbox_disk_too_small_for_one_pod" {

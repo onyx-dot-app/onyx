@@ -4,18 +4,12 @@ from collections.abc import Callable
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import MarketplaceKind
 from onyx.db.models import Marketplace, Plugin, PluginSkill, PluginVersion, User
 from tests.external_dependency_unit.craft.db_helpers import make_user
-
-
-def _check_deferred_constraints(db_session: Session) -> None:
-    """Run the checks a commit would run, without a commit."""
-    db_session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
 
 
 def _user_uploads(db_session: Session, owner: User) -> Marketplace:
@@ -57,9 +51,7 @@ def _refused(db_session: Session, write: Callable[[], object], constraint: str) 
     with pytest.raises(IntegrityError, match=constraint):
         write()
         db_session.flush()
-        _check_deferred_constraints(db_session)
     savepoint.rollback()
-    db_session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
 
 
 @pytest.fixture
@@ -86,7 +78,6 @@ def test_one_transaction_inserts_a_plugin_and_its_first_version(
             )
         )
         db_session.flush()
-        _check_deferred_constraints(db_session)
     finally:
         db_session.rollback()
 
@@ -122,26 +113,6 @@ def test_database_refuses_invalid_plugins(db_session: Session, owner: User) -> N
             ),
             "uq_plugin_marketplace_name",
         )
-
-        # A current version that belongs to another plugin.
-        def _foreign_current_version() -> None:
-            plugin, version = _plugin_with_first_version(
-                marketplace.id, owner, name="pointer"
-            )
-            plugin.current_version_id = existing_version.id
-            db_session.add_all([plugin, version])
-
-        _refused(db_session, _foreign_current_version, "fk_plugin_current_version")
-
-        # A published version that belongs to another plugin.
-        def _foreign_published_version() -> None:
-            plugin, version = _plugin_with_first_version(
-                marketplace.id, owner, name="published"
-            )
-            plugin.published_version_id = existing_version.id
-            db_session.add_all([plugin, version])
-
-        _refused(db_session, _foreign_published_version, "fk_plugin_published_version")
 
         # A second skill with the same name in one version.
         db_session.add(

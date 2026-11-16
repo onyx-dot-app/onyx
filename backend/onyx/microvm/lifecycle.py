@@ -329,10 +329,13 @@ def evict_idle_sandbox_vm(
     sandbox_id: UUID,
     last_active: int,
     now: int,
+    draining: bool = False,
 ) -> VmStopOutcome:
     """The idle evictor: stop a VM idle past the timeout (P4) when nothing
-    runs in it (P7). Without checkpoint support it decides and keeps the VM."""
-    if not is_vm_idle(last_active, now):
+    runs in it (P7). Without checkpoint support it decides and keeps the VM.
+    On a draining node every VM counts as idle, so each is saved and stopped
+    once nothing runs in it; the next wake places it on another node."""
+    if not draining and not is_vm_idle(last_active, now):
         return VmStopOutcome.NOT_IDLE
     if not checkpointer.supported:
         return VmStopOutcome.KEPT_NO_CHECKPOINT

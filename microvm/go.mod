@@ -1,6 +1,6 @@
 module github.com/onyx-dot-app/onyx/microvm
 
-go 1.27.1
+go 1.27.4
 
 require (
 	github.com/go-openapi/errors v0.22.9

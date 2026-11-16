@@ -9,7 +9,14 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
 from onyx.db.enums import BuildSessionStatus, PatType, Permission, SandboxStatus
-from onyx.db.models import BuildSession, PersonalAccessToken, Sandbox, Snapshot, User
+from onyx.db.models import (
+    BuildSession,
+    ChatSession,
+    PersonalAccessToken,
+    Sandbox,
+    Snapshot,
+    User,
+)
 from onyx.db.pat import create_pat, revoke_pat
 from onyx.server.features.build.sandbox.models import SandboxCleanupCheckpoint
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
@@ -504,3 +511,45 @@ def get_user_sandbox_blob_paths(db_session: Session, user_id: UUID) -> list[str]
             )
         )
     return paths
+
+
+def get_sandbox_purge_targets(
+    db_session: Session, user_id: UUID | None = None
+) -> dict[UUID, list[UUID]]:
+    """Sandbox ID -> its user's build session IDs; one user, or every
+    sandbox of the current tenant."""
+    stmt = select(Sandbox.id, BuildSession.id).outerjoin(
+        BuildSession, BuildSession.user_id == Sandbox.user_id
+    )
+    if user_id is not None:
+        stmt = stmt.where(Sandbox.user_id == user_id)
+    targets: dict[UUID, list[UUID]] = {}
+    for sandbox_id, session_id in db_session.execute(stmt).all():
+        sessions = targets.setdefault(sandbox_id, [])
+        if session_id is not None:
+            sessions.append(session_id)
+    return targets
+
+
+def get_all_sandbox_ids(db_session: Session) -> list[UUID]:
+    return list(db_session.scalars(select(Sandbox.id)).all())
+
+
+def get_retained_session_ids(
+    db_session: Session, session_ids: list[UUID], cutoff: datetime.datetime
+) -> set[UUID]:
+    """The IDs in `session_ids` that chat retention keeps: an existing chat
+    session (the retention task deletes the expired ones), or a build
+    session with activity since `cutoff`."""
+    if not session_ids:
+        return set()
+    chats = db_session.scalars(
+        select(ChatSession.id).where(ChatSession.id.in_(session_ids))
+    ).all()
+    builds = db_session.scalars(
+        select(BuildSession.id).where(
+            BuildSession.id.in_(session_ids),
+            BuildSession.last_activity_at >= cutoff,
+        )
+    ).all()
+    return {*chats, *builds}

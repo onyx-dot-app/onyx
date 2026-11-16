@@ -16,6 +16,7 @@ from onyx.agents.models import (
     StepRecord,
 )
 from onyx.cache.interface import CacheBackend
+from onyx.chat import incognito_context
 from onyx.chat.agent import ChatAgent
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.citation_utils import message_citation_sources
@@ -24,6 +25,7 @@ from onyx.chat.history_store import (
     RedisChatHistoryStore,
     get_chat_history_store,
 )
+from onyx.chat.mention_models import PickedSkillMessage, RecordedSkillMention
 from onyx.chat.models import (
     ChatBranch,
     ChatHistoryResult,
@@ -33,6 +35,7 @@ from onyx.chat.models import (
     IncognitoAgentResponse,
     IncognitoState,
     SavedAgentContext,
+    picked_skill_messages,
 )
 from onyx.chat.presentation import project_response
 from onyx.chat.restoration import restore_subagent
@@ -94,6 +97,7 @@ def test_research_request_restores_a_chat_child_without_a_live_chat_root(
     setup.user_identity = LLMUserIdentity()
     setup.chat_files_for_tools = []
     setup.reasoning_effort = ReasoningEffort.AUTO
+    setup.has_chat_skills = False
     setup.all_injected_file_metadata = {}
     setup.incognito_record_mode = None
     configuration = ChatConfiguration(kind="chat")
@@ -442,3 +446,83 @@ def test_incognito_regeneration_preserves_results_before_selected_question() -> 
     assert messages[:2] == [search, image]
     assert search.metadata is None
     assert cached.messages[-1] is answer
+
+
+def _skill_message(question_id: str) -> UserMessage:
+    version_id = uuid4()
+    return picked_skill_messages(
+        question_id,
+        [RecordedSkillMention(name="triage", version_id=version_id)],
+        [
+            PickedSkillMessage(
+                version_id=version_id,
+                content="<skill>\n<name>triage</name>\nSort.\n</skill>",
+                token_count=6,
+            )
+        ],
+    )[0]
+
+
+def test_incognito_trim_keeps_each_question_with_its_skill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(incognito_context, "_MAX_CONTEXT_MESSAGES", 4)
+    first = UserMessage(id="chat:1", content="First question")
+    second = UserMessage(id="chat:3", content="Second question")
+    state = IncognitoState(
+        messages=[
+            first,
+            _skill_message("chat:1"),
+            AssistantMessage(id="run:0", content=[TextContent(text="First answer")]),
+            second,
+            second_skill := _skill_message("chat:3"),
+        ]
+    )
+
+    retained = incognito_context._retained_state(state, required_messages=2)
+
+    # The first question leaves with its skill; the second keeps its own.
+    assert [message.id for message in retained.messages] == [
+        second.id,
+        second_skill.id,
+    ]
+
+
+def test_incognito_history_keeps_saved_skills_with_their_questions() -> None:
+    store = RedisChatHistoryStore(message_id=17, chat_session_id=uuid4())
+    earlier = UserMessage(id="chat:15", content="Earlier question")
+    earlier_skill = _skill_message("chat:15")
+    answer = AssistantMessage(id="run16:0", content=[TextContent(text="Answer")])
+    question = UserMessage(id="chat:17", content="Original question")
+    skill = _skill_message("chat:17")
+    cached = IncognitoState(
+        messages=[earlier, earlier_skill, answer, question, skill],
+        responses={
+            "16": IncognitoAgentResponse(
+                replay_digest="", run_id="run16", message_ids=["run16:0"]
+            )
+        },
+    )
+    with patch("onyx.chat.history_store.load_incognito_context", return_value=cached):
+        prepared_history, _, _ = store.prepare_messages(
+            # The content-free rows carry no skill text.
+            ChatHistoryResult(
+                messages=[
+                    UserMessage(id="chat:15", content=""),
+                    AssistantMessage(id="chat:16", content=[]),
+                ],
+                input_start=2,
+                all_injected_file_metadata={},
+            ),
+            None,
+        )
+
+    # Selection and regeneration reuse the saved skill text after each question.
+    assert prepared_history.messages == [
+        earlier,
+        earlier_skill,
+        answer,
+        question,
+        skill,
+    ]
+    assert prepared_history.input_start == 3

@@ -92,7 +92,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _PLACEMENT_LOCK_PREFIX = "sandbox_fc:place_lock:"
-_LOCK_WAIT_SECONDS = SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS + 15
+PLACEMENT_LOCK_WAIT_SECONDS = SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS + 15
 _LOCK_LEASE_SECONDS = SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS + 30
 
 # Capacity reasons that are not agent ErrorReasons.
@@ -188,7 +188,7 @@ def sandbox_placement_lock(
         _PLACEMENT_LOCK_PREFIX + str(sandbox_id), timeout=_LOCK_LEASE_SECONDS
     )
     acquired = (
-        lock.acquire(blocking_timeout=_LOCK_WAIT_SECONDS)
+        lock.acquire(blocking_timeout=PLACEMENT_LOCK_WAIT_SECONDS)
         if blocking
         else lock.acquire(blocking=False)
     )

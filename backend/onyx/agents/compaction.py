@@ -173,6 +173,15 @@ def working_messages(
     return messages_after_compaction(messages, boundary, summary=checkpoint.summary)
 
 
+def is_input_context(message: Message) -> bool:
+    """Whether a message is context of the user message before it, such as a
+    picked skill, and not a user turn."""
+    return (
+        isinstance(message.metadata, CompactionMetadata)
+        and message.metadata.is_input_context
+    )
+
+
 def messages_after_compaction(
     messages: list[Message], boundary: int, *, summary: str
 ) -> list[Message]:
@@ -181,13 +190,15 @@ def messages_after_compaction(
     retained: list[Message] = [m for m in prefix if isinstance(m, SystemMessage)]
     if summary:
         retained.append(SystemMessage(content=f"Conversation summary:\n{summary}"))
-    # Between-step input does not replace the question that started this task.
+    # Between-step input and input context do not replace the question that
+    # started this task. A retained question keeps no context messages.
     latest_user = next(
         (
             index
             for index in range(len(messages) - 1, -1, -1)
             if isinstance(messages[index], UserMessage)
             and not isinstance(messages[index].metadata, InputMessageMetadata)
+            and not is_input_context(messages[index])
         ),
         None,
     )
@@ -199,7 +210,8 @@ def messages_after_compaction(
 def history_boundaries(
     messages: list[Message], *, input_start: int | None = None
 ) -> list[int]:
-    """Preserve tool exchanges and unanswered input from input_start onward.
+    """Preserve tool exchanges, input context and unanswered input from
+    input_start onward.
 
     Without a run boundary, retain the whole trailing unanswered input group.
     """
@@ -220,7 +232,9 @@ def history_boundaries(
             and (input_start is None or index >= input_start)
         ):
             unanswered_input_start = index
-        if not pending:
+        if not pending and not (
+            index + 1 < len(messages) and is_input_context(messages[index + 1])
+        ):
             boundaries.append(index + 1)
     # Files and request context can precede the question as separate user messages.
     if unanswered_input_start is not None:

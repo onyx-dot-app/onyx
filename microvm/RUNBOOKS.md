@@ -62,7 +62,7 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --previous --tail=100   # after a rest
 ```
 
 - `host agent failed` in the log: the agent stopped at start-up. The error names the failed
-  check (for example XFS reflink, cgroup v2, `/dev/kvm`, artifacts SHA256).
+  check (for example reflink or the loop store, cgroup v2, `/dev/kvm`, artifacts SHA256).
 - `/metrics has no token` in the log: the metrics token Secret is empty or missing. Compare
   `craft.hostAgent.metrics.authExistingSecret` (or the chart copy) with `auth.metricsAuth`.
 - The pod is Running and the log is clean: check the scrape target in Prometheus
@@ -109,6 +109,65 @@ kubectl $K -n $NS get events --sort-by=.lastTimestamp | tail -20
 failed pod.
 
 **Escalate** when a node with `onyx.app/kvm=true` gets no agent pod after the fix.
+
+### CraftFcNodeReportsStale
+
+**Meaning.** The agent on one node answers scrapes, but for 5 minutes the api_server has not
+accepted a node state report from it in the last 300 s (`craft.hostAgent.alerts.nodeReportStaleSeconds`).
+If the node had an accepted report since it registered, then after
+`SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (default 180 s) without one the api_server places no new
+VMs on the node, and the next wake of a sandbox on the node starts it on a live node. VMs on the
+node continue to run. The api_server does not reconcile them. `CraftFcHostAgentDown` does not fire.
+
+The alert also fires when the agent has no accepted report since it started (the timestamp is 0,
+so the alert shows an age of about 56 years). The api_server still places VMs on a registered node
+that never reported. The agent sends reports only after its signing key registration succeeds, and
+the alert needs reports on (`--state-report-interval` above 0, the default 20 s).
+
+**Check.**
+
+```bash
+kubectl $K -n $NS logs "$(pod_on <node>)" --tail=300 | grep -E 'node state report|node signing key'
+kubectl $K -n $REL logs -l app=api-server --prefix --tail=500 \
+  | grep -E 'sandbox_fc_node_report_rejected|sandbox_node_signing_key_registered'
+```
+
+The dashboard panel "Time since last accepted report / key registration" shows both values per
+node. `craft_fc_host_agent_node_reports_total` and `craft_fc_host_agent_key_registrations_total`
+count each try by `result`.
+
+- `node signing key registration failed` with `HTTP 401`: the agent's registration secret does not
+  match `auth.sandboxNodeRegistration` of the api_server. This is the usual cause after a secret
+  rotation. The registered key expires 1 hour after the last good registration, then the reports
+  get `HTTP 401` too. So this alert fires about 1 hour after a wrong rotation.
+- `node state report failed` with `HTTP 401`, and `sandbox_fc_node_report_rejected` in the
+  api_server log: the api_server does not know the node key (for example after a Redis flush). The
+  agent registers again only every 20 minutes.
+- `HTTP 409` (`node has no registered agent_address`): the api_server has no agent address for
+  the node. The agent registered none (`no --advertise-address and no $POD_IP` at start-up), or the
+  address is gone from Redis. The agent sends it again at its next registration.
+- An error with no HTTP status (`result="failed"`): the agent cannot reach
+  `craft.hostAgent.apiServerUrl` (DNS, NetworkPolicy, ingress or WAF).
+- `HTTP 5xx` (`result="server_error"`): look for the error in the api_server log.
+
+**Fix.**
+
+- For a secret mismatch, make the agent's copy of the secret equal the api_server's value. With an
+  inline `auth.sandboxNodeRegistration` value, deploy again: the chart copies the value to the
+  agent namespace. With `craft.hostAgent.registrationExistingSecret`, update that Secret in the
+  agent namespace. The api_server and the agents read the value at start-up: restart the
+  api_server if its value changed, then the agents (`kubectl $K -n $NS rollout restart ds/$DS`).
+- For an unknown node key, delete the agent pod. The new agent registers at once, and adopts its
+  running VMs from the journal.
+- For a network error, fix the path to the api_server, or set `craft.hostAgent.apiServerUrl` to the
+  in-cluster URL of the api_server Service.
+
+The alert clears when reports are accepted again. After repeated failures the agent waits up to
+2 minutes between reports, so the first accepted report can come 2 minutes after the fix. The api_server places VMs on the node again
+after the first accepted report.
+
+**Escalate** when the reports stay rejected after the agent registered again
+(`node signing key registered` in the log).
 
 ### CraftFcCreateFailures
 
@@ -272,8 +331,8 @@ kernel log), or when host processes other than VMs use the memory.
 `TEMPLATE_INCOMPATIBLE`, or a `BuildTemplate` call failed. The node cannot start VMs for that
 template.
 
-The start-up template build has no metric. The api_server skips a node with no template, so this
-alert does not see a failed start-up build. Read the agent log after each agent start.
+The alert also fires when `craft_fc_host_agent_template_ready` is 0: the node has no usable
+template from its root drive, for example after a failed start-up build. The agent log names the cause.
 
 **Check.**
 
@@ -295,18 +354,17 @@ agent NodeInfo   # templates on the node and their keys
 
 ### Drain a node
 
-Running VMs keep running during a drain. The api_server does not move them yet. Stop them after
-their sessions are saved.
+Running VMs keep running during a drain. The api_server saves the session of each VM on a
+draining node, then stops the VM.
 
 1. Set the manual drain flag first. It stays set across agent restarts:
    `agent SetDrain '{"drain": true}'`.
 2. Cordon the node: `kubectl $K cordon <node>`. The agent sees the taint within
    `--drain-poll-interval` (10 s).
 3. New Creates on the node now get `NODE_DRAINING`, and the api_server uses other nodes.
-4. List the VMs (`agent List`). Make sure that the api_server saved each session. Then stop each VM:
-   `agent Stop '{"sandbox_id": "<id>", "attempt": <n>, "generation": <n>}'`.
-5. Wait until `agent NodeInfo` shows `drain.state` `DRAINED`. Then remove or repair the node.
-6. To put the node back: `kubectl $K uncordon <node>` and `agent SetDrain '{"drain": false}'`.
+4. Wait until `agent NodeInfo` shows `drain.state` `DRAINED` (`agent List` shows the VMs that
+   are left). Then remove or repair the node.
+5. To put the node back: `kubectl $K uncordon <node>` and `agent SetDrain '{"drain": false}'`.
 
 ### Rebuild a template
 
@@ -337,8 +395,8 @@ Escalate before you remove a record of a VM that a user can still use.
 ### Restore a user session
 
 The api_server owns session saves and restores: it calls `CaptureSession`, `UploadCapture` and
-`RestoreSession` with presigned URLs. Automatic saves before a stop are not built yet. There is no
-operator command to restore a session by hand. If a user lost a session, escalate with the
+`RestoreSession` with presigned URLs. It saves a session automatically before it stops the VM on a
+draining node. There is no operator command to restore a session by hand. If a user lost a session, escalate with the
 sandbox ID, the tenant ID and the time.
 
 ### Purge data
@@ -351,13 +409,40 @@ sandbox ID, the tenant ID and the time.
   credentials.
 - A whole node: drain it, then delete the node. VM data is only on the node data disk.
 
+### Patch a kernel or Firecracker CVE
+
+`ods audit craft-fc` matches the guest kernel and Firecracker pins in
+`deployment/craft-fc/Dockerfile.artifacts` with the Amazon Linux 2023 advisories and the
+Firecracker GitHub advisories. CVE Alerts runs it every day with `--fail-on=high` and opens a
+`cve-alert` issue for each finding. Each release runs it with `--fail-on=critical` before it
+publishes the host agent.
+
+1. Read the advisory. A guest escape (Firecracker, the jailer, or KVM in the host kernel) is
+   urgent: ship a patch release. A guest kernel issue goes in the next monthly bump, because
+   guest root is in the threat model.
+2. If the advisory does not apply to our use, suppress its ID (`ALAS2023-...` or `GHSA-...`) with a
+   reason and an expiry. An ALAS ID covers all of its CVEs:
+   `ods audit ignore add <ID> --ecosystem craft-fc --reason "<why>" --expires <YYYY-MM-DD>`.
+3. Else change the version. Follow "Change a version" in `deployment/craft-fc/README.md`: the
+   newest kernel tag of the series in `amazonlinux/linux` (`kernel<series>-<version>`, the AL2023
+   package source, or `microvm-kernel`), or the fixed Firecracker release, with its SHA256 pins.
+   In the same change, set `ARTIFACTS_TAG` in `microvm/Dockerfile` to the new tag and update the
+   binary pins in `microvm/internal/binaries`. The host agent build checks that `ARTIFACTS_TAG`
+   matches `Dockerfile.artifacts`. If no kernel tag of the series has the fix yet, escalate.
+4. Do the boot test, and run the "Craft Firecracker Host Agent KVM" workflow (full lane) on the
+   branch. Until the new artifacts tag is published, CI builds the artifacts from the branch.
+5. Merge. Then publish `craft-fc-artifacts` from `main` (it pushes the `-source` tag first),
+   before the next Onyx release tag. The host agent release publish needs the published tag.
+6. The next Onyx release publishes `craft-fc-host-agent:<tag>` with the new kernel and Firecracker.
+   The DaemonSet replaces one agent pod at a time. Running VMs keep the old kernel and Firecracker
+   until they stop. After a guest escape fix, stop and start each running VM after its session is
+   saved (see "Drain a node").
+
 ## Signals with no metric
 
 These have no Prometheus metric yet. Use the agent log:
 
 | Signal | Log line |
 |---|---|
-| Node state report push | `node state report failed` (with `failures`), then `node state report sent again` |
-| Node key registration | `node signing key registered` or `node signing key registration failed` |
 | Start-up template build | `template ready` or `template build at start-up failed` |
 | Balloon reclaim | none. The dashboard compares guest memory allocated with node memory in use |

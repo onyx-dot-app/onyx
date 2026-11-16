@@ -154,7 +154,9 @@ func (l *Launcher) Spawn(ctx context.Context, id string, uid uint32, files []Fil
 	cmd.Stdout = console
 	cmd.Stderr = console
 	cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	// A VM has no NIC, so Firecracker gets an empty network namespace of its
+	// own: an escaped VMM cannot reach the pod network. vsock is Unix sockets.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Cloneflags: syscall.CLONE_NEWNET}
 	// From here a Firecracker process may exist. Every failure must stop it,
 	// or keep the chroot and report agent.ErrVMLeft.
 	// With --new-pid-ns the jailer exits after it starts Firecracker.

@@ -16,20 +16,24 @@ from onyx.tools.constants import (
     SPAWN_AGENT_TOOL_NAME,
     WAIT_AGENTS_TOOL_NAME,
 )
-from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.interface import (
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+)
 from onyx.tools.models import (
     CodeModeExposure,
     ToolCallException,
     ToolContext,
 )
 from onyx.tools.tool_implementations.subagents.models import (
-    AgentMessageInput,
+    AgentSelectionArguments,
     AgentWaitDetails,
     ChatConfiguration,
-    ListAgentsInput,
-    SpawnAgentInput,
-    SubagentSelection,
-    WaitAgentsInput,
+    ListAgentsArguments,
+    SendMessageArguments,
+    SpawnAgentArguments,
+    WaitAgentsArguments,
 )
 
 # An agent name is a path segment shown in agent lists and the UI.
@@ -39,16 +43,11 @@ MAX_AGENT_NAME_BYTES = 256
 class _SubagentTool(Tool):
     id = None
     code_mode_exposure = CodeModeExposure.DIRECT
-    input_model: ClassVar[type[BaseModel]]
+    arguments: ClassVar[type[BaseModel]]
 
     def tool_definition(self) -> ToolDefinition:
-        schema = self.input_model.model_json_schema()
-        # Titles repeat the property names; leave them out of every request.
-        schema.pop("title", None)
-        for field in schema["properties"].values():
-            field.pop("title", None)
-        return ToolDefinition(
-            name=self.name, description=self.description, parameters=schema
+        return tool_definition_from_arguments(
+            self.name, self.description, self.arguments
         )
 
 
@@ -59,14 +58,14 @@ class SpawnAgentTool(_SubagentTool):
         "Start an agent on a task in the background. It does not see this "
         "conversation, so give complete instructions. Its result arrives as a message."
     )
-    input_model = SpawnAgentInput
+    arguments = SpawnAgentArguments
 
     def __init__(self, create_agent: Callable[[], Agent], *, max_steps: int) -> None:
         self.create_agent = create_agent
         self.max_steps = max_steps
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        request = parse_tool_arguments(SpawnAgentInput, invocation.arguments)
+        request = parse_tool_arguments(SpawnAgentArguments, invocation.arguments)
         # The instruction becomes the child's first message, so it has the
         # limit of a message sent to an agent.
         for field, value, limit in (
@@ -98,10 +97,10 @@ class ListAgentsTool(_SubagentTool):
     name = "list_agents"
     display_name = "List agents"
     description = "List agents with their path, agent_id, parent and status."
-    input_model = ListAgentsInput
+    arguments = ListAgentsArguments
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        request = parse_tool_arguments(ListAgentsInput, invocation.arguments)
+        request = parse_tool_arguments(ListAgentsArguments, invocation.arguments)
         control = invocation.agents
         matching = sorted(
             (
@@ -151,13 +150,13 @@ class SendMessageTool(_SubagentTool):
         "Send a message to an agent. A running agent reads it at its next step; an "
         "idle agent starts a new run with it."
     )
-    input_model = AgentMessageInput
+    arguments = SendMessageArguments
 
     def __init__(self, *, max_steps: int) -> None:
         self.max_steps = max_steps
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        request = parse_tool_arguments(AgentMessageInput, invocation.arguments)
+        request = parse_tool_arguments(SendMessageArguments, invocation.arguments)
         receipt = invocation.agents.send_message(
             request.agent_id,
             message=request.message,
@@ -176,10 +175,10 @@ class InterruptAgentTool(_SubagentTool):
     name = "interrupt_agent"
     display_name = "Interrupt agent"
     description = "Stop an agent's current run. No result is reported."
-    input_model = SubagentSelection
+    arguments = AgentSelectionArguments
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        selection = parse_tool_arguments(SubagentSelection, invocation.arguments)
+        selection = parse_tool_arguments(AgentSelectionArguments, invocation.arguments)
         agent = invocation.agents.interrupt_agent(selection.agent_id)
         if agent is None:
             raise ToolCallException(
@@ -197,13 +196,13 @@ class WaitAgentsTool(_SubagentTool):
         "Wait for agents that you started and end your response. When they finish, a "
         "new response starts with all of their results."
     )
-    input_model = WaitAgentsInput
+    arguments = WaitAgentsArguments
 
     def __init__(self, *, has_open_cells: Callable[[], bool]) -> None:
         self.has_open_cells = has_open_cells
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        request = parse_tool_arguments(WaitAgentsInput, invocation.arguments)
+        request = parse_tool_arguments(WaitAgentsArguments, invocation.arguments)
         if self.has_open_cells():
             raise ToolCallException(
                 "A code cell is open.",

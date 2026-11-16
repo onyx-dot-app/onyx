@@ -8,6 +8,7 @@ from onyx.skills.bundle import (
     build_single_file_bundle,
     build_skill_md,
     inspect_custom_bundle,
+    read_stored_bundle,
     update_custom_bundle_files,
 )
 
@@ -145,3 +146,14 @@ def test_inspect_custom_bundle_returns_instructions_and_sorted_supporting_files(
         {"path": "docs/a.md", "size": 1},
         {"path": "z.txt", "size": 2},
     ]
+
+
+def test_stored_bundle_with_a_damaged_skill_md_is_unreadable() -> None:
+    skill_md = b"---\nname: report\ndescription: Report.\n---\n\nWrite it.\n"
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_STORED) as bundle_zip:
+        bundle_zip.writestr("SKILL.md", skill_md)
+    damaged = output.getvalue().replace(b"Write it.", b"Wrote it.")
+
+    with pytest.raises(OnyxError):
+        read_stored_bundle(damaged)

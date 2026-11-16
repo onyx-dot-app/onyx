@@ -40,6 +40,7 @@ import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useNavigation } from "@opal/navigation";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
+import type { ComposedMessage } from "@/lib/chat/types";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -61,12 +62,13 @@ interface UseChatSessionControllerProps {
 
   // Actions
   refreshChatSessions: () => void;
-  onSubmit: (params: {
-    message: string;
-    currentMessageFiles: ProjectFile[];
-    deepResearch: boolean;
-    isSeededChat?: boolean;
-  }) => Promise<void>;
+  onSubmit: (
+    params: ComposedMessage & {
+      currentMessageFiles: ProjectFile[];
+      deepResearch: boolean;
+      isSeededChat?: boolean;
+    }
+  ) => Promise<void>;
 }
 
 export type SessionFetchError = {
@@ -183,6 +185,7 @@ export default function useChatSessionController({
           submitOnLoadPerformed.current = true;
           await onSubmit({
             message: firstMessage || "",
+            mentions: [],
             currentMessageFiles: [],
             deepResearch: false,
           });
@@ -298,7 +301,7 @@ export default function useChatSessionController({
           ? restoreIncognitoMessages(
               savedMessages,
               localMessages,
-              chatSession.current_stream?.stream_id
+              chatSession.current_stream?.response_ids[0]
             )
           : preserveFailedMessages(savedMessages, localMessages);
       }
@@ -308,13 +311,13 @@ export default function useChatSessionController({
         useChatSessionStore
           .getState()
           .updateSessionData(chatSession.chat_session_id, {
-            sendAcknowledged: Promise.resolve(currentStream.stream_id),
+            sendAcknowledged: Promise.resolve(currentStream),
           });
       }
-      const { messageTree: newMessageMap, replayStreamId } = prepareSavedChat(
+      const { messageTree: newMessageMap, replayStream } = prepareSavedChat(
         savedMessages,
         localMessages,
-        currentStream?.stream_id
+        currentStream
       );
       const newMessageHistory = getLatestMessageChain(newMessageMap);
 
@@ -341,6 +344,7 @@ export default function useChatSessionController({
           .getState()
           .updateSessionData(chatSession.chat_session_id, {
             hasOlderMessages: chatSession.has_older_messages ?? false,
+            approvalsVersion: chatSession.approvals_version,
           });
         chatSessionIdRef.current = chatSession.chat_session_id;
       }
@@ -349,7 +353,7 @@ export default function useChatSessionController({
 
       if (
         sessionOwner &&
-        (replayStreamId !== null ||
+        (replayStream !== null ||
           sessionBusy ||
           useChatSessionStore
             .getState()
@@ -360,7 +364,7 @@ export default function useChatSessionController({
           controller: sessionOwner,
           errorMessage: tReadiness("checkFailed"),
           mode: recovering ? "recovery" : "completion",
-          streamId: replayStreamId,
+          stream: replayStream,
           messageMap: newMessageMap,
         });
       }
@@ -387,13 +391,14 @@ export default function useChatSessionController({
       ) {
         submitOnLoadPerformed.current = true;
 
-        const seededMessage = newMessageHistory[0]?.message;
-        if (!seededMessage) {
+        const seeded = newMessageHistory[0];
+        if (!seeded?.message) {
           return;
         }
 
         await onSubmit({
-          message: seededMessage,
+          message: seeded.message,
+          mentions: seeded.mentions ?? [],
           isSeededChat: true,
           currentMessageFiles: [],
           deepResearch: false,

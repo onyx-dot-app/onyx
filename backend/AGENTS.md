@@ -113,17 +113,16 @@ comparison. Schema defaults and updates to existing rows are fine.
 `scripts/check_migration_determinism.py` enforces this on commit for revisions newer than the
 rule, and `# migration-determinism: allow` marks a deliberate exception.
 
-A deploy runs every pending revision in one transaction (`alembic/env.py`). A revision that
-writes rows under a deferrable constraint queues checks until commit, and a later `ALTER TABLE`
-on that table then fails with "pending trigger events". Empty test databases do not show this.
+A deploy runs every pending revision in one transaction (`alembic/env.py`).
 
-- Add a deferrable constraint only when one transaction must write rows in both directions of
-  an FK. Put the reason in a comment.
+- Do not add deferrable constraints. Their checks wait until commit, so an `ALTER TABLE` on the
+  table in a later revision of the same deploy fails with "pending trigger events".
+  `tests/integration/tests/migrations/test_no_deferrable_constraints.py` enforces this.
+- Add a CHECK constraint only when a race or another writer can break the rule that application
+  code keeps. Name that case in a comment.
 - A new CHECK or FK on a large table scans every row under a lock that blocks the table. Add it
   with `postgresql_not_valid=True`. Commit, then validate it, as `9d8f310ac672` does. A later
   revision is not enough, because it runs in the same transaction and keeps the lock.
-- A revision that writes rows under a deferrable constraint ends with
-  `SET CONSTRAINTS <names> IMMEDIATE`, then `SET CONSTRAINTS <names> DEFERRED`.
 - Test a backfill with seeded rows and a single upgrade to `head`, as
   `tests/integration/tests/migrations/test_plugin_backfill_single_run_upgrade.py` does.
 

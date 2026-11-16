@@ -55,6 +55,7 @@ def test_detail_selects_the_same_thinking_as_saved_display(
     snapshot = RunState(run_id="run", status=status, steps=steps, answer_step_index=0)
     projected = project_response(snapshot, tool_ids={})
     response = ChatMessage(
+        mentions=[],
         id=1,
         chat_session_id=uuid4(),
         message="Answer",
@@ -122,6 +123,7 @@ def test_detail_preserves_thinking_display_settings(
         tool_ids={},
     )
     response = ChatMessage(
+        mentions=[],
         id=1,
         chat_session_id=uuid4(),
         message="Answer",
@@ -150,14 +152,16 @@ def test_detail_preserves_thinking_display_settings(
 
 @pytest.mark.parametrize("thinking", ["Legacy thinking", "", None])
 def test_legacy_reasoning_preserves_null_and_empty_values(thinking: str | None) -> None:
-    response = ChatMessage(response_status=None, reasoning_tokens=thinking)
+    response = ChatMessage(response_status=None, reasoning_tokens=thinking, mentions=[])
     assert get_chat_message_reasoning(response) == thinking
 
 
 @pytest.mark.parametrize("thinking", ["Canonical thinking", "", None])
 def test_sdk_reasoning_uses_response_items(thinking: str | None) -> None:
     response = ChatMessage(
-        response_status=RunStatus.COMPLETE, reasoning_tokens="Compatibility copy"
+        mentions=[],
+        response_status=RunStatus.COMPLETE,
+        reasoning_tokens="Compatibility copy",
     )
     response.response_items.append(
         ChatResponseItem(

@@ -18,7 +18,7 @@ from onyx.chat import stream_buffer
 from onyx.chat.chat_processing_checker import (
     ACTIVE_LEASE_SECONDS,
     ChatTurnAdmission,
-    get_processing_stream_id,
+    get_processing_stream,
     is_chat_session_processing,
 )
 from onyx.chat.models import AnswerStreamPart, CreateChatSessionID
@@ -414,6 +414,7 @@ def test_initial_ids_precede_response_in_live_and_replayed_output(
     packets: list[AnswerStreamPart] = [
         CreateChatSessionID(chat_session_id=session_id),
         MultiModelMessageResponseIDInfo(
+            mentions=[],
             user_message_id=1,
             responses=[
                 ModelResponseSlot(message_id=2, model_name="first"),
@@ -421,7 +422,9 @@ def test_initial_ids_precede_response_in_live_and_replayed_output(
             ],
         )
         if multi_model
-        else MessageResponseIDInfo(user_message_id=1, reserved_assistant_message_id=2),
+        else MessageResponseIDInfo(
+            mentions=[], user_message_id=1, reserved_assistant_message_id=2
+        ),
         Packet(placement=Placement(turn_index=0), obj=OverallStop()),
     ]
     for packet in packets[:-1]:
@@ -489,11 +492,11 @@ def test_delayed_refresh_does_not_mark_stream_inactive() -> None:
     session_id = uuid4()
     admission = ChatTurnAdmission(cache)
     admission.claim(session_id)
-    admission.publish(_STREAM_ID)
+    admission.publish(_STREAM_ID, [])
     for key in cache.expiries:
         cache.expiries[key] = ACTIVE_LEASE_SECONDS - 20
     assert is_chat_session_processing(session_id, cache)
-    assert get_processing_stream_id(session_id, cache) == _STREAM_ID
+    assert get_processing_stream(session_id, cache) == (_STREAM_ID, [], False)
     admission.release()
     assert not is_chat_session_processing(session_id, cache)
 

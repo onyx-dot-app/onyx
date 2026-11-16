@@ -48,3 +48,16 @@ func TestPrivateMemoryBytesOfSelf(t *testing.T) {
 		t.Fatalf("missing pid: %v", err)
 	}
 }
+
+func TestAboveEviction(t *testing.T) {
+	for _, tc := range []struct{ avail, total, want uint64 }{
+		{avail: 50, total: 100, want: 40},
+		{avail: 10, total: 100, want: 0},
+		{avail: 5, total: 100, want: 0},
+		{avail: 0, total: 0, want: 0},
+	} {
+		if got := aboveEviction(tc.avail, tc.total); got != tc.want {
+			t.Errorf("aboveEviction(%d, %d) = %d, want %d", tc.avail, tc.total, got, tc.want)
+		}
+	}
+}

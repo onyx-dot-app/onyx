@@ -48,11 +48,17 @@ def test_checkpoint_publish_claim_release_and_finalize(db_session: Session) -> N
         input_messages=[],
         input_payloads=[],
     )
+    # A first checkpoint replaces no program dumps.
     assert (
         publish_checkpoint__no_commit(
-            db_session, response.id, checkpoint, expected_ownership_version=None
+            db_session,
+            response.id,
+            checkpoint,
+            expected_ownership_version=None,
+            child_run_ids=[7],
+            dump_file_ids=["first", "kept"],
         )
-        == 1
+        == []
     )
     assert response.response_status == RunStatus.SUSPENDED
     claim = claim_checkpoint__no_commit(db_session, response.id)
@@ -66,13 +72,20 @@ def test_checkpoint_publish_claim_release_and_finalize(db_session: Session) -> N
     db_session.flush()
     claim = claim_checkpoint__no_commit(db_session, response.id)
     assert claim is not None and claim.ownership_version == 3
-    assert (
-        publish_checkpoint__no_commit(
-            db_session, response.id, checkpoint, expected_ownership_version=3
-        )
-        == 4
-    )
-    interrupt_response__no_commit(db_session, response.id, cancelled=True)
+    # The checkpoint that replaces it returns the dumps that only the old one held.
+    assert publish_checkpoint__no_commit(
+        db_session,
+        response.id,
+        checkpoint,
+        expected_ownership_version=3,
+        dump_file_ids=["kept", "second"],
+    ) == ["first"]
+    row = db_session.get(ChatResponseCheckpoint, response.id)
+    assert row is not None and (row.ownership_version, row.child_run_ids) == (4, [])
+    assert interrupt_response__no_commit(db_session, response.id, cancelled=True) == [
+        "kept",
+        "second",
+    ]
     db_session.flush()
     assert response.response_status == RunStatus.CANCELLED
     assert db_session.get(ChatResponseCheckpoint, response.id) is None
