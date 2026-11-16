@@ -237,7 +237,8 @@ def test_toggle_on_refused_with_usage() -> None:
 
 
 def test_admin_change_past_the_limit_is_not_refused(admin_user: DATestUser) -> None:
-    """A group setting that puts a member past the limit is saved."""
+    """A group setting that puts a member past the limit is saved. The member
+    shows in the admin list of users past the limit."""
     author = UserManager.create(name=unique_name("req_author"))
     full = UserManager.create(name=unique_name("req_full"))
     group = UserGroupManager.create(
@@ -251,6 +252,11 @@ def test_admin_change_past_the_limit_is_not_refused(admin_user: DATestUser) -> N
         admin_user, skill.id, _group_share(group.id, "REQUIRED")
     ).raise_for_status()
     assert skill.name in _custom_names(full)
+    over = client.get(
+        f"{API_SERVER_URL}/skills/users-over-limit", headers=admin_user.headers
+    )
+    over.raise_for_status()
+    assert full.id in {user["user_id"] for user in over.json()["users"]}
 
 
 def test_save_counts_for_the_author() -> None:

@@ -645,12 +645,11 @@ def test_automatic_skill_name_conflicts(db_session: Session) -> None:
             db_session=db_session,
         )
     assert error.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
-    with pytest.raises(OnyxError) as error:
-        set_skill_installation_policy(
-            optional, SkillInstallationPolicy.DEFAULT, db_session
-        )
-    assert error.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
-    assert optional.installation_policy == SkillInstallationPolicy.AVAILABLE
+    # Two automatic skills can share a name; the name order keeps the
+    # Required one.
+    set_skill_installation_policy(optional, SkillInstallationPolicy.DEFAULT, db_session)
+    states = skill_user_states(user, [optional.id, automatic.id], db_session)
+    assert not states[optional.id].enabled and states[automatic.id].enabled
     set_skill_installation_policy(
         automatic, SkillInstallationPolicy.AVAILABLE, db_session
     )
