@@ -174,14 +174,29 @@ Read the report like this:
   subprocesses'. When the process's CPU seconds come close to the elapsed seconds, parsing in
   the process limits the run, and more workers do not help.
 
+## Point Onyx at it in a test
+
+`point_onyx_at_mock(url)` in `mock_gdrive/patch_onyx.py` is a context manager that sends the
+Google calls of the test process to the mock. The fixtures in
+`backend/tests/external_dependency_unit/connectors/google_drive/conftest.py` and the benchmark
+use it.
+
 ## Point a running Onyx at it
 
-1. Add `GOOGLE_API_ENDPOINT_OVERRIDE=http://localhost:9650/` to the environment of the API server
-   and every Celery worker, for example in `.vscode/.env`. Then restart them. The setting is for
-   testing only. When it is set, every Google connector sends its calls to the mock. This
-   includes Gmail connectors, and the mock has no Gmail routes, so their calls fail.
-   Onyx accepts plain `http` only for `localhost`, `127.0.0.1` and `::1`. Any other host must use
-   `https`.
+Onyx has no setting for this. `sitecustomize.py` in this directory patches the Google client
+libraries and the Drive connector at process start, when `MOCK_GDRIVE_URL` is set.
+
+1. Start the API server and every Celery worker with this directory on `PYTHONPATH` and
+   `MOCK_GDRIVE_URL` set, for example:
+
+   ```bash
+   export PYTHONPATH="$PWD/backend/tests/integration/mock_services/mock_google_drive_server:$PYTHONPATH"
+   export MOCK_GDRIVE_URL=http://localhost:9650/
+   ```
+
+   Python imports `sitecustomize` once, from the first directory on the path that has one. When
+   it is set, every Google API client in the process calls the mock. This includes Gmail
+   connectors, and the mock has no Gmail routes, so their calls fail.
 2. Save the service account key:
    `curl -s localhost:9650/_mock/service-account-key > mock-service-account.json`
 3. In the Admin panel, add a Google Drive connector. Upload `mock-service-account.json` as a

@@ -36,6 +36,10 @@ from typing import IO, Any
 
 import httpx
 
+from tests.integration.mock_services.mock_google_drive_server.mock_gdrive.patch_onyx import (
+    point_onyx_at_mock,
+)
+
 _MOCK_APP_DIR = (
     Path(__file__).resolve().parent.parent
     / "tests"
@@ -119,13 +123,7 @@ def run_benchmark(
     partitions_per_checkpoint: int | None = None,
     profile_path: str | None = None,
 ) -> dict[str, Any]:
-    if "onyx.configs.app_configs" in sys.modules:
-        raise RuntimeError(
-            "Onyx was imported before GOOGLE_API_ENDPOINT_OVERRIDE was set; "
-            "run the benchmark in a fresh process."
-        )
-    os.environ["GOOGLE_API_ENDPOINT_OVERRIDE"] = mock_url
-
+    """Call it inside ``point_onyx_at_mock(mock_url)``."""
     from onyx.configs.app_configs import INDEX_BATCH_SIZE
     from onyx.connectors.connector_runner import ConnectorRunner
     from onyx.connectors.google_drive import connector as drive_connector
@@ -380,18 +378,19 @@ def main() -> None:
                 control.patch(
                     "/_mock/config", json=json.loads(args.config)
                 ).raise_for_status()
-        report = run_benchmark(
-            mock_url,
-            include_shared_drives=not args.no_shared_drives,
-            include_my_drives=not args.no_my_drives,
-            include_files_shared_with_me=not args.no_shared_with_me,
-            max_docs=args.max_docs,
-            report_every=args.report_every,
-            include_permissions=args.perm_sync,
-            conversion_workers=args.conversion_workers,
-            partitions_per_checkpoint=args.partitions_per_checkpoint,
-            profile_path=args.profile,
-        )
+        with point_onyx_at_mock(mock_url):
+            report = run_benchmark(
+                mock_url,
+                include_shared_drives=not args.no_shared_drives,
+                include_my_drives=not args.no_my_drives,
+                include_files_shared_with_me=not args.no_shared_with_me,
+                max_docs=args.max_docs,
+                report_every=args.report_every,
+                include_permissions=args.perm_sync,
+                conversion_workers=args.conversion_workers,
+                partitions_per_checkpoint=args.partitions_per_checkpoint,
+                profile_path=args.profile,
+            )
     finally:
         if process is not None:
             process.terminate()

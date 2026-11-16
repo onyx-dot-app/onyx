@@ -8,14 +8,15 @@ import httpx
 import pytest
 from scripts.benchmark_google_drive_connector import start_mock_server
 
-from onyx.connectors.google_drive import source_operations
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.file_retrieval import (
     DriveFileFieldType,
     get_files_by_web_view_links_batch,
 )
-from onyx.connectors.google_utils import google_auth, resources
 from onyx.server.documents.models import GoogleServiceAccountKey
+from tests.integration.mock_services.mock_google_drive_server.mock_gdrive.patch_onyx import (
+    point_onyx_at_mock,
+)
 
 _CORPUS = {
     "num_users": 2,
@@ -28,22 +29,15 @@ _CORPUS = {
 
 
 @pytest.fixture
-def mock_drive_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[httpx.Client]:
+def mock_drive_client() -> Iterator[httpx.Client]:
     process, url = start_mock_server({"corpus": _CORPUS, "latency": {"enabled": False}})
     try:
-        override = f"{url}/"
-        monkeypatch.setattr(resources, "GOOGLE_API_ENDPOINT_OVERRIDE", override)
-        monkeypatch.setattr(google_auth, "GOOGLE_API_TOKEN_URI", f"{override}token")
-        monkeypatch.setattr(
-            source_operations,
-            "_DOCS_API_DOCUMENT_URL",
-            override + "v1/documents/{doc_id}",
-        )
-        resources._overridden_discovery_doc.cache_clear()
-        with httpx.Client(base_url=url, timeout=30) as client:
+        with (
+            point_onyx_at_mock(url),
+            httpx.Client(base_url=url, timeout=30) as client,
+        ):
             yield client
     finally:
-        resources._overridden_discovery_doc.cache_clear()
         process.terminate()
         process.wait(timeout=30)
 

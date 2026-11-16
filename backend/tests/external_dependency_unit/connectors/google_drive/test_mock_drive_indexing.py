@@ -1,7 +1,7 @@
-"""Indexes the mock Google Drive corpus with the real connector, through
-GOOGLE_API_ENDPOINT_OVERRIDE, and checks that every file becomes a document.
+"""Indexes the mock Google Drive corpus with the real connector, through the
+benchmark script, and checks that every file becomes a document.
 
-The benchmark runs in a subprocess: the override is read when Onyx is imported.
+The benchmark runs in a subprocess, the way a developer runs it.
 """
 
 import json

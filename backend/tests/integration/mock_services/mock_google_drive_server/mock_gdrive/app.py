@@ -5,7 +5,7 @@ quotas and stats live in the process):
 
     uvicorn mock_gdrive.app:app --port 9650
 
-Point Onyx at it with GOOGLE_API_ENDPOINT_OVERRIDE=http://localhost:9650/.
+Point Onyx at it with patch_onyx.py or ../sitecustomize.py (see README.md).
 """
 
 import asyncio
