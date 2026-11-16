@@ -120,8 +120,7 @@ jobs:
               - 'deployment/helm/charts/onyx/templates/sandbox-proxy/**'
               - 'deployment/helm/charts/onyx/templates/network-policy-sandbox-*'
               # Not craft-fc-*: values-ci.yaml leaves Firecracker off, so those render nothing.
-              - 'deployment/helm/charts/onyx/templates/craft-kubernetes-version-check.yaml'
-              - 'deployment/helm/charts/onyx/templates/craft-validation.yaml'
+              - 'deployment/helm/charts/onyx/templates/craft-!(fc-*)'
               - 'deployment/helm/charts/onyx/templates/celery-worker-scheduled-tasks*'
               - 'deployment/helm/charts/onyx/charts/code-interpreter-*'
               - 'deployment/helm/charts/onyx/values-ci.yaml'

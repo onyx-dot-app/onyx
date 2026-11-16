@@ -6,7 +6,7 @@ on:
       - "deployment/craft-runtime/**"
       - "deployment/craft-fc/**"
       # The guest daemon, egress relay and the runtime KVM test, with their
-      # in-module imports (go list -deps -test -tags kvm). Pushes to main
+      # in-module imports (GOOS=linux go list -deps -test -tags kvm). Pushes to main
       # still run on any microvm/ change.
       - "microvm/go.mod"
       - "microvm/go.sum"
@@ -15,6 +15,7 @@ on:
       - "microvm/internal/guestd/**"
       - "microvm/internal/egressca/**"
       - "microvm/internal/egressrelay/**"
+      - "microvm/internal/testcerts/**"
       - "microvm/proto/sandboxd/**"
       - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
       - "tools/ods/internal/audit/**"

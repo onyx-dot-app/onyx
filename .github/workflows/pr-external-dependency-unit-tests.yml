@@ -88,22 +88,44 @@ jobs:
         env:
           CHANGED_FILES: ${{ steps.filter.outputs.changed_files || '[]' }}
         run: |
-          all=$(find backend/tests/external_dependency_unit -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
-          # A PR that changes only the Helm chart or files inside test
-          # directories runs only those directories. Only craft_helm reads the
-          # chart. Any other change (or a tag push) runs every directory.
-          scoped=$(jq -r '
-            if length == 0 then "ALL" else
-              map(
-                if startswith("deployment/helm/") then "craft_helm"
-                elif test("^backend/tests/external_dependency_unit/[^/]+/") then split("/")[3]
-                else "ALL" end
-              ) | unique | if index("ALL") then "ALL" else .[] end
-            end' <<<"$CHANGED_FILES")
-          if [ "$scoped" = "ALL" ]; then
+          root=backend/tests/external_dependency_unit
+          all=$(find "$root" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+          # A PR that changes only the Helm chart or Python files inside test
+          # directories runs only the directories it can affect: the changed
+          # directory and every directory that imports the changed module.
+          # Only craft_helm reads the chart. Any other change (or a tag push)
+          # runs every directory.
+          selected=""
+          scope_all=false
+          [ "$(jq length <<<"$CHANGED_FILES")" -gt 0 ] || scope_all=true
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            if [[ "$f" == deployment/helm/* ]]; then
+              selected+="craft_helm"$'\n'
+            elif [[ "$f" =~ ^$root/([^/]+)/(.+)\.py$ ]]; then
+              dir="${BASH_REMATCH[1]}"
+              mod="${BASH_REMATCH[2]//\//.}"
+              mod="${mod%.__init__}"
+              pkg="tests.external_dependency_unit.$dir.$mod"
+              parent="${pkg%.*}"
+              selected+="$dir"$'\n'
+              # Importers by full module path, or by `from <parent> import`.
+              users=$(grep -rlE --include='*.py' \
+                -e "${pkg//./\\.}([^a-zA-Z0-9_]|$)" \
+                -e "from ${parent//./\\.} import" "$root" || true)
+              for u in $users; do
+                rel="${u#"$root"/}"
+                # A file at the root (a shared conftest or helper) is not a directory.
+                [[ "$rel" == */* ]] && selected+="${rel%%/*}"$'\n'
+              done
+            else
+              scope_all=true
+            fi
+          done < <(jq -r '.[]' <<<"$CHANGED_FILES")
+          if [ "$scope_all" = true ]; then
             selected="$all"
           else
-            selected=$(comm -12 <(echo "$all") <(echo "$scoped" | sort))
+            selected=$(comm -12 <(echo "$all") <(echo "$selected" | sort -u))
             # A PR that only deletes test directories still needs a matrix.
             [ -n "$selected" ] || selected="$all"
           fi
