@@ -25,6 +25,8 @@ import {
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { ReasoningRenderer } from "@/app/app/message/messageComponents/timeline/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "@/app/app/message/messageComponents/renderers/CustomToolRenderer";
+import { ExecToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/sandbox/ExecToolRenderer";
+import { ApplyPatchToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/sandbox/ApplyPatchToolRenderer";
 import { FileReaderToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/filereader/FileReaderToolRenderer";
 import { FetchToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/fetch/FetchToolRenderer";
 import { MemoryToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/memory/MemoryToolRenderer";
@@ -76,6 +78,17 @@ function isCustomToolPacket(packet: Packet) {
 
 function isFileReaderToolPacket(packet: Packet) {
   return packet.obj.type === PacketType.FILE_READER_START;
+}
+
+function isExecToolPacket(packet: Packet) {
+  return (
+    packet.obj.type === PacketType.EXEC_COMMAND_START ||
+    packet.obj.type === PacketType.WRITE_STDIN_START
+  );
+}
+
+function isApplyPatchToolPacket(packet: Packet) {
+  return packet.obj.type === PacketType.APPLY_PATCH_START;
 }
 
 function isFetchToolPacket(packet: Packet) {
@@ -147,6 +160,12 @@ export function findRenderer(
   }
   if (packets.some(isFileReaderToolPacket)) {
     return FileReaderToolRenderer;
+  }
+  if (packets.some(isExecToolPacket)) {
+    return ExecToolRenderer;
+  }
+  if (packets.some(isApplyPatchToolPacket)) {
+    return ApplyPatchToolRenderer;
   }
   if (packets.some(isCustomToolPacket)) {
     return CustomToolRenderer;

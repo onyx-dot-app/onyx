@@ -13117,6 +13117,12 @@
           },
           "waitingForApproval": {
             "label": "Wartet auf Ihre Freigabe"
+          },
+          "runningCommand": {
+            "label": "Befehl wird ausgeführt"
+          },
+          "editingFiles": {
+            "label": "Dateien werden bearbeitet"
           }
         },
         "internalSearch": {
@@ -13246,11 +13252,54 @@
           "researchAgent": "Recherche-Agent",
           "thinking": "Nachdenken",
           "tool": "Werkzeug",
-          "webSearch": "Websuche"
+          "webSearch": "Websuche",
+          "terminal": "Terminal",
+          "applyPatch": "Patch anwenden"
         },
         "webSearch": {
           "searching": {
             "status": "Durchsucht das Web"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {Befehl wird ausgeführt} started {Befehl gestartet} failed {Befehl fehlgeschlagen} canceled {Abgebrochen} done {Befehl ausgeführt} other {Befehl ausgeführt}}",
+            "workdir": {
+              "label": "In {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {Eingabe wird an Sitzung {sessionId} gesendet} failed {Eingabe an Sitzung {sessionId} konnte nicht gesendet werden} canceled {Abgebrochen} done {Eingabe an Sitzung {sessionId} gesendet} other {Eingabe an Sitzung {sessionId} gesendet}}} check {{phase, select, running {Sitzung {sessionId} wird geprüft} failed {Sitzung {sessionId} konnte nicht geprüft werden} canceled {Abgebrochen} done {Sitzung {sessionId} geprüft} other {Sitzung {sessionId} geprüft}}} other {Sitzung {sessionId}}}"
+          },
+          "output": {
+            "title": "Ausgabe"
+          },
+          "exitCode": {
+            "label": "Exit-Code {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {Durch ein Signal beendet} canceled {Abgebrochen} deadline_exceeded {Am Zeitlimit beendet} other {Beendet}}"
+          },
+          "stillRunning": {
+            "label": "Läuft noch (Sitzung {sessionId})"
+          },
+          "truncated": {
+            "label": "Ausgabe gekürzt"
+          },
+          "noOutput": {
+            "text": "Keine Ausgabe"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {# Datei bearbeitet} other {# Dateien bearbeitet}}"
+            },
+            "failed": {
+              "status": "Patch fehlgeschlagen"
+            },
+            "title": "Patch"
+          },
+          "stopped": {
+            "status": "Gestoppt"
           }
         }
       },
