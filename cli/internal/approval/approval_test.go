@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 )
@@ -51,6 +50,31 @@ func TestArgumentsCapCount(t *testing.T) {
 	}
 }
 
+func TestAllArgumentsShowEveryValueInFull(t *testing.T) {
+	args := map[string]any{
+		"body":   "Hi,\n\tsee \x1b]8;;https://evil\x1b\\this\x1b]8;;\x1b\\\rnow",
+		"nested": map[string]any{"k": 1},
+	}
+	long := strings.Repeat("x", 500)
+	for i := range maxArguments + 3 {
+		args[fmt.Sprintf("k%02d", i)] = long
+	}
+	lines := AllArguments(args)
+	joined := strings.Join(lines, "\n")
+	if strings.ContainsAny(joined, "\x1b\x07\r") {
+		t.Fatalf("arguments keep control characters: %q", joined)
+	}
+	if lines[0] != "body: Hi," || lines[1] != "      see thisnow" {
+		t.Fatalf("multi-line value = %q", lines[:2])
+	}
+	if len(lines) != 2+maxArguments+3+1 || lines[2] != "k00: "+long || lines[len(lines)-2] != "k12: "+long {
+		t.Fatalf("an argument or value is cut: %q", lines)
+	}
+	if lines[len(lines)-1] != `nested: {"k":1}` {
+		t.Fatalf("last line = %q", lines[len(lines)-1])
+	}
+}
+
 func TestTitleFallsBack(t *testing.T) {
 	if got := Title(models.ToolApprovalRequestEvent{DisplayName: "Create\x1b[2J issue\n"}); got != "Create issue " {
 		t.Errorf("Title = %q", got)
@@ -63,12 +87,13 @@ func TestTitleFallsBack(t *testing.T) {
 	}
 }
 
-func TestDeadlineShowsOnlyTheServerTime(t *testing.T) {
-	past := time.Date(2000, 1, 1, 15, 45, 0, 0, time.Local)
-	if got := Deadline(&past); got != "Approve by 15:45" {
-		t.Errorf("Deadline = %q", got)
+func TestAgentRequestNamesTheAgent(t *testing.T) {
+	req := models.ToolApprovalRequestEvent{ToolName: "create_issue", DisplayName: "Create issue"}
+	if got := AgentRequest(req); got != "" {
+		t.Fatalf("the chat's own request names an agent: %q", got)
 	}
-	if got := Deadline(nil); got != "" {
-		t.Errorf("Deadline = %q", got)
+	req.AgentName = "triage\x1b]52;c;ZWNobyBoaQ==\x07"
+	if got := AgentRequest(req); got != "triage wants to run Create issue" {
+		t.Fatalf("AgentRequest = %q", got)
 	}
 }

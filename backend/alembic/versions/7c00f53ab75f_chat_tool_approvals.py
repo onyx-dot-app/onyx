@@ -1,6 +1,8 @@
 """chat tool approvals
 
-Create approval_request for chat tool calls that wait for the user. Chat ran
+Create approval_request for chat tool calls that wait for the user, and give
+chat_response_checkpoint the runs that a parked response waits for and the
+program dumps that it owns. Chat ran
 MCP tools without approval, so existing MCP tools keep running without
 approval in chat (an Auto-approve workspace policy) when their server is not
 available in Craft, or when the tenant has never used Craft (no build
@@ -10,7 +12,7 @@ show it. Tools of Craft servers in a tenant that uses Craft keep their Craft
 policies. Existing workspace policies are kept.
 
 Revision ID: 7c00f53ab75f
-Revises: 414dfccc5e24
+Revises: c4e8a1f2b7d9
 Create Date: 2026-11-12 22:26:46.202126
 
 """
@@ -28,7 +30,7 @@ logger = logging.getLogger("alembic.runtime.migration")
 
 # revision identifiers, used by Alembic.
 revision = "7c00f53ab75f"
-down_revision = "414dfccc5e24"
+down_revision = "c4e8a1f2b7d9"
 branch_labels = None
 depends_on = None
 
@@ -90,6 +92,7 @@ def _create_approval_request() -> None:
         sa.Column("tool_call_id", sa.String(), nullable=False),
         sa.Column("tool_name", sa.String(), nullable=False),
         sa.Column("display_name", sa.String(), nullable=False),
+        sa.Column("arguments", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -145,6 +148,32 @@ def _drop_approval_request() -> None:
     op.drop_table("approval_request")
 
 
+def _add_checkpoint_waits() -> None:
+    op.add_column(
+        "chat_response_checkpoint",
+        sa.Column(
+            "child_run_ids",
+            postgresql.ARRAY(sa.Integer()),
+            nullable=False,
+            server_default="{}",
+        ),
+    )
+    op.add_column(
+        "chat_response_checkpoint",
+        sa.Column(
+            "dump_file_ids",
+            postgresql.ARRAY(sa.String()),
+            nullable=False,
+            server_default="{}",
+        ),
+    )
+
+
+def _drop_checkpoint_waits() -> None:
+    op.drop_column("chat_response_checkpoint", "dump_file_ids")
+    op.drop_column("chat_response_checkpoint", "child_run_ids")
+
+
 def _keep_chat_auto_approve() -> None:
     """Chat ran MCP tools without approval. Keep that for tools that exist
     now, except on servers that a tenant that uses Craft makes available in
@@ -175,6 +204,7 @@ def _keep_chat_auto_approve() -> None:
 
 def upgrade() -> None:
     _with_bounded_lock_wait(_create_approval_request)
+    _with_bounded_lock_wait(_add_checkpoint_waits)
     # The chat tables stay locked until the transaction ends, and an insert
     # can wait on a concurrent write of the same server or policy.
     _with_bounded_lock_wait(_keep_chat_auto_approve)
@@ -182,4 +212,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # The Auto-approve policies stay; they are valid without this table.
+    _with_bounded_lock_wait(_drop_checkpoint_waits)
     _with_bounded_lock_wait(_drop_approval_request)

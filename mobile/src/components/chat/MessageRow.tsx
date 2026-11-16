@@ -288,7 +288,7 @@ export const MessageRow = memo(
     prev.node.streamingStartedAt === next.node.streamingStartedAt &&
     prev.node.processingDurationSeconds ===
       next.node.processingDurationSeconds &&
-    prev.node.packets.length === next.node.packets.length &&
+    prev.node.packets === next.node.packets &&
     prev.node.files === next.node.files &&
     prev.agent === next.agent,
 );

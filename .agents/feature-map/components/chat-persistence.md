@@ -100,7 +100,10 @@ ChatResponsePersistence.save               chat/persistence.py; for USAGE_ONLY i
                                            citations, final records
 GET /chat/get-chat-session/{id}
   get_chat_message_page_ids                with `limit`: one page of the current
-                                           branch and the children of its messages
+                                           branch and the children of its messages;
+                                           the latest page reaches back to each
+                                           waiting card's reply
+                                           (db/chat_response.py:waiting_approval_reply_ids)
   get_chat_messages_by_session             that page, or all branches without
                                            `limit`; two ToolCall levels
   translate_assistant_message_to_packets   runtime rows: read_chat_execution,
@@ -182,7 +185,7 @@ one place at any moment. The delivery and the reader decide its path:
 
 | Message | Path |
 | --- | --- |
-| `send` that a running step reads | `chat_input` row → deleted when the step accepts it → `chat_response_item.inputs` of the reading step, in the same transaction |
+| `send` that a running step reads | `chat_input` row → deleted when the step accepts it → `chat_response_item.inputs` of the reading step, in the same transaction, with the records of the skills it picked (`mentions`, at the versions that acceptance resolved) and their `<skill>` messages (`skill_messages`) |
 | `queue`, `interrupt`, or a `send` that no step can read | `chat_input` row → deleted when a turn accepts it → a USER `chat_message` that starts the new turn, in the same transaction |
 
 Agent messages follow the same two paths. Child results go into the
@@ -198,8 +201,13 @@ Live and saved rendering emit accepted human inputs as `user_message` packets
 before the model step that consumed them. This preserves their display order.
 Human input needs no invoking tool call or source response. Main Chat accepts
 text without attachments or request headers. A queued or interrupting message
-keeps its Deep Research choice (`chat_input.deep_research`) and the model the
-picker showed (`chat_input.llm_override`). The human queue belongs to the
+keeps its Deep Research choice (`chat_input.deep_research`), the model the
+picker showed (`chat_input.llm_override`) and what the user tagged with `@`
+(`chat_input.mentions`); its turn accepts the picks when it accepts the
+message, and stores their records in `chat_message.mentions` and their
+`<skill>` messages in the deferred `chat_message.skill_messages` column
+([[skills]]). Only `db/chat.py:load_message_branch`, the branch load for
+model history, loads that column. The human queue belongs to the
 session: only a `send` row targets a response, and a `send` that its run never
 reads waits like queued input. Withdrawing pending text uses the
 same recipient lock as acceptance; accepted text cannot be withdrawn. Promotion
@@ -330,7 +338,15 @@ Tool results there keep their details as the saved type, documents included
 mode store work in later turns.
 The database branch selects retained user messages and response output IDs from
 the temporary list. Saving a new input removes future turns and unselected model
-answers before appending its text-file messages and question. A small response
+answers before appending its text-file messages and then its question. The
+temporary question keeps its skill messages, with their SKILL.md text, right
+after it, while the content-free database row keeps the records and leaves
+`skill_messages` empty. Later turns and regenerations reuse that text and
+never read the skill again. One helper,
+`chat/incognito_context.py:input_group`, finds a question's input group (its
+text-file messages before it and its skill messages after it) for trimming,
+regeneration and saves.
+A small response
 index keeps run IDs, output IDs and each response’s checkpoint.
 Continuation and regeneration use the selected parent’s
 checkpoint, never the last sibling saved. A failed save or eviction can leave a
@@ -361,7 +377,10 @@ deletes the context, then deletes the buffered stream keys. When the lock is
 busy, it queues a retry, and the periodic incognito cleanup task drains the
 pending set (`retry_incognito_teardowns`).
 
-**Deletion and retention.** Soft delete sets `deleted`. Hard delete
+**Deletion and retention.** Soft delete sets `deleted` and ends the chat's
+parked responses, which nothing can decide anymore
+(`server/query_and_chat/chat_backend.py:_end_parked_responses`): their
+requests, checkpoints and program dumps go. Hard delete
 (`HARD_DELETE_CHATS` or the `hard_delete` parameter) runs
 `db/chat.py:delete_messages_and_files_from_chat_session` over the session and
 its child sessions: message files, checkpoint blobs, then messages (tool calls,
@@ -398,10 +417,12 @@ Community downgrade clears it ([[billing]]).
    not delivered again.
    `chat/run_store.py:ChatRunStore._load_status` marks a `RUNNING` response
    with no live owner as `ERROR` (`cancel_run`: `CANCELLED`) only when a later
-   run reads it as a sub-agent. A root response left `RUNNING` is repaired
-   only in a conversation with an inbox row: dispatch saves it as `ERROR`
+   run reads it as a sub-agent. The inbox lists a selected root response that
+   is `RUNNING`, or `SUSPENDED` without a checkpoint row, and dispatch saves it
+   as `ERROR` when it has no owner
    (`chat/run_store.py:interrupt_ownerless_responses`), which pauses the queue.
-   Otherwise a reload replays it as is.
+   Repair skips a parked response, `SUSPENDED` with a checkpoint row: it has
+   no owner by design ([[mcp-and-custom-tools#chat-approval-durable-wait]]).
 3. `reserved-row-resolves` **A reserved assistant row must resolve.** Once
    `ChatTurnExecution.run` starts, `chat/persistence.py:ChatResponsePersistence`
    saves every outcome: an answer, a stop, a run failure, and a startup
@@ -421,8 +442,12 @@ Community downgrade clears it ([[billing]]).
    decision.** `db/chat_response.py:save_chat_turn` blanks text and reasoning,
    clears citations and skips sources and tool calls when `persist_content` is
    false, and `save_response_content` keeps only `response_status`. Error text
-   becomes a generic message. Token counts and `request_params` are kept on
-   purpose for usage metering. `db/chat.py:update_chat_session` drops a title
+   becomes a generic message. A question keeps its `mentions` record (for a
+   skill, its name and version id) in a content-free session, because a
+   mention identifies a record, not conversation content. The skill text is
+   content: a content-free row leaves `chat_message.skill_messages` empty,
+   and temporary history keeps the skill messages.
+   Token counts and `request_params` are kept on purpose for usage metering. `db/chat.py:update_chat_session` drops a title
    with no error. Every runtime writer (`_ResponseWriter`, child reservation,
    `db/chat_checkpoint.py:publish_checkpoint__no_commit`) refuses a
    content-free session. A new column stays empty for `USAGE_ONLY` only if you
@@ -453,7 +478,9 @@ Community downgrade clears it ([[billing]]).
    `latest_child_message_id` chain. A parent of None or the root id starts a
    new top-level branch, and `AUTO_PLACE_AFTER_LATEST_MESSAGE` appends to the
    active tip. A client must persist a branch switch before it sends on that
-   branch. Reservation moves the active pointer to the new answer before the
+   branch. A turn that resumes a suspended response, or hosts a parked agent
+   run's branch, passes `any_branch`: its parent can be off the active branch,
+   such as another model's response, and brings its own ancestry. Reservation moves the active pointer to the new answer before the
    run starts.
 8. `replay-matches-live-stream` **Replay must match the live stream.** Runtime
    replay and the live stream share `chat/renderer.py:MessageRenderer` and
@@ -521,15 +548,28 @@ Community downgrade clears it ([[billing]]).
     display grouping. `db/chat_response.py:write_response_items` also refuses
     an update that drops a saved item or tool result, so a run must keep its
     step ids stable across saves.
-15. `checkpoints-not-written` **No chat path writes a checkpoint.**
-    `chat/run_store.py:ChatRunStore.handoff` writes `chat_response_checkpoint`
-    and `agent-checkpoint/<root session id>/` blobs
-    (`chat/restoration.py:persist_checkpoint_files`), but nothing calls it.
-    Nothing calls `ChatRunStore.resume` either, so no chat path claims a
-    checkpoint or runs `chat/restoration.py:restore_chat_agent`. A turn that a
-    restart interrupts is never resumed ([[#save-chat-turn-one-commit]]). A
-    feature that starts to suspend runs must keep blobs under the root session
-    id, because hard delete finds them only by that prefix.
+15. `checkpoints-for-approvals` **Only a run whose waits are all on people
+    writes a checkpoint.** One park pass in
+    `chat/run_store.py:ChatRunStore.poll_control` hands off each owned run,
+    the root or an agent run, that `ChatRunStore.may_park` accepts; the root
+    reports its park through the store's `on_root_parked` callback.
+    `ChatRunStore.handoff` saves `agent-checkpoint/<root session id>/` blobs
+    (`chat/restoration.py:persist_checkpoint_files`; parked programs' dumps
+    under unique IDs, other files under content IDs), then writes
+    `chat_response_checkpoint` with the foreground child runs it waits for
+    (`child_run_ids`) and the dumps it owns (`dump_file_ids`), and sets the
+    response `SUSPENDED` (`db/chat_checkpoint.py:publish_checkpoint__no_commit`).
+    A response is parked only while it is `SUSPENDED` with that row; ownerless
+    repair keeps it, and ends a `SUSPENDED` response without the row. The
+    continuation's `ChatRunStore.resume` claims it once and runs
+    `chat/restoration.py:restore_chat_agent`; completion deletes it
+    ([[mcp-and-custom-tools#chat-approval-durable-wait]]). The row owns its
+    dumps: deleting the row (`db/chat_response.py:finish_checkpoint__no_commit`)
+    or replacing it returns them, and the caller deletes them after commit; a
+    failed handoff deletes the dumps it saved. A turn that a restart
+    interrupts mid-step is never resumed ([[#save-chat-turn-one-commit]]). A
+    feature that suspends runs must keep blobs under the root session id,
+    because hard delete finds them only by that prefix.
 16. `code-mode-replay-content` **A code mode result is replayed as saved, so
     its content must carry what the next turn needs**
     (`tools/tool_implementations/code_mode/prompt.py:format_content`). An

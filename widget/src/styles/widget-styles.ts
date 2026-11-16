@@ -674,6 +674,15 @@ export const widgetStyles = css`
     overflow: hidden;
   }
 
+  .approval-source {
+    margin: 0;
+    padding: var(--onyx-space-xs) var(--onyx-space-sm) 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+
   .approval-header {
     display: flex;
     align-items: center;
@@ -702,13 +711,6 @@ export const widgetStyles = css`
     font-size: var(--onyx-font-size-main);
     line-height: var(--onyx-line-height-main);
     font-weight: var(--onyx-weight-medium);
-  }
-
-  .approval-deadline {
-    flex-shrink: 0;
-    white-space: nowrap;
-    font-size: var(--onyx-font-size-secondary);
-    opacity: 0.7;
   }
 
   .approval-body {
@@ -748,18 +750,6 @@ export const widgetStyles = css`
   .approval-args dd.mono {
     font-family: var(--onyx-font-family-mono);
     font-size: var(--onyx-font-size-secondary);
-  }
-
-  .approval-args .arg-full,
-  .approval-args dd.expanded .arg-preview,
-  .approval-args .arg-less,
-  .approval-args dd.expanded .arg-more {
-    display: none;
-  }
-
-  .approval-args dd.expanded .arg-full,
-  .approval-args dd.expanded .arg-less {
-    display: inline;
   }
 
   .arg-toggle {

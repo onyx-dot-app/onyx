@@ -7,6 +7,7 @@ import io
 import stat
 import sys
 import zipfile
+import zlib
 from collections.abc import Callable, Iterable
 from contextlib import ExitStack
 from copy import copy
@@ -158,7 +159,9 @@ def strip_skill_md_frontmatter(content: str) -> str:
     return instructions_markdown.strip()
 
 
-def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
+def read_stored_bundle(zip_bytes: bytes) -> tuple[str, list[SkillBundleFile]]:
+    """The whole root SKILL.md of a stored bundle, frontmatter included, and
+    its other files, sorted by path."""
     try:
         zf = open_bundle_zip(zip_bytes)
     except zipfile.BadZipFile as exc:
@@ -174,6 +177,12 @@ def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
             raise OnyxError(
                 OnyxErrorCode.INTERNAL_ERROR,
                 "Stored skill bundle is missing SKILL.md.",
+            ) from exc
+        # A damaged member fails its CRC or decompression only when read.
+        except (zipfile.BadZipFile, zlib.error) as exc:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "Stored skill bundle SKILL.md is unreadable.",
             ) from exc
         files: list[SkillBundleFile] = []
         for info in zf.infolist():
@@ -191,11 +200,13 @@ def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
             OnyxErrorCode.INTERNAL_ERROR,
             "Stored skill bundle SKILL.md must be UTF-8 encoded.",
         ) from exc
+    return skill_md, sorted(files, key=lambda entry: entry.path)
 
-    sorted_files = sorted(files, key=lambda entry: entry.path)
+
+def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
+    skill_md, files = read_stored_bundle(zip_bytes)
     return CustomSkillBundleContents(
-        instructions_markdown=strip_skill_md_frontmatter(skill_md),
-        files=sorted_files,
+        instructions_markdown=strip_skill_md_frontmatter(skill_md), files=files
     )
 
 

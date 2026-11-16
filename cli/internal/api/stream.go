@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
@@ -49,7 +50,7 @@ func (c *Client) SendMessageStream(
 		payload.ChatSessionInfo = &models.ChatSessionCreationInfo{AgentID: agentID}
 	}
 	body, err := json.Marshal(payload)
-	return c.stream(ctx, sessionID, false, func(requestCtx context.Context) (*http.Request, error) {
+	return c.stream(ctx, sessionID, false, nil, func(requestCtx context.Context) (*http.Request, error) {
 		if err != nil {
 			return nil, fmt.Errorf("marshal: %w", err)
 		}
@@ -61,22 +62,31 @@ func (c *Client) SendMessageStream(
 	})
 }
 
-// ResumeChatStream replays the session's running response from its start and
-// then follows it, like SendMessageStream. The channel closes without events
-// when the session runs nothing.
-func (c *Client) ResumeChatStream(ctx context.Context, sessionID string) <-chan models.StreamEvent {
-	return c.stream(ctx, sessionID, true, func(requestCtx context.Context) (*http.Request, error) {
-		return c.newRequest(requestCtx, "GET", "/chat/chat-session/"+url.PathEscape(sessionID)+"/resume-stream?cursor=0", nil)
+// ResumeChatStream replays the session's running response from cursor and
+// then follows it, like SendMessageStream. A nil streamID follows whichever
+// response runs. Events arrive in complete batches, each ending with a
+// StreamCursorEvent, so a request from the last cursor repeats no event. A
+// StreamUnavailableEvent reports that the server has nothing to serve at the
+// cursor. Cancelling ctx stops streamID at once when it is known.
+func (c *Client) ResumeChatStream(ctx context.Context, sessionID string, streamID *int, cursor int) <-chan models.StreamEvent {
+	query := url.Values{"cursor": {strconv.Itoa(cursor)}}
+	if streamID != nil {
+		query.Set("stream_id", strconv.Itoa(*streamID))
+	}
+	return c.stream(ctx, sessionID, true, streamID, func(requestCtx context.Context) (*http.Request, error) {
+		return c.newRequest(requestCtx, "GET", "/chat/chat-session/"+url.PathEscape(sessionID)+"/resume-stream?"+query.Encode(), nil)
 	})
 }
 
 // stream delivers the events of one streaming response. Cancelling ctx stops
-// the response once the server reports its IDs. notFoundIsEmpty ends a 404
-// response without events.
+// knownStream, or the response that the server reports. A resume response
+// that is 404 delivers only a StreamUnavailableEvent, and a resume response
+// delivers events only in complete batches.
 func (c *Client) stream(
 	ctx context.Context,
 	sessionID string,
-	notFoundIsEmpty bool,
+	resume bool,
+	knownStream *int,
 	newRequest func(context.Context) (*http.Request, error),
 ) <-chan models.StreamEvent {
 	ch := make(chan models.StreamEvent, 64)
@@ -98,6 +108,9 @@ func (c *Client) stream(
 			stream  int
 		}
 		acknowledged := make(chan identity, 1)
+		if knownStream != nil {
+			acknowledged <- identity{sessionID, *knownStream}
+		}
 		stopAcknowledged := func(id identity) {
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer stopCancel()
@@ -173,7 +186,8 @@ func (c *Client) stream(
 		}
 		defer func() { _ = resp.Body.Close() }()
 
-		if notFoundIsEmpty && resp.StatusCode == http.StatusNotFound {
+		if resume && resp.StatusCode == http.StatusNotFound {
+			ch <- models.StreamUnavailableEvent{}
 			return
 		}
 		if err := checkResponse(resp); err != nil {
@@ -195,6 +209,29 @@ func (c *Client) stream(
 			return
 		}
 
+		deliver := func(event models.StreamEvent) {
+			switch event.(type) {
+			case models.SessionCreatedEvent, models.MessageIDEvent:
+				// The caller needs these IDs to settle and continue a cancelled turn.
+				select {
+				case ch <- event:
+					return
+				default:
+				}
+				select {
+				case ch <- event:
+				case <-streamCtx.Done():
+				}
+			default:
+				select {
+				case ch <- event:
+				case <-ctx.Done():
+					// Continue reading for acknowledgement; the cancellation worker is bounded.
+				}
+			}
+		}
+		var batch []models.StreamEvent
+
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 		for {
@@ -206,38 +243,38 @@ func (c *Client) stream(
 				break
 			}
 			event := parser.ParseStreamLine(scanner.Text())
+			acknowledgedStream := 0
 			switch e := event.(type) {
 			case models.SessionCreatedEvent:
 				sessionID = e.ChatSessionID
 			case models.MessageIDEvent:
-				if sessionID != "" {
-					select {
-					case acknowledged <- identity{sessionID, e.ReservedAgentMessageID}:
-					default:
-					}
-				}
+				acknowledgedStream = e.ReservedAgentMessageID
+			case models.StreamCursorEvent:
+				// A replay from a cursor has no message ID line.
+				acknowledgedStream = e.StreamID
 			}
-			if event != nil {
-				switch event.(type) {
-				case models.SessionCreatedEvent, models.MessageIDEvent:
-					// The caller needs these IDs to settle and continue a cancelled turn.
-					select {
-					case ch <- event:
-						continue
-					default:
-					}
-					select {
-					case ch <- event:
-					case <-streamCtx.Done():
-					}
+			if acknowledgedStream != 0 && sessionID != "" {
+				select {
+				case acknowledged <- identity{sessionID, acknowledgedStream}:
 				default:
-					select {
-					case ch <- event:
-					case <-ctx.Done():
-						// Continue reading for acknowledgement; the cancellation worker is bounded.
-					}
 				}
 			}
+			if event == nil {
+				continue
+			}
+			if resume {
+				// A batch that the stream cuts before its cursor replays again.
+				if _, isCursor := event.(models.StreamCursorEvent); !isCursor {
+					batch = append(batch, event)
+					continue
+				}
+				for _, batched := range batch {
+					deliver(batched)
+				}
+				clear(batch)
+				batch = batch[:0]
+			}
+			deliver(event)
 		}
 		if err := scanner.Err(); err != nil && ctx.Err() == nil {
 			if errors.Is(context.Cause(requestCtx), errStreamIdle) {

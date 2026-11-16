@@ -776,6 +776,7 @@ describe("SkillEditorPage", () => {
     );
     expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.buildExternalAppsAdmin);
     expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.userSkills);
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
 
   it("returns app-launched skill creation to that app on Cancel", async () => {

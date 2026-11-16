@@ -1,4 +1,4 @@
-import { mutate } from "swr";
+import { mutate, type ScopedMutator, useSWRConfig } from "swr";
 import { ChatSessionSharedStatus, type Message } from "@/app/app/types";
 import {
   act,
@@ -17,10 +17,10 @@ import {
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
 import { flushToolSelection } from "@/lib/tools/hooks";
-import type { PendingChatMessage } from "@/lib/chat/types";
+import type { ChatSessionStatus, PendingChatMessage } from "@/lib/chat/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@opal/layouts";
-import { PacketType } from "@/app/app/services/streamingModels";
+import { PacketType, StopReason } from "@/app/app/services/streamingModels";
 import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
 import { APPROVAL_PENDING_ERROR_CODE } from "@/app/app/types";
 
@@ -89,6 +89,14 @@ jest.mock("@/lib/projects/hooks", () => ({
 jest.mock("@/lib/connectors/hooks", () => ({
   useAvailableSources: () => ({ isLoading: false }),
 }));
+const mockNoChatSkills = {
+  entries: { skills: [], apps: [], mcpServers: [] },
+  onInputFocus: () => undefined,
+};
+jest.mock("@/lib/skills/hooks", () => ({
+  ...jest.requireActual("@/lib/skills/hooks"),
+  useChatSkills: () => mockNoChatSkills,
+}));
 jest.mock("@/hooks/usePromptShortcuts", () => ({
   __esModule: true,
   default: () => ({ activePromptShortcuts: [] }),
@@ -119,10 +127,31 @@ jest.mock("@/components/voice/Waveform", () => ({
 }));
 jest.mock("@/sections/cards/FileCard", () => ({ FileCard: () => null }));
 
+const IDLE_STATUS: ChatSessionStatus = {
+  is_processing: false,
+  current_stream: null,
+  has_active_subagents: false,
+  has_startable_input: false,
+  approvals_version: "1",
+  latest_response_id: 2,
+};
+let chatStatus = IDLE_STATUS;
+
+/** The chat's status, or its pending messages for any other read. */
+function readResponse(url: RequestInfo | URL): Response {
+  return new Response(
+    JSON.stringify(String(url).endsWith("/status") ? chatStatus : pending)
+  );
+}
+
 type ComposerProps = Omit<AppInputBarProps, "queue">;
+
+// Each render has its own SWR cache; tests revalidate keys through it.
+let swrMutate: ScopedMutator;
 
 /** The composer as chat pages mount it, with the session-level queue. */
 function ChatInput(inputProps: ComposerProps) {
+  swrMutate = useSWRConfig().mutate;
   const queue = useChatSessionQueue(!mockIncognito);
   return <AppInputBar {...inputProps} queue={queue} />;
 }
@@ -154,6 +183,7 @@ function props(chatState: AppInputBarProps["chatState"]): ComposerProps {
 }
 
 beforeEach(() => {
+  chatStatus = IDLE_STATUS;
   mockChatId = "session";
   mockSearchMode = false;
   mockIncognito = false;
@@ -166,6 +196,7 @@ beforeEach(() => {
       target_response_id: 2,
       deep_research: false,
       llm_override: null,
+      mentions: [],
     },
   ];
   jest.mocked(waitForChatResponseEnd).mockReset();
@@ -173,16 +204,6 @@ beforeEach(() => {
     .spyOn(global, "fetch")
     .mockImplementation(async (url, init) => {
       const method = init?.method ?? "GET";
-      if (String(url).endsWith("/status"))
-        return new Response(
-          JSON.stringify({
-            is_processing: false,
-            current_stream: null,
-            has_active_subagents: false,
-            has_startable_input: false,
-            latest_response_id: 2,
-          })
-        );
       if (method === "POST" && String(url).endsWith("/interrupt")) {
         const id = String(url).split("/").at(-2);
         const item = pending.find((message) => message.id === id);
@@ -209,11 +230,11 @@ beforeEach(() => {
           { status: item ? 200 : 409 }
         );
       }
-      return new Response(JSON.stringify(pending));
+      return readResponse(url);
     });
   mockClearDraft.mockClear();
   mockWriteDraft.mockClear();
-  jest.mocked(fetchSettledChatSession).mockResolvedValue({
+  jest.mocked(fetchSettledChatSession).mockImplementation(async () => ({
     chat_session_id: "session",
     description: "Existing chat",
     persona_id: 0,
@@ -228,10 +249,12 @@ beforeEach(() => {
     packets: [],
     is_processing: false,
     current_stream: null,
-  });
+    approvals_version: chatStatus.approvals_version,
+  }));
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
   const store = useChatSessionStore.getState();
-  store.createSession("session");
+  // The chat's load showed the requests of the status's version.
+  store.createSession("session", { approvalsVersion: "1" });
   store.setCurrentSession("session");
   const history = new Map<number, Message>([
     [
@@ -270,8 +293,8 @@ afterEach(() => fetchSpy.mockRestore());
 
 test("completion checks stay with their sessions across navigation", async () => {
   const user = setupUser();
-  const firstIdle = deferred<number | null>();
-  const secondIdle = deferred<number | null>();
+  const firstIdle = deferred<null>();
+  const secondIdle = deferred<null>();
   jest
     .mocked(waitForChatResponseEnd)
     .mockImplementation((sessionId) =>
@@ -353,7 +376,7 @@ test.each([false, true])(
   "retrying completion preserves the draft and paused queue (failed acknowledgement: %s)",
   async (failedAcknowledgement) => {
     const user = setupUser();
-    const idle = deferred<number | null>();
+    const idle = deferred<null>();
     jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
 
     const store = useChatSessionStore.getState();
@@ -442,12 +465,12 @@ test.each(["{Enter}", "{Control>}{Enter}{/Control}", "{Meta>}{Enter}{/Meta}"])(
 
 test("a failed submission returns its text to the composer", async () => {
   const user = setupUser();
-  fetchSpy.mockImplementation(async (_url, init) =>
+  fetchSpy.mockImplementation(async (url, init) =>
     init?.method === "POST"
       ? new Response(JSON.stringify({ detail: "Response has finished" }), {
           status: 409,
         })
-      : new Response(JSON.stringify(pending))
+      : readResponse(url)
   );
   render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
@@ -461,10 +484,8 @@ test("a failed submission returns its text to the composer", async () => {
 test("a failed submission keeps text typed while it was pending", async () => {
   const user = setupUser();
   const submission = deferred<Response>();
-  fetchSpy.mockImplementation(async (_url, init) =>
-    init?.method === "POST"
-      ? submission.promise
-      : new Response(JSON.stringify(pending))
+  fetchSpy.mockImplementation(async (url, init) =>
+    init?.method === "POST" ? submission.promise : readResponse(url)
   );
   render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
@@ -498,7 +519,7 @@ function awaitToolApproval() {
           tool_name: "mcp__3__github__create_issue",
           display_name: "Create issue",
           arguments: {},
-          expires_at: "2099-01-01T00:00:00Z",
+          agent_name: null,
         },
       },
     ],
@@ -506,48 +527,65 @@ function awaitToolApproval() {
   store.updateSessionMessageTree("session", tree);
 }
 
-test.each(["input", "streaming"] as const)(
-  "a waiting tool approval keeps the %s draft and points at its card",
-  async (chatState) => {
-    useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
-    const warning = jest.spyOn(toast, "warning");
-    awaitToolApproval();
-    const user = setupUser();
-    const inputProps = props(chatState);
-    render(<ChatInput {...inputProps} />);
-    const textbox = screen.getByRole("textbox", { name: "Message input" });
+/** The server refuses new input while a reply waits for an approval. */
+function refuseForApproval(url: RequestInfo | URL, init?: RequestInit) {
+  return init?.method === "POST"
+    ? new Response(
+        JSON.stringify({
+          error_code: APPROVAL_PENDING_ERROR_CODE,
+          detail: "Approve or reject the pending tool calls",
+        }),
+        { status: 409 }
+      )
+    : readResponse(url);
+}
 
-    await user.click(textbox);
-    await user.keyboard("{Enter}");
+test("a waiting card leaves the send to the server", async () => {
+  awaitToolApproval();
+  const user = setupUser();
+  const inputProps = props("input");
+  render(<ChatInput {...inputProps} />);
 
-    expect(inputProps.onSubmit).not.toHaveBeenCalled();
-    expect(textbox).toHaveTextContent("Keep this draft");
-    expect(mockClearDraft).not.toHaveBeenCalled();
-    expect(
-      fetchSpy.mock.calls.some(([, init]) => init?.method === "POST")
-    ).toBe(false);
-    expect(useToolApprovalUi.getState().nudge?.approvalId).toBe("approval-1");
-    expect(warning).toHaveBeenCalledWith(
-      "Approve or reject the pending tool calls first."
-    );
-  }
-);
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Enter}");
 
-test("a server refusal for a waiting approval returns the text to the composer", async () => {
+  expect(inputProps.onSubmit).toHaveBeenCalledWith({
+    message: "Keep this draft",
+    mentions: [],
+  });
+});
+
+test("a server refusal for a waiting approval keeps the draft and points at its card", async () => {
+  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  const warning = jest.spyOn(toast, "warning");
+  awaitToolApproval();
+  fetchSpy.mockImplementation(async (url, init) =>
+    refuseForApproval(url, init)
+  );
+  const user = setupUser();
+  render(<ChatInput {...props("streaming")} />);
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+
+  await user.click(textbox);
+  await user.keyboard("{Enter}");
+
+  await waitFor(() =>
+    expect(useToolApprovalUi.getState().nudge?.approvalId).toBe("approval-1")
+  );
+  expect(textbox).toHaveTextContent("Keep this draft");
+  expect(warning).toHaveBeenCalledWith(
+    "Approve or reject the pending tool calls first."
+  );
+  expect(fetchSettledChatSession).not.toHaveBeenCalled();
+});
+
+test("a server refusal for an approval this tab does not show loads the server's cards", async () => {
   useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
   const warning = jest.spyOn(toast, "warning");
   const error = jest.spyOn(toast, "error");
   const user = setupUser();
-  fetchSpy.mockImplementation(async (_url, init) =>
-    init?.method === "POST"
-      ? new Response(
-          JSON.stringify({
-            error_code: APPROVAL_PENDING_ERROR_CODE,
-            detail: "Approve or reject the pending tool calls",
-          }),
-          { status: 409 }
-        )
-      : new Response(JSON.stringify(pending))
+  fetchSpy.mockImplementation(async (url, init) =>
+    refuseForApproval(url, init)
   );
   render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
@@ -560,8 +598,9 @@ test("a server refusal for a waiting approval returns the text to the composer",
     "Approve or reject the pending tool calls first."
   );
   expect(error).not.toHaveBeenCalled();
-  // This tab has no card for the other tab's turn.
+  // This tab has no card for the other tab's turn, so it loads the session.
   expect(useToolApprovalUi.getState().nudge).toBeNull();
+  await waitFor(() => expect(fetchSettledChatSession).toHaveBeenCalled());
 });
 
 test("a queued message waits for the chat's tool selection to save", async () => {
@@ -570,12 +609,12 @@ test("a queued message waits for the chat's tool selection to save", async () =>
   const flush = jest.mocked(flushToolSelection);
   flush.mockReturnValueOnce(saved.promise);
   const posted = jest.fn();
-  fetchSpy.mockImplementation(async (_url, init) => {
+  fetchSpy.mockImplementation(async (url, init) => {
     if (init?.method === "POST") {
       posted();
       return new Response(JSON.stringify(pending[0]));
     }
-    return new Response(JSON.stringify(pending));
+    return readResponse(url);
   });
   render(<ChatInput {...props("streaming")} />);
   await user.click(screen.getByRole("textbox", { name: "Message input" }));
@@ -621,10 +660,8 @@ test("incognito keeps text in the composer while an answer is running", async ()
 test("a successful queue request keeps text typed while it was pending", async () => {
   const user = setupUser();
   const submission = deferred<Response>();
-  fetchSpy.mockImplementation(async (_url, init) =>
-    init?.method === "POST"
-      ? submission.promise
-      : new Response(JSON.stringify(pending))
+  fetchSpy.mockImplementation(async (url, init) =>
+    init?.method === "POST" ? submission.promise : readResponse(url)
   );
   render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
@@ -638,6 +675,7 @@ test("a successful queue request keeps text typed while it was pending", async (
       target_response_id: 2,
       deep_research: false,
       llm_override: null,
+      mentions: [],
     };
     pending.push(item);
     submission.resolve(new Response(JSON.stringify(item)));
@@ -660,10 +698,11 @@ test.each([true, false])(
                 current_stream: null,
                 has_active_subagents: false,
                 has_startable_input: startable,
+                approvals_version: "1",
                 latest_response_id: 2,
               })
             )
-          : new Response(JSON.stringify(pending))
+          : readResponse(url)
       );
       // An accepted "Send now" leaves the list before its turn starts; a
       // paused queue keeps its messages.
@@ -686,8 +725,8 @@ test("input sent during a slow request stays in the composer until it ends", asy
   const user = setupUser();
   const accepted = deferred<void>();
   const posted: string[] = [];
-  fetchSpy.mockImplementation(async (_url, init) => {
-    if (init?.method !== "POST") return new Response(JSON.stringify(pending));
+  fetchSpy.mockImplementation(async (url, init) => {
+    if (init?.method !== "POST") return readResponse(url);
     const body: Omit<PendingChatMessage, "id"> = JSON.parse(String(init.body));
     posted.push(body.message);
     if (posted.length === 1) await accepted.promise;
@@ -720,11 +759,14 @@ test("a turn found by a readiness check during completion loads once the chat is
             current_stream: null,
             has_active_subagents: false,
             has_startable_input: false,
+            approvals_version: "1",
             latest_response_id: latestResponseId,
           })
         )
-      : new Response(JSON.stringify(pending))
+      : readResponse(url)
   );
+  // Readiness checks share their reads through the default SWR cache, so only
+  // this test renders on it.
   await act(async () => {
     await mutate(() => true, undefined, { revalidate: false });
   });
@@ -756,9 +798,10 @@ function interruptRequests() {
 }
 
 test.each([
-  ["a live single-model stop", { turn_index: 0, model_index: 0 }],
-  ["a replayed stop", { turn_index: 0 }],
-])("Stop is withdrawn once %s arrives", async (_case, placement) => {
+  ["a live single-model stop", { turn_index: 0, model_index: 0 }, undefined],
+  ["a replayed stop", { turn_index: 0 }, undefined],
+  ["an approval wait's stop", { turn_index: 0 }, StopReason.AWAITING_APPROVAL],
+])("Stop is withdrawn once %s arrives", async (_case, placement, reason) => {
   const user = setupUser();
   const store = useChatSessionStore.getState();
   store.updateChatState("session", "streaming");
@@ -777,7 +820,7 @@ test.each([
   const answer = tree.get(2)!;
   tree.set(2, {
     ...answer,
-    packets: [{ placement, obj: { type: "stop" } }],
+    packets: [{ placement, obj: { type: "stop", stop_reason: reason } }],
   });
   act(() => store.updateSessionMessageTree("session", tree));
   expect(send).toBeDisabled();
@@ -928,14 +971,10 @@ test("Enter on a highlighted message that left the queue does not reach the next
     target_response_id: 2,
     deep_research: false,
     llm_override: null,
-  });
-  await act(async () => {
-    await mutate(() => true, undefined, { revalidate: false });
+    mentions: [],
   });
   const user = setupUser();
-  render(<ChatInput {...props("streaming")} initialMessage="" />, {
-    swrConfig: { provider: undefined },
-  });
+  render(<ChatInput {...props("streaming")} initialMessage="" />);
   await screen.findByText("Second follow-up");
   await user.click(screen.getByRole("textbox", { name: "Message input" }));
   await user.keyboard("{ArrowUp}{ArrowUp}");
@@ -946,7 +985,7 @@ test("Enter on a highlighted message that left the queue does not reach the next
   // A turn takes the highlighted head.
   pending = pending.slice(1);
   await act(async () => {
-    await mutate(SWR_KEYS.pendingChatMessages("session"));
+    await swrMutate(SWR_KEYS.pendingChatMessages("session"));
   });
   await waitFor(() =>
     expect(screen.queryByText("Queued follow-up")).not.toBeInTheDocument()
@@ -985,17 +1024,48 @@ test("an edited queued message is saved as the draft before the composer shows i
   // A chat switch cancels the composer's delayed save, so the text is saved now.
   expect(mockWriteDraft).toHaveBeenCalledWith(
     "chat:session",
-    "Queued follow-up"
+    { message: "Queued follow-up", mentions: [] },
+    expect.any(Function)
   );
+});
+
+test("an edited queued message keeps its picks, and a send carries them into the running response", async () => {
+  pending = [
+    {
+      ...pending[0]!,
+      message: "@code-review queued",
+      mentions: [{ type: "skill", name: "code-review" }],
+    },
+  ];
+  const user = setupUser();
+  render(<ChatInput {...props("streaming")} initialMessage="" />);
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Edit queued message: @code-review queued",
+    })
+  );
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+  await waitFor(() =>
+    expect(textbox).toHaveTextContent(/^@code-review queued$/)
+  );
+  expect(textbox.querySelectorAll('[data-mention-type="skill"]')).toHaveLength(
+    1
+  );
+
+  await user.type(textbox, "{Enter}");
+  await waitFor(() => expect(pending).toHaveLength(1));
+  expect(pending[0]).toMatchObject({
+    message: "@code-review queued",
+    delivery: "send",
+    mentions: [{ type: "skill", name: "code-review" }],
+  });
 });
 
 test("an edit that finishes after a chat switch returns its text to its own chat", async () => {
   const user = setupUser();
   const withdrawal = deferred<Response>();
-  fetchSpy.mockImplementation(async (_url, init) =>
-    init?.method === "DELETE"
-      ? withdrawal.promise
-      : new Response(JSON.stringify(pending))
+  fetchSpy.mockImplementation(async (url, init) =>
+    init?.method === "DELETE" ? withdrawal.promise : readResponse(url)
   );
   const store = useChatSessionStore.getState();
   store.createSession("other");
@@ -1016,7 +1086,8 @@ test("an edit that finishes after a chat switch returns its text to its own chat
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
       "chat:session",
-      "Queued follow-up"
+      { message: "Queued follow-up", mentions: [] },
+      expect.any(Function)
     )
   );
   expect(textbox).toHaveTextContent(/^$/);
@@ -1031,10 +1102,8 @@ test.each([
     mockChatId = chatId;
     const user = setupUser();
     const submission = deferred<Response>();
-    fetchSpy.mockImplementation(async (_url, init) =>
-      init?.method === "POST"
-        ? submission.promise
-        : new Response(JSON.stringify(pending))
+    fetchSpy.mockImplementation(async (url, init) =>
+      init?.method === "POST" ? submission.promise : readResponse(url)
     );
     useChatSessionStore.getState().createSession("other");
     render(<ChatInput {...props("streaming")} />);
@@ -1047,7 +1116,8 @@ test.each([
     await waitFor(() =>
       expect(mockWriteDraft).toHaveBeenCalledWith(
         "chat:session",
-        "Keep this draft"
+        { message: "Keep this draft", mentions: [] },
+        expect.any(Function)
       )
     );
     expect(mockWriteDraft).not.toHaveBeenCalledWith(
@@ -1060,10 +1130,8 @@ test.each([
 test("a failed submission that ends after the composer closes goes to the chat's draft", async () => {
   const user = setupUser();
   const submission = deferred<Response>();
-  fetchSpy.mockImplementation(async (_url, init) =>
-    init?.method === "POST"
-      ? submission.promise
-      : new Response(JSON.stringify(pending))
+  fetchSpy.mockImplementation(async (url, init) =>
+    init?.method === "POST" ? submission.promise : readResponse(url)
   );
   // The page keeps the chat's queue while the composer closes.
   function Page({ composerOpen }: { composerOpen: boolean }) {
@@ -1082,7 +1150,8 @@ test("a failed submission that ends after the composer closes goes to the chat's
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
       "chat:session",
-      "Keep this draft"
+      { message: "Keep this draft", mentions: [] },
+      expect.any(Function)
     )
   );
 });
@@ -1102,6 +1171,7 @@ test("Stop subagents interrupts background work and refreshes the status", async
           current_stream: null,
           has_active_subagents: active,
           has_startable_input: false,
+          approvals_version: "1",
           latest_response_id: 2,
         })
       );
@@ -1123,4 +1193,48 @@ test("Stop subagents interrupts background work and refreshes the status", async
         init?.method === "POST"
     )
   ).toHaveLength(1);
+});
+
+describe("approvals version in the status", () => {
+  test("an idle chat reloads only when the version differs from its load", async () => {
+    const statusReads = () =>
+      fetchSpy.mock.calls.filter(([url]) => String(url).endsWith("/status"))
+        .length;
+    render(<ChatInput {...props("input")} initialMessage="" />);
+    await waitFor(() => expect(statusReads()).toBe(1));
+
+    // The same version again: the chat already shows every request.
+    await act(async () => {
+      await swrMutate(SWR_KEYS.chatSessionStatus("session"));
+    });
+    expect(statusReads()).toBe(2);
+    expect(fetchSettledChatSession).not.toHaveBeenCalled();
+
+    // A background agent opened or resolved a request.
+    chatStatus = { ...IDLE_STATUS, approvals_version: "2" };
+    await act(async () => {
+      await swrMutate(SWR_KEYS.chatSessionStatus("session"));
+    });
+    await waitFor(() =>
+      expect(fetchSettledChatSession).toHaveBeenCalledTimes(1)
+    );
+    // The reload's version is the chat's new baseline.
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("session")?.approvalsVersion
+      ).toBe("2")
+    );
+    await act(async () => {
+      await swrMutate(SWR_KEYS.chatSessionStatus("session"));
+    });
+    expect(fetchSettledChatSession).toHaveBeenCalledTimes(1);
+  });
+
+  test("a status read that finds a version the load did not show reloads", async () => {
+    chatStatus = { ...IDLE_STATUS, approvals_version: "2" };
+    render(<ChatInput {...props("input")} initialMessage="" />);
+    await waitFor(() =>
+      expect(fetchSettledChatSession).toHaveBeenCalledTimes(1)
+    );
+  });
 });

@@ -44,6 +44,22 @@ locals {
     }
   } : {}
 
+  # Pod sandbox pool beside a Firecracker pool. Same label and workload taint
+  # as a pod-runtime sandbox pool but no onyx.app/kvm, so pod sandboxes and the
+  # image prepuller land here and not on the KVM nodes.
+  craft_pod_sandbox_node_pool = local.sandbox_firecracker && var.enable_craft_pod_sandbox_node_pool ? {
+    sandboxpod = {
+      machine_type   = var.craft_pod_sandbox_node_machine_type
+      min_count      = var.craft_pod_sandbox_node_min_count
+      max_count      = var.craft_pod_sandbox_node_max_count
+      disk_size_gb   = var.sandbox_node_disk_size_gb
+      disk_type      = "pd-balanced"
+      labels         = { "onyx.app/workload" = "sandbox" }
+      taints         = [{ key = "workload", value = "sandbox", effect = "NO_SCHEDULE" }]
+      node_locations = []
+    }
+  } : {}
+
   node_pools = merge(
     {
       for key, pool in var.node_pools : key => pool
@@ -51,6 +67,7 @@ locals {
     },
     local.gpu_node_pool,
     local.sandbox_node_pool,
+    local.craft_pod_sandbox_node_pool,
   )
 
   # A service account ID is capped at 30 characters and a cluster name can be

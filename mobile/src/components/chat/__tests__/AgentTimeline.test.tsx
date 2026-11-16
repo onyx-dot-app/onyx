@@ -1,12 +1,5 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-} from "@jest/globals";
-import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { describe, expect, it, jest } from "@jest/globals";
+import { fireEvent, render, screen } from "@testing-library/react-native";
 
 import { makePacket, makePlacedPacket } from "@/chat/__tests__/fixtures";
 import { createInitialState, processPackets } from "@/chat/messageProcessor";
@@ -368,66 +361,6 @@ describe("AgentTimeline", () => {
 
       expect(screen.getByText("Waiting for your approval")).toBeTruthy();
       expect(screen.queryByText("Web Search")).toBeNull();
-    });
-  });
-
-  describe("approval waits", () => {
-    beforeEach(() => {
-      jest.useFakeTimers();
-    });
-    afterEach(() => {
-      jest.useRealTimers();
-    });
-
-    const parallelPackets = [
-      makePlacedPacket({ type: "reasoning_start" }, { tab_index: 0 }),
-      makePlacedPacket({ type: "search_tool_start" }, { tab_index: 1 }),
-    ];
-
-    function timeline(awaitingApproval: boolean, streamingStartTime: number) {
-      return (
-        <AgentTimeline
-          turnGroups={turnGroupsFor(parallelPackets).turnGroups}
-          chatState={chatState}
-          streamingStartTime={streamingStartTime}
-          awaitingApproval={awaitingApproval}
-        />
-      );
-    }
-
-    it("keeps excluding a wait after the header is swapped out", () => {
-      const start = Date.now();
-      const view = render(timeline(false, start));
-      fireEvent.press(screen.getByLabelText("Expand timeline"));
-      act(() => jest.advanceTimersByTime(2000));
-      expect(screen.getByText("2s")).toBeTruthy();
-
-      view.rerender(timeline(true, start));
-      act(() => jest.advanceTimersByTime(10_000));
-      expect(screen.getByText("2s")).toBeTruthy();
-      view.rerender(timeline(false, start));
-
-      // Collapsing a parallel turn swaps in the tab header; expanding mounts a new timer.
-      fireEvent.press(screen.getByText("2s"));
-      fireEvent.press(screen.getByLabelText("Expand timeline"));
-      act(() => jest.advanceTimersByTime(1000));
-      expect(screen.getByText("3s")).toBeTruthy();
-    });
-
-    it("does not carry a wait into a new stream", () => {
-      const first = Date.now();
-      const view = render(timeline(false, first));
-      fireEvent.press(screen.getByLabelText("Expand timeline"));
-      act(() => jest.advanceTimersByTime(2000));
-      view.rerender(timeline(true, first));
-      act(() => jest.advanceTimersByTime(10_000));
-
-      const second = Date.now();
-      view.rerender(timeline(true, second));
-      act(() => jest.advanceTimersByTime(1000));
-      view.rerender(timeline(false, second));
-      act(() => jest.advanceTimersByTime(2000));
-      expect(screen.getByText("2s")).toBeTruthy();
     });
   });
 });

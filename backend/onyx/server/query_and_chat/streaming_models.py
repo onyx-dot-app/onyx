@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field, JsonValue
 
+from onyx.chat.mention_models import RecordedMention
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
@@ -56,6 +57,7 @@ class StreamingType(Enum):
     CUSTOM_TOOL_DELTA = "custom_tool_delta"
     TOOL_APPROVAL_REQUEST = "tool_approval_request"
     TOOL_APPROVAL_RESOLVED = "tool_approval_resolved"
+    REPLAY_END = "replay_end"
     FILE_READER_START = "file_reader_start"
     FILE_READER_RESULT = "file_reader_result"
     REASONING_START = "reasoning_start"
@@ -99,9 +101,20 @@ class SectionEnd(BaseObj):
     type: Literal["section_end"] = StreamingType.SECTION_END.value
 
 
+# The stop reason of a response whose run waits for the user's approval
+# decisions; it continues in a new stream after them.
+AWAITING_APPROVAL = "awaiting_approval"
+
+
 class OverallStop(BaseObj):
     type: Literal["stop"] = StreamingType.STOP.value
     stop_reason: str | None = None
+
+
+# Ends the replayed prefix of a stream that continues a suspended response:
+# the packets before it repeat the saved output, the packets after it are live.
+class ReplayEnd(BaseObj):
+    type: Literal["replay_end"] = StreamingType.REPLAY_END.value
 
 
 class PacketException(BaseObj):
@@ -120,6 +133,8 @@ class UserMessagePacket(BaseObj):
     type: Literal["user_message"] = StreamingType.USER_MESSAGE.value
     id: str
     message: str
+    # What the message picked, as its acceptance resolved it.
+    mentions: list[RecordedMention]
 
 
 ################################################
@@ -485,16 +500,19 @@ class ToolApprovalRequest(BaseObj):
     tool_name: str
     display_name: str
     arguments: dict[str, JsonValue]
-    expires_at: datetime
+    # The background agent that asks; its request shows in the reply's call
+    # that started the agent and waits whether or not the reply ended. None for
+    # the reply's own runs.
+    agent_name: str | None = None
 
 
 # How a tool approval request ended: the user's decision, an approval of the
 # action for the rest of the chat session (approved_for_chat: this request's or
-# an earlier request's), no decision in time, an approval that the action
-# policy blocked or a request deleted with its tool's server (disabled), or the
-# call stopped waiting because its run or program stopped.
+# an earlier request's), an approval that the action policy blocked or a
+# request deleted with its tool's server (disabled), or the call stopped
+# waiting because its run or program stopped.
 ToolApprovalOutcome = Literal[
-    "approved", "approved_for_chat", "rejected", "expired", "disabled", "cancelled"
+    "approved", "approved_for_chat", "rejected", "disabled", "cancelled"
 ]
 
 
@@ -537,6 +555,7 @@ PacketObj = Union[
     CustomToolDelta,
     ToolApprovalRequest,
     ToolApprovalResolved,
+    ReplayEnd,
     FileReaderStart,
     FileReaderResult,
     MemoryToolStart,

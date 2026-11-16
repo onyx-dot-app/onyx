@@ -57,8 +57,6 @@ export interface AgentMessageProps {
   rawPackets: Packet[];
   restoredPacketCount?: number;
   packetCount?: number; // Tracked separately for React memo comparison (avoids reading from mutated array)
-  /** This client lost the stream, so a stop here does not close approvals. */
-  streamLost?: boolean;
   chatState: FullChatState;
   nodeId: number;
   messageId?: number;
@@ -105,8 +103,9 @@ function arePropsEqual(
     // Compare packetCount (primitive) instead of rawPackets.length
     // The array is mutated in place, so reading .length from prev and next would return same value
     prev.packetCount === next.packetCount &&
+    // A replay or reload replaces the array, possibly at the same length.
+    prev.rawPackets === next.rawPackets &&
     prev.restoredPacketCount === next.restoredPacketCount &&
-    prev.streamLost === next.streamLost &&
     prev.chatState.agent?.id === next.chatState.agent?.id &&
     prev.chatState.docs === next.chatState.docs &&
     prev.chatState.citations === next.chatState.citations &&
@@ -130,7 +129,6 @@ const AgentMessage = React.memo(function AgentMessage({
   rawPackets,
   packetCount,
   restoredPacketCount: replayPacketCount = 0,
-  streamLost = false,
   chatState,
   nodeId,
   messageId,
@@ -229,7 +227,7 @@ const AgentMessage = React.memo(function AgentMessage({
     );
 
   const authErrors = useAuthErrors(rawPackets);
-  const toolApprovals = useToolApprovals(rawPackets, streamLost);
+  const toolApprovals = useToolApprovals(rawPackets);
 
   const sections = useMemo(() => {
     const sections: ResponseSection[] = [
@@ -283,7 +281,7 @@ const AgentMessage = React.memo(function AgentMessage({
         .findLast((section) => section.turnIndex < error.turnIndex)!
         .authErrors.push(error);
     }
-    for (const approval of toolApprovals) {
+    for (const approval of toolApprovals.records) {
       sections
         .findLast((section) => section.turnIndex < approval.turnIndex)!
         .toolApprovals.push(approval);
@@ -294,7 +292,7 @@ const AgentMessage = React.memo(function AgentMessage({
     pacedTurnGroups,
     generatedImages,
     authErrors,
-    toolApprovals,
+    toolApprovals.records,
   ]);
   const lastAnswerGroup = sections.at(-1)!.displayGroups.at(-1);
 
@@ -465,7 +463,10 @@ const AgentMessage = React.memo(function AgentMessage({
           <React.Fragment key={section.userMessage?.id ?? "initial"}>
             {section.userMessage && (
               <Section height="fit" alignItems="end" gap={0}>
-                <HumanMessageBubble content={section.userMessage.message} />
+                <HumanMessageBubble
+                  content={section.userMessage.message}
+                  mentions={section.userMessage.mentions}
+                />
               </Section>
             )}
 
@@ -480,12 +481,7 @@ const AgentMessage = React.memo(function AgentMessage({
               finalAnswerComing={!isLastSection || pacedFinalAnswerComing}
               toolProcessingDuration={toolProcessingDuration}
               codeModeWorking={isLastSection && codeModeWorking}
-              awaitingApproval={
-                isLastSection &&
-                section.toolApprovals.some(
-                  (approval) => approval.status === "pending"
-                )
-              }
+              awaitingApproval={isLastSection && toolApprovals.awaitingApproval}
             />
 
             {/* Row 2: Display content + MessageToolbar */}

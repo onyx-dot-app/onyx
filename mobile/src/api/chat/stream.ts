@@ -53,8 +53,17 @@ export class StreamHttpError extends Error {
   }
 }
 
+// Follows the complete packet prefix of a resumed stream. Resuming from `next_cursor` delivers no
+// packet twice. `replay_complete` marks the end of the output that existed when the resume began.
+export interface StreamCursor {
+  stream_id: number;
+  next_cursor: number;
+  replay_complete: boolean;
+}
+
 // The wire mixes wrapped packets ({placement, obj}) with root control objects; discriminate by field, not `type`.
-export type StreamEvent = Packet | MessageResponseIDInfo | StreamingError;
+export type StreamEvent =
+  Packet | MessageResponseIDInfo | StreamingError | StreamCursor;
 
 export function isPacket(event: StreamEvent): event is Packet {
   return "obj" in event && "placement" in event;
@@ -64,6 +73,10 @@ export function isMessageIdInfo(
   event: StreamEvent,
 ): event is MessageResponseIDInfo {
   return "user_message_id" in event;
+}
+
+export function isStreamCursor(event: StreamEvent): event is StreamCursor {
+  return "next_cursor" in event;
 }
 
 export function isStreamError(event: StreamEvent): event is StreamingError {
@@ -141,14 +154,16 @@ export async function* streamChatMessage(
   yield* readNdjson(response);
 }
 
-// Replays the in-flight run's buffer from `cursor` (0 = whole buffer, matching web), then tails live.
+// Replays stream `streamId` from `cursor` (0 = whole buffer), then tails it live. 404 when that
+// stream has no buffer.
 export async function* resumeChatMessage(
   sessionId: string,
+  streamId: number,
   cursor: number,
   signal: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const response = await expoFetch(
-    `${getBaseUrl()}/chat/chat-session/${sessionId}/resume-stream?cursor=${cursor}`,
+    `${getBaseUrl()}/chat/chat-session/${sessionId}/resume-stream?stream_id=${streamId}&cursor=${cursor}`,
     { method: "GET", headers: await buildHeaders({ signal }, false), signal },
   );
 

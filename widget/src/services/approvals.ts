@@ -11,13 +11,15 @@ import type { ChatMessage } from "@/types/widget-types";
 /** `error_code` of the 409 a send gets while the chat waits for a decision. */
 export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
 
+/** `stop_reason` of a stream that stops while the response waits for decisions. */
+export const AWAITING_APPROVAL_STOP_REASON = "awaiting_approval";
+
 export type ApprovalDecision = "approve_once" | "approve_session" | "reject";
 
 export type ApprovalOutcome =
   | "approved"
   | "approved_for_chat"
   | "rejected"
-  | "expired"
   | "disabled"
   | "cancelled";
 
@@ -32,9 +34,14 @@ export type ApprovalStatus =
   | "approved"
   | "approvedForSession"
   | "rejected"
-  | "expired"
   | "disabled"
   | "closed";
+
+/**
+ * This widget's short-lived state for a request: its decision is in flight,
+ * failed, or got the server's answer. The resolution packet replaces it.
+ */
+export type LocalApproval = "submitting" | "failed" | ApprovalStatus;
 
 export interface ApprovalEntry {
   request: ToolApprovalRequest;
@@ -46,7 +53,6 @@ const OUTCOMES: ReadonlySet<string> = new Set<ApprovalOutcome>([
   "approved",
   "approved_for_chat",
   "rejected",
-  "expired",
   "disabled",
   "cancelled",
 ]);
@@ -60,18 +66,18 @@ export function readOutcome(value: unknown): ApprovalOutcome | null {
 
 /**
  * The resolution packet decides the status. Before it arrives, a decision from
- * this widget decides it; a stopped response closes the request. A response
- * stops only when the server ends it, not when this widget loses its stream.
- * The deadline never decides: the server resolves an expired request.
+ * this widget decides it. The server resolves every request it ends, so a stop
+ * never changes the status.
  */
 export function approvalStatus(
   entry: ApprovalEntry,
-  localStatus: ApprovalStatus | undefined,
-  stopped: boolean
+  local: LocalApproval | undefined
 ): ApprovalStatus {
   switch (entry.outcome) {
     case null:
-      return localStatus ?? (stopped ? "closed" : "pending");
+      return local !== undefined && local !== "submitting" && local !== "failed"
+        ? local
+        : "pending";
     case "approved_for_chat":
       return "approvedForSession";
     case "cancelled":
@@ -92,19 +98,20 @@ export function decidedStatus(
     : "approved";
 }
 
-/** The first request that still waits for this user. */
+/**
+ * The first root agent request that still waits for this user. Subagent
+ * requests never hold the chat.
+ */
 export function findPendingApproval(
   messages: ChatMessage[],
-  localStatuses: ReadonlyMap<string, ApprovalStatus>
+  localApprovals: ReadonlyMap<string, LocalApproval>
 ): ApprovalEntry | null {
   for (const message of messages) {
     const pending = message.approvals?.find(
       (entry) =>
-        approvalStatus(
-          entry,
-          localStatuses.get(entry.request.approval_id),
-          !message.isStreaming
-        ) === "pending"
+        !entry.request.agent_name &&
+        approvalStatus(entry, localApprovals.get(entry.request.approval_id)) ===
+          "pending"
     );
     if (pending) return pending;
   }
@@ -125,8 +132,6 @@ export function approvalRecord(
       return `Approved for this chat: ${toolName}`;
     case "rejected":
       return `Not approved: ${toolName}`;
-    case "expired":
-      return `Timed out: ${toolName}`;
     case "disabled":
       return `Disabled: ${toolName}`;
     case "closed":
@@ -134,89 +139,13 @@ export function approvalRecord(
   }
 }
 
-/** "Approve by 3:45 PM" in the visitor's locale, or null for a bad date. */
-export function approvalDeadline(
-  expiresAt: string,
-  locale?: string
-): string | null {
-  const date = new Date(expiresAt);
-  if (Number.isNaN(date.getTime())) return null;
-  const time = new Intl.DateTimeFormat(locale, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-  return `Approve by ${time}`;
-}
-
-// Limits on a tool call's arguments, which come from the model, before the
-// widget stores them in sessionStorage or renders them. Lengths count UTF-16
-// code units, the unit sessionStorage and the DOM store. The per-value limits
-// keep one large value from hiding the arguments after it.
-const MAX_ARGUMENT_STRING_CHARS = 2_000;
-const MAX_ARGUMENT_CHARS = 20_000;
-const MAX_ARGUMENT_ITEMS = 50;
-// Values in the whole argument tree, containers included
-const MAX_ARGUMENT_VALUES = 500;
-const MAX_ARGUMENT_DEPTH = 8;
-const OMITTED = "…";
-
-/**
- * A copy of the arguments within the limits. Past a limit, a string ends in
- * "…", a container lists its first values and then "…", and a deeper value
- * becomes "…".
- */
-export function boundArguments(
-  args: Record<string, unknown>
-): Record<string, unknown> {
-  let chars = 0;
-  let values = 0;
-  const full = () =>
-    values >= MAX_ARGUMENT_VALUES || chars >= MAX_ARGUMENT_CHARS;
-  const clip = (text: string): string => {
-    const room = Math.min(
-      MAX_ARGUMENT_STRING_CHARS,
-      MAX_ARGUMENT_CHARS - chars
-    );
-    chars += Math.min(text.length, room);
-    return text.length > room ? `${text.slice(0, room)}${OMITTED}` : text;
-  };
-  const bound = (value: unknown, depth: number): unknown => {
-    values += 1;
-    if (typeof value === "string") return clip(value);
-    if (value === null || typeof value !== "object") return value;
-    if (depth >= MAX_ARGUMENT_DEPTH) return OMITTED;
-    if (Array.isArray(value)) {
-      const items: unknown[] = [];
-      for (const item of value) {
-        if (items.length >= MAX_ARGUMENT_ITEMS || full()) {
-          items.push(OMITTED);
-          break;
-        }
-        items.push(bound(item, depth + 1));
-      }
-      return items;
-    }
-    const entries: [string, unknown][] = [];
-    for (const key in value) {
-      if (entries.length >= MAX_ARGUMENT_ITEMS || full()) {
-        entries.push([OMITTED, OMITTED]);
-        break;
-      }
-      entries.push([
-        clip(key),
-        bound((value as Record<string, unknown>)[key], depth + 1),
-      ]);
-    }
-    // fromEntries defines own keys, so a "__proto__" key stays plain data.
-    return Object.fromEntries(entries);
-  };
-  return bound(args ?? {}, 0) as Record<string, unknown>;
-}
-
 // Past this length a string value shows Show more.
 const STRING_TRUNCATE_AT = 300;
-// Past this many lines a JSON value shows Show more.
+// Past this many lines or characters a JSON value shows Show more.
 const JSON_TRUNCATE_AT_LINES = 8;
+const JSON_TRUNCATE_AT_CHARS = 1_000;
+/** Past this many rows the card shows Show all arguments. */
+export const ARGUMENT_ROWS_SHOWN = 20;
 
 export interface ArgumentRow {
   key: string;
@@ -227,8 +156,8 @@ export interface ArgumentRow {
 }
 
 /**
- * One row per top-level argument. Primitive arrays join to one line; objects
- * and other arrays show as JSON.
+ * One row per top-level argument, with the full text and a short preview.
+ * Primitive arrays join to one line; objects and other arrays show as JSON.
  */
 export function argumentRows(args: Record<string, unknown>): ArgumentRow[] {
   const rows: ArgumentRow[] = [];
@@ -240,14 +169,15 @@ export function argumentRows(args: Record<string, unknown>): ArgumentRow[] {
       value.every((v) => ["string", "number", "boolean"].includes(typeof v));
     if (typeof value === "object" && !primitiveArray) {
       const text = JSON.stringify(value, null, 2);
-      const lines = text.split("\n");
+      const head = text
+        .slice(0, JSON_TRUNCATE_AT_CHARS)
+        .split("\n")
+        .slice(0, JSON_TRUNCATE_AT_LINES)
+        .join("\n");
       rows.push({
         key,
         text,
-        preview:
-          lines.length > JSON_TRUNCATE_AT_LINES
-            ? `${lines.slice(0, JSON_TRUNCATE_AT_LINES).join("\n")}\n…`
-            : null,
+        preview: head.length < text.length ? `${head}\n…` : null,
         mono: true,
       });
       continue;

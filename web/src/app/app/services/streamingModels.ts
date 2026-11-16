@@ -1,4 +1,5 @@
 import { OnyxDocument } from "@/lib/search/types";
+import type { RecordedMention } from "@/lib/chat/types";
 
 // Base interface for all streaming objects
 interface BaseObj {
@@ -101,6 +102,7 @@ export interface UserMessage extends BaseObj {
   type: "user_message";
   id: string;
   message: string;
+  mentions: RecordedMention[];
 }
 
 export interface MessageStart extends BaseObj {
@@ -127,6 +129,9 @@ export enum StopReason {
   USER_CANCELLED = "user_cancelled",
   /** The turn reached its execution deadline. */
   TIMED_OUT = "timed_out",
+  /** The stream ended while tool calls wait for the user's approval. The
+   * response continues in a new stream after the decisions. */
+  AWAITING_APPROVAL = "awaiting_approval",
 }
 
 export interface Stop extends BaseObj {
@@ -426,6 +431,11 @@ export interface ChatHeartbeat extends BaseObj {
 
 export type ChatHeartbeatObj = ChatHeartbeat;
 
+// Ends the replayed prefix of a continuation stream; carries no run state
+export interface ReplayEnd extends BaseObj {
+  type: "replay_end";
+}
+
 export type SectionEndObj = SectionEnd;
 
 export type PacketErrorObj = PacketError;
@@ -538,8 +548,9 @@ export interface ToolApprovalRequest extends BaseObj {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
-  // ISO 8601 UTC; the server resolves the request when it passes
-  expires_at: string;
+  /** The background subagent that made the request; null for the reply's own
+   * calls. Such a request waits on its own: no stop of the reply closes it. */
+  agent_name: string | null;
 }
 
 export interface ToolApprovalResolved extends BaseObj {
@@ -552,7 +563,6 @@ export interface ToolApprovalResolved extends BaseObj {
     | "approved"
     | "approved_for_chat"
     | "rejected"
-    | "expired"
     | "disabled"
     | "cancelled";
 }
@@ -568,6 +578,7 @@ export type ObjTypes =
   | ReasoningObj
   | StopObj
   | ChatHeartbeatObj
+  | ReplayEnd
   | SectionEndObj
   | CitationObj
   | DeepResearchPlanObj

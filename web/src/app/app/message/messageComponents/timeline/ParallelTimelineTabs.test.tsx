@@ -71,7 +71,7 @@ const approvalStep = step(0, [
       tool_name: "mcp__3__github__create_issue",
       display_name: "Create issue",
       arguments: { title: "Bug" },
-      expires_at: "2099-01-01T00:00:00Z",
+      agent_name: null,
     },
   },
   {

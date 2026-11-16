@@ -351,6 +351,7 @@ test.each([false, true])(
               type: "user_message",
               id: "instruction",
               message: "Use the latest report",
+              mentions: [],
             },
           },
           {
@@ -456,6 +457,7 @@ test("accepting an instruction reveals preceding text before its user bubble", (
           type: "user_message",
           id: "instruction",
           message: "Use the latest report",
+          mentions: [],
         },
       });
       publish();

@@ -32,6 +32,7 @@ export class InputBar {
   readonly pendingMessageHint: Locator;
   readonly subagentActivity: Locator;
   readonly stopSubagentsButton: Locator;
+  readonly skillPicker: Locator;
 
   readonly tile: Locator;
   readonly tileRemoveButton: Locator;
@@ -57,6 +58,8 @@ export class InputBar {
     this.pendingMessageHint = this.container.getByTestId(
       "pending-message-hint"
     );
+
+    this.skillPicker = page.getByTestId("skill-picker-popover");
 
     this.tile = page.locator("[data-rich-tile]");
     this.tileRemoveButton = page.locator("[data-rich-tile-remove]");
@@ -87,6 +90,36 @@ export class InputBar {
 
   async focus(): Promise<void> {
     await this.textbox.focus();
+  }
+
+  /** Presses a key in the input, where the caret is. */
+  async press(key: string): Promise<void> {
+    await this.textbox.press(key);
+  }
+
+  /** Clicks the text so the caret lands before character `offset`. */
+  async clickAtTextOffset(offset: number): Promise<void> {
+    const point = await this.textbox.evaluate((el, at) => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let remaining = at;
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const length = node.textContent?.length ?? 0;
+        if (remaining < length) {
+          const range = document.createRange();
+          range.setStart(node, remaining);
+          range.setEnd(node, remaining + 1);
+          const rect = range.getBoundingClientRect();
+          // The left part of a character puts the caret before it.
+          return {
+            x: rect.left + rect.width / 4,
+            y: rect.top + rect.height / 2,
+          };
+        }
+        remaining -= length;
+      }
+      throw new Error(`No character at offset ${at}`);
+    }, offset);
+    await this.page.mouse.click(point.x, point.y);
   }
 
   async clear(): Promise<void> {
@@ -235,6 +268,26 @@ export class InputBar {
   }
 
   // ---------------------------------------------------------------------------
+  // Skill picker
+  // ---------------------------------------------------------------------------
+
+  skillPickerRow(name: string): Locator {
+    return this.skillPicker.getByTestId(`skill-picker-row-${name}`);
+  }
+
+  /** Picks `name` by clicking its row, or with Enter on the highlighted row,
+   * which must be `name`. */
+  async pickSkill(name: string, via: "click" | "Enter"): Promise<void> {
+    if (via === "click") {
+      await this.skillPickerRow(name).click();
+    } else {
+      await expect(this.skillPickerRow(name)).toBeVisible();
+      await this.page.keyboard.press("Enter");
+    }
+    await expect(this.skillPicker).toBeHidden();
+  }
+
+  // ---------------------------------------------------------------------------
   // Tile interactions
   // ---------------------------------------------------------------------------
 
@@ -283,10 +336,15 @@ export class InputBar {
   }
 
   /** The composer accepts a normal send, and the empty composer cannot send. */
-  async expectIdle(timeout = POLL_TIMEOUT): Promise<void> {
+  /** No turn streams, so the composer sends a normal message. */
+  async expectAcceptsSend(timeout = POLL_TIMEOUT): Promise<void> {
     await expect(this.container).toHaveAttribute("data-accepts-send", "true", {
       timeout,
     });
+  }
+
+  async expectIdle(timeout = POLL_TIMEOUT): Promise<void> {
+    await this.expectAcceptsSend(timeout);
     await expect(this.textbox).toHaveAttribute("data-empty", "");
     await expect(this.sendButton).toBeDisabled();
   }

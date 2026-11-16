@@ -37,16 +37,20 @@ import {
 import {
   Packet,
   PacketType,
+  StopReason,
   buildUserCancelledStopPacket,
 } from "@/chat/streamingModels";
 import {
   APPROVAL_PENDING_ERROR_CODE,
-  findPendingToolApprovalIds,
+  readToolApprovals,
   useToolApprovalUi,
 } from "@/chat/toolApprovals";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
-import { recoverChatSession } from "@/hooks/useChatSessionController";
+import {
+  recoverChatSession,
+  watchBackgroundAgents,
+} from "@/hooks/useChatSessionController";
 import { toast } from "@/hooks/useToast";
 
 // the run can finish before the ChatSession row is committed; let it settle before naming (web too)
@@ -90,16 +94,13 @@ function appendUserCancelledStop(sessionId: string, nodeId: number): void {
   });
 }
 
+// Delivery continues until the server confirms Stop. A failed Stop leaves the
+// response running, and its requests still wait for a decision.
 async function stopAcknowledgedStream(
   sessionId: string,
   streamId: number,
   controller: AbortController,
 ): Promise<void> {
-  // The server's Stop rejects the requests that wait. The cut stream does not
-  // deliver their resolutions, so this device records them.
-  const waiting = findPendingToolApprovalIds(
-    useChatSessionStore.getState().sessions.get(sessionId)?.messageTree,
-  );
   try {
     await stopChatSession(sessionId, streamId);
   } catch (error) {
@@ -107,11 +108,11 @@ async function stopAcknowledgedStream(
     const store = useChatSessionStore.getState();
     if (store.sessions.get(sessionId)?.abortController === controller) {
       store.setStopRequested(sessionId, false);
+      toast.error("Could not stop the response. Try again.");
     }
     return;
   }
-  const { recordStatus } = useToolApprovalUi.getState();
-  for (const approvalId of waiting) recordStatus(approvalId, "rejected");
+  controller.abort();
 }
 
 async function runChatStream(
@@ -138,8 +139,9 @@ async function runChatStream(
   let rejection: string | null = null;
   let approvalPending = false;
   let streamId: number | null = null;
-  // The connection dropped after the server accepted the turn; the run goes on without it.
-  let reattach = false;
+  let sawStop = false;
+  // The response waits for approval decisions; the server continues it in a new stream.
+  let paused = false;
 
   // Anchors the timeline's elapsed timer. Stamped here, not at node creation, so it measures the
   // stream rather than the session-create round trip that can precede it.
@@ -198,7 +200,6 @@ async function runChatStream(
             event.reserved_assistant_message_id,
             controller,
           );
-          controller.abort();
         }
         continue;
       }
@@ -233,16 +234,18 @@ async function runChatStream(
           sawStreaming = true;
           store.getState().updateChatState(sessionId, "streaming");
         }
+        if (event.obj.type === PacketType.STOP) {
+          sawStop = true;
+          paused = event.obj.stop_reason === StopReason.AWAITING_APPROVAL;
+        }
         pending.push(event);
         scheduleFlush();
       }
     }
   } catch (error) {
-    // Abort is the normal stop path. A lost connection does not end an accepted run, so it
-    // reattaches; any other failure marks the assistant node errored.
-    if (!signal.aborted && stillOurs() && accepted) {
-      reattach = true;
-    } else if (!signal.aborted && stillOurs()) {
+    // Abort is the normal stop path. A lost connection does not end an accepted run, so the
+    // readiness check below decides whether to follow it; any other failure marks the node errored.
+    if (!signal.aborted && stillOurs() && !accepted) {
       hadError = true;
       const message =
         error instanceof Error ? error.message : "Something went wrong.";
@@ -268,16 +271,20 @@ async function runChatStream(
     }
   }
   if (!stillOurs()) return;
-  if (reattach && streamId !== null) {
-    store.getState().setAbortController(sessionId, null);
-    void recoverChatSession(
-      sessionId,
-      streamId,
-      server.serverUrl,
-      server.queryClient,
-      new AbortController(),
-    );
-    return;
+  // Delivery ended before the run's stop, and the run can go on without it.
+  const lost = accepted && !signal.aborted && !hadError && !sawStop;
+  // The cut stream of a stopped response does not deliver the resolutions of its requests.
+  const unresolvedAfterStop =
+    signal.aborted &&
+    readToolApprovals(
+      store.getState().sessions.get(sessionId)?.messageTree.get(agentNodeId)
+        ?.packets ?? [],
+    ).some((entry) => entry.outcome === null);
+  // The wait is not stream time; a continuation restarts the timer.
+  if (paused) {
+    store
+      .getState()
+      .patchNode(sessionId, agentNodeId, { streamingStartedAt: undefined });
   }
   if (rejection !== null) {
     // The turn does not belong in the tree; the composer still holds its text.
@@ -287,15 +294,57 @@ async function runChatStream(
   }
   store.getState().updateChatState(sessionId, "settling");
   try {
-    const idle = await waitForSessionIdle(sessionId, stillOurs, () => {
-      store.getState().updateChatState(sessionId, "unconfirmed");
-    });
-    if (!idle || !stillOurs()) return;
-    store.getState().updateChatState(sessionId, "input");
+    // Follow a run this send lost, its continuation after approval decisions, or one that the
+    // server runs instead of it, such as a response whose approval refused this send.
+    const wait = await waitForSessionIdle(
+      sessionId,
+      stillOurs,
+      () => store.getState().updateChatState(sessionId, "unconfirmed"),
+      // A Stop the server confirms during the wait ends following.
+      (next) => !signal.aborted && (lost || next !== streamId),
+    );
     // name a new session once it streamed output; skip stop/abort and thrown transport failures
-    if (isNewSession && !signal.aborted && sawStreaming && !hadError) {
+    if (
+      wait.kind === "idle" &&
+      isNewSession &&
+      !signal.aborted &&
+      sawStreaming &&
+      !hadError
+    ) {
       void nameNewSession(sessionId, server);
     }
+    // A decision made during this send names its continuation or needs another status read.
+    const queued =
+      wait.kind === "idle"
+        ? store.getState().takeQueuedFollow(sessionId)
+        : null;
+    // An idle server still reloads the saved session when this device lacks what the server
+    // saved: a lost send's answer, the requests that refused this send, the outcomes a Stop
+    // gave, or approvals and responses that the chat does not show.
+    if (
+      wait.kind === "stream" ||
+      queued !== null ||
+      (wait.kind === "idle" &&
+        (lost || approvalPending || unresolvedAfterStop || wait.stale))
+    ) {
+      store.getState().setAbortController(sessionId, null);
+      void recoverChatSession(
+        sessionId,
+        wait.kind === "stream" ? wait.stream : (queued?.stream ?? null),
+        server.serverUrl,
+        server.queryClient,
+        new AbortController(),
+      );
+      return;
+    }
+    if (wait.kind !== "idle" || !stillOurs()) return;
+    store.getState().updateChatState(sessionId, "input");
+    if (wait.backgroundWork)
+      void watchBackgroundAgents(
+        sessionId,
+        server.serverUrl,
+        server.queryClient,
+      );
   } catch (error) {
     if (!stillOurs()) return;
     console.warn("Could not confirm chat readiness", error);
@@ -349,8 +398,9 @@ export function useChatController(
     sessionId ? state.sessions.get(sessionId) : undefined,
   );
 
+  // No open chat on other screens ends the readers and watches of the last one.
   useEffect(() => {
-    if (sessionId) useChatSessionStore.getState().setCurrentSession(sessionId);
+    useChatSessionStore.getState().setCurrentSession(sessionId);
   }, [sessionId]);
 
   // Hydrate a session opened but not yet in the store (sidebar / relaunch).
@@ -367,6 +417,7 @@ export function useChatController(
           .hydrateSession(
             sessionId!,
             processRawChatHistory(backend.messages, backend.packets),
+            backend.approvals_version,
           );
       }
       return backend;
@@ -391,15 +442,6 @@ export function useChatController(
       if (!text) return;
       const fileDescriptors = files ?? [];
       if (submittingRef.current) return;
-      if (
-        sessionId != null &&
-        findPendingToolApprovalIds(
-          useChatSessionStore.getState().sessions.get(sessionId)?.messageTree,
-        ).length > 0
-      ) {
-        showPendingApproval();
-        return;
-      }
       submittingRef.current = true;
       try {
         const isNewSession = sessionId == null;
@@ -535,15 +577,16 @@ export function useChatController(
         current.streamId,
         current.abortController,
       );
-      current.abortController.abort();
       return;
     }
     // A lost acknowledgement must not prevent Stop from reaching the readiness check.
+    // Once the acknowledgement arrives, the scoped Stop decides instead.
     const controller = current.abortController;
     const timeout = setTimeout(() => {
+      const session = useChatSessionStore.getState().sessions.get(sessionId);
       if (
-        useChatSessionStore.getState().sessions.get(sessionId)
-          ?.abortController === controller
+        session?.abortController === controller &&
+        session.streamId === null
       ) {
         controller.abort();
       }

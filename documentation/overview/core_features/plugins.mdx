@@ -102,8 +102,9 @@ You can continue chatting with other tools.
 ### Approve tool calls
 
 Your admin sets an approval policy for each MCP tool. When the agent calls a tool with the **Ask** policy,
-the answer pauses and an approval card shows **Approval requested** with the tool name, the time to approve by,
-and the arguments of the call. Select one of these options:
+the answer pauses. An approval card shows **Approval requested** with the tool name and the arguments of the call.
+The card shows below the last message of the chat. If more cards wait, they show in the order of the requests.
+When you compare models, each card names its model. Select one of these options:
 
 | Option | Effect |
 | --- | --- |
@@ -111,11 +112,18 @@ and the arguments of the call. Select one of these options:
 | **Approve for this chat** | The call runs. Later calls of the same tool in this chat run without a card. |
 | **Reject** | The call does not run. The agent is told that you rejected the call. |
 
-After your decision, the card becomes a one-line record of the result.
-The record stays when the answer finishes and when you open the chat again. If you do not decide in time,
-the call does not run, and the card shows **Timed out**. If your admin disables the tool before you approve,
-the call does not run, and the card shows **Disabled**. If you stop the answer, Onyx rejects the call,
-and the card shows **Not approved**.
+The request does not expire. It waits until you decide, also when you close the chat or reload the page.
+After the answer stops to wait for your decision, you cannot send a new message in the chat.
+
+After your decision, the card becomes a one-line record of the result, and the answer continues.
+The record moves to the tool call in the answer. It stays when the answer finishes and when you open the chat again.
+If your admin disables the tool before you approve, the call does not run, and the card shows **Disabled**.
+If you stop the answer while it runs, Onyx rejects the call, and the card shows **Not approved**.
+After the answer stops to wait for your decision, **Stop** is not available. To end the wait, reject the call.
+
+A subagent that works in the background can also ask for approval. Its card names the subagent.
+The request waits until you decide, also after the answer that started the subagent finishes or stops.
+You can send new messages while it waits. After your decision, the subagent continues in the background.
 
 The Onyx web app, the mobile app, the website widget, and the Onyx CLI show approval requests.
 The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.

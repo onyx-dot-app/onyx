@@ -60,26 +60,39 @@ onyx-cli chat --agent-name "Support Agent"
 #### Tool approvals
 
 Some tool calls need your approval before they run. The chat shows a card with
-the tool name, its arguments, and the time by which to decide. The server waits
-up to 10 minutes for a decision.
+the tool name and its arguments. The request waits until you decide. It has no
+time limit.
 
 | Key | Action |
 |-----|--------|
 | `y` | Approve once |
 | `a` | Approve for this session |
 | `n` | Reject |
+| `d` | Show all arguments in full, or the short list again |
 | `Up` / `Down`, `Enter` | Select and confirm an action |
-| `Escape`, `Ctrl+C` | Stop the response |
+| `Escape`, `Ctrl+C` | Stop the response while it runs |
 
-The shortcuts work when the input is empty. While a request waits, you can type
-a draft, but you cannot send it. After the decision, the card changes to a
-one-line record: Approved, Approved for this session, Not approved, Timed out,
-Disabled, or No longer waiting.
+The card shows at most 10 arguments and shortens long values. Press `d` to
+read every argument before you decide.
 
-When you open a session with `/resume` while a request in it waits, the chat
-shows the response again with its card, so you can decide here. If you send a
-message while a request waits elsewhere, the chat does the same and keeps your
-message as a draft.
+The shortcuts work when the input is empty. After the decision, the card changes
+to a one-line record: Approved, Approved for this session, Not approved,
+Disabled, or No longer waiting. When the server continues the response, the
+chat shows the rest of it.
+
+While a request waits, the response is paused on the server. A paused response
+cannot be stopped, so `Escape` and `Ctrl+C` do nothing to it; decide each
+request instead. If you stop a running response while a request is open, Onyx
+rejects the request, and the card shows that outcome. You can quit the chat and
+decide later: when you open the session with `/resume`, the chat shows the
+response with its card. If you send a message while the response waits, Onyx
+refuses it: the chat keeps your message as a draft and shows the card. If the
+connection to a running response drops, the chat connects to it again.
+
+A request from a background agent names the agent, for example
+`triage wants to run Create issue`. It does not pause the chat: you can send
+messages while it waits, and its card stays after the response ends or stops.
+After you decide, the chat shows the outcome and the agent's later requests.
 
 ### One-shot question
 
@@ -102,20 +115,32 @@ onyx-cli ask --json "Hello"
 
 When a tool call needs approval and stderr is a terminal, `ask` shows the
 request on stderr and prompts:
-`[y] approve once / [a] approve for session / [N] reject`. If the server ends
-the request first, for example at its deadline, the prompt ends and `ask` shows
-the outcome. `ask` ignores input that you typed before the prompt showed.
+`[y] approve once / [a] approve for session / [d] show all arguments / [N] reject`.
+The request shows at most 10 arguments and shortens long values. Answer `d` to
+show every argument in full, then answer the prompt again. If the server ends
+the request first, for example because the program that made the call ended,
+the prompt ends and `ask` shows the outcome. `ask` ignores input that you typed
+before the prompt showed. When the response continues after the answers, `ask`
+follows it and prints the rest of the answer.
+If you interrupt `ask` at a prompt while the response waits, `ask` exits with
+code 11 without a decision. The request keeps waiting, and you can decide it in
+another client, for example with `/resume` in `onyx-cli chat`. An interrupt
+while the response still runs stops it.
 
 Without a terminal, in CI, or with `--json`, `ask` never waits for input. It
 uses `--approve` instead:
 
-- `fail` rejects the tool call, stops the response, and exits with code 10.
+- `fail` rejects the tool call, prints the rest of the answer, and exits with
+  code 10.
 - `reject` rejects the tool call and continues the response without it.
 - `once` and `session` approve every tool call in the response that needs
   approval.
 
 If you set `--approve`, `ask` uses it on a terminal too. With `--json`, approval
 requests appear as `tool_approval_request` and `tool_approval_resolved` events.
+A `stop` event with `stop_reason` `awaiting_approval` marks where the response
+waits for the answers; the events of its continuation follow. They do not
+repeat events that `ask` already printed.
 
 ### List agents
 
@@ -214,6 +239,7 @@ export ONYX_PAT="your-pat"
 | 8 | ServerError | Server returned 5xx |
 | 9 | NotAvailable | Feature/endpoint doesn't exist |
 | 10 | ApprovalRequired | A tool call needed approval and `ask --approve=fail` rejected it |
+| 11 | ApprovalPending | `ask` was interrupted at an approval prompt; the request still waits |
 
 ### Skill File
 
@@ -253,6 +279,7 @@ onyx-cli install-skill --agent claude-code
 | `Enter` | Send message |
 | `Escape`, `Ctrl+C` | Cancel current generation |
 | `y` / `a` / `n` | Approve once / approve for this session / reject a tool call |
+| `d` | Show all arguments of a tool call that waits for approval |
 | `Ctrl+O` | Toggle source citations |
 | `Ctrl+D` | Quit (press twice) |
 | `Scroll` / `Shift+Up/Down` | Scroll chat history |
@@ -387,5 +414,5 @@ cancellation closes delivery after ten seconds without sending an unscoped Stop.
 For acknowledged runs, delivery closes after the bounded Stop request completes.
 Session and response identities remain available after cancellation so the next message can continue from the cancelled turn.
 
-A chat stream has no total time limit, because a turn can wait minutes for a tool approval.
+A chat stream has no total time limit, because a turn can run for many minutes.
 The server sends a heartbeat every 15 seconds. The client fails the stream after 2 minutes without data.

@@ -35,6 +35,7 @@ import {
   BackendMessage,
   ChatFileType,
   CitationMap,
+  ChatStream,
   FileChatDisplay,
   FileDescriptor,
   Message,
@@ -85,17 +86,25 @@ import type { MemberPlugin } from "@/lib/plugins/member";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
-import { settleChatSession } from "@/lib/chat/settleChatSession";
+import {
+  claimStreamReader,
+  releaseStreamReader,
+  writesAnswer,
+  settleChatSession,
+} from "@/lib/chat/settleChatSession";
+import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
 import {
   stopChatSession,
   STOP_BEFORE_DISPATCH,
 } from "@/lib/chat/stopChatSession";
-import { useToolApprovalSendGuard } from "@/lib/chat/hooks";
+import { useShowPendingApproval } from "@/lib/chat/hooks";
 
 const SYSTEM_MESSAGE_ID = -3;
 
-export interface OnSubmitProps {
-  message: string;
+// `mentions` is what the question tagged. An edit sends the recorded mentions
+// its new text still has; a resend or regeneration sends the question's
+// recorded mentions.
+export interface OnSubmitProps extends ComposedMessage {
   //from chat input bar
   currentMessageFiles: ProjectFile[];
   // from the chat bar???
@@ -130,8 +139,8 @@ interface UseChatControllerProps {
   selectedDocuments: OnyxDocument[];
   searchParams: URLSearchParams;
   resetInputBar: () => void;
-  /** Puts a message and its files back after a send fails before it starts. */
-  restoreInputBar: (message: string, files: ProjectFile[]) => void;
+  /** Puts a question back after a send fails before it starts. */
+  restoreInputBar: (unsent: UnsentMessage) => void;
 }
 
 export default function useChatController({
@@ -205,7 +214,7 @@ export default function useChatController({
   const currentMessageTree = useCurrentMessageTree();
   const currentMessageHistory = useCurrentMessageHistory();
   const tReadiness = useTranslations("chat.readiness");
-  const approvalGuard = useToolApprovalSendGuard();
+  const showPendingApproval = useShowPendingApproval();
 
   const navigatingAway = useRef(false);
 
@@ -359,6 +368,7 @@ export default function useChatController({
       message,
       currentMessageFiles,
       deepResearch,
+      mentions,
       messageIdToResend,
       queryOverride,
       isSeededChat,
@@ -463,7 +473,11 @@ export default function useChatController({
               scroll: false,
             });
           }
-          restoreInputBar(message, currentMessageFiles);
+          restoreInputBar({
+            message,
+            mentions,
+            files: currentMessageFiles,
+          });
           return;
         }
 
@@ -692,7 +706,8 @@ export default function useChatController({
           effectiveFileDescriptors,
           messageToResend
         );
-        initialUserNode = result.initialUserNode;
+        // The chips show at once; the server's record replaces them.
+        initialUserNode = { ...result.initialUserNode, mentions };
         initialAgentNode = result.initialAgentNode;
 
         // In multi-model mode, create N assistant placeholder nodes (one per model).
@@ -762,7 +777,11 @@ export default function useChatController({
           store.currentSessionId === frozenSessionId &&
           !regenerationRequest
         ) {
-          restoreInputBar(message, currentMessageFiles);
+          restoreInputBar({
+            message,
+            mentions,
+            files: currentMessageFiles,
+          });
         }
       };
       const discardUnsentTurn = () => {
@@ -803,6 +822,8 @@ export default function useChatController({
 
       let newUserMessageId: number | null = null;
       let newAgentMessageId: number | null = null;
+      // What the saved question mentioned, as the server recorded it.
+      let recordedMentions = initialUserNode.mentions;
 
       // Multi-model per-model state (indexed by model_index from backend)
       const numModels = selectedModels?.length ?? 0;
@@ -914,6 +935,7 @@ export default function useChatController({
               ...currentUserNode,
               messageId: newUserMessageId ?? undefined,
               files: files,
+              mentions: recordedMentions,
             };
             messagesToUpsert = [updatedUserNode, ...dirtyNodes];
           } else {
@@ -930,6 +952,7 @@ export default function useChatController({
               ...initialUserNode,
               messageId: newUserMessageId ?? undefined,
               files: files,
+              mentions: recordedMentions,
             },
             {
               ...initialAgentNode,
@@ -965,10 +988,24 @@ export default function useChatController({
           ];
         }
 
+        writeAnswers(messagesToUpsert);
+      }
+
+      /** Merges the send's updates into the chat's current tree. An answer
+       *  that a newer stream writes, such as its continuation, keeps its
+       *  rows, and rows that others added stay. */
+      function writeAnswers(messages: Message[]) {
+        const streamId = claimedStream?.stream_id ?? null;
         currentMessageTreeLocal = upsertToCompleteMessageTree({
-          messages: messagesToUpsert,
-          completeMessageTreeOverride: currentMessageTreeLocal,
-          chatSessionId: frozenSessionId!,
+          messages: messages.filter(
+            (message) =>
+              message.type === "user" ||
+              writesAnswer(streamId, message.messageId)
+          ),
+          completeMessageTreeOverride:
+            useChatSessionStore.getState().sessions.get(frozenSessionId)
+              ?.messageTree ?? currentMessageTreeLocal,
+          chatSessionId: frozenSessionId,
         });
       }
 
@@ -1000,6 +1037,10 @@ export default function useChatController({
       const readerFinished = new Promise<void>((resolve) => {
         resolveReaderFinished = resolve;
       });
+      // The send reads its own stream, so a decision that names it as the
+      // continuation does not start a second reader.
+      let claimedStream: ChatStream | null = null;
+      let readerDone = false;
 
       try {
         // Selection-time override writes are best-effort. Await confirmation
@@ -1043,10 +1084,18 @@ export default function useChatController({
           sendAcknowledged: stack.acknowledged,
           readerFinished,
         });
+        stack.acknowledged.then(
+          (stream) => {
+            if (stream && !readerDone && claimStreamReader(stream))
+              claimedStream = stream;
+          },
+          () => {}
+        );
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
           message: currMessage,
           fileDescriptors: effectiveFileDescriptors,
+          mentions,
           parentMessageId: (() => {
             const parentId =
               regenerationRequest?.parentMessage.messageId ??
@@ -1144,6 +1193,9 @@ export default function useChatController({
             if ((packet as MessageResponseIDInfo).user_message_id) {
               newUserMessageId = (packet as MessageResponseIDInfo)
                 .user_message_id;
+              // SAFETY: only ID info lines carry user_message_id.
+              recordedMentions =
+                (packet as MessageResponseIDInfo).mentions ?? recordedMentions;
               userNodeDirty = true;
 
               // Track extension queries in PostHog (reuses isExtension/extensionContext from above)
@@ -1240,22 +1292,18 @@ export default function useChatController({
                   });
                   erroredModelIndices.add(errorModelIndex);
                   dirtyModelIndices.delete(errorModelIndex);
-                  currentMessageTreeLocal = upsertToCompleteMessageTree({
-                    messages: [
-                      {
-                        ...buildAssistantNodeUpdate(errorModelIndex),
-                        errorMessage: streamingError.error,
-                        type: "error",
-                        stackTrace: streamingError.stack_trace || null,
-                        errorCode: streamingError.error_code || null,
-                        isRetryable: streamingError.is_retryable ?? true,
-                        errorDetails: streamingError.details || null,
-                        is_generating: false,
-                      },
-                    ],
-                    completeMessageTreeOverride: currentMessageTreeLocal,
-                    chatSessionId: frozenSessionId!,
-                  });
+                  writeAnswers([
+                    {
+                      ...buildAssistantNodeUpdate(errorModelIndex),
+                      errorMessage: streamingError.error,
+                      type: "error",
+                      stackTrace: streamingError.stack_trace || null,
+                      errorCode: streamingError.error_code || null,
+                      isRetryable: streamingError.is_retryable ?? true,
+                      errorDetails: streamingError.details || null,
+                      is_generating: false,
+                    },
+                  ]);
                 } else {
                   // Error without model_index in multi-model — can't route
                   // to a specific panel. Log and continue; the stream loop
@@ -1391,7 +1439,7 @@ export default function useChatController({
 
         if (stack.approvalPending) {
           restoreTreeBeforeSend();
-          approvalGuard.showPendingApproval();
+          showPendingApproval();
         } else {
           // Surface FIFO errors (e.g. 429 before any packets arrive) so the
           // catch block replaces the thinking placeholder with an error message.
@@ -1442,6 +1490,7 @@ export default function useChatController({
           const userErrorNode: Message = {
             ...liveUserNode,
             messageId: newUserMessageId ?? liveUserNode.messageId,
+            mentions: recordedMentions,
           };
 
           // In multi-model mode, mark non-errored assistant nodes as errors.
@@ -1484,11 +1533,7 @@ export default function useChatController({
                 },
               ];
 
-          currentMessageTreeLocal = upsertToCompleteMessageTree({
-            messages: [userErrorNode, ...errorAssistantNodes],
-            completeMessageTreeOverride: currentMessageTreeLocal,
-            chatSessionId: frozenSessionId,
-          });
+          writeAnswers([userErrorNode, ...errorAssistantNodes]);
         }
       } finally {
         try {
@@ -1498,14 +1543,12 @@ export default function useChatController({
             initialAssistantNodes.length > 0 &&
             streamSucceeded
           ) {
-            upsertToCompleteMessageTree({
-              messages: buildNonErroredNodes({ is_generating: false }),
-              completeMessageTreeOverride: currentMessageTreeLocal,
-              chatSessionId: frozenSessionId,
-            });
+            writeAnswers(buildNonErroredNodes({ is_generating: false }));
           }
         } finally {
           controller.signal.removeEventListener("abort", discardUnsentTurn);
+          readerDone = true;
+          if (claimedStream !== null) releaseStreamReader(claimedStream);
           resolveReaderFinished();
         }
       }
@@ -1552,7 +1595,7 @@ export default function useChatController({
       searchParams,
       resetInputBar,
       restoreInputBar,
-      approvalGuard,
+      showPendingApproval,
       t,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,

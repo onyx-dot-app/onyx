@@ -20,6 +20,9 @@ const (
 	// ApprovalRequired: a tool call needed approval that no one could give
 	// (ask --approve=fail, the default without a terminal). The CLI rejected it.
 	ApprovalRequired Code = 10
+	// ApprovalPending: ask was interrupted at an approval prompt while the
+	// response waited. The request still waits for a decision.
+	ApprovalPending Code = 11
 )
 
 // ForHTTPStatus maps an HTTP status code to a CLI exit code.

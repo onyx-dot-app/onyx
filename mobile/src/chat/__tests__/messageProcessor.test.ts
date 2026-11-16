@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 
 import { createInitialState, processPackets } from "@/chat/messageProcessor";
-import { Packet, PacketType } from "@/chat/streamingModels";
+import { Packet, PacketType, StopReason } from "@/chat/streamingModels";
 
 import {
   makeCitationPacket,
@@ -41,11 +41,41 @@ describe("messageProcessor", () => {
     ]);
   });
 
+  it("rebuilds when a replay replaces the packets at the same length", () => {
+    let state = processPackets(createInitialState(1), [
+      makeMessageStartPacket([]),
+      makeStopPacket(),
+    ]);
+    expect(state.stopPacketSeen).toBe(true);
+
+    state = processPackets(state, [
+      makeMessageStartPacket([]),
+      makePacket({ type: PacketType.MESSAGE_DELTA, content: "more" }),
+    ]);
+
+    expect(state.stopPacketSeen).toBe(false);
+    expect(state.isComplete).toBe(false);
+  });
+
   it("marks complete on stop", () => {
     let state = createInitialState(1);
     expect(state.isComplete).toBe(false);
     state = processPackets(state, [makeStopPacket()]);
     expect(state.isComplete).toBe(true);
+  });
+
+  it("does not complete a response that waits for approval", () => {
+    const state = processPackets(createInitialState(1), [
+      {
+        placement: { turn_index: 0 },
+        obj: {
+          type: PacketType.STOP,
+          stop_reason: StopReason.AWAITING_APPROVAL,
+        },
+      },
+    ]);
+    expect(state.isComplete).toBe(false);
+    expect(state.stopPacketSeen).toBe(false);
   });
 
   it("shows text whose step also called a tool once the response stops", () => {
@@ -104,7 +134,6 @@ describe("messageProcessor", () => {
         tool_name: "lookup",
         display_name: "Lookup",
         arguments: {},
-        expires_at: "2099-01-01T00:00:00Z",
       },
     };
     const resolved: Packet = {
@@ -133,7 +162,7 @@ describe("messageProcessor", () => {
         obj: {
           type: PacketType.TOOL_APPROVAL_RESOLVED,
           approval_id: "a1",
-          outcome: "expired",
+          outcome: "cancelled",
         },
       },
     ]);

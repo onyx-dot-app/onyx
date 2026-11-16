@@ -16,7 +16,7 @@ import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { ToolApprovalCard } from "@tests/e2e/pages/ToolApprovalCard";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
-const PORT = Number(process.env.MCP_APPROVAL_TEST_PORT || "8008");
+const BASE_PORT = Number(process.env.MCP_APPROVAL_TEST_PORT || "8008");
 // A shared mock server gets a query string, so specs that clean up servers by
 // URL never delete this spec's server.
 const SHARED_SERVER_URL = process.env.MCP_API_KEY_TEST_URL
@@ -24,10 +24,14 @@ const SHARED_SERVER_URL = process.env.MCP_API_KEY_TEST_URL
   : null;
 const TOOL_NAME = "tool_0";
 const TOOL_OUTPUT = "Secret value 200!";
+// Auto-approved; sleeps until the call is cancelled, so its turn stays live.
+const SLOW_TOOL_NAME = "slow_tool";
 
 /**
  * An MCP tool on the default (ASK) policy pauses the chat run until the user
- * approves or rejects the call in the answer's approval card.
+ * approves or rejects the call in its approval card, which waits after the
+ * last message. The turn's stream ends while it waits, and the reply
+ * continues after the decision. The decision's record stays in the reply.
  */
 test.describe("MCP tool approval in chat @code-mode", () => {
   test.describe.configure({ mode: "serial" });
@@ -37,13 +41,18 @@ test.describe("MCP tool approval in chat @code-mode", () => {
   let agentId: number;
   let agentName: string;
   let qualifiedToolName: string;
+  let qualifiedSlowToolName: string;
   let toolDisplayName: string;
 
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }, workerInfo) => {
     let serverUrl = SHARED_SERVER_URL;
     if (!serverUrl) {
+      // Projects that select this spec can run in parallel workers.
+      const projectIndex = workerInfo.config.projects.findIndex(
+        (project) => project.name === workerInfo.project.name
+      );
       serverProcess = await startMcpApiKeyServer({
-        port: PORT,
+        port: BASE_PORT + projectIndex,
         apiKey: API_KEY,
       });
       serverUrl = `http://${serverProcess.address.host}:${serverProcess.address.port}/mcp`;
@@ -69,8 +78,23 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     );
     toolDisplayName = tool?.display_name || TOOL_NAME;
     qualifiedToolName = qualifiedMcpToolName(serverId, serverName, TOOL_NAME);
+    const slowToolId = await adminClient.findMcpToolId(
+      serverId,
+      SLOW_TOOL_NAME
+    );
+    await adminClient.setMcpActionPolicies(serverId, {
+      [SLOW_TOOL_NAME]: "ALWAYS",
+    });
+    qualifiedSlowToolName = qualifiedMcpToolName(
+      serverId,
+      serverName,
+      SLOW_TOOL_NAME
+    );
     agentName = `PW Approval Agent ${Date.now()}`;
-    agentId = await adminClient.createAgentWithMcpTools(agentName, [toolId]);
+    agentId = await adminClient.createAgentWithMcpTools(agentName, [
+      toolId,
+      slowToolId,
+    ]);
     await adminContext.close();
   });
 
@@ -87,24 +111,41 @@ test.describe("MCP tool approval in chat @code-mode", () => {
 
   /**
    * Script a turn that calls the tool, then, unless the test stops the turn,
-   * answers once it has a result. Starts a new chat unless `sameChat`.
+   * answers once it has a result. With `slowSibling`, the turn also calls the
+   * slow tool at the same time, so it stays live while the card waits.
+   * Starts a new chat unless `sameChat`.
    */
   async function askForToolCall(
     page: Page,
-    { sameChat = false, answers = true } = {}
+    { sameChat = false, answers = true, slowSibling = false } = {}
   ): Promise<{ nonce: string; answer: string; conversation: string }> {
     const nonce = mockLlmNonce();
     const callId = `call-${nonce}`;
     const answer = `Finished ${nonce}`;
     const conversation = `approval-${nonce}`;
+    const gatedCall = {
+      id: callId,
+      name: qualifiedToolName,
+      arguments: { name: nonce },
+    };
     await addMockLlmConversation({
       name: conversation,
       conditions: { prompt_contains: [nonce] },
       replies: [
-        // Code mode calls the tool from an execute_code program.
-        mockLlmToolCallReply([
-          { id: callId, name: qualifiedToolName, arguments: { name: nonce } },
-        ]),
+        // Code mode calls the tools from an execute_code program.
+        slowSibling
+          ? mockLlmToolCallReply(
+              [
+                gatedCall,
+                {
+                  id: `slow-${nonce}`,
+                  name: qualifiedSlowToolName,
+                  arguments: { seconds: 60 },
+                },
+              ],
+              { concurrent: true }
+            )
+          : mockLlmToolCallReply([gatedCall]),
         ...(answers
           ? [{ text: answer, conditions: { has_results_for: [callId] } }]
           : []),
@@ -117,6 +158,81 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     return { nonce, answer, conversation };
   }
 
+  /**
+   * Script a turn that starts a background agent whose tool call asks for
+   * approval. The reply ends at once; the agent reports after the decision,
+   * and its report wakes the chat with `followUp`. With `asksTwice`, the
+   * agent calls the tool again, with `secondArgument`, after the first
+   * result, and reports after the second.
+   */
+  async function startBackgroundAgent(
+    page: Page,
+    { asksTwice = false } = {}
+  ): Promise<{ followUp: string; secondArgument: string }> {
+    const nonce = mockLlmNonce();
+    const task = `Greet ${nonce} in the background`;
+    const callId = `agent-call-${nonce}`;
+    const secondCallId = `agent-call-again-${nonce}`;
+    const secondArgument = `again-${nonce}`;
+    const report = `Mailer report ${nonce}`;
+    const followUp = `The mailer reported ${nonce}`;
+    await addMockLlmConversation({
+      name: `root-${nonce}`,
+      conditions: { prompt_contains: [`Start a mailer ${nonce}`] },
+      replies: [
+        {
+          // Agent tools stay direct tools in code mode.
+          tool_calls: [
+            {
+              id: `spawn-${nonce}`,
+              name: "spawn_agent",
+              arguments: { name: "mailer", instruction: task },
+            },
+          ],
+          conditions: { offers: ["spawn_agent"] },
+        },
+        {
+          text: `Started ${nonce}`,
+          conditions: { has_results_for: [`spawn-${nonce}`] },
+        },
+        { text: followUp, conditions: { prompt_contains: [report] } },
+      ],
+    });
+    const secondCall = mockLlmToolCallReply([
+      {
+        id: secondCallId,
+        name: qualifiedToolName,
+        arguments: { name: secondArgument },
+      },
+    ]);
+    await addMockLlmConversation({
+      name: `agent-${nonce}`,
+      conditions: { prompt_contains: [task] },
+      replies: [
+        mockLlmToolCallReply([
+          { id: callId, name: qualifiedToolName, arguments: { name: nonce } },
+        ]),
+        ...(asksTwice
+          ? [
+              {
+                ...secondCall,
+                conditions: {
+                  ...secondCall.conditions,
+                  has_results_for: [callId],
+                },
+              },
+              { text: report, conditions: { has_results_for: [secondCallId] } },
+            ]
+          : [{ text: report, conditions: { has_results_for: [callId] } }]),
+      ],
+    });
+    const chat = new ChatPage(page);
+    await chat.gotoAgent(agentId, agentName);
+    await chat.inputBar.fill(`Start a mailer ${nonce}`);
+    await chat.inputBar.send();
+    return { followUp, secondArgument };
+  }
+
   test("Approve runs the tool and the answer continues", async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -126,6 +242,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     await card.expectPending(toolDisplayName);
     await card.expectArgument(nonce);
     const chat = new ChatPage(page);
+    await chat.inputBar.expectAcceptsSend();
 
     await test.step("a send waits for the decision and keeps the draft", async () => {
       const draft = `Next question ${nonce}`;
@@ -140,11 +257,14 @@ test.describe("MCP tool approval in chat @code-mode", () => {
 
     await card.approve();
 
-    await card.expectApproved(toolDisplayName);
-    await chat.expectLatestReplyComplete();
-    await expect(chat.answerText(answer)).toBeVisible();
-    await chat.expectCustomToolResult(toolDisplayName, TOOL_OUTPUT);
-    await card.expectApproved(toolDisplayName);
+    await test.step("the reply continues in the same message", async () => {
+      await card.expectApproved(toolDisplayName);
+      await chat.expectLatestReplyComplete();
+      await expect(chat.answerText(answer)).toBeVisible();
+      await expect(chat.aiMessages).toHaveCount(1);
+      await chat.expectCustomToolResult(toolDisplayName, TOOL_OUTPUT);
+      await card.expectApproved(toolDisplayName);
+    });
 
     await chat.reload();
     await card.expectApproved(toolDisplayName);
@@ -207,7 +327,9 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     ).toBe(true);
   });
 
-  test("A waiting card stays decidable after a reload", async ({ page }) => {
+  test("A waiting card survives a reload while its turn is suspended", async ({
+    page,
+  }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
     const { answer } = await askForToolCall(page);
@@ -215,22 +337,116 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     const card = new ToolApprovalCard(page);
     await card.expectPending(toolDisplayName);
     const chat = new ChatPage(page);
+    await chat.inputBar.expectAcceptsSend();
     await chat.reload();
 
+    // The saved response replays the request; no stream runs.
     await card.expectPending(toolDisplayName);
+    await card.expectPendingInView();
+    await chat.inputBar.expectAcceptsSend();
     await card.approve();
     await card.expectApproved(toolDisplayName);
     await chat.expectLatestReplyComplete();
     await expect(chat.answerText(answer)).toBeVisible();
+    await expect(chat.aiMessages).toHaveCount(1);
     await chat.expectCustomToolResult(toolDisplayName, TOOL_OUTPUT);
   });
 
-  test("Stop rejects a waiting call and the chat takes new messages", async ({
+  test("A background agent's card waits after the last message and does not block sends", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
-    await askForToolCall(page, { answers: false });
+    const { followUp } = await startBackgroundAgent(page);
+    const chat = new ChatPage(page);
+
+    const card = new ToolApprovalCard(page);
+    await card.expectPending(toolDisplayName);
+    await card.expectAgentRequest("mailer", toolDisplayName);
+    await card.expectPendingInView();
+    await chat.inputBar.expectAcceptsSend();
+
+    await card.approve();
+    // The agent continues in the background; its result wakes the chat.
+    await expect(chat.answerText(followUp, 1)).toBeVisible({
+      timeout: 60_000,
+    });
+    await card.expectApproved(toolDisplayName);
+    await chat.reload();
+    await card.expectApproved(toolDisplayName);
+  });
+
+  test("A background agent's card stays actionable after a reload and does not block sends", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+    const { followUp } = await startBackgroundAgent(page);
+    const chat = new ChatPage(page);
+    const card = new ToolApprovalCard(page);
+    await card.expectPending(toolDisplayName);
+    await chat.expectLatestReplyComplete();
+
+    // The session load replays the agent's waiting request.
+    await chat.reload();
+    await card.expectPending(toolDisplayName);
+    await card.expectAgentRequest("mailer", toolDisplayName);
+
+    await test.step("a send runs while the agent's card waits", async () => {
+      const nonce = mockLlmNonce();
+      await addMockLlmConversation({
+        name: `beside-agent-${nonce}`,
+        conditions: { prompt_contains: [nonce] },
+        replies: [{ text: `Hello beside ${nonce}` }],
+      });
+      await chat.inputBar.fill(`Say hello ${nonce}`);
+      await chat.inputBar.send();
+      await chat.expectLatestReplyComplete();
+      await expect(chat.answerText(`Hello beside ${nonce}`, 1)).toBeVisible();
+      await card.expectPending(toolDisplayName);
+    });
+
+    await card.approve();
+    await expect(chat.answerText(followUp, 2)).toBeVisible({
+      timeout: 60_000,
+    });
+    await card.expectApproved(toolDisplayName);
+  });
+
+  test("A background agent that asks again after a decision shows its next card without a reload", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+    const { followUp, secondArgument } = await startBackgroundAgent(page, {
+      asksTwice: true,
+    });
+    const chat = new ChatPage(page);
+    const card = new ToolApprovalCard(page);
+    await card.expectPending(toolDisplayName);
+    await chat.expectLatestReplyComplete();
+
+    // The decision starts no stream; the chat reads its status until the
+    // resumed agent parks on its next request.
+    await card.approve();
+    await card.expectArgument(secondArgument, 60_000);
+    await card.expectPending(toolDisplayName);
+
+    await card.approve();
+    await expect(chat.answerText(followUp, 1)).toBeVisible({
+      timeout: 60_000,
+    });
+    await card.expectApproved(toolDisplayName);
+  });
+
+  // Stop shows only while the turn is live. A lone gated call suspends the turn
+  // as soon as its card opens, so the slow tool runs beside it.
+  test("Stop during a live turn rejects its open card and the chat takes new messages", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+    await askForToolCall(page, { answers: false, slowSibling: true });
 
     const card = new ToolApprovalCard(page);
     await card.expectPending(toolDisplayName);

@@ -25,6 +25,9 @@ _DASHBOARDS_ON = ["--set", "monitoring.grafana.dashboards.enabled=true"]
 _JOB = "onyx-craft-fc-host-agent"
 _DASHBOARD_KEY = "onyx-craft-fc-host-agent.json"
 _REPO_ROOT = find_ancestor_containing("microvm/internal/metrics")
+_DOCS_RUNBOOK = (
+    "https://docs.onyx.app/deployment/kubernetes/craft-firecracker-operations"
+)
 _ALERTS = [
     "CraftFcHostAgentDown",
     "CraftFcHostAgentPodsMissing",
@@ -98,7 +101,7 @@ def test_rules_render_with_selectors_labels_and_runbooks() -> None:
         assert rule["labels"]["team"] == "craft"
         assert rule["labels"]["severity"] in {"warning", "critical"}
         anchor = rule["alert"].lower()
-        assert rule["annotations"]["runbook_url"].endswith(f"RUNBOOKS.md#{anchor}")
+        assert rule["annotations"]["runbook_url"] == f"{_DOCS_RUNBOOK}#{anchor}"
         expr = rule["expr"]
         if rule["alert"] == "CraftFcHostAgentPodsMissing":
             assert f'daemonset="{_JOB}", namespace="{_AGENT_NS}"' in expr
@@ -154,6 +157,18 @@ def test_rules_keep_zero_thresholds() -> None:
     )
     assert ") > 0\n" in rules["CraftFcCreateFailures"]["expr"]
     assert ") > 0\n" in rules["CraftFcRelayErrors"]["expr"]
+
+
+def test_template_unusable_sees_a_failed_root_drive_build() -> None:
+    # A failed start-up build refuses no Create (placement skips the node),
+    # so only template_ready shows it.
+    expr = _by_alert(_rules([*_METRICS_ON, *_RULES_ON]))["CraftFcTemplateUnusable"][
+        "expr"
+    ]
+    assert (
+        f'max by (namespace, node) (craft_fc_host_agent_template_ready{{job="{_JOB}", '
+        f'namespace="{_AGENT_NS}"}}) == 0'
+    ) in expr
 
 
 def test_relay_ratio_counts_each_connection_once() -> None:

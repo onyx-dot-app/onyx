@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"time"
+	"strings"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/sanitize"
@@ -31,41 +31,65 @@ func Title(req models.ToolApprovalRequestEvent) string {
 	return "Tool call"
 }
 
-// Arguments returns one "key: value" line per argument, sorted by key.
-// Long values and long argument lists are truncated.
-func Arguments(args map[string]any) []string {
-	keys := make([]string, 0, len(args))
-	for key := range args {
-		keys = append(keys, key)
+// AgentRequest names the background agent that asks to run the tool, as the
+// web card does. It is empty for the chat's own agent.
+func AgentRequest(req models.ToolApprovalRequestEvent) string {
+	agent := truncate(sanitize.Line(req.AgentName), maxKeyRunes)
+	if agent == "" {
+		return ""
 	}
-	sort.Strings(keys)
+	return agent + " wants to run " + Title(req)
+}
 
+// Arguments returns one "key: value" line per argument, sorted by key.
+// Long values and long argument lists are truncated; AllArguments shows them.
+func Arguments(args map[string]any) []string {
+	keys := sortedKeys(args)
 	lines := make([]string, 0, min(len(keys), maxArguments+1))
 	for i, key := range keys {
 		if i == maxArguments {
 			lines = append(lines, fmt.Sprintf("… %d more", len(keys)-maxArguments))
 			break
 		}
-		value, ok := args[key].(string)
-		if !ok {
-			encoded, err := json.Marshal(args[key])
-			if err != nil {
-				encoded = []byte("?")
-			}
-			value = string(encoded)
-		}
-		lines = append(lines, truncate(sanitize.Line(key), maxKeyRunes)+": "+truncate(sanitize.Line(value), maxValueRunes))
+		lines = append(lines, truncate(sanitize.Line(key), maxKeyRunes)+": "+truncate(sanitize.Line(argumentText(args[key])), maxValueRunes))
 	}
 	return lines
 }
 
-// Deadline shows when the server ends the request, or "" when the server
-// sent no deadline. Only the server decides that the request expired.
-func Deadline(expiresAt *time.Time) string {
-	if expiresAt == nil {
-		return ""
+// AllArguments returns every argument in full, sorted by key. A value keeps
+// its line breaks, and its later lines are indented under its key.
+func AllArguments(args map[string]any) []string {
+	var lines []string
+	for _, key := range sortedKeys(args) {
+		value := strings.ReplaceAll(sanitize.Terminal(argumentText(args[key])), "\t", "    ")
+		valueLines := strings.Split(value, "\n")
+		lines = append(lines, sanitize.Line(key)+": "+valueLines[0])
+		for _, line := range valueLines[1:] {
+			lines = append(lines, "  "+line)
+		}
 	}
-	return "Approve by " + expiresAt.Local().Format("15:04")
+	return lines
+}
+
+func sortedKeys(args map[string]any) []string {
+	keys := make([]string, 0, len(args))
+	for key := range args {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// argumentText is a string argument as is and any other value as JSON.
+func argumentText(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "?"
+	}
+	return string(encoded)
 }
 
 // OutcomeLabel names how a request ended.
@@ -77,8 +101,6 @@ func OutcomeLabel(outcome string) string {
 		return "Approved for this session"
 	case models.ApprovalOutcomeRejected:
 		return "Not approved"
-	case models.ApprovalOutcomeExpired:
-		return "Timed out"
 	case models.ApprovalOutcomeDisabled:
 		return "Disabled"
 	default:

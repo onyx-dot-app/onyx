@@ -13,7 +13,12 @@ from pydantic import (
 )
 
 from onyx.agents.execution_records import messages_for_model
-from onyx.agents.tools import ChildRunWait, HumanToolAnswer, PendingToolInput
+from onyx.agents.tools import (
+    ChildRunWait,
+    HumanToolAnswer,
+    NestedInputWait,
+    PendingToolInput,
+)
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import (
     AssistantMessage,
@@ -206,10 +211,16 @@ class AgentState(BaseModel):
 
 
 class CompactionMetadata(BaseModel):
-    """Summary input text and whether a message can anchor a saved summary."""
+    """Summary input text, whether a message can anchor a saved summary, and
+    whether it is context of the user message before it."""
 
     compaction_text: str | None = None
     allow_compaction_cutoff: bool = True
+    # Context of the user message before it, such as a skill that the message
+    # picked. It belongs to that message: it is never the task or a turn of its
+    # own, a cut never separates it from that message, and compacted history
+    # keeps only the message.
+    is_input_context: bool = False
 
 
 class PreparedStep(BaseModel):
@@ -284,9 +295,6 @@ class StepInput(BaseModel):
     step: AgentStep
     previous: StepResult | None = None
     received_inputs: list[UserMessage] = Field(default_factory=list)
-    # Time this run's calls have spent waiting for input, such as the user's
-    # approval, so features can leave it out of their own timing.
-    input_wait_seconds: float = 0.0
 
 
 class RunResult(BaseModel):
@@ -362,17 +370,32 @@ class RunProgress(BaseModel):
     options: GenerationOptions | None = None
     tools: list[ToolDefinition] = Field(default_factory=list)
     allowed_tool_names: frozenset[str] | None = None
-    tool_configuration_digest: str
     previous_options: GenerationOptions | None = None
     finalized_tool_call_ids: set[str] = Field(default_factory=set)
     feature_state: dict[str, JsonValue] | None = None
-    pending_tool_calls: dict[str, PendingToolInput | ChildRunWait] = Field(
-        default_factory=dict
+    pending_tool_calls: dict[str, PendingToolInput | ChildRunWait | NestedInputWait] = (
+        Field(default_factory=dict)
     )
     human_tool_answers: dict[str, HumanToolAnswer] = Field(default_factory=dict)
     child_run_ids: list[str] = Field(default_factory=list)
     observed_child_run_ids: list[str] = Field(default_factory=list)
     outcome: RunStatus | None = None
+
+    @property
+    def input_requests(self) -> list[PendingToolInput]:
+        """The saved input requests: of direct calls, and of calls that tools
+        made for the model."""
+        return [
+            request
+            for pending in self.pending_tool_calls.values()
+            for request in (
+                [pending]
+                if isinstance(pending, PendingToolInput)
+                else [nested.request for nested in pending.requests]
+                if isinstance(pending, NestedInputWait)
+                else []
+            )
+        ]
 
     @field_serializer("allowed_tool_names", when_used="json")
     def serialize_allowed_tool_names(

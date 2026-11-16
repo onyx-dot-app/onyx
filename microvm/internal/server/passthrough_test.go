@@ -32,6 +32,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
+	"github.com/onyx-dot-app/onyx/microvm/internal/metrics"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
 	"github.com/onyx-dot-app/onyx/microvm/internal/testcerts"
 	"github.com/onyx-dot-app/onyx/microvm/internal/transfer"
@@ -695,5 +696,31 @@ func TestCreateSendsEgressCA(t *testing.T) {
 	defer vm.casMu.Unlock()
 	if len(vm.cas) != 1 || string(vm.cas[0]) != string(ca.PEM) {
 		t.Fatalf("installed %d CAs", len(vm.cas))
+	}
+}
+
+// A caller that gives up during the key install is not a guest key fault:
+// the Create shows as canceled, not as GUEST_KEY_REJECTED.
+func TestInstallKeyCallerGivesUp(t *testing.T) {
+	vm := startFakeVM(t)
+	a := newPTAgent(t, false, map[string]string{sandbox: vm.uds})
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	expired, cancel2 := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel2()
+	for name, tc := range map[string]struct {
+		ctx  context.Context
+		want error
+	}{
+		"canceled": {canceled, context.Canceled},
+		"deadline": {expired, context.DeadlineExceeded},
+	} {
+		err := a.pt.InstallKey(tc.ctx, a.vms[sandbox], vmKey, nil)
+		if !errors.Is(err, tc.want) || reasonOf(err) != "" {
+			t.Errorf("%s: %v (reason %q), want %v", name, err, reasonOf(err), tc.want)
+		}
+		if got := createResult(nil, toStatus(err), true); got != metrics.CreateCanceled {
+			t.Errorf("%s: create result %s, want canceled", name, got)
+		}
 	}
 }

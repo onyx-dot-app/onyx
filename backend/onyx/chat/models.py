@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal
@@ -20,6 +20,8 @@ from onyx.agents.models import (
     AgentInfo,
     CompactionCheckpoint,
     CompactionMetadata,
+    InputMessageMetadata,
+    InputSource,
     MessageDelivery,
     RunFailure,
     RunFailureKind,
@@ -30,6 +32,7 @@ from onyx.agents.models import (
 from onyx.agents.tools import InputDecision
 from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
+from onyx.chat.mention_models import Mentions, PickedSkillMessage, RecordedMention
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -66,12 +69,16 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoadedFile
 from onyx.tools.models import (
     ChatFile,
+    ChatToolSelection,
     GeneratedImage,
     PersonaToolConfiguration,
     SearchToolUsage,
     ToolCallInfo,
 )
-from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
+from onyx.tools.tool_implementations.code_mode.models import (
+    CodeModeExecutionResult,
+    SavedCodeCell,
+)
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
@@ -89,6 +96,7 @@ class PendingChatMessage(BaseModel):
     target_response_id: int | None
     deep_research: bool = False
     llm_override: LLMOverride | None = None
+    mentions: Mentions
 
 
 class QueuedChatTurn(BaseModel):
@@ -105,6 +113,77 @@ class PromptMetadata(CompactionMetadata):
     should_cache: bool = False
     file_id: str | None = None
     is_reminder: bool = False
+
+
+class ChatInputMetadata(InputMessageMetadata):
+    """A user message accepted between steps, with the records of what it
+    picked. The `<skill>` message of each pick follows it in history."""
+
+    mentions: list[RecordedMention] = Field(default_factory=list)
+
+
+def recorded_mentions(message: Message) -> list[RecordedMention]:
+    """What a message accepted between steps picked."""
+    return (
+        message.metadata.mentions
+        if isinstance(message.metadata, ChatInputMetadata)
+        else []
+    )
+
+
+def skill_message_id(message_id: str, version_id: UUID) -> str:
+    """The id of the `<skill>` message that a message's pick of a skill
+    version gives the model."""
+    return f"{message_id}:skill:{version_id}"
+
+
+def picked_skill_messages(
+    message_id: str,
+    mentions: Sequence[RecordedMention],
+    skill_messages: Sequence[PickedSkillMessage],
+) -> list[UserMessage]:
+    """The `<skill>` messages that follow a message in history, in the order
+    it picked the skills."""
+    by_version = {message.version_id: message for message in skill_messages}
+    if by_version.keys() != {mention.version_id for mention in mentions}:
+        raise ValueError("Each picked skill needs its saved skill message")
+    return [
+        UserMessage(
+            id=skill_message_id(message_id, mention.version_id),
+            content=by_version[mention.version_id].content,
+            metadata=PromptMetadata(
+                token_count=by_version[mention.version_id].token_count,
+                is_input_context=True,
+            ),
+        )
+        for mention in mentions
+    ]
+
+
+def accepted_input_messages(
+    *,
+    message_id: str,
+    content: str,
+    source: InputSource,
+    source_run_id: str | None,
+    mentions: list[RecordedMention],
+    skill_messages: list[PickedSkillMessage],
+) -> list[UserMessage]:
+    """A user message accepted between steps and the `<skill>` messages of
+    its picks, as the run accepted it and as its saved record restores it."""
+    return [
+        UserMessage(
+            id=message_id,
+            content=content,
+            # Only a message that picked skills has the chat metadata.
+            metadata=ChatInputMetadata(
+                source=source, source_run_id=source_run_id, mentions=mentions
+            )
+            if mentions
+            else InputMessageMetadata(source=source, source_run_id=source_run_id),
+        ),
+        *picked_skill_messages(message_id, mentions, skill_messages),
+    ]
 
 
 class FileContextResult(BaseModel):
@@ -152,7 +231,7 @@ class ToolApprovalDenial(BaseModel):
 
     # disabled: the action policy blocked the call when the user approved it,
     # or the tool's server was deleted while the call waited.
-    outcome: Literal["rejected", "expired", "disabled"]
+    outcome: Literal["rejected", "disabled"]
 
 
 class MessageRendering(BaseModel):
@@ -246,6 +325,8 @@ class AgentResultState(BaseModel):
     root_response_id: int
     status: RunStatus
     failure: RunFailure | None = None
+    # SUSPENDED with a checkpoint: the run waits for people, without an owner.
+    parked: bool = False
 
     @property
     def wakes_recipient(self) -> bool:
@@ -263,8 +344,14 @@ class AgentResultState(BaseModel):
         """An active background agent: an unfinished run that delivers this result.
 
         Only `spawn_agent` runs have result rows, so foreground workers never count.
+        A run that waits for the user without an owner (parked) counts.
         """
         return not self.status.is_terminal
+
+    @property
+    def is_running(self) -> bool:
+        """An active run that is not parked: it has, or had, an owner."""
+        return self.is_active and not self.parked
 
 
 class AgentWait(BaseModel):
@@ -294,6 +381,26 @@ class AgentInboxWork(BaseModel):
     parent_tool_call_id: str
 
 
+class ParkedRun(BaseModel):
+    """A parked run whose waits have all ended, on any branch of the chat."""
+
+    # The agent's conversation; the chat session itself for a root response.
+    agent_id: str
+    response_id: int
+    # The root response whose branch the run belongs to.
+    root_response_id: int
+    # The model, temperature, and the request's tools and search filters that
+    # the run's checkpoint saved, which it continues with.
+    model_configuration_id: int | None = None
+    temperature: float | None = None
+    tool_selection: ChatToolSelection | None = None
+
+    @property
+    def is_root(self) -> bool:
+        """Whether the run is a root response, which continues in a turn."""
+        return self.response_id == self.root_response_id
+
+
 class ChatBranch(BaseModel):
     chat_session_id: UUID
     message_ids: list[int]
@@ -304,14 +411,18 @@ class ChatInbox(BaseModel):
 
     branch: ChatBranch
     selected_response_id: int | None
-    # The running selected response and active background agents. Each can have
-    # lost its owner.
+    # The running selected response and running background agents. Each can
+    # have lost its owner; parked runs have none and are not listed.
     running_response_ids: list[int] = Field(default_factory=list)
     results: list[AgentResultState] = Field(default_factory=list)
     next_turn: QueuedChatTurn | None = None
     child_work: list[AgentInboxWork] = Field(default_factory=list)
     # Unfinished latest runs of agents whose messages wait for them.
     waiting_response_ids: list[int] = Field(default_factory=list)
+    # Parked runs whose waits have all ended, on any branch: root responses
+    # continue in a turn before any queued turn, and the stores of their
+    # branches resume agent runs.
+    resumable_runs: list[ParkedRun] = Field(default_factory=list)
 
     @property
     def unfinished_response_ids(self) -> list[int]:
@@ -455,6 +566,8 @@ class ChatHistoryMessage(BaseModel):
     token_count: int
     files: list[FileDescriptor]
     is_clarification: bool
+    # The `<skill>` messages of the skills a question picked.
+    skill_messages: list[UserMessage]
     response_messages: list[Message]
     checkpoint: CompactionCheckpoint | None = None
 
@@ -529,9 +642,9 @@ class ChatFullResponse(BaseModel):
     # packet does. A server that omits it did not honor an incognito request.
     incognito: bool = False
     error_msg: str | None = None
-    # Set when the response returned early because a tool call waits for the
-    # user's approval. The turn keeps running; its answer is saved to the chat
-    # session after the decision. Empty for a finished response.
+    # Set when the response stopped because tool calls wait for the user's
+    # approval (stop reason `awaiting_approval`). After the decisions the
+    # response continues in the chat session. Empty for a finished response.
     pending_tool_approvals: list[ToolApprovalRequest] = []
 
 
@@ -749,6 +862,8 @@ class ChatFeatureState(BaseModel):
     chat_files: list[SavedChatFile]
     has_called_search_tool: bool
     search_context: SearchContext
+    # Cells whose observations wait for the user's input.
+    code_cells: list[SavedCodeCell] = Field(default_factory=list)
 
 
 class ReservedChatResponse(BaseModel):
@@ -777,6 +892,8 @@ class ChatTurnSetup(BaseModel):
     checkpoint: CompactionCheckpoint | None
     # Child-result delivery has no new user message.
     user_message_id: int | None
+    # The mentions recorded on the question, for its ID packet.
+    mentions: list[RecordedMention]
     user_identity: LLMUserIdentity
     responses: list[ReservedChatResponse]
     messages: list[Message]
@@ -797,6 +914,9 @@ class ChatTurnSetup(BaseModel):
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext
+    # The turn offers the skill tools when the user had custom skills as it
+    # started; the tools and each agent's catalog read the current skills.
+    has_chat_skills: bool
     # For deep research: was the last assistant message a clarification request?
     skip_clarification: bool
     cache: CacheBackend
@@ -810,6 +930,9 @@ class ChatTurnSetup(BaseModel):
     # for a bot that cannot show approval requests. Only server-side callers
     # set it; the public request has no such field.
     ask_for_approval: bool = True
+    # The suspended response that this turn continues after its approvals,
+    # under a new stream ID; None for a turn that starts a response.
+    resumed_response_id: int | None = None
 
 
 class ResponseOwner(BaseModel):
@@ -861,6 +984,12 @@ class ResponseCheckpoint(BaseModel):
     message_payloads: list[MessagePayload]
     input_messages: list[Message]
     input_payloads: list[MessagePayload]
+    # The saved model configuration that the response runs, its sampling
+    # temperature, and the tools and search filters of its request; a parked
+    # response continues with them.
+    model_configuration_id: int | None = None
+    temperature: float | None = None
+    tool_selection: ChatToolSelection | None = None
 
 
 class SavedCheckpoint(BaseModel):
@@ -887,10 +1016,33 @@ class SavedToolApproval(BaseModel):
     tool_call_id: str
     tool_name: str
     display_name: str
+    arguments: dict[str, JsonValue]
     created_at: datetime
     decision: ApprovalDecision | None
     decided_via: ApprovalDecidedVia | None
     decided_at: datetime | None
+
+
+class AgentToolApproval(BaseModel):
+    """A background agent's approval request, shown at the root response's
+    call that started the agent."""
+
+    approval: SavedToolApproval
+    agent_name: str
+
+
+class ChatApprovals(BaseModel):
+    """The approval requests of a page of chat responses, read once for the
+    replays of those responses."""
+
+    # The requests of the responses and of the runs that they started, by
+    # response (the request's chat message), in the order they were made.
+    requests: dict[int, list[SavedToolApproval]] = Field(default_factory=dict)
+    # The agent names of the responses of background agents.
+    agent_names: dict[int, str] = Field(default_factory=dict)
+    # The runs that each response's calls started, directly or through the
+    # runs they started, with the ID of the response's call.
+    started_runs: dict[int, list[tuple[int, str]]] = Field(default_factory=dict)
 
 
 class ResponseReplayData(BaseModel):
@@ -899,6 +1051,11 @@ class ResponseReplayData(BaseModel):
 
     tools: dict[tuple[str, str], ToolReplayData]
     documents: dict[str, SearchDoc]
-    # The approval requests of an ended response, in the order they were
-    # made, by response run ID and tool call ID.
+    # The approval requests of an ended or suspended response, in the order
+    # they were made, by response run ID and tool call ID.
     approvals: dict[tuple[str, str], list[SavedToolApproval]]
+    # The requests of the background agents that the response started, by its
+    # run ID and the call that started each agent.
+    agent_approvals: dict[tuple[str, str], list[AgentToolApproval]] = Field(
+        default_factory=dict
+    )

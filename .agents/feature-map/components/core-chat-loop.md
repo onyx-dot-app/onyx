@@ -39,10 +39,12 @@
   text. Multi-model Stop also marks the individual response IDs, so automatic
   child-result delivery can check the same stop request. Anonymous users cannot
   stop ([[#anonymous-send]]).
-- **A tool call waits for approval.** The response pauses inside the turn, so
-  the session stays busy until the user decides, the request expires or the
-  user stops the turn. Stop expires the request
-  ([[mcp-and-custom-tools#chat-approval-owner-delivers]]).
+- **A tool call waits for approval.** When nothing but approval requests
+  remains, the turn stops with `awaiting_approval` and the session is idle;
+  the user can draft but not send. Once the user decides every request, the
+  response continues in a new stream, on any server
+  ([[mcp-and-custom-tools#chat-approval-durable-wait]]). A Stop of a live turn
+  rejects its waiting requests.
 - **Leaving is not stopping.** If the user closes the tab, navigates away or loses
   the network, the run continues on the server and is saved. When the user returns
   while the run is live, the client resumes the stream ([[streaming-protocol]]).
@@ -77,9 +79,10 @@
   reads agent results that the failed turn left unread on the branch.
 - **An API caller** gets NDJSON when `stream=true` and one `ChatFullResponse`
   when `stream=false`. A multi-model request without streaming is rejected.
-  Without streaming, a tool call that waits for approval returns the response
-  early with `pending_tool_approvals`; the turn keeps running
-  ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]).
+  Without streaming, a response whose tool calls wait for approval stops: the
+  call returns with `pending_tool_approvals`, the response waits saved, and it
+  continues in the chat session after the decisions
+  ([[mcp-and-custom-tools#chat-approval-durable-wait]]).
 - **Bots.** The Slack bot runs the same turn in-process
   (`onyxbot/slack/handlers/handle_regular_answer.py`). The Discord bot calls the
   HTTP endpoint (`onyxbot/discord/api_client.py`). A change here reaches both.
@@ -117,8 +120,8 @@ _stream_chat_turn               ChatTurnExecution.run                ChatTurnExe
   prepare_chat_turn (DB, files)   starts one response thread           create_chat_agent: construct_tools,
   -> ChatTurnSetup                  per model                            ChatAgent or DeepResearchAgent
   start_chat_turn                 wake >= every 250 ms: Stop;          load_chat_branch (session check)
-    clear_stop, admission.publish   admission every 5 s; owner         ChatRunStore (content kept) or
-    publish IDs to ChatDelivery     leases every 10 s (content kept)     persistence view; register saved agents
+    clear_stop, buffer open,        admission every 5 s; owner         ChatRunStore (content kept) or
+    admission.publish, ID lines     leases every 10 s (content kept)     persistence view; register saved agents
     start control thread          _poll_responses: outcomes, idle      Agent.start(background=False)
   yield from ChatStream (reader)  all drained: OverallStop (user Stop or deadline)   ResponsePresenter -> Emitter -> ChatDelivery
                                     admission.release, delivery.finish RunStore.save -> ChatResponsePersistence
@@ -147,7 +150,9 @@ document-set access, saves only the fields the body sets, and stores nothing
 for a chat whose record mode keeps no content. The chat-session detail returns
 the selection to its owner. The chat's model is `current_alternate_model`,
 which the web writes through `PUT /chat/update-chat-session-model` on each
-send. Pending human submissions run the same hook before queue storage;
+send. A turn that resumes a suspended response, and an agent host that
+resumes parked agent runs, use the model, tools and search filters that the
+parked run's checkpoint saved instead (`db/chat_checkpoint.py:parked_response_settings`). Pending human submissions run the same hook before queue storage;
 setup reuses that processed text without rewriting it again. Then setup resolves the custom agent prompt, memories, the
 reserved tokens, the tool configuration and the branch summary, and copies the
 history out of the ORM rows. It closes the DB session before slow file loading,
@@ -213,14 +218,16 @@ saved answers keep their status. Stop without a stream ID pauses the queue under
 the admission lock whether or not a turn runs, so a Stop that finds no turn, or
 a turn without a stream, is not lost. The next turn that reserves a response
 clears the pause (`db/chat.py:reserve_chat_response_ids`).
-After release, `chat/process_message.py:dispatch_pending_chat_messages` gives
+After release, every turn, `run_chat_turn` included, calls
+`chat/process_message.py:dispatch_pending_chat_messages`. It continues a
+parked root response whose waits ended first, on any branch, then gives
 queued user text priority over unread child results.
-`db/chat_inputs.py:read_chat_inbox` always reads the selected branch; it reads
-the queued turn, the running root response and child work only when the
-conversation has an inbox row. With admission free, dispatch saves a selected
-root response or a branch child that is still `RUNNING` without an owner as
-interrupted
-(`chat/run_store.py:interrupt_ownerless_responses`). It starts a response with
+`db/chat_inputs.py:read_chat_inbox` reads the parked runs that can continue on
+every branch (`ChatInbox.resumable_runs`) and the selected branch; it reads the
+queued turn and child work only when the conversation has an inbox row. With
+admission free, dispatch saves a selected root response or a branch child that
+is `RUNNING`, or `SUSPENDED` without a checkpoint, and has no owner as
+interrupted (`chat/run_store.py:interrupt_ownerless_responses`). It starts a response with
 current session settings and fresh authorization checks. A queued turn whose
 owner lost `WRITE_CHAT`, or access to a saved document set, saves an error
 response, which pauses the queue. A turn the server starts uses the chat's
@@ -245,17 +252,29 @@ leases until they finish. After admission is released, it does not check the
 turn's Stop key, admission lease or deadline. When a child releases ownership, the turn
 dispatches queued input and root results again; that dispatch also ends a root's
 `wait_agents` wait. `ChatRunStore` scans child
-inboxes after a notification and while children run on the branch, and only
-while its response is on the selected branch. A dispatch failure never cancels
-the turn. When child work can start but no running child keeps a store
-scanning, dispatch from `/status` or a pending-message route starts an agent
-host (`chat/execution.py:host_agent_work`): the selected response's setup
-without a root run, which starts the work and keeps the leases. Only
-callers that deliver follow-ups (`delivers_follow_ups`, false for
-`run_chat_turn`), for a client that shows them (`SendMessageRequest.accepts_follow_ups`,
-which the web chat and server-started turns set), offer agent tools in a
-single-model turn. An agent host that the owner's token budget rejects saves
-the work as failed runs, so it does not retry on every poll. Foreground children still drain with their parent. API shutdown
+inboxes after a notification and while children run on the branch. It starts
+child work only while its response is on the selected branch, and resumes the
+parked agent runs of its own branch whether or not it is selected. A dispatch
+failure never cancels the turn. Only the approval decision route prepares a
+turn on the calling thread; the dispatch after a release, after a child's
+release and after a status read start work on a thread. Any turn or agent
+host that ends while a parked root of the chat can continue hands its
+admission to that resume instead of releasing it
+(`chat/chat_processing_checker.py:ChatTurnAdmission.release`,
+`chat/execution.py:root_response_resumes`), so the chat shows processing
+throughout. When child work or a parked agent run can
+start but no running child keeps a store scanning, dispatch starts an agent
+host (`chat/execution.py:host_agent_work`): the setup of the selected
+response, or of a parked run's root response, without a root run, which starts
+the work and keeps the leases. A store's control poll parks the runs it owns
+that wait only on people ([[mcp-and-custom-tools#chat-approval-durable-wait]]).
+A single-model turn offers agent tools for a client that shows follow-ups
+(`SendMessageRequest.accepts_follow_ups`, which the web chat and
+server-started turns set); `run_chat_turn` clears that flag, since its callers
+read one response. An agent host that cannot start, other than for a
+transient error or a conflict, saves its child work as failed runs, so it
+does not retry on every poll. It ends the decided agents that it would resume,
+except after a rate limit, which keeps them parked for a later dispatch. Foreground children still drain with their parent. API shutdown
 waits up to `CHAT_EXECUTION_TIMEOUT_S` for `chat/execution.py:chat_turn_work`,
 then closes database and tracing services; it does not cancel turns. The pod's
 termination grace period is much shorter, so it ends running turns first
@@ -486,7 +505,11 @@ termination grace period is much shorter, so it ends running turns first
   passed its deadline". A deadline sends `timed_out`; lost admission can end
   the stream with no stop packet ([[#non-user-cancel]]). In the tenant's cache, the
   session owner key is `chatprocessing_owner_<session_id>`, the processing fence
-  is `chatprocessing_fence_<session_id>` (it holds the stream ID), and the stop
+  is `chatprocessing_fence_<session_id>` (it holds the stream ID, in the
+  integer format that every server version reads), the stream's responses
+  are `chatprocessing_responses_<session_id>` (the response IDs that the
+  stream still writes, and whether the turn resumes a suspended response),
+  and the stop
   key is `chatsessionstop_fence_<session_id>_<stream_id>`. Each owned run also
   has `chat_response_owner:<response_id>`, `chat_response_stop:<response_id>`
   and `chat_response_lock:<response_id>`; a child run's owner lease keeps the

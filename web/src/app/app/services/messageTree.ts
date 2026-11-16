@@ -148,7 +148,7 @@ export function upsertMessages(
 export function restoreIncognitoMessages(
   saved: MessageTreeState,
   local: MessageTreeState,
-  streamId?: number
+  responseId?: number
 ): MessageTreeState {
   const nodeIds = new Map<number, number>();
   for (const message of local.values()) {
@@ -163,13 +163,9 @@ export function restoreIncognitoMessages(
   );
   if (localRoot && savedRoot) nodeIds.set(savedRoot.nodeId, localRoot.nodeId);
 
-  const active = streamId === undefined ? undefined : saved.get(streamId);
+  const active = responseId === undefined ? undefined : saved.get(responseId);
   const savedQuestion =
-    active?.type === "user"
-      ? active
-      : active?.parentNodeId != null
-        ? saved.get(active.parentNodeId)
-        : undefined;
+    active?.parentNodeId != null ? saved.get(active.parentNodeId) : undefined;
   const localChain = getLatestMessageChain(local);
   const localQuestion = localChain.findLast(
     (message) => message.type === "user"

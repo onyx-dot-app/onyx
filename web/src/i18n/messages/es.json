@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "Selector de habilidades"
         },
-        "empty": {
-          "text": "No hay habilidades que coincidan"
-        },
         "mcpServersGroup": {
           "label": "Servidores MCP"
         },
@@ -12597,6 +12594,19 @@
         "expandButton": {
           "label": "Expandir en la barra de entrada",
           "tooltip": "Reemplazar esta tarjeta por su texto completo en línea"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Quitar {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Texto pegado: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Quitar texto pegado"
+          }
         }
       },
       "plusMenuButton": {
@@ -13228,6 +13238,9 @@
             "status": "Buscando en la web"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} quiere ejecutar {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -15856,9 +15869,6 @@
       "saveError": "No se pudieron guardar las ajustes de aprobación.",
       "emptyActions": "No hay acciones conocidas. Las acciones desconocidas requieren aprobación.",
       "emptyApps": "No hay aplicaciones disponibles.",
-      "expired": "Se agotó el tiempo para aprobar. La acción no se ejecutó.",
-      "rejected": "Solicitud rechazada. Esta solicitud no se ejecutó.",
-      "deadline": "Aprobar antes de {time}",
       "agentPermissionRequired": "Esta ejecución se detuvo porque una acción requería aprobación. Revisa los permisos y vuelve a ejecutar la tarea.",
       "enableForTask": "Activar para esta tarea",
       "enableAppForTask": "Activar {app} para esta tarea",

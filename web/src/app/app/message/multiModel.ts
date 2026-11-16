@@ -29,9 +29,22 @@ export function getMultiModelChildren(
   return multiModelChildren.length >= 2 ? multiModelChildren : null;
 }
 
+// The model label of one answer of a multi-model turn. `modelProviderLookup`
+// maps model → provider slug for icons and may be empty (e.g. the shared
+// view). `getModelIcon` then falls back to the name.
+export function getMultiModelLabel(
+  msg: Message,
+  modelProviderLookup: Map<string, string>
+): Pick<MultiModelResponse, "provider" | "modelName" | "displayName"> {
+  const modelVersion = msg.overridden_model || msg.modelDisplayName || "Model";
+  return {
+    provider: modelProviderLookup.get(modelVersion) ?? "",
+    modelName: modelVersion,
+    displayName: msg.modelDisplayName || modelVersion,
+  };
+}
+
 // Group a user message's sibling responses into multi-model panels.
-// `modelProviderLookup` maps model → provider slug for icons and may be
-// empty (e.g. the shared view). `getModelIcon` then falls back to the name.
 export function getMultiModelResponses(
   userMessage: Message,
   messageTree: Map<number, Message>,
@@ -41,23 +54,16 @@ export function getMultiModelResponses(
   if (!multiModelChildren) return null;
 
   return multiModelChildren.map((msg, idx): MultiModelResponse => {
-    const modelVersion =
-      msg.overridden_model || msg.modelDisplayName || "Model";
-    const provider = modelProviderLookup.get(modelVersion) ?? "";
-    const displayName = msg.modelDisplayName || modelVersion;
     const isError = msg.type === "error";
     return {
       modelIndex: idx,
-      provider,
-      modelName: modelVersion,
-      displayName,
+      ...getMultiModelLabel(msg, modelProviderLookup),
       packets: msg.packets || [],
       packetCount: msg.packetCount || msg.packets?.length || 0,
       nodeId: msg.nodeId,
       messageId: msg.messageId,
       currentFeedback: msg.currentFeedback,
       isGenerating: msg.is_generating || false,
-      streamLost: msg.streamLost,
       errorMessage: isError ? msg.errorMessage : null,
       errorCode: isError ? msg.errorCode : null,
       isRetryable: isError ? msg.isRetryable : undefined,

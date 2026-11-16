@@ -2,7 +2,7 @@ import json
 from collections import defaultdict
 from typing import Any
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
@@ -26,17 +26,22 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
+from onyx.tools.interface import (
+    CITATIONS_PER_TOOL_CALL,
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+)
 from onyx.tools.models import (
     CodeModeExposure,
     CodeModeResultSpec,
     SearchResult,
     SearchResults,
-    ToolCallException,
     ToolContext,
 )
 from onyx.tools.tool_implementations.open_url.models import (
     FailedFetch,
+    OpenURLArguments,
     WebContentProvider,
 )
 from onyx.tools.tool_implementations.open_url.url_normalization import (
@@ -61,8 +66,6 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
-
-URLS_FIELD = "urls"
 
 # 2 minute timeout for parallel URL fetching to prevent indefinite hangs
 OPEN_URL_TIMEOUT_SECONDS = 2 * 60
@@ -133,38 +136,6 @@ def _build_failure_message(
     if not parts:
         return "Failed to fetch content from the requested resources."
     return "Failed to fetch content from " + " and ".join(parts)
-
-
-def _dedupe_preserve_order(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for value in values:
-        if not value:
-            continue
-        if value in seen:
-            continue
-        seen.add(value)
-        ordered.append(value)
-    return ordered
-
-
-def _normalize_string_list(value: JsonValue) -> list[str]:
-    """Normalize a value that may be a string, list of strings, or None into a cleaned list.
-
-    Returns a deduplicated list of non-empty stripped strings.
-    """
-    if value is None:
-        return []
-    if isinstance(value, str):
-        value = [value]
-    if not isinstance(value, list):
-        raise ToolCallException(
-            message="Invalid URL list",
-            llm_facing_message="Provide urls as a string or a list of strings.",
-        )
-    return _dedupe_preserve_order(
-        [stripped for item in value if (stripped := str(item).strip())]
-    )
 
 
 def _url_lookup_variants(url: str) -> set[str]:
@@ -400,7 +371,7 @@ MAX_URLS_PER_CALL = 10
 
 
 class OpenURLTool(Tool):
-    merge_list_argument = URLS_FIELD
+    merge_list_argument = "urls"
     merge_list_limit = MAX_URLS_PER_CALL
 
     NAME = "open_url"
@@ -492,29 +463,12 @@ class OpenURLTool(Tool):
         return True
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=self.description,
-            strict=True,
-            parameters={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    URLS_FIELD: {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": (
-                            "List of URLs to open and read, can be a single URL or multiple URLs. "
-                            "This will return the text content of the page(s)."
-                        ),
-                    },
-                },
-                "required": [URLS_FIELD],
-            },
+        return tool_definition_from_arguments(
+            self.name, self.description, OpenURLArguments, strict=True
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
-        urls = _normalize_string_list(invocation.arguments.get(URLS_FIELD))
+        urls = parse_tool_arguments(OpenURLArguments, invocation.arguments).urls
 
         if len(urls) > MAX_URLS_PER_CALL:
             logger.warning(
@@ -523,16 +477,6 @@ class OpenURLTool(Tool):
                 MAX_URLS_PER_CALL,
             )
             urls = urls[:MAX_URLS_PER_CALL]
-
-        if not urls:
-            raise ToolCallException(
-                message=f"Missing required '{URLS_FIELD}' parameter in open_url tool call",
-                llm_facing_message=(
-                    f"The open_url tool requires a '{URLS_FIELD}' parameter "
-                    f"containing an array of URLs. Please provide "
-                    f'like: {{"urls": ["https://example.com"]}}'
-                ),
-            )
 
         with get_session_with_current_tenant() as db_session:
             url_to_doc_id: dict[str, str] = {}

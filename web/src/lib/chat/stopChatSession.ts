@@ -1,5 +1,6 @@
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
+import type { ChatStream } from "@/app/app/types";
 
 export const STOP_BEFORE_DISPATCH = Symbol("stop-before-dispatch");
 
@@ -32,11 +33,11 @@ export async function stopChatSession(
   // Abort local preparation; a dispatched send must acknowledge before Stop.
   if (!sendAcknowledged && !serverTurn) controller.abort(STOP_BEFORE_DISPATCH);
 
-  let streamId: number | null | undefined;
+  let stream: ChatStream | null | undefined;
   try {
-    streamId = await sendAcknowledged;
+    stream = await sendAcknowledged;
     if (!ownsStop()) return;
-    if (serverTurn || typeof streamId === "number") {
+    if (serverTurn || stream) {
       // The accepted stream can end before Stop arrives, and a queued turn can
       // follow it. Stop targets the chat's current turn: the server stops it,
       // or pauses the queue when no turn is running.
@@ -53,10 +54,7 @@ export async function stopChatSession(
     if (!ownsStop()) return;
     useChatSessionStore.getState().updateSessionData(sessionId, {
       // A failed Stop leaves the accepted stream available for another Stop.
-      chatState:
-        serverTurn || typeof streamId === "number"
-          ? "streaming"
-          : "unconfirmed",
+      chatState: serverTurn || stream ? "streaming" : "unconfirmed",
       uncaughtError: { error: errorMessage },
     });
     throw error;

@@ -7,6 +7,8 @@ from concurrent.futures import Future
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from typing import Protocol
+from uuid import UUID
 
 from onyx.agents.agent_coordination import AgentCoordinator, RunStore
 from onyx.agents.concurrency import WorkTracker
@@ -22,7 +24,10 @@ from onyx.agents.runtime import Run
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.agent import ChatAgent, build_chat_agent, chat_subagent_factory
-from onyx.chat.chat_processing_checker import PROCESSING_REFRESH_INTERVAL_S
+from onyx.chat.chat_processing_checker import (
+    PROCESSING_REFRESH_INTERVAL_S,
+    ChatTurnAdmission,
+)
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import chat_error
 from onyx.chat.history_store import get_chat_history_store
@@ -33,7 +38,12 @@ from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.presentation import ResponsePresenter, overall_stop
 from onyx.chat.prompt_utils import build_language_section
 from onyx.chat.restoration import restore_chat_agent, restore_subagent
-from onyx.chat.run_store import ChatRunStore
+from onyx.chat.run_store import (
+    RESUME_FAILED_MESSAGE,
+    RETRYABLE_START_ERRORS,
+    ChatRunStore,
+    fail_suspended_response,
+)
 from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.configs.chat_configs import (
@@ -41,7 +51,9 @@ from onyx.configs.chat_configs import (
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
+from onyx.db.chat_checkpoint import chat_has_checkpoint, resumable_parked_runs
 from onyx.db.chat_inputs import pause_chat_queue__no_commit
+from onyx.db.chat_response import read_suspended_response_replay
 from onyx.db.chat_subagents import load_chat_branch
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
@@ -62,17 +74,23 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
+    ReplayEnd,
     StreamingError,
     ToolApprovalResolved,
 )
 from onyx.server.settings.store import load_settings
 from onyx.tools.constants import CODING_AGENT_TOOL_ID
 from onyx.tools.interface import Tool
+from onyx.tools.models import ChatToolSelection
 from onyx.tools.tool_constructor import (
     CustomToolConfig,
     FileReaderToolConfig,
     SearchToolConfig,
     construct_tools,
+)
+from onyx.tools.tool_implementations.skills.skill_tools import (
+    SkillsListTool,
+    SkillsReadTool,
 )
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION, QueryObservation
@@ -93,13 +111,40 @@ _DEADLINE_BACKSTOP = timedelta(seconds=30)
 chat_turn_work = WorkTracker()
 
 
+class DispatchPendingMessages(Protocol):
+    """Start the chat's queued work (`dispatch_pending_chat_messages`), with
+    the admission that an ending turn hands over, if any. With `retry_resume`,
+    a resume failed to start for a moment, and the dispatch runs after a
+    backoff."""
+
+    def __call__(
+        self,
+        *,
+        admission: ChatTurnAdmission | None = None,
+        retry_resume: bool = False,
+    ) -> None: ...
+
+
+def root_response_resumes(chat_session_id: UUID) -> bool:
+    """Whether a parked root response of the chat waits only to continue."""
+    try:
+        with get_session_with_current_tenant() as session:
+            # Most chats have no parked root, and one EXISTS read shows it.
+            return chat_has_checkpoint(session, chat_session_id) and any(
+                run.is_root for run in resumable_parked_runs(session, chat_session_id)
+            )
+    except Exception:
+        logger.exception("Could not read the chat's parked responses")
+        return False
+
+
 def start_chat_turn(
     setup: ChatTurnSetup,
     user: User,
     response_future: Future[ChatResponseOutcome] | None = None,
     *,
     query_observation: QueryObservation | None = None,
-    dispatch_pending_messages: Callable[[], None] | None = None,
+    dispatch_pending_messages: DispatchPendingMessages | None = None,
 ) -> ChatStream:
     """Publish response identity and launch work that outlives its stream reader."""
     mode = setup.incognito_record_mode
@@ -136,8 +181,14 @@ def start_chat_turn(
         try:
             turn._auto_filters = load_settings().auto_detect_search_filters is not False
             clear_stop(setup.chat_session_id, setup.cache, stream_id=setup.stream_id)
+            # A published stream ID always has a buffer that resume can serve.
+            stream_buffer.open()
             # Stop must identify this response before the client receives its IDs.
-            setup.admission.publish(setup.stream_id)
+            setup.admission.publish(
+                setup.stream_id,
+                [response.message_id for response in setup.responses],
+                resumed=setup.resumed_response_id is not None,
+            )
         except Exception as error:
             startup_error = error
         if setup.new_msg_req.chat_session_id is None:
@@ -156,6 +207,7 @@ def start_chat_turn(
                     )
                     for response in setup.responses
                 ],
+                setup.mentions,
             )
         )
         if query_observation is not None:
@@ -194,7 +246,7 @@ class ChatTurnExecution:
         stream_buffer: StreamBufferWriter | None = None,
         *,
         query_observation: QueryObservation | None = None,
-        dispatch_pending_messages: Callable[[], None] | None = None,
+        dispatch_pending_messages: DispatchPendingMessages | None = None,
     ) -> None:
         self.setup = setup
         self.user = user
@@ -212,6 +264,8 @@ class ChatTurnExecution:
         )
         self._auto_filters = False
         self._admission_released = False
+        # A resume that storage failed to start retries after a backoff.
+        self._resume_deferred = False
         self._stopped_by_user = False
         # Each model gets one stop, including models still preparing at cancellation.
         self._stopped_models: set[int] = set()
@@ -393,7 +447,8 @@ class ChatTurnExecution:
                 if not worker_done:
                     continue
                 if run is not None:
-                    if not run.status.is_terminal:
+                    # A parked run resolved its outcome when it handed off.
+                    if not run.status.is_terminal and not persistence.outcome.done():
                         continue
                     try:
                         if not run.wait_for_idle(timeout=0):
@@ -425,6 +480,20 @@ class ChatTurnExecution:
                     )
             del self._response_workers[worker]
 
+    def _root_parked(self, persistence: ChatResponsePersistence, run: Run) -> None:
+        """End a response whose run handed off to wait for people: the turn
+        stops it with `awaiting_approval`, and the decisions resume it on any
+        pod."""
+        persistence.report_suspended(run)
+        # The stream keeps naming it, so `model_index` still indexes the
+        # stream's responses; its decisions continue it in a new stream.
+        self._publish(
+            Packet(
+                placement=Placement(turn_index=0, model_index=persistence.model_index),
+                obj=overall_stop(RunStatus.SUSPENDED, None),
+            )
+        )
+
     def _clear_processing_status(self) -> None:
         def save_late_stop() -> None:
             # A Stop of this turn, even after its answer finished, pauses the queue.
@@ -443,19 +512,33 @@ class ChatTurnExecution:
                 session.commit()
 
         try:
-            self.setup.admission.release(settle=save_late_stop)
+            successor = self.setup.admission.release(
+                settle=save_late_stop,
+                # The resume of a parked root response takes admission over,
+                # whichever turn parked it, so the chat does not show idle in
+                # between. A deferred resume retries after a backoff instead.
+                hand_off=partial(root_response_resumes, self.setup.chat_session_id)
+                if not self._resume_deferred
+                and self._dispatch_pending_messages is not None
+                else None,
+            )
             self._admission_released = True
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
             return
-        self._dispatch_after_release()
+        self._dispatch_after_release(successor)
 
-    def _dispatch_after_release(self) -> None:
-        """Start queued input or a follow-up on child results once the chat is idle."""
+    def _dispatch_after_release(
+        self, admission: ChatTurnAdmission | None = None
+    ) -> None:
+        """Start queued input or a follow-up on child results once the chat is
+        idle, or with the `admission` that this turn handed over."""
         if not self._admission_released or self._dispatch_pending_messages is None:
             return
         try:
-            self._dispatch_pending_messages()
+            self._dispatch_pending_messages(
+                admission=admission, retry_resume=self._resume_deferred
+            )
         except Exception:
             logger.exception("Could not dispatch queued chat input")
 
@@ -467,6 +550,9 @@ class ChatTurnExecution:
         startup_error: BaseException | None = None,
     ) -> Run | None:
         index = persistence.model_index
+        resumed_id = self.setup.resumed_response_id
+        run: Run | None = None
+        replayed = False
         cancellation = CancellationSignal()
         links = ExitStack()
         links.enter_context(
@@ -509,6 +595,8 @@ class ChatTurnExecution:
             else:
                 configured_tools = chat_agent.configured_tools
                 persistence.initial_citations = dict(chat_agent.initial_citations)
+            presenter = ResponsePresenter(emitter, tool_ids=tool_ids)
+            store: ChatRunStore | None = None
             if record_mode_persists_content(self.setup.incognito_record_mode):
                 store, coordinator = bind_run_store(
                     self.setup,
@@ -518,9 +606,9 @@ class ChatTurnExecution:
                     tools=configured_tools,
                     coordinator=persistence.coordinator,
                     follow_up_steps=chat_agent.max_steps,
-                    with_subagents=with_subagents,
                     root_response=persistence,
                     on_child_released=self._dispatch_after_release,
+                    on_root_parked=partial(self._root_parked, persistence),
                 )
                 with self._lock:
                     self._stores.append(store)
@@ -528,33 +616,56 @@ class ChatTurnExecution:
                 # Incognito chats have no child agents to find, restore, or own,
                 # and no approvals.
                 coordinator = persistence.coordinator.view(store=persistence)
-            coordinator.register(
-                AgentInfo(
-                    id=chat_agent.id,
-                    path="/root",
-                    parent_id=None,
-                    description="",
-                    restoration_config=None,
-                    latest_run_id=self.setup.previous_run_id,
+            if resumed_id is None:
+                coordinator.register(
+                    AgentInfo(
+                        id=chat_agent.id,
+                        path="/root",
+                        parent_id=None,
+                        description="",
+                        restoration_config=None,
+                        latest_run_id=self.setup.previous_run_id,
+                    )
                 )
-            )
-            cancellation.check()
-            run = chat_agent.start(
-                background=False,
-                messages=self.setup.input_messages,
-                max_steps=chat_agent.max_steps,
-                cancellation=cancellation,
-                deadline_at=self._deadline_at,
-                coordinator=coordinator,
-                event_dispatcher=self.delivery.events,
-                on_event=ResponsePresenter(
-                    emitter,
-                    tool_ids=tool_ids,
-                    display_names={
-                        tool.name: tool.display_name for tool in configured_tools
-                    },
-                ).consume,
-            )
+                cancellation.check()
+                run = chat_agent.start(
+                    background=False,
+                    messages=self.setup.input_messages,
+                    max_steps=chat_agent.max_steps,
+                    cancellation=cancellation,
+                    deadline_at=self._deadline_at,
+                    coordinator=coordinator,
+                    event_dispatcher=self.delivery.events,
+                    on_event=presenter.consume,
+                )
+            elif store is None:
+                raise ValueError("Only a saved chat response can continue")
+            else:
+                # The saved output first, then the run with the saved decisions.
+                with get_session_with_current_tenant() as db_session:
+                    execution, replay = read_suspended_response_replay(
+                        db_session, resumed_id
+                    )
+                presenter.replay(execution.response, replay, execution.presentation)
+                replayed = True
+                resumed = store.resume(
+                    str(resumed_id),
+                    context=AgentState(
+                        messages=list(self.setup.messages),
+                        checkpoint=self.setup.checkpoint,
+                    ),
+                    deadline_at=self._deadline_at,
+                    on_event=presenter.consume,
+                    event_dispatcher=self.delivery.events,
+                )
+                if resumed is None:
+                    raise RuntimeError("The response no longer waits to continue")
+                run = resumed
+                links.enter_context(
+                    cancellation.on_cancel(
+                        lambda: resumed.cancel(cancellation.reason or "requested")
+                    )
+                )
 
             def response_saved(completion: Future[RunState]) -> None:
                 try:
@@ -572,7 +683,28 @@ class ChatTurnExecution:
             return run
         except BaseException as failure:
             try:
-                persistence.save_failure(failure, cancellation.reason)
+                if resumed_id is not None and run is None:
+                    if not replayed:
+                        emitter.emit(
+                            Packet(placement=Placement(turn_index=0), obj=ReplayEnd())
+                        )
+                    if isinstance(failure, RETRYABLE_START_ERRORS):
+                        # The response stays suspended, and this turn's
+                        # release dispatches it again after a backoff.
+                        self._resume_deferred = True
+                    else:
+                        # The response ends as failed, so no later dispatch
+                        # tries it again.
+                        fail_suspended_response(
+                            self.setup.cache, get_current_tenant_id(), resumed_id
+                        )
+                    persistence.report_worker_failure(
+                        failure
+                        if isinstance(failure, Exception)
+                        else RuntimeError(RESUME_FAILED_MESSAGE)
+                    )
+                else:
+                    persistence.save_failure(failure, cancellation.reason)
             except Exception:
                 logger.exception(
                     "Response startup finalization failed for model %d", index
@@ -659,9 +791,9 @@ def bind_run_store(
     tools: list[Tool],
     coordinator: AgentCoordinator,
     follow_up_steps: int,
-    with_subagents: bool,
     root_response: RunStore | None,
     on_child_released: Callable[[], None] | None,
+    on_root_parked: Callable[[Run], None] | None = None,
 ) -> tuple[ChatRunStore, AgentCoordinator]:
     """Bind the run store of a response's branch and register the visible agents."""
     branch = load_chat_branch(response_id)
@@ -687,6 +819,14 @@ def bind_run_store(
         tools=tools,
         # Child-result delivery saves no user message.
         answers_agent_results=setup.user_message_id is None,
+        on_root_parked=on_root_parked,
+        model_configuration_id=llm.config.model_configuration_id,
+        temperature=llm.config.temperature,
+        tool_selection=ChatToolSelection(
+            allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
+            preferred_tool_id=setup.new_msg_req.preferred_tool_id,
+            internal_search_filters=setup.new_msg_req.internal_search_filters,
+        ),
     )
     view = store.bind(
         coordinator,
@@ -695,15 +835,13 @@ def bind_run_store(
             llm=llm,
             tools=tools,
             user_identity=setup.user_identity,
-            create_subagent=chat_subagent_factory(
+            subagent_factory=lambda depth: chat_subagent_factory(
                 setup=setup,
                 llm=llm,
                 tools=tools,
                 inject_memories=user.use_memories,
-                depth=1,
-            )
-            if with_subagents
-            else None,
+                depth=depth,
+            ),
         ),
     )
     for info in store.list_agents():
@@ -712,12 +850,15 @@ def bind_run_store(
 
 
 def host_agent_work(
-    setup: ChatTurnSetup, user: User, dispatch_pending_messages: Callable[[], None]
+    setup: ChatTurnSetup,
+    user: User,
+    dispatch_pending_messages: DispatchPendingMessages,
 ) -> None:
     """Start agents' queued work on the selected branch when no chat turn hosts it.
 
     The host starts no root run. It holds chat admission through its first
-    scan, so hosts and turns do not start the same work. It runs on the calling
+    scan, so hosts and turns do not start the same work, then hands it to the
+    resume of a parked root response that can continue. It runs on the calling
     thread until the agents it started release their leases.
     """
     # The trace makes hosted model calls count toward usage records and limits.
@@ -749,17 +890,20 @@ def host_agent_work(
                 tools=chat_agent.configured_tools,
                 coordinator=AgentCoordinator(),
                 follow_up_steps=chat_agent.max_steps,
-                with_subagents=True,
                 root_response=None,
                 on_child_released=dispatch_pending_messages,
             )
             store.poll_control()
-        finally:
+        except BaseException:
             setup.admission.release()
+            raise
+        successor = setup.admission.release(
+            hand_off=partial(root_response_resumes, setup.chat_session_id)
+        )
         # A child that finished during the first scan dispatched while the host
         # held admission, so its results wait for this dispatch.
         try:
-            dispatch_pending_messages()
+            dispatch_pending_messages(admission=successor)
         except Exception:
             logger.exception("Could not dispatch queued chat input")
         while store.has_owned_work:
@@ -835,6 +979,12 @@ def create_chat_agent(
             ask_for_approval=setup.ask_for_approval,
         )
         tools = [tool for tool_list in tools_by_type.values() for tool in tool_list]
+        # Every user with a chat skill when the turn starts gets the skill
+        # tools, whatever the agent's tool selection; each call reads the
+        # user's current skills. Restored and child agents receive them with
+        # the other configured tools.
+        if setup.has_chat_skills:
+            tools += [SkillsListTool(user), SkillsReadTool(user)]
 
         preferred_tool_id = setup.preferred_tool_id
         if preferred_tool_id is not None and preferred_tool_id not in {

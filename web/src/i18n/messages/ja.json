@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "スキル選択"
         },
-        "empty": {
-          "text": "一致するスキルはありません"
-        },
         "mcpServersGroup": {
           "label": "MCP サーバー"
         },
@@ -12597,6 +12594,19 @@
         "expandButton": {
           "label": "入力バーに展開",
           "tooltip": "このタイルを全文に置き換えて入力欄に表示します"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "{name} を削除"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "貼り付けたテキスト: {preview}、{meta}",
+          "removeButton": {
+            "ariaLabel": "貼り付けたテキストを削除"
+          }
         }
       },
       "plusMenuButton": {
@@ -13228,6 +13238,9 @@
             "status": "ウェブを検索中"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} が {tool} を実行しようとしています"
       },
       "toolbar": {
         "dislikeButton": {
@@ -15856,9 +15869,6 @@
       "saveError": "承認設定を保存できませんでした。",
       "emptyActions": "既知のアクションがありません。不明なアクションには承認が必要です。",
       "emptyApps": "利用可能なアプリがありません。",
-      "expired": "承認がタイムアウトしました。アクションは実行されませんでした。",
-      "rejected": "リクエストが拒否されました。このリクエストは実行されませんでした。",
-      "deadline": "{time}までに承認",
       "agentPermissionRequired": "アクションに承認が必要なため、この実行は停止しました。権限を確認してタスクを再実行してください。",
       "enableForTask": "このタスクで有効にする",
       "enableAppForTask": "このタスクで{app}を有効にする",

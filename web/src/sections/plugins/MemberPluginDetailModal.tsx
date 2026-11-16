@@ -43,6 +43,7 @@ import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import { useExternalAppSkillIssues } from "@/lib/externalApps/hooks";
 import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 import useUserSkills from "@/hooks/useUserSkills";
+import { refreshSkillLists } from "@/lib/skills/cache";
 import type { Skill, SkillsList } from "@/lib/skills/types";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -359,6 +360,7 @@ export function MemberPluginDetailContent({
       return;
     setSaving(true);
     setSaveError(null);
+    let skillChanged = false;
     try {
       if (preferencesDirty) {
         if (plugin.kind === "mcp") {
@@ -414,6 +416,7 @@ export function MemberPluginDetailContent({
           }
           throw error;
         }
+        skillChanged = true;
         if (skillId === replaceSkillId) setSkillConflict(null);
         const updateSkill = (skill: Skill): Skill =>
           skill.id === updated.id
@@ -442,6 +445,8 @@ export function MemberPluginDetailContent({
         error instanceof Error ? error.message : t("defaults.saveFailed")
       );
     } finally {
+      // Other skill lists must see the changes saved before a failure too.
+      if (skillChanged) void refreshSkillLists(mutate);
       setSaving(false);
     }
   }

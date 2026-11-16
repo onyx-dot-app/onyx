@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "Skill picker"
         },
-        "empty": {
-          "text": "No matching skills"
-        },
         "mcpServersGroup": {
           "label": "MCP servers"
         },
@@ -12597,6 +12594,19 @@
         "expandButton": {
           "label": "Expand into input bar",
           "tooltip": "Replace this tile with its full text inline"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Remove {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Pasted text: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Remove pasted text"
+          }
         }
       },
       "plusMenuButton": {
@@ -13228,6 +13238,9 @@
             "status": "Searching the web"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} wants to run {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -15856,9 +15869,6 @@
       "saveError": "Could not save approval settings.",
       "emptyActions": "No known actions. Unknown actions require approval.",
       "emptyApps": "No apps available.",
-      "expired": "Approval timed out. The action did not run.",
-      "rejected": "Request rejected. This request did not run.",
-      "deadline": "Approve by {time}",
       "agentPermissionRequired": "This run stopped because an action needed approval. Review approval settings, then run the task again.",
       "enableForTask": "Enable for this task",
       "enableAppForTask": "Enable {app} for this task",

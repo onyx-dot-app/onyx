@@ -1,7 +1,6 @@
 """Tests for the FileReaderTool.
 
 Verifies:
-- Tool definition schema is well-formed
 - File ID validation (allowlist, UUID format)
 - Character range extraction and clamping
 - Error handling for missing parameters and non-text files
@@ -12,7 +11,6 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from jsonschema import Draft202012Validator
 from pydantic import JsonValue
 
 from onyx.agents.tools import ToolInvocation
@@ -21,12 +19,7 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
 from onyx.tools.constants import FILE_READER_MAX_CHARS
 from onyx.tools.models import FileReadResult, ToolCallException, ToolContext
-from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
-    FILE_ID_FIELD,
-    NUM_CHARS_FIELD,
-    START_CHAR_FIELD,
-    FileReaderTool,
-)
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 
 TOOL_MODULE = "onyx.tools.tool_implementations.file_reader.file_reader_tool"
 
@@ -61,26 +54,6 @@ class TestToolMetadata:
     def test_tool_name(self) -> None:
         tool = _make_tool()
         assert tool.name == "read_file"
-
-    def test_tool_definition_schema(self) -> None:
-        tool = _make_tool()
-        defn = tool.tool_definition()
-        assert defn.name == "read_file"
-        props = defn.parameters["properties"]
-        assert isinstance(props, dict)
-        assert FILE_ID_FIELD in props
-        assert START_CHAR_FIELD in props
-        assert NUM_CHARS_FIELD in props
-        assert defn.strict
-        assert defn.parameters["additionalProperties"] is False
-        assert defn.parameters["required"] == [
-            FILE_ID_FIELD,
-            START_CHAR_FIELD,
-            NUM_CHARS_FIELD,
-        ]
-        Draft202012Validator(defn.parameters).validate(
-            {FILE_ID_FIELD: "file", START_CHAR_FIELD: None, NUM_CHARS_FIELD: None}
-        )
 
 
 # ------------------------------------------------------------------
@@ -117,9 +90,7 @@ class TestFileIdValidation:
 
 
 class TestRun:
-    @pytest.mark.parametrize(
-        "defaults", [{}, {START_CHAR_FIELD: None, NUM_CHARS_FIELD: None}]
-    )
+    @pytest.mark.parametrize("defaults", [{}, {"start_char": None, "num_chars": None}])
     @patch.object(FileReaderTool, "_load_file")
     def test_returns_full_content_by_default(
         self,
@@ -134,7 +105,7 @@ class TestRun:
         resp = tool.run(
             invocation=ToolInvocation(
                 call_id="test",
-                arguments={FILE_ID_FIELD: str(uid), **defaults},
+                arguments={"file_id": str(uid), **defaults},
                 cancellation=CancellationSignal(),
                 update=lambda _progress: None,
             ),
@@ -166,9 +137,9 @@ class TestRun:
             invocation=ToolInvocation(
                 call_id="test",
                 arguments={
-                    FILE_ID_FIELD: str(uid),
-                    START_CHAR_FIELD: start,
-                    NUM_CHARS_FIELD: length,
+                    "file_id": str(uid),
+                    "start_char": start,
+                    "num_chars": length,
                 },
                 cancellation=CancellationSignal(),
                 update=lambda _progress: None,
@@ -195,8 +166,8 @@ class TestRun:
             invocation=ToolInvocation(
                 call_id="test",
                 arguments={
-                    FILE_ID_FIELD: str(uid),
-                    NUM_CHARS_FIELD: FILE_READER_MAX_CHARS + 9999,
+                    "file_id": str(uid),
+                    "num_chars": FILE_READER_MAX_CHARS + 9999,
                 },
                 cancellation=CancellationSignal(),
                 update=lambda _progress: None,
@@ -219,7 +190,7 @@ class TestRun:
         resp = tool.run(
             invocation=ToolInvocation(
                 call_id="test",
-                arguments={FILE_ID_FIELD: str(uid), NUM_CHARS_FIELD: 10},
+                arguments={"file_id": str(uid), "num_chars": 10},
                 cancellation=CancellationSignal(),
                 update=lambda _progress: None,
             ),
@@ -230,7 +201,7 @@ class TestRun:
 
     def test_raises_on_missing_file_id(self) -> None:
         tool = _make_tool()
-        with pytest.raises(ToolCallException, match="Missing required"):
+        with pytest.raises(ToolCallException, match="file_id: Field required"):
             tool._run(
                 invocation=ToolInvocation(
                     call_id="test",
@@ -259,7 +230,7 @@ class TestRun:
             tool._run(
                 invocation=ToolInvocation(
                     call_id="test",
-                    arguments={FILE_ID_FIELD: str(uid)},
+                    arguments={"file_id": str(uid)},
                     cancellation=CancellationSignal(),
                     update=lambda _progress: None,
                 ),

@@ -97,6 +97,12 @@ SANDBOX_FC_ORPHAN_STOPS_PER_REPORT = _fc_env_int(
 SANDBOX_FC_IDLE_TIMEOUT_SECONDS = _fc_env_int(
     "SANDBOX_FC_IDLE_TIMEOUT_SECONDS", 900, minimum=1
 )
+# At the end of a turn, save the session in the background when its last
+# save is older than this. 0 turns off turn-end saves (idle stops and drains
+# still save).
+SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS = _fc_env_int(
+    "SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS", 300, minimum=0
+)
 # Spreads the scheduled-task runs of one beat tick, so that they do not all
 # start VMs at the same moment.
 SANDBOX_FC_SCHEDULED_RUN_JITTER_SECONDS = _fc_env_float(

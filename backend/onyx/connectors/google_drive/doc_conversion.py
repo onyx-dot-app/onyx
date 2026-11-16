@@ -326,9 +326,12 @@ def _download_and_extract_sections_basic(
 
         # Store images for later processing
         sections: list[TextSection | ImageSection | TabularSection] = []
+        # Download outside the try: a failed download must fail the document,
+        # not drop it.
+        image_data = response_call()
         try:
             section, embedded_id = store_image_and_create_section(
-                image_data=response_call(),
+                image_data=image_data,
                 file_id=file_id,
                 display_name=file_name,
                 media_type=mime_type,
@@ -454,8 +457,12 @@ def _download_and_extract_sections_basic(
         logger.warning("Skipping file %s due to extension.", file.get("name"))
         return FileExtractionResult(sections=[])
 
+    # Download outside the try: a failed download must fail the document, so
+    # that the run reports it and tries the next user. A file that cannot be
+    # parsed is still skipped.
+    raw_bytes = response_call()
     try:
-        text = extract_file_text(io.BytesIO(response_call()), file_name)
+        text = extract_file_text(io.BytesIO(raw_bytes), file_name)
         return FileExtractionResult(sections=[TextSection(link=link, text=text)])
     except Exception as e:
         logger.warning("Failed to extract text from %s: %s", file_name, e)

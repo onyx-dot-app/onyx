@@ -19,10 +19,26 @@ type SessionsLoadedMsg struct {
 // SessionResumedMsg carries a loaded session detail.
 type SessionResumedMsg struct {
 	Detail *models.ChatSessionDetailResponse
-	// Running reports a response that still runs, such as one that waits for
+	// Status reports a response that still runs, such as one that waits for
 	// an approval.
-	Running bool
-	Err     error
+	Status models.ChatSessionStatus
+	// Origin is the stream that asked to reload its session, or nil when the
+	// user opened the session.
+	Origin <-chan models.StreamEvent
+	// Reload names the open chat whose saved session a status read loads, or
+	// nil. Its result applies only while that chat stays open and no stream
+	// runs.
+	Reload *sessionReload
+	Err    error
+}
+
+// sessionReload is a status read's load of the open chat's saved session.
+type sessionReload struct {
+	sessionID string
+	// responseID is the unseen response that the load shows, or 0.
+	responseID int
+	// streams is the model's stream count when the load started.
+	streams int
 }
 
 // FileUploadedMsg carries an uploaded file descriptor.

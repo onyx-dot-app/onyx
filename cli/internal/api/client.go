@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,8 +27,8 @@ import (
 // Each call site picks an http.Client with a timeout matched to its expected
 // work: 3min for quick JSON endpoints, 5min for /search (which runs LLM query
 // expansion + relevance selection) and uploads, and 6min for image generation.
-// Chat streams have no total timeout: a turn can wait minutes for a tool
-// approval, so streamIdleTimeout bounds each wait for data instead.
+// Chat streams have no total timeout: a turn can run for many minutes, so
+// streamIdleTimeout bounds each wait for data instead.
 type Client struct {
 	baseURL           string
 	apiKey            string
@@ -65,7 +66,7 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 			Transport: transport,
 		},
 		streamHTTPClient: &http.Client{Transport: transport},
-		// The server sends a heartbeat every 15 seconds while a turn is idle.
+		// The server sends a heartbeat every 15 seconds while a turn has no output.
 		streamIdleTimeout: 2 * time.Minute,
 		// Must exceed the server's 5-minute image-generation stream ceiling,
 		// or the client gives up before the server's timeout envelope arrives.
@@ -433,41 +434,89 @@ func (c *Client) DecideApproval(ctx context.Context, approvalID string, decision
 	return result, err
 }
 
-// IsChatSessionProcessing confirms whether the server still owns the session.
-func (c *Client) IsChatSessionProcessing(ctx context.Context, sessionID string) (bool, error) {
+// ChatSessionStatus confirms whether the server still owns the session. A
+// failed query reports a running session.
+func (c *Client) ChatSessionStatus(ctx context.Context, sessionID string) (models.ChatSessionStatus, error) {
 	var status struct {
-		IsProcessing *bool `json:"is_processing"`
+		IsProcessing       *bool              `json:"is_processing"`
+		CurrentStream      *models.ChatStream `json:"current_stream"`
+		ApprovalsVersion   string             `json:"approvals_version"`
+		HasActiveSubagents bool               `json:"has_active_subagents"`
+		HasStartableInput  bool               `json:"has_startable_input"`
+		LatestResponseID   *int               `json:"latest_response_id"`
 	}
+	unknown := models.ChatSessionStatus{IsProcessing: true}
 	if err := c.doJSON(ctx, "GET", "/chat/chat-session/"+sessionID+"/status", nil, &status); err != nil {
 		var apiErr *OnyxAPIError
 		if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusNotFound || apiErr.StatusCode == http.StatusMethodNotAllowed) {
-			return true, fmt.Errorf("session or readiness endpoint unavailable; use a server with the chat readiness API: %w", err)
+			return unknown, fmt.Errorf("session or readiness endpoint unavailable; use a server with the chat readiness API: %w", err)
 		}
-		return true, err
+		return unknown, err
 	}
 	if status.IsProcessing == nil {
-		return true, fmt.Errorf("invalid chat readiness response")
+		return unknown, fmt.Errorf("invalid chat readiness response")
 	}
-	return *status.IsProcessing, nil
+	return models.ChatSessionStatus{
+		IsProcessing:       *status.IsProcessing,
+		CurrentStream:      status.CurrentStream,
+		ApprovalsVersion:   status.ApprovalsVersion,
+		HasActiveSubagents: status.HasActiveSubagents,
+		HasStartableInput:  status.HasStartableInput,
+		LatestResponseID:   status.LatestResponseID,
+	}, nil
 }
+
+// StatusPollInterval paces the status reads that wait for the server.
+var StatusPollInterval = time.Second
 
 // WaitForChatSessionIdle keeps completion separate from delivery.
 func WaitForChatSessionIdle(ctx context.Context, client ClientAPI, sessionID string) error {
 	for {
-		processing, err := client.IsChatSessionProcessing(ctx, sessionID)
+		status, err := client.ChatSessionStatus(ctx, sessionID)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		if err != nil && !IsRetryableReadinessError(err) {
 			return err
 		}
-		if err == nil && !processing {
+		if err == nil && !status.IsProcessing {
 			return nil
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Second):
+		case <-time.After(StatusPollInterval):
+		}
+	}
+}
+
+// FollowResponse reads the session status until a stream other than
+// streamID writes the response responseID, and returns that stream. While
+// another turn holds the session, the status reports processing, so the
+// read continues. It returns nil once the session is idle: the saved session
+// then shows how the response went on.
+func FollowResponse(ctx context.Context, client ClientAPI, sessionID string, responseID, streamID int) (*models.ChatStream, error) {
+	for {
+		status, err := client.ChatSessionStatus(ctx, sessionID)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if err != nil && !IsRetryableReadinessError(err) {
+			return nil, err
+		}
+		if err == nil {
+			current := status.CurrentStream
+			if current != nil && current.StreamID != streamID && slices.Contains(current.ResponseIDs, responseID) {
+				return current, nil
+			}
+			if !status.IsProcessing {
+				return nil, nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(StatusPollInterval):
 		}
 	}
 }
@@ -483,10 +532,10 @@ type ClientAPI interface {
 	UploadFile(ctx context.Context, filePath string) (*models.FileDescriptorPayload, error)
 	GetBackendVersion(ctx context.Context) (string, error)
 	StopChatSession(ctx context.Context, sessionID string, streamID int)
-	IsChatSessionProcessing(ctx context.Context, sessionID string) (bool, error)
+	ChatSessionStatus(ctx context.Context, sessionID string) (models.ChatSessionStatus, error)
 	DecideApproval(ctx context.Context, approvalID string, decision models.ApprovalDecision) (models.ApprovalDecisionResult, error)
 	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload, llmOverride *models.LLMOverride) <-chan models.StreamEvent
-	ResumeChatStream(ctx context.Context, sessionID string) <-chan models.StreamEvent
+	ResumeChatStream(ctx context.Context, sessionID string, streamID *int, cursor int) <-chan models.StreamEvent
 	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)
 	GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error)
 }

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import JsonValue
 
-from onyx.agents.events import InputRequiredEvent, ToolUpdateEvent
+from onyx.agents.events import ToolUpdateEvent
 from onyx.agents.models import (
     AgentStep,
     RunProgress,
@@ -22,13 +22,15 @@ from onyx.agents.tools import (
     InputDecision,
     InputMode,
     NestedCallGate,
+    NestedInputAnswer,
+    NestedInputRequest,
+    NestedInputWait,
     PendingToolInput,
     ToolExecutionMode,
     ToolInvocation,
     ToolOutcome,
     ToolProgress,
 )
-from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
     Message,
     NamedToolChoice,
@@ -56,6 +58,9 @@ def _tool_view(message: Message) -> Message:
 MAX_TOOL_CALLS_PER_STEP = 64
 # What the model sees for a call whose request was denied without a result.
 DENIED_CALL_MESSAGE = "The tool call was not approved, so it did not run."
+# What the model sees for an approved call whose tool was removed, or whose
+# parameters changed, while the call waited.
+UNAVAILABLE_CALL_MESSAGE = "This tool is no longer available, so this call did not run."
 
 
 class ToolBatch:
@@ -164,6 +169,7 @@ class ToolBatch:
         *,
         approved: bool = False,
         children: list[RunState] | None = None,
+        nested_answers: list[NestedInputAnswer] | None = None,
         merged_arguments: dict[str, JsonValue] | None = None,
     ) -> None:
 
@@ -172,6 +178,7 @@ class ToolBatch:
                 calls=calls,
                 approved=approved,
                 children=children,
+                nested_answers=nested_answers,
                 merged_arguments=merged_arguments,
             )
             if len(calls) > 1 and not isinstance(outcome, ToolResult):
@@ -234,24 +241,10 @@ class ToolBatch:
                         with self.run.execution_lock:
                             pending = self.progress.pending_tool_calls.get(call.id)
                             suspend = self.run.suspension_requested
-                            answer = (
-                                self.progress.human_tool_answers.get(pending.request_id)
-                                if isinstance(pending, PendingToolInput)
-                                else None
-                            )
                         if suspend:
                             continue
-                        if isinstance(pending, PendingToolInput):
-                            if answer is None:
-                                continue
-                            self.run.resolve_tool_wait(call, answer)
-                            if answer.decision == InputDecision.APPROVE:
-                                self._start([call], approved=True)
-                            else:
-                                output = answer.result or ToolResult(
-                                    content=DENIED_CALL_MESSAGE, is_error=True
-                                )
-                                self.run.record_tool_results(output, [call])
+                        if isinstance(pending, (PendingToolInput, NestedInputWait)):
+                            self._continue_input_wait(call, pending)
                             continue
                         if isinstance(pending, ChildRunWait):
                             if self.run.coordination is None:
@@ -279,6 +272,49 @@ class ToolBatch:
             self.run.cancellation_signal.cancel()
             self.run.notify_tool_activity()
             raise
+
+    def _continue_input_wait(
+        self, call: ToolCall, pending: PendingToolInput | NestedInputWait
+    ) -> None:
+        """Continue a call once each of its requests has an answer: run it,
+        record its denial, or continue its tool with the answers."""
+        requests = (
+            [nested.request for nested in pending.requests]
+            if isinstance(pending, NestedInputWait)
+            else [pending]
+        )
+        with self.run.execution_lock:
+            answers = self.progress.human_tool_answers
+            found = [
+                answer
+                for request in requests
+                if (answer := answers.get(request.request_id)) is not None
+            ]
+        if len(found) < len(requests):
+            return
+        self.run.resolve_tool_wait(call)
+        if isinstance(pending, PendingToolInput) and (
+            found[0].decision != InputDecision.APPROVE
+        ):
+            self.run.record_tool_results(
+                found[0].result
+                or ToolResult(content=DENIED_CALL_MESSAGE, is_error=True),
+                [call],
+            )
+        elif call.name not in self.tools:
+            self.run.record_tool_results(
+                ToolResult(content=UNAVAILABLE_CALL_MESSAGE, is_error=True), [call]
+            )
+        elif isinstance(pending, PendingToolInput):
+            self._start([call], approved=True)
+        else:
+            self._start(
+                [call],
+                nested_answers=[
+                    NestedInputAnswer(request=request, answer=answer)
+                    for request, answer in zip(pending.requests, found, strict=True)
+                ],
+            )
 
     def _start_compatible_calls(
         self, call: ToolCall, index: int, completed_call_ids: set[str]
@@ -340,8 +376,12 @@ class ToolBatch:
         calls: list[ToolCall],
         approved: bool = False,
         children: list[RunState] | None = None,
+        nested_answers: list[NestedInputAnswer] | None = None,
         merged_arguments: dict[str, JsonValue] | None = None,
     ) -> ToolOutcome:
+        """`approved` starts a call whose request the user approved.
+        `nested_answers` continue a call that waited for the requests of calls
+        that its tool made."""
         call = calls[0]
         cancellation_signal = self.run.cancellation_signal
         step = self.step
@@ -370,7 +410,7 @@ class ToolBatch:
                 content=call.argument_error or "Tool arguments were truncated.",
                 is_error=True,
             )
-        if not approved and children is None:
+        if not approved and children is None and nested_answers is None:
             decision = self.decide_call(call, None)
             if decision is not None:
                 return decision
@@ -431,7 +471,12 @@ class ToolBatch:
                     )
                 return result
             try:
-                outcome = tool.execute(invocation)
+                if nested_answers is None:
+                    outcome = tool.execute(invocation)
+                elif tool.resume_with_input is None:
+                    raise ValueError("Tool does not support continuing after input")
+                else:
+                    outcome = tool.resume_with_input(invocation, nested_answers)
             except BeforeToolCallFailed as failed:
                 # As when the hook raises for a direct call: the run fails.
                 raise failed.error
@@ -458,31 +503,24 @@ class _NestedCallGate(NestedCallGate):
         self._batch = batch
         self._call = call
 
-    def decide(self, call: ToolCall) -> ToolResult | PendingToolInput | None:
+    def decide(self, call: ToolCall) -> ToolResult | NestedInputRequest | None:
+        batch = self._batch
         try:
-            return self._batch.decide_call(self._call, call)
+            decision = batch.decide_call(self._call, call)
         except Exception as error:
             # As when the hook raises for a direct call: the run fails.
             raise BeforeToolCallFailed(error) from error
-
-    def wait_for_input(
-        self,
-        call: ToolCall,
-        request: PendingToolInput,
-        cancellation: CancellationSignal,
-    ) -> ToolResult | None:
-        batch = self._batch
-        answer = batch.run.await_nested_input(
-            InputRequiredEvent(
-                **batch.run.event_context,
-                message_id=batch.message_id,
-                step_index=batch.step.index,
-                tool_call=self._call,
-                nested_call=call,
-                request=request,
-            ),
-            cancellation,
+        if not isinstance(decision, PendingToolInput):
+            return decision
+        request = NestedInputRequest(
+            message_id=batch.message_id,
+            step_index=batch.step.index,
+            tool_call=self._call,
+            nested_call=call,
+            request=decision,
         )
-        if answer.decision == InputDecision.APPROVE:
-            return None
-        return answer.result or ToolResult(content=DENIED_CALL_MESSAGE, is_error=True)
+        batch.run.open_nested_input(request)
+        return request
+
+    def withdraw(self, request: NestedInputRequest) -> None:
+        self._batch.run.withdraw_nested_input(request)

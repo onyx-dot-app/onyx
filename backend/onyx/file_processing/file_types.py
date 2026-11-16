@@ -1,5 +1,6 @@
 import mimetypes
 import os
+from pathlib import Path
 
 PRESENTATION_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -123,3 +124,28 @@ class OnyxFileExtensions:
     TEXT_AND_DOCUMENT_EXTENSIONS = PLAIN_TEXT_EXTENSIONS.union(DOCUMENT_EXTENSIONS)
 
     ALL_ALLOWED_EXTENSIONS = TEXT_AND_DOCUMENT_EXTENSIONS.union(IMAGE_EXTENSIONS)
+
+
+def get_file_ext(file_path_or_name: str | Path) -> str:
+    _, extension = os.path.splitext(file_path_or_name)
+    return extension.lower()
+
+
+def is_indexable_file_type(
+    file_name: str, mime_type: str | None, allow_images: bool
+) -> bool:
+    """True when Onyx can read content from a file of this name and type.
+
+    An image (by a supported image mime type or extension) needs
+    ``allow_images``. Any other file needs a supported text or document
+    extension, because text extraction selects its parser by extension. A
+    connector that reads some mime types with its own code checks those types
+    before it calls this function."""
+    mime = (mime_type or "").split(";", 1)[0].strip().lower()
+    extension = get_file_ext(file_name)
+    if (
+        mime in OnyxMimeTypes.IMAGE_MIME_TYPES
+        or extension in OnyxFileExtensions.IMAGE_EXTENSIONS
+    ):
+        return allow_images
+    return extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS

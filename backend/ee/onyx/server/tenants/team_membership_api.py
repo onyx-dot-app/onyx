@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -16,6 +18,10 @@ from onyx.db.users import (
     delete_user_from_db,
     delete_user_from_db__no_commit,
     get_user_by_email,
+)
+from onyx.server.features.build.db.sandbox import get_sandbox_purge_targets
+from onyx.server.features.build.sandbox.firecracker.purge import (
+    purge_harness_sandboxes,
 )
 from onyx.server.manage.models import UserByEmail
 from onyx.utils.logger import setup_logger
@@ -53,6 +59,8 @@ async def leave_organization(
         logger.info(
             "Last admin user is leaving the organization. Deleting tenant from control plane."
         )
+        # The tenant goes: purge every harness sandbox after the commit.
+        purge_targets = get_sandbox_purge_targets(db_session)
         # Validate and stage local cleanup before the irreversible remote call.
         # Keep it uncommitted so a remote failure preserves the local account.
         try:
@@ -76,8 +84,11 @@ async def leave_organization(
             )
 
         db_session.commit()
-        remove_user_from_invited_users(user_email.user_email)
-        remove_all_users_from_tenant(tenant_id)
+        try:
+            remove_user_from_invited_users(user_email.user_email)
+            remove_all_users_from_tenant(tenant_id)
+        finally:
+            await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
         return
 
     db_session.expunge(user_to_delete)

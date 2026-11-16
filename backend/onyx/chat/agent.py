@@ -79,6 +79,7 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
     update_search_context,
 )
+from onyx.tools.tool_implementations.skills.skill_tools import skills_catalog_message
 from onyx.tools.tool_implementations.subagents.subagent_tools import (
     InterruptAgentTool,
     ListAgentsTool,
@@ -138,6 +139,9 @@ class ChatAgent(Agent, RestorableFeature):
         # The tools the chat is configured with; restored and child agents receive
         # them, and code mode applies per agent.
         self.configured_tools = list(tools)
+        self.skills_catalog_message = skills_catalog_message(
+            self.configured_tools, llm.config.max_input_tokens
+        )
         self.code_mode = code_mode
         # Each agent instance has its own cells, so a restored run has none open.
         self.application_tools, self.code_cells = (
@@ -155,9 +159,6 @@ class ChatAgent(Agent, RestorableFeature):
         self.inject_memories = inject_memories_in_prompt
         self.search_context = SearchContext()
         self.started = time.monotonic()
-        # The run's input wait time at the latest step; elapsed time leaves it
-        # out, so waiting for the user's approval is not thinking time.
-        self._input_wait_seconds = 0.0
         self.preferred_tool_id = preferred_tool_id
         self.chat_files = list(chat_files or [])
         # Only the Python tool reads the files of found documents.
@@ -252,13 +253,14 @@ class ChatAgent(Agent, RestorableFeature):
             custom_prompt=self.custom_agent_prompt,
             request_context=self.additional_context,
             reminders_enabled=self.reminders_enabled,
-            elapsed_seconds=self._elapsed_seconds(),
+            elapsed_seconds=max(0.0, time.monotonic() - self.started),
             citation_sources=self.citation_processor.citation_to_doc,
             citation_mapping=self.citation_mapping,
             gathered_documents=self.gathered_documents,
             chat_files=[SavedChatFile.capture(file) for file in self.chat_files],
             has_called_search_tool=self.has_called_search_tool,
             search_context=self.search_context,
+            code_cells=self.code_cells.saved() if self.code_cells is not None else [],
         )
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:
@@ -281,13 +283,13 @@ class ChatAgent(Agent, RestorableFeature):
             raise ValueError("Chat restoration configuration does not match")
         self.search_context = saved.search_context
         self.started = time.monotonic() - saved.elapsed_seconds
-        # The restored run counts its input waits from zero.
-        self._input_wait_seconds = 0.0
         self.citation_processor.citation_to_doc = saved.citation_sources
         self.citation_mapping = saved.citation_mapping
         self.gathered_documents = saved.gathered_documents
         self.chat_files = [file.restore() for file in saved.chat_files]
         self.has_called_search_tool = saved.has_called_search_tool
+        if self.code_cells is not None:
+            self.code_cells.restore(saved.code_cells)
 
     def _update_tool_context(self, responses: list[ToolResultMessage]) -> None:
         """Apply accepted tool results to the next request's context policy."""
@@ -323,12 +325,8 @@ class ChatAgent(Agent, RestorableFeature):
             inject_memories_in_prompt=self.inject_memories,
         )
 
-    def _elapsed_seconds(self) -> float:
-        return max(0.0, time.monotonic() - self.started - self._input_wait_seconds)
-
     def _prepare_step(self, state: StepInput) -> PreparedStep:
         previous = state.previous
-        self._input_wait_seconds = state.input_wait_seconds
         if previous is None:
             self.search_context = SearchContext()
             self.started = time.monotonic()
@@ -393,13 +391,14 @@ class ChatAgent(Agent, RestorableFeature):
                 sources=dict(self.citation_processor.citation_to_doc),
                 documents=list(self.gathered_documents),
                 include_citations=self.include_citations,
-                elapsed_seconds=self._elapsed_seconds(),
+                elapsed_seconds=time.monotonic() - self.started,
             ),
             assemble_messages=partial(
                 prepare_prompt,
                 agent_instructions=self.agent_instructions,
                 system_prompt=prompt.system_prompt,
                 user_info_prompt=prompt.user_info_prompt,
+                skills_catalog_message=self.skills_catalog_message,
                 custom_agent_prompt=prompt.custom_prompt,
                 reminder_message=prompt.reminder,
                 request_context_message=UserMessage(

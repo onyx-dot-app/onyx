@@ -53,4 +53,6 @@ export interface ChatMessage {
   citations?: ResolvedCitation[];
   // Tool calls of this response that asked for the user's approval
   approvals?: ApprovalEntry[];
+  // The stream stopped while the response waits for decisions
+  awaitingApproval?: boolean;
 }

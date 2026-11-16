@@ -15,6 +15,8 @@ export enum PacketType {
   STOP = "stop",
   SECTION_END = "section_end",
   TOP_LEVEL_BRANCHING = "top_level_branching",
+  // Ends the replayed prefix of a continuation stream.
+  REPLAY_END = "replay_end",
   ERROR = "error",
 
   SEARCH_TOOL_START = "search_tool_start",
@@ -103,6 +105,8 @@ export enum StopReason {
   USER_CANCELLED = "user_cancelled",
   // The turn reached its execution deadline.
   TIMED_OUT = "timed_out",
+  // The stream ends while the response waits for the user's approval decisions.
+  AWAITING_APPROVAL = "awaiting_approval",
 }
 
 export interface Stop extends BaseObj {
@@ -117,6 +121,10 @@ export interface SectionEnd extends BaseObj {
 export interface TopLevelBranching extends BaseObj {
   type: "top_level_branching";
   num_parallel_branches: number;
+}
+
+export interface ReplayEnd extends BaseObj {
+  type: "replay_end";
 }
 
 export interface PacketError extends BaseObj {
@@ -388,8 +396,8 @@ export interface ToolApprovalRequest extends BaseObj {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
-  // ISO 8601; shown to the user, never used to close the request
-  expires_at: string;
+  // The subagent that asks; null or absent for the root agent's own request.
+  agent_name?: string | null;
 }
 
 export interface ToolApprovalResolved extends BaseObj {
@@ -398,12 +406,7 @@ export interface ToolApprovalResolved extends BaseObj {
   // "approved_for_chat": approved by a grant for the chat's later calls of the tool.
   // "disabled": an approval found the tool disabled, so the call did not run.
   outcome:
-    | "approved"
-    | "approved_for_chat"
-    | "rejected"
-    | "expired"
-    | "disabled"
-    | "cancelled";
+    "approved" | "approved_for_chat" | "rejected" | "disabled" | "cancelled";
 }
 
 export type ToolApprovalObj = ToolApprovalRequest | ToolApprovalResolved;
@@ -483,6 +486,7 @@ export type ObjTypes =
   | ChatHeartbeat
   | SectionEnd
   | TopLevelBranching
+  | ReplayEnd
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj

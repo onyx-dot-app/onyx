@@ -5,6 +5,7 @@ import {
   Message,
   ChatSessionSharedStatus,
   BackendChatSession,
+  ChatStream,
   FeedbackType,
 } from "@/app/app/types";
 import {
@@ -36,7 +37,7 @@ interface ChatSessionData {
   chatSessionSharedStatus: ChatSessionSharedStatus;
   selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
-  sendAcknowledged?: Promise<number | null>;
+  sendAcknowledged?: Promise<ChatStream | null>;
   // Resolves after the reader applies its final packets and message state.
   readerFinished?: Promise<void>;
   hasPerformedInitialScroll: boolean;
@@ -47,6 +48,8 @@ interface ChatSessionData {
   isFetchingChatMessages: boolean;
   // Paged loading: the current branch has messages above the loaded ones.
   hasOlderMessages: boolean;
+  // The `approvals_version` of the load whose approval requests the chat shows.
+  approvalsVersion?: string;
   isLoadingOlderMessages: boolean;
   uncaughtError: SessionError | null;
   loadingError: string | null;

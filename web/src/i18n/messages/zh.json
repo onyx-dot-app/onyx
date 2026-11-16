@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "技能选择器"
         },
-        "empty": {
-          "text": "没有匹配的技能"
-        },
         "mcpServersGroup": {
           "label": "MCP 服务器"
         },
@@ -12597,6 +12594,19 @@
         "expandButton": {
           "label": "展开到输入框",
           "tooltip": "在输入框中用完整文本替换此卡片"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "移除 {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "粘贴的文本：{preview}，{meta}",
+          "removeButton": {
+            "ariaLabel": "移除粘贴的文本"
+          }
         }
       },
       "plusMenuButton": {
@@ -13228,6 +13238,9 @@
             "status": "正在搜索网页"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} 想要运行 {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -15856,9 +15869,6 @@
       "saveError": "无法保存审批设置。",
       "emptyActions": "没有已知操作。未知操作需要审批。",
       "emptyApps": "没有可用应用。",
-      "expired": "审批已超时。操作未执行。",
-      "rejected": "请求已拒绝。此请求未执行。",
-      "deadline": "请在 {time} 前批准",
       "agentPermissionRequired": "某项操作需要审批，因此本次运行已停止。请检查权限，然后重新运行任务。",
       "enableForTask": "为此任务启用",
       "enableAppForTask": "为此任务启用 {app}",

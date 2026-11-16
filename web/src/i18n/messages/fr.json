@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "Sélecteur de compétences"
         },
-        "empty": {
-          "text": "Aucune compétence correspondante"
-        },
         "mcpServersGroup": {
           "label": "Serveurs MCP"
         },
@@ -12597,6 +12594,19 @@
         "expandButton": {
           "label": "Développer dans la barre de saisie",
           "tooltip": "Remplacer cette vignette par son texte complet en ligne"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Retirer {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Texte collé : {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Retirer le texte collé"
+          }
         }
       },
       "plusMenuButton": {
@@ -13228,6 +13238,9 @@
             "status": "Recherche sur le web"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} veut exécuter {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -15856,9 +15869,6 @@
       "saveError": "Impossible d’enregistrer les paramètres d’approbation.",
       "emptyActions": "Aucune action connue. Les actions inconnues nécessitent une approbation.",
       "emptyApps": "Aucune application disponible.",
-      "expired": "Le délai d’approbation a expiré. L’action n’a pas été exécutée.",
-      "rejected": "Demande rejetée. Cette demande n’a pas été exécutée.",
-      "deadline": "Approuver avant {time}",
       "agentPermissionRequired": "Cette exécution s’est arrêtée car une action nécessitait une approbation. Vérifiez les autorisations, puis relancez la tâche.",
       "enableForTask": "Activer pour cette tâche",
       "enableAppForTask": "Activer {app} pour cette tâche",

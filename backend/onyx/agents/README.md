@@ -153,7 +153,6 @@ The coordinator calls its `RunStore` to save output after the result becomes ava
 `prepare_step(StepInput)` returns a `PreparedStep` for an allowed model call.
 It receives conversation history, this run's input and output, the step budget, and the previous completed step.
 `StepInput.received_inputs` contains submitted instructions and unread background results.
-`StepInput.input_wait_seconds` is the time this run's calls have spent waiting for input, such as the user's approval, so a feature can leave it out of its own timing.
 The runtime accepts them before the next model call, including when no preparation callback exists.
 A feature can return `PreparedStep.input_messages` to transform their content, for example to remap citations.
 Preserve each input's identity, provenance, and order. The runtime records accepted inputs with their step.
@@ -227,13 +226,14 @@ Two optional tool callbacks cover interception and enrichment:
 Callbacks receive copies. Required transformations belong inside the tool, before it returns a valid result.
 A tool that calls other tools for the model, such as a code mode program, gets `ToolInvocation.nested_calls`, a `NestedCallGate`.
 `NestedCallGate.decide` applies `before_tool_call`, then the approval gate below, to each of those calls.
-For a `PendingToolInput` decision, the tool can block the call with `NestedCallGate.wait_for_input`, which returns `None` to run an approved call or the result that replaces it.
-The run publishes `input_required` with the outer call as `tool_call` and the blocked call as `nested_call`.
-`run.submit()` answers it like any other request; the request is not saved with the run.
-Cancellation of the run, or of the signal the tool passes for the waiting call, unblocks it with `AgentCancelled`.
-A run that ends publishes `input_ended` without an answer for each request still open, nested or direct, before `agent_end`; the waiting call can wake later.
-While it waits, the outer call keeps running, so the run does not suspend.
-Code mode passes the cell's stop signal. While the program waits only for such calls, the wait counts toward neither its lifetime nor its yield time.
+A decision that waits for input is an open `NestedInputRequest`: the run publishes `input_required` at once, with the outer call as `tool_call` and the waiting call as `nested_call`.
+The waiting call does not block a thread.
+The tool returns its open requests in `NestedInputWait`, which the run saves as the outer call's pending entry, like `ChildRunWait`, so the run can suspend and transfer.
+When every request has an answer, the runtime calls `AgentTool.resume_with_input` with the answers instead of repeating `execute`.
+An approved request runs its call; a denied one gives the call the answer's result.
+The continuation returns a result, or another `NestedInputWait`.
+A tool that stops waiting, for example because its program ended, ends the request with `NestedCallGate.withdraw`.
+A request that no `NestedInputWait` saved ends when the run suspends or ends.
 A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
 A code mode program stops at the failure; the observation that reports its end raises it.
 When no observation reports that end, the cells' finish or suspend hook raises `ReleaseFailed`.
@@ -241,14 +241,17 @@ For example, deep research normalizes a child report's citations before returnin
 
 Approval is separate from the callbacks. An `AgentTool` lists the call names that need the user's approval in `approval_required`: its own name, or the names of calls it makes for the model.
 The runtime gates those calls through the coordinator's `ToolApprovals` (`AgentCoordinator(approvals=...)`).
+A call whose `before_tool_call` request the user approves runs without asking `ToolApprovals`.
 `ToolApprovals.request_approval(run, tool_call, nested_call)` returns a `PendingToolInput` to wait for, a `ToolResult` for a call that cannot wait, or `None` when a standing grant approves the call. `tool_call` is the call of the run's step; `nested_call` is the call that its tool makes for the model, or `None` for a direct call.
-`ToolApprovals.withdraw_approval(request_id)` ends a request whose call stopped waiting without an answer: a nested call whose program ended, or any call of a run that ends. It returns the answer of a decision that the application saved before the request ended, such as the user's rejection on Stop, or `None`.
-The run reports that answer in `input_ended`. A direct call that the answer denies keeps the denial as its result, so the model sees it in later runs.
+`ToolApprovals.withdraw_approval(request_id)` ends the request of a call that a tool made for the model when that call stops waiting while the run goes on: its program ended, its park was refused, or the run suspended before any wait saved it.
+The runtime logs a `withdraw_approval` that raises, so the waiting call still ends.
+The requests of a run that ends are the application's to close; the run store does it when it releases the run.
+Answers live in `RunProgress.human_tool_answers`. A request ends with the answer recorded there, or none, and the run reports it in `input_ended`.
+To stop a run with answers, such as the user's rejection on Stop, submit them and cancel while holding `Run.execution_lock`; the run applies them only after it sees the cancellation.
+A direct call that an answer denies keeps the denial as its result, so the model sees it in later runs.
 The runtime sets `PendingToolInput.approval` on the requests that `ToolApprovals` opens. That owner answers and withdraws only those requests; hook and question-tool requests do not have it.
+`PendingToolInput.display_name` carries the application's name for the action to the card that shows the request.
 Without `ToolApprovals`, such a call returns an error result.
-`Run.has_event_listeners` tells the application whether a listener receives the run's events, directly or through a foreground ancestor; a run that no one watches cannot show a request.
-`Run.input_wait_seconds` totals the time the run's calls spent waiting for input.
-The tool activity bound does not count that time either.
 
 The runtime records a tool's raw result before calling `after_tool_call`.
 That callback can replace the result; its failure preserves the raw result and fails the run.
@@ -417,7 +420,9 @@ Parent dependencies use run IDs and completion records. Local resource cleanup w
 A coordinator rejects competing local owners, including while ownership release is in progress.
 The application uses an atomic storage claim to exclude other API pods.
 A new coordinator can load terminal child states through `read_run`.
-Foreground children must finish before the parent can transfer. Rejected transfers leave the local owner intact.
+A parent transfers while each pending foreground child executes elsewhere, for example after the child handed off; the application decides whether that child is durable.
+A foreground child that still executes locally blocks transfer. Rejected transfers leave the local owner intact.
+A released parent stops observing the runs it waited for, unless another local run waits for them.
 
 `close()` cancels all owned runs and waits for execution, terminal handling, and resource cleanup.
 A timeout leaves unfinished work owned. The coordinator is process-local; storage and cross-pod control belong to the application.
@@ -506,8 +511,8 @@ Snapshots taken during provider I/O or arbitrary callbacks support inspection on
 `before_tool_call` or `ToolApprovals` can return `PendingToolInput(mode=InputMode.EXECUTE)` to gate an action.
 A question tool returns `PendingToolInput(mode=InputMode.RESULT)` to request its result from the caller.
 Each request has a unique `request_id` within its run.
-Submit a matching `HumanToolAnswer` through `run.submit()`; answers can arrive while sibling tools are still running.
-`PendingToolInput.expires_at` tells the client when the application stops waiting for an answer.
+Submit a matching `HumanToolAnswer` through `run.submit()`, or pass saved answers to `Agent.resume(snapshot, answers=...)`; answers can arrive while sibling tools are still running.
+A request takes answers once the run saves it, a direct call's request or one in a `NestedInputWait`, or while a tool holds it open.
 A `standing` approval also approves later calls of the same action; the application that answers applies it to those calls.
 Approval executes the exact pending call. A result answer completes the question without repeating its tool code.
 The run publishes `input_ended` with the call and its answer when it applies the answer.
@@ -554,10 +559,10 @@ The SDK invokes release once; applications implement the storage operation.
 If release fails, handoff, local waiters, and pending parent dependencies report the cleanup error.
 A new execution owner can register the same run ID once ownership is released.
 
-Pass executable tools to `Agent(tools=...)`; the runtime restores the saved declarations and execution permissions.
-A configuration digest rejects changed definitions, schema key order, tool order, or phases before restoration callbacks run.
-Schema key order matters because it changes the serialized prompt prefix.
-Older checkpoints without a digest still validate their saved step declarations.
+Pass executable tools to `Agent(tools=...)`; the runtime restores the saved step's declarations and execution permissions against them.
+A saved call runs only when the agent still has its tool with the same `parameters` schema; descriptions, other tools, their order and phases can differ.
+An approved call whose tool is gone or changed gets `UNAVAILABLE_CALL_MESSAGE` instead, and later steps use the current tools.
+`Agent.resume(..., deadline_at=...)` replaces the saved deadline.
 Onyx tools receive application context when invoked. Chat and research derive it from feature state,
 which changes after the tool phase.
 Rebuild the feature agent and its live resources with `restored.agent_state` and the saved `agent_id`.
@@ -764,23 +769,33 @@ Bind authorized history lookup and the feature factory with
 Application control calls `poll_control()` while `has_owned_work` is true, including during reconstruction.
 Each poll scans the inbox after a notification and while children run on the branch.
 `read_chat_inbox` reads the work: the next root turn, idle children's queued messages, and their result follow-ups.
-A store dispatches only while its response is on the selected branch, so it starts inbox work from each agent's newest run.
+A store starts inbox work only while its response is on the selected branch, so it starts that work from each agent's newest run.
+It resumes the parked agent runs of its own branch whether or not that branch is selected.
 A dispatch failure never stops the turn. Transient errors retry at a later poll. Work that cannot start becomes a failed run; if even that fails, the work is dropped.
-When child work can start but no running child keeps a store scanning, `dispatch_pending_chat_messages` starts an agent host.
-The host prepares the selected response's configuration without a root run, starts the work, and holds the leases until the runs release.
+When child work or a parked agent run can start but no running child keeps a store scanning, `dispatch_pending_chat_messages` starts an agent host.
+The host prepares the configuration of the selected response, or of a parked run's root response, without a root run, starts the work, and holds the leases until the runs release.
+It runs on the saved model of the first parked agent that it resumes. When it cannot start for any reason other than a transient error, a conflict or a rate limit, it ends the agents that it would resume; after a rate limit they stay parked for a later dispatch.
 Any API pod can start it; chat admission keeps hosts and turns from starting the same work.
+Every turn and agent host hands its admission to the resume of a parked root response that can continue, so the chat shows processing until that resume publishes its stream.
+A resume that fails to start for a moment retries after a backoff.
 `handoff()` requires a suspended, idle run and saves a `ChatResponseCheckpoint` beside its response history.
-Its foreground children must have terminal results before transfer.
+Its foreground children must have ended or parked before transfer.
+Any run whose waits are all on people parks in one park pass of `poll_control`, the root included; the root reports its park to its turn through the store's `on_root_parked` callback.
+A park that the run's change (`RunNotTransferable`) or a storage error stops keeps the run, and a later poll tries again.
+The checkpoint row also names the foreground child runs that the run waits for and the program dumps that it owns.
+An agent run's checkpoint binds to its agent's saved runs before it, so any pod rebuilds the same history.
 The checkpoint contains execution progress and callback payloads omitted from normal conversation history.
 It contains no repeated response text, full model requests, history prefix, or nested child transcripts.
 The original step budget and applied-callback boundary survive transfer.
 Before handoff, the adapter verifies that saved history can reconstruct the captured input and output.
 Unsupported input representations fail while the original run still owns execution.
 
-`resume(run_id, context=...)` requires authorized history reconstructed by the application.
-The adapter validates its digest and compaction boundary, then restores the snapshot from saved messages and operation outcomes.
+`resume(run_id, context=...)` requires authorized history reconstructed by the application; an agent run's comes from its agent's saved runs.
+A run is parked while its response is `SUSPENDED` with a checkpoint row.
+Dispatch resumes a parked run, on any branch, once its waits end, the leaf first: a root response in a turn, an agent run in the store of its branch or an agent host.
+The adapter validates its history digest and compaction boundary, then restores the snapshot from saved messages and operation outcomes.
 Only one process can claim a checkpoint. Conditional revision checks reject stale writers.
-Reconstruction failure before execution releases the claim for retry.
+Reconstruction failure before execution releases the claim. Chat then ends the response as failed (`fail_suspended_response`), so no retry repeats the failure.
 Completion removes the checkpoint while preserving chat history.
 
 Live inspection snapshots are not transferable checkpoints. An in-flight tool must finish before ownership transfers.
@@ -790,9 +805,10 @@ Coding's temporary sandbox has no cross-process reconstruction factory.
 ### Delivery and failure boundaries
 
 There is no durable generic control ledger. Human messages sent to a running response are stored in `chat_input`, as described above.
-Tool approval decisions are saved in `approval_request` before the decision API returns, which then sets a wake key for the response.
-The response owner's control poll reads the wake key with the Stop key, reads the decisions of the requests that its runs wait on (`Run.pending_inputs`), and submits the answers to its runs. A slower periodic read covers a lost wake key and expires overdue requests, up to that interval late.
-When a run ends, or a program's call stops waiting, chat expires its open requests. The user's Stop first saves the user's rejection of the requests that the turn's runs wait on, so they end rejected, as with Reject. When the API server starts to shut down, runs that wait stop and their requests expire, and new calls do not ask.
+Tool approval decisions are saved in `approval_request` before the decision API returns, which then dispatches.
+A run that waits for them has handed off, so the resumed run reads the saved decisions; requests have no deadline.
+When a run ends, the run store closes its open requests as it releases the run; a program's call that stops waiting while its run goes on ends its request through `withdraw_approval`.
+The user's Stop first saves the user's rejection of the requests that the root run and its foreground descendants wait on, then gives each of those runs its answers through `Run.submit` and cancels it, under the run's execution lock, so the requests end rejected, as with Reject.
 The existing chat Stop route keeps its cache signal; child Stop requests also use tenant-scoped cache state.
 An expired owner is reported as interrupted when its response is inspected. Uncertain external work is never automatically replayed.
 
@@ -801,4 +817,5 @@ Closing the old coordinator does not cancel execution claimed by another pod.
 Incognito runs have no child agents. `USAGE_ONLY` incognito runs keep only local ownership, have no directory, and write no durable execution checkpoints or child conversations to PostgreSQL. `FULL_HISTORY` incognito runs keep content, so `ChatRunStore` gives them run ownership and the agent directory.
 
 Checkpoint file data uses existing file-store references. Generated files are stored under the chat session before transfer.
-Deleting the chat removes those files. Tool execution loads file contents when needed.
+A parked program's dump gets a unique ID, and the checkpoint row owns it: ending or replacing the checkpoint, a failed transfer, and soft deleting the chat delete it.
+Hard deleting the chat removes those files. Tool execution loads file contents when needed.

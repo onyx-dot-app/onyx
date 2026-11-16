@@ -13,7 +13,7 @@ import {
 export function useToolApprovals(packets: Packet[]): ToolApproval[] {
   // Streams append to the same array, so its length keys the result too.
   const packetCount = packets.length;
-  const { entries, stopped } = useMemo(
+  const entries = useMemo(
     () => readToolApprovals(packets.slice(0, packetCount)),
     [packets, packetCount],
   );
@@ -38,8 +38,8 @@ export function useToolApprovals(packets: Packet[]): ToolApproval[] {
       entries.map((entry, index) => ({
         turnIndex: entry.turnIndex,
         request: entry.request,
-        status: toolApprovalStatus(entry, localStatuses[index], stopped),
+        status: toolApprovalStatus(entry, localStatuses[index]),
       })),
-    [entries, localStatuses, stopped],
+    [entries, localStatuses],
   );
 }

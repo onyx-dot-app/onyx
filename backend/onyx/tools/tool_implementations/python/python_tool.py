@@ -26,7 +26,11 @@ from onyx.file_store.utils import (
     get_default_file_store,
 )
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.interface import (
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+)
 from onyx.tools.models import (
     ChatFile,
     CodeModeExposure,
@@ -36,7 +40,6 @@ from onyx.tools.models import (
     PythonArguments,
     PythonExecutionDelta,
     PythonExecutionFile,
-    ToolCallException,
     ToolContext,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
@@ -52,7 +55,6 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
-CODE_FIELD = "code"
 CODE_INTERPRETER_DEFAULT_FILENAME = "file"
 CODE_INTERPRETER_FILENAME_MAX_LENGTH = 200
 CODE_INTERPRETER_UNSAFE_FILENAME_CHARS = re.compile(r"[\x00-\x1f/\\:\*\?\"<>\|]+")
@@ -298,21 +300,8 @@ class PythonTool(Tool):
             return client.health(use_cache=True).healthy
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=self.description,
-            strict=True,
-            parameters={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    CODE_FIELD: {
-                        "type": "string",
-                        "description": "Python source code to execute",
-                    },
-                },
-                "required": [CODE_FIELD],
-            },
+        return tool_definition_from_arguments(
+            self.name, self.description, PythonArguments, strict=True
         )
 
     def _upload_and_stage(
@@ -370,15 +359,6 @@ class PythonTool(Tool):
         return files_to_stage, failed_uploads
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
-        if CODE_FIELD not in invocation.arguments:
-            raise ToolCallException(
-                message=f"Missing required '{CODE_FIELD}' parameter in python tool call",
-                llm_facing_message=(
-                    f"The python tool requires a '{CODE_FIELD}' parameter containing "
-                    f"the Python code to execute. Please provide like: "
-                    f'{{"code": "print(\'Hello, world!\')"}}'
-                ),
-            )
         code = parse_tool_arguments(PythonArguments, invocation.arguments).code
         chat_files = context.chat_files
 

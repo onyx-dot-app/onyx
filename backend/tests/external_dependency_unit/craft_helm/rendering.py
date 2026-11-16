@@ -11,7 +11,7 @@ import pytest
 from tests.common.paths import find_ancestor_containing
 
 _REPO_ROOT: Path = find_ancestor_containing("deployment/helm/charts/onyx")
-_CHART_DIR: Path = _REPO_ROOT / "deployment" / "helm" / "charts" / "onyx"
+CHART_DIR: Path = _REPO_ROOT / "deployment" / "helm" / "charts" / "onyx"
 _DEFAULT_KUBE_VERSION_ARGS: list[str] = ["--kube-version", "1.33.0"]
 _HELM_TEST_SECRET_ARGS: list[str] = [
     "--set-string",
@@ -43,11 +43,11 @@ def helm_template_command(extra_args: list[str] | None = None) -> list[str]:
         helm,
         "template",
         "onyx",
-        str(_CHART_DIR),
+        str(CHART_DIR),
         "-n",
         "onyx",
         "-f",
-        str(_CHART_DIR / "values-ci.yaml"),
+        str(CHART_DIR / "values-ci.yaml"),
         *_chart_args_with_default_kube_version(extra_args),
         *_HELM_TEST_SECRET_ARGS,
     ]

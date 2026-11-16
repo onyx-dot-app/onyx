@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
+from onyx.chat.models import ChatApprovals
 from onyx.chat.presentation import replay_response
 from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_QUERY_KEY,
@@ -550,6 +551,7 @@ def translate_assistant_message_to_packets(
     chat_message: ChatMessage,
     tools_by_id: Mapping[int, Tool],
     db_session: Session,
+    chat_approvals: ChatApprovals | None = None,
 ) -> list[Packet]:
     """
     Translates an assistant message and tool calls to packet format.
@@ -557,17 +559,20 @@ def translate_assistant_message_to_packets(
     The final answer and citations are also a "step".
 
     `tools_by_id` holds the tools of the message's tool calls (see
-    `load_session_tools`), so replay does not query a tool per call.
+    `load_session_tools`), and `chat_approvals` the approval requests of the
+    page's responses (see `load_chat_approvals`), so a session replay does not query them per
+    message.
     """
     execution = read_chat_execution(chat_message)
     if execution is not None:
-        replay = read_response_replay_data(execution, db_session)
+        replay = read_response_replay_data(execution, db_session, chat_approvals)
         return replay_response(
             execution.response,
             replay.tools,
             execution.presentation,
             replay.documents,
             approvals=replay.approvals,
+            agent_approvals=replay.agent_approvals,
         )
     packet_list: list[Packet] = []
 

@@ -1363,6 +1363,26 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
+# Files the Google Drive connector converts at once in one docfetching
+# process. Each conversion makes one to three Google calls, so this sets the
+# requests in flight. Past about 32, parsing on one core limits a run.
+_GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT = 32
+try:
+    GOOGLE_DRIVE_CONVERSION_WORKERS = max(
+        1,
+        int(
+            os.environ.get("GOOGLE_DRIVE_CONVERSION_WORKERS")
+            or _GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT
+        ),
+    )
+except ValueError:
+    logger.warning(
+        "GOOGLE_DRIVE_CONVERSION_WORKERS=%r is not an integer; falling back to %d",
+        os.environ.get("GOOGLE_DRIVE_CONVERSION_WORKERS"),
+        _GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT,
+    )
+    GOOGLE_DRIVE_CONVERSION_WORKERS = _GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT
+
 # Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
 # fetch. Native Docs report no `size`, so the fetch can't be checked from
 # metadata; larger Docs are indexed via the basic text export.

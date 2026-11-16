@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -275,6 +276,9 @@ func createResult(resp any, err error, admitted bool) string {
 			return metrics.CreateCreated
 		}
 		return metrics.CreateExisting
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return metrics.CreateCanceled
 	}
 	if admitted {
 		return metrics.CreateFailed

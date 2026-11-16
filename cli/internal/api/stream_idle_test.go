@@ -36,7 +36,7 @@ func collectEvents(t *testing.T, events <-chan models.StreamEvent) []models.Stre
 
 func TestStreamOutlivesIdleTimeoutWhileDataArrives(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Heartbeats keep a long wait, such as a pending approval, alive.
+		// Heartbeats keep a long turn without output alive.
 		for range 40 {
 			fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"chat_heartbeat"}}`)
 			w.(http.Flusher).Flush()
@@ -115,10 +115,11 @@ func TestResumeReplaysTheRunningResponse(t *testing.T) {
 		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"tool_approval_request","approval_id":"a1","tool_name":"lookup"}}`)
 		fmt.Fprintln(w, `{"stream_id":2,"next_cursor":1,"replay_complete":true}`)
 		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"stop"}}`)
+		fmt.Fprintln(w, `{"stream_id":2,"next_cursor":2,"replay_complete":true}`)
 	}))
 	defer server.Close()
 
-	events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1"))
+	events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1", nil, 0))
 
 	if path != "/api/chat/chat-session/session-1/resume-stream?cursor=0" {
 		t.Fatalf("path = %q", path)
@@ -126,18 +127,54 @@ func TestResumeReplaysTheRunningResponse(t *testing.T) {
 	if _, ok := events[1].(models.ToolApprovalRequestEvent); !ok {
 		t.Fatalf("events = %#v", events)
 	}
-	if _, ok := events[len(events)-1].(models.StopEvent); !ok {
-		t.Fatalf("last event = %T, want StopEvent", events[len(events)-1])
+	if _, ok := events[len(events)-2].(models.StopEvent); !ok {
+		t.Fatalf("event = %T, want StopEvent", events[len(events)-2])
 	}
 }
 
-func TestResumeEndsQuietlyWhenNothingRuns(t *testing.T) {
+func TestResumeFromCursorDropsTheCutBatch(t *testing.T) {
+	var path string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, `{"detail":"No resumable stream"}`, http.StatusNotFound)
+		path = r.URL.RequestURI()
+		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"message_delta","content":"kept"}}`)
+		fmt.Fprintln(w, `{"stream_id":7,"next_cursor":4,"replay_complete":true}`)
+		// The connection ends inside the next batch.
+		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"message_delta","content":"cut"}}`)
 	}))
 	defer server.Close()
 
-	if events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1")); len(events) != 0 {
+	streamID := 7
+	events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1", &streamID, 3))
+
+	if path != "/api/chat/chat-session/session-1/resume-stream?cursor=3&stream_id=7" {
+		t.Fatalf("path = %q", path)
+	}
+	if len(events) != 2 {
+		t.Fatalf("events = %#v, want the complete batch only", events)
+	}
+	if e, ok := events[0].(models.MessageDeltaEvent); !ok || e.Content != "kept" {
 		t.Fatalf("events = %#v", events)
+	}
+	if e, ok := events[1].(models.StreamCursorEvent); !ok || e.NextCursor != 4 {
+		t.Fatalf("events = %#v", events)
+	}
+}
+
+func TestResumeReportsOnlyA404AsUnavailable(t *testing.T) {
+	for status, want := range map[int][]models.StreamEvent{
+		http.StatusNotFound: {models.StreamUnavailableEvent{}},
+		// A clean end before the first cursor leaves the response resumable.
+		http.StatusOK: nil,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if status == http.StatusNotFound {
+				http.Error(w, `{"detail":"No resumable stream"}`, status)
+			}
+		}))
+		events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1", nil, 0))
+		server.Close()
+		if len(events) != len(want) || (len(want) > 0 && events[0] != want[0]) {
+			t.Fatalf("HTTP %d: events = %#v, want %#v", status, events, want)
+		}
 	}
 }

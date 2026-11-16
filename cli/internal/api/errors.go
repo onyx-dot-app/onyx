@@ -49,7 +49,7 @@ func IsRetryableReadinessError(err error) bool {
 }
 
 // IsApprovalNoLongerWaiting reports a decision the server cannot apply because
-// the request was already decided, expired, or does not exist.
+// the request was already decided, ended with its response, or does not exist.
 func IsApprovalNoLongerWaiting(err error) bool {
 	var apiErr *OnyxAPIError
 	return errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusConflict || apiErr.StatusCode == http.StatusNotFound)

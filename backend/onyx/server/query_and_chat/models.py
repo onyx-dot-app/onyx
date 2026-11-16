@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.agents.models import MessageDelivery, RunStatus
+from onyx.chat.mention_models import Mentions, RecordedMention
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import (
@@ -17,6 +18,7 @@ from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride
+from onyx.server.features.action_policies.models import DecisionBody
 from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
 from onyx.tools.models import ChatToolSelection
 
@@ -40,6 +42,8 @@ class MessageOrigin(str, Enum):
 class MessageResponseIDInfo(BaseModel):
     user_message_id: int | None
     reserved_assistant_message_id: int
+    # What the question tagged, as its turn accepted it.
+    mentions: list[RecordedMention]
 
 
 class ModelResponseSlot(BaseModel):
@@ -55,19 +59,25 @@ class MultiModelMessageResponseIDInfo(BaseModel):
 
     user_message_id: int | None
     responses: list[ModelResponseSlot]
+    mentions: list[RecordedMention]
 
 
 def response_id_info(
-    user_message_id: int | None, responses: list[ModelResponseSlot]
+    user_message_id: int | None,
+    responses: list[ModelResponseSlot],
+    mentions: list[RecordedMention],
 ) -> "MessageResponseIDInfo | MultiModelMessageResponseIDInfo":
     """The packet that names a turn's saved question and reserved responses."""
     if len(responses) > 1:
         return MultiModelMessageResponseIDInfo(
-            user_message_id=user_message_id, responses=responses
+            user_message_id=user_message_id,
+            responses=responses,
+            mentions=mentions,
         )
     return MessageResponseIDInfo(
         user_message_id=user_message_id,
         reserved_assistant_message_id=responses[0].message_id,
+        mentions=mentions,
     )
 
 
@@ -145,6 +155,17 @@ class SendMessageRequest(BaseModel):
         return data
 
     file_descriptors: list[FileDescriptor] = []
+
+    mentions: Mentions = Field(
+        default_factory=list,
+        description=(
+            "What the user tagged in this message with `@`. A `skill` mention "
+            "names a chat skill; its SKILL.md, as it is when the question is "
+            "accepted, goes to the model after the question in this turn and "
+            "later ones. Skills the user cannot use are ignored, and the "
+            "message text never tags anything."
+        ),
+    )
 
     internal_search_filters: BaseFilters | None = None
 
@@ -248,6 +269,16 @@ class PendingChatMessageRequest(BaseModel):
             "ignores it."
         ),
     )
+    mentions: Mentions = Field(
+        default_factory=list,
+        description=(
+            "What the user tagged in this message with `@`. A `skill` mention "
+            "names a chat skill; its SKILL.md, as it is when the message is "
+            "accepted, goes to the model after the message, both when a turn "
+            "starts with it and when a running response accepts a send. Skills "
+            "the user cannot use are ignored."
+        ),
+    )
 
     @field_validator("message")
     @classmethod
@@ -278,10 +309,29 @@ class StopChatResponse(BaseModel):
     message: str
 
 
+class ChatApprovalDecisionRequest(DecisionBody):
+    # Headers for the MCP servers that the response's continuation calls;
+    # they are not saved.
+    mcp_headers: dict[str, str] | None = None
+
+
+class CurrentStreamInfo(BaseModel):
+    """Unfinished response available for stream reconnection."""
+
+    stream_id: int
+    # The responses that the stream writes. A stream that continues a response
+    # after its approvals has an ID that no message has.
+    response_ids: list[int] = Field(default_factory=list)
+
+
 class ApprovalDecisionResponse(BaseModel):
     approval_id: UUID
     decision: Literal[ApprovalDecision.APPROVED, ApprovalDecision.REJECTED]
     decided_via: ApprovalDecidedVia
+    # The stream that continues the request's response, when the decision
+    # started it or found it running; None while the response still waits, or
+    # for a background agent's request, which continues without a stream.
+    continuation: CurrentStreamInfo | None = None
 
 
 class StopSubagentsResponse(BaseModel):
@@ -333,6 +383,8 @@ class ChatMessageDetail(BaseModel):
     citations: dict[int, str] | None = None
     time_sent: datetime
     files: list[FileDescriptor]
+    # What a question tagged, as its turn resolved it.
+    mentions: list[RecordedMention]
     error: str | None = None
     error_info: StreamingError | None = None
     response_status: RunStatus | None = None
@@ -360,12 +412,6 @@ class SetPreferredResponseRequest(BaseModel):
     preferred_response_id: int
 
 
-class CurrentStreamInfo(BaseModel):
-    """Unfinished response available for stream reconnection."""
-
-    stream_id: int
-
-
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
     # Background agents are active on the selected branch, or their queued work waits.
@@ -375,6 +421,11 @@ class ChatSessionProcessingStatus(BaseModel):
     # The newest response on the selected branch.
     latest_response_id: int | None = None
     current_stream: CurrentStreamInfo | None = None
+    # Changes when an approval request of the chat opens, is decided or is
+    # removed; reload the session to show the requests. Opaque, and empty
+    # while the chat has no request: a client that loaded nothing compares
+    # against the empty version.
+    approvals_version: str = ""
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -403,6 +454,8 @@ class ChatSessionDetailResponse(BaseModel):
     has_older_messages: bool = False
     # The owner's saved tools and search filters; NULL means the agent's tools.
     tool_selection: ChatToolSelection | None = None
+    # The status route's `approvals_version` for the requests this load shows.
+    approvals_version: str = ""
 
 
 class AdminSearchRequest(BaseModel):

@@ -37,6 +37,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeCallStarted,
     CodeModeExecutionResult,
     CodeModeStdout,
+    ParkedProgram,
     SandboxLimits,
     SandboxResult,
 )
@@ -77,7 +78,7 @@ class Response:
             cells=self.cells,
             limits=limits,
         )
-        self.wait_tool = WaitCodeTool(self.cells)
+        self.wait_tool = WaitCodeTool(self.cells, self.execute.program)
         self.cancellation = CancellationSignal()
         self.recorded: list[Message] = list(history)
         self.events: dict[str, list[BaseModel]] = {}
@@ -369,7 +370,7 @@ def test_running_cell_limit_is_process_wide(monkeypatch: pytest.MonkeyPatch) -> 
     assert refused.content == BUSY_MESSAGE
     first.finish()
     # The ended cell's driver gives its place back.
-    until(lambda: cells_module._running_cells.acquire())
+    until(lambda: cells_module._running_cells.acquire("unknown"))
     cells_module._running_cells.release("unknown", 0.0)
     assert _details(Response().run("1\n")).status == "completed"
 
@@ -875,7 +876,9 @@ def test_a_cell_rejected_as_busy_leaves_the_dropped_writes_note_to_the_next(
     crashed = Response(history=response.recorded)
     with monkeypatch.context() as patched:
         # Every running-cell slot is taken.
-        patched.setattr(cells_module._running_cells, "acquire", lambda: False)
+        patched.setattr(
+            cells_module._running_cells, "acquire", lambda _tenant_id: False
+        )
         refused = crashed.run("1\n")
     assert refused.content == BUSY_MESSAGE
     accepted = crashed.run("2\n")
@@ -931,7 +934,7 @@ def test_a_cell_that_ends_after_its_closing_record_commits_nothing(
     release = threading.Event()
     execute = cells_module.execute_program
 
-    def late_end(code: str, **kwargs: Any) -> SandboxResult:
+    def late_end(code: str, **kwargs: Any) -> SandboxResult | ParkedProgram:
         """Ignores the stop, then completes after its cell closed."""
         if code != "late":
             return execute(code, **kwargs)

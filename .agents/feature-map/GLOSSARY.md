@@ -102,9 +102,9 @@ usage events sent to the Onyx fleet service ([[fleet-telemetry]]).
 - Craft: `ActionApproval` rows (`action_approval`) that the sandbox proxy writes and waits on
   (`SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS`), with "approve for session" scoped
   to a Craft session. See [[craft-external-apps]].
-- Chat: `ApprovalRequest` rows (`approval_request`) for paused MCP calls
-  (`chat/tool_approvals.py:TOOL_APPROVAL_TIMEOUT`), with "Approve for this chat" scoped to a
-  chat session. See [[mcp-and-custom-tools#chat-approval-owner-delivers]].
+- Chat: `ApprovalRequest` rows (`approval_request`) for paused MCP calls, with no
+  deadline; the response is saved while they wait. "Approve for this chat" is
+  scoped to a chat session. See [[mcp-and-custom-tools#chat-approval-durable-wait]].
 
 **MCP** goes both ways. Onyx is an MCP client of servers that an admin connects
 ([[mcp-and-custom-tools]]), and an MCP server for external clients
@@ -189,7 +189,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Emitter | The object that stamps `model_index` on a packet and hands it to delivery. See [[streaming-protocol#emitter-sets-model-index]]. |
 | Reminder | A trailing message with one or two critical instructions. See [[context-assembly]]. |
 | Custom agent prompt | The agent's instructions, normally sent as a fixed user message before conversation history. With an empty base prompt and no base-prompt replacement, they become the system message. See [[context-assembly]]. |
-| Fence (chat) | A per-session cache flag. The stop fence (`chat/stop_signal_checker.py`, keyed by session and stream ID) means the user pressed Stop. The processing fence holds 0 after admission and the live stream ID after `ChatTurnAdmission.publish`. The admission owner key, not a fence, marks a busy session. The per-response keys in `chat/run_store.py:ChatRunStore` are not fences: `chat_response_owner` is the execution lease, and `chat_response_stop` is the flag that `cancel_run` sets when a parent cancels a child agent. See [[core-chat-loop#session-admission]]. |
+| Fence (chat) | A per-session cache flag. The stop fence (`chat/stop_signal_checker.py`, keyed by session and stream ID) means the user pressed Stop. The processing fence holds 0 after admission, and the live stream ID with the response IDs it writes after `ChatTurnAdmission.publish` (`chat/chat_processing_checker.py:get_processing_stream`). The admission owner key, not a fence, marks a busy session. The per-response keys in `chat/run_store.py:ChatRunStore` are not fences: `chat_response_owner` is the execution lease, and `chat_response_stop` is the flag that `cancel_run` sets when a parent cancels a child agent. See [[core-chat-loop#session-admission]]. |
 | Last cycle | The final allowed chat step offers no tools and must answer. Image generation does not end tool use early. See [[core-chat-loop#stopping-tools]]. |
 | `BASH_TOOL_SENTINEL_ID` | The id that the coding agent gives its in-memory `BashTool`. See [[code-execution#bash-tool-sentinel]]. |
 | Message types | `ChatMessage` (the row), `ChatResponseItem` (the saved steps of a response), `llm/models.py:Message` (the conversation type the runtime uses) and `llm/model_request.py:ChatCompletionMessage` (the provider wire form). See [[core-chat-loop#three-message-types]]. |
@@ -197,7 +197,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Reserved message | An assistant `ChatMessage` row created with placeholder text before streaming starts. See [[chat-persistence]]. |
 | Incognito and record mode | `IncognitoRecordMode` is fixed on a session and decides what the database keeps. See [[chat-persistence]]. |
 | Child session | A `ChatSession` with `spawned_by_message_id` set. Research and coding child agents get one in a session that keeps content. See [[chat-persistence]]. |
-| Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`), and checkpoint handoff and resume. Suspension on `ChildRunWait` and on chat tool approvals (`PendingToolInput`) in the same process is live. See [[agent-runtime#wire-module]]. |
+| Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`). Suspension on `ChildRunWait` and on chat tool approvals is live, and so are checkpoint handoff and resume: a run whose waits are all on people parks and resumes on any pod ([[mcp-and-custom-tools#chat-approval-durable-wait]]). See [[agent-runtime#wire-module]]. |
 | `use_memories` vs `enable_memory_tool` | `use_memories` controls whether memories reach the prompt. `enable_memory_tool` controls whether the memory tool can write them. See [[chat-preferences]]. |
 | Decision model | A model that answers typed predicate, choice or score questions with probabilities, not through LiteLLM. See [[llm-providers]]. |
 | Passthrough (LLM gateway) | A native OpenAI Responses or Anthropic Messages forward that skips `LitellmLLM`. See [[llm-gateway]]. |

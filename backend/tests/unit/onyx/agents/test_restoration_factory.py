@@ -1,8 +1,13 @@
 """Rebuild feature configuration and resources without replacing saved conversation state."""
 
+from collections.abc import Callable
+from unittest.mock import MagicMock
+from uuid import uuid4
+
 import pytest
 from pydantic import JsonValue
 
+from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
 from onyx.agents.models import (
     AgentState,
     AgentStep,
@@ -12,10 +17,12 @@ from onyx.agents.models import (
     RunStatus,
     StepInput,
 )
+from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent
 from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.restoration import restore_chat_agent
 from onyx.context.models import UserInfo, UserMemoryContext
+from onyx.db.models import User
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
@@ -29,8 +36,14 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     UserMessage,
 )
+from onyx.skills.models import ChatSkill
 from onyx.tools.constants import WAIT_CODE_TOOL_NAME
+from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from onyx.tools.tool_implementations.skills.skill_tools import (
+    SkillsListTool,
+    SkillsReadTool,
+)
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
     FakeModelClient,
@@ -158,7 +171,6 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
             status=RunStatus.SUSPENDED,
             steps=[],
             progress=RunProgress(
-                tool_configuration_digest="test-tool-configuration",
                 step_limit=3,
                 feature_state=state.model_dump(mode="json"),
             ),
@@ -168,9 +180,11 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
     saved = checkpoint.model_copy(deep=True)
     rebuilt = restore_chat_agent(
         checkpoint,
+        0,
         llm=llm,
         tools=[EchoTool()] if name == "chat" else [],
         user_identity=None,
+        subagent_factory=lambda _depth: pytest.fail("No agent tools"),
     )
     assert rebuilt is not original
     assert rebuilt.id == original.id
@@ -233,16 +247,21 @@ def test_factory_rejects_checkpoint_without_supported_feature_state() -> None:
             agent_id="coding-agent",
             status=RunStatus.SUSPENDED,
             steps=[],
-            progress=RunProgress(
-                tool_configuration_digest="test-tool-configuration", step_limit=3
-            ),
+            progress=RunProgress(step_limit=3),
         ),
     )
     llm = FakeModelClient(
         lambda _request, _signal: AssistantMessage(content=[TextContent(text="done")])
     )
     with pytest.raises(ValueError, match="no supported chat feature state"):
-        restore_chat_agent(checkpoint, llm=llm, tools=[], user_identity=None)
+        restore_chat_agent(
+            checkpoint,
+            0,
+            llm=llm,
+            tools=[],
+            user_identity=None,
+            subagent_factory=lambda _depth: pytest.fail("No agent tools"),
+        )
 
 
 def _offered(llm: ScriptedLLM) -> tuple[list[str], ToolChoiceOptions, str]:
@@ -254,10 +273,17 @@ def _offered(llm: ScriptedLLM) -> tuple[list[str], ToolChoiceOptions, str]:
     )
 
 
-def _chat_agent(llm: ScriptedLLM, *, code_mode: bool = False) -> ChatAgent:
+def _chat_agent(
+    llm: ScriptedLLM,
+    *,
+    code_mode: bool = False,
+    tools: list[Tool] | None = None,
+    create_subagent: Callable[[], Agent] | None = None,
+) -> ChatAgent:
     return ChatAgent(
+        create_subagent=create_subagent,
         messages=[],
-        tools=[EchoTool()],
+        tools=tools or [EchoTool()],
         code_mode=code_mode,
         custom_agent_prompt=None,
         base_system_prompt="Base instructions",
@@ -278,7 +304,7 @@ def _chat_agent(llm: ScriptedLLM, *, code_mode: bool = False) -> ChatAgent:
     )
 
 
-def _suspended(agent: ChatAgent, state: dict[str, JsonValue]) -> ExecutionCheckpoint:
+def _suspended(agent: Agent, state: dict[str, JsonValue]) -> ExecutionCheckpoint:
     return ExecutionCheckpoint(
         agent_state=agent.state,
         run_state=RunState(
@@ -286,9 +312,10 @@ def _suspended(agent: ChatAgent, state: dict[str, JsonValue]) -> ExecutionCheckp
             agent_id=agent.id,
             status=RunStatus.SUSPENDED,
             steps=[],
+            # The suspended step declared the agent's tools.
             progress=RunProgress(
-                tool_configuration_digest="test-tool-configuration",
                 step_limit=3,
+                tools=[tool.definition for tool in agent.tools],
                 feature_state=state,
             ),
         ),
@@ -313,14 +340,17 @@ def test_restored_chat_keeps_the_saved_code_mode(
 ) -> None:
     # Restoration reads only the saved state, never the deployment setting.
     llm = ScriptedLLM([Delta(content="done")])
-    original = _chat_agent(llm, code_mode=saved_code_mode)
+    original = _chat_agent(
+        llm, code_mode=saved_code_mode, create_subagent=lambda: _chat_agent(llm)
+    )
     state = original.capture_state().model_dump(mode="json")
     rebuilt = restore_chat_agent(
         _suspended(original, state),
+        0,
         llm=llm,
         tools=[EchoTool()],
         user_identity=None,
-        create_subagent=lambda: _chat_agent(llm),
+        subagent_factory=lambda _depth: lambda: _chat_agent(llm),
     )
     assert isinstance(rebuilt, ChatAgent)
     assert (rebuilt.code_cells is not None) == saved_code_mode
@@ -337,3 +367,115 @@ def test_restored_chat_keeps_the_saved_code_mode(
     ]
     assert choice == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {preferred}." in request_text
+
+
+@pytest.fixture
+def _user_skills(monkeypatch: pytest.MonkeyPatch) -> User:
+    """A user whose current skills are one skill, as the skill tools and
+    the catalog read them."""
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.skills.skill_tools.get_session_with_current_tenant",
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.skills.skill_tools.list_chat_skills",
+        lambda _session, _user: [
+            ChatSkill(name="triage", description="Sort.", version_id=uuid4())
+        ],
+    )
+    return User(id=uuid4())
+
+
+def test_restored_chat_offers_the_skill_tools_once(_user_skills: User) -> None:
+    # Restoration receives the turn's configured tools, skill tools included.
+    llm = ScriptedLLM([Delta(content="done")])
+    original = _chat_agent(
+        llm,
+        tools=[EchoTool(), SkillsListTool(_user_skills), SkillsReadTool(_user_skills)],
+    )
+    state = original.capture_state().model_dump(mode="json")
+
+    rebuilt = restore_chat_agent(
+        _suspended(original, state),
+        0,
+        llm=llm,
+        tools=original.configured_tools,
+        user_identity=None,
+        subagent_factory=lambda _depth: pytest.fail("No agent tools"),
+    )
+    assert isinstance(rebuilt, ChatAgent)
+    rebuilt.restore_state(state)
+    run_agent(rebuilt, max_steps=3, messages=[UserMessage(content="Go")])
+
+    names, _, _ = _offered(llm)
+    assert names == [EchoTool().name, "skills_list", "skills_read"]
+
+
+def test_restored_deep_research_offers_the_skill_tools_like_the_original(
+    _user_skills: User,
+) -> None:
+    llm = ScriptedLLM([])
+    original = DeepResearchAgent(
+        messages=[],
+        allowed_tools=[SkillsListTool(_user_skills), SkillsReadTool(_user_skills)],
+        llm=llm,
+        token_counter=len,
+        user_identity=None,
+        language_section="",
+        reasoning_effort=ReasoningEffort.LOW,
+        all_injected_file_metadata={},
+        skip_clarification=True,
+    )
+
+    rebuilt = restore_chat_agent(
+        _suspended(original, original.capture_state().model_dump(mode="json")),
+        0,
+        llm=llm,
+        tools=original.application_tools,
+        user_identity=None,
+        subagent_factory=lambda _depth: pytest.fail("No agent tools"),
+    )
+
+    names = [tool.definition.name for tool in original.tools]
+    assert {"skills_list", "skills_read"} <= set(names)
+    assert [tool.definition for tool in rebuilt.tools] == [
+        tool.definition for tool in original.tools
+    ]
+    assert isinstance(rebuilt, DeepResearchAgent)
+    for agent in (original, rebuilt):
+        assert agent.skills_catalog_message is not None
+        assert "- triage: Sort." in agent.skills_catalog_message.text
+
+
+@pytest.mark.parametrize(
+    ("agent_tools", "depth"),
+    [(False, 0), (True, 0), (True, 1), (True, MAX_CHILD_DEPTH)],
+)
+def test_restored_chat_keeps_its_agent_tools_at_its_depth(
+    agent_tools: bool, depth: int
+) -> None:
+    # A root whose client offered no agent tools resumes without them, and a
+    # child's children are one level deeper; at the limit it cannot spawn.
+    llm = ScriptedLLM([Delta(content="done")])
+    original = _chat_agent(
+        llm, create_subagent=(lambda: _chat_agent(llm)) if agent_tools else None
+    )
+    state = original.capture_state().model_dump(mode="json")
+    child_depths: list[int] = []
+
+    def subagent_factory(child_depth: int) -> Callable[[], Agent]:
+        child_depths.append(child_depth)
+        return lambda: _chat_agent(llm)
+
+    rebuilt = restore_chat_agent(
+        _suspended(original, state),
+        depth,
+        llm=llm,
+        tools=[EchoTool()],
+        user_identity=None,
+        subagent_factory=subagent_factory,
+    )
+    names = {tool.name for tool in rebuilt.tools}
+    assert ("list_agents" in names) == agent_tools
+    assert ("spawn_agent" in names) == (agent_tools and depth < MAX_CHILD_DEPTH)
+    assert child_depths == ([depth + 1] if agent_tools else [])

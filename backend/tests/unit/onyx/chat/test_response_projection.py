@@ -230,7 +230,9 @@ def test_full_response_content_survives_delivery_gaps(
         )
     )
     packets: list[AnswerStreamPart] = [
-        MessageResponseIDInfo(user_message_id=41, reserved_assistant_message_id=42)
+        MessageResponseIDInfo(
+            mentions=[], user_message_id=41, reserved_assistant_message_id=42
+        )
     ]
     if delivery == "gap":
         output.report_gap()
@@ -355,7 +357,9 @@ def test_full_response_reads_canonical_tool_output() -> None:
         iter(
             [
                 MessageResponseIDInfo(
-                    user_message_id=41, reserved_assistant_message_id=42
+                    mentions=[],
+                    user_message_id=41,
+                    reserved_assistant_message_id=42,
                 )
             ]
         ),

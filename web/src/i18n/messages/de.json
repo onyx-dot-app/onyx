@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "Skill-Auswahl"
         },
-        "empty": {
-          "text": "Keine passenden Skills"
-        },
         "mcpServersGroup": {
           "label": "MCP-Server"
         },
@@ -12597,6 +12594,19 @@
         "expandButton": {
           "label": "In die Eingabeleiste erweitern",
           "tooltip": "Diese Kachel durch ihren vollständigen Text ersetzen"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "{name} entfernen"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Eingefügter Text: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Eingefügten Text entfernen"
+          }
         }
       },
       "plusMenuButton": {
@@ -13228,6 +13238,9 @@
             "status": "Durchsucht das Web"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} möchte {tool} ausführen"
       },
       "toolbar": {
         "dislikeButton": {
@@ -15856,9 +15869,6 @@
       "saveError": "Genehmigungseinstellungen konnten nicht gespeichert werden.",
       "emptyActions": "Keine bekannten Aktionen. Unbekannte Aktionen erfordern eine Genehmigung.",
       "emptyApps": "Keine Apps verfügbar.",
-      "expired": "Die Genehmigungsfrist ist abgelaufen. Die Aktion wurde nicht ausgeführt.",
-      "rejected": "Anfrage abgelehnt. Diese Anfrage wurde nicht ausgeführt.",
-      "deadline": "Bis {time} genehmigen",
       "agentPermissionRequired": "Dieser Lauf wurde gestoppt, weil eine Aktion eine Genehmigung benötigte. Prüfen Sie die Berechtigungen und starten Sie erneut.",
       "enableForTask": "Für diese Aufgabe aktivieren",
       "enableAppForTask": "{app} für diese Aufgabe aktivieren",

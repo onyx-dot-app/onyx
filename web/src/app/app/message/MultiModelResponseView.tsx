@@ -604,7 +604,6 @@ export default function MultiModelResponseView({
       agentMessageProps: {
         rawPackets: response.packets,
         packetCount: response.packetCount,
-        streamLost: response.streamLost,
         chatState,
         nodeId: response.nodeId,
         messageId: response.messageId,

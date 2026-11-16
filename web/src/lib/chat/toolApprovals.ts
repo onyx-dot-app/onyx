@@ -6,9 +6,11 @@ import {
   ToolApprovalResolved,
 } from "@/app/app/services/streamingModels";
 import {
-  getLatestTurn,
+  getLatestMessageChain,
   type MessageTreeState,
 } from "@/app/app/services/messageTree";
+import { getMultiModelChildren } from "@/app/app/message/multiModel";
+import type { Message } from "@/app/app/types";
 import type { ApprovalStatus } from "@/lib/approvals/types";
 import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
@@ -31,27 +33,48 @@ const OUTCOMES: ReadonlySet<string> = new Set<ToolApprovalResolved["outcome"]>([
   "approved",
   "approved_for_chat",
   "rejected",
-  "expired",
   "disabled",
   "cancelled",
 ]);
 
-/**
- * The requests in one response's packets, and whether the response stopped.
- * A resolution without a known outcome counts as no resolution. The stop that
- * closes a lost stream is this client's own, so it does not count: the server
- * can still wait for a decision.
- */
-export function readToolApprovals(
-  packets: Packet[],
-  streamLost = false
-): {
+export interface ToolApprovalRead {
   entries: ToolApprovalEntry[];
-  stopped: boolean;
-} {
+}
+
+// Streams append to a response's packet array and a replay replaces it, so a
+// read stays valid for the same array until it grows.
+const approvalReads = new WeakMap<
+  Packet[],
+  { count: number; read: ToolApprovalRead }
+>();
+
+/**
+ * The requests in one response's packets and their outcomes. A resolution
+ * without a known outcome counts as no resolution. A stop changes nothing:
+ * the server resolves every request that it ends, also as "cancelled".
+ * Packets that cannot change the result keep the same read object.
+ */
+export function readToolApprovals(packets: Packet[]): ToolApprovalRead {
+  const cached = approvalReads.get(packets);
+  if (cached && cached.count <= packets.length) {
+    let changed = false;
+    for (
+      let index = cached.count;
+      index < packets.length && !changed;
+      index++
+    ) {
+      const type = packets[index]?.obj.type;
+      changed =
+        type === PacketType.TOOL_APPROVAL_REQUEST ||
+        type === PacketType.TOOL_APPROVAL_RESOLVED;
+    }
+    if (!changed) {
+      cached.count = packets.length;
+      return cached.read;
+    }
+  }
   const entries = new Map<string, ToolApprovalEntry>();
   const outcomes = new Map<string, ToolApprovalResolved["outcome"]>();
-  let stopped = false;
   for (const packet of packets) {
     if (packet.obj.type === PacketType.TOOL_APPROVAL_REQUEST) {
       entries.set(packet.obj.approval_id, {
@@ -64,32 +87,34 @@ export function readToolApprovals(
       OUTCOMES.has(packet.obj.outcome)
     ) {
       outcomes.set(packet.obj.approval_id, packet.obj.outcome);
-    } else if (packet.obj.type === PacketType.STOP && !streamLost) {
-      stopped = true;
     }
   }
-  return {
+  const read: ToolApprovalRead = {
     entries: Array.from(entries.values(), (entry) => ({
       ...entry,
       outcome: outcomes.get(entry.request.approval_id) ?? null,
     })),
-    stopped,
   };
+  approvalReads.set(packets, { count: packets.length, read });
+  return read;
+}
+
+/** Whether the server still waits for a decision on the request. */
+export function awaitsDecision(entry: ToolApprovalEntry): boolean {
+  return entry.outcome === null;
 }
 
 /**
  * The resolution packet decides the status. Before it arrives, a decision this
- * client made decides it; a stopped response closes the request. The deadline
- * never does: the server resolves an expired request.
+ * client made decides it.
  */
 export function toolApprovalStatus(
   entry: ToolApprovalEntry,
-  localStatus: ApprovalStatus | undefined,
-  stopped: boolean
+  localStatus: ApprovalStatus | undefined
 ): ApprovalStatus {
   switch (entry.outcome) {
     case null:
-      return localStatus ?? (stopped ? "closed" : "pending");
+      return localStatus ?? "pending";
     case "approved_for_chat":
       return "approvedForSession";
     case "cancelled":
@@ -99,7 +124,52 @@ export function toolApprovalStatus(
   }
 }
 
-export type SectionEntry =
+/** A request that waits for a decision, and the response that holds it. */
+interface WaitingToolApproval {
+  turnIndex: number;
+  request: ToolApprovalRequest;
+  response: Message;
+  /** The response is one answer of a multi-model turn. */
+  multiModel: boolean;
+}
+
+/**
+ * Every request on the selected branch that the server has not resolved, the
+ * reply's own and its background subagents', oldest response first and in
+ * packet order within a response.
+ */
+export function readWaitingToolApprovals(
+  tree: MessageTreeState
+): WaitingToolApproval[] {
+  const waiting: WaitingToolApproval[] = [];
+  function collect(response: Message, multiModel: boolean) {
+    for (const entry of readToolApprovals(response.packets).entries) {
+      if (awaitsDecision(entry))
+        waiting.push({
+          turnIndex: entry.turnIndex,
+          request: entry.request,
+          response,
+          multiModel,
+        });
+    }
+  }
+  let multiModelQuestion: number | null = null;
+  for (const message of getLatestMessageChain(tree)) {
+    if (message.type === "user") {
+      const answers = getMultiModelChildren(message, tree);
+      multiModelQuestion = answers ? message.nodeId : null;
+      for (const answer of answers ?? []) collect(answer, true);
+    } else if (
+      (message.type === "assistant" || message.type === "error") &&
+      message.parentNodeId !== multiModelQuestion
+    ) {
+      collect(message, false);
+    }
+  }
+  return waiting;
+}
+
+type SectionEntry =
   | { kind: "display"; turnIndex: number; group: GroupedPacket }
   | { kind: "approval"; turnIndex: number; approval: ToolApproval };
 
@@ -181,27 +251,3 @@ export const useToolApprovalUi = create<ToolApprovalUiState>()((set, get) => ({
   clearNudge: (seq) =>
     set((state) => (state.nudge?.seq === seq ? { nudge: null } : {})),
 }));
-
-/** The first request of the latest turn that still waits for this user. */
-export function findPendingToolApprovalId(
-  tree: MessageTreeState | undefined
-): string | null {
-  if (!tree) return null;
-  const { localStatuses } = useToolApprovalUi.getState();
-  for (const response of getLatestTurn(tree)) {
-    const { entries, stopped } = readToolApprovals(
-      response.packets,
-      response.streamLost
-    );
-    const pending = entries.find(
-      (entry) =>
-        toolApprovalStatus(
-          entry,
-          localStatuses.get(entry.request.approval_id),
-          stopped
-        ) === "pending"
-    );
-    if (pending) return pending.request.approval_id;
-  }
-  return null;
-}

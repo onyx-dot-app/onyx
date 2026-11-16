@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -105,7 +106,7 @@ func TestDecideApprovalSendsDecision(t *testing.T) {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		gotDecision = body.Decision
-		_, _ = w.Write([]byte(`{"approval_id":"a1","decision":"APPROVED","decided_via":"SESSION_GRANT"}`))
+		_, _ = w.Write([]byte(`{"approval_id":"a1","decision":"APPROVED","decided_via":"SESSION_GRANT","continuation":{"stream_id":9,"response_ids":[4]}}`))
 	}))
 	defer srv.Close()
 
@@ -116,7 +117,13 @@ func TestDecideApprovalSendsDecision(t *testing.T) {
 	if gotPath != "/api/chat/approvals/a1/decision" || gotDecision != "approve_session" {
 		t.Fatalf("request = %s %q", gotPath, gotDecision)
 	}
-	if want := (models.ApprovalDecisionResult{ApprovalID: "a1", Decision: "APPROVED", DecidedVia: "SESSION_GRANT"}); result != want {
+	want := models.ApprovalDecisionResult{
+		ApprovalID:   "a1",
+		Decision:     "APPROVED",
+		DecidedVia:   "SESSION_GRANT",
+		Continuation: &models.ChatStream{StreamID: 9, ResponseIDs: []int{4}},
+	}
+	if !reflect.DeepEqual(result, want) {
 		t.Fatalf("result = %+v, want %+v", result, want)
 	}
 }

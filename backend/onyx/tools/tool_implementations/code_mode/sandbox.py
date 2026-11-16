@@ -14,7 +14,7 @@ from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import ExitStack, contextmanager, nullcontext
 from functools import partial
 from pathlib import Path
-from typing import NamedTuple, NoReturn
+from typing import Literal, NamedTuple, NoReturn
 
 import psutil
 from pydantic_monty import (
@@ -45,8 +45,10 @@ from onyx.server.metrics import code_mode as metrics
 from onyx.tools.tool_implementations.code_mode.models import (
     MAX_CPU_SECONDS,
     ExternalCall,
+    ParkedProgram,
     PendingCall,
     ProgramCompleted,
+    ProgramState,
     ProgramStopped,
     ProgramSuspended,
     ProgramWaiting,
@@ -59,7 +61,6 @@ from onyx.tools.tool_implementations.code_mode.store import json_value
 from onyx.tools.tool_implementations.utils import truncate_output, truncation_marker
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import call_later, start_thread_future
-from onyx.utils.timing import PausableClock
 
 logger = setup_logger()
 
@@ -115,6 +116,14 @@ DUMP_MEMORY_MESSAGE = (
     "tool calls. This program's writes are discarded. Earlier tool calls may have "
     "completed; check before you retry. Keep less data in memory, for example by "
     "storing results with store() and keeping only what you need."
+)
+# A program that waits for the user's approval when its dump runs out of
+# memory. Its worker is lost, so it cannot continue without its waiting calls.
+PARK_MEMORY_MESSAGE = (
+    "The sandbox ran out of memory while pausing this program for the user's "
+    "approval, so the program stopped and its calls that needed approval did "
+    "not run. This program's writes are discarded. Make those calls from a "
+    "program that keeps less data, or outside a program."
 )
 # Tool calls of one program that run at the same time, each on its own thread.
 # Later calls wait in order for a free slot.
@@ -213,9 +222,18 @@ _DIAGNOSTIC = re.compile(r"^\S+:\d+:\d+: error\[(?P<code>[\w-]+)\] (?P<message>.
 _FUNCTION_IN_MESSAGE = re.compile(r"function `(?P<name>[\w.]+)`")
 
 
-# Runs on a worker thread. The return value goes to the program; an Exception is
-# raised inside the program.
+class AwaitsInput:
+    """What an ExternalCallHandler returns for a call that waits for the
+    user's input: the call keeps the program waiting without a thread."""
+
+
+AWAITS_INPUT = AwaitsInput()
+# Runs on a worker thread. The return value goes to the program, except
+# AWAITS_INPUT; an Exception is raised inside the program.
 ExternalCallHandler = Callable[[ExternalCall], object]
+# How a wait of the program ends: one of its calls ended, it gives up its
+# worker, or every call it waits for waits for input.
+_Waited = Literal["ended", "yield", "park"]
 
 
 class StdoutCollector:
@@ -670,10 +688,12 @@ class _WorkerDemand:
 
 class _SuspendedBytes:
     """The budget of dumped programs held in the server process
-    (MAX_SUSPENDED_BYTES)."""
+    (MAX_SUSPENDED_BYTES): suspended ones and parked ones."""
 
     def __init__(self, limit: int) -> None:
-        self._lock = threading.Lock()
+        # Reentrant: a garbage collection inside `reserve` can release a
+        # parked program's bytes (`CodeCell._park`).
+        self._lock = threading.RLock()
         self._free = limit
 
     @property
@@ -696,7 +716,7 @@ class _SuspendedBytes:
 
 
 _worker_demand = _WorkerDemand(MAX_SANDBOX_PROCESSES)
-_suspended_bytes = _SuspendedBytes(MAX_SUSPENDED_BYTES)
+suspended_bytes = _SuspendedBytes(MAX_SUSPENDED_BYTES)
 
 
 def _call_host(
@@ -729,8 +749,7 @@ class _Run:
         cancellation: CancellationSignal,
         on_print: Callable[[str], None],
         on_yield: Callable[[], None],
-        on_blocked: Callable[[bool, Callable[[], None]], bool],
-        clock: PausableClock,
+        elapsed_seconds: float = 0.0,
     ) -> None:
         self.limits = limits
         self.function_names = frozenset(function_names)
@@ -765,15 +784,11 @@ class _Run:
             on_print(text)
 
         self.print_callback = print_callback
-        self.on_blocked = on_blocked
-        # The program waits for tool calls only, as last reported to `on_blocked`.
-        self.blocked = False
         # The clock starts when the first worker is checked out, so time spent
-        # queueing for a worker does not count.
+        # queueing for a worker does not count. A resumed program counts the
+        # time it ran before it parked.
         self.started: float | None = None
-        # The end of the lifetime on `clock`, which stands still while the
-        # caller pauses it, for example while a call waits for the user.
-        self.clock = clock
+        self.elapsed_before = elapsed_seconds
         self.deadline = math.inf
         # When the program ended; its calls that still run hold their threads.
         self.ended: float | None = None
@@ -792,13 +807,13 @@ class _Run:
 
     def start_clock(self) -> None:
         if self.started is None:
-            self.started = time.monotonic()
-            self.deadline = self.clock.now() + self.limits.lifetime_seconds
+            self.started = time.monotonic() - self.elapsed_before
+            self.deadline = self.started + self.limits.lifetime_seconds
 
     def abort_reason(self) -> "_Aborted | None":
         if self.cancellation.cancelled:
             return _Aborted("cancelled", "The execution was cancelled.")
-        if self.clock.now() >= self.deadline:
+        if time.monotonic() >= self.deadline:
             return _Aborted(
                 "timed_out",
                 f"TimeoutError: the program did not finish within "
@@ -914,7 +929,7 @@ class _Run:
                 return
             try:
                 pending.future = start_thread_future(
-                    partial(self._call_thread, pending.external),
+                    partial(self._call_thread, pending),
                     name=f"code-mode-{pending.external.function_name}",
                 )
             except BaseException:
@@ -923,9 +938,13 @@ class _Run:
             pending.future.add_done_callback(lambda _future: self.wake.set())
             running += 1
 
-    def _call_thread(self, external: ExternalCall) -> object:
+    def _call_thread(self, pending: PendingCall) -> object:
+        external = pending.external
         try:
-            return self.handler(external)
+            result = self.handler(external)
+            # Before the future completes, so the driver sees it with the end.
+            pending.awaits_input = result is AWAITS_INPUT
+            return result
         finally:
             _tool_call_threads.release(self.wake.set)
             ended = self.ended
@@ -953,7 +972,58 @@ class _Run:
         if call_id in self.host_results:
             return True
         pending = self.calls.get(call_id)
-        return pending is None or (pending.future is not None and pending.future.done())
+        return pending is None or (
+            pending.future is not None
+            and pending.future.done()
+            and not pending.awaits_input
+        )
+
+    def parkable(self, pending: list[int]) -> bool:
+        """Whether the program waits only for calls that wait for input: each
+        unfinished call or sleep that it awaits is one, and no other call or
+        sleep of it still runs."""
+        now = time.monotonic()
+        return (
+            bool(pending)
+            and all(
+                call_id in self.calls and self.calls[call_id].awaits_input
+                for call_id in pending
+            )
+            and all(
+                call.future is not None and call.future.done()
+                for call in self.calls.values()
+            )
+            and all(end <= now for end in self.sleeps.values())
+        )
+
+    def requeue_waiting(self) -> None:
+        """Queue the calls that wait for input to run again through the handler,
+        which now answers them."""
+        for pending in self.calls.values():
+            if pending.awaits_input:
+                pending.future = None
+                pending.awaits_input = False
+        self.start_queued()
+
+    def parked(self, snapshot: bytes) -> ParkedProgram | None:
+        """The parked form of a parkable program; None when it holds a result
+        that it has not received, such as of a call that it never awaited."""
+        waiting = {
+            call_id: pending.external
+            for call_id, pending in self.calls.items()
+            if pending.awaits_input
+        }
+        if self.host_results or self.sleeps or len(waiting) < len(self.calls):
+            return None
+        return ParkedProgram(
+            state=ProgramState(
+                waiting=waiting,
+                tool_calls=self.tool_calls,
+                elapsed_seconds=self.elapsed,
+                type_check_notes=self.type_check_notes,
+            ),
+            snapshot=snapshot,
+        )
 
     def wait_for_any(
         self,
@@ -961,13 +1031,14 @@ class _Run:
         *,
         yield_worker: bool = False,
         batch_seconds: float = 0.0,
-    ) -> bool:
-        """Wait until one of the calls or sleeps ends; True once one has.
+        park: bool = False,
+    ) -> _Waited:
+        """Wait until one of the calls or sleeps ends.
 
         With `yield_worker`, the program keeps its worker while it waits and
-        returns False as soon as another program waits for a worker. With
+        stops waiting as soon as another program waits for a worker. With
         `batch_seconds`, it then waits that long for the others, unless all of
-        them end first.
+        them end first. With `park`, it stops waiting once it is `parkable`.
         """
         batch_end = math.inf
         with _worker_demand.holding(self.wake.set) if yield_worker else nullcontext():
@@ -978,37 +1049,20 @@ class _Run:
                 self.start_queued()
                 pending = [i for i in call_ids if not self._finished(i)]
                 now = time.monotonic()
-                ended = False
                 if len(pending) < len(call_ids):
                     batch_end = min(batch_end, now + batch_seconds)
-                    ended = not pending or now >= batch_end
-                if ended:
-                    # A program that waited for tool calls only continues once
-                    # the caller lets it; until then it waits here, where it
-                    # can give up its worker.
-                    if not self.blocked or self.on_blocked(False, self.wake.set):
-                        self.blocked = False
-                        return True
-                elif (
-                    pending
-                    and not self.blocked
-                    and all(i in self.calls for i in pending)
-                ):
-                    # Tool calls alone can wake the program, not a sleep's end.
-                    self.blocked = True
-                    self.on_blocked(True, self.wake.set)
+                    if not pending or now >= batch_end:
+                        return "ended"
+                elif park and self.parkable(pending):
+                    return "park"
                 if yield_worker and _worker_demand.gives_up(self.wake.set):
-                    return False
+                    return "yield"
                 # A sleep's end sets no event.
                 wakeup = min(
                     (self.sleeps[i] for i in pending if i in self.sleeps),
                     default=math.inf,
                 )
-                timeout = min(
-                    wakeup - now,
-                    math.inf if ended else batch_end - now,
-                    self.deadline - self.clock.now(),
-                )
+                timeout = min(wakeup, batch_end, self.deadline) - now
                 self.wake.wait(None if math.isinf(timeout) else max(0.0, timeout))
 
     def settled(self, call_ids: list[int]) -> dict[int, ExternalSettledResult]:
@@ -1055,7 +1109,8 @@ class _Run:
         return tuple(
             pending.external
             for pending in self.calls.values()
-            if pending.future is not None and not pending.future.done()
+            if pending.future is not None
+            and (not pending.future.done() or pending.awaits_input)
         )
 
     def unstarted_calls(self) -> tuple[ExternalCall, ...]:
@@ -1085,12 +1140,11 @@ def _watched(run: _Run, pid: int | None) -> Iterator[None]:
 
     The driver checks the run only between snapshots, so a busy loop would
     otherwise ignore Stop and the wall clock until the compute limit. A timer runs
-    only when the deadline can fall within the segment's compute limit, and
-    rechecks the run's clock when it fires. The pool replaces a killed worker.
+    only when the deadline can fall within the segment's compute limit. The pool
+    replaces a killed worker.
     """
     lock = threading.Lock()
     computing = pid
-    cancel_timer: Callable[[], None] | None = None
 
     def kill() -> None:
         nonlocal computing
@@ -1100,30 +1154,21 @@ def _watched(run: _Run, pid: int | None) -> Iterator[None]:
                 metrics.count_worker_lost("killed")
                 computing = None
 
-    def kill_at_deadline() -> None:
-        nonlocal cancel_timer
-        # The clock stands still while the run's calls wait.
-        remaining = run.deadline - run.clock.now()
-        if remaining <= 0:
-            kill()
-            return
-        with lock:
-            if computing is not None:
-                cancel_timer = call_later(remaining, kill_at_deadline)
-
-    remaining = run.deadline - run.clock.now()
-    if remaining < run.limits.max_cpu_seconds:
-        cancel_timer = call_later(max(0.0, remaining), kill_at_deadline)
+    remaining = run.deadline - time.monotonic()
+    cancel_timer = (
+        call_later(max(0.0, remaining), kill)
+        if remaining < run.limits.max_cpu_seconds
+        else None
+    )
     try:
         with run.cancellation.on_cancel(kill):
             yield
     finally:
-        # Under the lock, so the worker is never killed after it is returned,
-        # and no timer starts after this one is cancelled.
+        if cancel_timer is not None:
+            cancel_timer()
+        # Under the lock, so the worker is never killed after it is returned.
         with lock:
             computing = None
-            if cancel_timer is not None:
-                cancel_timer()
 
 
 def _start(
@@ -1160,7 +1205,7 @@ def _load(
             suspended.snapshot, print_callback=run.print_callback
         )
     finally:
-        _suspended_bytes.release(len(suspended.snapshot))
+        suspended_bytes.release(len(suspended.snapshot))
 
 
 def _segment(
@@ -1219,38 +1264,85 @@ def _checked_out(session: MontySession) -> _Worker:
     return _Worker(session.worker_pid, _worker_memory_bytes(session.worker_pid))
 
 
+def _dump(
+    run: _Run, waiting: ProgramWaiting, worker: _Worker, out_of_memory: str
+) -> bytes | None:
+    """Dump a waiting program; None when its worker grew too much since
+    checkout to dump (MAX_DUMP_MEMORY_SHARE), or its memory cannot be read.
+    Raises `_Aborted` with `out_of_memory` when the dump still runs out of
+    memory: the worker is gone, so the program cannot continue."""
+    growth = worker.memory_growth()
+    if growth is None or growth > run.limits.max_memory_bytes * MAX_DUMP_MEMORY_SHARE:
+        return None
+    try:
+        return waiting.state.dump()
+    except MontyRuntimeError as error:
+        if not isinstance(error.exception(), MemoryError):
+            raise
+        logger.warning("Code mode sandbox worker ran out of memory in a dump")
+        metrics.count_worker_lost("out_of_memory")
+        raise _Aborted("failed", out_of_memory) from error
+
+
 def _suspend(
     run: _Run, waiting: ProgramWaiting, worker: _Worker
 ) -> ProgramSuspended | None:
     """Dump a waiting program; None when it keeps its worker instead.
 
     It keeps its worker when its dump does not fit MAX_SUSPENDED_BYTES, or when
-    the worker grew too much since checkout to dump (MAX_DUMP_MEMORY_SHARE), or
-    its memory cannot be read. The program's last dump size estimates the next,
-    so a dump that cannot fit is skipped. Raises `_Aborted` when the dump still
-    runs out of memory: the worker is gone, so the program cannot continue.
+    `_dump` cannot dump it. The program's last dump size estimates the next, so
+    a dump that cannot fit is skipped.
     """
-    if run.last_dump_bytes > _suspended_bytes.free:
+    if run.last_dump_bytes > suspended_bytes.free:
         metrics.count_suspension("over_budget")
         return None
-    growth = worker.memory_growth()
-    if growth is None or growth > run.limits.max_memory_bytes * MAX_DUMP_MEMORY_SHARE:
+    snapshot = _dump(run, waiting, worker, DUMP_MEMORY_MESSAGE)
+    if snapshot is None:
         metrics.count_suspension("over_memory")
         return None
-    try:
-        snapshot = waiting.state.dump()
-    except MontyRuntimeError as error:
-        if not isinstance(error.exception(), MemoryError):
-            raise
-        logger.warning("Code mode sandbox worker ran out of memory in a dump")
-        metrics.count_worker_lost("out_of_memory")
-        raise _Aborted("failed", DUMP_MEMORY_MESSAGE) from error
     run.last_dump_bytes = len(snapshot)
-    if not _suspended_bytes.reserve(len(snapshot)):
+    if not suspended_bytes.reserve(len(snapshot)):
         metrics.count_suspension("over_budget")
         return None
     metrics.count_suspension("dumped")
     return ProgramSuspended(snapshot=snapshot, call_ids=waiting.call_ids)
+
+
+def _offered(
+    run: _Run,
+    snapshot: bytes | None,
+    park: Callable[[ParkedProgram | None], bool],
+    *,
+    reserved: bool,
+) -> ParkedProgram | None:
+    """Offer a parkable program to `park`; None when it does not park. Then its
+    calls that wait for input run again, and the handler answers them.
+
+    The dump counts against MAX_SUSPENDED_BYTES: its existing reservation when
+    `reserved`, else a new one, and a dump that does not fit is not offered.
+    A parked program's reservation passes to `park`, which releases it."""
+    parked = run.parked(snapshot) if snapshot is not None else None
+    if (
+        parked is not None
+        and not reserved
+        and not suspended_bytes.reserve(len(parked.snapshot))
+    ):
+        metrics.count_suspension("over_budget")
+        parked = None
+    try:
+        accepted = park(parked)
+    except BaseException:
+        if parked is not None and not reserved:
+            suspended_bytes.release(len(parked.snapshot))
+        raise
+    if accepted and parked is not None:
+        metrics.count_suspension("parked")
+        return parked
+    if parked is not None and not reserved:
+        suspended_bytes.release(len(parked.snapshot))
+    metrics.count_suspension("park_refused")
+    run.requeue_waiting()
+    return None
 
 
 def _functions_module(run: _Run, stubs: str) -> ExternalModule:
@@ -1335,23 +1427,18 @@ def execute_program(
     limits: SandboxLimits,
     on_print: Callable[[str], None],
     on_yield: Callable[[], None],
-    on_blocked: Callable[[bool, Callable[[], None]], bool],
-    clock: PausableClock,
+    park: Callable[[ParkedProgram | None], bool] | None = None,
+    parked: ParkedProgram | None = None,
     pool: Callable[[], Monty] = sandbox_pool,
-) -> SandboxResult:
-    """Run one program in a fresh interpreter. Raises the handler's BaseException.
+) -> SandboxResult | ParkedProgram:
+    """Run one program in a fresh interpreter, or continue `parked` on a new
+    worker. Raises the handler's BaseException.
 
     `stubs` types the program's functions and includes PRELUDE_STUBS.
     `cancellation` stops the program at once, also while it computes or waits.
     `on_print` receives the printed text and `on_yield` each yield_control() call,
-    both on the driver thread. `on_blocked(True, wake)`, also on the driver
-    thread, reports that the program starts to wait for unfinished tool calls
-    only. Before it continues, `on_blocked(False, wake)` returns whether it
-    may. When it may not, the caller calls `wake` once it may, and the program
-    keeps waiting and can give up its worker. The program's lifetime runs on
-    `clock`. Nothing carries
-    over from earlier programs; plain functions such as load() give a program
-    outside state.
+    both on the driver thread. Nothing carries over from earlier programs; plain
+    functions such as load() give a program outside state.
     The program waits at each await on unfinished tool calls or sleeps, and at
     each synchronous sleep. It keeps its worker while it waits, until another
     program waits for one; then it is dumped, its worker returned to the pool, and
@@ -1359,6 +1446,16 @@ def execute_program(
     RESUME_BATCH_SECONDS after the first of them ends. When the program
     ends, calls it never awaited are not waited for, and queued calls never start;
     the caller cancels the running ones.
+
+    A call for which the handler returns AWAITS_INPUT waits for the user's
+    input. Once the program waits only for such calls (`_Run.parkable`), it is
+    dumped and offered to `park`, on the driver thread. When `park` accepts
+    it, the worker is returned and the parked program is returned. When `park`
+    refuses it, or the dump is not possible (`park(None)`, which refuses),
+    those calls run again through the handler. Without `park`, such calls wait
+    until the program ends. A `parked` program runs its waiting calls again
+    through the handler, which now answers them, and its lifetime counts the
+    time it ran before it parked.
     """
     run = _Run(
         limits=limits,
@@ -1369,9 +1466,22 @@ def execute_program(
         cancellation=cancellation,
         on_print=on_print,
         on_yield=on_yield,
-        on_blocked=on_blocked,
-        clock=clock,
+        elapsed_seconds=parked.state.elapsed_seconds if parked is not None else 0.0,
     )
+    if parked is not None:
+        run.tool_calls = parked.state.tool_calls
+        run.type_check_notes = parked.state.type_check_notes
+        run.calls = {
+            call_id: PendingCall(external=external)
+            for call_id, external in parked.state.waiting.items()
+        }
+        # The answered calls start while the program waits for a worker.
+        run.start_queued()
+
+    def begin(session: MontySession) -> SyncSnapshot | ProgramStopped:
+        if parked is None:
+            return _start(session, code, run)
+        return session.load_snapshot(parked.snapshot, print_callback=run.print_callback)
 
     def bounded(text: str | None, label: str) -> str | None:
         if text is None:
@@ -1400,46 +1510,17 @@ def execute_program(
             unstarted_calls=run.unstarted_calls() if status == "completed" else (),
         )
 
-    resource_limits = _resource_limits(limits)
-    functions = partial(_functions_module, run, stubs)
-    # A dumped program that waits for its calls without a worker.
-    suspended: ProgramSuspended | None = None
     try:
-        with cancellation.on_cancel(run.wake.set):
-            while True:
-                with _checkout(
-                    pool(),
-                    run,
-                    resumed=suspended is not None,
-                    stubs=stubs,
-                    limits=resource_limits,
-                    functions=functions,
-                ) as session:
-                    run.start_clock()
-                    worker = _checked_out(session)
-                    loading, suspended = suspended, None
-                    step = _segment(
-                        session,
-                        run,
-                        partial(_start, session, code, run)
-                        if loading is None
-                        else partial(_load, session, run, loading),
-                    )
-                    while isinstance(step, ProgramWaiting):
-                        if not run.wait_for_any(step.call_ids, yield_worker=True):
-                            suspended = _suspend(run, step, worker)
-                            if suspended is not None:
-                                break
-                            _worker_demand.kept(run.wake.set)
-                            run.wait_for_any(step.call_ids)
-                        step = _segment(session, run, partial(_resumed, step))
-                if not isinstance(step, ProgramWaiting):
-                    ended = step
-                    break
-                if suspended is not None:
-                    run.wait_for_any(
-                        suspended.call_ids, batch_seconds=RESUME_BATCH_SECONDS
-                    )
+        ended = _drive(
+            run,
+            begin=begin,
+            resumed=parked is not None,
+            stubs=stubs,
+            park=park,
+            pool=pool,
+        )
+        if isinstance(ended, ParkedProgram):
+            return ended
         if isinstance(ended, ProgramStopped):
             return finish(ended.status, error=ended.error, raised=ended.raised)
     except _Aborted as aborted:
@@ -1465,8 +1546,6 @@ def execute_program(
                 "Code mode program ended with tool calls still running: %s",
                 ", ".join(run.running_call_names()),
             )
-        if suspended is not None:
-            _suspended_bytes.release(len(suspended.snapshot))
     if ended.output is None:
         return finish("completed")
     try:
@@ -1476,3 +1555,82 @@ def execute_program(
     except (TypeError, ValueError) as error:
         return finish("completed", error=str(error))
     return finish("completed", result=repr(output))
+
+
+def _drive(
+    run: _Run,
+    *,
+    begin: Callable[[MontySession], SyncSnapshot | ProgramStopped],
+    resumed: bool,
+    stubs: str,
+    park: Callable[[ParkedProgram | None], bool] | None,
+    pool: Callable[[], Monty],
+) -> ProgramCompleted | ProgramStopped | ParkedProgram:
+    """Run the program from `begin` on workers until it ends or parks."""
+    resource_limits = _resource_limits(run.limits)
+    functions = partial(_functions_module, run, stubs)
+    parks = park is not None
+    # A dumped program that waits for its calls without a worker.
+    suspended: ProgramSuspended | None = None
+    try:
+        with run.cancellation.on_cancel(run.wake.set):
+            while True:
+                with _checkout(
+                    pool(),
+                    run,
+                    resumed=resumed or suspended is not None,
+                    stubs=stubs,
+                    limits=resource_limits,
+                    functions=functions,
+                ) as session:
+                    run.start_clock()
+                    worker = _checked_out(session)
+                    loading, suspended = suspended, None
+                    step = _segment(
+                        session,
+                        run,
+                        partial(begin, session)
+                        if loading is None
+                        else partial(_load, session, run, loading),
+                    )
+                    while isinstance(step, ProgramWaiting):
+                        waited = run.wait_for_any(
+                            step.call_ids, yield_worker=True, park=parks
+                        )
+                        if waited == "yield":
+                            suspended = _suspend(run, step, worker)
+                            if suspended is not None:
+                                break
+                            _worker_demand.kept(run.wake.set)
+                            waited = run.wait_for_any(step.call_ids, park=parks)
+                        if waited == "park" and park is not None:
+                            offered = _offered(
+                                run,
+                                _dump(run, step, worker, PARK_MEMORY_MESSAGE),
+                                park,
+                                reserved=False,
+                            )
+                            if offered is not None:
+                                return offered
+                            continue
+                        step = _segment(session, run, partial(_resumed, step))
+                if not isinstance(step, ProgramWaiting):
+                    return step
+                if suspended is not None:
+                    while (
+                        run.wait_for_any(
+                            suspended.call_ids,
+                            batch_seconds=RESUME_BATCH_SECONDS,
+                            park=parks,
+                        )
+                        == "park"
+                        and park is not None
+                    ):
+                        offered = _offered(run, suspended.snapshot, park, reserved=True)
+                        if offered is not None:
+                            # The parked program holds the reservation now.
+                            suspended = None
+                            return offered
+    finally:
+        if suspended is not None:
+            suspended_bytes.release(len(suspended.snapshot))

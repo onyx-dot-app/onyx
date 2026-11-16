@@ -5,6 +5,7 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   createChatSession,
   processRawChatHistory,
+  resumeStream,
   sendMessage,
   setPreferredResponse,
   ApprovalPendingError,
@@ -12,9 +13,14 @@ import {
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { toast } from "@opal/layouts";
 import {
-  findPendingToolApprovalId,
+  readWaitingToolApprovals,
   useToolApprovalUi,
 } from "@/lib/chat/toolApprovals";
+import {
+  claimStreamReader,
+  followChatStream,
+  refreshChatSession,
+} from "@/lib/chat/settleChatSession";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
 import {
@@ -71,17 +77,34 @@ jest.mock("@/providers/IncognitoProvider", () => ({
     incognitoSessionId: null,
   }),
 }));
-jest.mock("@/app/app/services/lib", () => ({
-  updateLlmOverrideForChatSession: jest.fn(),
-  processRawChatHistory: jest.fn(() => new Map()),
-  sendMessage: jest.fn(),
-  setPreferredResponse: jest.fn(),
-  createChatSession: jest.fn(),
-  buildChatUrl: () => "/app?chatId=session",
-  ChatSendRejectedError: class extends Error {},
-  ApprovalPendingError: class extends Error {},
+jest.mock("@/app/app/services/lib", () => {
+  class ChatSendRejectedError extends Error {}
+  return {
+    updateLlmOverrideForChatSession: jest.fn(),
+    processRawChatHistory: jest.fn(() => new Map()),
+    sendMessage: jest.fn(),
+    resumeStream: jest.fn(),
+    setPreferredResponse: jest.fn(),
+    createChatSession: jest.fn(),
+    buildChatUrl: () => "/app?chatId=session",
+    ChatSendRejectedError,
+    ApprovalPendingError: class extends ChatSendRejectedError {},
+  };
+});
+jest.mock("@/lib/chat/settleChatSession", () => ({
+  ...jest.requireActual("@/lib/chat/settleChatSession"),
+  refreshChatSession: jest.fn(async () => {}),
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
+  CHAT_STATUS_POLL_MS: 0,
+  readChatSessionStatus: jest.fn(async () => ({
+    is_processing: false,
+    current_stream: null,
+    has_startable_input: false,
+    approvals_version: "0",
+    has_active_subagents: false,
+    latest_response_id: null,
+  })),
   waitForChatResponseEnd: jest.fn(async () => null),
   fetchSettledChatSession: jest.fn(async () => ({
     messages: [],
@@ -183,7 +206,8 @@ test.each([
     let pendingSend: Promise<void> | undefined;
     act(() => {
       pendingSend = result.current.onSubmit({
-        message: "Do not send this after Stop",
+        message: "Do not send this after Stop @code-review",
+        mentions: [{ type: "skill", name: "code-review" }],
         currentMessageFiles: [],
         deepResearch: false,
       });
@@ -201,10 +225,11 @@ test.each([
     ).toBe("loading");
     if (stop) {
       await act(async () => result.current.stopGenerating());
-      expect(restoreInputBar).toHaveBeenCalledWith(
-        "Do not send this after Stop",
-        []
-      );
+      expect(restoreInputBar).toHaveBeenCalledWith({
+        message: "Do not send this after Stop @code-review",
+        mentions: [{ type: "skill", name: "code-review" }],
+        files: [],
+      });
     } else {
       useChatSessionStore
         .getState()
@@ -281,6 +306,7 @@ test("Stop drains multi-model packets and finishes every panel before releasing 
   act(() => {
     sending = result.current.onSubmit({
       message: "Compare answers",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
       selectedModels: ["First", "Second"].map((name) => ({
@@ -381,6 +407,7 @@ test.each([false, true])(
     await act(async () =>
       result.current.onSubmit({
         message: "Question",
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
         selectedModels: multiModel
@@ -417,10 +444,10 @@ test.each([false, true])(
   }
 );
 
-test("a lost stream keeps a waiting approval open until the server is idle", async () => {
+test("a lost stream keeps its waiting approval open after the server is idle", async () => {
   jest.spyOn(console, "log").mockImplementation(() => {});
   useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
-  const idle = Promise.withResolvers<number | null>();
+  const idle = Promise.withResolvers<null>();
   jest.mocked(waitForChatResponseEnd).mockReturnValueOnce(idle.promise);
   useChatSessionStore.setState({
     sessions: new Map(),
@@ -438,7 +465,7 @@ test("a lost stream keeps a waiting approval open until the server is idle", asy
         tool_name: "mcp__3__github__create_issue",
         display_name: "Create issue",
         arguments: {},
-        expires_at: "2099-01-01T00:00:00Z",
+        agent_name: null,
       },
     };
     throw new Error("network error");
@@ -458,11 +485,14 @@ test("a lost stream keeps a waiting approval open until the server is idle", asy
   );
   const tree = () =>
     useChatSessionStore.getState().sessions.get("session")!.messageTree;
+  const waitingIds = () =>
+    readWaitingToolApprovals(tree()).map(({ request }) => request.approval_id);
 
   let sending: Promise<void> | undefined;
   act(() => {
     sending = result.current.onSubmit({
       message: "Open an issue",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     });
@@ -470,13 +500,168 @@ test("a lost stream keeps a waiting approval open until the server is idle", asy
   await waitFor(() => expect(waitForChatResponseEnd).toHaveBeenCalled());
   const lost = [...tree().values()].find((message) => message.type === "error");
   expect(lost?.packets.at(-1)?.obj.type).toBe("stop");
-  expect(findPendingToolApprovalId(tree())).toBe("approval");
+  expect(waitingIds()).toEqual(["approval"]);
 
   await act(async () => {
     idle.resolve(null);
     await sending;
   });
-  expect(findPendingToolApprovalId(tree())).toBeNull();
+  // An idle server can still wait for the decision.
+  expect(waitingIds()).toEqual(["approval"]);
+});
+
+test("a continuation that names the send's own stream keeps the send as its only reader", async () => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  const answerEnds = Promise.withResolvers<void>();
+  jest.mocked(sendMessage).mockImplementation(async function* () {
+    yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+    yield {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "tool_approval_request",
+        approval_id: "approval",
+        tool_call_id: "call",
+        tool_name: "mcp__3__github__create_issue",
+        display_name: "Create issue",
+        arguments: {},
+        agent_name: null,
+      },
+    };
+    await answerEnds.promise;
+  });
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+  const tree = () =>
+    useChatSessionStore.getState().sessions.get("session")!.messageTree;
+  const waitingIds = () =>
+    readWaitingToolApprovals(tree()).map(({ request }) => request.approval_id);
+
+  let sending: Promise<void> | undefined;
+  act(() => {
+    sending = result.current.onSubmit({
+      message: "Open an issue",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() => expect(waitingIds()).toEqual(["approval"]));
+
+  act(() =>
+    followChatStream("session", { stream_id: 12, response_ids: [12] }, "Check")
+  );
+
+  expect(resumeStream).not.toHaveBeenCalled();
+  // The answer keeps the output its send reader received.
+  expect(waitingIds()).toEqual(["approval"]);
+  await act(async () => {
+    answerEnds.resolve();
+    await sending;
+  });
+});
+
+test("a send reader's later flush keeps an answer that its continuation took over", async () => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  const takenOver = Promise.withResolvers<void>();
+  const answerEnds = Promise.withResolvers<void>();
+  jest.mocked(sendMessage).mockImplementation(async function* () {
+    yield { user_message_id: 31, reserved_assistant_message_id: 32 };
+    yield {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: "message_delta", content: "Before" },
+    };
+    await takenOver.promise;
+    yield {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: "message_delta", content: " stale" },
+    };
+    await answerEnds.promise;
+  });
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+  const answer = () =>
+    [
+      ...useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .messageTree.values(),
+    ].find((message) => message.messageId === 32);
+
+  let sending: Promise<void> | undefined;
+  act(() => {
+    sending = result.current.onSubmit({
+      message: "Open an issue",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() => expect(answer()?.packets).toHaveLength(1));
+
+  // A continuation of the answer claims it and writes its rows.
+  const continuedPacket = {
+    placement: { turn_index: 2, tab_index: 0 },
+    obj: { type: "message_delta" as const, content: "Continued" },
+  };
+  const continued = { ...answer()!, packets: [continuedPacket] };
+  act(() => {
+    expect(claimStreamReader({ stream_id: 940, response_ids: [32] })).toBe(
+      true
+    );
+    const store = useChatSessionStore.getState();
+    store.updateSessionMessageTree(
+      "session",
+      new Map(store.sessions.get("session")!.messageTree).set(
+        continued.nodeId,
+        continued
+      )
+    );
+  });
+  await act(async () => {
+    takenOver.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+
+  expect(answer()?.packets).toEqual([continuedPacket]);
+  await act(async () => {
+    answerEnds.resolve();
+    await sending;
+  });
+  expect(answer()?.packets).toEqual([continuedPacket]);
 });
 
 test("a send refused for a waiting approval restores the draft and points at the card", async () => {
@@ -521,7 +706,7 @@ test("a send refused for a waiting approval restores the draft and points at the
               tool_name: "mcp__3__github__create_issue",
               display_name: "Create issue",
               arguments: {},
-              expires_at: "2099-01-01T00:00:00Z",
+              agent_name: null,
             },
           },
         ],
@@ -552,15 +737,67 @@ test("a send refused for a waiting approval restores the draft and points at the
   await act(async () =>
     result.current.onSubmit({
       message: "Another question",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     })
   );
 
-  expect(restoreInputBar).toHaveBeenCalledWith("Another question", []);
+  expect(restoreInputBar).toHaveBeenCalledWith({
+    message: "Another question",
+    mentions: [],
+    files: [],
+  });
   expect(toast.warning).toHaveBeenCalledWith("toast");
   expect(toast.error).not.toHaveBeenCalled();
   expect(useToolApprovalUi.getState().nudge?.approvalId).toBe("approval-1");
+  expect(refreshChatSession).not.toHaveBeenCalled();
+});
+
+test("a send refused for an approval this chat does not show settles with the saved session", async () => {
+  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  jest.mocked(sendMessage).mockImplementation(() => {
+    throw new ApprovalPendingError("A tool approval waits");
+  });
+  const restoreInputBar = jest.fn();
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar,
+    })
+  );
+
+  await act(async () =>
+    result.current.onSubmit({
+      message: "Another question",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    })
+  );
+
+  expect(restoreInputBar).toHaveBeenCalledWith({
+    message: "Another question",
+    mentions: [],
+    files: [],
+  });
+  expect(toast.warning).toHaveBeenCalledWith("toast");
+  expect(useToolApprovalUi.getState().nudge).toBeNull();
+  // Settlement loads the saved session, which replays the server's cards.
+  expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+  expect(refreshChatSession).not.toHaveBeenCalled();
 });
 
 test("abort releases a reader with packets queued before its first paint", async () => {
@@ -595,6 +832,7 @@ test("abort releases a reader with packets queued before its first paint", async
   act(() => {
     sending = result.current.onSubmit({
       message: "Question",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     });
@@ -678,6 +916,7 @@ test.each([false, true])(
     await act(async () =>
       result.current.onSubmit({
         message: "Question",
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -690,6 +929,7 @@ test.each([false, true])(
     await act(async () =>
       result.current.onSubmit({
         message: "Follow-up",
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -745,6 +985,7 @@ test("a send after a failed turn continues after the failed response", async () 
     await act(async () =>
       result.current.onSubmit({
         message,
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -782,6 +1023,69 @@ function renderChatController(restoreInputBar = jest.fn()) {
     })
   );
 }
+
+test("a sent question shows its picks until the server records its skills", async () => {
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  const saved = Promise.withResolvers<void>();
+  jest.mocked(sendMessage).mockImplementationOnce(async function* () {
+    await saved.promise;
+    // The user can no longer use `gone`, so the server ignored it.
+    yield {
+      user_message_id: 11,
+      reserved_assistant_message_id: 12,
+      mentions: [
+        { type: "skill", name: "code-review", version_id: "v-code-review" },
+      ],
+    };
+    yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+  });
+  const { result } = renderChatController();
+  const question = () => {
+    const tree = useChatSessionStore
+      .getState()
+      .sessions.get("session")?.messageTree;
+    return tree && getLatestMessageChain(tree)[0];
+  };
+
+  let sent: Promise<void> | undefined;
+  act(() => {
+    sent = result.current.onSubmit({
+      message: "@code-review and @gone",
+      mentions: [
+        { type: "skill", name: "code-review" },
+        { type: "skill", name: "gone" },
+      ],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() =>
+    expect(question()?.mentions).toEqual([
+      { type: "skill", name: "code-review" },
+      { type: "skill", name: "gone" },
+    ])
+  );
+  expect(sendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      mentions: [
+        { type: "skill", name: "code-review" },
+        { type: "skill", name: "gone" },
+      ],
+    })
+  );
+
+  await act(async () => {
+    saved.resolve();
+    await sent;
+  });
+  expect(question()?.mentions).toEqual([
+    { type: "skill", name: "code-review", version_id: "v-code-review" },
+  ]);
+});
 
 // A setup failure, such as a rejected query hook, ends the stream with no IDs.
 async function* rejectedSend() {
@@ -823,6 +1127,7 @@ test.each(["send", "regenerate"] as const)(
     await act(async () =>
       result.current.onSubmit({
         message: "Question",
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -834,12 +1139,14 @@ test.each(["send", "regenerate"] as const)(
       result.current.onSubmit(
         kind === "send"
           ? {
-              message: "Rejected question",
+              message: "Rejected @code-review question",
+              mentions: [{ type: "skill", name: "code-review" }],
               currentMessageFiles: [],
               deepResearch: false,
             }
           : {
               message: "Question",
+              mentions: [],
               currentMessageFiles: [],
               deepResearch: false,
               messageIdToResend: 11,
@@ -854,7 +1161,11 @@ test.each(["send", "regenerate"] as const)(
       isRetryable: false,
     });
     if (kind === "send") {
-      expect(restoreInputBar).toHaveBeenCalledWith("Rejected question", []);
+      expect(restoreInputBar).toHaveBeenCalledWith({
+        message: "Rejected @code-review question",
+        mentions: [{ type: "skill", name: "code-review" }],
+        files: [],
+      });
     } else {
       expect(restoreInputBar).not.toHaveBeenCalled();
     }
@@ -862,6 +1173,7 @@ test.each(["send", "regenerate"] as const)(
     await act(async () =>
       result.current.onSubmit({
         message: "Next",
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -949,6 +1261,7 @@ test("saved history keeps a failed turn and drops a rejected send", async () => 
     await act(async () =>
       result.current.onSubmit({
         message,
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -966,6 +1279,7 @@ test("saved history keeps a failed turn and drops a rejected send", async () => 
   await act(async () =>
     result.current.onSubmit({
       message: "try again",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     })
@@ -1020,6 +1334,7 @@ test("a failed preference write drops the send and the next send retries it", as
   await act(async () =>
     result.current.onSubmit({
       message: "Compare answers",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
       selectedModels: ["First", "Second"].map((name) => ({
@@ -1036,12 +1351,17 @@ test("a failed preference write drops the send and the next send retries it", as
   await act(async () =>
     result.current.onSubmit({
       message: "Follow-up",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     })
   );
   expect(sendMessage).toHaveBeenCalledTimes(1);
-  expect(restoreInputBar).toHaveBeenCalledWith("Follow-up", []);
+  expect(restoreInputBar).toHaveBeenCalledWith({
+    message: "Follow-up",
+    mentions: [],
+    files: [],
+  });
   expect(session().uncaughtError?.error).toBe("Not saved");
   expect(
     getLatestMessageChain(session().messageTree).map(
@@ -1055,6 +1375,7 @@ test("a failed preference write drops the send and the next send retries it", as
   await act(async () =>
     result.current.onSubmit({
       message: "Follow-up",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     })

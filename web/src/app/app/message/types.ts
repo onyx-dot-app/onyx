@@ -13,8 +13,6 @@ export interface MultiModelResponse {
 
   currentFeedback?: FeedbackType | null;
   isGenerating?: boolean;
-  /** This client lost the response's stream; the server may still run it. */
-  streamLost?: boolean;
 
   // Error state (when this model failed)
   errorMessage?: string | null;

@@ -116,7 +116,6 @@ def checkpoint() -> ExecutionCheckpoint:
             )
         ],
         progress=RunProgress(
-            tool_configuration_digest="test-tool-configuration",
             step_limit=3,
             action=RunAction.TOOLS,
             options=GenerationOptions(),
@@ -183,7 +182,6 @@ def test_resume_rejects_finalized_tools_without_current_step_results(
 
 def test_finalized_tool_ids_serialize_in_stable_order() -> None:
     progress = RunProgress(
-        tool_configuration_digest="test-tool-configuration",
         step_limit=1,
         finalized_tool_call_ids={"z", "a"},
     )
