@@ -43,6 +43,7 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/types";
 import { Text } from "@opal/components";
 import { AgentTimeline } from "@/lib/timeline/chat/AgentTimeline";
+import { AnswerText } from "@/lib/timeline/components/AnswerText";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
@@ -536,7 +537,7 @@ const AgentMessage = React.memo(function AgentMessage({
                     const textIndex = nextAnswerRef++;
                     const { group } = segment;
                     return (
-                      <div key={`text-${segment.key}`}>
+                      <AnswerText key={`text-${segment.key}`}>
                         <div
                           ref={(element) => {
                             answerRefs.current[textIndex] = element;
@@ -571,7 +572,7 @@ const AgentMessage = React.memo(function AgentMessage({
                             )}
                           </RendererComponent>
                         </div>
-                      </div>
+                      </AnswerText>
                     );
                   }
                   case "record":
@@ -655,20 +656,20 @@ const AgentMessage = React.memo(function AgentMessage({
             {isLastSection &&
               section.displayGroups.length === 0 &&
               stopReason === StopReason.USER_CANCELLED && (
-                <div>
+                <AnswerText>
                   <Text as="p" font="secondary-body" color="text-04">
                     {t("agentMessage.stoppedGeneration.text")}
                   </Text>
-                </div>
+                </AnswerText>
               )}
             {isLastSection &&
               stopPacketSeen &&
               stopReason === StopReason.TIMED_OUT && (
-                <div>
+                <AnswerText>
                   <Text as="p" font="secondary-body" color="text-04">
                     {t("agentMessage.timedOut.text")}
                   </Text>
-                </div>
+                </AnswerText>
               )}
           </React.Fragment>
         );

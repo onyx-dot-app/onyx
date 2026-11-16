@@ -1,9 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Text } from "@opal/components";
-import { cn } from "@opal/utils";
-import type { IconFunctionComponent } from "@opal/types";
+import { markdown } from "@opal/utils";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import BashBody from "@/lib/timeline/craft/components/tool-cards/BashBody";
 import DiffBody from "@/lib/timeline/craft/components/tool-cards/DiffBody";
@@ -24,34 +23,27 @@ function primaryText(toolCall: ToolCallState): string {
   return toolCall.description || toolCall.title;
 }
 
+/** Text that inline markdown shows as written. */
+function plain(text: string): string {
+  return text.replace(/[\\`*_~[\]<>#|]/g, "\\$&");
+}
+
+/** A code span that holds any text, backticks included. */
+function code(text: string): string {
+  const longestRun = Math.max(
+    0,
+    ...(text.match(/`+/g) ?? []).map((run) => run.length)
+  );
+  const fence = "`".repeat(longestRun + 1);
+  return `${fence} ${text} ${fence}`;
+}
+
 /**
  * A plain verb, a code-formatted chip (command, pattern, path, skill name…),
  * and an optional plain suffix ("Using <skill> skill").
  */
-function verbWithCode(verb: string, code: string, suffix?: string): ReactNode {
-  return (
-    <>
-      <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
-        {verb}
-      </Text>
-      {/* 12px mono (vs the 14px sans verb): DM Mono renders visually larger
-          than the sans face, so the smaller step matches their apparent size. */}
-      <span className="rounded-sm bg-background-tint-01 px-1">
-        <Text
-          font="secondary-mono"
-          color="text-04"
-          wordWrap="whitespace-nowrap"
-        >
-          {code}
-        </Text>
-      </span>
-      {suffix && (
-        <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
-          {suffix}
-        </Text>
-      )}
-    </>
-  );
+function verbWithCode(verb: string, chip: string, suffix?: string): RichStr {
+  return markdown(`${plain(verb)}${code(chip)}${suffix ? plain(suffix) : ""}`);
 }
 
 /**
@@ -59,14 +51,12 @@ function verbWithCode(verb: string, code: string, suffix?: string): ReactNode {
  * the actual command / pattern / file path in a code-formatted chip;
  * everything else is plain text.
  */
-export function renderToolCallHeader(toolCall: ToolCallState): ReactNode {
+export function renderToolCallHeader(
+  toolCall: ToolCallState
+): string | RichStr {
   if (toolCall.kind === "execute" && toolCall.command) {
     if (toolCall.skillName && toolCall.description) {
-      return (
-        <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
-          {toolCall.description}
-        </Text>
-      );
+      return toolCall.description;
     }
     return verbWithCode("Running ", toolCall.command);
   }
@@ -82,11 +72,7 @@ export function renderToolCallHeader(toolCall: ToolCallState): ReactNode {
   ) {
     return verbWithCode(`${toolCall.title} `, toolCall.description);
   }
-  return (
-    <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
-      {primaryText(toolCall)}
-    </Text>
-  );
+  return primaryText(toolCall);
 }
 
 export function renderToolCallBody(toolCall: ToolCallState): ReactNode {

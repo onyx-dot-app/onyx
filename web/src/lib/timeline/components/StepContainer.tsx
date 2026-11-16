@@ -1,7 +1,6 @@
 import React, { FunctionComponent } from "react";
 import { cn } from "@opal/utils";
-import { IconProps } from "@opal/types";
-import { TimelineRow } from "@/lib/timeline/components/primitives/TimelineRow";
+import type { IconProps, RichStr } from "@opal/types";
 import {
   TimelineSurface,
   TimelineSurfaceBackground,
@@ -13,8 +12,8 @@ export interface StepContainerProps {
   children?: React.ReactNode;
   /** Step icon component */
   stepIcon?: FunctionComponent<IconProps>;
-  /** Header left slot */
-  header?: React.ReactNode;
+  /** The step's title, beside its icon */
+  header?: string | RichStr;
   /** Rendered at the inline end of the header, before the toggle */
   headerAccessory?: React.ReactNode;
   /** Button title for toggle */
@@ -29,9 +28,9 @@ export interface StepContainerProps {
   collapsible?: boolean;
   /** Collapse button shown only when renderer supports collapsible mode */
   supportsCollapsible?: boolean;
-  /** Last step (no bottom connector) */
+  /** Last step: no rail line below its icon */
   isLastStep?: boolean;
-  /** First step (top padding instead of connector) */
+  /** First step; kept for callers, the rail starts at the first icon anyway */
   isFirstStep?: boolean;
   /** Hide header (single-step timelines) */
   hideHeader?: boolean;
@@ -41,18 +40,20 @@ export interface StepContainerProps {
   collapsedIcon?: FunctionComponent<IconProps>;
   /** Remove right padding (for reasoning content) */
   noPaddingRight?: boolean;
-  /** Render without rail (for nested/parallel content) */
-  withRail?: boolean;
   /** Override the surface background variant */
   surfaceBackground?: TimelineSurfaceBackground;
   /** Fold the body open and closed with `isExpanded`, animated. */
   foldBody?: boolean;
 }
 
-/** Visual wrapper for timeline steps - icon, connector line, header, and content */
+/**
+ * One step of a run: its header (icon and title, as `Content`) and its body,
+ * on the run card's surface. The rail is a line from this step's icon to the
+ * next step's icon, placed absolutely, so it needs no column of its own.
+ */
 export function StepContainer({
   children,
-  stepIcon: StepIconComponent,
+  stepIcon,
   header,
   headerAccessory,
   buttonTitle,
@@ -62,67 +63,50 @@ export function StepContainer({
   collapsible = true,
   supportsCollapsible = false,
   isLastStep = false,
-  isFirstStep = false,
   hideHeader = false,
   isHover = false,
-  collapsedIcon: CollapsedIconComponent,
+  collapsedIcon,
   noPaddingRight = false,
-  withRail = true,
   surfaceBackground,
   foldBody = false,
 }: StepContainerProps) {
-  const iconNode = StepIconComponent ? (
-    <StepIconComponent
-      className={cn(
-        "h-(--timeline-icon-size) w-(--timeline-icon-size) stroke-text-02",
-        isHover && "stroke-text-04"
-      )}
-    />
-  ) : null;
-
-  const content = (
-    <TimelineStepContent
-      header={header}
-      headerAccessory={headerAccessory}
-      buttonTitle={buttonTitle}
-      toggleLabel={toggleLabel}
-      isExpanded={isExpanded}
-      onToggle={onToggle}
-      collapsible={collapsible}
-      supportsCollapsible={supportsCollapsible}
-      hideHeader={hideHeader}
-      collapsedIcon={CollapsedIconComponent}
-      noPaddingRight={noPaddingRight}
-      surfaceBackground={surfaceBackground}
-      foldBody={foldBody}
-    >
-      {children}
-    </TimelineStepContent>
-  );
-
-  // The surface holds the rail too, so the rail sits inside the run's card.
   return (
     <TimelineSurface
-      className="flex w-full"
+      className="relative"
       isHover={isHover}
       roundedBottom={isLastStep}
       background={surfaceBackground}
     >
-      {withRail ? (
-        <TimelineRow
-          railVariant="rail"
-          icon={iconNode}
-          showIcon={!hideHeader && Boolean(StepIconComponent)}
-          iconRowVariant={hideHeader ? "compact" : "default"}
-          isFirst={isFirstStep}
-          isLast={isLastStep}
-          isHover={isHover}
-        >
-          {content}
-        </TimelineRow>
-      ) : (
-        <div className="flex-1 min-w-0">{content}</div>
+      {!isLastStep && (
+        // From this step's header centre to the next step's, behind both
+        // icons; each icon box masks it, so it shows between them, centred.
+        <div
+          aria-hidden
+          className={cn(
+            "absolute start-4 -bottom-4 w-px",
+            hideHeader ? "top-0" : "top-4",
+            isHover ? "bg-border-04" : "bg-border-01"
+          )}
+        />
       )}
+      <TimelineStepContent
+        icon={stepIcon}
+        header={header}
+        headerAccessory={headerAccessory}
+        buttonTitle={buttonTitle}
+        toggleLabel={toggleLabel}
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        collapsible={collapsible}
+        supportsCollapsible={supportsCollapsible}
+        hideHeader={hideHeader}
+        collapsedIcon={collapsedIcon}
+        noPaddingRight={noPaddingRight}
+        surfaceBackground={surfaceBackground}
+        foldBody={foldBody}
+      >
+        {children}
+      </TimelineStepContent>
     </TimelineSurface>
   );
 }

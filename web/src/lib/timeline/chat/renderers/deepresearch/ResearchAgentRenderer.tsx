@@ -302,7 +302,6 @@ export const ResearchAgentRenderer: MessageRenderer<
                   results={results}
                   isLastStep={isLastNestedStep}
                   isFirstStep={!researchTask && index === 0}
-                  isSingleStep={false}
                   collapsible={true}
                 />
               )}

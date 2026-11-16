@@ -164,9 +164,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   );
 
   const expansion = useTimelineExpansion(stopPacketSeen, hasDisplayContent);
-  // A single step stays on the rail, as in Craft; only longer runs fold.
-  const isExpanded = expansion.isExpanded || isSingleStep;
-  const canFold = collapsible && !isSingleStep;
+  // Every run folds, even with one step, as in Craft.
+  const isExpanded = expansion.isExpanded;
+  const canFold = collapsible;
   const handleToggle = expansion.handleToggle;
 
   // Streaming duration tracking
@@ -365,11 +365,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             stopReason={stopReason}
             isSingleStep={isSingleStep}
             userStopped={userStopped}
-            // As in Craft, a single step has no Done row. The rows use the
-            // open state, so they stay while the fold closes.
-            showDoneStep={openState.showDoneStep && !isSingleStep}
-            showStoppedStep={openState.showStoppedStep && !isSingleStep}
-            hasDoneIndicator={openState.hasDoneIndicator && !isSingleStep}
+            // The rows use the open state, so they stay while the fold closes.
+            showDoneStep={openState.showDoneStep}
+            showStoppedStep={openState.showStoppedStep}
+            hasDoneIndicator={openState.hasDoneIndicator}
           />
         </Collapsible.Content>
       </Collapsible.Root>

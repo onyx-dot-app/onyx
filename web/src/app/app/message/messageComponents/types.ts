@@ -41,7 +41,7 @@ export interface FullChatState {
 
 export interface RendererResult {
   icon: IconFunctionComponent | null;
-  status: string | JSX.Element | null;
+  status: string | null;
   content: JSX.Element;
 
   // can be used to override the look on the "expanded" view

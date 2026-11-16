@@ -1,13 +1,16 @@
 import React, { FunctionComponent } from "react";
-import { cn, richNodes } from "@opal/utils";
+import { cn } from "@opal/utils";
 import { SvgFold, SvgExpand, SvgXOctagon } from "@opal/icons";
-import { IconProps } from "@opal/types";
-import { Button, Collapsible, Text } from "@opal/components";
+import type { IconProps, RichStr } from "@opal/types";
+import { Content } from "@opal/layouts";
+import { Button, Collapsible } from "@opal/components";
 import { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
 
 export interface TimelineStepContentProps {
   children?: React.ReactNode;
-  header?: React.ReactNode;
+  /** The step's icon, at the title's size. */
+  icon?: FunctionComponent<IconProps>;
+  header?: string | RichStr;
   /** Rendered at the inline end of the header, before the toggle. */
   headerAccessory?: React.ReactNode;
   buttonTitle?: string;
@@ -31,6 +34,7 @@ export interface TimelineStepContentProps {
  */
 export function TimelineStepContent({
   children,
+  icon,
   header,
   headerAccessory,
   buttonTitle,
@@ -49,7 +53,8 @@ export function TimelineStepContent({
   const body = (
     <div
       className={cn(
-        "ps-1 pb-1",
+        // Under the title: past the header's inset and the 1rem icon box.
+        "ps-5 pb-1",
         !noPaddingRight && "pe-(--timeline-step-header-right-section-width)",
         hideHeader && "pt-(--timeline-step-top-padding)"
       )}
@@ -62,16 +67,20 @@ export function TimelineStepContent({
     <div className="flex flex-col px-1 pb-1">
       {!hideHeader && header && (
         <div className="flex items-center justify-between h-(--timeline-step-header-height) ps-1">
-          <div className="pt-(--timeline-step-top-padding) ps-(--timeline-common-text-padding) w-full min-w-0">
-            <Text as="p" font="main-ui-muted" color="text-04">
-              {richNodes(header)}
-            </Text>
+          {/* Positioned so it paints over the rail line; the icon box takes the
+              surface colour to mask the line. */}
+          <div className="relative flex-1 min-w-0 [&_.opal-content-icon]:bg-(--timeline-surface)">
+            <Content
+              icon={icon}
+              title={header}
+              font="secondary-body"
+              titleColor="text-03"
+              titleMaxLines={1}
+            />
           </div>
 
           {headerAccessory && (
-            <div className="shrink-0 pt-(--timeline-step-top-padding) ps-2">
-              {headerAccessory}
-            </div>
+            <div className="shrink-0 ps-2">{headerAccessory}</div>
           )}
 
           <div className="h-full w-(--timeline-step-header-right-section-width) flex items-center justify-end">
