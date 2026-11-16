@@ -318,7 +318,7 @@ def test_assemble_skips_skill_that_would_pass_the_sandbox_total(
     first = _bundle("first")
     with zipfile.ZipFile(io.BytesIO(first)) as bundle_zip:
         first_size = sum(info.file_size for info in bundle_zip.infolist())
-    monkeypatch.setattr(push, "MAX_BUNDLE_BYTES", first_size + 1)
+    monkeypatch.setattr(push, "SKILL_RUNTIME_MAX_BYTES", first_size + 1)
 
     files = push._assemble_fileset(
         [_skill(name="first", is_valid=True), _skill(name="second", is_valid=True)],
@@ -350,7 +350,9 @@ def test_skill_dropped_by_resolution_does_not_crowd_out_later_skills(
     with zipfile.ZipFile(io.BytesIO(healthy)) as bundle_zip:
         healthy_size = sum(info.file_size for info in bundle_zip.infolist())
     monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", expanding_size + 1)
-    monkeypatch.setattr(push, "MAX_BUNDLE_BYTES", expanding_size + healthy_size - 1)
+    monkeypatch.setattr(
+        push, "SKILL_RUNTIME_MAX_BYTES", expanding_size + healthy_size - 1
+    )
 
     files = push._assemble_fileset(
         [
@@ -445,3 +447,40 @@ def test_enqueue_skill_push_sends_the_push_task_to_the_sandbox_queue(
         "tenant_id": "tenant",
     }
     assert kwargs["queue"] == OnyxCeleryQueues.SANDBOX
+
+
+def test_a_payload_that_would_cross_the_batch_budget_starts_a_new_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sandboxes = sorted([uuid4(), uuid4(), uuid4()])
+    sizes = dict(zip(sandboxes, [6, 6, 20], strict=True))
+    batches: list[list[object]] = []
+
+    def push_to_sandboxes(*, mount_path: str, sandbox_files: dict) -> object:  # noqa: ARG001
+        batches.append(sorted(sandbox_files))
+        return SimpleNamespace(failures=[])
+
+    monkeypatch.setattr(push, "_PUSH_BATCH_MAX_BYTES", 10)
+    monkeypatch.setattr(
+        push, "get_sandbox_user_map", lambda _ids, _s: {sid: sid for sid in sandboxes}
+    )
+    monkeypatch.setattr(push, "lock_sandbox_skills_states", lambda _s, _ids: {})
+    monkeypatch.setattr(
+        push,
+        "build_user_skills_payload",
+        lambda sid, _s: push.UserSkillsPayload(
+            connectable_apps_section="",
+            files={"f": b"x" * sizes[sid]},
+            omissions=(),
+        ),
+    )
+    monkeypatch.setattr(
+        push,
+        "get_sandbox_manager",
+        lambda: SimpleNamespace(push_to_sandboxes=push_to_sandboxes),
+    )
+    monkeypatch.setattr(push, "set_sandbox_skills_states__no_commit", MagicMock())
+
+    push.push_skills_for_users(set(sandboxes), MagicMock())
+
+    assert batches == [[sandboxes[0]], [sandboxes[1]], [sandboxes[2]]]

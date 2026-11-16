@@ -5700,6 +5700,12 @@ class Skill(Base):
 
     __table_args__ = (
         UniqueConstraint("name", "id", name="uq_skill_name_id"),
+        Index(
+            "uq_skill_automatic_name",
+            "name",
+            unique=True,
+            postgresql_where=text("installation_policy <> 'AVAILABLE'"),
+        ),
         CheckConstraint(
             "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
             name="ck_skill_definition_source",

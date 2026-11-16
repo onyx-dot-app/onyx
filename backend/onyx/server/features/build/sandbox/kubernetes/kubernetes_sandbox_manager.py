@@ -51,7 +51,7 @@ import tempfile
 import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
-from typing import cast
+from typing import IO, cast
 from uuid import UUID
 
 from kubernetes import client, watch
@@ -76,6 +76,9 @@ from onyx.server.features.build.sandbox.base import (
     SandboxManager,
     document_preview_command,
     parse_document_preview_response,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
+    MAX_BUNDLE_BYTES,
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
@@ -200,17 +203,16 @@ _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
 _PROXY_RESOLVE_RETRY_BACKOFF_S = 0.5
 
 
-_MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MiB
-
-
-def _build_targz(files: FileSet) -> tuple[bytes, str]:
+def _build_targz(files: FileSet, archive_file: IO[bytes]) -> str:
+    """Write ``files`` as tar.gz into ``archive_file`` and return its SHA-256."""
     total = sum(len(v) for v in files.values())
-    if total > _MAX_BUNDLE_BYTES:
+    if total > MAX_BUNDLE_BYTES:
         raise FatalWriteError(
-            f"Bundle size {total} exceeds {_MAX_BUNDLE_BYTES} byte limit"
+            f"Bundle size {total} exceeds {MAX_BUNDLE_BYTES} byte limit"
         )
-    buf = io.BytesIO()
-    with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6, mtime=0) as gzip_file:
+    with gzip.GzipFile(
+        filename="", fileobj=archive_file, mode="wb", compresslevel=6, mtime=0
+    ) as gzip_file:
         with tarfile.open(fileobj=gzip_file, mode="w") as tar:
             for name in sorted(files):
                 data = files[name]
@@ -221,8 +223,11 @@ def _build_targz(files: FileSet) -> tuple[bytes, str]:
                 info.gid = 0
                 info.mode = 0o644
                 tar.addfile(info, io.BytesIO(data))
-    raw = buf.getvalue()
-    return raw, hashlib.sha256(raw).hexdigest()
+    archive_file.seek(0)
+    sha256 = hashlib.sha256()
+    for chunk in iter(lambda: archive_file.read(1024 * 1024), b""):
+        sha256.update(chunk)
+    return sha256.hexdigest()
 
 
 class KubernetesSandboxManager(SandboxManager):
@@ -2769,19 +2774,21 @@ fi
         mount_path: str,
         files: FileSet,
     ) -> None:
-        """Build tar.gz, POST to the in-pod daemon."""
+        """Build tar.gz on disk and stream it to the in-pod daemon."""
         pod_name = self._get_pod_name(sandbox_id)
-        tar_bytes, sha256_hex = _build_targz(files)
 
         try:
-            self._sidecar_client.push_archive(
-                sandbox_id=sandbox_id,
-                mount_path=mount_path,
-                archive=tar_bytes,
-                sha256_hex=sha256_hex,
-                operation_label=pod_name,
-                timeout_seconds=RPC_TIMEOUT_SECONDS,
-            )
+            # On disk, so the archive is not a second in-memory copy of files.
+            with tempfile.TemporaryFile() as archive_file:
+                sha256_hex = _build_targz(files, archive_file)
+                self._sidecar_client.push_archive(
+                    sandbox_id=sandbox_id,
+                    mount_path=mount_path,
+                    archive_file=archive_file,
+                    sha256_hex=sha256_hex,
+                    operation_label=pod_name,
+                    timeout_seconds=BULK_TRANSFER_TIMEOUT_SECONDS,
+                )
         except SidecarRequestError as e:
             raise RetriableWriteError(f"Push to {pod_name} failed: {e}") from e
         except SidecarStatusError as e:

@@ -1,8 +1,7 @@
 """apply the run-time skill limit
 
-Drop uq_skill_automatic_name: the run-time name order now decides which of
-two same-name skills a user gets. Add sandbox.skill_omissions: the plugins the
-run-time skill limit left out of the content a sandbox got.
+Add sandbox.skill_omissions: the plugins the run-time skill limit left out of
+the content a sandbox got.
 
 Revision ID: ff11c4042c42
 Revises: 7c00f53ab75f
@@ -69,9 +68,6 @@ def _with_bounded_lock_wait(table_name: str, change: Callable[[], None]) -> None
 
 
 def upgrade() -> None:
-    # A skill push locks sandbox rows and then reads skills. Lock in the same
-    # order, so the two cannot deadlock and skills stay readable while this
-    # waits for the sandbox table.
     _with_bounded_lock_wait(
         "sandbox",
         lambda: op.add_column(
@@ -84,38 +80,7 @@ def upgrade() -> None:
             ),
         ),
     )
-    _with_bounded_lock_wait(
-        "skill",
-        lambda: op.drop_index("uq_skill_automatic_name", table_name="skill"),
-    )
 
 
 def downgrade() -> None:
     op.drop_column("sandbox", "skill_omissions")
-    # The legacy column is a mirror; the plugin tables keep the real setting.
-    # Keep one automatic row of each name so the index can come back: a
-    # Required one first, else the oldest. The others lose their setting in
-    # the legacy column, so this downgrade is lossy.
-    op.execute(
-        """
-        UPDATE skill SET installation_policy = 'AVAILABLE'
-        WHERE id IN (
-            SELECT id FROM (
-                SELECT id, row_number() OVER (
-                    PARTITION BY name
-                    ORDER BY installation_policy = 'REQUIRED' DESC, created_at, id
-                ) AS position
-                FROM skill
-                WHERE installation_policy <> 'AVAILABLE'
-            ) AS ranked
-            WHERE position > 1
-        )
-        """
-    )
-    op.create_index(
-        "uq_skill_automatic_name",
-        "skill",
-        ["name"],
-        unique=True,
-        postgresql_where=sa.text("installation_policy <> 'AVAILABLE'"),
-    )
