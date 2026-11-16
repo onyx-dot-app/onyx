@@ -232,6 +232,13 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
 (`<chroot>/root/v.sock_3128`) → sandbox-proxy (`--egress-proxy`). Design: `plans/craft-fc-d1-egress-identity.md`
 (D1-A). The proxy side is PR #17174 (`backend/onyx/sandbox_proxy/sandbox_identity/signed.py`).
 
+- With `--egress-proxy-tls-ca`, `--egress-proxy-tls-cert` and `--egress-proxy-tls-key`, every proxy
+  connection uses mTLS (TLS 1.3): the relay checks the proxy certificate against the CA and
+  `--egress-proxy-tls-server-name` (default: the `--egress-proxy` host), and shows its client certificate.
+  A failed handshake gets a 502, and so does a TLS alert from the proxy before its first byte (TLS 1.3
+  refuses a client certificate after the client handshake ends); the relay never falls back to plain TCP. A partial or unloadable setup
+  stops the agent at start. The relay reads the files again on the next connection after they change.
+  The Helm chart turns this on with Firecracker (`craft.hostAgent.relayTls`, proxy port 8443).
 - The relay reads one request head per connection, with strict parsing (no bare LF, no obs-fold, at most
   64 KiB). A bad head gets a 400 and never reaches the proxy.
 - It removes every `Proxy-Authorization` and `X-Onyx-Session-Hint` from the VM, then adds

@@ -2139,6 +2139,39 @@ craft:
       # (<release>-craft-fc-host-agent.<namespace>.svc); a value here is added
       # to the chart-made certificate.
       tlsServerName: ""
+    # mTLS between the agent egress relays and sandbox-proxy. The relays
+    # dial the proxy relay port (relayTls.port), check the proxy certificate,
+    # and show a client certificate; a failed handshake fails the connection
+    # (no plain TCP fallback). The proxy accepts only that client certificate
+    # and still checks the signed token. Only the agent namespace reaches the
+    # relay port; pod sandboxes keep the plain proxy port (which stays open to
+    # the agents for rolling upgrades). With both
+    # existingSecret values empty, the chart makes a relay CA, the proxy and
+    # relay certificates (10 years), keeps them on upgrade with Helm lookup,
+    # and renews them like the agent set above. A new set restarts
+    # sandbox-proxy; the agents and the proxy also load changed files at
+    # their next connection.
+    # Set both existingSecret values, or neither.
+    relayTls:
+      # false: the relays send their tokens to the plain proxy port. Also set
+      # false if craft.hostAgent.image.tag pins an agent without the
+      # --egress-proxy-tls-* flags (before this chart): it does not start.
+      enabled: true
+      port: 8443
+      # A Secret in the agent namespace with tls.crt and tls.key (the relay
+      # client certificate) and ca.crt (the CA of the proxy certificate).
+      existingSecret: ""
+      # A Secret in the release namespace with tls.crt and tls.key (the proxy
+      # certificate) and ca.crt (the CA of the relay client certificates).
+      proxyExistingSecret: ""
+      # Name the relays verify in the proxy certificate. Empty = the
+      # sandbox-proxy host (configMap.SANDBOX_PROXY_HOST, else the Service
+      # FQDN); a value here is added to the chart-made certificate.
+      serverName: ""
+      # Comma-separated DNS or URI SANs; the relay certificate must have one.
+      # Empty = the relay certificate name with chart-made certificates, or
+      # any certificate that the relay CA (proxyExistingSecret ca.crt) signed.
+      clientAllowedSans: ""
     # Secret in the agent namespace with the registration key: the key name
     # in auth.sandboxNodeRegistration.secretKeys.SANDBOX_NODE_REGISTRATION_SECRET
     # (default sandbox_node_registration_secret). Empty = the chart copies

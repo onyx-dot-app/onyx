@@ -142,6 +142,8 @@ kubectl $K annotate node <node> cluster-autoscaler.kubernetes.io/scale-down-disa
 ## Rotate the certificates
 
 The host agent reads its certificate files again on the next connection after they change, so it needs no restart.
+This applies to its server certificate and to its relay certificate.
+The sandbox proxy also reads its relay certificate files again on the next connection after they change.
 The API server and the workers read their client certificate at start.
 
 For the chart-made certificates, delete both Secrets and upgrade. The chart makes new certificates,
@@ -155,6 +157,18 @@ helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.y
 ```
 
 The Secret names start with the release name (`onyx` here). New calls to the host agents fail until the upgrade ends.
+
+To rotate the chart-made relay certificates, delete the two relay Secrets and upgrade.
+The sandbox proxy restarts by itself. microVM egress fails until the kubelet gives the new files to each host agent,
+usually within 2 minutes. The same short stop occurs when the chart renews the relay set by itself,
+or when the sandbox proxy host or `craft.hostAgent.relayTls.serverName` changes:
+
+```bash
+kubectl $K -n $NS delete secret onyx-craft-fc-host-agent-relay-tls
+kubectl $K -n $REL delete secret onyx-sandbox-proxy-relay-tls
+helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml \
+  --values craft-fc-values.yaml --values craft-fc-secrets.yaml --version <chart version>
+```
 
 For your own certificates (`existingSecret`):
 
@@ -182,6 +196,11 @@ For your own certificates (`existingSecret`):
     the clients still trust the old CA.
   </Step>
 </Steps>
+
+For your own relay certificates (`relayTls.existingSecret` and `relayTls.proxyExistingSecret`),
+do the same steps with the two relay Secrets. Skip the restarts:
+the host agents and the sandbox proxy read the new files at the next connection.
+The kubelet can take up to 2 minutes to update the files in the pods.
 
 ## Rotate the registration value
 
@@ -501,8 +520,10 @@ The dashboard panel "Relay connections by result" shows which result grows.
 **Fix.**
 
 - `upstream_failed` on all nodes: the sandbox proxy is down or full. Fix it or add replicas.
-- `upstream_failed` on one node: check the NetworkPolicy from the host agent namespace to the proxy port, and that the
-  node key is registered (`node signing key registered`).
+- `upstream_failed` on one node: check the NetworkPolicy from the host agent namespace to the proxy relay port (8443),
+  and that the node key is registered (`node signing key registered`).
+- `upstream_failed` with `upstream TLS handshake` or `relay upstream refused the TLS connection` in the host agent
+  log: the relay certificates do not match. See [Certificates](/deployment/kubernetes/craft-firecracker#certificates).
 - `over_cap` from one microVM: a user program opens too many connections. The limit protects the node.
 
 **Contact Onyx support** when the proxy is healthy and the node key is registered, but the errors continue.

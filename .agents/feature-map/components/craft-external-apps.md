@@ -218,7 +218,10 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    The proxy holds node public keys only and checks the cache placement record
    (`microvm/registry.py`; no schema change).
    A bad token is a 403, never an IP fallback; a signed plain-HTTP connection
-   allows one request.
+   allows one request. The relays reach the proxy over mTLS on a separate port
+   (`sandbox_proxy/relay_tls.py`, Helm `craft.hostAgent.relayTls`); it pipes
+   to the plain listener on loopback, so relay flows log a loopback source IP
+   and the token check stays the identity check.
    `sandbox_proxy/sandbox_identity/resolution.py:IdentityResolver.resolve_session_by_id` accepts a tag
    only for a session of the IP-resolved user. A forged tag can only move an
    approval to another session of the same user. The comment in

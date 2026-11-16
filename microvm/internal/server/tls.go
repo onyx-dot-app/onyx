@@ -5,12 +5,12 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"os"
 	"slices"
 	"sync"
-	"time"
 
 	"google.golang.org/grpc/credentials"
+
+	"github.com/onyx-dot-app/onyx/microvm/internal/tlsfiles"
 )
 
 // MTLS is the TLS setup of the TCP listener: the agent's own cert, and only
@@ -23,14 +23,8 @@ type MTLS struct {
 	// client leaf must have one of them as a DNS or URI SAN.
 	AllowedSANs []string
 
-	mu    sync.Mutex
-	cfg   *tls.Config
-	stamp [3]fileStamp
-}
-
-type fileStamp struct {
-	mod  time.Time
-	size int64
+	once sync.Once
+	r    *tlsfiles.Reloader
 }
 
 // Config returns the server TLS config. It fails if the files do not load.
@@ -55,34 +49,11 @@ func (m *MTLS) Credentials() (credentials.TransportCredentials, error) {
 	return credentials.NewTLS(cfg), nil
 }
 
-// current returns the config for the files on disk. If a reload fails (for
-// example a rotation is half written), it keeps the last good config.
 func (m *MTLS) current() (*tls.Config, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var stamp [3]fileStamp
-	for i, f := range []string{m.CertFile, m.KeyFile, m.ClientCAFile} {
-		st, err := os.Stat(f)
-		if err != nil {
-			if m.cfg != nil {
-				return m.cfg, nil
-			}
-			return nil, err
-		}
-		stamp[i] = fileStamp{mod: st.ModTime(), size: st.Size()}
-	}
-	if m.cfg != nil && stamp == m.stamp {
-		return m.cfg, nil
-	}
-	cfg, err := m.load()
-	if err != nil {
-		if m.cfg != nil {
-			return m.cfg, nil
-		}
-		return nil, err
-	}
-	m.cfg, m.stamp = cfg, stamp
-	return cfg, nil
+	m.once.Do(func() {
+		m.r = &tlsfiles.Reloader{Files: []string{m.CertFile, m.KeyFile, m.ClientCAFile}, Load: m.load}
+	})
+	return m.r.Current()
 }
 
 func (m *MTLS) load() (*tls.Config, error) {
@@ -90,13 +61,9 @@ func (m *MTLS) load() (*tls.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load server cert: %w", err)
 	}
-	raw, err := os.ReadFile(m.ClientCAFile)
+	pool, err := tlsfiles.CertPool(m.ClientCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("read client CA: %w", err)
-	}
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(raw) {
-		return nil, errors.New("client CA file has no PEM certificate")
+		return nil, fmt.Errorf("client CA: %w", err)
 	}
 	cfg := &tls.Config{
 		Certificates: []tls.Certificate{cert},

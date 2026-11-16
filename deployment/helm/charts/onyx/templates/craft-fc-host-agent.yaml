@@ -28,7 +28,9 @@ Agent flags and node requirements: microvm/README.md.
   copy in its own namespace.
 - Only the agent clients (api_server, heavy and scheduled-tasks workers) reach
   the agent listener (NetworkPolicy below). Agent
-  pods may reach the sandbox-proxy port (sandbox-proxy/networkpolicy.yaml).
+  pods may reach the sandbox-proxy relay mTLS port (craft.hostAgent.relayTls,
+  craft-fc-relay-tls.yaml), or the plain port with relayTls off
+  (sandbox-proxy/networkpolicy.yaml).
 - Drain (craft.hostAgent.drainWatch): the agent reads its own Node with a
   ServiceAccount that may "get" nodes, and refuses new VMs while the
   Node has a drain taint. Off: no ServiceAccount token in the pod.
@@ -72,6 +74,7 @@ Agent flags and node requirements: microvm/README.md.
 {{- $imageTag = include "onyx.craftFcPinnedTag" (list (include "onyx.craftFcReleaseTag" .) "host agent image" "craft.hostAgent.image.tag") }}
 {{- end }}
 {{- $tls := $agent.tls | default dict }}
+{{- $relayTls := include "onyx.craftFcRelayTls.enabled" . }}
 {{- $clientSecret := include "onyx.craftFcAgentClient.secretName" . }}
 {{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict }}
 {{- if ne (toString $reg.enabled) "true" }}
@@ -448,7 +451,15 @@ spec:
             {{- with $agent.advertiseAddress }}
             - {{ printf "--advertise-address=%s" . | quote }}
             {{- end }}
+            {{- if $relayTls }}
+            - --egress-proxy={{ include "onyx.sandboxProxyHost" . }}:{{ include "onyx.craftFcRelayTls.port" . }}
+            - --egress-proxy-tls-ca=/etc/craft-fc/relay-tls/ca.crt
+            - --egress-proxy-tls-cert=/etc/craft-fc/relay-tls/tls.crt
+            - --egress-proxy-tls-key=/etc/craft-fc/relay-tls/tls.key
+            - --egress-proxy-tls-server-name={{ include "onyx.craftFcRelayTls.serverName" . }}
+            {{- else }}
             - --egress-proxy={{ include "onyx.sandboxProxyHost" . }}:{{ include "onyx.sandboxProxyPort" . }}
+            {{- end }}
             - --api-server-url={{ $agent.apiServerUrl | default (include "onyx.sandboxApiUrl" .) }}
             {{- if $watchDrain }}
             - --watch-node-drain
@@ -526,6 +537,12 @@ spec:
             - name: tls
               mountPath: /etc/craft-fc/tls
               readOnly: true
+            {{- if $relayTls }}
+            {{- /* No subPath: the kubelet updates the files, and the relay reloads them. */}}
+            - name: relay-tls
+              mountPath: /etc/craft-fc/relay-tls
+              readOnly: true
+            {{- end }}
             {{- if $metricsToken }}
             {{- /* No subPath: the kubelet updates the file when the Secret changes. */}}
             - name: metrics-auth
@@ -545,6 +562,12 @@ spec:
           secret:
             secretName: {{ $tlsSecret }}
             defaultMode: 0400
+        {{- if $relayTls }}
+        - name: relay-tls
+          secret:
+            secretName: {{ include "onyx.craftFcRelayTls.relaySecretName" . }}
+            defaultMode: 0400
+        {{- end }}
         {{- if $metricsToken }}
         - name: metrics-auth
           secret:

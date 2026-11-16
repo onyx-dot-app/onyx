@@ -3,7 +3,9 @@ package relay
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -47,7 +49,10 @@ type VM struct {
 type Relay struct {
 	Signer *Signer
 	// Upstream is the proxy address (host:port).
-	Upstream    string
+	Upstream string
+	// TLS, if set, wraps every upstream connection in mTLS. A failed
+	// handshake fails the connection; the relay never falls back to plain TCP.
+	TLS         *UpstreamTLS
 	IdleTimeout time.Duration
 	HeadTimeout time.Duration
 	DialTimeout time.Duration
@@ -281,7 +286,7 @@ func (r *Relay) handle(vmConn net.Conn, vm VM) {
 	if dial == nil {
 		dial = (&net.Dialer{KeepAlive: 30 * time.Second}).DialContext
 	}
-	up, err := dial(ctx, "tcp", r.Upstream)
+	up, err := r.dialUpstream(ctx, dial)
 	cancel()
 	if err != nil {
 		_, _ = io.WriteString(vmConn, "HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
@@ -304,12 +309,30 @@ func (r *Relay) handle(vmConn net.Conn, vm VM) {
 			return
 		}
 	}
-	r.splice(p, up)
+	r.splice(p, up, vm)
+}
+
+func (r *Relay) dialUpstream(ctx context.Context, dial func(ctx context.Context, network, addr string) (net.Conn, error)) (net.Conn, error) {
+	up, err := dial(ctx, "tcp", r.Upstream)
+	if err != nil || r.TLS == nil {
+		return up, err
+	}
+	cfg, err := r.TLS.config()
+	if err != nil {
+		_ = up.Close()
+		return nil, fmt.Errorf("upstream TLS: %w", err)
+	}
+	tc := tls.Client(up, cfg)
+	if err := tc.HandshakeContext(ctx); err != nil {
+		_ = tc.Close()
+		return nil, fmt.Errorf("upstream TLS handshake: %w", err)
+	}
+	return tc, nil
 }
 
 // splice copies both ways. When either side ends or fails, both sides close:
 // Firecracker vsock does not carry a half-close.
-func (r *Relay) splice(p *pair, up net.Conn) {
+func (r *Relay) splice(p *pair, up net.Conn, vm VM) {
 	var last atomic.Int64
 	last.Store(time.Now().UnixNano())
 	idle := r.idle()
@@ -317,10 +340,12 @@ func (r *Relay) splice(p *pair, up net.Conn) {
 	cp := func(dst, src net.Conn) {
 		defer func() { done <- struct{}{} }()
 		buf := make([]byte, bufSize)
+		got := false
 		for {
 			_ = src.SetReadDeadline(time.Now().Add(idle))
 			n, err := src.Read(buf)
 			if n > 0 {
+				got = true
 				last.Store(time.Now().UnixNano())
 				if _, werr := dst.Write(buf[:n]); werr != nil {
 					return
@@ -330,6 +355,14 @@ func (r *Relay) splice(p *pair, up net.Conn) {
 				var ne net.Error
 				if errors.As(err, &ne) && ne.Timeout() && time.Since(time.Unix(0, last.Load())) < idle {
 					continue
+				}
+				// In TLS 1.3 the proxy refuses a client certificate after the
+				// relay's handshake ends, so the refusal comes as an alert here.
+				var oe *net.OpError
+				if src == up && !got && errors.As(err, &oe) && oe.Op == "remote error" {
+					_, _ = io.WriteString(p.vm, "HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
+					r.event(EventUpstreamFailed)
+					r.Log.Warn("relay upstream refused the TLS connection", "sandbox_id", vm.SandboxID, "err", err)
 				}
 				return
 			}

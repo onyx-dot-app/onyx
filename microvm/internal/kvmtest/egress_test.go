@@ -29,6 +29,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/relay"
 	"github.com/onyx-dot-app/onyx/microvm/internal/scratch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
+	"github.com/onyx-dot-app/onyx/microvm/internal/testcerts"
 )
 
 // The matrix runs as the sandbox user with the proxy env of the prototype
@@ -114,6 +115,48 @@ func countLines(path, substr string) int {
 	return n
 }
 
+// relayTLSAddr is the harness proxy's relay mTLS port.
+const relayTLSAddr = "127.0.0.1:8098"
+
+// relayTLSFiles makes a proxy CA and a relay CA. It returns the relay side
+// and the proxy env for the sandbox-proxy relay mTLS listener, which pins
+// the relay's SAN.
+func relayTLSFiles(t *testing.T) (*relay.UpstreamTLS, []string) {
+	t.Helper()
+	dir := t.TempDir()
+	write := func(name string, data []byte) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	proxyCA, err := testcerts.NewCA("kvm proxy CA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	relayCA, err := testcerts.NewCA("kvm relay CA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, sk, err := proxyCA.Leaf("sandbox-proxy", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cc, ck, err := relayCA.Leaf("craft-fc-relay", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := &relay.UpstreamTLS{CAFile: write("proxy-ca.crt", proxyCA.PEM), CertFile: write("relay.crt", cc),
+		KeyFile: write("relay.key", ck), ServerName: "localhost"}
+	_, port, _ := net.SplitHostPort(relayTLSAddr)
+	return up, []string{"SANDBOX_PROXY_LISTEN_HOST=127.0.0.1", "SANDBOX_PROXY_LISTEN_PORT=8099",
+		"SANDBOX_PROXY_RELAY_TLS_PORT=" + port, "SANDBOX_PROXY_RELAY_TLS_CERT_PATH=" + write("proxy.crt", sc),
+		"SANDBOX_PROXY_RELAY_TLS_KEY_PATH=" + write("proxy.key", sk),
+		"SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH=" + write("relay-ca.crt", relayCA.PEM),
+		"SANDBOX_PROXY_RELAY_TLS_ALLOWED_SANS=spiffe://test/craft-fc-relay"}
+}
+
 func TestEgressKVM(t *testing.T) {
 	e := loadEnv()
 	cmd := newCommand(t, e)
@@ -134,10 +177,14 @@ func TestEgressKVM(t *testing.T) {
 	env := []string{"SANDBOX_RUNTIME=firecracker", "CACHE_BACKEND=redis", "REDIS_HOST=127.0.0.1", "REDIS_PORT=6379",
 		"MULTI_TENANT=false", "LOG_LEVEL=debug", "SANDBOX_NODE_REGISTRATION_SECRET=" + secret, "PYTHONPATH=" + getenv("KVM_PR_BACKEND", "/opt/pr/backend")}
 	confdir := filepath.Join(t.TempDir(), "confdir")
+	// The relay reaches the proxy only through its mTLS port, as in the chart.
+	upTLS, proxyTLSEnv := relayTLSFiles(t)
 	reg := startService(t, "reg_server", filepath.Join(logDir, "egress-reg.log"), env, py, filepath.Join(harness, "reg_server.py"))
-	proxy := startService(t, "gate_proxy", filepath.Join(logDir, "egress-proxy.log"), append(env, "HARNESS_CONFDIR="+confdir), py, filepath.Join(harness, "gate_proxy.py"))
+	proxy := startService(t, "gate_proxy", filepath.Join(logDir, "egress-proxy.log"),
+		append(append(env, "HARNESS_CONFDIR="+confdir), proxyTLSEnv...), py, filepath.Join(harness, "gate_proxy.py"))
 	waitTCP(t, ctx, "127.0.0.1:8095", reg)
 	waitTCP(t, ctx, "127.0.0.1:8099", proxy)
+	waitTCP(t, ctx, relayTLSAddr, proxy)
 	// mitmproxy can listen before it has written its CA files.
 	var ca []byte
 	for {
@@ -156,7 +203,7 @@ func TestEgressKVM(t *testing.T) {
 	_, key, _ := ed25519.GenerateKey(nil)
 	signer := relay.NewSigner(nodeID, fmt.Sprintf("%s-%d", nodeID, time.Now().Unix()), key)
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	rl := &relay.Relay{Signer: signer, Upstream: "127.0.0.1:8099", Log: log}
+	rl := &relay.Relay{Signer: signer, Upstream: relayTLSAddr, TLS: upTLS, Log: log}
 	g := &relay.Registrar{BaseURL: "http://127.0.0.1:8095", Secret: secret, Signer: signer, Log: log}
 	if err := g.Register(ctx); err != nil {
 		t.Fatalf("register node key: %v", err)
@@ -281,6 +328,9 @@ func TestEgressKVM(t *testing.T) {
 	if verifiedA < 9 || refusedB < 1 || rejectedA != 0 {
 		t.Errorf("proxy identity checks failed; see %s", proxy.log)
 	}
+	if countLines(proxy.log, "relay mTLS listening") != 1 || countLines(proxy.log, "relay_tls_rejected") != 0 {
+		t.Errorf("relay traffic did not use the mTLS port; see %s", proxy.log)
+	}
 	if countLines(reg.log, "sandbox_node_signing_key_registered node="+nodeID) < 1 {
 		t.Errorf("registration not logged by the api route; see %s", reg.log)
 	}
@@ -300,7 +350,7 @@ func TestEgressKVM(t *testing.T) {
 		&template.Store{Dir: filepath.Join(e.DataDir, "templates")}, &fcvm.Launcher{Cmd: cmd, Log: log},
 		hostinfo.Stats{DataDir: e.DataDir}, uids2, kvmVersions(t, e), log)
 	m2.UseJournal(&journal.Journal{Dir: jdir})
-	m2.UseEgress(&relay.AgentEgress{Relay: &relay.Relay{Signer: signer2, Upstream: "127.0.0.1:8099", Log: log}})
+	m2.UseEgress(&relay.AgentEgress{Relay: &relay.Relay{Signer: signer2, Upstream: relayTLSAddr, TLS: upTLS, Log: log}})
 	rep, err := m2.Recover(ctx, &fcvm.Launcher{Cmd: cmd, Log: log})
 	if err != nil || rep.Adopted != 2 {
 		t.Fatalf("recover: %+v %v", rep, err)
