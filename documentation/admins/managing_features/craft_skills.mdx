@@ -13,7 +13,7 @@ Open **Craft → Skills** to manage your own library.
   Admins can inspect and manage all custom Skills, including private personal Skills.
   Only Admins set installation policies, because this needs the organization-wide `manage:plugins` permission.
   Group Managers hold `manage:plugins` only for their groups. They cannot set an installation policy,
-  not even for a Skill shared only with their group. Craft needs a Business or Enterprise plan, or Onyx Cloud.
+  for the organization or for a group. Craft needs a Business or Enterprise plan, or Onyx Cloud.
 </Note>
 
 ## Understand the Skills library
@@ -198,6 +198,40 @@ The setting applies to every way to publish: the sharing dialog, **Publish updat
 and GitHub import. Users with the organization-wide `manage:plugins` permission always publish at once.
 Linking a Skill to an App is not affected.
 
+### Set the default access
+
+The **Default Access** setting applies to every published Skill that does not have its own installation policy,
+including Skills that are published later. Open **Admin Panel**, select **Craft → Preferences**,
+and choose a value under **Default Access**:
+
+| Value | Effect |
+| --- | --- |
+| **Available to install** | Members find the Skill and turn it on if they want it. This is the default. |
+| **Installed by default** | Installed for every member. Members can turn it off. |
+| **Not available** | Hidden. Members cannot find it or turn it on, unless a share or a group setting gives them access. |
+
+**Required** is not a value of this setting, because it would turn on every published Skill for every member.
+
+With **Not available**, a newly published Skill reaches only its author, the people and groups it is shared with,
+and the members of a group whose own setting for the Skill is more open.
+Other members get it after an Admin sets an installation policy on the Skill, **Available to install** too.
+In the sharing dialog, the **Default access** choice makes a Skill follow this setting again.
+A Skill that an App uses gets **Available to install** when it is linked, so this setting does not hide it.
+
+### Control who shares
+
+The **Sharing** setting controls whether members can share Skills with people and groups. It is on by default.
+Open **Admin Panel**, select **Craft → Preferences**, and turn **Sharing** on or off.
+
+When **Sharing** is off, members cannot add people or groups in the sharing dialog, and the dialog says why.
+Onyx also refuses a change to a share level and an ownership transfer by a member,
+because the previous owner keeps edit access. Members can still remove a share.
+Users with the organization-wide `manage:plugins` permission can always share.
+
+To keep a Skill away from a group, set the Skill to **Not available** and turn **Sharing** off.
+Turning **Sharing** off stops new shares only. Also remove the Skill's existing shares with the group and its members,
+and make sure that no group setting of that group gives a more open level.
+
 ### Review publish requests
 
 Under **Requires review**, a publish from an author makes a request, and the version shows **Pending review**.
@@ -347,6 +381,8 @@ Configure access once before importing the batch. Onyx reports invalid bundles s
 <Accordion title="Users cannot find a shared Skill">
   Confirm that the Skill is enabled and that the user or one of their groups has **Can use** or **Can edit** access.
   If it was shared during an active session, start a new turn or session and check the picker again.
+  For a published Skill with no installation policy of its own, check **Default Access** under **Craft → Preferences**.
+  With **Not available**, only the author and the people and groups it is shared with see it.
 </Accordion>
 
 <Accordion title="A Skill is on but Craft uses a different Skill">
