@@ -451,6 +451,7 @@ class ToolBatch:
             nested_calls=_NestedCallGate(self, call)
             if self.run.before_tool_call is not None or self.run.approval_required
             else None,
+            run_work=self.run.work,
         )
         try:
             if children is not None:

@@ -215,6 +215,14 @@ A hook that fails otherwise or stops for cancellation is logged; the run keeps i
 An amended result inside the compaction checkpoint drops the checkpoint, so the next request summarizes the new result.
 `on_suspend(results)` has the same contract; it runs when the run suspends, before the run captures its state.
 Chat code mode uses these hooks to stop open cells and save what they did, also for a call that Stop interrupted.
+`on_drained()` runs after each finish or suspension, once the run's work has drained:
+its tool threads, including calls that ignored a Stop, and the work of its foreground children.
+Background children do not hold it back.
+A suspension calls the hook only when no foreground child waits or works; otherwise the run's later end calls it.
+A run that hands off in that state calls no hook: an early call could end state that a child still uses. The owner that restores the run calls the hook at the run's end.
+It runs on the thread that ended that work, so it must be short. It returns nothing and cannot change results.
+Errors, including `AgentCancelled`, are logged; the run still becomes idle and reusable.
+Chat's root agent gets it from `create_chat_agent` to end per-run tool state; subagents share the root's tools and install no `on_drained` hook.
 
 Two optional tool callbacks cover interception and enrichment:
 
@@ -271,6 +279,9 @@ The `ToolInvocation` argument provides everything the tool needs:
 - `update(ToolProgress(...))` — the current partial output and typed result details.
   The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
 - `agents` — the subagent coordinator (next section).
+- `run_work` — the run's work. A tool that starts work which outlives the call, such as a code mode
+  program's driver and tool call threads, adds it with `run_work.track_operation(future)`. The run
+  drains, calls `on_drained` and becomes idle only after that work.
 
 Tool calls run in parallel by default. `SEQUENTIAL` orders calls to the same registered tool name
 within one step. The next call waits for the previous call and its completion hook to finish.

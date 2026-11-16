@@ -643,7 +643,9 @@ health calls are not retried.
   keeps running; the model works on and gets the rest with `wait_code`. A cell
   never outlives its response: `CodeCells.finish` stops it, and a closing
   record saves what it did after its last observation, so the saved history
-  and the next turn see its side effects.
+  and the next turn see its side effects. Its driver and tool call threads join
+  the run's work (`ToolInvocation.run_work`), so the run drains only after a
+  call that outlived the program returns.
 - **Code mode keeps values with `store()`, not interpreter state.** The
   model chooses what persists, so the saved data stays small and JSON. Workers
   stay stateless, so any worker in any process can run the next program. The

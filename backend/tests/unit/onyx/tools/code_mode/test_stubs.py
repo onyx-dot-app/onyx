@@ -724,3 +724,33 @@ def test_soft_keywords_keep_their_names_as_arguments_and_fields() -> None:
         in (function.declarations[0])
     )
     assert function.argument_names == {"type": "type"}
+
+
+class _Status(BaseModel):
+    state: str = Field(alias="status")
+    exit_code: int | None = None
+
+
+class _LiveStatus(_Status):
+    stream: str
+
+
+class _StatusTool(FakeTool):
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(kind=CodeModeResultKind.DETAILS, model=_Status)
+
+
+def test_details_results_give_the_program_the_declared_details() -> None:
+    """The program gets the details as the declared model has them, also from
+    a subclass with an aliased field; the model reads the content."""
+    function = build_tool_stubs([_StatusTool("status", _unused)]).functions["status"]
+    assert ") -> _Status:" in function.stub
+
+    details = _LiveStatus(status="ok", exit_code=0, stream="out")
+    result = ToolResult(content="Process exited with code 0", details=details)
+    assert program_value(function, result) == {"state": "ok", "exit_code": 0}
+    with pytest.raises(RuntimeError, match="no details"):
+        program_value(function, ToolResult(content=""))
+    with pytest.raises(ValueError, match="needs the model"):
+        CodeModeResultSpec(kind=CodeModeResultKind.DETAILS)
