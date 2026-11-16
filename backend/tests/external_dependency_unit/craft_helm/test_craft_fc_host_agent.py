@@ -666,6 +666,13 @@ def test_only_agent_clients_reach_agent_listener() -> None:
             ],
             "must be at least 32 characters",
         ),
+        (
+            ["--set-string", "craft.hostAgent.sliceMemoryPercent=85%"],
+            "sliceMemoryPercent",
+        ),
+        (["--set", "craft.hostAgent.sliceMemoryPercent=0.85"], "sliceMemoryPercent"),
+        (["--set", "craft.hostAgent.sliceMemoryPercent=5"], "sliceMemoryPercent"),
+        (["--set", "craft.hostAgent.sliceMemoryPercent=101"], "sliceMemoryPercent"),
         (["--set-string", "configMap.ENABLE_CRAFT=false"], "ENABLE_CRAFT"),
         (
             ["--set-string", "craft.hostAgent.namespace=onyx"],
