@@ -29,21 +29,12 @@ from onyx.chat.chat_processing_checker import get_processing_stream
 from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.stop_signal_checker import request_stop
-from onyx.db.action_policy import (
-    get_or_create_gated_app_id,
-    replace_workspace_action_policies,
-)
 from onyx.db.chat_inputs import submit_human_message__no_commit
 from onyx.db.chat_response import read_response_steps
 from onyx.db.enums import (
-    ActionPolicy,
-    GatedAppKind,
     IncognitoRecordMode,
-    MCPAuthenticationPerformer,
-    MCPAuthenticationType,
-    MCPTransport,
+    IntegrationActionPolicyValue,
 )
-from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import ChatMessage, ChatResponseItem, Persona, Tool, ToolCall, User
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -86,6 +77,12 @@ from tests.external_dependency_unit.code_mode_helpers import (
     wait_step,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import (
+    hold_in_plugin,
+    link_persona,
+    make_mcp_integration,
+    set_policy,
+)
 from tests.external_dependency_unit.mock_image_provider import (
     use_mock_image_generation_provider,
 )
@@ -189,7 +186,7 @@ def mcp_server_url() -> Generator[str, None, None]:
     sock.close()
 
 
-# Code mode includes the server ID in each MCP function namespace.
+# Code mode includes the integration ID in each MCP function namespace.
 MCP_SERVER = "acme"
 
 
@@ -200,45 +197,27 @@ def _persona_with_mcp_tool(
     tool_names: Sequence[str] = ("hello",),
     output_schema: dict[str, JsonValue] | None = None,
 ) -> tuple[Persona, str]:
-    mcp_server = create_mcp_server__no_commit(
-        owner_email=user.email,
-        name=MCP_SERVER,
-        description="In-process MCP server",
+    integration, _ = make_mcp_integration(
+        db_session,
         server_url=server_url,
-        auth_type=MCPAuthenticationType.NONE,
-        transport=MCPTransport.STREAMABLE_HTTP,
-        auth_performer=MCPAuthenticationPerformer.ADMIN,
-        db_session=db_session,
+        name=MCP_SERVER,
+        tools=tool_names,
+        description="Say hi.",
+        # FastMCP wraps a str result as {"result": str}.
+        output_schema=output_schema
+        or {
+            "type": "object",
+            "properties": {"result": {"type": "string"}},
+            "required": ["result"],
+        },
     )
-    db_session.flush()
-    tools = [
-        Tool(
-            name=name,
-            display_name=name.title(),
-            description="Say hi.",
-            mcp_server_id=mcp_server.id,
-            mcp_input_schema={
-                "type": "object",
-                "properties": {"name": {"type": "string"}},
-                "required": ["name"],
-            },
-            # FastMCP wraps a str result as {"result": str}.
-            mcp_output_schema=output_schema
-            or {
-                "type": "object",
-                "properties": {"result": {"type": "string"}},
-                "required": ["result"],
-            },
-            user_id=user.id,
-        )
-        for name in tool_names
-    ]
+    plugin = hold_in_plugin(db_session, [integration])
     persona = Persona(
         name=f"Code Mode Persona {uuid4().hex[:8]}",
         description="Persona with one MCP tool",
         system_prompt="You are a helpful assistant",
         task_prompt="",
-        tools=tools,
+        tools=[],
         document_sets=[],
         user_id=user.id,
         groups=[],
@@ -248,17 +227,14 @@ def _persona_with_mcp_tool(
         starter_messages=None,
         deleted=False,
     )
-    db_session.add_all([*tools, persona])
+    db_session.add(persona)
     db_session.flush()
+    link_persona(db_session, persona.id, plugin.id)
     # These tests run programs, not approvals, so the tools run without asking.
-    replace_workspace_action_policies(
-        db_session,
-        get_or_create_gated_app_id(db_session, GatedAppKind.MCP_SERVER, mcp_server.id),
-        dict.fromkeys(tool_names, ActionPolicy.ALWAYS),
-    )
-    db_session.commit()
+    for name in tool_names:
+        set_policy(db_session, integration.id, name, IntegrationActionPolicyValue.ALLOW)
     db_session.refresh(persona)
-    return persona, f"mcp__{mcp_server.id}__{MCP_SERVER}"
+    return persona, f"mcp__{integration.id}__{MCP_SERVER}"
 
 
 def _code_mode_packets(packets: Sequence[object]) -> list[Packet]:
@@ -1168,7 +1144,7 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
     text = last_tool_text(llm, "find")
     assert f"Output:\n{namespace}__hello\n" in text
     # The stub types the result from the server's output schema.
-    assert f"-> Mcp{persona.tools[0].mcp_server_id}AcmeHelloResult" in text
+    assert f"-> Mcp{namespace.split('__')[1]}AcmeHelloResult" in text
     assert text.rstrip().endswith("Hello, alpha!")
 
 

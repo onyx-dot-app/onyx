@@ -16,8 +16,7 @@ import pytest
 from mcp.types import CallToolResult, TextContent
 
 from onyx.agents.tools import ToolInvocation
-from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
-from onyx.db.models import MCPServer
+from onyx.integrations.call_credentials import CallCredentials
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool
@@ -123,32 +122,17 @@ def _make_tool(
     tool_name: str = "aws___list_regions",
     server_name: str = "aws-knowledge",
     server_id: int = 1,
-    auth_type: MCPAuthenticationType | None = MCPAuthenticationType.NONE,
 ) -> MCPTool:
-    mcp_server = MCPServer(
-        id=server_id,
-        name=server_name,
-        server_url="http://mcp.example",
-        auth_type=auth_type,
-        transport=None,
-        oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
-        oauth_cimd_enabled=True,
-        oauth_authorization_endpoint=None,
-        oauth_token_endpoint=None,
-    )
     return MCPTool(
-        tool_id=1,
-        mcp_server=mcp_server,
+        integration_id=server_id,
+        integration_name=server_name,
+        server_url="http://mcp.example",
+        transport=None,
         tool_name=tool_name,
         tool_description="List AWS regions",
         tool_definition=input_schema,
+        acting_user_id=None,
     )
-
-
-def test_server_without_auth_type_builds_tool() -> None:
-    tool = _make_tool({"type": "object"}, auth_type=None)
-
-    assert tool.mcp_server.auth_type is None
 
 
 class TestMCPToolDefinition:
@@ -203,7 +187,9 @@ class TestMCPToolLLMNames:
             spec={},
         )
         custom_tools = [
-            CustomTool(id=id, method_spec=method, base_url="https://example.com")
+            CustomTool(
+                integration_id=id, method_spec=method, base_url="https://example.com"
+            )
             for id in (1, 2)
         ]
         mcp_tools = [
@@ -246,7 +232,9 @@ class TestMCPToolLLMNames:
             tools.extend(
                 [
                     CustomTool(
-                        id=1, method_spec=method, base_url="https://example.com"
+                        integration_id=1,
+                        method_spec=method,
+                        base_url="https://example.com",
                     ),
                     _make_tool({}, tool_name=name, server_name="server" * 20),
                 ]
@@ -261,12 +249,25 @@ class TestMCPToolLLMNames:
     def test_disambiguated_mcp_tool_calls_server_with_original_name(self) -> None:
         mcp_tool = _make_tool({"type": "object"}, tool_name="shared")
 
-        with patch(
-            "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value=CallToolResult(
-                content=[TextContent(type="text", text='{"ok": true}')]
+        with (
+            patch(
+                "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
+                return_value=CallToolResult(
+                    content=[TextContent(type="text", text='{"ok": true}')]
+                ),
+            ) as mock_call_mcp_tool,
+            patch(
+                "onyx.tools.tool_implementations.mcp.mcp_tool."
+                "resolve_call_credentials_by_id",
+                return_value=CallCredentials(
+                    integration_id=1,
+                    auth_method=None,
+                    connection_id=None,
+                    connection_user_id=None,
+                    headers={},
+                ),
             ),
-        ) as mock_call_mcp_tool:
+        ):
             mcp_tool.run(
                 ToolInvocation(
                     call_id="test",

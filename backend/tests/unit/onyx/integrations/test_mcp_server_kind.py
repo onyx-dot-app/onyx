@@ -8,7 +8,6 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
-    GatedAppKind,
     IntegrationActionPolicyValue,
     IntegrationAuthMode,
     IntegrationKind,
@@ -17,6 +16,7 @@ from onyx.db.enums import (
 )
 from onyx.db.models import Integration, IntegrationAction, MCPServer
 from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.integrations.call_credentials import CallCredentials
 from onyx.integrations.kinds import mcp_server as mcp_kind
 from onyx.integrations.kinds.mcp_server import McpServerKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
@@ -215,11 +215,10 @@ def test_match_request_without_url_is_none(
 
 
 def test_build_chat_tools_sets_approval_and_schemas(
-    integration: Integration, server: MCPServer
+    integration: Integration,
+    server: MCPServer,  # noqa: ARG001
 ) -> None:
-    scope = ToolApprovalScope(
-        app_kind=GatedAppKind.MCP_SERVER, target_id=server.id, action_id="create"
-    )
+    scope = ToolApprovalScope(integration_id=integration.id, action_id="create")
     actions = [
         IntegrationAction(
             id=11,
@@ -232,6 +231,13 @@ def test_build_chat_tools_sets_approval_and_schemas(
     ]
     ctx = ChatToolContext(
         user_email="u@example.com",
+        credentials=CallCredentials(
+            integration_id=integration.id,
+            auth_method=None,
+            connection_id=None,
+            connection_user_id=None,
+            headers={},
+        ),
         approval_for=lambda key: scope if key == "create" else None,
     )
 
@@ -241,7 +247,9 @@ def test_build_chat_tools_sets_approval_and_schemas(
     search, create = tools
     assert search.approval is None
     assert create.approval == scope
-    assert search.id == 11
+    # An integration action has no tool row; its name has the integration id.
+    assert search.id is None
+    assert search.name.startswith(f"mcp__{integration.id}__")
     assert search.tool_definition().parameters["properties"] == {
         "q": {"type": "string"}
     }

@@ -32,8 +32,6 @@ from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.chat.run_store import agent_result_message
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.models import MCPServer
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
@@ -1068,7 +1066,7 @@ def test_chat_child_has_its_own_context_and_the_parent_tools(code_mode: bool) ->
 def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) -> None:
     configured = (
         CustomTool(
-            id=42,
+            integration_id=42,
             method_spec=MethodSpec(
                 name="list_agents",
                 raw_name="list_agents",
@@ -1081,14 +1079,11 @@ def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) 
         )
         if custom
         else MCPTool(
-            tool_id=42,
-            mcp_server=MCPServer(
-                id=42,
-                name="remote",
-                server_url="https://example.com",
-                oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
-                oauth_cimd_enabled=True,
-            ),
+            integration_id=42,
+            integration_name="remote",
+            server_url="https://example.com",
+            transport=None,
+            acting_user_id=None,
             tool_name="list_agents",
             tool_description="List remote agents",
             tool_definition={"type": "object", "properties": {}},

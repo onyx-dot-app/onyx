@@ -27,7 +27,6 @@ from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunStatus
 from onyx.agents.runtime import Agent, Run
-from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
 from onyx.agents.tools import (
     AgentTool,
     ChildRunWait,
@@ -47,26 +46,20 @@ from onyx.chat.run_store import (
     fail_suspended_response,
 )
 from onyx.configs.constants import MessageType
-from onyx.db.action_policy import replace_workspace_action_policies
 from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import delete_messages_and_files_from_chat_session
 from onyx.db.chat_inputs import read_chat_inbox
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.enums import (
-    ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    GatedAppKind,
+    IntegrationActionPolicyValue,
 )
-from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
     ChatResponseCheckpoint,
     ChatSession,
-    GatedApp,
-    MCPServer,
-    Tool,
     User,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -119,6 +112,11 @@ from tests.external_dependency_unit.chat.test_run_store import (
     chat_agent,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    make_mcp_integration,
+    set_policy,
+)
 from tests.unit.onyx.agents.fakes import FakeModelClient
 from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeMCPTool, until
 
@@ -126,32 +124,31 @@ ACTION = "send_email"
 
 
 class ApprovalChat(BaseModel):
-    """A user's chat session, with a saved turn, and an MCP server with one tool."""
+    """A user's chat session, with a saved turn, and an MCP server integration
+    with one action."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     user: User
-    server: MCPServer
-    gated_app_id: int
+    integration_id: int
     chat_session_id: UUID
     question: UserMessage
     response_id: int
 
     def scope(self) -> ToolApprovalScope:
-        return ToolApprovalScope(
-            app_kind=GatedAppKind.MCP_SERVER,
-            target_id=self.server.id,
-            action_id=ACTION,
-        )
+        return ToolApprovalScope(integration_id=self.integration_id, action_id=ACTION)
 
     def tool(self) -> MCPTool:
         """The server's tool as tool construction builds it for an ASK policy."""
         return MCPTool(
-            tool_id=1,
-            mcp_server=self.server,
+            integration_id=self.integration_id,
+            integration_name="approvals",
+            server_url="https://example.com/mcp",
+            transport=None,
             tool_name=ACTION,
             tool_description="",
             tool_definition={"displayName": "Send email"},
+            acting_user_id=self.user.id,
             approval=self.scope(),
         )
 
@@ -188,17 +185,12 @@ def chat(
     db_session: Session, make_test_user: MakeTestUser
 ) -> Generator[ApprovalChat, None, None]:
     user = make_test_user("tool_approval")
-    server = create_mcp_server__no_commit(
-        owner_email=user.email,
-        name=f"approvals_{uuid4().hex[:8]}",
-        description=None,
+    integration, _ = make_mcp_integration(
+        db_session,
         server_url="https://example.com/mcp",
-        auth_type=None,
-        transport=None,
-        auth_performer=None,
-        db_session=db_session,
+        name=f"approvals_{uuid4().hex[:8]}",
+        tools=[ACTION],
     )
-    db_session.add(Tool(name=ACTION, mcp_server_id=server.id, user_id=user.id))
     chat_session = ChatSession(id=uuid4(), user_id=user.id, description="approvals")
     db_session.add(chat_session)
     db_session.flush()
@@ -220,16 +212,12 @@ def chat(
     db_session.add(response)
     db_session.flush()
     question.latest_child_message_id = response.id
-    gated_app_id = db_session.scalar(
-        select(GatedApp.id).where(GatedApp.mcp_server_id == server.id)
-    )
-    assert gated_app_id is not None
+    integration_id = integration.id
     db_session.commit()
     try:
         yield ApprovalChat(
             user=user,
-            server=server,
-            gated_app_id=gated_app_id,
+            integration_id=integration_id,
             chat_session_id=chat_session.id,
             question=UserMessage(id=f"chat:{question.id}", content=question.message),
             response_id=response.id,
@@ -237,9 +225,7 @@ def chat(
     finally:
         db_session.rollback()
         delete_messages_and_files_from_chat_session(chat_session.id, db_session)
-        # Cascades to the server's tools, app identity, and requests.
-        db_session.execute(delete(MCPServer).where(MCPServer.id == server.id))
-        db_session.commit()
+        delete_integrations(db_session, [integration_id])
 
 
 def _replies(first: AssistantMessage) -> Callable[..., AssistantMessage]:
@@ -425,7 +411,7 @@ def _resumable(db_session: Session, chat: ApprovalChat) -> list[int]:
 
 
 def _resume_direct_call_in_process(
-    chat_session_id: str, response_id: str, user_id: str, server_id: str
+    chat_session_id: str, response_id: str, user_id: str, integration_id: str
 ) -> None:
     """Resume the handed-off response with fresh objects and its saved
     decision, as another API pod does."""
@@ -435,16 +421,10 @@ def _resume_direct_call_in_process(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
         ) as session:
             user = session.get_one(User, UUID(user_id))
-            server = session.get_one(MCPServer, int(server_id))
-            gated_app_id = session.scalar(
-                select(GatedApp.id).where(GatedApp.mcp_server_id == server.id)
-            )
-            assert gated_app_id is not None
             session.expunge_all()
         chat = ApprovalChat(
             user=user,
-            server=server,
-            gated_app_id=gated_app_id,
+            integration_id=int(integration_id),
             chat_session_id=UUID(chat_session_id),
             question=UserMessage(content="Email the team"),
             response_id=int(response_id),
@@ -509,7 +489,7 @@ def test_a_waiting_direct_call_hands_off_and_another_process_resumes_it(
             str(chat.chat_session_id),
             str(chat.response_id),
             str(chat.user.id),
-            str(chat.server.id),
+            str(chat.integration_id),
         ],
         cwd=Path(__file__).resolve().parents[3],
         capture_output=True,
@@ -621,11 +601,12 @@ def test_a_decision_and_a_stop_of_the_live_turn_keep_the_first(
     ]
 
 
-def test_a_call_whose_server_was_deleted_gets_no_longer_available(
+def test_a_call_whose_integration_was_deleted_is_disabled(
     db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
 ) -> None:
-    """Deleting the server deletes the request; the response resumes, and the
-    call gets no tool."""
+    """Deleting the integration keeps the request with no integration. An
+    approval of it saves a rejection by the policy; the response resumes, and
+    the call reads that its tool is disabled."""
     tool = chat.tool()
     sent: list[str] = []
     owned = _start(
@@ -637,12 +618,14 @@ def test_a_call_whose_server_was_deleted_gets_no_longer_available(
     )
     _hand_off(owned)
     [row] = chat.rows(db_session)
-    # Deletes the server's app identity and its requests.
-    db_session.execute(delete(MCPServer).where(MCPServer.id == chat.server.id))
-    db_session.commit()
-    with pytest.raises(OnyxError) as missing:
-        chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
-    assert missing.value.error_code == OnyxErrorCode.NOT_FOUND
+    delete_integrations(db_session, [chat.integration_id])
+    decided = chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+    assert (decided.decision, decided.decided_via) == (
+        ApprovalDecision.REJECTED,
+        ApprovalDecidedVia.POLICY,
+    )
+    [row] = chat.rows(db_session)
+    assert row.integration_id is None
     assert _resumable(db_session, chat) == [chat.response_id]
 
     resumed = _resume(
@@ -655,23 +638,23 @@ def test_a_call_whose_server_was_deleted_gets_no_longer_available(
 
     assert resumed is not None
     assert resumed.run.result(timeout=10).output.text == "done"
-    assert resumed.first_result("send") == UNAVAILABLE_CALL_MESSAGE
+    assert resumed.first_result("send") == (
+        f"The {tool.name} tool is disabled, so this call did not run."
+    )
     assert sent == []
 
 
-def test_a_request_creates_the_missing_app_identity(
+def test_a_request_keys_on_the_integration_with_no_gated_app(
     db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
 ) -> None:
-    db_session.execute(delete(GatedApp).where(GatedApp.id == chat.gated_app_id))
-    db_session.commit()
-
+    """An integration made after the upgrade has no gated_app row: the
+    request writes its integration and no gated_app."""
     owned = _direct_call(chat, owned_runs)
 
     assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
     [row] = chat.rows(db_session)
-    assert row.gated_app_id == db_session.scalar(
-        select(GatedApp.id).where(GatedApp.mcp_server_id == chat.server.id)
-    )
+    assert row.integration_id == chat.integration_id
+    assert row.gated_app_id is None
 
 
 def test_a_request_stores_its_arguments_without_nul_characters(
@@ -1138,7 +1121,8 @@ def test_a_saved_decision_repeated_after_the_tool_is_disabled_returns_it(
         db_session,
         chat_session_id=chat.chat_session_id,
         chat_message_id=chat.response_id,
-        gated_app_id=chat.gated_app_id,
+        integration_id=chat.integration_id,
+        gated_app_id=None,
         action_id=ACTION,
         tool_call_id="send",
         tool_name=ACTION,
@@ -1153,10 +1137,13 @@ def test_a_saved_decision_repeated_after_the_tool_is_disabled_returns_it(
             decided_via=ApprovalDecidedVia.SESSION_GRANT,
         )
     )
-    replace_workspace_action_policies(
-        db_session, chat.gated_app_id, {ACTION: ActionPolicy.DENY}
-    )
     db_session.commit()
+    set_policy(
+        db_session,
+        chat.integration_id,
+        ACTION,
+        IntegrationActionPolicyValue.BLOCKED,
+    )
 
     repeated = chat.decide(db_session, approval_id, ApprovalChoice.APPROVE_ONCE)
 

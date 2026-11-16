@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -7,8 +8,9 @@ from fastapi.testclient import TestClient
 from mcp.types import CallToolResult, TextContent
 
 from onyx.agents.tools import ToolInvocation, ToolResult, ToolUpdate
-from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
-from onyx.db.models import MCPServer
+from onyx.integrations.call_credentials import CallCredentials
+from onyx.integrations.connection_models import ConnectionState
+from onyx.integrations.connections import ConnectionProblem
 from onyx.llm.cancellation import CancellationSignal
 from onyx.mcp_server.api import create_mcp_fastapi_app
 from onyx.mcp_server.auth import OnyxTokenVerifier
@@ -20,27 +22,34 @@ from onyx.server.metrics.mcp_server import MCPAuthResult, MCPServerToolName
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 
+_MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
 
-def _mcp_tool(
-    auth_type: MCPAuthenticationType = MCPAuthenticationType.NONE,
-) -> MCPTool:
-    server = MCPServer(
-        id=1,
-        name="Customer MCP",
-        server_url="https://mcp.example",
-        auth_type=auth_type,
-        transport=None,
-        oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
-        oauth_cimd_enabled=True,
-        oauth_authorization_endpoint=None,
-        oauth_token_endpoint=None,
-    )
+
+@pytest.fixture(autouse=True)
+def _resolved_credentials() -> Iterator[None]:
+    with patch(
+        f"{_MODULE}.resolve_call_credentials_by_id",
+        return_value=CallCredentials(
+            integration_id=1,
+            auth_method=None,
+            connection_id=None,
+            connection_user_id=None,
+            headers={},
+        ),
+    ):
+        yield
+
+
+def _mcp_tool() -> MCPTool:
     return MCPTool(
-        tool_id=1,
-        mcp_server=server,
+        integration_id=1,
+        integration_name="Customer MCP",
+        server_url="https://mcp.example",
+        transport=None,
         tool_name="lookup",
         tool_description="Lookup",
         tool_definition={"type": "object", "properties": {}},
+        acting_user_id=None,
     )
 
 
@@ -76,10 +85,16 @@ def test_client_records_success_once() -> None:
 
 
 def test_client_records_missing_credentials_as_auth_error() -> None:
-    tool = _mcp_tool(MCPAuthenticationType.API_TOKEN)
-    with patch(
-        "onyx.tools.tool_implementations.mcp.mcp_tool.record_mcp_client_tool_outcome"
-    ) as record:
+    tool = _mcp_tool()
+    with (
+        patch(
+            f"{_MODULE}.resolve_call_credentials_by_id",
+            return_value=ConnectionProblem(
+                code=ConnectionState.NOT_CONNECTED, reason="Connect it."
+            ),
+        ),
+        patch(f"{_MODULE}.record_mcp_client_tool_outcome") as record,
+    ):
         response = tool.run(_invocation(), ToolContext())
 
     record.assert_called_once()
@@ -103,7 +118,7 @@ def test_client_records_reauthentication_required_as_auth_error() -> None:
         response = tool.run(_invocation(), ToolContext())
 
     assert isinstance(response, ToolResult)
-    assert "Please use the MCP dropdown" in response.text
+    assert "from the Plugins page" in response.text
     record.assert_called_once()
     assert record.call_args.kwargs["status"] == MCPToolCallStatus.AUTH_ERROR
     assert response.is_error
