@@ -8,7 +8,7 @@ from collections import deque
 from collections.abc import Callable, Collection, Generator, Iterable, Iterator
 from contextlib import closing
 from datetime import datetime
-from typing import Any, Protocol, cast
+from typing import Any, NamedTuple, Protocol, cast
 from urllib.parse import ParseResult, parse_qs, urlparse
 
 from typing_extensions import override
@@ -70,6 +70,7 @@ from onyx.connectors.google_drive.models import (
     PhaseProgress,
     RetrievedDriveFile,
     StageCompletion,
+    UnlistedParent,
     make_user_removal_checker,
     next_phase,
     split_target_partition_key,
@@ -235,19 +236,17 @@ def _clean_requested_drive_ids(
 # Folders one step of the read of unlisted parents reads, and the most nodes
 # it holds before it yields them.
 PARENT_READ_BATCH_SIZE = 500
-# The most users kept as readers to try for one unlisted parent folder. It
-# bounds the checkpoint: the map has one entry for each such folder.
-MAX_PARENT_READERS = 4
 
 
-def _add_parent_reader(
-    unresolved: dict[str, list[str]], parent_id: str, email: str
-) -> None:
-    """Records ``email`` as a user who can try to read the parent. The first
-    user to see a child is not always one who can read its parent."""
-    readers = unresolved.setdefault(parent_id, [])
-    if email not in readers and len(readers) < MAX_PARENT_READERS:
-        readers.append(email)
+class _FolderRead(NamedTuple):
+    """The result of a read of one unlisted folder."""
+
+    node: HierarchyNode | None
+    # The folder's parent to read next. None at a root, or with no node.
+    parent_id: str | None
+    # The user who read the folder, and the folder's shared drive.
+    reader: str | None
+    drive_id: str | None
 
 
 def _take[T](pending: dict[str, T], count: int) -> dict[str, T]:
@@ -2717,9 +2716,8 @@ class GoogleDriveConnector(
                 max_workers=DRIVE_CONVERSION_WORKERS,
             ),
         )
-        unresolved = listing.unresolved_parent_emails
         for folder in yielded:
-            unresolved.pop(folder.drive_file["id"], None)
+            listing.unresolved_parents.pop(folder.drive_file["id"], None)
         for folder in new_folders:
             if not _get_parent_id_from_file(folder.drive_file):
                 parentless[folder.drive_file["id"]] = folder.user_email
@@ -2730,8 +2728,38 @@ class GoogleDriveConnector(
                 and parent_id not in seen
                 and parent_id not in checkpoint.fully_walked_hierarchy_node_raw_ids
             ):
-                _add_parent_reader(unresolved, parent_id, item.user_email)
+                listing.add_parent_reader(
+                    parent_id,
+                    item.user_email,
+                    drive_id=item.drive_file.get("driveId"),
+                    owner=owner_email(item.drive_file),
+                )
         return nodes
+
+    def _parent_readers(
+        self,
+        checkpoint: GoogleDriveCheckpoint,
+        listing: DriveListingState,
+        parent: UnlistedParent,
+    ) -> list[str]:
+        """Who reads an unlisted parent, in order. First the user who listed
+        its shared drive, or the in-domain owner of a My Drive child: that
+        user can usually read the folder, so most parents take one call. Then
+        every user who saw a child."""
+        readers = listing.parent_reader_emails(parent)
+        first: str | None = None
+        if self.is_service_account:
+            if parent.drive_id is not None:
+                first = checkpoint.organizer_email_by_drive_id.get(parent.drive_id)
+            elif (
+                parent.owner is not None
+                and parent.owner.endswith(f"@{self.google_domain.lower()}")
+                and self._may_impersonate(parent.owner, checkpoint)
+            ):
+                first = parent.owner
+        if first is None:
+            return readers
+        return [first, *(reader for reader in readers if reader != first)]
 
     def _resolve_unlisted_parents(
         self,
@@ -2760,12 +2788,12 @@ class GoogleDriveConnector(
         )
         seen = checkpoint.seen_hierarchy_node_raw_ids
         walked = checkpoint.fully_walked_hierarchy_node_raw_ids
-        if listing.parentless_folder_emails or listing.unresolved_parent_emails:
+        if listing.parentless_folder_emails or listing.unresolved_parents:
             logger.info(
                 "Reading %s folders listed with no parent and %s parent folders "
                 "that no folder listing returned",
                 len(listing.parentless_folder_emails),
-                len(listing.unresolved_parent_emails),
+                len(listing.unresolved_parents),
             )
         while listing.parentless_folder_emails:
             batch = _take(listing.parentless_folder_emails, PARENT_READ_BATCH_SIZE)
@@ -2795,23 +2823,20 @@ class GoogleDriveConnector(
             for node in nodes:
                 parent_id = node.raw_parent_id
                 if parent_id and parent_id not in seen and parent_id not in walked:
-                    _add_parent_reader(
-                        listing.unresolved_parent_emails,
-                        parent_id,
-                        batch[node.raw_node_id],
-                    )
+                    listing.add_parent_reader(parent_id, batch[node.raw_node_id])
             # Also when no read gave a node: the consumer checks its stop
             # signal and reports progress for each batch.
             yield nodes
-        while listing.unresolved_parent_emails:
-            batch = _take(listing.unresolved_parent_emails, PARENT_READ_BATCH_SIZE)
+        while listing.unresolved_parents:
             batch = {
-                folder_id: emails
-                for folder_id, emails in batch.items()
+                folder_id: self._parent_readers(checkpoint, listing, parent)
+                for folder_id, parent in _take(
+                    listing.unresolved_parents, PARENT_READ_BATCH_SIZE
+                ).items()
                 if folder_id not in seen
             }
             results = cast(
-                list[tuple[HierarchyNode | None, str | None]],
+                list[_FolderRead],
                 run_functions_tuples_in_parallel(
                     [
                         (
@@ -2830,21 +2855,28 @@ class GoogleDriveConnector(
                 ),
             )
             nodes = []
-            for (folder_id, emails), (node, parent_id) in zip(
-                batch.items(), results, strict=True
-            ):
-                if node is not None:
-                    nodes.append(node)
+            for (folder_id, emails), read in zip(batch.items(), results, strict=True):
+                if read.node is not None:
+                    nodes.append(read.node)
+                parent_id = read.parent_id
                 if (
                     parent_id is not None
+                    and read.reader is not None
                     and parent_id not in seen
-                    and (parent_id not in walked)
+                    and parent_id not in walked
                 ):
-                    for email in emails:
-                        _add_parent_reader(
-                            listing.unresolved_parent_emails, parent_id, email
+                    # The user who read the folder first: that user can
+                    # usually read its parent too.
+                    for email in [read.reader, *emails]:
+                        listing.add_parent_reader(
+                            parent_id, email, drive_id=read.drive_id
                         )
-                logger.debug("Read unlisted folder %s as one of %s", folder_id, emails)
+                logger.debug(
+                    "Read unlisted folder %s as %s of %s",
+                    folder_id,
+                    read.reader,
+                    emails,
+                )
             yield nodes
 
     def _read_parentless_folder(
@@ -2878,12 +2910,11 @@ class GoogleDriveConnector(
         checkpoint: GoogleDriveCheckpoint,
         permission_sync_context: PermissionSyncContext | None,
         add_prefix: bool,
-    ) -> tuple[HierarchyNode | None, str | None]:
-        """The node for one folder, and the parent to read next (None at a
-        root or when the folder cannot be read). Reads as each of ``emails``
-        and then as the admin, until one can read the folder."""
-        if checkpoint.seen_hierarchy_node_raw_ids.check_and_add(folder_id):
-            return None, None
+    ) -> _FolderRead:
+        """The node for one folder, and the parent to read next. Reads as each
+        of ``emails`` and then as the admin, until one can read the folder.
+        A folder that no one can read is not marked as seen: a later child
+        that names it adds readers for another try."""
         field_type = (
             DriveFileFieldType.WITH_PERMISSIONS
             if permission_sync_context
@@ -2899,21 +2930,25 @@ class GoogleDriveConnector(
                 break
         if folder is None:
             # Documents under it keep their STUB parent.
-            return None, None
+            return _FolderRead(None, None, None, None)
         node = self._folder_node(
             folder, permission_sync_context, add_prefix, raw_id=folder_id
         )
+        if checkpoint.seen_hierarchy_node_raw_ids.check_and_add(folder_id):
+            # A listing yielded it while this read ran.
+            return _FolderRead(None, None, None, None)
+        drive_id = folder.get("driveId")
         if _is_shared_drive_root(folder):
             drive_name = self._get_shared_drive_name(folder_id, email)
             if drive_name:
                 node.display_name = drive_name
             node.node_type = HierarchyNodeType.SHARED_DRIVE
             checkpoint.fully_walked_hierarchy_node_raw_ids.add(folder_id)
-            return node, None
+            return _FolderRead(node, None, email, drive_id)
         if self._is_my_drive_root(folder, email):
             checkpoint.fully_walked_hierarchy_node_raw_ids.add(folder_id)
-            return node, None
-        return node, node.raw_parent_id
+            return _FolderRead(node, None, email, drive_id)
+        return _FolderRead(node, node.raw_parent_id, email, drive_id)
 
     def _retrieve_all_slim_docs_impl(
         self,

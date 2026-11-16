@@ -107,6 +107,7 @@ from onyx.db.index_attempt import (
     get_index_attempt,
     get_stale_not_started_index_attempts,
     get_waiting_index_attempt,
+    index_attempt_has_errors_without_document,
     mark_attempt_canceled,
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
@@ -532,12 +533,13 @@ def monitor_indexing_attempt_progress(
 def _remove_unfilled_stub_nodes(
     db_session: Session, cc_pair: ConnectorCredentialPair
 ) -> None:
-    """After a successful attempt, a STUB parent that is still not filled
-    will not be filled: its folder is not in the source, or the connector
-    cannot see it. Move what is under it to the source root and remove it,
-    so nothing stays hidden from the tree. A failed or canceled attempt
-    keeps its STUBs, because the next attempt can still fill them. A STUB
-    that a failed cleanup keeps is removed by the next successful attempt."""
+    """After an attempt whose listing completed, a STUB parent that is still
+    not filled will not be filled: its folder is not in the source, or the
+    connector cannot see it. Move what is under it to the source root and
+    remove it, so nothing stays hidden from the tree. A failed or canceled
+    attempt, or one with a listing failure, keeps its STUBs, because the
+    next attempt can still fill them. A STUB that a failed cleanup keeps is
+    removed by the next attempt that completes its listing."""
     source = cc_pair.connector.source
     # The attempt is complete. A cleanup error must not undo that.
     try:
@@ -569,6 +571,18 @@ def _remove_unfilled_stub_nodes(
         logger.exception(
             "Could not invalidate the hierarchy cache of source %s", source
         )
+
+
+def _attempt_listed_every_parent(db_session: Session, attempt: IndexAttempt) -> bool:
+    """Whether the attempt's listing completed, so a STUB that is still not
+    filled will not be filled. Failures of single documents do not change
+    that. A failure that names no document (a listing, a partition or a
+    batch) can mean a parent was not seen."""
+    if attempt.status == IndexingStatus.SUCCESS:
+        return True
+    if attempt.status != IndexingStatus.COMPLETED_WITH_ERRORS:
+        return False
+    return not index_attempt_has_errors_without_document(attempt.id, db_session)
 
 
 def check_indexing_completion(
@@ -638,7 +652,9 @@ def check_indexing_completion(
 
         # A backfill can run with a partial config, so it does not list
         # every parent.
-        if attempt.status == IndexingStatus.SUCCESS and not attempt.is_backfill:
+        if not attempt.is_backfill and _attempt_listed_every_parent(
+            db_session, attempt
+        ):
             _remove_unfilled_stub_nodes(db_session, cc_pair)
 
         source = cc_pair.connector.source.value

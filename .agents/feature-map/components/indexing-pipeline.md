@@ -337,10 +337,12 @@ the error type on purpose in auth code.
 - **A document can point at a STUB parent.** When a document's parent node is
   not stored yet, the document gets a STUB hierarchy node
   (`redis/redis_hierarchy.py:resolve_parent_node_ids`), and the parent fills
-  it when it arrives. When an attempt finishes with success,
+  it when it arrives. When an attempt's listing completed (success, or
+  `COMPLETED_WITH_ERRORS` where every failure names a document),
   `backend/onyx/db/hierarchy.py:remove_unfilled_stub_hierarchy_nodes_for_cc_pair` moves
   what is under a STUB that is still not filled to the source root and removes
-  the STUB. A failed or canceled attempt keeps its STUBs.
+  the STUB. A failed or canceled attempt, or one with a failure that names no
+  document (a listing, a partition or a batch), keeps its STUBs.
 - **The embedding rate limit blocks instead of failing.** The limit is one
   sliding window per tenant in Redis
   (`natural_language_processing/embedding_rate_limit.py`). A full window or a

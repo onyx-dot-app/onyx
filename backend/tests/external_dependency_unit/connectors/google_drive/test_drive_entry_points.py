@@ -194,7 +194,7 @@ def test_inline_indexing_builds_the_folder_tree_without_the_walk(
     for document in run.documents:
         assert document.parent_hierarchy_raw_node_id in node_ids, document.id
     assert run.final is not None and run.final.listing is not None
-    assert run.final.listing.unresolved_parent_emails == {}
+    assert run.final.listing.unresolved_parents == {}
 
 
 @pytest.mark.usefixtures("small_calls", "db_session", "tenant_context")
