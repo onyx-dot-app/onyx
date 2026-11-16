@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { Button, CopyButton, InputTypeIn, Text } from "@opal/components";
@@ -91,10 +91,7 @@ export function CancelInviteModal({
       action: {
         icon: SvgArrowUpRight,
         label: t("deleteModal.toasts.openSkills"),
-        onClick: () => {
-          toast.dismiss(PRIVATE_SKILLS_TOAST_ID);
-          navigation.go("/admin/skills");
-        },
+        onClick: () => navigation.go("/admin/skills"),
       },
     });
     return true;
@@ -172,10 +169,7 @@ export function DeactivateUserModal({
       action: {
         icon: SvgArrowUpRight,
         label: t("deleteModal.toasts.openSkills"),
-        onClick: () => {
-          toast.dismiss(PRIVATE_SKILLS_TOAST_ID);
-          navigation.go("/admin/skills");
-        },
+        onClick: () => navigation.go("/admin/skills"),
       },
     });
     return true;
@@ -285,6 +279,14 @@ export function ActivateUserModal({
 
 const PRIVATE_SKILLS_TOAST_ID = "delete-user-private-skills";
 
+/**
+ * Closes the private-skills conflict toast when the Users page unmounts, so
+ * the toast leaves together with the page and not over it.
+ */
+export function useClosePrivateSkillsToastOnLeave() {
+  useEffect(() => () => toast.dismiss(PRIVATE_SKILLS_TOAST_ID), []);
+}
+
 interface DeleteUserModalProps {
   email: string;
   onClose: () => void;
@@ -312,10 +314,7 @@ export function DeleteUserModal({
       action: {
         icon: SvgArrowUpRight,
         label: t("deleteModal.toasts.openSkills"),
-        onClick: () => {
-          toast.dismiss(PRIVATE_SKILLS_TOAST_ID);
-          navigation.go("/admin/skills");
-        },
+        onClick: () => navigation.go("/admin/skills"),
       },
     });
     return true;

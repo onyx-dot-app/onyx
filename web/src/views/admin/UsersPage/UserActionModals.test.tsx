@@ -1,9 +1,11 @@
+import { renderHook } from "@testing-library/react";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { toast } from "@opal/layouts";
 import { FetchError } from "@/lib/fetcher";
 import {
   DeleteUserModal,
   ResetPasswordModal,
+  useClosePrivateSkillsToastOnLeave,
 } from "@/views/admin/UsersPage/UserActionModals";
 import { deleteUser, resetPassword } from "@/views/admin/UsersPage/svc";
 
@@ -93,8 +95,8 @@ describe("DeleteUserModal", () => {
     expect(options?.duration).toBe(Infinity);
     const dismiss = jest.spyOn(toast, "dismiss");
     options?.action?.onClick();
-    expect(dismiss).toHaveBeenCalledWith(options?.id);
     expect(mockGo).toHaveBeenCalledWith("/admin/skills");
+    expect(dismiss).not.toHaveBeenCalled();
     errorToast.mockRestore();
     dismiss.mockRestore();
   });
@@ -124,5 +126,17 @@ describe("DeleteUserModal", () => {
     await waitFor(() => expect(errorToast).toHaveBeenCalled());
     expect(errorToast.mock.calls[0]![1]?.action).toBeUndefined();
     errorToast.mockRestore();
+  });
+});
+
+describe("useClosePrivateSkillsToastOnLeave", () => {
+  it("closes the private-skills toast when the Users page unmounts", () => {
+    const { unmount } = renderHook(() => useClosePrivateSkillsToastOnLeave());
+    const dismiss = jest.spyOn(toast, "dismiss");
+
+    unmount();
+
+    expect(dismiss).toHaveBeenCalledWith("delete-user-private-skills");
+    dismiss.mockRestore();
   });
 });
