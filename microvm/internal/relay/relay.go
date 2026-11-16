@@ -315,6 +315,9 @@ func (r *Relay) handle(vmConn net.Conn, vm VM) {
 	if n := br.Buffered(); n > 0 {
 		buf, _ := br.Peek(n)
 		if _, err := up.Write(buf); err != nil {
+			if r.TLS != nil {
+				r.refused(p, vm, err)
+			}
 			return
 		}
 	}
@@ -352,19 +355,27 @@ func (r *Relay) refused(p *pair, vm VM, err error) {
 func (r *Relay) splice(p *pair, up net.Conn, vm VM) {
 	var last atomic.Int64
 	last.Store(time.Now().UnixNano())
+	var gotUp atomic.Bool
 	idle := r.idle()
-	done := make(chan struct{}, 2)
+	// Each copy reports its error; vmEnded is true when the VM side ended.
+	type end struct {
+		vmEnded bool
+		err     error
+	}
+	done := make(chan end, 2)
 	cp := func(dst, src net.Conn) {
-		defer func() { done <- struct{}{} }()
+		fromVM := src == p.vm
 		buf := make([]byte, bufSize)
-		got := false
 		for {
 			_ = src.SetReadDeadline(time.Now().Add(idle))
 			n, err := src.Read(buf)
 			if n > 0 {
-				got = true
+				if !fromVM {
+					gotUp.Store(true)
+				}
 				last.Store(time.Now().UnixNano())
 				if _, werr := dst.Write(buf[:n]); werr != nil {
+					done <- end{vmEnded: !fromVM, err: werr}
 					return
 				}
 			}
@@ -373,19 +384,20 @@ func (r *Relay) splice(p *pair, up net.Conn, vm VM) {
 				if errors.As(err, &ne) && ne.Timeout() && time.Since(time.Unix(0, last.Load())) < idle {
 					continue
 				}
-				// In TLS 1.3 the proxy refuses a client certificate after the
-				// relay's handshake ends: an alert, a close (SAN pin) or a reset
-				// before the first byte.
-				if src == up && !got && r.TLS != nil && !p.isClosed() {
-					r.refused(p, vm, err)
-				}
+				done <- end{vmEnded: fromVM, err: err}
 				return
 			}
 		}
 	}
 	go cp(up, p.vm)
 	go cp(p.vm, up)
-	<-done
+	first := <-done
+	// In TLS 1.3 the proxy refuses a client certificate after the relay's
+	// handshake ends: an alert, a close (SAN pin) or a reset before its first
+	// byte. Tell the VM, unless the VM ended first or CloseAll ran.
+	if r.TLS != nil && !first.vmEnded && !gotUp.Load() && !p.isClosed() {
+		r.refused(p, vm, first.err)
+	}
 	p.close()
 	<-done
 }
