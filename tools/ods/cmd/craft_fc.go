@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -152,10 +153,17 @@ func runCraftFCSmoke(o *craftFCSmokeOptions, root string, stdout, stderr io.Writ
 	return 0, nil
 }
 
-// craftFCAPIPod returns a running api-server pod that is not terminating:
-// an exec there would end with the pod.
+// craftFCAPIPodTemplate lists the pods that are not terminating and whose
+// container is ready: an exec in a terminating pod ends with the pod.
+func craftFCAPIPodTemplate(container string) string {
+	return `{{range .items}}{{if not .metadata.deletionTimestamp}}{{$pod := .metadata.name}}` +
+		`{{range .status.containerStatuses}}{{if and (eq .name ` + strconv.Quote(container) + `) .ready}}` +
+		`{{$pod}}{{"\n"}}{{end}}{{end}}{{end}}{{end}}`
+}
+
+// craftFCAPIPod returns a running api-server pod with a ready container.
 func craftFCAPIPod(o *craftFCSmokeOptions) (string, error) {
-	tmpl := `{{range .items}}{{if not .metadata.deletionTimestamp}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}`
+	tmpl := craftFCAPIPodTemplate(o.container)
 	c := exec.Command("kubectl", o.kubectl(
 		"get", "pods", "-l", o.selector,
 		"--field-selector", "status.phase=Running",
@@ -170,5 +178,5 @@ func craftFCAPIPod(o *craftFCSmokeOptions) (string, error) {
 	if names := strings.Fields(string(out)); len(names) > 0 {
 		return names[0], nil
 	}
-	return "", fmt.Errorf("no running pod matches %q in namespace %s", o.selector, o.namespace)
+	return "", fmt.Errorf("no running pod with a ready %s container matches %q in namespace %s", o.container, o.selector, o.namespace)
 }

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"text/template"
 )
 
 // craftFCFakeKubectl answers "get pods" with $ODS_TEST_PODS, copies the stdin
@@ -66,7 +67,7 @@ func TestCraftFCSmoke_sendsTheScriptToARunningAPIPod(t *testing.T) {
 	if err != nil || string(got) != "print('smoke')\n" {
 		t.Fatalf("expected the script on stdin, got %q (%v)", got, err)
 	}
-	tmpl := `{{range .items}}{{if not .metadata.deletionTimestamp}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}`
+	tmpl := craftFCAPIPodTemplate("api-server")
 	kubeAssertCalls(t, kubeCallsTo(calls(), "kubectl"), [][]string{
 		{"--context", "ctx", "--namespace", "ns", "get", "pods", "-l", "app=api-server",
 			"--field-selector", "status.phase=Running", "-o", "go-template=" + tmpl},
@@ -96,7 +97,7 @@ func TestCraftFCSmoke_refusesToRunWithoutAPod(t *testing.T) {
 
 	_, err := runCraftFCSmoke(opts, craftFCSmokeRepo(t), &bytes.Buffer{}, &bytes.Buffer{})
 
-	if err == nil || !strings.Contains(err.Error(), "no running pod") {
+	if err == nil || !strings.Contains(err.Error(), "no running pod with a ready api-server container") {
 		t.Fatalf("expected a no-pod error, got %v", err)
 	}
 	if n := len(kubeCallsTo(calls(), "kubectl")); n != 1 {
@@ -124,6 +125,37 @@ func TestCraftFCSmoke_rejectsBadFlags(t *testing.T) {
 				t.Fatalf("expected no kubectl call, got %q", got)
 			}
 		})
+	}
+}
+
+func TestCraftFCSmoke_podTemplateSkipsTerminatingAndUnreadyPods(t *testing.T) {
+	tmpl, err := template.New("pods").Parse(craftFCAPIPodTemplate("api-server"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod := func(name string, deleting bool, ready ...bool) map[string]any {
+		var statuses []any
+		names := []string{"api-server", "sidecar"}
+		for i, r := range ready {
+			statuses = append(statuses, map[string]any{"name": names[i], "ready": r})
+		}
+		meta := map[string]any{"name": name}
+		if deleting {
+			meta["deletionTimestamp"] = "2026-11-16T00:00:00Z"
+		}
+		return map[string]any{"metadata": meta, "status": map[string]any{"containerStatuses": statuses}}
+	}
+	list := map[string]any{"items": []any{
+		pod("terminating", true, true),
+		pod("not-ready", false, false, true),
+		pod("ready", false, true, false),
+	}}
+	var out bytes.Buffer
+	if err := tmpl.Execute(&out, list); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "ready\n" {
+		t.Fatalf("expected only the ready pod, got %q", out.String())
 	}
 }
 

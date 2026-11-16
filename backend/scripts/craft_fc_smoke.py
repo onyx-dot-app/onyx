@@ -366,6 +366,9 @@ class FirecrackerSmoke:
         require(not probe.record_exists(), f"file record {self.file_id} is still there")
         after = probe.object_status()
         require(after != 200, "the archive object is still readable")
+        # 404, or 403 when the signer may not list the bucket: any other status
+        # does not show that the object is gone.
+        require(after in (403, 404), f"archive GET after the purge: http={after}")
         return f"save record, file record and object gone (GET http={after})"
 
     def cleanup(self) -> str:
