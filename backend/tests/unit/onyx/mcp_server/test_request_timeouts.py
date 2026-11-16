@@ -6,7 +6,8 @@ shared client keep the short 60s default.
 """
 
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -80,3 +81,47 @@ async def test_tool_call_succeeds_within_configured_value(
 @pytest.mark.usefixtures("fresh_client")
 async def test_shared_client_keeps_short_default_for_non_tool_calls() -> None:
     assert get_http_client().timeout == httpx.Timeout(60.0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool", "tool_kwargs", "error_prefix"),
+    [
+        (
+            search_module.search_indexed_documents,
+            {"query": "q"},
+            "Document search failed: ",
+        ),
+        (search_module.search_web, {"query": "q"}, "Web search failed: "),
+        (
+            search_module.open_urls,
+            {"urls": ["https://example.com"]},
+            "URL fetch failed: ",
+        ),
+    ],
+)
+async def test_tool_timeout_reaches_the_client_with_a_message(
+    monkeypatch: pytest.MonkeyPatch,
+    tool: Callable[..., Awaitable[dict[str, Any]]],
+    tool_kwargs: dict[str, Any],
+    error_prefix: str,
+) -> None:
+    """An httpx.ReadTimeout has an empty str(), so formatting it with str()
+    sent MCP clients a blank error. The message must say what happened."""
+
+    async def _resolve_no_filters(**_kwargs: object) -> search_module._ResolvedFilters:
+        return search_module._ResolvedFilters(persona_id=None, source_types=None)
+
+    async def _raise_read_timeout(*_args: object, **_kwargs: object) -> httpx.Response:
+        raise httpx.ReadTimeout("")
+
+    monkeypatch.setattr(search_module, "require_access_token", lambda: _TOKEN)
+    monkeypatch.setattr(search_module, "_resolve_filters", _resolve_no_filters)
+    monkeypatch.setattr(search_module, "_post_model", _raise_read_timeout)
+
+    payload = await tool(**tool_kwargs)
+
+    assert payload["error"].startswith(error_prefix)
+    detail = payload["error"].removeprefix(error_prefix)
+    assert detail, "timeout reached the client as a blank message"
+    assert "ReadTimeout" in detail
