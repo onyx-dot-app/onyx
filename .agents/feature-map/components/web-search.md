@@ -85,8 +85,9 @@ waits until an admin activates it.
 and `build_content_provider_from_config` turn a type, key and config into a
 client. They raise when a type's required config is missing, such as a
 SearXNG base URL or a Firecrawl base URL. See `shared_configs/enums.py` for
-the current provider types. `provider_requires_api_key` exempts only SearXNG.
-With no active content provider, `open_url` uses the built-in `OnyxWebCrawler`.
+the current provider types. `provider_requires_api_key` exempts SearXNG and
+Keenable. Without a key, Keenable uses its public endpoint, and a key only
+lifts rate limits. With no active content provider, `open_url` uses the built-in `OnyxWebCrawler`.
 
 **Shared keys.** Some vendors serve both search and content. Their key is
 copied to the other side on upsert (`_SEARCH_TO_CONTENT_SYNC` and
@@ -132,8 +133,8 @@ image-generation reminder.
 active rows with the same factories, but it does not use the tool classes.
 Its behaviour differs from the tools in four ways.
 `_get_active_search_provider` refuses an active provider that has no API key,
-so a SearXNG provider with only a base URL works in chat but fails these routes
-with `INVALID_INPUT`. `/open-urls` and `/search`
+so a SearXNG provider with only a base URL, or a Keenable provider with no key,
+works in chat but fails these routes with `INVALID_INPUT`. `/open-urls` and `/search`
 only crawl, so they have no indexed lookup and no ACL path. The routes run the
 queries one after another, and one failed query fails the whole request with
 `BAD_GATEWAY` (`_run_web_search`). An error from the content provider also
