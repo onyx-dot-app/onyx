@@ -14,7 +14,8 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx import setup
-from onyx.db.enums import VectorQuantization
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import IndexModelStatus, VectorQuantization
 from onyx.db.models import SearchSettings
 from onyx.document_index.opensearch.client import (
     OpenSearchIndexClient,
@@ -40,15 +41,20 @@ def index_name() -> Generator[str, None, None]:
 
 
 def _set_default(
-    db_session: Session, index_name: str, used_by: str | None = None
+    db_session: Session,
+    index_name: str,
+    used_by: str | None = None,
+    search_settings: SearchSettings | None = None,
 ) -> VectorQuantization:
-    """Runs the startup rule on unsaved search settings and returns the result.
+    """Runs the startup rule and returns the result.
 
     used_by names one sign of earlier use to report; None reports a new deployment.
+    Without search_settings, the rule runs on unsaved search settings.
     """
-    search_settings = SearchSettings(
-        index_name=index_name, vector_quantization=VectorQuantization.NONE
-    )
+    if search_settings is None:
+        search_settings = SearchSettings(
+            index_name=index_name, vector_quantization=VectorQuantization.NONE
+        )
     with (
         patch.object(setup, "check_docs_exist", return_value=used_by == _USE_CHECKS[0]),
         patch.object(
@@ -64,6 +70,36 @@ def _set_default(
 
 def test_new_deployment_gets_7_bit(db_session: Session, index_name: str) -> None:
     assert _set_default(db_session, index_name) == VectorQuantization.SCALAR_7_BIT
+
+
+def test_new_deployment_saves_7_bit(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    index_name: str,
+) -> None:
+    # A PAST row, so the test does not change the shared database's present settings.
+    search_settings = SearchSettings(
+        model_name="test-model",
+        model_dim=384,
+        normalize=True,
+        query_prefix="",
+        passage_prefix="",
+        index_name=index_name,
+        status=IndexModelStatus.PAST,
+        vector_quantization=VectorQuantization.NONE,
+    )
+    db_session.add(search_settings)
+    db_session.commit()
+    try:
+        _set_default(db_session, index_name, search_settings=search_settings)
+
+        with get_session_with_current_tenant() as fresh_session:
+            saved = fresh_session.get(SearchSettings, search_settings.id)
+            assert saved is not None
+            assert saved.vector_quantization == VectorQuantization.SCALAR_7_BIT
+    finally:
+        db_session.delete(search_settings)
+        db_session.commit()
 
 
 def test_existing_index_keeps_its_quantization(

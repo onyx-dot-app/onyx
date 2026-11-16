@@ -44,6 +44,7 @@ from onyx.db.search_settings import (
     get_active_search_settings,
     get_current_search_settings,
     update_current_search_settings,
+    update_search_settings_vector_quantization,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_default_document_index
@@ -309,8 +310,9 @@ def set_new_deployment_vector_quantization(
         )
         return
 
-    search_settings.vector_quantization = NEW_DEPLOYMENT_VECTOR_QUANTIZATION
-    db_session.commit()
+    update_search_settings_vector_quantization(
+        search_settings, NEW_DEPLOYMENT_VECTOR_QUANTIZATION, db_session
+    )
     logger.notice(
         "New deployment: index %s uses %s vector quantization.",
         search_settings.index_name,
