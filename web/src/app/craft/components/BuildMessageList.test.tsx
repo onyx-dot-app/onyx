@@ -9,10 +9,6 @@ import type {
 } from "@/app/craft/types/streamingTypes";
 import type { TimelineEvent } from "@/lib/timeline/events";
 
-jest.mock("@/lib/app/components", () => ({
-  FoldableLogo: () => <div data-testid="onyx-logo" />,
-}));
-
 jest.mock("@/components/chat/MinimalMarkdown", () => ({
   __esModule: true,
   default: ({ content }: { content: string }) => <div>{content}</div>,
@@ -374,7 +370,6 @@ test("keeps one assistant cursor during finalization and removes it when finaliz
     </TooltipProvider>
   );
   expect(screen.getAllByText("Final answer")).toHaveLength(1);
-  expect(screen.getAllByTestId("onyx-logo")).toHaveLength(1);
   expect(screen.getAllByTestId("blinking-bar")).toHaveLength(1);
   rerender(
     <TooltipProvider>

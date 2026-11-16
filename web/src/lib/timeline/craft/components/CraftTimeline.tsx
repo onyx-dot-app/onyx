@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Collapsible } from "@opal/components";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import { FoldableLogo } from "@/lib/app/components";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
 import { TimelineSteps } from "@/lib/timeline/components/TimelineSteps";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
@@ -136,8 +135,6 @@ interface CraftTimelineProps {
   entries: CraftTimelineEntry[];
   /** Fold the run closed once an assistant message follows it. */
   autoCollapse?: boolean;
-  /** Only a response's first run shows the agent's logo, as in chat. */
-  showAgentAvatar?: boolean;
 }
 
 /**
@@ -148,7 +145,6 @@ interface CraftTimelineProps {
 export default function CraftTimeline({
   entries,
   autoCollapse = false,
-  showAgentAvatar = false,
 }: CraftTimelineProps) {
   const t = useTranslations("craft.toolCards.group");
   const tTimeline = useTranslations("chat.messages.timeline");
@@ -190,9 +186,6 @@ export default function CraftTimeline({
   return (
     <TimelineRoot>
       <RunHeaderRow
-        left={
-          showAgentAvatar ? <FoldableLogo onyxBranded folded size={24} /> : null
-        }
         interactive={foldable}
         tinted={isRunning || isOpen}
         roundedBottom={!isOpen}

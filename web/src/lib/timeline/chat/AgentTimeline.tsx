@@ -7,7 +7,6 @@ import {
   RenderType,
 } from "@/app/app/message/messageComponents/types";
 import { TurnGroup } from "./transformers";
-import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { TextLoader } from "@opal/loaders";
 import { Collapsible } from "@opal/components";
 import { useTimelineExpansion } from "@/lib/timeline/chat/hooks/useTimelineExpansion";
@@ -41,25 +40,17 @@ import type { AwaitingUser } from "@/lib/chat/toolApprovals";
 // =============================================================================
 
 interface TimelineContainerProps {
-  agent: FullChatState["agent"];
-  showAgentAvatar: boolean;
   headerContent?: React.ReactNode;
   children?: React.ReactNode;
 }
 
 function TimelineContainer({
-  agent,
-  showAgentAvatar,
   headerContent,
   children,
 }: TimelineContainerProps) {
   return (
     <TimelineRoot>
-      <TimelineHeaderRow
-        left={showAgentAvatar ? <AgentAvatar agent={agent} size={24} /> : null}
-      >
-        {headerContent}
-      </TimelineHeaderRow>
+      <TimelineHeaderRow>{headerContent}</TimelineHeaderRow>
       {children}
     </TimelineRoot>
   );
@@ -101,8 +92,6 @@ export interface AgentTimelineProps {
   /** A tool call in the latest turn waits for the user's approval or
    * answers */
   awaitingUser?: AwaitingUser | null;
-  /** Only a message's first run shows the agent's avatar. */
-  showAgentAvatar?: boolean;
 }
 
 /**
@@ -126,8 +115,7 @@ function areAgentTimelinePropsEqual(
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
     prev.codeModeWorking === next.codeModeWorking &&
-    prev.awaitingUser === next.awaitingUser &&
-    prev.showAgentAvatar === next.showAgentAvatar
+    prev.awaitingUser === next.awaitingUser
   );
 }
 
@@ -146,7 +134,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   toolProcessingDuration,
   codeModeWorking = false,
   awaitingUser = null,
-  showAgentAvatar = true,
 }: AgentTimelineProps) {
   // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
@@ -337,8 +324,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   if (uiState === TimelineUIState.EMPTY) {
     return (
       <TimelineContainer
-        agent={chatState.agent}
-        showAgentAvatar={showAgentAvatar}
         headerContent={
           <div className="flex w-full h-full items-center ps-(--timeline-header-padding-left) pe-(--timeline-header-padding-right)">
             <TextLoader>{headerText}</TextLoader>
@@ -348,24 +333,12 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     );
   }
 
-  // Display content only (no timeline steps)
-  if (uiState === TimelineUIState.DISPLAY_CONTENT_ONLY) {
-    return (
-      <TimelineContainer
-        agent={chatState.agent}
-        showAgentAvatar={showAgentAvatar}
-      />
-    );
-  }
+  // Display content only (no timeline steps): nothing to draw.
+  if (uiState === TimelineUIState.DISPLAY_CONTENT_ONLY) return null;
 
   return (
     <TimelineRoot>
       <RunHeaderRow
-        left={
-          showAgentAvatar ? (
-            <AgentAvatar agent={chatState.agent} size={24} />
-          ) : null
-        }
         interactive={headerIsInteractive}
         tinted={showTintedBackground}
         roundedBottom={showRoundedBottom}

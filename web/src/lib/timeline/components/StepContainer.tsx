@@ -81,48 +81,49 @@ export function StepContainer({
   ) : null;
 
   const content = (
+    <TimelineStepContent
+      header={header}
+      headerAccessory={headerAccessory}
+      buttonTitle={buttonTitle}
+      toggleLabel={toggleLabel}
+      isExpanded={isExpanded}
+      onToggle={onToggle}
+      collapsible={collapsible}
+      supportsCollapsible={supportsCollapsible}
+      hideHeader={hideHeader}
+      collapsedIcon={CollapsedIconComponent}
+      noPaddingRight={noPaddingRight}
+      surfaceBackground={surfaceBackground}
+      foldBody={foldBody}
+    >
+      {children}
+    </TimelineStepContent>
+  );
+
+  // The surface holds the rail too, so the rail sits inside the run's card.
+  return (
     <TimelineSurface
-      className="flex-1 flex flex-col"
+      className="flex w-full"
       isHover={isHover}
       roundedBottom={isLastStep}
       background={surfaceBackground}
     >
-      <TimelineStepContent
-        header={header}
-        headerAccessory={headerAccessory}
-        buttonTitle={buttonTitle}
-        toggleLabel={toggleLabel}
-        isExpanded={isExpanded}
-        onToggle={onToggle}
-        collapsible={collapsible}
-        supportsCollapsible={supportsCollapsible}
-        hideHeader={hideHeader}
-        collapsedIcon={CollapsedIconComponent}
-        noPaddingRight={noPaddingRight}
-        surfaceBackground={surfaceBackground}
-        foldBody={foldBody}
-      >
-        {children}
-      </TimelineStepContent>
+      {withRail ? (
+        <TimelineRow
+          railVariant="rail"
+          icon={iconNode}
+          showIcon={!hideHeader && Boolean(StepIconComponent)}
+          iconRowVariant={hideHeader ? "compact" : "default"}
+          isFirst={isFirstStep}
+          isLast={isLastStep}
+          isHover={isHover}
+        >
+          {content}
+        </TimelineRow>
+      ) : (
+        <div className="flex-1 min-w-0">{content}</div>
+      )}
     </TimelineSurface>
-  );
-
-  if (!withRail) {
-    return <div className="flex w-full">{content}</div>;
-  }
-
-  return (
-    <TimelineRow
-      railVariant="rail"
-      icon={iconNode}
-      showIcon={!hideHeader && Boolean(StepIconComponent)}
-      iconRowVariant={hideHeader ? "compact" : "default"}
-      isFirst={isFirstStep}
-      isLast={isLastStep}
-      isHover={isHover}
-    >
-      {content}
-    </TimelineRow>
   );
 }
 

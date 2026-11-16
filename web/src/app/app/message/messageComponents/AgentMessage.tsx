@@ -46,7 +46,6 @@ import { AgentTimeline } from "@/lib/timeline/chat/AgentTimeline";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
-import { cn } from "@opal/utils";
 import { useTranslations } from "next-intl";
 
 // Type for the regeneration factory function passed from ChatUI
@@ -76,8 +75,6 @@ export interface AgentMessageProps {
   hideFooter?: boolean;
   /** Disable autoplay for non-primary or failed responses. */
   disableTTS?: boolean;
-  /** When on, drop the message's reading-width padding so it sits flush with the chat edge. */
-  fullWidthChat?: boolean;
 }
 
 interface ResponseSection {
@@ -123,8 +120,7 @@ function arePropsEqual(
       next.llmManager?.isLoadingProviders &&
     prev.processingDurationSeconds === next.processingDurationSeconds &&
     prev.hideFooter === next.hideFooter &&
-    prev.disableTTS === next.disableTTS &&
-    prev.fullWidthChat === next.fullWidthChat
+    prev.disableTTS === next.disableTTS
     // Skip: chatState.regenerate, chatState.setPresentingDocument,
     //       most of llmManager, onMessageSelection (function/object props)
   );
@@ -146,7 +142,6 @@ const AgentMessage = React.memo(function AgentMessage({
   processingDurationSeconds,
   hideFooter,
   disableTTS,
-  fullWidthChat,
 }: AgentMessageProps) {
   // Returning to a mounted session restores its retained output immediately.
   const mountedPrefix = useRef({ nodeId, count: rawPackets.length });
@@ -541,82 +536,70 @@ const AgentMessage = React.memo(function AgentMessage({
                     const textIndex = nextAnswerRef++;
                     const { group } = segment;
                     return (
-                      <div
-                        key={`text-${segment.key}`}
-                        ref={(element) => {
-                          answerRefs.current[textIndex] = element;
-                        }}
-                        className={cn(
-                          "overflow-x-visible focus:outline-hidden select-text cursor-text",
-                          !fullWidthChat && "px-3"
-                        )}
-                        onCopy={(e) => {
-                          handleCopy(e, { current: e.currentTarget });
-                        }}
-                      >
-                        <RendererComponent
-                          packets={group.packets}
-                          nestedCalls={group.nestedCalls}
-                          streamPackets={group.streamPackets}
-                          chatState={effectiveChatState}
-                          messageNodeId={nodeId}
-                          hasTimelineThinking={section.toolGroups.length > 0}
-                          onComplete={() => {
-                            // The hook checks finalAnswerComing itself.
-                            if (group === lastAnswerGroup) onRenderComplete();
+                      <div key={`text-${segment.key}`}>
+                        <div
+                          ref={(element) => {
+                            answerRefs.current[textIndex] = element;
                           }}
-                          restoredTextLength={visibleGroups.get(segment.key)}
-                          animate={!stopPacketSeen && isLastSection}
-                          stopPacketSeen={stopPacketSeen}
-                          stopReason={stopReason}
+                          className="overflow-x-visible focus:outline-hidden select-text cursor-text"
+                          onCopy={(e) => {
+                            handleCopy(e, { current: e.currentTarget });
+                          }}
                         >
-                          {(results) => (
-                            <>
-                              {results.map((r, i) => (
-                                <div key={i}>{r.content}</div>
-                              ))}
-                            </>
-                          )}
-                        </RendererComponent>
+                          <RendererComponent
+                            packets={group.packets}
+                            nestedCalls={group.nestedCalls}
+                            streamPackets={group.streamPackets}
+                            chatState={effectiveChatState}
+                            messageNodeId={nodeId}
+                            hasTimelineThinking={section.toolGroups.length > 0}
+                            onComplete={() => {
+                              // The hook checks finalAnswerComing itself.
+                              if (group === lastAnswerGroup) onRenderComplete();
+                            }}
+                            restoredTextLength={visibleGroups.get(segment.key)}
+                            animate={!stopPacketSeen && isLastSection}
+                            stopPacketSeen={stopPacketSeen}
+                            stopReason={stopReason}
+                          >
+                            {(results) => (
+                              <>
+                                {results.map((r, i) => (
+                                  <div key={i}>{r.content}</div>
+                                ))}
+                              </>
+                            )}
+                          </RendererComponent>
+                        </div>
                       </div>
                     );
                   }
                   case "record":
                     return segment.record.kind === "approval" ? (
-                      <div
-                        key={segment.record.request.approval_id}
-                        className={cn(!fullWidthChat && "px-3")}
-                      >
+                      <div key={segment.record.request.approval_id}>
                         <ToolApprovalCard approval={segment.record} />
                       </div>
                     ) : (
-                      <div
-                        key={segment.record.request.question_request_id}
-                        className={cn(!fullWidthChat && "px-3")}
-                      >
+                      <div key={segment.record.request.question_request_id}>
                         <ToolQuestionCard question={segment.record} />
                       </div>
                     );
                   case "extras":
                     return (
-                      <div
-                        key="extras"
-                        className={cn(
-                          "flex flex-col gap-3",
-                          !fullWidthChat && "px-3"
-                        )}
-                      >
-                        {/* Generated images lead the answer. */}
-                        {section.images.length > 0 && (
-                          <GeneratedImageGrid images={section.images} />
-                        )}
-                        {section.authErrors.map((authError, i) => (
-                          <CustomToolAuthCard
-                            key={`auth-error-${i}`}
-                            toolName={authError.toolName}
-                            toolId={authError.toolId}
-                          />
-                        ))}
+                      <div key="extras">
+                        <div className="flex flex-col gap-3">
+                          {/* Generated images lead the answer. */}
+                          {section.images.length > 0 && (
+                            <GeneratedImageGrid images={section.images} />
+                          )}
+                          {section.authErrors.map((authError, i) => (
+                            <CustomToolAuthCard
+                              key={`auth-error-${i}`}
+                              toolName={authError.toolName}
+                              toolId={authError.toolId}
+                            />
+                          ))}
+                        </div>
                       </div>
                     );
                   case "files":
@@ -626,8 +609,6 @@ const AgentMessage = React.memo(function AgentMessage({
                       </div>
                     );
                   case "run": {
-                    const showAgentAvatar =
-                      segments.findIndex((s) => s.kind === "run") === index;
                     const isLiveRun =
                       segments.findLastIndex((s) => s.kind === "run") === index;
                     if (!isLiveRun) {
@@ -640,7 +621,6 @@ const AgentMessage = React.memo(function AgentMessage({
                           stopPacketSeen
                           hasDisplayContent
                           finalAnswerComing
-                          showAgentAvatar={showAgentAvatar}
                         />
                       );
                     }
@@ -664,7 +644,6 @@ const AgentMessage = React.memo(function AgentMessage({
                         awaitingUser={
                           isLastSection ? toolRequests.awaiting : null
                         }
-                        showAgentAvatar={showAgentAvatar}
                       />
                     );
                   }
@@ -676,7 +655,7 @@ const AgentMessage = React.memo(function AgentMessage({
             {isLastSection &&
               section.displayGroups.length === 0 &&
               stopReason === StopReason.USER_CANCELLED && (
-                <div className={cn(!fullWidthChat && "px-3")}>
+                <div>
                   <Text as="p" font="secondary-body" color="text-04">
                     {t("agentMessage.stoppedGeneration.text")}
                   </Text>
@@ -685,7 +664,7 @@ const AgentMessage = React.memo(function AgentMessage({
             {isLastSection &&
               stopPacketSeen &&
               stopReason === StopReason.TIMED_OUT && (
-                <div className={cn(!fullWidthChat && "px-3")}>
+                <div>
                   <Text as="p" font="secondary-body" color="text-04">
                     {t("agentMessage.timedOut.text")}
                   </Text>
@@ -745,9 +724,8 @@ function packetTurn(group: TurnGroup): number {
  * and approval and question cards in arrival (turn) order. Consecutive steps
  * form one run. Text between steps shows once every earlier step of the
  * section is revealed, so it never appears ahead of the steps before it; an
- * earlier section's steps never gate it. A section that does not start with a
- * run starts with an empty one, which shows only the avatar, as Craft starts
- * with its logo row. The last run holds the live header.
+ * earlier section's steps never gate it. The last run holds the live header;
+ * a section with no run gets an empty one for the waiting state.
  */
 function buildSectionSegments(
   section: ResponseSection,
@@ -820,8 +798,8 @@ function buildSectionSegments(
       kind: "extras",
     });
   }
-  if (segments[0]?.kind !== "run") {
-    segments.unshift({ kind: "run", key: "lead", turnGroups: [] });
+  if (!segments.some((s) => s.kind === "run")) {
+    segments.push({ kind: "run", key: "live", turnGroups: [] });
   }
   if (section.publishedFiles.length > 0) {
     segments.push({ kind: "files" });
