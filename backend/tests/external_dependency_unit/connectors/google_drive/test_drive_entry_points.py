@@ -384,3 +384,57 @@ def test_pruning_lists_files_edited_during_its_last_pass(
     assert len(first_window_end) == 2, "the last pass did not run"
     assert set(edits) == expected
     assert {_file_id(doc_id) for doc_id in pruning} == expected
+
+
+def test_permission_sync_lists_again_the_files_edited_after_the_first_pass(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every file is edited when the last pass starts. Each file is then
+    listed again with its new state, also a file that no exact partition
+    lists (a file of an owner outside the domain), which the first pass
+    claimed in the dedup set."""
+    monkeypatch.setattr(parallel_listing, "LISTING_PAGE_SIZE", _PAGE_SIZE)
+    mock_drive = own_mock_drive
+    mock_drive.set_corpus(
+        {
+            "num_users": 3,
+            "num_shared_drives": 1,
+            "files_per_shared_drive": 6,
+            "files_per_user": 4,
+            "external_shares": {"owners": 1, "files": 6, "recipients": 2},
+        }
+    )
+    expected = mock_drive.content_file_ids()
+    fetch_page = parallel_listing.ParallelDriveLister._fetch_page
+    lock = threading.Lock()
+    edits: list[str] = []
+
+    def edit_when_the_last_pass_starts(
+        self: parallel_listing.ParallelDriveLister, shard: ListingShard
+    ) -> object:
+        with lock:
+            if shard.open_end and not edits:
+                time.sleep(0.01)
+                edits.extend(
+                    mock_drive.client.post(
+                        "/_mock/corpus/touch", json={"count": len(expected)}
+                    ).json()["file_ids"]
+                )
+        return fetch_page(self, shard)
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister,
+        "_fetch_page",
+        edit_when_the_last_pass_starts,
+    )
+
+    synced = Counter(
+        _file_id(doc_id)
+        for doc_id in _slim_ids(
+            mock_drive.build_connector().retrieve_all_slim_docs_perm_sync()
+        )
+    )
+
+    assert set(edits) == expected
+    assert set(synced) == expected
+    assert [file_id for file_id, count in synced.items() if count < 2] == []

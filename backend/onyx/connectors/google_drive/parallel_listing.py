@@ -553,6 +553,7 @@ class ParallelDriveLister:
         newest_ms: int | None,
         skip_ids: list[str] | None = None,
         owner_filter: str | None = None,
+        drive_filter: str | None = None,
     ) -> int:
         """The caller holds the lock."""
         state = self._state
@@ -568,6 +569,7 @@ class ParallelDriveLister:
             exact=exact,
             skip_ids=skip_ids or [],
             owner_filter=owner_filter,
+            drive_filter=drive_filter,
             open_end=state.open_end and t1 >= state.window_t1,
         )
         return shard_id
@@ -733,6 +735,8 @@ class ParallelDriveLister:
         listable = not via_shortcut or self._in_window(file)
 
         if kind is ListingPartitionKind.SHARED_WITH_USER:
+            if shard.drive_filter is not None and file_drive_id != shard.drive_filter:
+                return False
             covered = (
                 file_drive_id in state.listed_drive_ids or owner in state.listed_owners
             )
@@ -852,6 +856,7 @@ class ParallelDriveLister:
                     # Only the first sub-range starts at the shard's start.
                     skip_ids if index == 0 else None,
                     shard.owner_filter,
+                    shard.drive_filter,
                 )
                 for index, (t0, t1) in enumerate(ranges)
             ]
@@ -925,6 +930,7 @@ class ParallelDriveLister:
             self._emit(failures)
             if partition.kind is ListingPartitionKind.SHARED_DRIVE:
                 drive_id = partition.key
+                was_covered = drive_id in state.listed_drive_ids
                 state.listed_drive_ids.discard(drive_id)
                 self._checkpoint.organizer_email_by_drive_id.pop(drive_id, None)
                 if list_again:
@@ -933,6 +939,28 @@ class ParallelDriveLister:
                     self._checkpoint.incomplete_drive_ids.add(drive_id)
                     if drive_id in self._requested_shared_drive_ids:
                         self._checkpoint.unreachable_target_ids.add(drive_id)
+                if was_covered:
+                    # A shared-with listing that began dropped this drive's
+                    # files. It lists them again, and keeps only them. A new
+                    # organizer listing of the drive covers them again, and
+                    # then they are dropped as before.
+                    relist = [
+                        self._add_shard(
+                            started_partition,
+                            principal,
+                            exact,
+                            state.window_t0,
+                            state.window_t1,
+                            newest_ms=None,
+                            drive_filter=drive_id,
+                        )
+                        for started_partition, principal, exact in state.started_partitions
+                        if started_partition.kind
+                        is ListingPartitionKind.SHARED_WITH_USER
+                    ]
+                    return [
+                        self._page_task(shard_id) for shard_id in relist
+                    ] + self._plan_tasks()
             elif partition.kind is ListingPartitionKind.MY_DRIVE:
                 # Files of this owner are no longer covered, so a shared-with
                 # listing that starts later keeps them.
