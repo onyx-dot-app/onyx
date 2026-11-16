@@ -13119,6 +13119,12 @@
           },
           "waitingForApproval": {
             "label": "Aguardando sua aprovação"
+          },
+          "runningCommand": {
+            "label": "Executando comando"
+          },
+          "editingFiles": {
+            "label": "Editando arquivos"
           }
         },
         "internalSearch": {
@@ -13248,11 +13254,54 @@
           "researchAgent": "Agente de pesquisa",
           "thinking": "Pensando",
           "tool": "Ferramenta",
-          "webSearch": "Pesquisa na web"
+          "webSearch": "Pesquisa na web",
+          "terminal": "Terminal",
+          "applyPatch": "Aplicar patch"
         },
         "webSearch": {
           "searching": {
             "status": "Pesquisando na web"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {Executando comando} started {Comando iniciado} failed {O comando falhou} canceled {Cancelado} done {Comando executado} other {Comando executado}}",
+            "workdir": {
+              "label": "Em {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {Enviando entrada para a sessão {sessionId}} failed {Não foi possível enviar a entrada para a sessão {sessionId}} canceled {Cancelado} done {Entrada enviada para a sessão {sessionId}} other {Entrada enviada para a sessão {sessionId}}}} check {{phase, select, running {Verificando a sessão {sessionId}} failed {Não foi possível verificar a sessão {sessionId}} canceled {Cancelado} done {Sessão {sessionId} verificada} other {Sessão {sessionId} verificada}}} other {Sessão {sessionId}}}"
+          },
+          "output": {
+            "title": "Saída"
+          },
+          "exitCode": {
+            "label": "Código de saída {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {Interrompido por um sinal} canceled {Cancelado} deadline_exceeded {Interrompido no limite de tempo} other {Encerrado}}"
+          },
+          "stillRunning": {
+            "label": "Ainda em execução (sessão {sessionId})"
+          },
+          "truncated": {
+            "label": "Saída truncada"
+          },
+          "noOutput": {
+            "text": "Sem saída"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {# arquivo editado} other {# arquivos editados}}"
+            },
+            "failed": {
+              "status": "O patch falhou"
+            },
+            "title": "Patch"
+          },
+          "stopped": {
+            "status": "Interrompido"
           }
         }
       },
