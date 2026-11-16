@@ -6111,6 +6111,9 @@ class Integration(Base):
     )
 
     __table_args__ = (
+        # The value checks of the integration tables: SQL migrations write
+        # these columns as plain strings, past the enum type. A value outside
+        # the enum makes each ORM read of the row raise.
         CheckConstraint("kind IN ('mcp_server', 'api')", name="ck_integration_kind"),
         CheckConstraint(
             "auth_mode IN ('none', 'shared', 'individual')",

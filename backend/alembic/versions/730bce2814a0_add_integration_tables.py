@@ -79,6 +79,9 @@ def _create_tables() -> None:
             nullable=False,
         ),
         *_timestamps(),
+        # The value checks of these tables: SQL migrations write the columns
+        # as plain strings, past the enum type of the model. A value outside
+        # the enum makes each ORM read of the row raise.
         sa.CheckConstraint("kind IN ('mcp_server', 'api')", name="ck_integration_kind"),
         sa.CheckConstraint(
             "auth_mode IN ('none', 'shared', 'individual')",
@@ -113,6 +116,7 @@ def _create_tables() -> None:
         sa.UniqueConstraint(
             "integration_id", "key", name="uq_integration_action_integration_key"
         ),
+        # A SQL migration can write a value outside the enum (see integration).
         sa.CheckConstraint(
             "source IN ('mcp_sync', 'openapi_spec', 'preset_catalog')",
             name="ck_integration_action_source",
@@ -147,6 +151,7 @@ def _create_tables() -> None:
         sa.Column("client_secret", sa.LargeBinary(), nullable=True),
         sa.Column("registration", sa.LargeBinary(), nullable=True),
         *_timestamps(),
+        # A SQL migration can write a value outside the enum (see integration).
         sa.CheckConstraint(
             "provider_mode IN ('preset', 'manual', 'discovery')",
             name="ck_integration_oauth_client_provider_mode",
@@ -190,6 +195,7 @@ def _create_tables() -> None:
         sa.Column("status", sa.String(), server_default="connected", nullable=False),
         sa.Column("status_reason", sa.Text(), nullable=True),
         *_timestamps(),
+        # A SQL migration can write a value outside the enum (see integration).
         sa.CheckConstraint(
             "status IN ('connected', 'needs_reconnect')",
             name="ck_integration_connection_status",
@@ -230,6 +236,7 @@ def _create_tables() -> None:
         ),
         sa.Column("policy", sa.String(), nullable=False),
         *_timestamps(),
+        # A SQL migration can write a value outside the enum (see integration).
         sa.CheckConstraint(
             "policy IN ('allow', 'auto', 'ask', 'blocked')",
             name="ck_integration_action_policy_policy",
