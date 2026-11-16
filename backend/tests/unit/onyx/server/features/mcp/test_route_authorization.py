@@ -23,6 +23,14 @@ from onyx.server.features.tool.models import CustomToolCreate, CustomToolUpdate,
 from onyx.utils.encryption import mask_string
 
 
+@pytest.fixture(autouse=True)
+def no_action_sync(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The mocked session has no integration to sync.
+    monkeypatch.setattr(
+        tool_api, "sync_actions_for_integration_id__no_commit", lambda *_: None
+    )
+
+
 @pytest.fixture
 def user() -> User:
     return User(id=uuid4(), email="user@example.com", is_group_manager=True)
