@@ -1,12 +1,23 @@
 """The execute_code and wait_code tools: model-written Python programs that call
 other tools, run as cells of the response (code_mode/cells.py)."""
 
-from pydantic import BaseModel
+from collections.abc import Callable
 
-from onyx.agents.tools import ToolExecutionMode, ToolInvocation
+from pydantic import BaseModel, Field
+
+from onyx.agents.tools import (
+    NestedInputAnswer,
+    ToolExecutionMode,
+    ToolInvocation,
+    ToolOutcome,
+)
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME
-from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.interface import (
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+)
 from onyx.tools.models import CodeModeExposure, ToolCallException, ToolContext
 from onyx.tools.tool_implementations.code_mode.cells import (
     DEFAULT_MAX_OUTPUT_TOKENS,
@@ -45,17 +56,40 @@ RESTORED_WAIT_MESSAGE = (
 )
 
 
+_MAX_OUTPUT_TOKENS_DESCRIPTION = (
+    "Token budget for the output this call returns; longer output is cut in the "
+    f"middle. Defaults to {DEFAULT_MAX_OUTPUT_TOKENS} tokens, at most "
+    f"{MAX_OUTPUT_TOKENS}."
+)
+
+
 class CodeModeArguments(BaseModel):
-    code: str
-    yield_time_ms: int = DEFAULT_EXECUTE_YIELD_MS
-    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
+    code: str = Field(description="The Python program to run.")
+    yield_time_ms: int = Field(
+        default=DEFAULT_EXECUTE_YIELD_MS,
+        description="How long to wait for the program before returning its output "
+        f"so far while it keeps running. Defaults to {DEFAULT_EXECUTE_YIELD_MS} ms, "
+        f"at most {MAX_EXECUTE_YIELD_MS} ms.",
+    )
+    max_output_tokens: int = Field(
+        default=DEFAULT_MAX_OUTPUT_TOKENS, description=_MAX_OUTPUT_TOKENS_DESCRIPTION
+    )
 
 
 class WaitCodeArguments(BaseModel):
-    cell_id: int
-    yield_time_ms: int = DEFAULT_WAIT_YIELD_MS
-    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
-    terminate: bool = False
+    cell_id: int = Field(description="Identifier of the running cell.")
+    yield_time_ms: int = Field(
+        default=DEFAULT_WAIT_YIELD_MS,
+        description="How long to wait for more output before returning. Defaults "
+        f"to {DEFAULT_WAIT_YIELD_MS} ms, at most {MAX_WAIT_YIELD_MS} ms.",
+    )
+    max_output_tokens: int = Field(
+        default=DEFAULT_MAX_OUTPUT_TOKENS, description=_MAX_OUTPUT_TOKENS_DESCRIPTION
+    )
+    terminate: bool = Field(
+        default=False,
+        description="True stops the running cell; false or omitted waits for output.",
+    )
 
 
 def yield_seconds(yield_time_ms: int, maximum_ms: int) -> float:
@@ -64,11 +98,6 @@ def yield_seconds(yield_time_ms: int, maximum_ms: int) -> float:
 
 def output_tokens(requested: int) -> int:
     return min(max(requested, 1), MAX_OUTPUT_TOKENS)
-
-
-_MAX_TOKENS_TEXT = (
-    f"Defaults to {DEFAULT_MAX_OUTPUT_TOKENS} tokens, at most {MAX_OUTPUT_TOKENS}."
-)
 
 
 # The saved result of an `execute_code` call that stopped before it returned. A
@@ -103,6 +132,16 @@ class CodeModeTool(Tool):
             for tool in self._inner_tools
             if tool.execution_mode == ToolExecutionMode.SEQUENTIAL
         }
+        self.resume_with_input = self._resume_with_input
+
+    def program(self, code: str, limits: SandboxLimits) -> Program:
+        """A program that calls this tool's functions."""
+        return Program(
+            code=code,
+            stubs=self._stubs,
+            limits=limits,
+            sequential_calls=self._sequential_calls,
+        )
 
     @property
     def inner_tools(self) -> list[Tool]:
@@ -140,35 +179,13 @@ class CodeModeTool(Tool):
         return ToolExecutionMode.SEQUENTIAL
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=code_mode_description(self._stubs, self._limits),
-            parameters={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "The Python program to run.",
-                    },
-                    "yield_time_ms": {
-                        "type": "integer",
-                        "description": "How long to wait for the program before "
-                        "returning its output so far while it keeps running. "
-                        f"Defaults to {DEFAULT_EXECUTE_YIELD_MS} ms, at most "
-                        f"{MAX_EXECUTE_YIELD_MS} ms.",
-                    },
-                    "max_output_tokens": {
-                        "type": "integer",
-                        "description": "Token budget for the output this call "
-                        "returns; longer output is cut in the middle. "
-                        + _MAX_TOKENS_TEXT,
-                    },
-                },
-                "required": ["code"],
-            },
+        return tool_definition_from_arguments(
+            self.name,
+            code_mode_description(self._stubs, self._limits),
+            CodeModeArguments,
         )
 
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
         arguments = parse_tool_arguments(CodeModeArguments, invocation.arguments)
         if not arguments.code.strip():
             raise ToolCallException(
@@ -176,16 +193,26 @@ class CodeModeTool(Tool):
                 llm_facing_message="The `code` argument is empty. Provide a Python program.",
             )
         return self._cells.start(
-            Program(
-                code=arguments.code,
-                stubs=self._stubs,
-                limits=self._limits,
-                sequential_calls=self._sequential_calls,
-            ),
+            self.program(arguments.code, self._limits),
             invocation,
             context,
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_EXECUTE_YIELD_MS),
             max_tokens=output_tokens(arguments.max_output_tokens),
+        )
+
+    def _resume_with_input(
+        self,
+        invocation: ToolInvocation,
+        context: ToolContext,
+        answers: list[NestedInputAnswer],
+    ) -> ToolOutcome:
+        arguments = parse_tool_arguments(CodeModeArguments, invocation.arguments)
+        return self._cells.resume(
+            invocation,
+            context,
+            answers,
+            programs=self.program,
+            yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_EXECUTE_YIELD_MS),
         )
 
 
@@ -195,8 +222,13 @@ class WaitCodeTool(Tool):
     DESCRIPTION = "Wait for a running code cell."
     interrupted_result = INTERRUPTED_WAIT_RESULT
 
-    def __init__(self, cells: CodeCells) -> None:
+    def __init__(
+        self, cells: CodeCells, programs: Callable[[str, SandboxLimits], Program]
+    ) -> None:
         self._cells = cells
+        # Builds a saved cell's program with the current tools.
+        self._programs = programs
+        self.resume_with_input = self._resume_with_input
 
     @property
     def id(self) -> None:
@@ -223,39 +255,11 @@ class WaitCodeTool(Tool):
         return ToolExecutionMode.SEQUENTIAL
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=WAIT_CODE_DESCRIPTION,
-            parameters={
-                "type": "object",
-                "properties": {
-                    "cell_id": {
-                        "type": "integer",
-                        "description": "Identifier of the running cell.",
-                    },
-                    "yield_time_ms": {
-                        "type": "integer",
-                        "description": "How long to wait for more output before "
-                        f"returning. Defaults to {DEFAULT_WAIT_YIELD_MS} ms, at most "
-                        f"{MAX_WAIT_YIELD_MS} ms.",
-                    },
-                    "max_output_tokens": {
-                        "type": "integer",
-                        "description": "Token budget for the output this call "
-                        "returns; longer output is cut in the middle. "
-                        + _MAX_TOKENS_TEXT,
-                    },
-                    "terminate": {
-                        "type": "boolean",
-                        "description": "True stops the running cell; false or "
-                        "omitted waits for output.",
-                    },
-                },
-                "required": ["cell_id"],
-            },
+        return tool_definition_from_arguments(
+            self.name, WAIT_CODE_DESCRIPTION, WaitCodeArguments
         )
 
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
         arguments = parse_tool_arguments(WaitCodeArguments, invocation.arguments)
         return self._cells.wait(
             arguments.cell_id,
@@ -264,6 +268,21 @@ class WaitCodeTool(Tool):
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
             max_tokens=output_tokens(arguments.max_output_tokens),
             terminate=arguments.terminate,
+        )
+
+    def _resume_with_input(
+        self,
+        invocation: ToolInvocation,
+        context: ToolContext,
+        answers: list[NestedInputAnswer],
+    ) -> ToolOutcome:
+        arguments = parse_tool_arguments(WaitCodeArguments, invocation.arguments)
+        return self._cells.resume(
+            invocation,
+            context,
+            answers,
+            programs=self._programs,
+            yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
         )
 
 
@@ -290,8 +309,9 @@ def with_code_mode(tools: list[Tool]) -> tuple[list[Tool], CodeCells | None]:
     if not inner:
         return tools, None
     cells = CodeCells()
+    code_tool = CodeModeTool(inner, cells=cells, limits=SandboxLimits())
     return [
         *(tool for tool in tools if tool.code_mode_exposure is CodeModeExposure.DIRECT),
-        CodeModeTool(inner, cells=cells, limits=SandboxLimits()),
-        WaitCodeTool(cells),
+        code_tool,
+        WaitCodeTool(cells, code_tool.program),
     ], cells

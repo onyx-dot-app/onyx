@@ -59,6 +59,7 @@ import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import SkillReviewRequests from "@/sections/skills/SkillReviewRequests";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
+import { refreshSkillLists } from "@/lib/skills/cache";
 import {
   deleteUserSkill,
   bulkUpdateSkills,
@@ -94,11 +95,11 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       ? Number(externalAppIdParam)
       : null;
   const { data, error, isLoading, refresh } = useUserSkills();
+  const { mutate } = useSWRConfig();
   // Revalidation after a successful change is best effort.
   function revalidateSkills() {
-    return refresh().catch(() => undefined);
+    return refreshSkillLists(mutate).catch(() => undefined);
   }
-  const { mutate } = useSWRConfig();
   const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
     null
   );
@@ -259,7 +260,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         },
         { revalidate: false }
       );
-      void refresh().catch(() => {
+      void refreshSkillLists(mutate).catch(() => {
         toast.error(t("page.toasts.refreshFailed", { name: item.name }));
       });
     } catch (error) {

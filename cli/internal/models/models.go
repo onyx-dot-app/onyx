@@ -1,6 +1,8 @@
 // Package models defines API request/response types for the Onyx CLI.
 package models
 
+import "encoding/json"
+
 // AgentSummary represents an agent from the API.
 type AgentSummary struct {
 	ID               int    `json:"id"`
@@ -19,11 +21,11 @@ type DocumentSetSummary struct {
 
 // ChatSessionDetails is a session with timestamps as strings.
 type ChatSessionDetails struct {
-	ID        string  `json:"id"`
-	Name      *string `json:"name"`
+	ID      string  `json:"id"`
+	Name    *string `json:"name"`
 	AgentID *int    `json:"persona_id"`
-	Created   string  `json:"time_created"`
-	Updated   string  `json:"time_updated"`
+	Created string  `json:"time_created"`
+	Updated string  `json:"time_updated"`
 }
 
 // ChatMessageDetail is a single message in a session.
@@ -41,9 +43,42 @@ type ChatMessageDetail struct {
 type ChatSessionDetailResponse struct {
 	ChatSessionID string              `json:"chat_session_id"`
 	Description   *string             `json:"description"`
-	AgentID     *int                `json:"persona_id"`
-	AgentName   *string             `json:"persona_name"`
+	AgentID       *int                `json:"persona_id"`
+	AgentName     *string             `json:"persona_name"`
 	Messages      []ChatMessageDetail `json:"messages"`
+	// One replay packet list for each assistant message, in message order.
+	Packets [][]json.RawMessage `json:"packets"`
+	// ApprovalsVersion is the status's approvals version for the requests
+	// that this load shows.
+	ApprovalsVersion string `json:"approvals_version"`
+}
+
+// ChatStream is a running response stream and the response rows it writes.
+// A stream ID is not a message ID.
+type ChatStream struct {
+	StreamID int `json:"stream_id"`
+	// One response for each model, in model order.
+	ResponseIDs []int `json:"response_ids"`
+}
+
+// ChatSessionStatus reports whether the server still runs a response of a
+// session.
+type ChatSessionStatus struct {
+	IsProcessing bool
+	// CurrentStream is the running response that has a stream, or nil.
+	CurrentStream *ChatStream
+	// ApprovalsVersion changes when the session's waiting approval requests
+	// change. A session load shows the requests of the version.
+	ApprovalsVersion string
+	// HasActiveSubagents reports background agents that run, have queued
+	// work, or have their decisions and wait to resume. An agent that waits
+	// for a decision does not count.
+	HasActiveSubagents bool
+	// HasStartableInput reports input that the server starts a root turn
+	// for, such as a finished agent's unread result.
+	HasStartableInput bool
+	// LatestResponseID is the newest response on the selected branch, or nil.
+	LatestResponseID *int
 }
 
 // ChatFileType represents a file type for uploads.
@@ -131,6 +166,28 @@ type LLMProviderResponse struct {
 	DefaultText *DefaultModel           `json:"default_text"`
 }
 
+// ApprovalDecision is the user's answer to a tool approval request.
+type ApprovalDecision string
+
+const (
+	ApproveOnce    ApprovalDecision = "approve_once"
+	ApproveSession ApprovalDecision = "approve_session"
+	RejectApproval ApprovalDecision = "reject"
+)
+
+// ApprovalDecisionResult is the decision the server saved for a request.
+type ApprovalDecisionResult struct {
+	ApprovalID string `json:"approval_id"`
+	// APPROVED or REJECTED.
+	Decision string `json:"decision"`
+	// USER, SESSION_GRANT, or POLICY: the action policy disabled the tool, so
+	// the approval rejected the call.
+	DecidedVia string `json:"decided_via"`
+	// Continuation is the stream that continues the response after the
+	// decision, or nil while other requests still wait or nothing resumed.
+	Continuation *ChatStream `json:"continuation"`
+}
+
 // SendMessagePayload is the request body for POST /api/chat/send-chat-message.
 type SendMessagePayload struct {
 	Message          string                   `json:"message"`
@@ -138,7 +195,7 @@ type SendMessagePayload struct {
 	ChatSessionInfo  *ChatSessionCreationInfo `json:"chat_session_info,omitempty"`
 	LLMOverride      *LLMOverride             `json:"llm_override,omitempty"`
 	ParentMessageID  *int                     `json:"parent_message_id"`
-	FileDescriptors  []FileDescriptorPayload `json:"file_descriptors"`
+	FileDescriptors  []FileDescriptorPayload  `json:"file_descriptors"`
 	Origin           string                   `json:"origin"`
 	IncludeCitations bool                     `json:"include_citations"`
 	Stream           bool                     `json:"stream"`

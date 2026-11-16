@@ -2,13 +2,21 @@ import codecs
 import json
 import re
 import string
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from typing import Any
 from urllib.parse import quote
 
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
+
+
+def unique_stripped(values: Iterable[str]) -> list[str]:
+    """Each value stripped, without empty and repeated values, in first order."""
+    return list(
+        dict.fromkeys(stripped for value in values if (stripped := value.strip()))
+    )
+
 
 # Mapping of curly/smart quotes to straight quotes
 CURLY_TO_STRAIGHT_QUOTES: dict[str, str] = {

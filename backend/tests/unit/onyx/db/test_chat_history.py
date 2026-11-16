@@ -223,6 +223,7 @@ def test_replay_preserves_completed_tools_and_drops_partial_arguments(
 
 def test_saved_response_history_preserves_generation_content() -> None:
     response = ChatMessage(
+        mentions=[],
         id=42,
         chat_session=ChatSession(),
         message_type=MessageType.ASSISTANT,
@@ -256,6 +257,7 @@ def test_saved_response_history_preserves_generation_content() -> None:
 
 def test_saved_file_citations_restore_without_search_tool_results() -> None:
     response = ChatMessage(
+        mentions=[],
         id=42,
         chat_session=ChatSession(),
         message_type=MessageType.ASSISTANT,

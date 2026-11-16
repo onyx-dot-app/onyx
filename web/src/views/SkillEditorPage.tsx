@@ -34,6 +34,7 @@ import {
 } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { refreshSkillLists } from "@/lib/skills/cache";
 import {
   createCustomSkillFromEditor,
   deleteUserSkill,
@@ -242,10 +243,6 @@ export default function SkillEditorPage({
     unsavedChanges.requestLeave(leaveEditor);
   }
 
-  async function refreshSkillList() {
-    await mutate(SWR_KEYS.userSkills);
-  }
-
   async function handleSave(
     event?: FormEvent<HTMLFormElement>,
     createDisabled = false
@@ -287,7 +284,7 @@ export default function SkillEditorPage({
             );
           }
         }
-        void mutate(SWR_KEYS.userSkills).catch((error: unknown) => {
+        void refreshSkillLists(mutate).catch((error: unknown) => {
           console.error("Failed to refresh skill data after creation", error);
         });
         toast.success(t("editor.toasts.created", { name: created.name }));
@@ -324,7 +321,7 @@ export default function SkillEditorPage({
       };
       if (!fresh) await refreshSkill(nextSkill, { revalidate: false });
       syncEditableFields(nextSkill);
-      await refreshSkillList();
+      await refreshSkillLists(mutate);
       toast.success(t("editor.toasts.saved", { name: updated.name }));
     } catch (err) {
       if (isCreatingForApp && isSkillNameConflict(err)) {
@@ -356,7 +353,7 @@ export default function SkillEditorPage({
 
   async function handleSharingSaved() {
     await refreshSkill();
-    await refreshSkillList();
+    await refreshSkillLists(mutate);
   }
 
   function handleVersionRestored(restored: SkillEditableDetail) {
@@ -402,7 +399,7 @@ export default function SkillEditorPage({
       );
       await refreshSkill(updated, { revalidate: false });
       syncEditableFields(updated);
-      await refreshSkillList();
+      await refreshSkillLists(mutate);
       toast.success(t("editor.toasts.filesUpdated", { name: updated.name }));
     } catch (err) {
       if (isSkillVersionStale(err)) {
@@ -450,7 +447,7 @@ export default function SkillEditorPage({
       // Removal is blocked while the fields are dirty, so take the fields
       // with the version the server returned.
       syncEditableFields(updated);
-      await refreshSkillList();
+      await refreshSkillLists(mutate);
       toast.success(t("editor.toasts.fileRemoved", { path }));
     } catch (err) {
       if (isSkillVersionStale(err)) {
@@ -501,7 +498,7 @@ export default function SkillEditorPage({
       }
       // The skill is gone — a transient list-refresh failure must not mask
       // the successful delete or block navigation off the dead editor page.
-      void refreshSkillList();
+      void refreshSkillLists(mutate);
       toast.success(t("editor.toasts.deleted", { name: skill.name }));
       leaveEditor();
     } catch (err) {

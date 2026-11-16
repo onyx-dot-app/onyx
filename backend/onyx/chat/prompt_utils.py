@@ -605,6 +605,7 @@ def prepare_prompt(
     context_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int],
     user_info_prompt: Message | None = None,
+    skills_catalog_message: Message | None = None,
     request_context_message: Message | None = None,
     agent_instructions: str | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
@@ -626,6 +627,8 @@ def prepare_prompt(
         result.append(system_prompt.model_copy())
     if user_info_prompt is not None:
         result.append(user_info_prompt.model_copy())
+    if skills_catalog_message is not None:
+        result.append(skills_catalog_message.model_copy())
     if custom_agent_prompt is not None:
         result.append(custom_agent_prompt.model_copy())
     if agent_instructions is not None:

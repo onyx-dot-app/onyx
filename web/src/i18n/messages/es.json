@@ -12581,9 +12581,6 @@
         "content": {
           "ariaLabel": "Selector de habilidades"
         },
-        "empty": {
-          "text": "No hay habilidades que coincidan"
-        },
         "mcpServersGroup": {
           "label": "Servidores MCP"
         },
@@ -12620,6 +12617,19 @@
         "expandButton": {
           "label": "Expandir en la barra de entrada",
           "tooltip": "Reemplazar esta tarjeta por su texto completo en línea"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Quitar {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Texto pegado: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Quitar texto pegado"
+          }
         }
       },
       "plusMenuButton": {
@@ -12667,6 +12677,9 @@
         "alreadyAccepted": "Este mensaje ya fue aceptado y ya no está pendiente.",
         "interruptFailed": "No se pudo enviar este mensaje ahora. Sigue pendiente.",
         "stopSubagentsFailed": "No se pudieron detener los subagentes."
+      },
+      "pendingToolApproval": {
+        "toast": "Primero aprueba o rechaza las llamadas a herramientas pendientes."
       }
     },
     "mcpApiKey": {
@@ -13109,6 +13122,9 @@
           },
           "working": {
             "label": "Trabajando"
+          },
+          "waitingForApproval": {
+            "label": "Esperando tu aprobación"
           }
         },
         "internalSearch": {
@@ -13245,6 +13261,9 @@
             "status": "Buscando en la web"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} quiere ejecutar {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14463,6 +14482,54 @@
         "decision": "Decisión",
         "vision": "Visión"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "Sin contenido."
+      },
+      "showLess": {
+        "button": "Mostrar menos"
+      },
+      "showMore": {
+        "button": "Mostrar más"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "Aprobar para este chat",
+        "tooltip": "Aprueba ahora y ejecuta esta herramienta sin volver a preguntar durante el resto de este chat"
+      },
+      "approveOnce": {
+        "ariaLabel": "Aprobar esta acción una vez",
+        "button": "Aprobar una vez"
+      },
+      "approveSession": {
+        "button": "Aprobar para la sesión",
+        "tooltip": "Aprobar acciones coincidentes para esta sesión"
+      },
+      "deadline": "Aprobar antes de {time}",
+      "header": {
+        "required": "Aprobación solicitada: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# acción} other {# acciones}} en {app}",
+        "singleAction": "{action} en {app}"
+      },
+      "reject": {
+        "ariaLabel": "Rechazar esta acción",
+        "button": "Rechazar"
+      },
+      "record": {
+        "approved": "Aprobado: {headline}",
+        "closed": "Ya no espera: {headline}",
+        "disabled": "Desactivado: {headline}",
+        "expired": "Tiempo agotado: {headline}",
+        "rejected": "No aprobado: {headline}",
+        "approvedForChat": "Aprobado para este chat: {headline}",
+        "approvedForSession": "Aprobado para esta sesión: {headline}"
+      },
+      "submitError": "No se pudo enviar tu decisión. Inténtalo de nuevo.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14475,50 +14542,6 @@
       },
       "switch": {
         "ariaLabel": "Cambiar de agente"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Aprobar esta acción una vez",
-        "button": "Aprobar una vez"
-      },
-      "approveSession": {
-        "button": "Aprobar para la sesión",
-        "tooltip": "Aprobar acciones coincidentes para esta sesión"
-      },
-      "details": {
-        "hideAriaLabel": "Ocultar detalles",
-        "showAriaLabel": "Mostrar detalles"
-      },
-      "header": {
-        "required": "Se requiere aprobación: {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# acción} other {# acciones}} en {app}",
-        "singleAction": "{action} en {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "Sin contenido."
-        },
-        "showLess": {
-          "button": "Mostrar menos"
-        },
-        "showMore": {
-          "button": "Mostrar más"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Rechazar esta acción",
-        "button": "Rechazar"
-      },
-      "status": {
-        "approved": "Aprobado",
-        "rejected": "Rechazado",
-        "expired": "Caducada"
-      },
-      "submit": {
-        "errorFallback": "No se pudo enviar la decisión"
       }
     },
     "apps": {
@@ -14656,7 +14679,7 @@
         "duplicateSkillName": "La app «{appName}» ya tiene una habilidad asociada llamada «{skillName}». Sube una habilidad con otro nombre."
       },
       "mcpPolicy": {
-        "description": "Configura qué puede hacer el agente de Craft con las herramientas de este servidor MCP.",
+        "description": "Elige qué herramientas se ejecutan automáticamente, piden aprobación o están deshabilitadas en el chat y en Craft.",
         "emptyPolicies": "No hay herramientas habilitadas en este servidor. Habilita primero las herramientas en la página de acciones MCP.",
         "saveButton": "Guardar",
         "title": "Editar {name}"
@@ -15853,7 +15876,7 @@
     "actionPolicies": {
       "appTitle": "Ajustes de aprobación de {name}",
       "title": "Ajustes de aprobación",
-      "personalDescription": "Estos ajustes determinan si las acciones se ejecutan automáticamente o requieren aprobación en las conversaciones de Craft y las tareas nuevas; las tareas existentes conservan sus propios ajustes.",
+      "personalDescription": "Estos ajustes determinan si las acciones se ejecutan automáticamente o requieren aprobación en las conversaciones de Craft, las tareas nuevas y las llamadas a herramientas MCP en el chat; las tareas existentes conservan sus propios ajustes.",
       "taskDescription": "Elige los plugins que puede usar esta tarea y qué acciones se ejecutan automáticamente. Los cambios solo afectan a esta tarea.",
       "newTaskDescription": "Activa un plugin para comenzar con tu configuración actual de acciones.",
       "workspace_disabled": "Desactivada para el espacio de trabajo",
@@ -15869,9 +15892,6 @@
       "saveError": "No se pudieron guardar las ajustes de aprobación.",
       "emptyActions": "No hay acciones conocidas. Las acciones desconocidas requieren aprobación.",
       "emptyApps": "No hay aplicaciones disponibles.",
-      "expired": "Se agotó el tiempo para aprobar. La acción no se ejecutó.",
-      "rejected": "Solicitud rechazada. Esta solicitud no se ejecutó.",
-      "deadline": "Aprobar antes de {time}",
       "agentPermissionRequired": "Esta ejecución se detuvo porque una acción requería aprobación. Revisa los permisos y vuelve a ejecutar la tarea.",
       "enableForTask": "Activar para esta tarea",
       "enableAppForTask": "Activar {app} para esta tarea",

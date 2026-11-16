@@ -1,8 +1,10 @@
+import asyncio
 import json
 import os
 import sys
 
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_headers
 
 mcp = FastMCP("My HTTP MCP")
 
@@ -19,6 +21,19 @@ def get_ticket(ticket_id: int) -> str:
     return json.dumps(
         {"id": ticket_id, "title": 'Fix the "widget" parser', "labels": ["bug"]}
     )
+
+
+@mcp.tool
+def echo_header(header: str) -> str:
+    """Return the value of a request header, for tests of pass-through headers."""
+    return f"{header}={get_http_headers().get(header.lower(), '')}"
+
+
+@mcp.tool
+async def slow(seconds: float) -> str:
+    """Answer after a delay, for tests of calls that run beside a waiting one."""
+    await asyncio.sleep(seconds)
+    return "slept"
 
 
 def make_many_tools() -> None:

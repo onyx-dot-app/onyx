@@ -5,10 +5,12 @@ import {
   Message,
   ChatSessionSharedStatus,
   BackendChatSession,
+  ChatStream,
   FeedbackType,
 } from "@/app/app/types";
 import {
   getLatestMessageChain,
+  getLatestTurn,
   getMessageByMessageId,
   MessageTreeState,
 } from "../services/messageTree";
@@ -35,7 +37,7 @@ interface ChatSessionData {
   chatSessionSharedStatus: ChatSessionSharedStatus;
   selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
-  sendAcknowledged?: Promise<number | null>;
+  sendAcknowledged?: Promise<ChatStream | null>;
   // Resolves after the reader applies its final packets and message state.
   readerFinished?: Promise<void>;
   hasPerformedInitialScroll: boolean;
@@ -46,6 +48,8 @@ interface ChatSessionData {
   isFetchingChatMessages: boolean;
   // Paged loading: the current branch has messages above the loaded ones.
   hasOlderMessages: boolean;
+  // The `approvals_version` of the load whose approval requests the chat shows.
+  approvalsVersion?: string;
   isLoadingOlderMessages: boolean;
   uncaughtError: SessionError | null;
   loadingError: string | null;
@@ -673,16 +677,8 @@ export const useCurrentResponseStopped = () =>
       ? sessions.get(currentSessionId)
       : null;
     if (!currentSession) return false;
-    const tree = currentSession.messageTree;
-    const latest = getLatestMessageChain(tree).at(-1);
-    if (!latest) return false;
     // Each model of a multi-model turn is a sibling that ends with its own stop.
-    const turn =
-      latest.parentNodeId === null
-        ? [latest]
-        : (tree.get(latest.parentNodeId)?.childrenNodeIds ?? [latest.nodeId])
-            .map((nodeId) => tree.get(nodeId))
-            .filter((node): node is Message => node !== undefined);
+    const turn = getLatestTurn(currentSession.messageTree);
     return (
       turn.length > 0 &&
       turn.every((node) => node.packets.at(-1)?.obj.type === "stop")

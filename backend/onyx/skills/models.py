@@ -1,9 +1,14 @@
 import re
-from typing import Any, Final
+from typing import Annotated, Any, Final
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 SKILL_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+SKILL_NAME_MAX_LENGTH: Final = 64
+SkillName = Annotated[
+    str, Field(pattern=SKILL_NAME_PATTERN, max_length=SKILL_NAME_MAX_LENGTH)
+]
 GITHUB_SKILL_MAX_COUNT: Final[int] = 500
 
 
@@ -27,8 +32,8 @@ class SkillMetadata(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_name(cls, value: str) -> str:
-        if len(value) > 64:
-            raise ValueError("must be at most 64 characters")
+        if len(value) > SKILL_NAME_MAX_LENGTH:
+            raise ValueError(f"must be at most {SKILL_NAME_MAX_LENGTH} characters")
         if not SKILL_NAME_PATTERN.fullmatch(value):
             raise ValueError(
                 "must contain only lowercase letters, numbers, and single hyphens"
@@ -161,3 +166,27 @@ class GitHubSkillBundle(BaseModel):
     description: str | None
     bundle_bytes: bytes | None
     unavailable_reason: str | None = None
+
+
+class ChatSkill(BaseModel):
+    """A custom skill the user runs, at the version the user runs. Each
+    description is one line: runs of whitespace become one space."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    description: str
+    # `metadata.short-description` in the frontmatter, which the catalog
+    # prefers. None when it is missing or blank.
+    short_description: str | None = None
+    version_id: UUID
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str) -> str:
+        return " ".join(value.split())
+
+    @field_validator("short_description")
+    @classmethod
+    def normalize_short_description(cls, value: str | None) -> str | None:
+        return (" ".join(value.split()) or None) if value is not None else None

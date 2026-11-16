@@ -14,7 +14,7 @@ import {
   startExternalAppOAuth,
   upsertUserCredentials,
 } from "@/app/craft/services/externalAppsService";
-import CometEdge from "@/app/craft/components/CometEdge";
+import CometEdge from "@/refresh-components/CometEdge";
 import {
   OAUTH_POPUP_MESSAGE_SOURCE,
   OAuthPopupMessage,
@@ -25,6 +25,7 @@ import {
 } from "@/app/craft/v1/apps/registry";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { refreshSkillLists } from "@/lib/skills/cache";
 
 interface SetupCardProps {
   // Correlation id for the parked `connect_app` request (from the packet).
@@ -101,7 +102,7 @@ export default function SetupCard({
       setDecision(result);
       if (result === "connected") {
         void mutate(SWR_KEYS.buildExternalApps);
-        void mutate(SWR_KEYS.userSkills);
+        void refreshSkillLists(mutate);
       }
     },
     [requestId, mutate, t]

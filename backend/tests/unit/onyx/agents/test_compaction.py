@@ -3,6 +3,7 @@
 import threading
 from collections.abc import Callable, Generator, Sequence
 from unittest.mock import Mock, patch
+from uuid import uuid4
 
 import pytest
 import tiktoken
@@ -51,7 +52,12 @@ from onyx.agents.tools import (
 )
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.files import build_file_context
-from onyx.chat.models import ChatHistoryMessage, CheckpointBinding
+from onyx.chat.mention_models import PickedSkillMessage, RecordedSkillMention
+from onyx.chat.models import (
+    ChatHistoryMessage,
+    CheckpointBinding,
+    picked_skill_messages,
+)
 from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.configs.constants import MessageType
@@ -357,6 +363,7 @@ def test_compaction_replaces_attachment_body_with_file_reference() -> None:
 def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     model = ContextModel()
     old_answer = ChatHistoryMessage(
+        skill_messages=[],
         id=1,
         message_type=MessageType.ASSISTANT,
         message="Old findings. " * 600,
@@ -370,6 +377,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
         ],
     )
     question = ChatHistoryMessage(
+        skill_messages=[],
         id=2,
         message_type=MessageType.USER,
         message="Current question. " * (160 if long_question else 1),
@@ -819,6 +827,7 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
         token_count=stored_image_tokens,
     )
     question = ChatHistoryMessage(
+        skill_messages=[],
         id=1,
         message_type=MessageType.USER,
         message=older_text,
@@ -1001,6 +1010,68 @@ def test_truncation_preserves_the_user_task_before_an_agent_result() -> None:
         message.text for message in working_messages(source, checkpoint, input_start=1)
     ]
     assert size == input_limit
+
+
+def test_compaction_drops_skill_messages_and_keeps_the_question_as_the_task() -> None:
+    model = ContextModel()
+    version_id = uuid4()
+    question = ChatHistoryMessage(
+        id=1,
+        message_type=MessageType.USER,
+        message=TASK,
+        token_count=0,
+        files=[],
+        is_clarification=False,
+        skill_messages=picked_skill_messages(
+            "chat:1",
+            [RecordedSkillMention(name="triage", version_id=version_id)],
+            [
+                PickedSkillMessage(
+                    version_id=version_id,
+                    content="<skill>\n<name>triage</name>\nSort by area.\n</skill>",
+                    token_count=9,
+                )
+            ],
+        ),
+        response_messages=[],
+    )
+    history: list[Message] = [
+        *convert_chat_history([question], files=[]).messages,
+        AssistantMessage(
+            id="work", content=[TextContent(text="Earlier research context. " * 300)]
+        ),
+        UserMessage(
+            id="child-delivery",
+            content="Child research findings",
+            metadata=InputMessageMetadata(
+                source=InputSource.AGENT_RESULT, source_run_id="child"
+            ),
+        ),
+    ]
+    skill_text = "<skill>\n<name>triage</name>\nSort by area.\n</skill>"
+    assert [message.text for message in history[:2]] == [TASK, skill_text]
+
+    # A cut never falls between the question and its skill.
+    assert 1 not in history_boundaries(history, input_start=0)
+    checkpoint = compact_history(
+        model,
+        history,
+        None,
+        GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        input_start=0,
+    )
+
+    # The summary reads the skill; compacted history keeps the question as the
+    # task and drops its skill.
+    assert checkpoint.covered_through_message_id == "work"
+    assert any(skill_text in summary.messages[0].text for summary in model.summaries)
+    assert [
+        message.text for message in working_messages(history, checkpoint, input_start=0)
+    ] == [
+        f"Conversation summary:\n{checkpoint.summary}",
+        TASK,
+        "Child research findings",
+    ]
 
 
 def test_truncation_validates_boundaries_once_across_candidates() -> None:

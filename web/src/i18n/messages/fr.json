@@ -12581,9 +12581,6 @@
         "content": {
           "ariaLabel": "Sélecteur de compétences"
         },
-        "empty": {
-          "text": "Aucune compétence correspondante"
-        },
         "mcpServersGroup": {
           "label": "Serveurs MCP"
         },
@@ -12620,6 +12617,19 @@
         "expandButton": {
           "label": "Développer dans la barre de saisie",
           "tooltip": "Remplacer cette vignette par son texte complet en ligne"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Retirer {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Texte collé : {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Retirer le texte collé"
+          }
         }
       },
       "plusMenuButton": {
@@ -12667,6 +12677,9 @@
         "alreadyAccepted": "Ce message a déjà été accepté et n’est plus en attente.",
         "interruptFailed": "Impossible d’envoyer ce message maintenant. Il reste en attente.",
         "stopSubagentsFailed": "Impossible d'arrêter les sous-agents."
+      },
+      "pendingToolApproval": {
+        "toast": "Approuvez ou refusez d'abord les appels d'outils en attente."
       }
     },
     "mcpApiKey": {
@@ -13109,6 +13122,9 @@
           },
           "working": {
             "label": "En cours"
+          },
+          "waitingForApproval": {
+            "label": "En attente de votre approbation"
           }
         },
         "internalSearch": {
@@ -13245,6 +13261,9 @@
             "status": "Recherche sur le web"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} veut exécuter {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14463,6 +14482,54 @@
         "decision": "Décision",
         "vision": "Vision"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "Aucune donnée."
+      },
+      "showLess": {
+        "button": "Afficher moins"
+      },
+      "showMore": {
+        "button": "Afficher plus"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "Approuver pour ce chat",
+        "tooltip": "Approuver maintenant et exécuter cet outil sans redemander pendant le reste de ce chat"
+      },
+      "approveOnce": {
+        "ariaLabel": "Approuver cette action une fois",
+        "button": "Approuver une fois"
+      },
+      "approveSession": {
+        "button": "Approuver pour la session",
+        "tooltip": "Approuver les actions correspondantes pour cette session"
+      },
+      "deadline": "Approuver avant {time}",
+      "header": {
+        "required": "Approbation demandée : {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
+        "singleAction": "{action} dans {app}"
+      },
+      "reject": {
+        "ariaLabel": "Rejeter cette action",
+        "button": "Rejeter"
+      },
+      "record": {
+        "approved": "Approuvé : {headline}",
+        "closed": "N'attend plus : {headline}",
+        "disabled": "Désactivé : {headline}",
+        "expired": "Délai dépassé : {headline}",
+        "rejected": "Non approuvé : {headline}",
+        "approvedForChat": "Approuvé pour ce chat : {headline}",
+        "approvedForSession": "Approuvé pour cette session : {headline}"
+      },
+      "submitError": "Impossible d'envoyer votre décision. Réessayez.",
+      "actionWithDescription": "{action} : {description}"
     }
   },
   "craft": {
@@ -14475,50 +14542,6 @@
       },
       "switch": {
         "ariaLabel": "Changer d'agent"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Approuver cette action une fois",
-        "button": "Approuver une fois"
-      },
-      "approveSession": {
-        "button": "Approuver pour la session",
-        "tooltip": "Approuver les actions correspondantes pour cette session"
-      },
-      "details": {
-        "hideAriaLabel": "Masquer les détails",
-        "showAriaLabel": "Afficher les détails"
-      },
-      "header": {
-        "required": "Approbation requise : {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
-        "singleAction": "{action} dans {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "Aucune donnée."
-        },
-        "showLess": {
-          "button": "Afficher moins"
-        },
-        "showMore": {
-          "button": "Afficher plus"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Rejeter cette action",
-        "button": "Rejeter"
-      },
-      "status": {
-        "approved": "Approuvé",
-        "rejected": "Rejeté",
-        "expired": "Expirée"
-      },
-      "submit": {
-        "errorFallback": "Échec de l'envoi de la décision"
       }
     },
     "apps": {
@@ -14656,7 +14679,7 @@
         "duplicateSkillName": "L'app « {appName} » a déjà une compétence associée nommée « {skillName} ». Importez une compétence avec un autre nom."
       },
       "mcpPolicy": {
-        "description": "Configurez ce que l'agent Craft peut faire avec les outils de ce serveur MCP.",
+        "description": "Choisissez les outils qui s'exécutent automatiquement, demandent une approbation ou sont désactivés dans le chat et dans Craft.",
         "emptyPolicies": "Aucun outil activé sur ce serveur. Activez d'abord les outils sur la page des actions MCP.",
         "saveButton": "Enregistrer",
         "title": "Modifier {name}"
@@ -15853,7 +15876,7 @@
     "actionPolicies": {
       "appTitle": "Paramètres d’approbation de {name}",
       "title": "Paramètres d’approbation",
-      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft et les nouvelles tâches ; les tâches existantes conservent leurs propres paramètres.",
+      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft, les nouvelles tâches et les appels d’outils MCP dans le chat ; les tâches existantes conservent leurs propres paramètres.",
       "taskDescription": "Choisissez les plugins de cette tâche et les actions à exécuter automatiquement. Les modifications concernent uniquement cette tâche.",
       "newTaskDescription": "Activez un plugin pour partir de vos paramètres actuels des actions.",
       "workspace_disabled": "Désactivée pour cet espace de travail",
@@ -15869,9 +15892,6 @@
       "saveError": "Impossible d’enregistrer les paramètres d’approbation.",
       "emptyActions": "Aucune action connue. Les actions inconnues nécessitent une approbation.",
       "emptyApps": "Aucune application disponible.",
-      "expired": "Le délai d’approbation a expiré. L’action n’a pas été exécutée.",
-      "rejected": "Demande rejetée. Cette demande n’a pas été exécutée.",
-      "deadline": "Approuver avant {time}",
       "agentPermissionRequired": "Cette exécution s’est arrêtée car une action nécessitait une approbation. Vérifiez les autorisations, puis relancez la tâche.",
       "enableForTask": "Activer pour cette tâche",
       "enableAppForTask": "Activer {app} pour cette tâche",

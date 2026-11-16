@@ -228,7 +228,8 @@ def _get_answer_with_tools(
             )
 
             stream_start_time = time.time()
-            full = run_chat_turn(new_msg_req=request, user=user)
+            # Nobody answers approval requests in an eval run.
+            full = run_chat_turn(new_msg_req=request, user=user, ask_for_approval=False)
 
             result = _chat_full_response_to_eval_result(full, stream_start_time)
 
@@ -365,7 +366,9 @@ def _get_multi_turn_answer_with_tools(
                 )
 
                 stream_start_time = time.time()
-                full = run_chat_turn(new_msg_req=request, user=user)
+                full = run_chat_turn(
+                    new_msg_req=request, user=user, ask_for_approval=False
+                )
 
                 result = _chat_full_response_to_eval_result(full, stream_start_time)
 

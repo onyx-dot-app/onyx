@@ -23,10 +23,19 @@ export function useTimelineHeader(
   turnGroups: TurnGroup[],
   stopReason?: StopReason,
   codeModeWorking = false,
+  awaitingApproval = false,
 ): TimelineHeaderResult {
   return useMemo(() => {
     const hasPackets = turnGroups.length > 0;
     const userStopped = stopReason === StopReason.USER_CANCELLED;
+
+    if (awaitingApproval) {
+      return {
+        headerText: "Waiting for your approval",
+        hasPackets,
+        userStopped,
+      };
+    }
 
     if (codeModeWorking) {
       return { headerText: "Working", hasPackets, userStopped };
@@ -105,5 +114,5 @@ export function useTimelineHeader(
     }
 
     return { headerText: "Thinking...", hasPackets, userStopped };
-  }, [turnGroups, stopReason, codeModeWorking]);
+  }, [turnGroups, stopReason, codeModeWorking, awaitingApproval]);
 }
