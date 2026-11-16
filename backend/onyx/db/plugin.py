@@ -57,7 +57,7 @@ from onyx.db.models import (
 )
 from onyx.db.plugin_access import (
     affected_user_ids_for_plugins,
-    plugin_visible_to_user,
+    visible_plugin_ids,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import (
@@ -413,8 +413,6 @@ def get_visible_versions_skill_md(
     query. A version that is gone or hidden from the user is left out."""
     rows = db_session.execute(
         select(PluginVersion.id, PluginVersion.bundle_file_id, PluginSkill.skill_md)
-        .join(Plugin, Plugin.id == PluginVersion.plugin_id)
-        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
         .outerjoin(
             PluginSkill,
             and_(
@@ -424,7 +422,7 @@ def get_visible_versions_skill_md(
         )
         .where(
             PluginVersion.id.in_(version_ids),
-            plugin_visible_to_user(Plugin, Marketplace, user_id),
+            PluginVersion.plugin_id.in_(visible_plugin_ids(user_id)),
         )
     )
     return {

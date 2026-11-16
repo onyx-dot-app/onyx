@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -15,6 +16,7 @@ from onyx.db.models import (
     Skill,
     Skill__User,
     Skill__UserGroup,
+    UserPluginPreference,
     UserSkillPreference,
 )
 from onyx.db.plugin import (
@@ -46,6 +48,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_skill,
     make_user,
     set_current_version_validity,
+    set_plugin_created_at,
     share_skill_with_group,
     share_skill_with_user,
 )
@@ -616,6 +619,8 @@ def test_automatic_skill_name_conflicts(db_session: Session) -> None:
     name = f"policy-conflict-{uuid4().hex[:8]}"
     optional = make_skill(db_session, name=name, is_public=True)
     automatic = make_skill(db_session, name=name, is_public=True)
+    # Of two published skills with one name, the older one runs.
+    set_plugin_created_at(db_session, optional.id, datetime(2025, 1, 1, tzinfo=UTC))
     set_skill_enabled_for_user(
         skill_id=optional.id, enabled=True, user=user, db_session=db_session
     )
@@ -718,9 +723,11 @@ def test_replacing_default_skill_remembers_opt_out(db_session: Session) -> None:
 
 
 @pytest.mark.parametrize("share_via_group", [False, True])
-def test_inaccessible_selection_does_not_suppress_default(
+def test_published_default_keeps_its_name_over_a_shared_selection(
     db_session: Session, share_via_group: bool
 ) -> None:
+    """Name order: a published skill wins over a shared one, also when the
+    user turned the shared one on. The hidden choice stays saved."""
     owner = make_user(db_session)
     user = make_user(db_session)
     selected = make_skill(db_session, is_public=False, author_user_id=owner.id)
@@ -735,34 +742,32 @@ def test_inaccessible_selection_does_not_suppress_default(
     )
     default = make_skill(db_session, name=selected.name, is_public=True)
     set_skill_installation_policy(default, SkillInstallationPolicy.DEFAULT, db_session)
-    assert not skill_user_states(user, [default.id], db_session)[default.id].enabled
+
+    def runtime_ids() -> set[UUID]:
+        return {
+            skill.skill.id
+            for skill in list_runtime_skills_for_user(user=user, db_session=db_session)
+        }
+
+    states = skill_user_states(user, [default.id, selected.id], db_session)
+    assert states[default.id].enabled
+    assert not states[selected.id].enabled
+    assert default.id in runtime_ids() and selected.id not in runtime_ids()
 
     replace_skill_shares(
         skill=selected, user_shares={}, group_shares={}, db_session=db_session
     )
     assert skill_user_states(user, [default.id], db_session)[default.id].enabled
-    runtime_ids = {
-        skill.skill.id
-        for skill in list_runtime_skills_for_user(user=user, db_session=db_session)
-    }
-    assert default.id in runtime_ids
-    assert selected.id not in runtime_ids
+    assert default.id in runtime_ids() and selected.id not in runtime_ids()
     preference = db_session.get(UserSkillPreference, (user.id, selected.id))
     assert preference is not None and preference.enabled
 
-    # Restoring access restores the saved selection without enabling both skills.
-    if share_via_group:
-        share_skill_with_group(db_session, selected, group)
-    else:
-        share_skill_with_user(db_session, selected, user)
-    states = skill_user_states(user, [default.id, selected.id], db_session)
-    assert states[selected.id].enabled
-    assert not states[default.id].enabled
 
-
-def test_replacement_clears_inaccessible_selection_and_effective_default(
+def test_replacement_clears_effective_default_and_keeps_hidden_choice(
     db_session: Session,
 ) -> None:
+    """A switch turns off the visible same-name skill only. The kept choice of
+    a skill the user can no longer see neither blocks it nor changes."""
     user = make_user(db_session)
     owner = make_user(db_session)
     previous = make_skill(db_session, is_public=False, author_user_id=owner.id)
@@ -784,13 +789,21 @@ def test_replacement_clears_inaccessible_selection_and_effective_default(
         user=user,
         db_session=db_session,
     )
-    for skill in (previous, default):
-        preference = db_session.get(UserSkillPreference, (user.id, skill.id))
-        assert preference is not None and not preference.enabled
+    default_choice = db_session.get(UserPluginPreference, (user.id, default.id))
+    assert default_choice is not None and not default_choice.enabled
+    hidden_choice = db_session.get(UserPluginPreference, (user.id, previous.id))
+    assert hidden_choice is not None and hidden_choice.enabled
     set_skill_enabled_for_user(
         skill_id=replacement.id, enabled=False, user=user, db_session=db_session
     )
+    set_skill_enabled_for_user(
+        skill_id=default.id, enabled=False, user=user, db_session=db_session
+    )
     share_skill_with_user(db_session, previous, user)
+    assert skill_user_states(user, [previous.id], db_session)[previous.id].enabled
+    set_skill_enabled_for_user(
+        skill_id=previous.id, enabled=False, user=user, db_session=db_session
+    )
     assert not any(
         state.enabled
         for state in skill_user_states(
@@ -1033,3 +1046,49 @@ def test_ownerless_public_skill_stays_published(
             skill=skill, public_permission=None, db_session=db_session
         )
     assert skill.public_permission == SkillSharePermission.VIEWER
+
+
+def test_required_skill_that_cannot_run_does_not_hold_its_name(
+    db_session: Session,
+) -> None:
+    """A Required app skill whose app the user has not connected does not load,
+    so the user's own skill with that name can be turned off and on again."""
+    user = make_user(db_session, standard_account=True)
+    name = f"app-name-{uuid4().hex[:8]}"
+    required = make_skill(db_session, name=name, is_public=True)
+    set_skill_installation_policy(
+        required, SkillInstallationPolicy.REQUIRED, db_session
+    )
+    make_external_app(db_session, skill=required, auth_template={}, enabled=False)
+    own = make_skill(db_session, name=name, author_user_id=user.id)
+    set_current_version_validity(db_session, own.id, True)
+
+    for enabled in (True, False, True):
+        set_skill_enabled_for_user(
+            skill_id=own.id, enabled=enabled, user=user, db_session=db_session
+        )
+    assert [
+        runtime.skill.id
+        for runtime in list_runtime_skills_for_user(user=user, db_session=db_session)
+        if runtime.name == name
+    ] == [own.id]
+
+
+def test_hidden_enabled_choice_does_not_block_a_toggle(db_session: Session) -> None:
+    """A user who turned on a shared skill and lost the share can turn on
+    their own skill with the same name."""
+    user = make_user(db_session, standard_account=True)
+    owner = make_user(db_session, standard_account=True)
+    name = f"hidden-{uuid4().hex[:8]}"
+    shared = make_skill(db_session, name=name, author_user_id=owner.id)
+    share_skill_with_user(db_session, shared, user, SkillSharePermission.VIEWER)
+    set_skill_enabled_for_user(
+        skill_id=shared.id, enabled=True, user=user, db_session=db_session
+    )
+    replace_skill_shares(skill=shared, user_shares={}, db_session=db_session)
+
+    own = make_skill(db_session, name=name, author_user_id=user.id)
+    set_skill_enabled_for_user(
+        skill_id=own.id, enabled=True, user=user, db_session=db_session
+    )
+    assert skill_user_states(user, [own.id], db_session)[own.id].enabled
