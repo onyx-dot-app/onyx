@@ -240,10 +240,9 @@ def test_cancel_with_sigint_signals_and_returns_no_result(guest: Guest) -> None:
     assert execution.signaled == sandboxd_pb2.CANCEL_SIGNAL_SIGINT
 
 
-def test_cancel_of_an_unknown_execution_raises_not_found(guest: Guest) -> None:
-    with pytest.raises(SandboxDaemonError) as exc:
-        guest.daemon.cancel("exec-404")
-    assert exc.value.reason is SandboxDaemonErrorReason.EXECUTION_NOT_FOUND
+def test_cancel_of_an_unknown_execution_reports_it_gone(guest: Guest) -> None:
+    gone = guest.daemon.cancel("exec-404")
+    assert (gone.result, gone.already_ended) == (None, True)
 
 
 def test_list_and_inspect_filter_by_labels(guest: Guest) -> None:

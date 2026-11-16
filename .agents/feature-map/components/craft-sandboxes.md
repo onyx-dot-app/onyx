@@ -294,10 +294,27 @@ Harness sandboxes (the agent harness runs outside the sandbox):
 - `backend/onyx/server/features/build/sandbox/harness_base.py:HarnessSandbox`
   is the narrow interface the new harness calls: `ensure_running`, the Codex
   `exec_command` / `write_stdin` contract (yield time, head and tail output
-  caps, "\x03" sends SIGINT), `read_file` / `write_file` (exact bytes for
-  view_image and apply_patch), `publish_artifact`, and busy signals (turn
-  and parked-approval marks). Each chat session works in
-  `SESSION_WORKSPACE_ROOT/<session_id>` (`/home/onyx/workspaces`).
+  caps, "\x03" sends SIGINT; the exec limits live in
+  `.../sandbox/exec_output.py`, whose `ExecOutputBuffer` keeps one call's
+  output: live deltas stop at what the result can show, `max_output_tokens`
+  x 4 bytes). A cancel of the current signal ends the wait and
+  kills the command however the wait ends (also when the consumer drops the
+  stream); a call cancelled before its command starts or its input is
+  written does neither. `read_file` / `write_file` (exact bytes, a mode),
+  `stat_files` (the guest daemon's typed `StatFiles` RPC over `os.Root`:
+  each path's own entry and link target, and its target through the links
+  inside the session with a device and inode identity, or why there is none:
+  missing, escapes, loop; at most 8 links per path; up to 1,000 paths and
+  1 MiB of path bytes per call; an older root drive fails with a message
+  that it updates after a restart) and `delete_file` for apply_patch,
+  `publish_artifact`, and busy signals (turn and parked-approval marks).
+  Each chat session works in `SESSION_WORKSPACE_ROOT/<session_id>`
+  (`/home/onyx/workspaces`); file calls take paths by
+  `session_relative_path`. For a missing file, `read_file` raises
+  `SandboxFileNotFoundError`, `stat_files` reports it and `delete_file`
+  returns False. A yield window counts from the
+  Start or the write, so a slow wake does not use it up; `wall_time_seconds`
+  covers the whole call.
 - `.../sandbox/firecracker/harness_sandbox.py:FirecrackerHarnessSandbox`
   implements it on the microvm code: wake on the first call (capacity
   retry for 10 s), Init only when `Health.initialized` is false or the
@@ -312,7 +329,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   Each command has a client label; when Start gets no answer, the harness
   finds the command by that label and adopts it.
 - `.../sandbox/harness_factory.py:get_harness_sandbox` returns it with
-  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`, the source image
+  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`
+  (`backend/onyx/microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the source image
   tag of the root drive. Each node names its templates
   `<tag>-<key hash[:12]>` and the hash differs per node, so
   `backend/onyx/microvm/models.py:NodeInfo.template` takes an exact version or that node's newest
@@ -347,7 +365,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   commit): a Craft session delete
   (`backend/onyx/server/features/build/session/api.py:delete_session`)
   deletes that session's save, its directory on the running VM and its
-  exec records; its artifacts stay. A user delete (`delete_user_from_db`
+  exec records; its artifacts stay. A session the harness has no record of
+  (save, instance mark or exec record) costs only cache reads. A user delete (`delete_user_from_db`
   in a background thread, `UserManager.delete`) and the last-admin tenant
   delete stop the VM and delete every save, artifact and record of the
   sandbox. At the end of each chat retention chain

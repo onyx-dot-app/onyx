@@ -18,7 +18,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from onyx.microvm.configs import FIRECRACKER_ENABLED, SANDBOX_FC_TEMPLATE
+from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.contextvars import get_current_tenant_id
@@ -26,13 +26,10 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-HARNESS_PURGE_ENABLED = FIRECRACKER_ENABLED and bool(SANDBOX_FC_TEMPLATE)
-
-
 def purge_harness_session(
     sandbox_id: UUID, session_id: UUID, *, retention: bool = False
 ) -> None:
-    if not HARNESS_PURGE_ENABLED:
+    if not HARNESS_SANDBOX_ENABLED:
         return
     try:
         from onyx.server.features.build.sandbox.harness_factory import (
@@ -56,7 +53,7 @@ def purge_harness_session(
 def purge_harness_sandboxes(targets: dict[UUID, list[UUID]]) -> None:
     """`targets`: sandbox ID -> session IDs to purge with it (older saves
     that the saved-session index may not name)."""
-    if not HARNESS_PURGE_ENABLED or not targets:
+    if not HARNESS_SANDBOX_ENABLED or not targets:
         return
     tenant_id = get_current_tenant_id()
     try:
@@ -84,7 +81,7 @@ def purge_expired_harness_sessions(
     whose build session had no activity in `retention_days`, until
     `deadline` (monotonic). The next run takes the rest. Run after the
     retention deletes commit."""
-    if not HARNESS_PURGE_ENABLED:
+    if not HARNESS_SANDBOX_ENABLED:
         return
     cutoff = datetime.now(tz=timezone.utc) - timedelta(days=retention_days)
     # The scan gets half the time, so the purges always get the rest.
@@ -150,7 +147,7 @@ def purge_expired_harness_sessions(
 def purge_harness_sandboxes_in_background(targets: dict[UUID, list[UUID]]) -> None:
     """For sync callers that may run on an event loop: a purge can wait a
     minute for the sandbox lock and the VM stop."""
-    if not HARNESS_PURGE_ENABLED or not targets:
+    if not HARNESS_SANDBOX_ENABLED or not targets:
         return
     start_thread_with_context(
         target=purge_harness_sandboxes,

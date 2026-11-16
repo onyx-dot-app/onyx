@@ -196,6 +196,31 @@ func (s *Server) ListFiles(ctx context.Context, r *pb.ListFilesRequest) (*pb.Lis
 	return out, nil
 }
 
+var statErrors = map[files.StatErr]pb.StatError{
+	files.StatMissing: pb.StatError_STAT_ERROR_MISSING,
+	files.StatEscapes: pb.StatError_STAT_ERROR_ESCAPES,
+	files.StatLoop:    pb.StatError_STAT_ERROR_LOOP,
+	files.StatOther:   pb.StatError_STAT_ERROR_OTHER,
+}
+
+// StatFiles implements pb.SandboxdServer.
+func (s *Server) StatFiles(ctx context.Context, r *pb.StatFilesRequest) (*pb.StatFilesResponse, error) {
+	stats, err := s.files.Stat(ctx, r.GetSessionId(), r.GetPaths())
+	if err != nil {
+		return nil, fileError(err)
+	}
+	out := &pb.StatFilesResponse{Stats: make([]*pb.PathStat, len(stats))}
+	for i, st := range stats {
+		out.Stats[i] = &pb.PathStat{
+			Path: st.Path, Exists: st.Exists, Type: fileTypes[st.Type], Mode: st.Mode,
+			LinkTarget: st.LinkTarget, TargetError: statErrors[st.TargetErr],
+			TargetType: fileTypes[st.TargetType], TargetMode: st.TargetMode,
+			Device: st.Device, Inode: st.Inode,
+		}
+	}
+	return out, nil
+}
+
 // DeleteFile implements pb.SandboxdServer.
 func (s *Server) DeleteFile(_ context.Context, r *pb.DeleteFileRequest) (*pb.DeleteFileResponse, error) {
 	deleted, err := s.files.Delete(r.GetSessionId(), r.GetPath(), r.GetRecursive())

@@ -119,6 +119,16 @@ service Sandboxd {
   // with recursive. A missing path is not an error (deleted is false).
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
 
+  // StatFiles reports what the kernel knows about session paths, in one
+  // call, so a caller can check every file of a change before it writes
+  // one. For each path: its own entry (lstat), and its target through the
+  // links inside the session directory (stat), or why there is none. It
+  // needs a session_id, reads no content, and answers per path: only a bad
+  // path, a limit or a cancel fails the call. At most 1,000 paths and
+  // 1 MiB of path bytes per call, so the request fits the daemon's 4 MiB
+  // message limit and the answer the 16 MiB pass-through limit.
+  rpc StatFiles(StatFilesRequest) returns (StatFilesResponse);
+
   // ZipFiles streams a deflate zip of the regular files under a directory.
   // The last message is the summary. A limit error ends the stream with a
   // status; drop the bytes received so far.
@@ -634,6 +644,55 @@ message DeleteFileRequest {
 message DeleteFileResponse {
   // False if the path did not exist.
   bool deleted = 1;
+}
+
+message StatFilesRequest {
+  string session_id = 1;
+  // Session-relative paths, as for ReadFile. "" or "." is the session
+  // directory.
+  repeated string paths = 2;
+}
+
+// Why a path's target has no facts.
+enum StatError {
+  STAT_ERROR_UNSPECIFIED = 0;
+  // The path or a link on it leads to nothing.
+  STAT_ERROR_MISSING = 1;
+  // A link on the path leads out of the session directory, also into a
+  // read-only root.
+  STAT_ERROR_ESCAPES = 2;
+  // The links on the path loop.
+  STAT_ERROR_LOOP = 3;
+  // Another error, such as a file used as a directory.
+  STAT_ERROR_OTHER = 4;
+}
+
+message PathStat {
+  // The requested path, cleaned as for ReadFile.
+  string path = 1;
+  // The entry itself exists: a file, a directory or a link, even a broken
+  // one.
+  bool exists = 2;
+  // The entry's own type (FILE_TYPE_SYMLINK for a link) and permission
+  // bits.
+  FileType type = 3;
+  uint32 mode = 4;
+  // FILE_TYPE_SYMLINK only: the link target as stored. Bytes that are not
+  // valid UTF-8 become U+FFFD.
+  string link_target = 5;
+  // STAT_ERROR_UNSPECIFIED when the target facts below are set.
+  StatError target_error = 6;
+  // The target after following links: type, permission bits, and its
+  // identity (two paths with the same device and inode name one file).
+  FileType target_type = 7;
+  uint32 target_mode = 8;
+  uint64 device = 9;
+  uint64 inode = 10;
+}
+
+message StatFilesResponse {
+  // One per requested path, in request order.
+  repeated PathStat stats = 1;
 }
 
 message ZipFilesRequest {

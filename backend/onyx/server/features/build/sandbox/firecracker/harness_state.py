@@ -185,6 +185,27 @@ def mark_session_on_instance(
     )
 
 
+def has_session_records(
+    cache: CacheBackend, sandbox_id: UUID, session_id: UUID
+) -> bool:
+    """Whether the harness recorded anything of the session: a save, a
+    saved-session index entry, a VM instance that set it up, or a command."""
+    return (
+        get_session_save(cache, session_id) is not None
+        or str(session_id) in get_ids(cache, SAVED_SESSIONS_PREFIX, sandbox_id)
+        or str(session_id)
+        in _read(
+            cache, SESSION_INSTANCES_PREFIX + str(sandbox_id), SessionInstanceTable
+        ).sessions
+        or any(
+            record.chat_session_id == str(session_id)
+            for record in _read(
+                cache, EXEC_SESSIONS_PREFIX + str(sandbox_id), ExecSessionTable
+            ).sessions.values()
+        )
+    )
+
+
 def forget_session_on_instances(
     cache: CacheBackend, sandbox_id: UUID, session_id: UUID
 ) -> None:
