@@ -57,6 +57,7 @@ from onyx.external_apps.providers.registry import (
     get_provider_for_app,
 )
 from onyx.external_apps.url_glob import UrlGlob
+from onyx.integrations.sync import sync_actions_for_integration_id__no_commit
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.external_apps.models import (
     ConnectAppDecisionRequest,
@@ -256,6 +257,7 @@ def create_built_in_external_app(
             users_can_manage=request.users_can_manage_policies,
         )
     skill = associate_built_in_skill__no_commit(db_session, app)
+    sync_actions_for_integration_id__no_commit(app.integration_id, db_session)
 
     # Push before commit so a push failure rolls back the create.
     push_skill_to_affected_sandboxes(skill, db_session)
@@ -332,6 +334,7 @@ def update_external_app_admin(
                 )
             }
         )
+    sync_actions_for_integration_id__no_commit(app.integration_id, db_session)
     affected: set[UUID] = set()
     for skill in affected_skills_by_id.values():
         affected.update(affected_user_ids_for_skill(skill, db_session))
@@ -389,6 +392,7 @@ def create_custom_external_app(
         None,
         users_can_manage=request.users_can_manage_policies,
     )
+    sync_actions_for_integration_id__no_commit(app.integration_id, db_session)
     db_session.commit()
 
     # A freshly created custom app has no stored policy overrides.

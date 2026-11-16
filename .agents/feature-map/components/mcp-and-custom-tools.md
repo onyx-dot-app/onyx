@@ -644,6 +644,14 @@ calls run with no row unless the policy is now DENY.
     withdraw stay open. A new route that starts a user turn in an existing
     chat must make the same check. A message typed while a question waits
     goes to the question answers route instead.
+21. `integration-action-sync` **Each write of a kind row syncs the actions of
+    its integration.** `integrations/sync.py:sync_actions_for_integration_id__no_commit`
+    rewrites `integration_action` from the kind's `discover_actions`, in the
+    same transaction, after `_sync_mcp_server_tools`, the OpenAPI create and
+    update routes, and the external app create and update routes. It does
+    nothing for a row with no `integration_id`. A new writer of MCP tool rows,
+    an OpenAPI spec or an external app must call it. A unit test with a mocked
+    session must patch it. No run time code reads `integration_action` yet.
 
 `Tool.enabled` gates MCP tools everywhere and OpenAPI tools only in Default
 Chat: see [[plugins#openapi-enabled-default-chat-only]].

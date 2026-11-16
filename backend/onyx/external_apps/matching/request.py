@@ -3,7 +3,7 @@ lazily derives and caches the views rule matchers need."""
 
 from functools import cached_property
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from onyx.external_apps.matching.graphql_parsing import parse_invocations
 
@@ -12,14 +12,18 @@ class ProxiedRequest(BaseModel):
     """The normalised form of an outbound sandbox request, transport-agnostic.
 
     The proxy builds one of these from whatever the sandbox emitted (the Python
-    helper, ``curl``, or raw HTTP); the host is already consumed by the proxy's
-    app-match, so only the path/method/body that distinguish *actions within an
-    app* are carried here.
+    helper, ``curl``, or raw HTTP). The catalog matcher reads only the
+    path/method/body that distinguish *actions within an app*. An integration
+    kind (``onyx.integrations``) also needs ``url`` to find out if the request
+    is for its integration, and MCP needs ``headers``.
     """
 
     method: str  # HTTP verb; compared case-insensitively
-    path: str  # URL path, tested against RestRoute.path
+    path: str  # URL path without the query, tested against RestRoute.path
     body: bytes | None = None  # raw body; parsed lazily for GraphQLOp matching
+    # The full URL, with scheme, host, port and query.
+    url: str | None = None
+    headers: dict[str, str] = Field(default_factory=dict)
 
 
 class MatchContext:

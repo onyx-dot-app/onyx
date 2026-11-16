@@ -142,6 +142,7 @@ covers new files that match it.
 | `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/db/plugin.py`, `backend/onyx/db/plugin_access.py`, `backend/onyx/db/skill_limit.py`, `backend/onyx/server/features/skill/` | skills |
 | `backend/onyx/server/features/action_policies/` | craft-external-apps, plugins |
 | `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py`, `backend/ee/onyx/db/mcp.py` | mcp-and-custom-tools |
+| `backend/onyx/integrations/`, `backend/onyx/db/integration.py` | mcp-and-custom-tools, craft-external-apps |
 | `backend/onyx/server/features/tool/tool_visibility.py` | mcp-and-custom-tools, plugins |
 | `terraform-provider-onyx/internal/client/custom_tool.go`, `terraform-provider-onyx/internal/client/custom_tool_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_availability_test.go`, `terraform-provider-onyx/docs/resources/custom_tool.md` | mcp-and-custom-tools |
 | `backend/onyx/db/input_prompt.py`, `backend/onyx/db/user_preferences.py`, `backend/onyx/server/features/input_prompt/` | chat-preferences |
