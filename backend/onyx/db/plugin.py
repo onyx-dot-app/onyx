@@ -750,8 +750,15 @@ def release_private_integrations__no_commit(user_id: UUID, db_session: Session) 
         return
     library_id = get_or_create_organization_library__no_commit(db_session)
     for plugin in plugins:
-        plugin.name = free_plugin_name(library_id, plugin.name, db_session)
-        plugin.marketplace_id = library_id
+        _move_plugin__no_commit(
+            plugin=plugin,
+            marketplace_id=library_id,
+            on_name_clash="rename",
+            clash_detail=lambda name: (
+                f"The organization already has a plugin named '{name}'."
+            ),
+            db_session=db_session,
+        )
         plugin.installation_policy = PluginInstallationPolicy.NOT_AVAILABLE
         plugin.published_version_id = plugin.current_version_id
         plugin.pending_version_id = None
