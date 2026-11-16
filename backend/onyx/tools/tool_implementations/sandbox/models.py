@@ -1,6 +1,5 @@
-"""Arguments and result details of the sandbox tools (exec_command,
-write_stdin, apply_patch). The saved-details unions import it, so it imports
-only models and constants."""
+"""Arguments and result details of the sandbox tools (sandbox_tools.py). The
+saved-details unions import it, so it imports only models and constants."""
 
 from typing import Annotated, Literal
 
@@ -67,6 +66,32 @@ class ApplyPatchArguments(BaseModel):
     input: str = Field(description="The full patch text.")
 
 
+_FILE_PATH_DESCRIPTION = (
+    "Path of the file, relative to the chat session directory or absolute inside it."
+)
+
+
+class EditArguments(BaseModel):
+    """The arguments of Claude Code's Edit tool."""
+
+    file_path: str = Field(description=_FILE_PATH_DESCRIPTION)
+    old_string: str = Field(description="The text to replace")
+    new_string: str = Field(
+        description="The text to replace it with (must be different from old_string)"
+    )
+    replace_all: bool = Field(
+        default=False,
+        description="Replace all occurrences of old_string (default false)",
+    )
+
+
+class WriteArguments(BaseModel):
+    """The arguments of Claude Code's Write tool."""
+
+    file_path: str = Field(description=_FILE_PATH_DESCRIPTION)
+    content: str = Field(description="The content to write to the file")
+
+
 class ExecCommandOutput(BaseModel):
     """What a code mode program receives from exec_command and write_stdin."""
 
@@ -96,6 +121,10 @@ class SandboxExecResult(ExecCommandOutput):
     truncated: bool = False
 
 
+# The names of the file tools (sandbox_tools.py), which the patch card shows.
+FileToolName = Literal["apply_patch", "edit", "write"]
+
+
 class ApplyPatchFileChange(BaseModel):
     # Relative to the chat session directory.
     path: str
@@ -104,7 +133,7 @@ class ApplyPatchFileChange(BaseModel):
 
 
 class ApplyPatchResult(BaseModel):
-    """Saved details of an apply_patch call that changed files."""
+    """Saved details of a file tool call (FileToolName) that changed files."""
 
     type: Literal["apply_patch"] = "apply_patch"
     files: list[ApplyPatchFileChange]

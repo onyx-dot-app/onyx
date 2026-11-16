@@ -179,7 +179,8 @@ tool catalog rows, are `DIRECT` in code mode, and render as generic tool cards w
 a short JSON summary, not the SKILL.md text.
 
 **Chat sandbox tools.** `chat/execution.py:create_chat_agent` also adds
-`exec_command`, `write_stdin` and `apply_patch` ([[code-execution]]) when
+`exec_command`, `write_stdin` and the file tools (`apply_patch`, or `edit` and
+`write` when the turn's model is Claude) ([[code-execution]]) when
 `ChatTurnSetup.sandbox_tools` is set. `chat/process_message.py:prepare_chat_turn`
 sets it in one expression: harness sandboxes run
 (`microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the user is not anonymous, the

@@ -1,5 +1,5 @@
-"""exec_command, write_stdin and apply_patch against FirecrackerHarnessSandbox
-with a fake host agent: chat turns through the chat flow (streamed and
+"""exec_command, write_stdin, apply_patch, edit and write against
+FirecrackerHarnessSandbox with a fake host agent: chat turns through the chat flow (streamed and
 replayed packets, code mode values, approvals, Stop, turns that offer no
 sandbox), the tools' model text and file effects, the turn lifecycle, the
 Sandbox row and the chat delete purge."""
@@ -62,6 +62,7 @@ from onyx.llm.cancellation import (
     CancellationSignal,
     cancellation_scope,
 )
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
@@ -129,8 +130,10 @@ from onyx.tools.tool_implementations.sandbox.models import (
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ApplyPatchTool,
+    EditTool,
     ExecCommandTool,
     WriteStdinTool,
+    WriteTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from tests.external_dependency_unit.chat.test_parked_agent_handoff import _gated
@@ -169,8 +172,8 @@ ADD_A = "*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch"
 
 
 class SandboxTools(BaseModel):
-    """The three tools of one construction, their turn, and its sandbox
-    reference."""
+    """The tools of one construction (every file tool), their turn, and its
+    sandbox reference."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -179,6 +182,8 @@ class SandboxTools(BaseModel):
     exec_command: ExecCommandTool
     write_stdin: WriteStdinTool
     apply_patch: ApplyPatchTool
+    edit: EditTool
+    write: WriteTool
 
     @property
     def all(self) -> list[Tool]:
@@ -247,6 +252,8 @@ def make_tools(db_session: Session, user: User) -> MakeTools:
             exec_command=ExecCommandTool(turn),
             write_stdin=WriteStdinTool(turn),
             apply_patch=ApplyPatchTool(turn),
+            edit=EditTool(turn),
+            write=WriteTool(turn),
         )
 
     return make
@@ -437,7 +444,7 @@ def test_a_chat_turn_streams_saves_and_replays_its_sandbox_calls(
         wall_time_seconds=end.wall_time_seconds,
     )
     patched = [
-        packets.ApplyPatchStart(patch=ADD_A),
+        packets.ApplyPatchStart(patch=ADD_A, tool_name=ApplyPatchTool.NAME),
         packets.ApplyPatchEnd(files=[ApplyPatchFileChange(path="a.txt", change="add")]),
         packets.SectionEnd(),
     ]
@@ -1119,7 +1126,7 @@ def test_a_patch_adds_updates_moves_and_deletes_files(
     # Deletes read no content: binary and large files go too.
     agent.files[_key(ref, "image.bin")] = b"\xff\xfe\x00"
     agent.files[_key(ref, "big.log")] = b"x" * (
-        sandbox_tools.APPLY_PATCH_MAX_FILE_BYTES + 1
+        sandbox_tools.FILE_TOOL_MAX_FILE_BYTES + 1
     )
     patch_text = (
         "*** Begin Patch\n"
@@ -1219,20 +1226,20 @@ def test_a_patch_adds_updates_moves_and_deletes_files(
             "*** Begin Patch\n*** Add File: new.txt\n+n\n"
             "*** Add File: link.txt\n+l\n*** End Patch",
             "apply_patch verification failed: link.txt is a symbolic link to "
-            "keep.py; patch that path instead",
+            "keep.py; edit that path instead",
         ),
         (
             "*** Begin Patch\n*** Add File: new.txt\n+n\n"
             "*** Update File: link.txt\n@@\n-a\n+A\n*** End Patch",
             "apply_patch verification failed: link.txt is a symbolic link to "
-            "keep.py; patch that path instead",
+            "keep.py; edit that path instead",
         ),
         (
             "*** Begin Patch\n*** Add File: new.txt\n+n\n"
             "*** Update File: keep.py\n*** Move to: out.txt\n@@\n-a\n+A\n"
             "*** End Patch",
             "apply_patch verification failed: out.txt is a symbolic link to "
-            "/etc/hosts; patch that path instead",
+            "/etc/hosts; edit that path instead",
         ),
         (
             # A link on the way out of the session directory.
@@ -1408,6 +1415,269 @@ def test_a_failed_write_names_the_files_already_changed(
     assert result.content == (
         "apply_patch failed to change b.txt: disk full. Files already changed: a.txt."
     )
+
+
+# The file tools of Claude models
+
+
+class NamedChatLLM(ChatLLM):
+    """A scripted chat model with a model name and deployment alias."""
+
+    def __init__(
+        self,
+        steps: Sequence[Delta],
+        *,
+        model_name: str,
+        deployment_name: str | None = None,
+    ) -> None:
+        super().__init__(steps)
+        self.model_name = model_name
+        self.deployment_name = deployment_name
+
+    @property
+    def config(self) -> LLMConfig:
+        return super().config.model_copy(
+            update={
+                "model_name": self.model_name,
+                "deployment_name": self.deployment_name,
+            }
+        )
+
+
+def _claude(steps: Sequence[Delta]) -> NamedChatLLM:
+    return NamedChatLLM(steps, model_name="claude-opus-4-5")
+
+
+@pytest.mark.parametrize(
+    ("model_name", "deployment_name", "claude"),
+    [
+        # A gateway alias whose deployment is a Claude model.
+        ("team-default", "anthropic/claude-opus-4-5", True),
+        ("gpt-5.1", None, False),
+    ],
+)
+@pytest.mark.usefixtures("node")
+def test_claude_models_get_edit_and_write_and_others_apply_patch(
+    chat: SandboxChat, model_name: str, deployment_name: str | None, claude: bool
+) -> None:
+    llm = NamedChatLLM(
+        [Delta(content="Ready.")],
+        model_name=model_name,
+        deployment_name=deployment_name,
+    )
+    chat.send(llm)
+
+    [request] = llm.requests
+    offered = {tool["function"]["name"] for tool in request.get("tools") or []}
+    file_tools = {EditTool.NAME, WriteTool.NAME}
+    assert offered & (file_tools | {ApplyPatchTool.NAME}) == (
+        file_tools if claude else {ApplyPatchTool.NAME}
+    )
+    # The system prompt's sandbox section names the turn's file tools.
+    assert (
+        "edit files with `edit` and create or overwrite files with `write`."
+        if claude
+        else "edit files with `apply_patch`."
+    ) in str(request["prompt"])
+
+
+@pytest.mark.usefixtures("node")
+def test_edit_and_write_calls_render_patch_cards_live_and_on_replay(
+    db_session: Session, node: RunningFakeAgent, chat: SandboxChat
+) -> None:
+    llm = _claude(
+        [
+            tool_step(
+                WriteTool.NAME, "create", {"file_path": "a.py", "content": "x = 1\n"}
+            ),
+            tool_step(
+                EditTool.NAME,
+                "edit",
+                {"file_path": "a.py", "old_string": "x = 1", "new_string": "x = 2"},
+            ),
+            tool_step(
+                WriteTool.NAME,
+                "overwrite",
+                {"file_path": "a.py", "content": "y = 3\n"},
+            ),
+            tool_step(
+                EditTool.NAME,
+                "missing",
+                {"file_path": "a.py", "old_string": "zzz", "new_string": "q"},
+            ),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm)
+
+    assert _files(node, chat.ref(db_session)) == {"a.py": b"y = 3\n"}
+    assert last_tool_text(llm, "create") == "File created successfully at: a.py"
+    assert last_tool_text(llm, "edit") == "The file a.py has been updated successfully."
+    assert last_tool_text(llm, "overwrite") == (
+        "The file a.py has been updated successfully."
+    )
+    not_found = "String to replace not found in file.\nString: zzz"
+    assert last_tool_text(llm, "missing") == not_found
+    added = "*** Begin Patch\n*** Add File: a.py\n+{}\n*** End Patch"
+    expected = [
+        packets.ApplyPatchStart(patch=added.format("x = 1"), tool_name=WriteTool.NAME),
+        packets.ApplyPatchEnd(files=[ApplyPatchFileChange(path="a.py", change="add")]),
+        packets.SectionEnd(),
+        packets.ApplyPatchStart(
+            patch="*** Begin Patch\n*** Update File: a.py\n@@\n-x = 1\n+x = 2\n"
+            "*** End Patch",
+            tool_name=EditTool.NAME,
+        ),
+        packets.ApplyPatchEnd(
+            files=[ApplyPatchFileChange(path="a.py", change="update")]
+        ),
+        packets.SectionEnd(),
+        # The end packet tells the overwrite from a new file.
+        packets.ApplyPatchStart(patch=added.format("y = 3"), tool_name=WriteTool.NAME),
+        packets.ApplyPatchEnd(
+            files=[ApplyPatchFileChange(path="a.py", change="update")]
+        ),
+        packets.SectionEnd(),
+        packets.ApplyPatchStart(
+            patch="*** Begin Patch\n*** Update File: a.py\n@@\n-zzz\n+q\n*** End Patch",
+            tool_name=EditTool.NAME,
+        ),
+        packets.ApplyPatchEnd(error=not_found),
+        packets.SectionEnd(),
+    ]
+    assert _sandbox_packets(parts) == expected
+    [replayed] = chat.replayed(db_session)
+    assert _sandbox_packets(replayed) == expected
+
+
+@pytest.mark.usefixtures("node")
+def test_a_program_edits_and_writes_files(
+    db_session: Session, node: RunningFakeAgent, chat: SandboxChat
+) -> None:
+    program = (
+        "print(await tools.write(file_path='a.txt', content='one\\ntwo\\n'))\n"
+        "print(await tools.edit(file_path='a.txt', old_string='two', new_string='2'))\n"
+        "try:\n"
+        "    await tools.edit(file_path='a.txt', old_string='nope', new_string='x')\n"
+        "except Exception as error:\n"
+        "    print('raised:', error)\n"
+    )
+    llm = _claude([code_step("code", program), Delta(content="Done.")])
+    chat.send(llm, code_mode=True)
+
+    assert (
+        "edit files with `tools.edit` and create or overwrite files with "
+        "`tools.write`." in str(llm.requests[0]["prompt"])
+    )
+    text = last_tool_text(llm, "code")
+    assert "File created successfully at: a.txt" in text
+    assert "The file a.txt has been updated successfully." in text
+    assert "raised: String to replace not found in file." in text
+    assert _files(node, chat.ref(db_session)) == {"a.txt": b"one\n2\n"}
+
+
+@pytest.mark.usefixtures("sandbox")
+def test_write_and_edit_create_change_and_keep_the_mode_of_files(
+    node: RunningFakeAgent, make_tools: MakeTools
+) -> None:
+    tools = make_tools()
+    ref = tools.ref
+    tools.turn.sandbox.ensure_running(ref)
+    agent = node.agent
+    agent.files[_key(ref, "run.sh")] = b"echo a\necho b\n"
+    agent.file_modes[_key(ref, "run.sh")] = 0o755
+
+    created, _ = _run(
+        tools.write, {"file_path": "new/dir/hello.txt", "content": "hi\n"}
+    )
+    edited, _ = _run(
+        tools.edit,
+        {
+            "file_path": f"{session_workspace(ref.session_id)}/run.sh",
+            "old_string": "echo b\n",
+            "new_string": "echo B\necho C\n",
+        },
+    )
+    # An empty old_string creates a file.
+    started, _ = _run(
+        tools.edit, {"file_path": "fresh.txt", "old_string": "", "new_string": "f"}
+    )
+    renamed, _ = _run(
+        tools.edit,
+        {
+            "file_path": "new/dir/hello.txt",
+            "old_string": "hi",
+            "new_string": "yo",
+            "replace_all": True,
+        },
+    )
+
+    assert created.content == "File created successfully at: new/dir/hello.txt"
+    assert edited.content == "The file run.sh has been updated successfully."
+    assert started.details == ApplyPatchResult(
+        files=[ApplyPatchFileChange(path="fresh.txt", change="add")]
+    )
+    assert renamed.content == (
+        "The file new/dir/hello.txt has been updated. All occurrences were "
+        "successfully replaced."
+    )
+    assert _files(node, ref) == {
+        "new/dir/hello.txt": b"yo\n",
+        "run.sh": b"echo a\necho B\necho C\n",
+        "fresh.txt": b"f",
+    }
+    assert agent.file_modes[_key(ref, "run.sh")] == 0o755
+    assert agent.file_modes[_key(ref, "new/dir/hello.txt")] == 0o644
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "arguments", "error"),
+    [
+        (
+            EditTool.NAME,
+            {"file_path": "image.bin", "old_string": "a", "new_string": "q"},
+            "Failed to read file to update image.bin: the file is not UTF-8 text",
+        ),
+        (
+            EditTool.NAME,
+            {"file_path": "link.txt", "old_string": "a", "new_string": "q"},
+            "link.txt is a symbolic link to keep.py; edit that path instead",
+        ),
+        (
+            WriteTool.NAME,
+            {"file_path": "link.txt", "content": "q"},
+            "link.txt is a symbolic link to keep.py; edit that path instead",
+        ),
+        (
+            WriteTool.NAME,
+            {"file_path": "../other/x.txt", "content": "q"},
+            "'../other/x.txt' leaves the session directory",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("sandbox")
+def test_a_failed_edit_or_write_changes_nothing(
+    node: RunningFakeAgent,
+    make_tools: MakeTools,
+    tool_name: str,
+    arguments: dict[str, JsonValue],
+    error: str,
+) -> None:
+    tools = make_tools()
+    ref = tools.ref
+    tools.turn.sandbox.ensure_running(ref)
+    before = {_key(ref, "keep.py"): b"a\na\n", _key(ref, "image.bin"): b"\xff\xfe"}
+    node.agent.files.update(before)
+    node.agent.links[_key(ref, "link.txt")] = "keep.py"
+
+    result, _ = _run(
+        tools.edit if tool_name == EditTool.NAME else tools.write, arguments
+    )
+
+    assert result.is_error
+    assert result.content.startswith(error)
+    assert _files(node, ref) == {key[2]: data for key, data in before.items()}
+    assert node.agent.links == {_key(ref, "link.txt"): "keep.py"}
 
 
 # The turn

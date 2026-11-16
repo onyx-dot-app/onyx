@@ -1,7 +1,9 @@
 import type { useTranslations } from "next-intl";
 import type { IconFunctionComponent } from "@opal/types";
 import {
+  ApplyPatchStart,
   CustomToolStart,
+  FileToolName,
   Packet,
   PacketType,
   SearchToolPacket,
@@ -77,6 +79,12 @@ export type TimelineTranslate = ReturnType<
   typeof useTranslations<"chat.messages.timeline">
 >;
 
+const FILE_TOOL_TITLES = {
+  apply_patch: "toolNames.applyPatch",
+  edit: "toolNames.editFile",
+  write: "toolNames.writeFile",
+} as const satisfies Record<FileToolName, string>;
+
 export function getToolName(packets: Packet[], t: TimelineTranslate): string {
   const firstPacket = firstActivityPacket(packets);
   if (!firstPacket) return t("toolNames.tool");
@@ -96,7 +104,9 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
     case PacketType.WRITE_STDIN_START:
       return t("toolNames.terminal");
     case PacketType.APPLY_PATCH_START:
-      return t("toolNames.applyPatch");
+      return t(
+        FILE_TOOL_TITLES[(firstPacket.obj as ApplyPatchStart).tool_name]
+      );
     case PacketType.FETCH_TOOL_START:
       return t("toolNames.openUrls");
     case PacketType.CUSTOM_TOOL_START: {

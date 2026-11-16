@@ -13256,7 +13256,9 @@
           "tool": "工具",
           "webSearch": "网页搜索",
           "terminal": "终端",
-          "applyPatch": "应用补丁"
+          "applyPatch": "应用补丁",
+          "editFile": "编辑文件",
+          "writeFile": "写入文件"
         },
         "webSearch": {
           "searching": {
@@ -13296,7 +13298,7 @@
               "status": "{count, plural, one {已编辑 # 个文件} other {已编辑 # 个文件}}"
             },
             "failed": {
-              "status": "补丁失败"
+              "status": "编辑失败"
             },
             "title": "补丁"
           },

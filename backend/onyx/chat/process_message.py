@@ -119,6 +119,7 @@ from onyx.llm.factory import (
     get_llm_token_counter,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.model_capabilities import model_identity_names
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride
 from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
@@ -153,6 +154,9 @@ from onyx.tools.constants import (
     SEARCH_TOOL_ID,
 )
 from onyx.tools.models import SearchToolUsage
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    sandbox_tools_for_model,
+)
 from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
@@ -711,6 +715,14 @@ def prepare_chat_turn(
                     memory.user_info.placeholder_values,
                 ),
                 token_counter=token_counter,
+                sandbox_tools=sandbox_tools_for_model(
+                    model_identity_names(
+                        selected_models[0][0].config.model_name,
+                        selected_models[0][0].config.deployment_name,
+                    )
+                )
+                if sandbox_tools
+                else (),
                 files=new_msg_req.file_descriptors,
                 user_memory_context=memory
                 if user.use_memories
