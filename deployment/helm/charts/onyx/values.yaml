@@ -1747,7 +1747,8 @@ auth:
       private_key: ""
   # Shared credential that Craft Firecracker host agents send to register
   # their node signing key (craft.sandboxRuntime=firecracker). The api_server
-  # rejects every registration while it is unset.
+  # rejects every registration while it is unset. An inline value must be at
+  # least 32 characters (the chart fails otherwise).
   sandboxNodeRegistration:
     enabled: false
     allPods: false  # Restricted: only the API server checks it (plus the other restricted pods)

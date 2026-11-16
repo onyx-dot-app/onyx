@@ -190,7 +190,8 @@ instead of making a loop store, add `--loop-store=off` to `craft.hostAgent.extra
     openssl rand -base64 48 | tr -d '\n' > sandbox-node-registration.txt
     ```
 
-    Keep this file private. You use it in the next step.
+    The chart refuses a value in the chart values that is shorter than 32 characters. Keep this file private.
+    You use it in the next step.
   </Step>
 
   <Step title="Add the Firecracker values">

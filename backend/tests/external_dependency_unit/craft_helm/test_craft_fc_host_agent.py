@@ -36,6 +36,7 @@ _CLIENT_TEMPLATES = [
 ]
 _CLIENT_DIR = "/etc/onyx/craft-fc-agent-client"
 _AGENT_NS = "onyx-sandbox-runtime"
+_REG_VALUE = "reg-test-0123456789abcdef0123456789"
 _FIRECRACKER = [
     "--set",
     "craft.sandboxRuntime=firecracker",
@@ -50,7 +51,7 @@ _FIRECRACKER = [
     "--set",
     "auth.sandboxNodeRegistration.enabled=true",
     "--set-string",
-    "auth.sandboxNodeRegistration.values.sandbox_node_registration_secret=reg-test",
+    f"auth.sandboxNodeRegistration.values.sandbox_node_registration_secret={_REG_VALUE}",
 ]
 
 
@@ -430,7 +431,7 @@ def test_registration_secret_is_copied_into_agent_namespace() -> None:
     )
 
     assert secret["metadata"]["namespace"] == _AGENT_NS
-    assert secret["stringData"] == {"sandbox_node_registration_secret": "reg-test"}
+    assert secret["stringData"] == {"sandbox_node_registration_secret": _REG_VALUE}
     assert ref["valueFrom"]["secretKeyRef"] == {
         "name": secret["metadata"]["name"],
         "key": "sandbox_node_registration_secret",
@@ -584,6 +585,14 @@ def test_only_agent_clients_reach_agent_listener() -> None:
             ["--set-string", "auth.sandboxNodeRegistration.existingSecret=reg"],
             "craft.hostAgent.registrationExistingSecret",
         ),
+        (
+            [
+                "--set-string",
+                "auth.sandboxNodeRegistration.values.sandbox_node_registration_secret="
+                + "x" * 31,
+            ],
+            "must be at least 32 characters",
+        ),
         (["--set-string", "configMap.ENABLE_CRAFT=false"], "ENABLE_CRAFT"),
         (
             ["--set-string", "craft.hostAgent.namespace=onyx"],
@@ -611,7 +620,7 @@ def test_registration_key_follows_secret_keys() -> None:
             "--set-string",
             "auth.sandboxNodeRegistration.secretKeys.SANDBOX_NODE_REGISTRATION_SECRET=custom_key",
             "--set-string",
-            "auth.sandboxNodeRegistration.values.custom_key=reg-custom",
+            f"auth.sandboxNodeRegistration.values.custom_key={_REG_VALUE}",
         ]
     )
     secret = _by_kind(docs, "Secret")
@@ -620,7 +629,7 @@ def test_registration_key_follows_secret_keys() -> None:
         e for e in container["env"] if e["name"] == "SANDBOX_NODE_REGISTRATION_SECRET"
     )
 
-    assert secret["stringData"] == {"custom_key": "reg-custom"}
+    assert secret["stringData"] == {"custom_key": _REG_VALUE}
     assert ref["valueFrom"]["secretKeyRef"]["key"] == "custom_key"
 
 

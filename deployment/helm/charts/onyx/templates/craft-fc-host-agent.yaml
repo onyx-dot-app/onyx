@@ -87,6 +87,9 @@ Agent flags and node requirements: microvm/README.md.
 {{- if and (not $regSecret) (or $reg.existingSecret (not $regValue)) }}
 {{- fail "craft.hostAgent.registrationExistingSecret is required when auth.sandboxNodeRegistration uses existingSecret or has no value" }}
 {{- end }}
+{{- if and (not $reg.existingSecret) $regValue (lt (len (toString $regValue)) 32) }}
+{{- fail (printf "auth.sandboxNodeRegistration.values.%s must be at least 32 characters (for example: openssl rand -hex 32)" $regKey) }}
+{{- end }}
 {{- $loopStoreGiB := toString (($agent.loopStore | default dict).sizeGiB | default "") }}
 {{- if and $loopStoreGiB (not (regexMatch "^[0-9]+$" $loopStoreGiB)) }}
 {{- fail (printf "craft.hostAgent.loopStore.sizeGiB must be a whole number of GiB, not %q" $loopStoreGiB) }}
