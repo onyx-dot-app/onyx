@@ -18,25 +18,14 @@ export interface RunStepProps {
   title?: string | RichStr;
   /** Rendered at the inline end of the header, before the toggle. */
   headerAccessory?: React.ReactNode;
-  /** Accessible name of the toggle. */
-  toggleLabel?: string;
   /** The step's body; `null` for a step with nothing to show. */
   body?: React.ReactNode;
-  /** Start open. Ignored when `isExpanded` controls the step. */
+  /** Start open. */
   defaultExpanded?: boolean;
-  /**
-   * Controlled open state, for a step whose body changes rather than hides
-   * when folded. Uncontrolled steps fold their body away, animated.
-   */
-  isExpanded?: boolean;
-  onToggle?: () => void;
-  /** Shown on the toggle while folded, in place of the expand icon. */
-  collapsedIcon?: IconFunctionComponent;
   /** Whether the step folds. Defaults to having a body. */
   expandable?: boolean;
   /** The body has no header (the body is its own control). */
   hideHeader?: boolean;
-  noPaddingRight?: boolean;
   isHover?: boolean;
   /** The surface when the step has not failed. */
   surfaceBackground?: TimelineSurfaceBackground;
@@ -54,7 +43,8 @@ function statusIcon(
 /**
  * One step of a run, the same in chat and Craft: the status decides the icon
  * (spinner while running, alert when failed or stopped) and the failed tint.
- * A failed step stays expandable so its error is reachable.
+ * Every step folds its body away completely; a failed step stays expandable
+ * so its error is reachable.
  */
 export function RunStep({
   status,
@@ -62,23 +52,16 @@ export function RunStep({
   icon,
   title,
   headerAccessory,
-  toggleLabel,
   body = null,
   defaultExpanded = false,
-  isExpanded: controlledExpanded,
-  onToggle,
-  collapsedIcon,
   expandable: expandableProp,
   hideHeader = false,
-  noPaddingRight = false,
   isHover = false,
   surfaceBackground,
 }: RunStepProps) {
   const [ownExpanded, setOwnExpanded] = useState(defaultExpanded);
-  const isControlled = controlledExpanded !== undefined;
   // A step without a header always shows its body.
-  const isExpanded =
-    hideHeader || (isControlled ? controlledExpanded : ownExpanded);
+  const isExpanded = hideHeader || ownExpanded;
   const failed = status === "error";
   const expandable = (expandableProp ?? body !== null) || failed;
 
@@ -87,18 +70,14 @@ export function RunStep({
       stepIcon={statusIcon(status) ?? icon}
       header={title}
       headerAccessory={headerAccessory}
-      toggleLabel={toggleLabel}
       isExpanded={isExpanded}
-      onToggle={isControlled ? onToggle : () => setOwnExpanded((prev) => !prev)}
+      onToggle={() => setOwnExpanded((prev) => !prev)}
       supportsCollapsible={expandable}
-      collapsedIcon={collapsedIcon}
       isFirstStep={position.isFirst}
       isLastStep={position.isLast}
       hideHeader={hideHeader}
-      noPaddingRight={noPaddingRight}
       isHover={isHover}
       surfaceBackground={failed ? "error" : surfaceBackground}
-      foldBody={!isControlled}
     >
       {body}
     </StepContainer>

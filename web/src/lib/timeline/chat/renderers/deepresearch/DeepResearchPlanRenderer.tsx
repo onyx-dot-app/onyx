@@ -73,7 +73,6 @@ export const DeepResearchPlanRenderer: MessageRenderer<
       icon: STEP_ICONS.thinking,
       status: statusText,
       content: planContent,
-      noPaddingRight: true,
     },
   ]);
 };

@@ -55,8 +55,6 @@ export interface RendererResult {
   alwaysCollapsible?: boolean;
   /** Whether the result should be wrapped by timeline UI or rendered as-is */
   timelineLayout?: TimelineLayout;
-  /** Remove right padding for long-form content (reasoning, deep research, memory). */
-  noPaddingRight?: boolean;
   /** Override the surface background (e.g. "error" for auth failures). */
   surfaceBackground?: TimelineSurfaceBackground;
 }

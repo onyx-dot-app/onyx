@@ -1,20 +1,18 @@
 "use client";
 
-import React, { FunctionComponent, useCallback, useMemo } from "react";
-import type { IconProps } from "@opal/types";
+import React, { useCallback } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState } from "@/app/app/message/messageComponents/types";
+import {
+  FullChatState,
+  RenderType,
+} from "@/app/app/message/messageComponents/types";
 import type { TransformedStep } from "@/lib/timeline/chat/transformers";
 import {
   TimelineRendererComponent,
   TimelineRendererOutput,
-  TimelineRendererResult,
 } from "@/lib/timeline/chat/TimelineRendererComponent";
 import { TimelineStepComposer } from "@/lib/timeline/chat/TimelineStepComposer";
-import {
-  isPythonToolPackets,
-  isSearchToolPackets,
-} from "@/lib/timeline/chat/packetHelpers";
+import { isPythonToolPackets } from "@/lib/timeline/chat/packetHelpers";
 import type {
   TimelineEntryStatus,
   TimelineStepPosition,
@@ -44,16 +42,6 @@ export const ChatStep = React.memo(function ChatStep({
   stopReason,
   defaultExpanded,
 }: ChatStepProps) {
-  const isSearchTool = useMemo(
-    () => isSearchToolPackets(step.packets),
-    [step.packets]
-  );
-  const getCollapsedIcon = useCallback(
-    (result: TimelineRendererResult) =>
-      isSearchTool ? (result.icon as FunctionComponent<IconProps>) : undefined,
-    [isSearchTool]
-  );
-
   const renderStep = useCallback(
     (results: TimelineRendererOutput) => (
       <TimelineStepComposer
@@ -61,11 +49,10 @@ export const ChatStep = React.memo(function ChatStep({
         isLastStep={position.isLast}
         isFirstStep={position.isFirst}
         collapsible
-        getCollapsedIcon={getCollapsedIcon}
         status={status}
       />
     ),
-    [position.isFirst, position.isLast, getCollapsedIcon, status]
+    [position.isFirst, position.isLast, status]
   );
 
   return (
@@ -78,6 +65,9 @@ export const ChatStep = React.memo(function ChatStep({
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
       defaultExpanded={defaultExpanded}
+      // Every step folds its body away, as in Craft: the renderer always
+      // draws its full view, never a compact or masked one.
+      renderTypeOverride={RenderType.FULL}
       isLastStep={position.isLast}
     >
       {renderStep}

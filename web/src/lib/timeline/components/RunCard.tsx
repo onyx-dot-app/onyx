@@ -2,11 +2,15 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Collapsible } from "@opal/components";
+import { Fold } from "@opal/components";
+import { Section } from "@opal/layouts";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
-import { RunHeaderRow } from "@/lib/timeline/components/primitives/TimelineHeaderRow";
+import {
+  RunCardSurface,
+  TimelineHeaderRow,
+} from "@/lib/timeline/components/primitives/TimelineHeaderRow";
 import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
 import {
   CompletedHeader,
@@ -110,59 +114,62 @@ export function RunCard<S extends RunCardStep>({
 
   return (
     <TimelineRoot>
-      <RunHeaderRow
-        interactive={foldable}
-        tinted={isRunning || isOpen}
-        roundedBottom={!isOpen || !foldable}
-      >
-        {isRunning ? (
-          <StreamingHeader
-            headerText={workingText}
-            collapsible={foldable}
-            isExpanded={isOpen}
-            onToggle={toggle}
-            streamingStartTime={startedAt}
-            toolProcessingDuration={durationSeconds}
-          />
-        ) : stopped ? (
-          <StoppedHeader
-            totalSteps={steps.length}
-            collapsible
-            isExpanded={isOpen}
-            onToggle={toggle}
-          />
-        ) : (
-          <CompletedHeader
-            totalSteps={steps.length}
-            collapsible
-            isExpanded={isOpen}
-            onToggle={toggle}
-            processingDurationSeconds={durationSeconds ?? timedSeconds}
-            {...summary}
-          />
-        )}
-      </RunHeaderRow>
-      {foldable && (
-        <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
-          <Collapsible.Content>
-            {steps.map((step, index) => (
-              <React.Fragment key={step.id}>
-                {renderStep(step, {
-                  isFirst: index === 0,
-                  isLast: index === steps.length - 1 && !showEndRow,
-                })}
-              </React.Fragment>
-            ))}
-            {showEndRow && (
+      <RunCardSurface interactive={foldable} tinted={isRunning || isOpen}>
+        {/* Flat: the header, then each step and the end row, 0.25rem apart.
+            The gap closes with the folds, so a folded card keeps none. */}
+        <Section
+          alignItems="stretch"
+          gap={isOpen ? 1 : 0}
+          height="auto"
+          className="transition-[row-gap] duration-150"
+        >
+          <TimelineHeaderRow>
+            {isRunning ? (
+              <StreamingHeader
+                headerText={workingText}
+                collapsible={foldable}
+                isExpanded={isOpen}
+                onToggle={toggle}
+                streamingStartTime={startedAt}
+                toolProcessingDuration={durationSeconds}
+              />
+            ) : stopped ? (
+              <StoppedHeader
+                totalSteps={steps.length}
+                collapsible
+                isExpanded={isOpen}
+                onToggle={toggle}
+              />
+            ) : (
+              <CompletedHeader
+                totalSteps={steps.length}
+                collapsible
+                isExpanded={isOpen}
+                onToggle={toggle}
+                processingDurationSeconds={durationSeconds ?? timedSeconds}
+                {...summary}
+              />
+            )}
+          </TimelineHeaderRow>
+          {steps.map((step, index) => (
+            <Fold key={step.id} open={isOpen}>
+              {renderStep(step, {
+                isFirst: index === 0,
+                isLast: index === steps.length - 1 && !showEndRow,
+              })}
+            </Fold>
+          ))}
+          {showEndRow && (
+            <Fold open={isOpen}>
               <StepContainer
                 stepIcon={stopped ? STEP_ICONS.stopped : STEP_ICONS.done}
                 header={t(stopped ? "stoppedStep.header" : "doneStep.header")}
                 isLastStep
               />
-            )}
-          </Collapsible.Content>
-        </Collapsible.Root>
-      )}
+            </Fold>
+          )}
+        </Section>
+      </RunCardSurface>
     </TimelineRoot>
   );
 }

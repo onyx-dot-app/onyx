@@ -153,8 +153,9 @@ Both products draw a block with the same components in
 (run header, fold, timer, Done or Stopped row) and `RunStep` is a step (its
 status sets the spinner, the alert icon and the failed tint). `CraftTimeline`
 and chat's `AgentTimeline` only map their steps onto them. A step's header is
-a `Content` (icon and title); the rail is a line that `StepContainer` places
-absolutely from one step's icon to the next. Answer text (`AnswerText`) lines
+a `Content` (icon and title) in Opal's `Collapsible.Header`, so the whole row
+folds the step; every step folds its body away the same way, with `Fold`.
+Answer text (`AnswerText`) lines
 up with the run header's text. Every block folds, even with one entry, once
 a text reply follows.
 

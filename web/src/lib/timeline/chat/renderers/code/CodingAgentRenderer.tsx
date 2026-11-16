@@ -231,7 +231,6 @@ function BashCallStep({
       isHover={isHover}
       collapsible={true}
       supportsCollapsible={true}
-      noPaddingRight={true}
     >
       <BashStepBody call={call} />
     </StepContainer>
