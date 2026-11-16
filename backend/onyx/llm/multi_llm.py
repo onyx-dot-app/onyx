@@ -117,7 +117,10 @@ from onyx.llm.prompt_cache.providers.openai import (
     without_cache_breakpoint_flags,
 )
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
+from onyx.llm.well_known_providers.constants import (
+    MINIMAX_DEFAULT_API_BASE,
+    VERTEX_LOCATION_KWARG,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import (
     llm_generation_span,
@@ -878,6 +881,18 @@ class LitellmLLM(LLM):
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
                 model_kwargs["api_base"] = self._api_base
 
+        if model_provider == LlmProviderNames.MINIMAX:
+            base = (self._api_base or MINIMAX_DEFAULT_API_BASE).rstrip("/")
+            if base.endswith("/anthropic/v1"):
+                base = base.removesuffix("/v1")
+            if base.endswith("/anthropic"):
+                self._custom_llm_provider = "anthropic"
+            else:
+                self._custom_llm_provider = "openai"
+                base = base if base.endswith("/v1") else f"{base}/v1"
+                model_kwargs["api_base"] = base
+            self._api_base = base
+
         # Default vertex_location to "global" if not provided for Vertex AI
         # Latest gemini models are only available through the global region
         if (
@@ -1055,6 +1070,12 @@ class LitellmLLM(LLM):
         )
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
+        is_minimax = self._model_provider == LlmProviderNames.MINIMAX
+        is_minimax_m3 = is_minimax and self.config.model_name == "MiniMax-M3"
+        is_minimax_m31_flash = (
+            is_minimax and self.config.model_name == "MiniMax-M3.1-Flash"
+        )
+        is_minimax_thinking_model = is_minimax_m3 or is_minimax_m31_flash
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
         # Some Vertex Anthropic models reject stream_options. Reasoning params
         # are sent regardless: a provider that rejects one answers with a 400
@@ -1069,6 +1090,12 @@ class LitellmLLM(LLM):
         required_kwarg_keys: frozenset[str] = frozenset()
 
         # Model name
+        uses_direct_model_name = self._model_provider in (
+            LlmProviderNames.BIFROST,
+            LlmProviderNames.OPENAI_COMPATIBLE,
+            LlmProviderNames.MINIMAX,
+            LlmProviderNames.NEBIUS_TOKENFACTORY,
+        )
         is_openai_compatible_proxy = self._api_surface in OPENAI_COMPATIBLE_SURFACES
         model_provider = (
             f"{self.config.model_provider}/responses"
@@ -1100,6 +1127,11 @@ class LitellmLLM(LLM):
             # Drives LiteLLM's completions -> responses bridge.
             model = f"responses/{model_bare}"
         elif self._api_surface is not None:
+            model = model_bare
+        elif uses_direct_model_name:
+            # Compatibility endpoints (e.g. MiniMax) expect model names
+            # without an Onyx provider prefix and select their LiteLLM
+            # protocol separately.
             model = model_bare
         else:
             model = f"{model_provider}/{model_bare}"
@@ -1224,6 +1256,7 @@ class LitellmLLM(LLM):
         if (
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
+            and not is_minimax
             and (
                 reasoning_effort != ReasoningEffort.OFF or sends_explicit_reasoning_none
             )
@@ -1361,6 +1394,7 @@ class LitellmLLM(LLM):
         if (
             not (is_claude_model or is_ollama or is_mistral)
             or is_openai_compatible_proxy
+            or uses_direct_model_name
         ):
             # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
             # However, this param breaks Anthropic and Mistral models,
@@ -1368,17 +1402,46 @@ class LitellmLLM(LLM):
             # routed through Bifrost's OpenAI-compatible endpoint.
             # Additionally, tool_choice is not supported by Ollama and causes warnings if included.
             # See also, https://github.com/ollama/ollama/issues/11171
-            optional_kwargs["allowed_openai_params"] = ["tool_choice"]
+            allowed_openai_params = ["tool_choice"]
             # drop_params removes reasoning_effort for any model LiteLLM does
             # not list as a reasoning model, e.g. Gemini behind a gateway.
             if is_openai_compatible_proxy and "reasoning_effort" in optional_kwargs:
-                optional_kwargs["allowed_openai_params"].append("reasoning_effort")
+                allowed_openai_params.append("reasoning_effort")
+            if is_minimax_thinking_model and self._custom_llm_provider == "anthropic":
+                allowed_openai_params.append("thinking")
+            optional_kwargs["allowed_openai_params"] = allowed_openai_params
 
         # Passthrough kwargs
         passthrough_kwargs = build_litellm_passthrough_kwargs(
             model_kwargs=dict(self._model_kwargs),
             user_identity=user_identity,
         )
+
+        if is_minimax and self._custom_llm_provider == "openai":
+            existing_extra_body = passthrough_kwargs.get("extra_body")
+            minimax_extra_body = (
+                dict(existing_extra_body)
+                if isinstance(existing_extra_body, dict)
+                else {}
+            )
+            minimax_extra_body["reasoning_split"] = True
+            if is_minimax_thinking_model:
+                thinking_disabled = is_minimax_m3 and (
+                    reasoning_effort is ReasoningEffort.OFF
+                    or _prompt_in_tool_loop(prompt)
+                )
+                minimax_extra_body["thinking"] = {
+                    "type": "disabled" if thinking_disabled else "adaptive"
+                }
+            passthrough_kwargs["extra_body"] = minimax_extra_body
+        elif is_minimax_thinking_model:
+            thinking_disabled = is_minimax_m3 and (
+                reasoning_effort in (ReasoningEffort.AUTO, ReasoningEffort.OFF)
+                or _prompt_in_tool_loop(prompt)
+            )
+            optional_kwargs["thinking"] = {
+                "type": "disabled" if thinking_disabled else "adaptive"
+            }
 
         # Match LiteLLM's api_base-over-base_url precedence, including custom config.
         base_url = passthrough_kwargs.pop("base_url", self._api_base) or None

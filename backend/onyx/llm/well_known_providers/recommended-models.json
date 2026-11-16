@@ -77,6 +77,19 @@
           "display_name": "Kimi K3.1 Pro"
         }
       ]
+    },
+    "minimax": {
+      "default_model": "MiniMax-M3.1-Flash",
+      "additional_visible_models": [
+        {
+          "name": "MiniMax-M3.1-Flash",
+          "display_name": "MiniMax M3.1 Flash"
+        },
+        {
+          "name": "MiniMax-M3",
+          "display_name": "MiniMax M3"
+        }
+      ]
     }
   }
 }
