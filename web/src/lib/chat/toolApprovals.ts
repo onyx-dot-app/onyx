@@ -21,7 +21,6 @@ import {
 import { getMultiModelChildren } from "@/app/app/message/multiModel";
 import type { Message } from "@/app/app/types";
 import type { ApprovalStatus } from "@/lib/approvals/types";
-import type { GroupedPacket } from "@/lib/timeline/chat/hooks/packetProcessor";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 
 /** What one response's packets say about an approval request. */
@@ -351,36 +350,6 @@ export function readWaitingQuestions(
 export type ToolRequestRecord =
   | ({ kind: "approval" } & ToolApproval)
   | ({ kind: "question" } & ToolQuestionCall);
-
-type SectionEntry<T> =
-  | { kind: "display"; turnIndex: number; group: GroupedPacket }
-  | { kind: "record"; turnIndex: number; record: T };
-
-/**
- * Orders records with a section's display groups by turn. A record follows
- * the display groups of its own turn and of every earlier turn.
- */
-export function orderRecordsByTurn<T extends { turnIndex: number }>(
-  displayGroups: GroupedPacket[],
-  records: T[]
-): SectionEntry<T>[] {
-  const entries: SectionEntry<T>[] = displayGroups.map((group) => ({
-    kind: "display",
-    turnIndex: group.turn_index,
-    group,
-  }));
-  for (const record of records) {
-    const index = entries.findIndex(
-      (entry) => entry.turnIndex > record.turnIndex
-    );
-    entries.splice(index === -1 ? entries.length : index, 0, {
-      kind: "record",
-      turnIndex: record.turnIndex,
-      record,
-    });
-  }
-  return entries;
-}
 
 /** The status the server's answer to this client's decision shows. */
 export function decidedStatus(
