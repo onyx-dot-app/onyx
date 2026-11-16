@@ -8,7 +8,6 @@ import io
 import json
 import threading
 import zipfile
-from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
@@ -17,7 +16,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MarketplaceKind
 from onyx.db.models import (
     Marketplace,
@@ -30,24 +29,12 @@ from onyx.db.models import (
 from onyx.db.plugin import version_is_skill
 from onyx.server.features.skill.response_helpers import skill_response_for_user
 from onyx.skills.bundle import SKILL_MD_MAX_BYTES
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 _ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
-
-
-@pytest.fixture(autouse=True)
-def _db_access() -> Generator[None, None, None]:
-    SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 @pytest.fixture

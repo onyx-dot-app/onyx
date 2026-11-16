@@ -5,12 +5,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/parser"
 )
+
+var errStreamIdle = errors.New("chat stream idle timeout")
 
 // SendMessageStream starts streaming a chat message response.
 // It reads NDJSON lines, parses them, and sends events on the returned channel.
@@ -23,6 +29,65 @@ func (c *Client) SendMessageStream(
 	parentMessageID *int,
 	fileDescriptors []models.FileDescriptorPayload,
 	llmOverride *models.LLMOverride,
+) <-chan models.StreamEvent {
+	payload := models.SendMessagePayload{
+		Message:          message,
+		LLMOverride:      llmOverride,
+		ParentMessageID:  parentMessageID,
+		FileDescriptors:  fileDescriptors,
+		Origin:           "api",
+		IncludeCitations: true,
+		Stream:           true,
+	}
+	if payload.FileDescriptors == nil {
+		payload.FileDescriptors = []models.FileDescriptorPayload{}
+	}
+	sessionID := ""
+	if chatSessionID != nil {
+		sessionID = *chatSessionID
+		payload.ChatSessionID = chatSessionID
+	} else {
+		payload.ChatSessionInfo = &models.ChatSessionCreationInfo{AgentID: agentID}
+	}
+	body, err := json.Marshal(payload)
+	return c.stream(ctx, sessionID, false, nil, func(requestCtx context.Context) (*http.Request, error) {
+		if err != nil {
+			return nil, fmt.Errorf("marshal: %w", err)
+		}
+		req, err := c.newRequest(requestCtx, "POST", "/chat/send-chat-message", bytes.NewReader(body))
+		if err == nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		return req, err
+	})
+}
+
+// ResumeChatStream replays the session's running response from cursor and
+// then follows it, like SendMessageStream. A nil streamID follows whichever
+// response runs. Events arrive in complete batches, each ending with a
+// StreamCursorEvent, so a request from the last cursor repeats no event. A
+// StreamUnavailableEvent reports that the server has nothing to serve at the
+// cursor. Cancelling ctx stops streamID at once when it is known.
+func (c *Client) ResumeChatStream(ctx context.Context, sessionID string, streamID *int, cursor int) <-chan models.StreamEvent {
+	query := url.Values{"cursor": {strconv.Itoa(cursor)}}
+	if streamID != nil {
+		query.Set("stream_id", strconv.Itoa(*streamID))
+	}
+	return c.stream(ctx, sessionID, true, streamID, func(requestCtx context.Context) (*http.Request, error) {
+		return c.newRequest(requestCtx, "GET", "/chat/chat-session/"+url.PathEscape(sessionID)+"/resume-stream?"+query.Encode(), nil)
+	})
+}
+
+// stream delivers the events of one streaming response. Cancelling ctx stops
+// knownStream, or the response that the server reports. A resume response
+// that is 404 delivers only a StreamUnavailableEvent, and a resume response
+// delivers events only in complete batches.
+func (c *Client) stream(
+	ctx context.Context,
+	sessionID string,
+	resume bool,
+	knownStream *int,
+	newRequest func(context.Context) (*http.Request, error),
 ) <-chan models.StreamEvent {
 	ch := make(chan models.StreamEvent, 64)
 
@@ -43,6 +108,9 @@ func (c *Client) SendMessageStream(
 			stream  int
 		}
 		acknowledged := make(chan identity, 1)
+		if knownStream != nil {
+			acknowledged <- identity{sessionID, *knownStream}
+		}
 		stopAcknowledged := func(id identity) {
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer stopCancel()
@@ -73,47 +141,36 @@ func (c *Client) SendMessageStream(
 			}
 			cancel()
 		}()
-		sessionID := ""
-		if chatSessionID != nil {
-			sessionID = *chatSessionID
+
+		// A dead connection fails after streamIdleTimeout without data, however
+		// long the turn itself runs.
+		requestCtx, cancelRequest := context.WithCancelCause(streamCtx)
+		defer cancelRequest(nil)
+		idle := time.AfterFunc(c.streamIdleTimeout, func() { cancelRequest(errStreamIdle) })
+		defer idle.Stop()
+		idleError := models.ErrorEvent{
+			Error:       fmt.Sprintf("no data from the server for %s", c.streamIdleTimeout),
+			IsRetryable: true,
+			StatusCode:  http.StatusRequestTimeout,
 		}
 
-		payload := models.SendMessagePayload{
-			Message:          message,
-			LLMOverride:      llmOverride,
-			ParentMessageID:  parentMessageID,
-			FileDescriptors:  fileDescriptors,
-			Origin:           "api",
-			IncludeCitations: true,
-			Stream:           true,
-		}
-		if payload.FileDescriptors == nil {
-			payload.FileDescriptors = []models.FileDescriptorPayload{}
-		}
-
-		if chatSessionID != nil {
-			payload.ChatSessionID = chatSessionID
-		} else {
-			payload.ChatSessionInfo = &models.ChatSessionCreationInfo{AgentID: agentID}
-		}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			ch <- models.ErrorEvent{Error: fmt.Sprintf("marshal error: %v", err), IsRetryable: false}
-			return
-		}
-
-		req, err := c.newRequest(streamCtx, "POST", "/chat/send-chat-message", bytes.NewReader(body))
+		req, err := newRequest(requestCtx)
 		if err != nil {
 			ch <- models.ErrorEvent{Error: fmt.Sprintf("request error: %v", err), IsRetryable: false}
 			return
 		}
-		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := c.streamingHTTPClient.Do(req)
+		// The idle timer keeps running until the scanner loop, so it also bounds
+		// the read of an error body.
+		resp, err := c.streamHTTPClient.Do(req)
 		if err != nil {
+			idle.Stop()
 			if ctx.Err() != nil {
 				return // cancelled
+			}
+			if errors.Is(context.Cause(requestCtx), errStreamIdle) {
+				ch <- idleError
+				return
 			}
 			wrapped := wrapTimeoutError(err)
 			if apiErr, ok := wrapped.(*OnyxAPIError); ok {
@@ -129,6 +186,10 @@ func (c *Client) SendMessageStream(
 		}
 		defer func() { _ = resp.Body.Close() }()
 
+		if resume && resp.StatusCode == http.StatusNotFound {
+			ch <- models.StreamUnavailableEvent{}
+			return
+		}
 		if err := checkResponse(resp); err != nil {
 			apiErr, ok := err.(*OnyxAPIError)
 			if ok {
@@ -136,6 +197,7 @@ func (c *Client) SendMessageStream(
 					Error:       fmt.Sprintf("HTTP %d: %s", apiErr.StatusCode, apiErr.Detail),
 					IsRetryable: apiErr.StatusCode >= 500,
 					StatusCode:  apiErr.StatusCode,
+					ErrorCode:   apiErr.ErrorCode,
 				}
 			} else {
 				ch <- models.ErrorEvent{
@@ -147,44 +209,78 @@ func (c *Client) SendMessageStream(
 			return
 		}
 
+		deliver := func(event models.StreamEvent) {
+			switch event.(type) {
+			case models.SessionCreatedEvent, models.MessageIDEvent:
+				// The caller needs these IDs to settle and continue a cancelled turn.
+				select {
+				case ch <- event:
+					return
+				default:
+				}
+				select {
+				case ch <- event:
+				case <-streamCtx.Done():
+				}
+			default:
+				select {
+				case ch <- event:
+				case <-ctx.Done():
+					// Continue reading for acknowledgement; the cancellation worker is bounded.
+				}
+			}
+		}
+		var batch []models.StreamEvent
+
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
-		for scanner.Scan() {
+		for {
+			// Only time spent waiting on the server counts toward the idle limit.
+			idle.Reset(c.streamIdleTimeout)
+			scanned := scanner.Scan()
+			idle.Stop()
+			if !scanned {
+				break
+			}
 			event := parser.ParseStreamLine(scanner.Text())
+			acknowledgedStream := 0
 			switch e := event.(type) {
 			case models.SessionCreatedEvent:
 				sessionID = e.ChatSessionID
 			case models.MessageIDEvent:
-				if sessionID != "" {
-					select {
-					case acknowledged <- identity{sessionID, e.ReservedAgentMessageID}:
-					default:
-					}
-				}
+				acknowledgedStream = e.ReservedAgentMessageID
+			case models.StreamCursorEvent:
+				// A replay from a cursor has no message ID line.
+				acknowledgedStream = e.StreamID
 			}
-			if event != nil {
-				switch event.(type) {
-				case models.SessionCreatedEvent, models.MessageIDEvent:
-					// The caller needs these IDs to settle and continue a cancelled turn.
-					select {
-					case ch <- event:
-						continue
-					default:
-					}
-					select {
-					case ch <- event:
-					case <-streamCtx.Done():
-					}
+			if acknowledgedStream != 0 && sessionID != "" {
+				select {
+				case acknowledged <- identity{sessionID, acknowledgedStream}:
 				default:
-					select {
-					case ch <- event:
-					case <-ctx.Done():
-						// Continue reading for acknowledgement; the cancellation worker is bounded.
-					}
 				}
 			}
+			if event == nil {
+				continue
+			}
+			if resume {
+				// A batch that the stream cuts before its cursor replays again.
+				if _, isCursor := event.(models.StreamCursorEvent); !isCursor {
+					batch = append(batch, event)
+					continue
+				}
+				for _, batched := range batch {
+					deliver(batched)
+				}
+				clear(batch)
+				batch = batch[:0]
+			}
+			deliver(event)
 		}
 		if err := scanner.Err(); err != nil && ctx.Err() == nil {
+			if errors.Is(context.Cause(requestCtx), errStreamIdle) {
+				ch <- idleError
+				return
+			}
 			ch <- models.ErrorEvent{Error: fmt.Sprintf("stream read error: %v", err), IsRetryable: true}
 		}
 	}()

@@ -6,7 +6,6 @@ import {
   CitationInfo,
   SearchToolDocumentsDelta,
   FetchToolDocuments,
-  Stop,
   GeneratedImage,
   MessageStart,
   ToolCallArgumentDelta,
@@ -311,15 +310,17 @@ function handleStreamingStatusPacket(
 }
 
 function handleStopPacket(state: ProcessorState, packet: Packet): void {
-  if (packet.obj.type !== PacketType.STOP || state.stopPacketSeen) {
+  // An approval wait pauses the response: it continues after the decisions.
+  if (
+    packet.obj.type !== PacketType.STOP ||
+    packet.obj.stop_reason === StopReason.AWAITING_APPROVAL ||
+    state.stopPacketSeen
+  ) {
     return;
   }
 
   state.stopPacketSeen = true;
-
-  // Extract and store the stop reason
-  const stopPacket = packet.obj as Stop;
-  state.stopReason = stopPacket.stop_reason;
+  state.stopReason = packet.obj.stop_reason;
 
   // Nothing follows Stop, so the latest text is the answer, even when its
   // step also called a tool.

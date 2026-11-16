@@ -14,6 +14,7 @@ type IOStreams struct {
 	ErrOut      io.Writer
 	IsStdinTTY  bool
 	IsStdoutTTY bool
+	IsStderrTTY bool
 }
 
 // System returns an IOStreams wired to the real os.Stdin/Stdout/Stderr.
@@ -24,6 +25,7 @@ func System() *IOStreams {
 		ErrOut:      os.Stderr,
 		IsStdinTTY:  term.IsTerminal(int(os.Stdin.Fd())),
 		IsStdoutTTY: term.IsTerminal(int(os.Stdout.Fd())),
+		IsStderrTTY: term.IsTerminal(int(os.Stderr.Fd())),
 	}
 }
 

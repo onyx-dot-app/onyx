@@ -5201,10 +5201,20 @@
           "description": "관리자만 스킬을 조직에 게시합니다."
         },
         "saveSuccess": {
-          "message": "게시 설정을 저장했습니다."
+          "message": "설정이 저장되었습니다."
         },
         "saveError": {
-          "message": "게시 설정을 저장할 수 없습니다."
+          "message": "설정을 저장하지 못했습니다."
+        },
+        "defaultAccess": {
+          "title": "기본 액세스",
+          "description": "자체 설정이 없는 모든 게시된 스킬에 적용됩니다. 나중에 게시되는 스킬도 포함됩니다.",
+          "loadFailed": "기본 액세스를 불러올 수 없습니다.",
+          "retry": "다시 시도"
+        },
+        "sharing": {
+          "title": "공유",
+          "description": "멤버는 스킬을 사람 및 그룹과 공유할 수 있습니다. 스킬 관리자는 항상 공유할 수 있습니다."
         }
       }
     },
@@ -12558,9 +12568,6 @@
         "content": {
           "ariaLabel": "스킬 선택기"
         },
-        "empty": {
-          "text": "일치하는 스킬 없음"
-        },
         "mcpServersGroup": {
           "label": "MCP 서버"
         },
@@ -12597,6 +12604,19 @@
         "expandButton": {
           "label": "입력창에 펼치기",
           "tooltip": "이 타일을 전체 텍스트로 바꿔 입력창에 넣습니다"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "{name} 제거"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "붙여넣은 텍스트: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "붙여넣은 텍스트 제거"
+          }
         }
       },
       "plusMenuButton": {
@@ -12644,6 +12664,9 @@
         "alreadyAccepted": "이 메시지는 이미 수락되어 더 이상 대기 중이 아닙니다.",
         "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다.",
         "stopSubagentsFailed": "하위 에이전트를 중지할 수 없습니다."
+      },
+      "pendingToolApproval": {
+        "toast": "먼저 대기 중인 도구 호출을 승인하거나 거부하세요."
       }
     },
     "mcpApiKey": {
@@ -12892,6 +12915,11 @@
           "text": "이미지 생성 중지됨"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "표 복사"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "질문"
@@ -13086,6 +13114,9 @@
           },
           "working": {
             "label": "작업 중"
+          },
+          "waitingForApproval": {
+            "label": "승인을 기다리는 중"
           }
         },
         "internalSearch": {
@@ -13222,6 +13253,9 @@
             "status": "웹 검색 중"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent}이(가) {tool}을(를) 실행하려고 합니다"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14440,6 +14474,54 @@
         "decision": "판단",
         "vision": "비전"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "페이로드가 없습니다."
+      },
+      "showLess": {
+        "button": "간략히 보기"
+      },
+      "showMore": {
+        "button": "더 보기"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "이 채팅에서 승인",
+        "tooltip": "지금 승인하고 이 채팅의 나머지 동안 이 도구를 다시 묻지 않고 실행합니다"
+      },
+      "approveOnce": {
+        "ariaLabel": "이 작업을 한 번만 승인",
+        "button": "한 번 승인"
+      },
+      "approveSession": {
+        "button": "세션 동안 승인",
+        "tooltip": "이 세션의 일치하는 작업 승인"
+      },
+      "deadline": "{time}까지 승인",
+      "header": {
+        "required": "승인 요청됨: {headline}"
+      },
+      "headline": {
+        "multiAction": "{app}의 {count, plural, one {작업 #개} other {작업 #개}}",
+        "singleAction": "{app}의 {action}"
+      },
+      "reject": {
+        "ariaLabel": "이 작업 거부",
+        "button": "거부"
+      },
+      "record": {
+        "approved": "승인됨: {headline}",
+        "closed": "더 이상 대기하지 않음: {headline}",
+        "disabled": "비활성화됨: {headline}",
+        "expired": "시간 초과: {headline}",
+        "rejected": "승인되지 않음: {headline}",
+        "approvedForChat": "이 채팅에서 승인됨: {headline}",
+        "approvedForSession": "이 세션에서 승인됨: {headline}"
+      },
+      "submitError": "결정을 제출할 수 없습니다. 다시 시도하세요.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14452,50 +14534,6 @@
       },
       "switch": {
         "ariaLabel": "에이전트 전환"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "이 작업을 한 번만 승인",
-        "button": "한 번 승인"
-      },
-      "approveSession": {
-        "button": "세션 동안 승인",
-        "tooltip": "이 세션의 일치하는 작업 승인"
-      },
-      "details": {
-        "hideAriaLabel": "세부 정보 숨기기",
-        "showAriaLabel": "세부 정보 표시"
-      },
-      "header": {
-        "required": "승인 필요: {headline}"
-      },
-      "headline": {
-        "multiAction": "{app}의 {count, plural, one {작업 #개} other {작업 #개}}",
-        "singleAction": "{app}의 {action}"
-      },
-      "payload": {
-        "empty": {
-          "label": "페이로드가 없습니다."
-        },
-        "showLess": {
-          "button": "간략히 보기"
-        },
-        "showMore": {
-          "button": "더 보기"
-        }
-      },
-      "reject": {
-        "ariaLabel": "이 작업 거부",
-        "button": "거부"
-      },
-      "status": {
-        "approved": "승인됨",
-        "rejected": "거부됨",
-        "expired": "만료됨"
-      },
-      "submit": {
-        "errorFallback": "결정을 제출하지 못했습니다"
       }
     },
     "apps": {
@@ -14633,7 +14671,7 @@
         "duplicateSkillName": "앱 \"{appName}\"에는 이미 \"{skillName}\" 이름의 연결된 스킬이 있습니다. 다른 이름의 스킬을 업로드하세요."
       },
       "mcpPolicy": {
-        "description": "이 MCP 서버의 도구로 Craft 에이전트가 할 수 있는 작업을 구성합니다.",
+        "description": "채팅과 Craft에서 자동으로 실행할 도구, 승인을 요청할 도구, 비활성화할 도구를 선택합니다.",
         "emptyPolicies": "이 서버에 활성화된 도구가 없습니다. 먼저 MCP 작업 페이지에서 도구를 활성화하세요.",
         "saveButton": "저장",
         "title": "{name} 편집"
@@ -15830,7 +15868,7 @@
     "actionPolicies": {
       "appTitle": "{name} 승인 설정",
       "title": "승인 설정",
-      "personalDescription": "이 설정은 Craft 대화와 새 작업에서 동작을 자동으로 실행할지 승인을 요청할지 결정하며, 기존 작업은 자체 설정을 유지합니다.",
+      "personalDescription": "이 설정은 Craft 대화, 새 작업, 채팅의 MCP 도구 호출에서 동작을 자동으로 실행할지 승인을 요청할지 결정하며, 기존 작업은 자체 설정을 유지합니다.",
       "taskDescription": "이 작업에서 사용할 플러그인과 자동으로 실행할 동작을 선택하세요. 변경 사항은 이 작업에만 적용됩니다.",
       "newTaskDescription": "플러그인을 활성화하면 현재 동작 설정으로 시작합니다.",
       "workspace_disabled": "워크스페이스에서 비활성화됨",
@@ -15846,9 +15884,6 @@
       "saveError": "승인 설정을 저장할 수 없습니다.",
       "emptyActions": "알려진 작업이 없습니다. 알 수 없는 작업은 승인이 필요합니다.",
       "emptyApps": "사용 가능한 앱이 없습니다.",
-      "expired": "승인 대기 시간이 초과되었습니다. 작업이 실행되지 않았습니다.",
-      "rejected": "요청이 거부되었습니다. 요청이 실행되지 않았습니다.",
-      "deadline": "{time}까지 승인",
       "agentPermissionRequired": "작업에 승인이 필요하여 실행이 중지되었습니다. 권한을 검토한 후 다시 실행하세요.",
       "enableForTask": "이 작업에서 활성화",
       "enableAppForTask": "이 작업에서 {app} 활성화",
@@ -17435,12 +17470,6 @@
         },
         "installation": {
           "title": "설치",
-          "available": "설치 가능",
-          "default": "기본 설치",
-          "required": "필수",
-          "availableDescription": "사용자는 언제든지 설치하거나 제거할 수 있습니다.",
-          "defaultDescription": "자동으로 설치됩니다. 사용자는 언제든지 비활성화하거나 제거할 수 있습니다.",
-          "requiredDescription": "자동으로 설치됩니다. 사용자는 비활성화하거나 제거할 수 없습니다.",
           "description": "액세스 권한이 있는 모든 사용자의 스킬 설치 방법을 선택하세요."
         },
         "description": "이 스킬을 사용할 수 있는 사용자와 설치 방법을 선택하세요.",
@@ -17464,6 +17493,19 @@
         "publishOff": {
           "title": "게시가 꺼져 있습니다",
           "description": "관리자가 조직 게시를 껐습니다. 관리자에게 이 스킬 게시를 요청하세요."
+        },
+        "sharingOff": {
+          "title": "공유가 꺼져 있습니다",
+          "description": "관리자가 사람 및 그룹과의 공유를 껐습니다. 스킬 관리자에게 이 스킬을 공유해 달라고 요청하세요."
+        },
+        "groupAccess": {
+          "title": "그룹 액세스",
+          "description": "기본적으로 모든 그룹은 조직 설정을 사용합니다. 그룹 설정은 더 엄격한 경우에도 그룹 구성원에 대해 조직 설정을 대체합니다.",
+          "add": "그룹 추가",
+          "select": "{name} 설정",
+          "remove": "{name} 제거",
+          "shared": "이 그룹과 공유됨",
+          "settingOnly": "그룹 설정만"
         }
       },
       "placeholders": {
@@ -17548,7 +17590,8 @@
       "empty": {
         "noMatches": {
           "description": "다른 검색어를 사용해 보세요.",
-          "title": "일치하는 스킬 없음"
+          "title": "일치하는 스킬 없음",
+          "groupDescription": "이 그룹에서 일치하는 스킬이 없습니다. 다른 그룹이나 검색어를 사용해 보세요."
         },
         "noSkills": {
           "title": "아직 사용자 지정 스킬이 없습니다",
@@ -17706,6 +17749,37 @@
         "firstPublish": "v{number} · 첫 게시",
         "update": "v{number} · v{published}에서 업데이트"
       }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "필수",
+        "description": "설치되어 항상 켜져 있습니다. 구성원이 끌 수 없습니다."
+      },
+      "DEFAULT": {
+        "label": "기본 설치",
+        "description": "모든 구성원에게 설치됩니다. 구성원이 끌 수 있습니다."
+      },
+      "AVAILABLE": {
+        "label": "설치 가능",
+        "description": "구성원이 찾아서 원하면 켭니다."
+      },
+      "NOT_AVAILABLE": {
+        "label": "사용 불가",
+        "description": "숨겨집니다. 구성원이 찾거나 켤 수 없습니다."
+      },
+      "inherit": {
+        "label": "{scope, select, group {조직 설정} other {기본 액세스}}",
+        "labelWithPolicy": "{scope, select, group {조직 설정({policy})} other {기본 액세스({policy})}}",
+        "description": "{scope, select, group {그룹 설정이 없습니다. 그룹은 조직 설정을 사용합니다.} other {자체 설정이 없습니다. 관리자가 변경한 후에도 스킬은 기본 액세스를 사용합니다.}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "그룹으로 필터링",
+        "all": "모든 그룹"
+      },
+      "card": "그룹: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

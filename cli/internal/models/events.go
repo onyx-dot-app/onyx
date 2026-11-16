@@ -26,6 +26,11 @@ const (
 	EventResearchAgentStart   = "research_agent_start"
 	EventIntermediateReport   = "intermediate_report_start"
 	EventIntermediateReportDt = "intermediate_report_delta"
+	EventToolApprovalRequest  = "tool_approval_request"
+	EventToolApprovalResolved = "tool_approval_resolved"
+	EventStreamCursor         = "stream_cursor"
+	EventStreamUnavailable    = "stream_unavailable"
+	EventReplayEnd            = "replay_end"
 	EventUnknown              = "unknown"
 )
 
@@ -44,6 +49,10 @@ type MessageIDEvent struct {
 
 func (e MessageIDEvent) EventType() string { return EventMessageIDInfo }
 
+// StopReasonAwaitingApproval ends the stream of a response that waits for
+// tool approval decisions. The response continues on a new stream after them.
+const StopReasonAwaitingApproval = "awaiting_approval"
+
 // StopEvent signals the end of a stream.
 type StopEvent struct {
 	Placement  *Placement `json:"placement,omitempty"`
@@ -52,13 +61,20 @@ type StopEvent struct {
 
 func (e StopEvent) EventType() string { return EventStop }
 
+// AwaitingApproval reports a stream that stopped while its response waits for
+// approval decisions.
+func (e StopEvent) AwaitingApproval() bool {
+	return e.StopReason != nil && *e.StopReason == StopReasonAwaitingApproval
+}
+
 // ErrorEvent signals an error.
 type ErrorEvent struct {
 	Placement   *Placement `json:"placement,omitempty"`
 	Error       string     `json:"error"`
 	StackTrace  *string    `json:"stack_trace,omitempty"`
 	IsRetryable bool       `json:"is_retryable"`
-	StatusCode  int        `json:"-"` // HTTP status for client-side errors; zero for server-pushed stream errors
+	StatusCode  int        `json:"-"`                    // HTTP status for client-side errors; zero for server-pushed stream errors
+	ErrorCode   string     `json:"error_code,omitempty"` // Onyx error code of a rejected request, e.g. APPROVAL_PENDING
 }
 
 func (e ErrorEvent) EventType() string { return EventError }
@@ -180,6 +196,66 @@ type IntermediateReportDeltaEvent struct {
 }
 
 func (e IntermediateReportDeltaEvent) EventType() string { return EventIntermediateReportDt }
+
+// ToolApprovalRequestEvent asks the user to approve one tool call. The tool
+// call waits until the user decides or stops the response. Arguments come
+// from the model and are untrusted.
+type ToolApprovalRequestEvent struct {
+	Placement   *Placement     `json:"placement,omitempty"`
+	ApprovalID  string         `json:"approval_id"`
+	ToolCallID  string         `json:"tool_call_id"`
+	ToolName    string         `json:"tool_name"`
+	DisplayName string         `json:"display_name"`
+	Arguments   map[string]any `json:"arguments"`
+	// AgentName names the background agent that asks; empty for the chat's
+	// own agent. An agent's request never blocks the chat.
+	AgentName string `json:"agent_name,omitempty"`
+}
+
+func (e ToolApprovalRequestEvent) EventType() string { return EventToolApprovalRequest }
+
+// Outcomes of a tool approval request.
+const (
+	ApprovalOutcomeApproved = "approved"
+	// ApprovalOutcomeApprovedForChat: a grant for the session's later calls of
+	// the tool approved the request.
+	ApprovalOutcomeApprovedForChat = "approved_for_chat"
+	ApprovalOutcomeRejected        = "rejected"
+	ApprovalOutcomeDisabled        = "disabled"
+	ApprovalOutcomeCancelled       = "cancelled"
+)
+
+// ToolApprovalResolvedEvent reports how an approval request ended.
+type ToolApprovalResolvedEvent struct {
+	Placement  *Placement `json:"placement,omitempty"`
+	ApprovalID string     `json:"approval_id"`
+	Outcome    string     `json:"outcome"`
+}
+
+func (e ToolApprovalResolvedEvent) EventType() string { return EventToolApprovalResolved }
+
+// StreamCursorEvent ends a complete batch of a replayed response. A request
+// for the same stream from NextCursor continues after the batch.
+type StreamCursorEvent struct {
+	StreamID       int  `json:"stream_id"`
+	NextCursor     int  `json:"next_cursor"`
+	ReplayComplete bool `json:"replay_complete"`
+}
+
+func (e StreamCursorEvent) EventType() string { return EventStreamCursor }
+
+// StreamUnavailableEvent reports that the server has nothing to serve at the
+// requested cursor of a resumed response: no running response, another
+// response, or no buffer. Requesting the same response again does not help.
+type StreamUnavailableEvent struct{}
+
+func (e StreamUnavailableEvent) EventType() string { return EventStreamUnavailable }
+
+// ReplayEndEvent ends the replayed prefix of a stream that continues a
+// response. The events after it are new.
+type ReplayEndEvent struct{}
+
+func (e ReplayEndEvent) EventType() string { return EventReplayEnd }
 
 // UnknownEvent is a catch-all for unrecognized stream data.
 type UnknownEvent struct {

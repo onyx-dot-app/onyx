@@ -31,6 +31,9 @@ export interface TimelineUIStateInput {
   // A code mode program runs between tool calls; it is the current activity even when the last
   // turn group is parallel.
   codeModeWorking: boolean;
+  // A tool call waits for the user's decision. The wait is the current activity, so a parallel
+  // turn shows the normal header with the waiting text.
+  awaitingApproval: boolean;
 }
 
 export interface TimelineUIStateResult {
@@ -67,6 +70,7 @@ export function useTimelineUIState(
       parallelActiveStepHasCollapsedContent,
       finalAnswerComing,
       codeModeWorking,
+      awaitingApproval,
     } = input;
 
     let uiState: TimelineUIState;
@@ -76,7 +80,7 @@ export function useTimelineUIState(
       uiState = TimelineUIState.DISPLAY_CONTENT_ONLY;
     } else if (!stopPacketSeen && !hasDisplayContent) {
       uiState =
-        lastTurnGroup?.isParallel && !codeModeWorking
+        lastTurnGroup?.isParallel && !codeModeWorking && !awaitingApproval
           ? TimelineUIState.STREAMING_PARALLEL
           : TimelineUIState.STREAMING_SEQUENTIAL;
     } else if (userStopped) {

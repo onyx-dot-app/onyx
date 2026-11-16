@@ -37,10 +37,11 @@ from onyx.agents.runtime import (
 from onyx.agents.tools import (
     AgentControl,
     AgentLifetime,
+    PendingToolInput,
     SpawnResult,
 )
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.models import Message, UserMessage
+from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -101,6 +102,29 @@ class RunOwnership(Protocol):
 
     def submit_message(self, request: AgentMessageRequest) -> AgentMessageReceipt:
         """Store a message for an agent; delivery belongs to the application."""
+        ...
+
+
+class ToolApprovals(Protocol):
+    """Open the requests of calls that wait for the user's approval.
+
+    Answers reach the run through `Run.submit` or `Agent.resume`. The requests
+    of a run end with it, when the run store releases it.
+    """
+
+    def request_approval(
+        self, run: Run, tool_call: ToolCall, nested_call: ToolCall | None
+    ) -> PendingToolInput | ToolResult | None:
+        """A request to wait for, a result for a call that cannot wait, or None
+        when a standing grant approves the call. The call is `nested_call`
+        when `tool_call`, a call of the run's step, makes it for the model, and
+        `tool_call` otherwise."""
+        ...
+
+    def withdraw_approval(self, request_id: str) -> None:
+        """A call that a tool made for the model stopped waiting for this
+        request while its run goes on, for example because its program ended.
+        Ends the request."""
         ...
 
 
@@ -165,6 +189,7 @@ class AgentCoordinator:
         directory: AgentDirectory | None = None,
         store: RunStore | None = None,
         ownership: RunOwnership | None = None,
+        approvals: ToolApprovals | None = None,
     ) -> None:
         self._state = _CoordinatorState()
         self._view_id = uuid4()
@@ -174,6 +199,8 @@ class AgentCoordinator:
         self._directory = directory
         self._store = store
         self.ownership = ownership
+        # Without it, calls that require approval return an error result.
+        self.approvals = approvals
 
     def view(
         self,
@@ -182,6 +209,7 @@ class AgentCoordinator:
         visible_run_ids: Sequence[str] = (),
         store: RunStore | None = None,
         ownership: RunOwnership | None = None,
+        approvals: ToolApprovals | None = None,
     ) -> "AgentCoordinator":
         """Share execution state; inherit each dependency unless its replacement is supplied."""
         self.check_open()
@@ -189,6 +217,7 @@ class AgentCoordinator:
             directory=directory if directory is not None else self._directory,
             store=store if store is not None else self._store,
             ownership=ownership if ownership is not None else self.ownership,
+            approvals=approvals if approvals is not None else self.approvals,
         )
         view._state = self._state
         with self._state.lock:
@@ -215,13 +244,21 @@ class AgentCoordinator:
             if info.parent_id is not None:
                 self._state.agents[agent.id] = _LoadedAgent(agent, self._view_id)
 
-    def release_execution(self, run: Run) -> None:
-        """Forget local execution; dependencies retain only its ID and completion."""
+    def release_execution(
+        self, run: Run, *, watched_run_ids: Collection[str] = ()
+    ) -> None:
+        """Forget local execution; dependencies retain only its ID and completion.
+
+        Remote observation of the runs that it waited for (`watched_run_ids`
+        and its foreground children) stops unless another local run waits too.
+        """
         snapshot = run.snapshot()
         with self._state.lock:
             tracked = self._state.tracked_runs[run.id]
             binding = tracked.coordination
             completion = tracked.completion
+        # The released run no longer changes its children.
+        waited = {*watched_run_ids, *(binding.children if binding else ())}
         # Reserve the local execution until its ownership cleanup finishes.
         try:
             if binding is not None:
@@ -237,11 +274,24 @@ class AgentCoordinator:
                 tracked.execution = None
                 self._state.agents.pop(run.agent_id, None)
                 self._state.latest[run.agent_id] = snapshot
-                has_waiters = any(
-                    run.id in entry.coordination.children
+                # Local runs wait for their foreground children, and for the
+                # runs that a ChildRunWait or a delegation watches.
+                still_waited = {
+                    run_id
                     for entry in self._state.tracked_runs.values()
                     if entry.coordination is not None
-                )
+                    for run_id in (
+                        *entry.coordination.children,
+                        *entry.coordination.run.watched_run_ids,
+                    )
+                }
+                has_waiters = run.id in still_waited
+                for run_id in waited - still_waited:
+                    observed = self._state.tracked_runs.get(run_id)
+                    if observed is not None and observed.observer_stop is not None:
+                        # A later waiter starts a new observation.
+                        observed.observer_stop.set()
+                        observed.observer_stop = None
         if has_waiters:
             self.observe_completion(run.id, agent_id=run.agent_id)
 
@@ -1182,13 +1232,19 @@ class RunCoordination:
             ]
 
     def validate_handoff(self) -> None:
+        """A parent transfers while its pending foreground children execute
+        elsewhere; the application decides whether a released child is durable."""
         try:
             self.coordinator.check_open()
         except RuntimeError as error:
             raise RunNotTransferable("Coordinator is closing") from error
-        if self.pending_children():
+        if any(
+            self.coordinator.child_run(run_id, self.run.agent_id) is not None
+            for run_id in self.pending_children()
+        ):
             raise RunNotTransferable(
-                "Foreground child runs must finish before parent transfer"
+                "Foreground child runs that execute here must finish or hand off "
+                "before parent transfer"
             )
 
     def finish(self, cancel: bool) -> list[RunState]:

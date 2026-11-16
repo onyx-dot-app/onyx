@@ -35,6 +35,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/imagegc"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
+	"github.com/onyx-dot-app/onyx/microvm/internal/loopstore"
 	"github.com/onyx-dot-app/onyx/microvm/internal/managed"
 	"github.com/onyx-dot-app/onyx/microvm/internal/metrics"
 	"github.com/onyx-dot-app/onyx/microvm/internal/nodereport"
@@ -102,6 +103,8 @@ type flags struct {
 	watchDrain     bool
 	drainTaints    string
 	drainPoll      time.Duration
+	guardScale     bool
+	guardGrace     time.Duration
 	advertise      string
 	captureTTL     time.Duration
 	captureMax     int64
@@ -111,12 +114,18 @@ type flags struct {
 	transferPart   int64
 	imageGCEvery   time.Duration
 	imageGCGrace   time.Duration
+	loopStore      string
+	loopStoreGiB   uint64
 }
 
 func main() {
 	var f flags
 	f.obs.register(flag.CommandLine)
-	flag.StringVar(&f.dataDir, "data-dir", "/var/lib/craft-fc", "XFS (reflink) data dir; must be the same path on the host and in the container")
+	flag.StringVar(&f.dataDir, "data-dir", "/var/lib/craft-fc", "data dir with reflink (XFS reflink=1), or see --loop-store; must be the same path on the host and in the container")
+	flag.StringVar(&f.loopStore, "loop-store", string(loopstore.Auto),
+		"auto: if the data dir has no reflink (ext4), mount a sparse XFS image <data-dir>/"+loopstore.ImageName+" on a loop device there; off: refuse to start (default $CRAFT_FC_LOOP_STORE or auto)")
+	flag.Uint64Var(&f.loopStoreGiB, "loop-store-gib", 0,
+		"size of a new loop store image; 0: the free space less 1/5 of the disk, 20 GiB to 4 TiB (default $CRAFT_FC_LOOP_STORE_GIB or 0); an existing image keeps its size")
 	flag.StringVar(&f.artifactsDir, "artifacts-dir", "/opt/craft-fc", "directory with the firecracker and jailer binaries")
 	flag.StringVar(&f.socket, "socket", "", "API Unix socket (default <data-dir>/run/host-agent.sock)")
 	flag.StringVar(&f.slice, "slice", "fcvms.slice", "host systemd slice for the VM scopes")
@@ -163,11 +172,13 @@ func main() {
 	flag.BoolVar(&f.watchDrain, "watch-node-drain", false, "read this pod's Node (--node-id) and drain while it has a --drain-taints taint; needs RBAC get on nodes")
 	flag.StringVar(&f.drainTaints, "drain-taints", strings.Join(nodewatch.DefaultTaintKeys, ","), "comma-separated taint keys that drain the node")
 	flag.DurationVar(&f.drainPoll, "drain-poll-interval", 10*time.Second, "how often --watch-node-drain reads the Node")
+	flag.BoolVar(&f.guardScale, "scale-down-guard", false, "annotate this pod's Node (--node-id) with "+nodewatch.ScaleDownDisabledKey+"=true while it runs VMs, so the cluster autoscaler does not remove it; needs RBAC get and patch on nodes")
+	flag.DurationVar(&f.guardGrace, "scale-down-guard-grace", 10*time.Minute, "how long the node has no VMs before --scale-down-guard removes the annotation")
 	flag.StringVar(&f.advertise, "advertise-address", "", "host:port the api_server dials for --listen, sent with the node key registration (default $POD_IP:<--listen port>)")
 	flag.DurationVar(&f.captureTTL, "capture-ttl", server.DefaultCaptureTTL, "delete a spooled session capture that is not uploaded after this long")
 	flag.Int64Var(&f.captureMax, "capture-max-bytes", server.DefaultCaptureMaxBytes, "largest session archive (stored bytes) that CaptureSession spools")
 	flag.DurationVar(&f.transferTO, "transfer-timeout", 10*time.Minute, "limit for one presigned upload, or for one whole restore download (all range parts)")
-	flag.BoolVar(&f.transferHTTP, "transfer-allow-http", false, "allow plain http presigned URLs (test object stores only)")
+	flag.BoolVar(&f.transferHTTP, "transfer-allow-http", false, "allow plain http presigned URLs and redirects, to any host (use it only for an object store inside the cluster, or a test store)")
 	flag.IntVar(&f.transferPar, "transfer-parallel", 8, "range GETs at once for a session restore download (1: one plain GET)")
 	flag.Int64Var(&f.transferPart, "transfer-part-bytes", 8<<20, "bytes per range GET; a restore holds up to --transfer-parallel of them in memory")
 	flag.DurationVar(&f.imageGCEvery, "image-gc-interval", 15*time.Minute, "how often the image GC removes managed images and old templates that no VM used for --image-gc-grace (0 = off)")
@@ -175,6 +186,10 @@ func main() {
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	if err := loopStoreEnv(flag.CommandLine, os.LookupEnv); err != nil {
+		log.Error("host agent failed", "err", err)
+		os.Exit(1)
+	}
 	if err := run(f, log); err != nil {
 		log.Error("host agent failed", "err", err)
 		os.Exit(1)
@@ -186,8 +201,20 @@ func run(f flags, log *slog.Logger) error {
 		f.socket = filepath.Join(f.dataDir, "run", "host-agent.sock")
 	}
 	lay := jailer.Layout{ChrootBase: filepath.Join(f.dataDir, "jail")}
-	if err := preflight(f, lay); err != nil {
+	// Flag checks first: preflight can make and mount a loop store.
+	if err := checkRanges(f); err != nil {
+		return err
+	}
+	if err := checkListen(f); err != nil {
+		return err
+	}
+	ls, err := preflight(f, lay, log)
+	if err != nil {
 		return fmt.Errorf("preflight: %w", err)
+	}
+	stats := hostinfo.Stats{DataDir: f.dataDir}
+	if ls != nil {
+		stats.NodeDir = ls.NodeDir
 	}
 	bins, err := binaries.Install(f.artifactsDir, filepath.Join(f.dataDir, "bin"),
 		binaries.FirecrackerVersion, binaries.FirecrackerSHA256, binaries.JailerSHA256)
@@ -199,12 +226,6 @@ func run(f flags, log *slog.Logger) error {
 		Slice: f.slice, HostMountNS: f.hostMountNS, LogLevel: f.logLevel,
 	}
 	if err := checkSystemdRun(cmd); err != nil {
-		return err
-	}
-	if err := checkRanges(f); err != nil {
-		return err
-	}
-	if err := checkListen(f); err != nil {
 		return err
 	}
 	kernel, err := binaries.InstallKernel(filepath.Join(f.artifactsDir, "vmlinux"), filepath.Join(f.dataDir, "kernel"))
@@ -261,7 +282,7 @@ func run(f flags, log *slog.Logger) error {
 	},
 		store,
 		launcher,
-		hostinfo.Stats{DataDir: f.dataDir},
+		stats,
 		uids,
 		versions,
 		log,
@@ -282,12 +303,19 @@ func run(f flags, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	obs, err := newObservability(f.obs, m, lay, hostinfo.Stats{DataDir: f.dataDir}, log)
+	obs, err := newObservability(f.obs, m, lay, stats, log)
 	if err != nil {
 		return err
 	}
 	push.start(ctx, obs.metrics)
+	if ls != nil {
+		go trimLoop(ctx, f.dataDir, log)
+	}
 	drainWatch, err := startDrainWatch(ctx, f, m, log)
+	if err != nil {
+		return err
+	}
+	guard, err := newScaleDownGuard(f, m, log)
 	if err != nil {
 		return err
 	}
@@ -300,6 +328,11 @@ func run(f flags, log *slog.Logger) error {
 		"abandoned", rep.Abandoned, "unverified", rep.Unverified, "unreadable", rep.Unreadable,
 		"tombstones", rep.Tombstones, "orphans_killed", rep.Orphans, "leftovers_removed", rep.Leftovers,
 		"ms", time.Since(t0).Milliseconds())
+	if guard != nil {
+		// After Recover, so adopted VMs count from the first check.
+		go guard.Run(ctx)
+		log.Info("scale-down guard on", "node", f.nodeID, "annotation", nodewatch.ScaleDownDisabledKey, "grace", f.guardGrace)
+	}
 	ports, err := parsePorts(f.dialPorts)
 	if err != nil {
 		return err
@@ -321,7 +354,6 @@ func run(f flags, log *slog.Logger) error {
 	if err := mstore.CleanStaging(managed.Unmount); err != nil {
 		return err
 	}
-	stats := hostinfo.Stats{DataDir: f.dataDir}
 	saves, err := server.NewSaves(&server.Saves{
 		M: m, PT: pt, Dir: filepath.Join(f.dataDir, "captures"), TTL: f.captureTTL, MaxBytes: f.captureMax,
 		MinFreeBytes: f.minFreeDiskGB * uint64(scratch.GiB), FreeBytes: stats.DiskFreeBytes,
@@ -585,6 +617,26 @@ func startDrainWatch(ctx context.Context, f flags, m *agent.Manager, log *slog.L
 	return w, nil
 }
 
+// scaleDownGuardInterval is how often --scale-down-guard counts the VMs.
+const scaleDownGuardInterval = 10 * time.Second
+
+// newScaleDownGuard returns the guard that keeps the cluster autoscaler from
+// removing the node while it runs VMs, or nil when --scale-down-guard is
+// off. A failed Node patch is logged and never blocks VMs.
+func newScaleDownGuard(f flags, m *agent.Manager, log *slog.Logger) (*nodewatch.ScaleDownGuard, error) {
+	if !f.guardScale {
+		return nil, nil
+	}
+	c, err := nodewatch.NewInCluster(f.nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("--scale-down-guard: %w", err)
+	}
+	g := &nodewatch.ScaleDownGuard{Node: c, VMs: m.ScaleDownHolds, Grace: f.guardGrace, Interval: scaleDownGuardInterval, Log: log}
+	// A new VM is guarded at once, not at the next tick.
+	m.OnAdmit(g.Kick)
+	return g, nil
+}
+
 // pushers are the key registration and node state report loops. They
 // start after the metrics exist, so the first result is counted.
 type pushers struct {
@@ -734,32 +786,90 @@ func reportEnded(ended []agent.EndedVM) []nodereport.EndedVM {
 	return out
 }
 
-func preflight(f flags, lay jailer.Layout) error {
+func preflight(f flags, lay jailer.Layout, log *slog.Logger) (*loopstore.Store, error) {
 	if os.Geteuid() != 0 {
-		return errors.New("the host agent must run as root")
+		return nil, errors.New("the host agent must run as root")
 	}
 	if _, err := os.Stat("/dev/kvm"); err != nil {
-		return fmt.Errorf("no /dev/kvm: %w", err)
+		return nil, fmt.Errorf("no /dev/kvm: %w", err)
 	}
 	if _, err := os.Stat("/sys/fs/cgroup/cgroup.controllers"); err != nil {
-		return fmt.Errorf("cgroup v2 is not mounted at /sys/fs/cgroup: %w", err)
+		return nil, fmt.Errorf("cgroup v2 is not mounted at /sys/fs/cgroup: %w", err)
+	}
+	mode, err := loopstore.ParseMode(f.loopStore)
+	if err != nil {
+		return nil, err
+	}
+	// The agent reads the host view of the data dir under /proc/1/root.
+	if !filepath.IsAbs(f.dataDir) {
+		return nil, fmt.Errorf("--data-dir %q must be an absolute path", f.dataDir)
+	}
+	longest := lay.HostPath(strings.Repeat("x", 36), longestSock)
+	if len(longest) > jailer.MaxSockPath {
+		return nil, fmt.Errorf("data dir %s is too long: VM socket paths would be %d bytes, the limit is %d",
+			f.dataDir, len(longest), jailer.MaxSockPath)
+	}
+	if err := os.MkdirAll(f.dataDir, 0o755); err != nil {
+		return nil, err
+	}
+	// Before the subdirs: a loop store mount hides what is under it.
+	store, err := loopstore.Ensure(loopstore.Options{
+		DataDir: f.dataDir, Mode: mode, SizeGiB: f.loopStoreGiB, HostMountNS: f.hostMountNS, RootfsDir: f.rootfsDir, Log: log,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("data dir %s: %w", f.dataDir, err)
+	}
+	if store != nil {
+		log.Info("data dir is a loop store", "image", store.Image, "device", store.Device,
+			"gib", store.SizeBytes>>30, "created", store.Created, "node_dir", store.NodeDir)
+		if store.NodeDir == "" {
+			log.Info("the node file system under the loop store has no other path here (a disk mounted at the data dir?): Create checks the free space of the store only")
+		}
 	}
 	for _, d := range []string{"templates", "jail", "bin", "kernel", "run", "journal", "managed"} {
 		if err := os.MkdirAll(filepath.Join(f.dataDir, d), 0o700); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	// The jailer needs to traverse the chroot base as the VM user.
 	if err := os.Chmod(lay.ChrootBase, 0o711); err != nil {
-		return err
+		return nil, err
 	}
-	if err := scratch.ProbeReflink(f.dataDir); err != nil {
-		return fmt.Errorf("data dir %s: %w", f.dataDir, err)
+	return store, nil
+}
+
+// trimLoop gives the blocks of deleted files in the loop store back to the
+// node disk at start and then every hour.
+func trimLoop(ctx context.Context, dir string, log *slog.Logger) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		if n, err := loopstore.Trim(dir); err != nil {
+			log.Warn("loop store trim failed", "err", err)
+		} else {
+			log.Info("loop store trimmed", "mib", n>>20)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
 	}
-	longest := lay.HostPath(strings.Repeat("x", 36), longestSock)
-	if len(longest) > jailer.MaxSockPath {
-		return fmt.Errorf("data dir %s is too long: VM socket paths would be %d bytes, the limit is %d",
-			f.dataDir, len(longest), jailer.MaxSockPath)
+}
+
+// loopStoreEnv applies $CRAFT_FC_LOOP_STORE and $CRAFT_FC_LOOP_STORE_GIB to
+// the loop store flags that the command line does not set.
+func loopStoreEnv(fs *flag.FlagSet, lookup func(string) (string, bool)) error {
+	set := map[string]bool{}
+	fs.Visit(func(fl *flag.Flag) { set[fl.Name] = true })
+	for name, env := range map[string]string{"loop-store": "CRAFT_FC_LOOP_STORE", "loop-store-gib": "CRAFT_FC_LOOP_STORE_GIB"} {
+		v, ok := lookup(env)
+		if !ok || v == "" || set[name] {
+			continue
+		}
+		if err := fs.Set(name, v); err != nil {
+			return fmt.Errorf("$%s: %w", env, err)
+		}
 	}
 	return nil
 }
@@ -795,6 +905,9 @@ func checkRanges(f flags) error {
 	}
 	if f.maxScratchGiB > math.MaxUint32 {
 		return fmt.Errorf("--max-scratch-gib %d is too large", f.maxScratchGiB)
+	}
+	if f.guardGrace < 0 {
+		return fmt.Errorf("--scale-down-guard-grace %v must be 0 or more", f.guardGrace)
 	}
 	return nil
 }

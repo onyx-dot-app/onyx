@@ -5201,10 +5201,20 @@
           "description": "管理者だけがスキルを組織に公開できます。"
         },
         "saveSuccess": {
-          "message": "公開設定を保存しました。"
+          "message": "設定を保存しました。"
         },
         "saveError": {
-          "message": "公開設定を保存できませんでした。"
+          "message": "設定を保存できませんでした。"
+        },
+        "defaultAccess": {
+          "title": "デフォルトのアクセス",
+          "description": "独自の設定がない公開済みスキルすべてに適用されます。後から公開されるスキルも含みます。",
+          "loadFailed": "デフォルトのアクセスを読み込めませんでした。",
+          "retry": "再試行"
+        },
+        "sharing": {
+          "title": "共有",
+          "description": "メンバーはスキルをユーザーやグループと共有できます。スキル管理者は常に共有できます。"
         }
       }
     },
@@ -12558,9 +12568,6 @@
         "content": {
           "ariaLabel": "スキル選択"
         },
-        "empty": {
-          "text": "一致するスキルはありません"
-        },
         "mcpServersGroup": {
           "label": "MCP サーバー"
         },
@@ -12597,6 +12604,19 @@
         "expandButton": {
           "label": "入力バーに展開",
           "tooltip": "このタイルを全文に置き換えて入力欄に表示します"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "{name} を削除"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "貼り付けたテキスト: {preview}、{meta}",
+          "removeButton": {
+            "ariaLabel": "貼り付けたテキストを削除"
+          }
         }
       },
       "plusMenuButton": {
@@ -12644,6 +12664,9 @@
         "alreadyAccepted": "このメッセージはすでに受け付けられており、保留中ではありません。",
         "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。",
         "stopSubagentsFailed": "サブエージェントを停止できませんでした。"
+      },
+      "pendingToolApproval": {
+        "toast": "先に保留中のツール呼び出しを承認または拒否してください。"
       }
     },
     "mcpApiKey": {
@@ -12892,6 +12915,11 @@
           "text": "画像の生成を停止しました"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "表をコピー"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "質問"
@@ -13086,6 +13114,9 @@
           },
           "working": {
             "label": "作業中"
+          },
+          "waitingForApproval": {
+            "label": "承認を待っています"
           }
         },
         "internalSearch": {
@@ -13222,6 +13253,9 @@
             "status": "ウェブを検索中"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} が {tool} を実行しようとしています"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14440,6 +14474,54 @@
         "decision": "判断",
         "vision": "画像対応"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "ペイロードはありません。"
+      },
+      "showLess": {
+        "button": "表示を減らす"
+      },
+      "showMore": {
+        "button": "もっと見る"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "このチャットで承認",
+        "tooltip": "今すぐ承認し、このチャットの残りの間はこのツールを確認なしで実行します"
+      },
+      "approveOnce": {
+        "ariaLabel": "このアクションを1回だけ承認",
+        "button": "1回だけ承認"
+      },
+      "approveSession": {
+        "button": "セッション全体で承認",
+        "tooltip": "このセッションの一致するアクションを承認"
+      },
+      "deadline": "{time}までに承認",
+      "header": {
+        "required": "承認リクエスト: {headline}"
+      },
+      "headline": {
+        "multiAction": "{app} での {count, plural, one {# 件のアクション} other {# 件のアクション}}",
+        "singleAction": "{app} での {action}"
+      },
+      "reject": {
+        "ariaLabel": "このアクションを却下",
+        "button": "却下"
+      },
+      "record": {
+        "approved": "承認済み: {headline}",
+        "closed": "承認待ちではありません: {headline}",
+        "disabled": "無効: {headline}",
+        "expired": "タイムアウト: {headline}",
+        "rejected": "未承認: {headline}",
+        "approvedForChat": "このチャットで承認済み: {headline}",
+        "approvedForSession": "このセッションで承認済み: {headline}"
+      },
+      "submitError": "決定を送信できませんでした。もう一度お試しください。",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14452,50 +14534,6 @@
       },
       "switch": {
         "ariaLabel": "エージェントを切り替える"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "このアクションを1回だけ承認",
-        "button": "1回だけ承認"
-      },
-      "approveSession": {
-        "button": "セッション全体で承認",
-        "tooltip": "このセッションの一致するアクションを承認"
-      },
-      "details": {
-        "hideAriaLabel": "詳細を隠す",
-        "showAriaLabel": "詳細を表示"
-      },
-      "header": {
-        "required": "承認が必要です: {headline}"
-      },
-      "headline": {
-        "multiAction": "{app} での {count, plural, one {# 件のアクション} other {# 件のアクション}}",
-        "singleAction": "{app} での {action}"
-      },
-      "payload": {
-        "empty": {
-          "label": "ペイロードはありません。"
-        },
-        "showLess": {
-          "button": "表示を減らす"
-        },
-        "showMore": {
-          "button": "もっと見る"
-        }
-      },
-      "reject": {
-        "ariaLabel": "このアクションを却下",
-        "button": "却下"
-      },
-      "status": {
-        "approved": "承認済み",
-        "rejected": "却下済み",
-        "expired": "期限切れ"
-      },
-      "submit": {
-        "errorFallback": "決定を送信できませんでした"
       }
     },
     "apps": {
@@ -14633,7 +14671,7 @@
         "duplicateSkillName": "アプリ「{appName}」には「{skillName}」という名前の関連スキルがすでにあります。別の名前のスキルをアップロードしてください。"
       },
       "mcpPolicy": {
-        "description": "この MCP サーバーのツールで Craft エージェントに許可する操作を設定します。",
+        "description": "チャットと Craft で、自動実行、承認を求める、無効にするツールを選択します。",
         "emptyPolicies": "このサーバーには有効なツールがありません。まず MCP アクションページでツールを有効にしてください。",
         "saveButton": "保存",
         "title": "{name} を編集"
@@ -15830,7 +15868,7 @@
     "actionPolicies": {
       "appTitle": "{name} の承認設定",
       "title": "承認設定",
-      "personalDescription": "これらの設定は、Craftの会話と新しいタスクでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
+      "personalDescription": "これらの設定は、Craftの会話、新しいタスク、チャットでのMCPツール呼び出しでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
       "taskDescription": "このタスクが使用できるプラグインを選び、自動実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
       "newTaskDescription": "プラグインを有効にすると、現在のアクション設定を初期設定として使用します。",
       "workspace_disabled": "ワークスペースで無効",
@@ -15846,9 +15884,6 @@
       "saveError": "承認設定を保存できませんでした。",
       "emptyActions": "既知のアクションがありません。不明なアクションには承認が必要です。",
       "emptyApps": "利用可能なアプリがありません。",
-      "expired": "承認がタイムアウトしました。アクションは実行されませんでした。",
-      "rejected": "リクエストが拒否されました。このリクエストは実行されませんでした。",
-      "deadline": "{time}までに承認",
       "agentPermissionRequired": "アクションに承認が必要なため、この実行は停止しました。権限を確認してタスクを再実行してください。",
       "enableForTask": "このタスクで有効にする",
       "enableAppForTask": "このタスクで{app}を有効にする",
@@ -17435,12 +17470,6 @@
         },
         "installation": {
           "title": "インストール",
-          "available": "インストール可能",
-          "default": "デフォルトでインストール",
-          "required": "必須",
-          "availableDescription": "ユーザーはいつでもインストールまたはアンインストールできます。",
-          "defaultDescription": "自動でインストールされます。ユーザーはいつでも無効化またはアンインストールできます。",
-          "requiredDescription": "自動でインストールされます。ユーザーは無効化またはアンインストールできません。",
           "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。"
         },
         "description": "このスキルを使用できるユーザーとインストール方法を選択します。",
@@ -17464,6 +17493,19 @@
         "publishOff": {
           "title": "公開はオフになっています",
           "description": "管理者が組織への公開をオフにしました。このスキルの公開を管理者に依頼してください。"
+        },
+        "sharingOff": {
+          "title": "共有はオフです",
+          "description": "管理者がユーザーやグループとの共有をオフにしました。このスキルの共有はスキル管理者に依頼してください。"
+        },
+        "groupAccess": {
+          "title": "グループアクセス",
+          "description": "デフォルトでは、各グループは組織の設定を使用します。グループの設定は、より厳しい場合でも、そのグループのメンバーに対して組織の設定を置き換えます。",
+          "add": "グループを追加",
+          "select": "{name} の設定",
+          "remove": "{name} を削除",
+          "shared": "このグループと共有済み",
+          "settingOnly": "グループ設定のみ"
         }
       },
       "placeholders": {
@@ -17548,7 +17590,8 @@
       "empty": {
         "noMatches": {
           "description": "別の検索をお試しください。",
-          "title": "一致するスキルがありません"
+          "title": "一致するスキルがありません",
+          "groupDescription": "このグループに一致するスキルはありません。別のグループまたは検索を試してください。"
         },
         "noSkills": {
           "title": "カスタムスキルはまだありません",
@@ -17706,6 +17749,37 @@
         "firstPublish": "v{number} · 初回公開",
         "update": "v{number} · v{published} からの更新"
       }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "必須",
+        "description": "インストール済みで常にオンです。メンバーはオフにできません。"
+      },
+      "DEFAULT": {
+        "label": "既定でインストール",
+        "description": "すべてのメンバーにインストールされます。メンバーはオフにできます。"
+      },
+      "AVAILABLE": {
+        "label": "インストール可能",
+        "description": "メンバーが見つけて、必要に応じてオンにします。"
+      },
+      "NOT_AVAILABLE": {
+        "label": "利用不可",
+        "description": "非表示です。メンバーは見つけることもオンにすることもできません。"
+      },
+      "inherit": {
+        "label": "{scope, select, group {組織の設定} other {デフォルトのアクセス}}",
+        "labelWithPolicy": "{scope, select, group {組織の設定（{policy}）} other {デフォルトのアクセス（{policy}）}}",
+        "description": "{scope, select, group {グループ設定はありません。グループは組織の設定を使用します。} other {独自の設定はありません。管理者が変更した後も、スキルはデフォルトアクセスを使用します。}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "グループで絞り込む",
+        "all": "すべてのグループ"
+      },
+      "card": "グループ: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

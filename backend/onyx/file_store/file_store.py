@@ -13,7 +13,12 @@ from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, NotRequired, TypedDict, TypeVar, cast
 
 import puremagic
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
+from botocore.retries.standard import (
+    RetryContext,
+    ThrottledRetryableChecker,
+    TransientRetryableChecker,
+)
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
@@ -428,12 +433,25 @@ class FileStore(ABC):
         List all file IDs that start with the given prefix.
         """
 
+    def is_transient_error(self, error: Exception) -> bool:  # noqa: ARG002
+        """Whether a later attempt can succeed after this store raised `error`:
+        the backing service throttled or failed for a moment. A denied access
+        or a missing bucket fails every attempt."""
+        return False
+
+
+# HTTP statuses of an object store that throttled or failed for a moment.
+TRANSIENT_STORAGE_STATUS = frozenset({429, 500, 502, 503, 504})
+
 
 class PresignableFileStore(FileStore):
     """A file store on a cloud object store (S3, GCS, Azure) that can sign URLs.
     Callers check isinstance(store, PresignableFileStore); other stores have no
     presigned URLs. The hooks take the bucket, so a store for another bucket can
     reuse the signer."""
+
+    # The largest object one presigned PUT can write.
+    _presign_max_upload_bytes = FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES
 
     @abstractmethod
     def _presign_bucket_name(self) -> str:
@@ -505,9 +523,9 @@ class PresignableFileStore(FileStore):
         writes no file_record row until finalize_presigned_upload. sha256 is
         the hex digest of the content to upload."""
         ttl_seconds = presign_ttl_seconds(ttl)
-        if not 0 <= size <= FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES:
+        if not 0 <= size <= self._presign_max_upload_bytes:
             raise ValueError(
-                f"A presigned upload size must be 0 to {FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES} bytes"
+                f"A presigned upload size must be 0 to {self._presign_max_upload_bytes} bytes"
             )
         sha256 = sha256.lower()
         if not _SHA256_HEX.fullmatch(sha256):
@@ -629,6 +647,19 @@ class PresignableFileStore(FileStore):
 
 class S3BackedFileStore(PresignableFileStore):
     """Isn't necessarily S3, but is any S3-compatible storage (e.g. MinIO)"""
+
+    def is_transient_error(self, error: Exception) -> bool:
+        # A connection error retries; an error response retries as botocore's
+        # retry checks decide.
+        if not isinstance(error, ClientError):
+            return isinstance(error, BotoCoreError)
+        context = RetryContext(attempt_number=1, parsed_response=error.response)
+        return (
+            error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+            in TRANSIENT_STORAGE_STATUS
+            or TransientRetryableChecker().is_retryable(context)
+            or ThrottledRetryableChecker().is_retryable(context)
+        )
 
     def __init__(
         self,

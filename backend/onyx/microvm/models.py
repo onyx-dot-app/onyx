@@ -132,6 +132,8 @@ class NodeInfo(BaseModel):
     # The agent's VM cap (--max-vms; 0 is no cap) and what it counts.
     max_vms: int = 0
     vm_slots_used: int = 0
+    # The node refuses new VMs (manual drain flag or a drain taint).
+    draining: bool = False
 
     def template(self, version: str) -> TemplateInfo | None:
         """The template with this exact version, else the newest compatible

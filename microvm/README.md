@@ -141,7 +141,10 @@ a URL (`internal/server/saves.go`, `internal/transfer`).
   extracts into a staging directory and replaces the session's capture roots only after the size and
   SHA-256 match. A mismatch is `ARCHIVE_MISMATCH` (agent) or `ARCHIVE_INVALID` (daemon); the session
   does not change.
-- URLs and redirect targets must be `https`, unless `--transfer-allow-http` (a test object store).
+- URLs and redirect targets must be `https`, unless `--transfer-allow-http`. The flag then allows
+  `http` to any host: the agent does not check the destination. Use it only for an object store
+  inside the cluster or a test store. The chart sets it only for the bundled in-cluster object
+  store (cluster-internal HTTP).
   `--transfer-timeout` (default 10 min) bounds one upload or one single-GET restore. A ranged restore
   uses one timeout for the whole download (all parts, queued parts included), so set it for the
   longest expected restore. Errors and logs show the URL without its query string.
@@ -170,7 +173,8 @@ process. VMs and their programs keep running; callers retry.
    Each VM gets its own cgroup (the scope) in the host slice, outside the agent's container cgroup, so it
    survives an agent restart. The scope has `memory.max` = guest memory + `--vm-mem-overhead-mib` and
    `cpu.max` = one CPU per vCPU (see Memory, admission and drain). The jailer gives it its own UID/GID (from `--uid-base`, `--uid-count`), a
-   chroot and a PID namespace.
+   chroot and a PID namespace. The agent starts the command in a new, empty network namespace (loopback
+   only), so Firecracker cannot reach the pod network. The VM has no NIC; vsock uses Unix sockets.
 4. The agent checks the PID (`comm` is `firecracker`, the cgroup is the VM scope), restores the snapshot
    and resumes the VM.
 
@@ -337,9 +341,30 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   not kill on doubt. If the host cgroup tree cannot be read, the agent does not start. An `nsenter
   --cgroup` wrapper is not needed. The agent does not `setns` itself: a cgroup namespace switch applies
   to one thread only, and Go runs on many threads.
-- The data dir must be on XFS with reflink (the agent checks this at start-up). It must be mounted at
-  the same path in the container and on the host, because the jailer runs in the host mount namespace.
+- The data dir needs reflink copies. It must be mounted at the same path in the container and on the
+  host, because the jailer runs in the host mount namespace (the agent compares the two at start-up).
   The path must be short enough for Unix socket paths (the agent checks this too).
+- Loop store (`--loop-store`, default `auto`, or `$CRAFT_FC_LOOP_STORE`): if the data dir has no
+  reflink (ext4 roots on GKE COS and AKS Ubuntu), the agent makes a sparse image
+  `<data-dir>/.craft-fc-store.img` with `mkfs.xfs -m reflink=1`, attaches it to a loop device (direct
+  I/O, auto-clear) and mounts it at the data dir, in the host mount namespace and in its own one (the
+  default hostPath propagation does not show a later host mount in the container). All paths
+  (journal, templates, jail) stay the same. After an agent restart the mount is still there (if the
+  host lost it, the agent mounts it again). After a node reboot the agent attaches and mounts the same
+  image again; it never formats an existing image. A root drive that the init container put in
+  `--rootfs-dir` on the node disk is copied into the store through a private mount before the data
+  dir mount (the node copy stays, so the init container finds it current after a reboot).
+  - Size of a new image: `--loop-store-gib` (or `$CRAFT_FC_LOOP_STORE_GIB`); 0 (default) is the free
+    space less 1/5 of the disk, 20 GiB to 4 TiB. An existing image keeps its size.
+  - The image is sparse. At start and every hour the agent trims the store (FITRIM), so deleted files give their
+    blocks back to the node disk. The free space for `--min-free-disk-gib` and the capture spool is
+    the smaller of the store's free space and the node disk's free space above 10% of its size (the
+    kubelet hard eviction threshold).
+  - Needs `/dev/loop-control` (loop driver), XFS in the node kernel, `mount` on the host, and
+    `mkfs.xfs` (xfsprogs) in the agent image. Without one of them the agent does not start and names
+    the missing part.
+  - An XFS disk with reflink mounted at the data dir needs no store and stays the faster option (one
+    file system layer less). `--loop-store=off` refuses to start without reflink.
 - `--artifacts-dir` has `firecracker` and `jailer` v1.17.0 and the guest kernel `vmlinux` (the
   `onyxdotapp/craft-fc-artifacts` layout). The agent checks the binaries' SHA256 against `internal/binaries`
   and copies them to `<data-dir>/bin/<version>/`.
@@ -360,7 +385,7 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
 
   | Metric | Type | Labels |
   |---|---|---|
-  | `craft_fc_host_agent_create_duration_seconds` | histogram | `result`: created, existing, refused, failed |
+  | `craft_fc_host_agent_create_duration_seconds` | histogram | `result`: created, existing, refused, failed, canceled (caller cancel or deadline) |
   | `craft_fc_host_agent_admissions_total` | counter | `result`: admitted, refused (stopped before admission passed), failed (the start failed after admission); `reason`: ErrorReason |
   | `craft_fc_host_agent_vms` | gauge | `state`: starting, running, exited |
   | `craft_fc_host_agent_vm_memory_allocated_bytes`, `_vm_vcpus_allocated` | gauge | |
@@ -588,7 +613,8 @@ returns `max_vms` and `vm_slots_used` (what the cap counts), and placement skips
 
 **Drain.** The node drains while the manual flag is set (`SetDrain`, kept in `<data-dir>/drain.json`
 across restarts) or while its Node has a taint from `--drain-taints` (default
-`node.kubernetes.io/unschedulable`, which `kubectl cordon` and `kubectl drain` set). With
+`node.kubernetes.io/unschedulable`, which `kubectl cordon` and `kubectl drain` set, and
+`ToBeDeletedByClusterAutoscaler`). With
 `--watch-node-drain`, the agent reads its own Node (`--node-id`, from `$NODE_NAME`) every
 `--drain-poll-interval` (default 10 s) with the pod's ServiceAccount (RBAC: `get` on nodes). The first read
 runs before the API serves. If a read fails, the agent keeps the last taints and shows the error in
@@ -600,14 +626,30 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
   (`FAILED_PRECONDITION`); create the VM on another node. A repeat Create of a VM that runs here still
   returns it. It also refuses a template build that must boot a template VM (`BuildTemplate` and the
   start-up build) with `NODE_DRAINING`; a template that is already on the node is still returned.
-- Running VMs keep running. Automatic evacuation by the api_server is planned, not built.
-  Until then, save the data you need, `Stop` each VM from `List`, and wait for `NodeInfo.drain.state`
-  `DRAINED` before you take the node down.
+- Running VMs keep running. The api_server saves the session of each VM on a draining node, then
+  stops the VM. Wait for `NodeInfo.drain.state` `DRAINED` before you take the node down.
 - `NodeInfo.drain`: `state` (`ACTIVE`, `DRAINING` while VMs are starting or running, while the agent
   keeps Firecracker processes in doubt or runs a template build VM, and while no process scan worked;
   `DRAINED` when none of these is left), `manual`, `taints`, `since`, `watch_error`. While draining,
   `NodeInfo` scans the processes again, so a doubt whose process exited clears. Clearing the manual flag does not end a drain that a
   taint causes.
+
+**Cluster autoscaler.** VMs are not pods, so the cluster autoscaler (GKE, AKS, the EKS
+cluster-autoscaler) sees a KVM node with VMs as empty and can remove it. With `--scale-down-guard`,
+the agent sets the Node annotation `cluster-autoscaler.kubernetes.io/scale-down-disabled=true` while
+the node runs VMs (starting, running, template builds and processes in doubt) and while no process
+scan has worked since the agent started; with processes in doubt, each check scans the processes
+again, so a doubt whose process exited stops holding the node. It checks when a Create
+or a template build takes a slot, and every 10 s from the first check after recovery; while VMs run,
+each check reads the Node and sets the annotation again if someone removed it. It removes the
+annotation when the node has had no VMs for `--scale-down-guard-grace` (default 10 m; after an agent
+restart the grace starts again). It patches only its own Node (RBAC: `get` and `patch` on nodes) and
+marks its value with `onyx.app/craft-fc-scale-down-guard=true`. It leaves a `true` value without this
+mark, and never removes it; it replaces any other value without the mark while VMs run. A failed
+patch is logged once per failure streak and tried again; it never blocks VM work. The default
+`--drain-taints` also has `ToBeDeletedByClusterAutoscaler`, the taint the autoscaler sets (without a
+cordon) before it removes a node. This is a second guard only: the autoscaler removes a node with only
+DaemonSet pods seconds after the taint. Karpenter does not read this annotation.
 
 ### Managed drive
 
@@ -728,8 +770,8 @@ go mod tidy
 
 - Unit tests: `go test -race ./...`. They use a fake VMM and run in CI.
 - KVM tests: build tag `kvm`, on a KVM host. The older tests use the kit rootfs (`onyxdotapp/sandbox`
-  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and guest
-  kernel 6.18.25. The egress and pass-through tests use the proxy harness in
+  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and the
+  pinned guest kernel. The egress and pass-through tests use the proxy harness in
   `internal/kvmtest/testdata/harness`.
 - `check-kvm.sh smoke|full ARTIFACTS_DIR SOURCE_IMAGE` (as root) prepares a host and runs them: the data
   dir, the root drives, the agent image, then one test at a time. CI

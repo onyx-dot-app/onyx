@@ -56,6 +56,10 @@ function existingSkill(
     enabled: true,
     can_toggle: true,
     installation_policy: "AVAILABLE",
+    default_installation_policy: "AVAILABLE",
+    can_delete: true,
+    group_summaries: [],
+    required_for_user: false,
     author_user_id: "author-id",
     author_email: "author@example.com",
     owner: { id: "author-id", email: "author@example.com" },
@@ -776,6 +780,7 @@ describe("SkillEditorPage", () => {
     );
     expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.buildExternalAppsAdmin);
     expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.userSkills);
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
 
   it("returns app-launched skill creation to that app on Cancel", async () => {

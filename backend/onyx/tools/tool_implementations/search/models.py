@@ -1,7 +1,8 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchCycle, TimeFilter
+from onyx.tools.tool_implementations.search.constants import MAX_QUERIES_PER_CALL
 
 
 class SearchContext(BaseModel):
@@ -40,4 +41,13 @@ class QueryExpansionAndScope(BaseModel):
 
 
 class SearchArguments(BaseModel):
-    queries: list[str]
+    queries: list[str] = Field(
+        description=(
+            f"List of up to {MAX_QUERIES_PER_CALL} search queries to "
+            "execute, typically a single query. Later queries are "
+            "ignored. "
+            "Query expansion and filter extraction steps will be run "
+            "automatically downstream, do not include time or source type "
+            "scoping details in your query."
+        )
+    )

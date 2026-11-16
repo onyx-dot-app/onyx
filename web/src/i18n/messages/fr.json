@@ -5201,10 +5201,20 @@
           "description": "Seuls les administrateurs publient des compétences pour l'organisation."
         },
         "saveSuccess": {
-          "message": "Paramètre de publication enregistré."
+          "message": "Paramètre enregistré."
         },
         "saveError": {
-          "message": "Impossible d'enregistrer le paramètre de publication."
+          "message": "Échec de l'enregistrement du paramètre."
+        },
+        "defaultAccess": {
+          "title": "Accès par défaut",
+          "description": "S'applique à chaque skill publié sans réglage propre, y compris ceux publiés plus tard.",
+          "loadFailed": "Impossible de charger l'accès par défaut.",
+          "retry": "Réessayer"
+        },
+        "sharing": {
+          "title": "Partage",
+          "description": "Les membres peuvent partager des skills avec des personnes et des groupes. Les gestionnaires de skills peuvent toujours partager."
         }
       }
     },
@@ -12558,9 +12568,6 @@
         "content": {
           "ariaLabel": "Sélecteur de compétences"
         },
-        "empty": {
-          "text": "Aucune compétence correspondante"
-        },
         "mcpServersGroup": {
           "label": "Serveurs MCP"
         },
@@ -12597,6 +12604,19 @@
         "expandButton": {
           "label": "Développer dans la barre de saisie",
           "tooltip": "Remplacer cette vignette par son texte complet en ligne"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Retirer {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Texte collé : {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Retirer le texte collé"
+          }
         }
       },
       "plusMenuButton": {
@@ -12644,6 +12664,9 @@
         "alreadyAccepted": "Ce message a déjà été accepté et n’est plus en attente.",
         "interruptFailed": "Impossible d’envoyer ce message maintenant. Il reste en attente.",
         "stopSubagentsFailed": "Impossible d'arrêter les sous-agents."
+      },
+      "pendingToolApproval": {
+        "toast": "Approuvez ou refusez d'abord les appels d'outils en attente."
       }
     },
     "mcpApiKey": {
@@ -12892,6 +12915,11 @@
           "text": "Génération d'images arrêtée"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Copier le tableau"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Question"
@@ -13086,6 +13114,9 @@
           },
           "working": {
             "label": "En cours"
+          },
+          "waitingForApproval": {
+            "label": "En attente de votre approbation"
           }
         },
         "internalSearch": {
@@ -13222,6 +13253,9 @@
             "status": "Recherche sur le web"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} veut exécuter {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14440,6 +14474,54 @@
         "decision": "Décision",
         "vision": "Vision"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "Aucune donnée."
+      },
+      "showLess": {
+        "button": "Afficher moins"
+      },
+      "showMore": {
+        "button": "Afficher plus"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "Approuver pour ce chat",
+        "tooltip": "Approuver maintenant et exécuter cet outil sans redemander pendant le reste de ce chat"
+      },
+      "approveOnce": {
+        "ariaLabel": "Approuver cette action une fois",
+        "button": "Approuver une fois"
+      },
+      "approveSession": {
+        "button": "Approuver pour la session",
+        "tooltip": "Approuver les actions correspondantes pour cette session"
+      },
+      "deadline": "Approuver avant {time}",
+      "header": {
+        "required": "Approbation demandée : {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
+        "singleAction": "{action} dans {app}"
+      },
+      "reject": {
+        "ariaLabel": "Rejeter cette action",
+        "button": "Rejeter"
+      },
+      "record": {
+        "approved": "Approuvé : {headline}",
+        "closed": "N'attend plus : {headline}",
+        "disabled": "Désactivé : {headline}",
+        "expired": "Délai dépassé : {headline}",
+        "rejected": "Non approuvé : {headline}",
+        "approvedForChat": "Approuvé pour ce chat : {headline}",
+        "approvedForSession": "Approuvé pour cette session : {headline}"
+      },
+      "submitError": "Impossible d'envoyer votre décision. Réessayez.",
+      "actionWithDescription": "{action} : {description}"
     }
   },
   "craft": {
@@ -14452,50 +14534,6 @@
       },
       "switch": {
         "ariaLabel": "Changer d'agent"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Approuver cette action une fois",
-        "button": "Approuver une fois"
-      },
-      "approveSession": {
-        "button": "Approuver pour la session",
-        "tooltip": "Approuver les actions correspondantes pour cette session"
-      },
-      "details": {
-        "hideAriaLabel": "Masquer les détails",
-        "showAriaLabel": "Afficher les détails"
-      },
-      "header": {
-        "required": "Approbation requise : {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
-        "singleAction": "{action} dans {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "Aucune donnée."
-        },
-        "showLess": {
-          "button": "Afficher moins"
-        },
-        "showMore": {
-          "button": "Afficher plus"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Rejeter cette action",
-        "button": "Rejeter"
-      },
-      "status": {
-        "approved": "Approuvé",
-        "rejected": "Rejeté",
-        "expired": "Expirée"
-      },
-      "submit": {
-        "errorFallback": "Échec de l'envoi de la décision"
       }
     },
     "apps": {
@@ -14633,7 +14671,7 @@
         "duplicateSkillName": "L'app « {appName} » a déjà une compétence associée nommée « {skillName} ». Importez une compétence avec un autre nom."
       },
       "mcpPolicy": {
-        "description": "Configurez ce que l'agent Craft peut faire avec les outils de ce serveur MCP.",
+        "description": "Choisissez les outils qui s'exécutent automatiquement, demandent une approbation ou sont désactivés dans le chat et dans Craft.",
         "emptyPolicies": "Aucun outil activé sur ce serveur. Activez d'abord les outils sur la page des actions MCP.",
         "saveButton": "Enregistrer",
         "title": "Modifier {name}"
@@ -15830,7 +15868,7 @@
     "actionPolicies": {
       "appTitle": "Paramètres d’approbation de {name}",
       "title": "Paramètres d’approbation",
-      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft et les nouvelles tâches ; les tâches existantes conservent leurs propres paramètres.",
+      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft, les nouvelles tâches et les appels d’outils MCP dans le chat ; les tâches existantes conservent leurs propres paramètres.",
       "taskDescription": "Choisissez les plugins de cette tâche et les actions à exécuter automatiquement. Les modifications concernent uniquement cette tâche.",
       "newTaskDescription": "Activez un plugin pour partir de vos paramètres actuels des actions.",
       "workspace_disabled": "Désactivée pour cet espace de travail",
@@ -15846,9 +15884,6 @@
       "saveError": "Impossible d’enregistrer les paramètres d’approbation.",
       "emptyActions": "Aucune action connue. Les actions inconnues nécessitent une approbation.",
       "emptyApps": "Aucune application disponible.",
-      "expired": "Le délai d’approbation a expiré. L’action n’a pas été exécutée.",
-      "rejected": "Demande rejetée. Cette demande n’a pas été exécutée.",
-      "deadline": "Approuver avant {time}",
       "agentPermissionRequired": "Cette exécution s’est arrêtée car une action nécessitait une approbation. Vérifiez les autorisations, puis relancez la tâche.",
       "enableForTask": "Activer pour cette tâche",
       "enableAppForTask": "Activer {app} pour cette tâche",
@@ -17435,12 +17470,6 @@
         },
         "installation": {
           "title": "Installation",
-          "available": "Disponible à l’installation",
-          "default": "Installé par défaut",
-          "required": "Obligatoire",
-          "availableDescription": "Les utilisateurs peuvent installer ou désinstaller à tout moment.",
-          "defaultDescription": "Installé automatiquement. Les utilisateurs peuvent désactiver ou désinstaller à tout moment.",
-          "requiredDescription": "Installé automatiquement. Les utilisateurs ne peuvent ni désactiver ni désinstaller.",
           "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès."
         },
         "description": "Choisissez qui peut utiliser cette compétence et comment elle est installée.",
@@ -17464,6 +17493,19 @@
         "publishOff": {
           "title": "La publication est désactivée",
           "description": "Un administrateur a désactivé la publication dans l'organisation. Demandez à un administrateur de publier cette compétence."
+        },
+        "sharingOff": {
+          "title": "Le partage est désactivé",
+          "description": "Un administrateur a désactivé le partage avec des personnes et des groupes. Demandez à un gestionnaire de skills de partager ce skill."
+        },
+        "groupAccess": {
+          "title": "Accès des groupes",
+          "description": "Par défaut, chaque groupe utilise le paramètre de l'organisation. Un paramètre de groupe le remplace pour les membres du groupe, même s'il est plus strict.",
+          "add": "Ajouter un groupe",
+          "select": "Paramètre pour {name}",
+          "remove": "Retirer {name}",
+          "shared": "Partagé avec ce groupe",
+          "settingOnly": "Paramètre de groupe uniquement"
         }
       },
       "placeholders": {
@@ -17548,7 +17590,8 @@
       "empty": {
         "noMatches": {
           "description": "Essayez une autre recherche.",
-          "title": "Aucune compétence correspondante"
+          "title": "Aucune compétence correspondante",
+          "groupDescription": "Aucune compétence de ce groupe ne correspond. Essayez un autre groupe ou une autre recherche."
         },
         "noSkills": {
           "title": "Aucune compétence personnalisée pour le moment",
@@ -17706,6 +17749,37 @@
         "firstPublish": "v{number} · Première publication",
         "update": "v{number} · Mise à jour depuis v{published}"
       }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Obligatoire",
+        "description": "Installé et toujours actif. Les membres ne peuvent pas le désactiver."
+      },
+      "DEFAULT": {
+        "label": "Installé par défaut",
+        "description": "Installé pour chaque membre. Les membres peuvent le désactiver."
+      },
+      "AVAILABLE": {
+        "label": "Disponible à l’installation",
+        "description": "Les membres le trouvent et l'activent s'ils le souhaitent."
+      },
+      "NOT_AVAILABLE": {
+        "label": "Non disponible",
+        "description": "Masqué. Les membres ne peuvent ni le trouver ni l'activer."
+      },
+      "inherit": {
+        "label": "{scope, select, group {Paramètre de l'organisation} other {Accès par défaut}}",
+        "labelWithPolicy": "{scope, select, group {Paramètre de l'organisation ({policy})} other {Accès par défaut ({policy})}}",
+        "description": "{scope, select, group {Aucun paramètre de groupe. Le groupe utilise le paramètre de l'organisation.} other {Aucun paramètre propre. La compétence utilise l'accès par défaut, même après une modification par un administrateur.}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Filtrer par groupe",
+        "all": "Tous les groupes"
+      },
+      "card": "Groupes : {groups}",
+      "entry": "{name} : {policy}"
     }
   },
   "opensearchHealth": {

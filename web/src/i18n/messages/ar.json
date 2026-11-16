@@ -5201,10 +5201,20 @@
           "description": "المسؤولون فقط ينشرون المهارات في المؤسسة."
         },
         "saveSuccess": {
-          "message": "تم حفظ إعداد النشر."
+          "message": "تم حفظ الإعداد."
         },
         "saveError": {
-          "message": "تعذّر حفظ إعداد النشر."
+          "message": "تعذر حفظ الإعداد."
+        },
+        "defaultAccess": {
+          "title": "الوصول الافتراضي",
+          "description": "ينطبق على كل مهارة منشورة ليس لها إعداد خاص، بما في ذلك المهارات المنشورة لاحقًا.",
+          "loadFailed": "تعذّر تحميل الوصول الافتراضي.",
+          "retry": "إعادة المحاولة"
+        },
+        "sharing": {
+          "title": "المشاركة",
+          "description": "يمكن للأعضاء مشاركة المهارات مع الأشخاص والمجموعات. يمكن لمديري المهارات المشاركة دائمًا."
         }
       }
     },
@@ -12558,9 +12568,6 @@
         "content": {
           "ariaLabel": "منتقي المهارات"
         },
-        "empty": {
-          "text": "لا توجد مهارات مطابقة"
-        },
         "mcpServersGroup": {
           "label": "خوادم MCP"
         },
@@ -12597,6 +12604,19 @@
         "expandButton": {
           "label": "توسيع في شريط الإدخال",
           "tooltip": "استبدال هذه البطاقة بنصها الكامل مباشرة"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "إزالة {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "نص ملصق: {preview}، {meta}",
+          "removeButton": {
+            "ariaLabel": "إزالة النص الملصق"
+          }
         }
       },
       "plusMenuButton": {
@@ -12644,6 +12664,9 @@
         "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولم تعد قيد الانتظار.",
         "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار.",
         "stopSubagentsFailed": "تعذّر إيقاف الوكلاء الفرعيين."
+      },
+      "pendingToolApproval": {
+        "toast": "وافق على استدعاءات الأدوات المعلقة أو ارفضها أولاً."
       }
     },
     "mcpApiKey": {
@@ -12892,6 +12915,11 @@
           "text": "تم إيقاف توليد الصورة"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "نسخ الجدول"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "سؤال"
@@ -13086,6 +13114,9 @@
           },
           "working": {
             "label": "قيد العمل"
+          },
+          "waitingForApproval": {
+            "label": "في انتظار موافقتك"
           }
         },
         "internalSearch": {
@@ -13222,6 +13253,9 @@
             "status": "جارٍ البحث في الويب"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "يريد {agent} تشغيل {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14440,6 +14474,54 @@
         "decision": "قرار",
         "vision": "رؤية"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "لا توجد بيانات."
+      },
+      "showLess": {
+        "button": "عرض أقل"
+      },
+      "showMore": {
+        "button": "عرض المزيد"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "موافقة لهذه المحادثة",
+        "tooltip": "وافق الآن وشغّل هذه الأداة دون السؤال مرة أخرى لبقية هذه المحادثة"
+      },
+      "approveOnce": {
+        "ariaLabel": "الموافقة على هذا الإجراء مرة واحدة",
+        "button": "الموافقة مرة واحدة"
+      },
+      "approveSession": {
+        "button": "الموافقة للجلسة",
+        "tooltip": "الموافقة على الإجراءات المطابقة لهذه الجلسة"
+      },
+      "deadline": "الموافقة قبل {time}",
+      "header": {
+        "required": "تم طلب الموافقة: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# إجراء} other {# إجراءات}} في {app}",
+        "singleAction": "{action} في {app}"
+      },
+      "reject": {
+        "ariaLabel": "رفض هذا الإجراء",
+        "button": "رفض"
+      },
+      "record": {
+        "approved": "تمت الموافقة: {headline}",
+        "closed": "لم يعد في الانتظار: {headline}",
+        "disabled": "معطّل: {headline}",
+        "expired": "انتهت المهلة: {headline}",
+        "rejected": "لم تتم الموافقة: {headline}",
+        "approvedForChat": "تمت الموافقة لهذه المحادثة: {headline}",
+        "approvedForSession": "تمت الموافقة لهذه الجلسة: {headline}"
+      },
+      "submitError": "تعذر إرسال قرارك. حاول مرة أخرى.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14452,50 +14534,6 @@
       },
       "switch": {
         "ariaLabel": "تبديل الوكيل"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "الموافقة على هذا الإجراء مرة واحدة",
-        "button": "الموافقة مرة واحدة"
-      },
-      "approveSession": {
-        "button": "الموافقة للجلسة",
-        "tooltip": "الموافقة على الإجراءات المطابقة لهذه الجلسة"
-      },
-      "details": {
-        "hideAriaLabel": "إخفاء التفاصيل",
-        "showAriaLabel": "عرض التفاصيل"
-      },
-      "header": {
-        "required": "الموافقة مطلوبة: {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# إجراء} other {# إجراءات}} في {app}",
-        "singleAction": "{action} في {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "لا توجد بيانات."
-        },
-        "showLess": {
-          "button": "عرض أقل"
-        },
-        "showMore": {
-          "button": "عرض المزيد"
-        }
-      },
-      "reject": {
-        "ariaLabel": "رفض هذا الإجراء",
-        "button": "رفض"
-      },
-      "status": {
-        "approved": "تمت الموافقة",
-        "rejected": "مرفوض",
-        "expired": "انتهت الصلاحية"
-      },
-      "submit": {
-        "errorFallback": "فشل إرسال القرار"
       }
     },
     "apps": {
@@ -14633,7 +14671,7 @@
         "duplicateSkillName": "التطبيق «{appName}» لديه بالفعل مهارة مرتبطة باسم «{skillName}». ارفع مهارة باسم مختلف."
       },
       "mcpPolicy": {
-        "description": "قم بإعداد ما يمكن لوكيل Craft فعله بأدوات خادم MCP هذا.",
+        "description": "اختر الأدوات التي تعمل تلقائيًا أو تطلب الموافقة أو تكون معطلة في المحادثة وفي Craft.",
         "emptyPolicies": "لا توجد أدوات مفعّلة على هذا الخادم. فعّل الأدوات أولًا من صفحة إجراءات MCP.",
         "saveButton": "حفظ",
         "title": "تعديل {name}"
@@ -15830,7 +15868,7 @@
     "actionPolicies": {
       "appTitle": "إعدادات الموافقة لـ {name}",
       "title": "إعدادات الموافقة",
-      "personalDescription": "تحدد هذه الإعدادات ما إذا كانت الإجراءات تُنفّذ تلقائيًا أو تتطلب موافقة في محادثات Craft والمهام الجديدة؛ وتحتفظ المهام الحالية بإعداداتها الخاصة.",
+      "personalDescription": "تحدد هذه الإعدادات ما إذا كانت الإجراءات تُنفّذ تلقائيًا أو تتطلب موافقة في محادثات Craft والمهام الجديدة واستدعاءات أدوات MCP في الدردشة؛ وتحتفظ المهام الحالية بإعداداتها الخاصة.",
       "taskDescription": "اختر الإضافات التي يمكن للمهمة استخدامها، ثم حدّد الإجراءات التي تعمل تلقائيًا. تنطبق التغييرات على هذه المهمة فقط.",
       "newTaskDescription": "فعّل إضافة للبدء بإعدادات الإجراءات الحالية.",
       "workspace_disabled": "معطل لمساحة العمل",
@@ -15846,9 +15884,6 @@
       "saveError": "تعذّر حفظ إعدادات الموافقة.",
       "emptyActions": "لا توجد إجراءات معروفة. تتطلب الإجراءات غير المعروفة الموافقة.",
       "emptyApps": "لا توجد تطبيقات متاحة.",
-      "expired": "انتهت مهلة الموافقة. لم يتم تنفيذ الإجراء.",
-      "rejected": "رُفض الطلب. لم يُنفذ هذا الطلب.",
-      "deadline": "الموافقة قبل {time}",
       "agentPermissionRequired": "توقف هذا التشغيل لأن إجراءً احتاج إلى موافقة. راجع الأذونات ثم شغّل المهمة مجددًا.",
       "enableForTask": "تفعيل لهذه المهمة",
       "enableAppForTask": "تفعيل {app} لهذه المهمة",
@@ -17435,12 +17470,6 @@
         },
         "installation": {
           "title": "التثبيت",
-          "available": "متاح للتثبيت",
-          "default": "مثبت افتراضيًا",
-          "required": "إلزامي",
-          "availableDescription": "يمكن للمستخدمين التثبيت أو إلغاء التثبيت في أي وقت.",
-          "defaultDescription": "يتم التثبيت تلقائيًا. يمكن للمستخدمين التعطيل أو إلغاء التثبيت في أي وقت.",
-          "requiredDescription": "يتم التثبيت تلقائيًا. لا يمكن للمستخدمين التعطيل أو إلغاء التثبيت.",
           "description": "اختر كيفية تثبيت هذه المهارة لكل من لديه حق الوصول."
         },
         "description": "اختر من يمكنه استخدام هذه المهارة وكيفية تثبيتها.",
@@ -17464,6 +17493,19 @@
         "publishOff": {
           "title": "النشر متوقف",
           "description": "أوقف مسؤول النشر إلى المؤسسة. اطلب من مسؤول نشر هذه المهارة."
+        },
+        "sharingOff": {
+          "title": "المشاركة متوقفة",
+          "description": "أوقف أحد المسؤولين مشاركة المهارات مع الأشخاص والمجموعات. اطلب من مدير المهارات مشاركة هذه المهارة."
+        },
+        "groupAccess": {
+          "title": "وصول المجموعات",
+          "description": "بشكل افتراضي، تستخدم كل مجموعة إعداد المؤسسة. يحل إعداد المجموعة محله لأعضاء المجموعة، حتى عندما يكون أكثر صرامة.",
+          "add": "إضافة مجموعة",
+          "select": "إعداد {name}",
+          "remove": "إزالة {name}",
+          "shared": "تمت المشاركة مع هذه المجموعة",
+          "settingOnly": "إعداد المجموعة فقط"
         }
       },
       "placeholders": {
@@ -17548,7 +17590,8 @@
       "empty": {
         "noMatches": {
           "description": "جرّب بحثًا مختلفًا.",
-          "title": "لا توجد مهارات مطابقة"
+          "title": "لا توجد مهارات مطابقة",
+          "groupDescription": "لا توجد مهارات مطابقة في هذه المجموعة. جرّب مجموعة أو بحثًا مختلفًا."
         },
         "noSkills": {
           "title": "لا توجد مهارات مخصصة بعد",
@@ -17706,6 +17749,37 @@
         "firstPublish": "v{number} · أول نشر",
         "update": "v{number} · تحديث من v{published}"
       }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "مطلوبة",
+        "description": "مثبتة ومفعلة دائمًا. لا يمكن للأعضاء إيقافها."
+      },
+      "DEFAULT": {
+        "label": "مثبتة افتراضيًا",
+        "description": "مثبتة لكل عضو. يمكن للأعضاء إيقافها."
+      },
+      "AVAILABLE": {
+        "label": "متاح للتثبيت",
+        "description": "يجدها الأعضاء ويفعّلونها إذا أرادوا."
+      },
+      "NOT_AVAILABLE": {
+        "label": "غير متاحة",
+        "description": "مخفية. لا يمكن للأعضاء العثور عليها أو تفعيلها."
+      },
+      "inherit": {
+        "label": "{scope, select, group {إعداد المؤسسة} other {الوصول الافتراضي}}",
+        "labelWithPolicy": "{scope, select, group {إعداد المؤسسة ({policy})} other {الوصول الافتراضي ({policy})}}",
+        "description": "{scope, select, group {لا يوجد إعداد للمجموعة. تستخدم المجموعة إعداد المؤسسة.} other {لا يوجد إعداد خاص. تستخدم المهارة الوصول الافتراضي، حتى بعد أن يغيره المسؤول.}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "التصفية حسب المجموعة",
+        "all": "كل المجموعات"
+      },
+      "card": "المجموعات: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

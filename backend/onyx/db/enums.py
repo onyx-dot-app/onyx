@@ -511,6 +511,8 @@ class ApprovalDecidedVia(str, PyEnum):
     USER = "USER"
     PRE_APPROVAL = "PRE_APPROVAL"
     SESSION_GRANT = "SESSION_GRANT"
+    # The action policy blocked the action when the user approved it.
+    POLICY = "POLICY"
 
 
 class ScheduledTaskStatus(str, PyEnum):
@@ -1039,7 +1041,7 @@ class PluginPublishingPolicy(str, PyEnum):
 
 class PluginInstallationPolicy(str, PyEnum):
     """Install setting of a plugin, a group override or a marketplace default.
-    Writes refuse NOT_AVAILABLE until group install settings ship."""
+    A marketplace default cannot be REQUIRED."""
 
     REQUIRED = "REQUIRED"
     DEFAULT = "DEFAULT"

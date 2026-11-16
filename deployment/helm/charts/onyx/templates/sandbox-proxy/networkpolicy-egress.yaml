@@ -11,6 +11,10 @@
 # cutting off the proxy's own datastores. 169.254.0.0/16 (link-local) is outside the VPC range, so
 # it's the one block that's both safe and high-value. DNS, datastores, api-server, and the public
 # internet remain reachable via the 0.0.0.0/0 allow.
+#
+# Some CNIs (GKE Dataplane V2 / Cilium) do not match pod IPs with ipBlock. The selector rules
+# below allow DNS (kube-dns and NodeLocal DNSCache pods) and the release-namespace pods
+# (api-server, in-cluster datastores) there. Where ipBlock matches pod IPs, they add nothing.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -37,6 +41,25 @@ spec:
             cidr: 0.0.0.0/0
             except:
               - 169.254.0.0/16 # link-local incl. cloud metadata (IMDS) — SSRF block
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector: {}
     {{- if .Values.sandboxProxy.egressAllowIPv6 }}
     - to:
         - ipBlock:

@@ -357,9 +357,12 @@ build their own clients.
 
 Tool authors opt into enforcement with `ToolDefinition.strict`. They supply
 closed schemas with all properties required and nullable defaulted arguments.
-File reader and image generation resolve null defaults in their argument models;
-the LLM response parser does not change nulls or remove arguments. MCP and custom
-OpenAPI tools do not opt in, and their schemas remain unchanged.
+`tools/interface.py:tool_definition_from_arguments` with `strict=True` makes
+such a schema from the tool's argument model, and `parse_tool_arguments` reads
+null for a defaulted argument as its default when the argument's type does not
+accept null. The LLM response parser does not
+change nulls or remove arguments. MCP and custom OpenAPI tools do not opt in,
+and their schemas remain unchanged.
 
 The shared invoke/stream paths enable strict flags only for direct OpenAI requests
 to catalogued, non-fine-tuned models with function-calling support. The adapter

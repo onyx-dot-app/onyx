@@ -93,6 +93,13 @@ Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` conv
 `craft-runtime` tag with no egress CA and publishes
 `onyxdotapp/craft-fc-artifacts:rootfs-<version>`. The host agent DaemonSet copies
 it into `<dataDir>/rootfs` with an init container (`craft.hostAgent.rootfs`).
+The chart takes `<version>` from `craft.hostAgent.rootfs.version` (default: the
+`global.version` release tag) and sets `SANDBOX_FC_TEMPLATE` to it, so the drive
+and the template tag move together (`onyx.craftFcRootfsVersion`). An explicit
+`craft.hostAgent.rootfs.image.tag` needs an explicit `configMap.SANDBOX_FC_TEMPLATE`
+(the chart fails without it); the operator keeps those two aligned. Without
+`existingSecret` values, the chart makes the agent mTLS CA and certificates and
+keeps them on upgrade with `lookup` (`deployment/helm/charts/onyx/templates/craft-fc-host-agent.yaml`).
 The agent reads the sandbox-proxy CA ConfigMap at each Create and sends it with
 `SetKey`; the guest daemon installs it at `Init`. So one drive and one template
 key serve every deployment CA.
@@ -204,8 +211,9 @@ library payload with the same code
 must close before the push. `push_managed_content` runs before the sandbox is
 reported `RUNNING`, because opencode scans the skills directory once per
 instance: a turn that starts during the push misses managed skills for good. It
-logs a failure and never raises. `skills_hash` is written
-only after a successful push, so the next session create or reload retries.
+logs a failure and never raises. `skills_hash` and `skill_omissions` (the
+plugins the run-time skill limit left out, [[skills]]) are written only after a
+successful push, so the next session create or reload retries.
 User library blobs use `FileOrigin.USER_FILE` but have no `UserFile` rows, so
 the chat user-file lifecycle does not apply to them.
 
@@ -327,6 +335,30 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   VM if it lost the lock. A session with no directory keeps its last save.
   A configuration error in the eviction
   policy turns idle eviction off; it never fails the node report.
+  On a draining node (NodeInfo drain state, read by each report) every VM
+  counts as idle, so it is saved and stopped once not busy. Each call
+  records "wanted" for the sandbox; a stop's save gives way to a call
+  within the placement lock wait (capture and upload are cancelled). The
+  end of a turn saves that session in the background
+  (`SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS`, default 300, 0 = off). One
+  save per session runs at a time (non-blocking session lock; a stop that
+  finds it held keeps the VM).
+- Purge (`.../firecracker/purge.py`, delete hooks, all after the DB
+  commit): a Craft session delete
+  (`backend/onyx/server/features/build/session/api.py:delete_session`)
+  deletes that session's save, its directory on the running VM and its
+  exec records; its artifacts stay. A user delete (`delete_user_from_db`
+  in a background thread, `UserManager.delete`) and the last-admin tenant
+  delete stop the VM and delete every save, artifact and record of the
+  sandbox. At the end of each chat retention chain
+  (`backend/ee/onyx/background/celery/tasks/ttl_management/tasks.py`),
+  `purge_expired_harness_sessions_task` runs on the `sandbox` queue (the
+  heavy worker has the host agent client certificates). It purges up to
+  100 saved sessions whose chat session is gone or whose build session had
+  no activity in the window.
+  A purge mark makes a save in progress drop its archive instead of
+  committing. Saves and artifacts are indexed per sandbox in the tenant
+  cache.
 
 ---
 

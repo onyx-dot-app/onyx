@@ -1,10 +1,10 @@
 import json
-from types import UnionType
-from typing import Any, Optional, Type
+from typing import Any, Optional
 
 from pydantic import BaseModel, TypeAdapter
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import TypeDecorator
+from typing_extensions import TypeForm
 
 from onyx.utils.postgres_sanitization import sanitize_json_like
 
@@ -16,7 +16,7 @@ class PydanticType(TypeDecorator):
 
     def __init__(
         self,
-        pydantic_model: Type[BaseModel] | UnionType,
+        pydantic_model: TypeForm[BaseModel],
         sanitize_strings: bool = False,
         *args: Any,
         **kwargs: Any,
@@ -49,14 +49,17 @@ class PydanticType(TypeDecorator):
 
 class PydanticListType(TypeDecorator):
     impl = JSONB
-    # The only state is the model class, so statements stay cacheable.
+    # The only state is the item type, so statements stay cacheable.
     cache_ok = True
 
     def __init__(
-        self, pydantic_model: Type[BaseModel], *args: Any, **kwargs: Any
+        self, pydantic_model: TypeForm[BaseModel], *args: Any, **kwargs: Any
     ) -> None:
+        """``pydantic_model`` is a model or a union of models, such as a
+        discriminated union."""
         super().__init__(*args, **kwargs)
         self.pydantic_model = pydantic_model
+        self._adapter = TypeAdapter[BaseModel](pydantic_model)
 
     def process_bind_param(
         self,
@@ -73,5 +76,5 @@ class PydanticListType(TypeDecorator):
         dialect: Any,  # noqa: ARG002
     ) -> Optional[list[BaseModel]]:
         if value is not None:
-            return [self.pydantic_model.model_validate(item) for item in value]
+            return [self._adapter.validate_python(item) for item in value]
         return None

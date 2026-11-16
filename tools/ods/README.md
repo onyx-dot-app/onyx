@@ -1075,8 +1075,9 @@ A scanner cannot read a bare `vmlinux` or the Firecracker binaries.
 `ods audit craft-fc` reads the `KERNEL_TAG` and `FC_VERSION` pins in
 `deployment/craft-fc/Dockerfile.artifacts` and matches them against advisory feeds:
 
-- The guest kernel is an Amazon Linux `microvm-kernel` tag. Each Amazon Linux 2023
-  advisory (ALAS) for the same kernel series, fixed in a newer package than the pin, is a finding.
+- The guest kernel is an `amazonlinux/linux` tag: the AL2023 kernel package source
+  (`kernel6.18-<version>`) or a `microvm-kernel` tag. Each Amazon Linux 2023 advisory (ALAS)
+  for the same kernel series, fixed in a newer package than the pin, is a finding.
 - Firecracker is matched against the GitHub security advisories of `firecracker-microvm/firecracker`.
 
 The allowlist, report formats and `--fail-on` work as for `ods audit image`.
@@ -1487,10 +1488,14 @@ matching `[build-system] requires` in all three `pyproject.toml` files; the
 `build-constraints-drift` hook fails if they disagree.
 
 `go-bin` ships the Go toolchain used to compile the binary. Bumping Go means
-moving it everywhere at once: the `go` directive in `go.mod`, `cli/Dockerfile`,
-the `setup-go` and `GO_VERSION` pins across `.github/workflows/`,
-`.devcontainer/Dockerfile`, the `go-bin` pin in all three `pyproject.toml` files
-and in `tools/requirements/build-constraints.in`, and the compiled `build-constraints.txt`.
+moving it everywhere at once: the `go` directive in every `go.mod`, the `golang`
+image tag and digest in `cli/Dockerfile` and `microvm/Dockerfile`, the `setup-go`
+and `GO_VERSION` pins across `.github/workflows/`, `GO_VERSION` and both tarball
+checksums in `.devcontainer/Dockerfile`, the `go-bin` pin in all three
+`pyproject.toml` files and in `tools/requirements/build-constraints.in`, the
+compiled `build-constraints.txt`, and the golangci-lint `language_version` in
+`.pre-commit-config.yaml`. A new Go release can need a newer golangci-lint, so
+run the hook on a file in each module after the bump.
 
 ## Deploy
 

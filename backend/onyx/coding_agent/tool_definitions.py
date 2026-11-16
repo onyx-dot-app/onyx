@@ -13,38 +13,6 @@ BASH_TOOL_CMD_KEY = "cmd"
 GENERATE_ANSWER_TOOL_NAME = "generate_answer"
 
 
-CODING_AGENT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
-    name=CODING_AGENT_TOOL_NAME,
-    description=(
-        "Investigate and answer a coding question against a specific GitHub "
-        "repository. The agent clones the repo into an isolated sandbox and "
-        "explores it via shell commands before returning a text answer."
-    ),
-    strict=True,
-    parameters={
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            CODING_AGENT_QUERY_KEY: {
-                "type": "string",
-                "description": (
-                    "The user's question or task to perform against the repository."
-                ),
-            },
-            CODING_AGENT_REPO_KEY: {
-                "type": "string",
-                "description": (
-                    "GitHub repository URL or 'owner/repo' identifier "
-                    "(e.g. 'https://github.com/onyx-dot-app/onyx' or "
-                    "'onyx-dot-app/onyx')."
-                ),
-            },
-        },
-        "required": [CODING_AGENT_QUERY_KEY, CODING_AGENT_REPO_KEY],
-    },
-)
-
-
 BASH_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
     name=BASH_TOOL_NAME,
     description=(

@@ -8,6 +8,7 @@ import {
   within,
 } from "@tests/setup/test-utils";
 import SkillsPage from "@/views/SkillsPage";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
 
 const mockSetSkillEnabled = jest.fn();
@@ -170,6 +171,10 @@ function customSkill(id: string, name: string): CustomSkill {
     enabled: false,
     can_toggle: true,
     installation_policy: "AVAILABLE",
+    default_installation_policy: "AVAILABLE",
+    can_delete: true,
+    group_summaries: [],
+    required_for_user: false,
     author_user_id: "owner-id",
     author_email: "owner@example.com",
     owner: { id: "owner-id", email: "owner@example.com" },
@@ -518,10 +523,10 @@ describe("SkillsPage preference toggles", () => {
     expect(mockBulkUpdateSkills).not.toHaveBeenCalled();
   });
 
-  it("does not let an owner who is not a manager delete a published skill", async () => {
+  it("does not offer bulk delete when the server refuses one skill", async () => {
     skillsData.customs = [
       { ...customSkill("private", "private-skill"), public_permission: null },
-      customSkill("published", "published-skill"),
+      { ...customSkill("published", "published-skill"), can_delete: false },
     ].map((skill) => ({ ...skill, user_permission: "OWNER" as const }));
     render(<SkillsPage />);
     const user = setupUser();
@@ -550,6 +555,114 @@ describe("SkillsPage preference toggles", () => {
     expect(mockBulkUpdateSkills).not.toHaveBeenCalled();
   });
 
+  it("filters the list by a group of the visible group summaries", async () => {
+    skillsData.customs = [
+      {
+        ...customSkill("first-id", "first-skill"),
+        group_summaries: [
+          {
+            group_id: 3,
+            group_name: "Design",
+            permission: "VIEWER",
+            installation_policy: "REQUIRED",
+          },
+        ],
+      },
+      {
+        ...customSkill("second-id", "second-skill"),
+        group_summaries: [
+          {
+            group_id: 4,
+            group_name: "Ops",
+            permission: null,
+            installation_policy: "NOT_AVAILABLE",
+          },
+        ],
+      },
+    ];
+    render(<SkillsPage admin />);
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
+    );
+
+    const filter = screen.getByRole("combobox", { name: "Filter by group" });
+    expect(filter).toHaveValue("All groups");
+    await user.click(filter);
+    await user.click(screen.getByRole("option", { name: "Ops" }));
+
+    expect(
+      screen.getByRole("switch", { name: "second-skill" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", { name: "first-skill" })
+    ).not.toBeInTheDocument();
+    // A filter change clears the selection, as a search does.
+    expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Search skills..."), "first");
+    expect(screen.getByText("No matching skills")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "No skills in this group match. Try a different group or search."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("clears the group filter when its group leaves every summary", async () => {
+    const ops = {
+      group_id: 4,
+      group_name: "Ops",
+      permission: null,
+      installation_policy: "NOT_AVAILABLE" as const,
+    };
+    const design = { ...ops, group_id: 3, group_name: "Design" };
+    skillsData.customs = [
+      { ...customSkill("first-id", "first-skill"), group_summaries: [design] },
+      { ...customSkill("second-id", "second-skill"), group_summaries: [ops] },
+    ];
+    const { rerender } = render(<SkillsPage admin />);
+    const user = setupUser();
+    await user.click(screen.getByRole("combobox", { name: "Filter by group" }));
+    await user.click(screen.getByRole("option", { name: "Ops" }));
+    expect(
+      screen.queryByRole("switch", { name: "first-skill" })
+    ).not.toBeInTheDocument();
+
+    skillsData = {
+      ...skillsData,
+      customs: [
+        {
+          ...customSkill("first-id", "first-skill"),
+          group_summaries: [design],
+        },
+        { ...customSkill("second-id", "second-skill"), group_summaries: [] },
+      ],
+    };
+    rerender(<SkillsPage admin />);
+    skillsData = {
+      ...skillsData,
+      customs: [
+        {
+          ...customSkill("first-id", "first-skill"),
+          group_summaries: [design],
+        },
+        { ...customSkill("second-id", "second-skill"), group_summaries: [ops] },
+      ],
+    };
+    rerender(<SkillsPage admin />);
+
+    expect(screen.getByRole("switch", { name: "first-skill" })).toBeVisible();
+    expect(screen.getByRole("switch", { name: "second-skill" })).toBeVisible();
+  });
+
+  it("shows no group filter when no skill has group summaries", () => {
+    render(<SkillsPage />);
+    expect(
+      screen.queryByRole("combobox", { name: "Filter by group" })
+    ).not.toBeInTheDocument();
+  });
+
   it("deletes an invalid skill only after confirmation and removes it from the list", async () => {
     skillsData.customs = [
       {
@@ -575,6 +688,7 @@ describe("SkillsPage preference toggles", () => {
         screen.queryByRole("switch", { name: "invalid-skill" })
       ).not.toBeInTheDocument()
     );
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
 
   it("refreshes associated apps after deletion without masking a successful delete on refresh failure", async () => {
@@ -709,6 +823,8 @@ describe("SkillsPage preference toggles", () => {
       await mutation.promise;
     });
     await waitFor(() => expect(firstSwitch).toBeEnabled());
+    // The `@` menu in chat offers only enabled skills.
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
 
   it("does not flash an unchanged same-named skill while enabling another", async () => {
@@ -798,14 +914,7 @@ describe("SkillsPage preference toggles", () => {
     const user = setupUser();
     const updated = enabledCustomAt(0);
     mockSetSkillEnabled.mockResolvedValueOnce(updated);
-    mockRefresh
-      .mockImplementationOnce(
-        async (updater: (value: SkillsList) => SkillsList) => {
-          skillsData = updater(skillsData);
-          return skillsData;
-        }
-      )
-      .mockRejectedValueOnce(new Error("Refresh failed"));
+    mockMutate.mockRejectedValue(new Error("Refresh failed"));
     render(<SkillsPage />);
 
     await user.click(screen.getByRole("switch", { name: "first-skill" }));

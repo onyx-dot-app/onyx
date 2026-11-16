@@ -64,6 +64,7 @@ _DAEMON_REASON_CODES: dict[SandboxDaemonErrorReason, grpc.StatusCode] = {
 
 # The guest daemon's files.TopFilesRoot.
 TOP_FILES_ROOT = ".onyx-top-level"
+WORKSPACES = "/home/onyx/workspaces"
 
 
 def _abort(
@@ -174,6 +175,12 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.list_max_entries: int | None = None
         # Seconds each Stop waits before it runs.
         self.stop_delay_seconds = 0.0
+        # CaptureSession waits this long first; a cancelled call ends early
+        # and spools nothing (like the agent).
+        self.capture_delay_seconds = 0.0
+        self.capture_started = threading.Event()
+        self.capture_cancelled = threading.Event()
+        self.drain_state = hostagent_pb2.DRAIN_STATE_ACTIVE
         # Seconds each guest daemon Init waits before it runs.
         self.init_delay_seconds = 0.0
         # Like grpc-go, the agent resets a stream with CANCELLED at its
@@ -349,6 +356,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 disk_free_mib=100_000,
                 max_vms=self.max_vms,
                 vm_slots_used=len(self.vms) + self.other_slots,
+                drain=hostagent_pb2.DrainStatus(state=self.drain_state),
             )
 
     def CloseConnections(  # noqa: N802
@@ -398,6 +406,13 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         request: hostagent_pb2.CaptureSessionRequest,
         context: grpc.ServicerContext,
     ) -> hostagent_pb2.CaptureSessionResponse:
+        self.capture_started.set()
+        waited_until = time.monotonic() + self.capture_delay_seconds
+        while time.monotonic() < waited_until:
+            if not context.is_active():
+                self.capture_cancelled.set()
+                abort_with_reason(context, HostAgentErrorReason.INTERNAL, "cancelled")
+            time.sleep(0.05)
         with self.lock:
             self._check_instance(
                 context,
@@ -1178,6 +1193,13 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     ) -> sandboxd_pb2.DeleteFileResponse:
         with self.agent.lock:
             sandbox_id = self._ready(context)
+            if not request.session_id and request.path.startswith(WORKSPACES + "/"):
+                # VM-wide delete of a whole session directory.
+                session = request.path.removeprefix(WORKSPACES + "/")
+                gone = [k for k in self.agent.files if k[:2] == (sandbox_id, session)]
+                for k in gone:
+                    del self.agent.files[k]
+                return sandboxd_pb2.DeleteFileResponse(deleted=bool(gone))
             path = self._check_path(context, request.path)
             key = (sandbox_id, request.session_id, path)
             if self.agent.files.pop(key, None) is not None:

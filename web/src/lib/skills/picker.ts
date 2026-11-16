@@ -4,6 +4,7 @@ import type {
 } from "@/app/craft/v1/apps/registry";
 import type { SkillsList } from "@/lib/skills/types";
 import type { MCPServer } from "@/lib/mcp/types";
+import type { CaretText } from "@/lib/contentEditable";
 import { CRAFT_APPS_TAB_PARAM } from "@/app/craft/v1/apps/connectableApps";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 
@@ -116,28 +117,40 @@ export function toPickerSections(
   return { skills, apps, mcpServers: mcp };
 }
 
-export interface SlashTrigger {
-  slashIndex: number;
+export interface PickerTrigger {
+  triggerIndex: number;
+  /** The whole word after the trigger, through the caret to the next
+   * whitespace. */
   query: string;
+  /** The trigger and query split at the caret: the text a pick replaces. */
+  token: CaretText;
 }
 
-// Trigger rules: "/" must be at start-of-text or after whitespace; the query
-// (chars between "/" and the cursor) must not contain whitespace.
-export function detectSlashTrigger(
-  textBeforeCursor: string
-): SlashTrigger | null {
-  const slashIndex = textBeforeCursor.lastIndexOf("/");
-  if (slashIndex === -1) return null;
+/** Opens Craft's picker; a picked skill becomes a `/slug` prompt prefix. */
+export const CRAFT_PICKER_TRIGGER = "/";
 
-  if (slashIndex > 0) {
-    const prev = textBeforeCursor[slashIndex - 1] ?? "";
-    if (!/\s/.test(prev)) return null;
-  }
+// The trigger must start the caret's word, before the caret. The query runs
+// from the trigger to the next whitespace, so the caret can sit inside it.
+export function detectPickerTrigger(
+  text: CaretText,
+  trigger: string
+): PickerTrigger | null {
+  const triggerIndex = text.before.lastIndexOf(trigger);
+  if (
+    triggerIndex === -1 ||
+    (triggerIndex > 0 && !/\s/.test(text.before.charAt(triggerIndex - 1)))
+  )
+    return null;
 
-  const query = textBeforeCursor.slice(slashIndex + 1);
-  if (/\s/.test(query)) return null;
+  const before = text.before.slice(triggerIndex);
+  if (/\s/.test(before)) return null;
+  const after = text.after.slice(0, text.after.search(/\s|$/));
 
-  return { slashIndex, query };
+  return {
+    triggerIndex,
+    query: before.slice(trigger.length) + after,
+    token: { before, after },
+  };
 }
 
 function matchesQuery(entry: PickerEntry, query: string): boolean {
@@ -171,7 +184,7 @@ export function pickerEntryKey(entry: PickerEntry): string {
 export function pickerEntryPromptPrefix(entry: PickerEntry): string {
   switch (entry.kind) {
     case "skill":
-      return `/${entry.slug}`;
+      return `${CRAFT_PICKER_TRIGGER}${entry.slug}`;
     case "app":
       return `[Use external app ${JSON.stringify(entry.name)} (ID: ${entry.externalAppId})]`;
     case "mcp":

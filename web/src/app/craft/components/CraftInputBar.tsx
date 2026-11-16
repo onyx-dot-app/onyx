@@ -25,7 +25,6 @@ import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
 import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
 import UserLibraryModal from "@/app/craft/components/UserLibraryModal";
 import { useEscapeInterrupt } from "@/hooks/useEscapeInterrupt";
-import useSlashPicker from "@/hooks/useSlashPicker";
 import {
   useUploadFilesContext,
   type BuildFile,
@@ -35,7 +34,11 @@ import { clearDraft, draftKey, useDraft } from "@/hooks/useDraft";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
+import type { CaretText } from "@/lib/contentEditable";
+import { useEntryPicker } from "@/lib/skills/hooks";
 import {
+  CRAFT_PICKER_TRIGGER,
+  filterPickerSections,
   pickerEntryConnectionPath,
   pickerEntryKey,
   pickerEntryPromptPrefix,
@@ -197,9 +200,18 @@ const CraftInputBar = memo(
         );
       }, []);
 
-      const slashPicker = useSlashPicker({
-        inputRef: baseRef,
-        onSelect: addEntry,
+      const pickEntry = useCallback(
+        (entry: PickerEntry, token: CaretText) => {
+          baseRef.current?.deleteToken(token);
+          addEntry(entry);
+        },
+        [addEntry]
+      );
+      const slashPicker = useEntryPicker({
+        trigger: CRAFT_PICKER_TRIGGER,
+        entries: pickerSections,
+        filter: filterPickerSections,
+        onSelect: pickEntry,
       });
 
       const interruptible = !!onInterrupt && isRunning;
@@ -357,15 +369,16 @@ const CraftInputBar = memo(
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
             onInputCallback={slashPicker.onInput}
-            onSelectionChange={slashPicker.onSelectionChange}
           />
           <EntryPickerPopover
             open={slashPicker.open}
             anchorRect={slashPicker.anchorRect}
             query={slashPicker.query}
-            sections={pickerSections}
+            sections={slashPicker.sections}
             onSelect={slashPicker.onSelect}
-            onClose={slashPicker.onClose}
+            onEscape={slashPicker.onEscape}
+            onDismiss={slashPicker.reset}
+            trigger={CRAFT_PICKER_TRIGGER}
           />
           {entryInfo && (
             <EntryInfoPopover

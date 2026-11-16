@@ -5201,10 +5201,20 @@
           "description": "只有管理员可以将技能发布到组织。"
         },
         "saveSuccess": {
-          "message": "已保存发布设置。"
+          "message": "设置已保存。"
         },
         "saveError": {
-          "message": "无法保存发布设置。"
+          "message": "无法保存设置。"
+        },
+        "defaultAccess": {
+          "title": "默认访问权限",
+          "description": "适用于每个没有自身设置的已发布技能，包括以后发布的技能。",
+          "loadFailed": "无法加载默认访问权限。",
+          "retry": "重试"
+        },
+        "sharing": {
+          "title": "共享",
+          "description": "成员可以与他人和群组共享技能。技能管理员始终可以共享。"
         }
       }
     },
@@ -12558,9 +12568,6 @@
         "content": {
           "ariaLabel": "技能选择器"
         },
-        "empty": {
-          "text": "没有匹配的技能"
-        },
         "mcpServersGroup": {
           "label": "MCP 服务器"
         },
@@ -12597,6 +12604,19 @@
         "expandButton": {
           "label": "展开到输入框",
           "tooltip": "在输入框中用完整文本替换此卡片"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "移除 {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "粘贴的文本：{preview}，{meta}",
+          "removeButton": {
+            "ariaLabel": "移除粘贴的文本"
+          }
         }
       },
       "plusMenuButton": {
@@ -12644,6 +12664,9 @@
         "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",
         "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。",
         "stopSubagentsFailed": "无法停止子代理。"
+      },
+      "pendingToolApproval": {
+        "toast": "请先批准或拒绝待处理的工具调用。"
       }
     },
     "mcpApiKey": {
@@ -12892,6 +12915,11 @@
           "text": "图片生成已停止"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "复制表格"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "问题"
@@ -13086,6 +13114,9 @@
           },
           "working": {
             "label": "处理中"
+          },
+          "waitingForApproval": {
+            "label": "正在等待你的批准"
           }
         },
         "internalSearch": {
@@ -13222,6 +13253,9 @@
             "status": "正在搜索网页"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} 想要运行 {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14440,6 +14474,54 @@
         "decision": "决策",
         "vision": "视觉"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "无载荷。"
+      },
+      "showLess": {
+        "button": "收起"
+      },
+      "showMore": {
+        "button": "展开"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "在此聊天中批准",
+        "tooltip": "立即批准，并在此聊天的剩余时间内运行此工具而不再询问"
+      },
+      "approveOnce": {
+        "ariaLabel": "仅批准此操作一次",
+        "button": "批准一次"
+      },
+      "approveSession": {
+        "button": "批准整个会话",
+        "tooltip": "批准此会话中的匹配操作"
+      },
+      "deadline": "请在 {time} 前批准",
+      "header": {
+        "required": "已请求批准：{headline}"
+      },
+      "headline": {
+        "multiAction": "{app} 中的 {count, plural, one {# 个操作} other {# 个操作}}",
+        "singleAction": "{app} 中的 {action}"
+      },
+      "reject": {
+        "ariaLabel": "拒绝此操作",
+        "button": "拒绝"
+      },
+      "record": {
+        "approved": "已批准：{headline}",
+        "closed": "不再等待：{headline}",
+        "disabled": "已禁用：{headline}",
+        "expired": "已超时：{headline}",
+        "rejected": "未批准：{headline}",
+        "approvedForChat": "已在此聊天中批准：{headline}",
+        "approvedForSession": "已在此会话中批准：{headline}"
+      },
+      "submitError": "无法提交你的决定。请重试。",
+      "actionWithDescription": "{action}：{description}"
     }
   },
   "craft": {
@@ -14452,50 +14534,6 @@
       },
       "switch": {
         "ariaLabel": "切换代理"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "仅批准此操作一次",
-        "button": "批准一次"
-      },
-      "approveSession": {
-        "button": "批准整个会话",
-        "tooltip": "批准此会话中的匹配操作"
-      },
-      "details": {
-        "hideAriaLabel": "隐藏详情",
-        "showAriaLabel": "显示详情"
-      },
-      "header": {
-        "required": "需要批准：{headline}"
-      },
-      "headline": {
-        "multiAction": "{app} 中的 {count, plural, one {# 个操作} other {# 个操作}}",
-        "singleAction": "{app} 中的 {action}"
-      },
-      "payload": {
-        "empty": {
-          "label": "无载荷。"
-        },
-        "showLess": {
-          "button": "收起"
-        },
-        "showMore": {
-          "button": "展开"
-        }
-      },
-      "reject": {
-        "ariaLabel": "拒绝此操作",
-        "button": "拒绝"
-      },
-      "status": {
-        "approved": "已批准",
-        "rejected": "已拒绝",
-        "expired": "已过期"
-      },
-      "submit": {
-        "errorFallback": "提交决定失败"
       }
     },
     "apps": {
@@ -14633,7 +14671,7 @@
         "duplicateSkillName": "应用“{appName}”已有名为“{skillName}”的关联技能。请上传其他名称的技能。"
       },
       "mcpPolicy": {
-        "description": "配置 Craft 智能体可以使用此 MCP 服务器的工具执行的操作。",
+        "description": "选择在聊天和 Craft 中哪些工具自动运行、请求批准或被禁用。",
         "emptyPolicies": "此服务器上没有已启用的工具。请先在 MCP 操作页面启用工具。",
         "saveButton": "保存",
         "title": "编辑 {name}"
@@ -15830,7 +15868,7 @@
     "actionPolicies": {
       "appTitle": "{name} 审批设置",
       "title": "审批设置",
-      "personalDescription": "这些设置决定 Craft 对话和新任务中的操作是自动运行还是需要批准；现有任务保留各自的设置。",
+      "personalDescription": "这些设置决定 Craft 对话、新任务和聊天中的 MCP 工具调用是自动运行还是需要批准；现有任务保留各自的设置。",
       "taskDescription": "选择此任务可使用的插件，并管理哪些操作可自动执行。更改仅适用于此任务。",
       "newTaskDescription": "启用插件后，将以您当前的操作设置为初始设置。",
       "workspace_disabled": "工作区已禁用",
@@ -15846,9 +15884,6 @@
       "saveError": "无法保存审批设置。",
       "emptyActions": "没有已知操作。未知操作需要审批。",
       "emptyApps": "没有可用应用。",
-      "expired": "审批已超时。操作未执行。",
-      "rejected": "请求已拒绝。此请求未执行。",
-      "deadline": "请在 {time} 前批准",
       "agentPermissionRequired": "某项操作需要审批，因此本次运行已停止。请检查权限，然后重新运行任务。",
       "enableForTask": "为此任务启用",
       "enableAppForTask": "为此任务启用 {app}",
@@ -17435,12 +17470,6 @@
         },
         "installation": {
           "title": "安装",
-          "available": "可供安装",
-          "default": "默认安装",
-          "required": "必需",
-          "availableDescription": "用户可以随时安装或卸载。",
-          "defaultDescription": "自动安装。用户可以随时禁用或卸载。",
-          "requiredDescription": "自动安装。用户无法禁用或卸载。",
           "description": "选择此技能对所有有访问权限的用户的安装方式。"
         },
         "description": "选择谁可以使用此技能及其安装方式。",
@@ -17464,6 +17493,19 @@
         "publishOff": {
           "title": "发布已关闭",
           "description": "管理员已关闭向组织发布。请让管理员发布此技能。"
+        },
+        "sharingOff": {
+          "title": "共享已关闭",
+          "description": "管理员已关闭与他人和群组共享。请让技能管理员共享此技能。"
+        },
+        "groupAccess": {
+          "title": "群组访问",
+          "description": "默认情况下，每个群组都使用组织设置。群组设置会为该群组的成员替换组织设置，即使它更严格。",
+          "add": "添加群组",
+          "select": "{name} 的设置",
+          "remove": "移除 {name}",
+          "shared": "已与此群组共享",
+          "settingOnly": "仅群组设置"
         }
       },
       "placeholders": {
@@ -17548,7 +17590,8 @@
       "empty": {
         "noMatches": {
           "description": "请尝试其他搜索。",
-          "title": "没有匹配的技能"
+          "title": "没有匹配的技能",
+          "groupDescription": "此群组中没有匹配的技能。请尝试其他群组或搜索。"
         },
         "noSkills": {
           "title": "暂无自定义技能",
@@ -17706,6 +17749,37 @@
         "firstPublish": "v{number} · 首次发布",
         "update": "v{number} · 从 v{published} 更新"
       }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "必需",
+        "description": "已安装且始终开启。成员无法关闭。"
+      },
+      "DEFAULT": {
+        "label": "默认安装",
+        "description": "为每位成员安装。成员可以关闭。"
+      },
+      "AVAILABLE": {
+        "label": "可供安装",
+        "description": "成员可以找到它，并按需开启。"
+      },
+      "NOT_AVAILABLE": {
+        "label": "不可用",
+        "description": "已隐藏。成员无法找到或开启。"
+      },
+      "inherit": {
+        "label": "{scope, select, group {组织设置} other {默认访问权限}}",
+        "labelWithPolicy": "{scope, select, group {组织设置（{policy}）} other {默认访问权限（{policy}）}}",
+        "description": "{scope, select, group {没有群组设置。群组使用组织设置。} other {没有自己的设置。即使管理员更改了默认访问，技能也会使用它。}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "按群组筛选",
+        "all": "所有群组"
+      },
+      "card": "群组：{groups}",
+      "entry": "{name}：{policy}"
     }
   },
   "opensearchHealth": {

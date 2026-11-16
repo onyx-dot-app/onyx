@@ -639,13 +639,15 @@ and limits stay.
 ## Craft sandboxes on Firecracker
 
 `craft_sandbox_runtime = "firecracker"` prepares the sandbox nodes for Craft
-Firecracker microVMs, which need `/dev/kvm`. It does not change how Craft runs
-sandboxes: Craft still runs pods until its Firecracker backend ships. Set it
-when you create the pool:
+Firecracker microVMs, which need `/dev/kvm`. The chart value
+`craft.sandboxRuntime: firecracker` then runs the Firecracker host agent on
+these nodes. Opencode sessions still run as pods, so add a pod sandbox pool
+too. Set both when you create the pools:
 
 ```hcl
-enable_sandbox_node_pool = true
-craft_sandbox_runtime    = "firecracker"
+enable_sandbox_node_pool           = true
+craft_sandbox_runtime              = "firecracker"
+enable_craft_pod_sandbox_node_pool = true
 ```
 
 With `"firecracker"`, the `gke` module:
@@ -658,9 +660,41 @@ With `"firecracker"`, the `gke` module:
 
 Kubelet does not count microVM memory, so only the Firecracker host agent and
 the preflight check tolerate the `onyx.app/kvm` taint. Pod sandboxes and the
-sandbox image prepuller do not run on the sandbox pool. To keep pod sandboxes,
-add a pool in `node_pools` with the label `onyx.app/workload=sandbox` and the
-taint `workload=sandbox:NO_SCHEDULE` only.
+sandbox image prepuller do not run on the sandbox pool. They run on the pod
+sandbox pool:
+
+```hcl
+enable_craft_pod_sandbox_node_pool  = true
+craft_pod_sandbox_node_machine_type = "n2-standard-4" # default
+craft_pod_sandbox_node_min_count    = 1               # default
+craft_pod_sandbox_node_max_count    = 2               # default
+```
+
+The `gke` module adds this pool under the key `sandboxpod`. It has the label
+`onyx.app/workload=sandbox` and the taint `workload=sandbox:NO_SCHEDULE`, but no
+`onyx.app/kvm` label or taint, and no nested virtualization. These match the
+chart's `sandboxPod` defaults, so you set no extra values. The boot disk is
+`sandbox_node_disk_size_gb`. One pod sandbox requests about 1.1 vCPU, 2.3 GiB
+of memory and 5.5 GiB of ephemeral storage. The flag needs
+`enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`.
+The `onyx` composition passes only `enable_craft_pod_sandbox_node_pool`; call
+the `gke` module directly to change the size.
+
+Unlike the other tainted pools, the Firecracker pool and the pod sandbox pool
+start with one node in each zone of the cluster (when their minimum is above 0).
+Their first workloads are DaemonSets (the host agent and the sandbox image
+prepuller), and a DaemonSet never makes the autoscaler add a node. GKE does not
+grow an empty pool to its minimum. Later, the autoscaler scales each pool
+between its minimum and maximum. The start size applies only when the module
+creates a pool. On a Firecracker pool that has no nodes, resize it by hand.
+Use the cluster location (the `location` output: the region, or the zone of a
+zonal cluster). `--num-nodes` counts the nodes in each zone. The autoscaler
+then keeps the pool between its minimum and maximum:
+
+```bash
+gcloud container clusters resize <cluster> --node-pool <sandbox pool> \
+  --num-nodes 1 --location <cluster location>
+```
 
 ### Signed GCS URLs
 
@@ -694,7 +728,9 @@ serviceAccount:
 
 The default, `"pod"`, leaves the pool as it is. GCP turns on nested
 virtualization only when it creates a pool, so a change to
-`craft_sandbox_runtime` replaces the sandbox pool.
+`craft_sandbox_runtime` replaces the sandbox pool. The replacement pool comes
+up before the old one drains. Pod sandboxes on the old pool stop when GKE
+drains it, and new pod sandboxes go to the pod sandbox pool.
 
 Node requirements:
 

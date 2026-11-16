@@ -1,9 +1,14 @@
 import re
-from typing import Any, Final
+from typing import Annotated, Any, Final, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 SKILL_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+SKILL_NAME_MAX_LENGTH: Final = 64
+SkillName = Annotated[
+    str, Field(pattern=SKILL_NAME_PATTERN, max_length=SKILL_NAME_MAX_LENGTH)
+]
 GITHUB_SKILL_MAX_COUNT: Final[int] = 500
 
 
@@ -27,8 +32,8 @@ class SkillMetadata(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_name(cls, value: str) -> str:
-        if len(value) > 64:
-            raise ValueError("must be at most 64 characters")
+        if len(value) > SKILL_NAME_MAX_LENGTH:
+            raise ValueError(f"must be at most {SKILL_NAME_MAX_LENGTH} characters")
         if not SKILL_NAME_PATTERN.fullmatch(value):
             raise ValueError(
                 "must contain only lowercase letters, numbers, and single hyphens"
@@ -161,3 +166,92 @@ class GitHubSkillBundle(BaseModel):
     description: str | None
     bundle_bytes: bytes | None
     unavailable_reason: str | None = None
+
+
+class ChatSkill(BaseModel):
+    """A custom skill the user runs, at the version the user runs. Each
+    description is one line: runs of whitespace become one space."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    description: str
+    # `metadata.short-description` in the frontmatter, which the catalog
+    # prefers. None when it is missing or blank.
+    short_description: str | None = None
+    version_id: UUID
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str) -> str:
+        return " ".join(value.split())
+
+    @field_validator("short_description")
+    @classmethod
+    def normalize_short_description(cls, value: str | None) -> str | None:
+        return (" ".join(value.split()) or None) if value is not None else None
+
+
+class SkillUsage(BaseModel):
+    """Unpacked size and file count of skills."""
+
+    model_config = ConfigDict(frozen=True)
+
+    bytes: int = 0
+    files: int = 0
+
+    def __add__(self, other: "SkillUsage") -> "SkillUsage":
+        return SkillUsage(
+            bytes=self.bytes + other.bytes, files=self.files + other.files
+        )
+
+    def __sub__(self, other: "SkillUsage") -> "SkillUsage":
+        return SkillUsage(
+            bytes=self.bytes - other.bytes, files=self.files - other.files
+        )
+
+    def grew_from(self, other: "SkillUsage") -> bool:
+        return self.bytes > other.bytes or self.files > other.files
+
+
+class SkillLimitRefusal(BaseModel):
+    """Why a write was refused: the acting user's usage after it, and the
+    write limits."""
+
+    usage: SkillUsage
+    max_bytes: int
+    max_files: int
+
+
+class SkillOmission(BaseModel):
+    """A plugin that the run-time limit left out of a sandbox."""
+
+    model_config = ConfigDict(frozen=True)
+
+    plugin_id: UUID
+    name: str
+    # Size and file count of the version the user runs.
+    bytes: int
+    files: int
+    # The limit it would break.
+    reason: Literal["bytes", "files"]
+
+
+class SandboxSkillsState(BaseModel):
+    """The skill content a sandbox got: its hash and the plugins the run-time
+    skill limit left out of it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    skills_hash: str | None
+    omissions: tuple[SkillOmission, ...]
+
+
+class UserPastWriteLimit(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    user_id: UUID
+    email: str
+    usage: SkillUsage
+    # Plugins the last push left out of the user's sandbox.
+    skills_not_loaded: int

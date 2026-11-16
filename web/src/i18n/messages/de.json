@@ -5201,10 +5201,20 @@
           "description": "Nur Admins veröffentlichen Skills für die Organisation."
         },
         "saveSuccess": {
-          "message": "Veröffentlichungseinstellung gespeichert."
+          "message": "Einstellung gespeichert."
         },
         "saveError": {
-          "message": "Die Veröffentlichungseinstellung konnte nicht gespeichert werden."
+          "message": "Einstellung konnte nicht gespeichert werden."
+        },
+        "defaultAccess": {
+          "title": "Standardzugriff",
+          "description": "Gilt für jeden veröffentlichten Skill ohne eigene Einstellung, auch für später veröffentlichte Skills.",
+          "loadFailed": "Standardzugriff konnte nicht geladen werden.",
+          "retry": "Erneut versuchen"
+        },
+        "sharing": {
+          "title": "Teilen",
+          "description": "Mitglieder können Skills mit Personen und Gruppen teilen. Skill-Manager können immer teilen."
         }
       }
     },
@@ -12558,9 +12568,6 @@
         "content": {
           "ariaLabel": "Skill-Auswahl"
         },
-        "empty": {
-          "text": "Keine passenden Skills"
-        },
         "mcpServersGroup": {
           "label": "MCP-Server"
         },
@@ -12597,6 +12604,19 @@
         "expandButton": {
           "label": "In die Eingabeleiste erweitern",
           "tooltip": "Diese Kachel durch ihren vollständigen Text ersetzen"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "{name} entfernen"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Eingefügter Text: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Eingefügten Text entfernen"
+          }
         }
       },
       "plusMenuButton": {
@@ -12644,6 +12664,9 @@
         "alreadyAccepted": "Diese Nachricht wurde bereits angenommen und ist nicht mehr ausstehend.",
         "interruptFailed": "Diese Nachricht konnte nicht sofort gesendet werden. Sie bleibt ausstehend.",
         "stopSubagentsFailed": "Die Unteragenten konnten nicht gestoppt werden."
+      },
+      "pendingToolApproval": {
+        "toast": "Geben Sie zuerst die ausstehenden Tool-Aufrufe frei oder lehnen Sie sie ab."
       }
     },
     "mcpApiKey": {
@@ -12892,6 +12915,11 @@
           "text": "Bildgenerierung gestoppt"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Tabelle kopieren"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Frage"
@@ -13086,6 +13114,9 @@
           },
           "working": {
             "label": "In Arbeit"
+          },
+          "waitingForApproval": {
+            "label": "Wartet auf Ihre Freigabe"
           }
         },
         "internalSearch": {
@@ -13222,6 +13253,9 @@
             "status": "Durchsucht das Web"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} möchte {tool} ausführen"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14440,6 +14474,54 @@
         "decision": "Entscheidung",
         "vision": "Vision"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "Keine Nutzdaten."
+      },
+      "showLess": {
+        "button": "Weniger anzeigen"
+      },
+      "showMore": {
+        "button": "Mehr anzeigen"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "Für diesen Chat freigeben",
+        "tooltip": "Jetzt freigeben und dieses Tool für den Rest dieses Chats ohne erneute Nachfrage ausführen"
+      },
+      "approveOnce": {
+        "ariaLabel": "Diese Aktion einmalig genehmigen",
+        "button": "Einmalig genehmigen"
+      },
+      "approveSession": {
+        "button": "Für Sitzung genehmigen",
+        "tooltip": "Übereinstimmende Aktionen für diese Sitzung genehmigen"
+      },
+      "deadline": "Bis {time} genehmigen",
+      "header": {
+        "required": "Freigabe angefordert: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# Aktion} other {# Aktionen}} in {app}",
+        "singleAction": "{action} in {app}"
+      },
+      "reject": {
+        "ariaLabel": "Diese Aktion ablehnen",
+        "button": "Ablehnen"
+      },
+      "record": {
+        "approved": "Freigegeben: {headline}",
+        "closed": "Wartet nicht mehr: {headline}",
+        "disabled": "Deaktiviert: {headline}",
+        "expired": "Zeitüberschreitung: {headline}",
+        "rejected": "Nicht freigegeben: {headline}",
+        "approvedForChat": "Für diesen Chat freigegeben: {headline}",
+        "approvedForSession": "Für diese Sitzung freigegeben: {headline}"
+      },
+      "submitError": "Ihre Entscheidung konnte nicht gesendet werden. Versuchen Sie es erneut.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14452,50 +14534,6 @@
       },
       "switch": {
         "ariaLabel": "Agent wechseln"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Diese Aktion einmalig genehmigen",
-        "button": "Einmalig genehmigen"
-      },
-      "approveSession": {
-        "button": "Für Sitzung genehmigen",
-        "tooltip": "Übereinstimmende Aktionen für diese Sitzung genehmigen"
-      },
-      "details": {
-        "hideAriaLabel": "Details ausblenden",
-        "showAriaLabel": "Details anzeigen"
-      },
-      "header": {
-        "required": "Genehmigung erforderlich: {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# Aktion} other {# Aktionen}} in {app}",
-        "singleAction": "{action} in {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "Keine Nutzdaten."
-        },
-        "showLess": {
-          "button": "Weniger anzeigen"
-        },
-        "showMore": {
-          "button": "Mehr anzeigen"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Diese Aktion ablehnen",
-        "button": "Ablehnen"
-      },
-      "status": {
-        "approved": "Genehmigt",
-        "rejected": "Abgelehnt",
-        "expired": "Abgelaufen"
-      },
-      "submit": {
-        "errorFallback": "Entscheidung konnte nicht übermittelt werden"
       }
     },
     "apps": {
@@ -14633,7 +14671,7 @@
         "duplicateSkillName": "Die App „{appName}“ hat bereits einen verknüpften Skill namens „{skillName}“. Laden Sie einen Skill mit anderem Namen hoch."
       },
       "mcpPolicy": {
-        "description": "Legen Sie fest, was der Craft-Agent mit den Tools dieses MCP-Servers tun darf.",
+        "description": "Legen Sie fest, welche Tools im Chat und in Craft automatisch ausgeführt werden, eine Freigabe anfordern oder deaktiviert sind.",
         "emptyPolicies": "Keine aktivierten Tools auf diesem Server. Aktivieren Sie Tools zuerst auf der MCP-Aktionsseite.",
         "saveButton": "Speichern",
         "title": "{name} bearbeiten"
@@ -15830,7 +15868,7 @@
     "actionPolicies": {
       "appTitle": "{name} Genehmigungseinstellungen",
       "title": "Genehmigungseinstellungen",
-      "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen und neuen Aufgaben automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
+      "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen, neuen Aufgaben und MCP-Toolaufrufen im Chat automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
       "taskDescription": "Wählen Sie die Plugins für diese Aufgabe und legen Sie fest, welche Aktionen automatisch ausgeführt werden. Änderungen gelten nur für diese Aufgabe.",
       "newTaskDescription": "Aktivieren Sie ein Plugin, um mit Ihren aktuellen Aktionseinstellungen zu beginnen.",
       "workspace_disabled": "Für den Arbeitsbereich deaktiviert",
@@ -15846,9 +15884,6 @@
       "saveError": "Genehmigungseinstellungen konnten nicht gespeichert werden.",
       "emptyActions": "Keine bekannten Aktionen. Unbekannte Aktionen erfordern eine Genehmigung.",
       "emptyApps": "Keine Apps verfügbar.",
-      "expired": "Die Genehmigungsfrist ist abgelaufen. Die Aktion wurde nicht ausgeführt.",
-      "rejected": "Anfrage abgelehnt. Diese Anfrage wurde nicht ausgeführt.",
-      "deadline": "Bis {time} genehmigen",
       "agentPermissionRequired": "Dieser Lauf wurde gestoppt, weil eine Aktion eine Genehmigung benötigte. Prüfen Sie die Berechtigungen und starten Sie erneut.",
       "enableForTask": "Für diese Aufgabe aktivieren",
       "enableAppForTask": "{app} für diese Aufgabe aktivieren",
@@ -17435,12 +17470,6 @@
         },
         "installation": {
           "title": "Installation",
-          "available": "Zur Installation verfügbar",
-          "default": "Standardmäßig installiert",
-          "required": "Erforderlich",
-          "availableDescription": "Nutzer können jederzeit installieren oder deinstallieren.",
-          "defaultDescription": "Automatisch installiert. Nutzer können jederzeit deaktivieren oder deinstallieren.",
-          "requiredDescription": "Automatisch installiert. Nutzer können nicht deaktivieren oder deinstallieren.",
           "description": "Wählen Sie, wie dieser Skill für alle Personen mit Zugriff installiert wird."
         },
         "description": "Wählen Sie, wer diesen Skill nutzen kann und wie er installiert wird.",
@@ -17464,6 +17493,19 @@
         "publishOff": {
           "title": "Die Veröffentlichung ist deaktiviert",
           "description": "Ein Admin hat die Veröffentlichung in der Organisation deaktiviert. Bitten Sie einen Admin, diesen Skill zu veröffentlichen."
+        },
+        "sharingOff": {
+          "title": "Teilen ist deaktiviert",
+          "description": "Ein Admin hat das Teilen mit Personen und Gruppen deaktiviert. Bitte einen Skill-Manager, diesen Skill zu teilen."
+        },
+        "groupAccess": {
+          "title": "Gruppenzugriff",
+          "description": "Standardmäßig verwendet jede Gruppe die Einstellung der Organisation. Eine Gruppeneinstellung ersetzt sie für die Mitglieder der Gruppe, auch wenn sie strenger ist.",
+          "add": "Gruppe hinzufügen",
+          "select": "Einstellung für {name}",
+          "remove": "{name} entfernen",
+          "shared": "Mit dieser Gruppe geteilt",
+          "settingOnly": "Nur Gruppeneinstellung"
         }
       },
       "placeholders": {
@@ -17548,7 +17590,8 @@
       "empty": {
         "noMatches": {
           "description": "Versuchen Sie eine andere Suche.",
-          "title": "Keine passenden Skills"
+          "title": "Keine passenden Skills",
+          "groupDescription": "Keine Skills in dieser Gruppe passen. Versuchen Sie eine andere Gruppe oder Suche."
         },
         "noSkills": {
           "title": "Noch keine benutzerdefinierten Skills",
@@ -17706,6 +17749,37 @@
         "firstPublish": "v{number} · Erste Veröffentlichung",
         "update": "v{number} · Update von v{published}"
       }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Erforderlich",
+        "description": "Installiert und immer aktiv. Mitglieder können es nicht deaktivieren."
+      },
+      "DEFAULT": {
+        "label": "Standardmäßig installiert",
+        "description": "Für jedes Mitglied installiert. Mitglieder können es deaktivieren."
+      },
+      "AVAILABLE": {
+        "label": "Zur Installation verfügbar",
+        "description": "Mitglieder finden es und aktivieren es bei Bedarf."
+      },
+      "NOT_AVAILABLE": {
+        "label": "Nicht verfügbar",
+        "description": "Ausgeblendet. Mitglieder können es weder finden noch aktivieren."
+      },
+      "inherit": {
+        "label": "{scope, select, group {Einstellung der Organisation} other {Standardzugriff}}",
+        "labelWithPolicy": "{scope, select, group {Einstellung der Organisation ({policy})} other {Standardzugriff ({policy})}}",
+        "description": "{scope, select, group {Keine Gruppeneinstellung. Die Gruppe verwendet die Einstellung der Organisation.} other {Keine eigene Einstellung. Der Skill verwendet den Standardzugriff, auch nachdem ein Admin ihn ändert.}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Nach Gruppe filtern",
+        "all": "Alle Gruppen"
+      },
+      "card": "Gruppen: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

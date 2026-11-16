@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
+from onyx.agents.compaction import is_input_context
 from onyx.agents.models import (
     AgentInfo,
     InputMessageMetadata,
@@ -168,9 +169,13 @@ def restore_response_sources(
 
 
 def _saved_message[T: Message](message: T) -> T:
-    # Input provenance is saved; the runtime already dropped its content metadata.
+    # Input provenance and input context are saved; the runtime already dropped
+    # the content metadata of input.
     update: dict[str, BaseModel | None] = (
-        {} if isinstance(message.metadata, InputMessageMetadata) else {"metadata": None}
+        {}
+        if isinstance(message.metadata, InputMessageMetadata)
+        or is_input_context(message)
+        else {"metadata": None}
     )
     if isinstance(message, ToolResultMessage):
         update["details"] = saved_result_details(message.details)

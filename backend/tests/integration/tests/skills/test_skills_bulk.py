@@ -112,7 +112,7 @@ def test_bulk_failure_after_write_rolls_back_only_that_skill(
     assert [failure.skill_id for failure in result.failed] == [conflicting.id]
     rolled_back = SkillManager.get_for_user(conflicting.id, admin_user)
     assert rolled_back.public_permission is None
-    assert rolled_back.installation_policy == "AVAILABLE"
+    assert rolled_back.installation_policy is None
     applied = SkillManager.get_for_user(clean.id, admin_user)
     assert applied.public_permission == "VIEWER"
     assert applied.installation_policy == "DEFAULT"

@@ -22,6 +22,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
   const handleSuggestionClick = (suggestion: string) => {
     onSubmit({
       message: suggestion,
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     });

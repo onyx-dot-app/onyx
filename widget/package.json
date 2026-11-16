@@ -14,7 +14,7 @@
     "build:cloud": "vite build --mode production",
     "build:self-hosted": "vite build --mode self-hosted",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "bun test tests"
   },
   "dependencies": {
@@ -24,6 +24,7 @@
     "terser": "^5.51.2"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.4",
     "@types/node": "^26.4.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"

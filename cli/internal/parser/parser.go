@@ -19,8 +19,11 @@ func ParseStreamLine(line string) models.StreamEvent {
 		return nil
 	}
 
+	// Numbers stay exact, so tool arguments show the values the server runs.
 	var data map[string]any
-	if err := json.Unmarshal([]byte(line), &data); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(line))
+	decoder.UseNumber()
+	if err := decoder.Decode(&data); err != nil {
 		return models.ErrorEvent{Error: fmt.Sprintf("malformed stream data: %v", err), IsRetryable: false}
 	}
 
@@ -41,7 +44,7 @@ func ParseStreamLine(line string) models.StreamEvent {
 			userMsgID = &id
 		}
 		return models.MessageIDEvent{
-			UserMessageID:              userMsgID,
+			UserMessageID:          userMsgID,
 			ReservedAgentMessageID: reservedID,
 		}
 	}
@@ -58,15 +61,29 @@ func ParseStreamLine(line string) models.StreamEvent {
 			if v, ok := data["is_retryable"].(bool); ok {
 				isRetryable = v
 			}
+			errorCode, _ := data["error_code"].(string)
 			return models.ErrorEvent{
 				Error:       errStr,
 				StackTrace:  stackTrace,
 				IsRetryable: isRetryable,
+				ErrorCode:   errorCode,
 			}
 		}
 	}
 
-	// Case 4: Packet with placement + obj
+	// Case 4: StreamCursor of a replayed response
+	if _, ok := data["next_cursor"]; ok {
+		if _, hasPlacement := data["placement"]; !hasPlacement {
+			replayComplete, _ := data["replay_complete"].(bool)
+			return models.StreamCursorEvent{
+				StreamID:       jsonInt(data["stream_id"]),
+				NextCursor:     jsonInt(data["next_cursor"]),
+				ReplayComplete: replayComplete,
+			}
+		}
+	}
+
+	// Case 5: Packet with placement + obj
 	if rawPlacement, ok := data["placement"]; ok {
 		if rawObj, ok := data["obj"]; ok {
 			placement := parsePlacement(rawPlacement)
@@ -108,6 +125,9 @@ func parsePacketObj(obj map[string]any, placement *models.Placement) models.Stre
 			reason = &r
 		}
 		return models.StopEvent{Placement: placement, StopReason: reason}
+
+	case models.EventReplayEnd:
+		return models.ReplayEndEvent{}
 
 	case "error":
 		errMsg := "Unknown error"
@@ -200,6 +220,25 @@ func parsePacketObj(obj map[string]any, placement *models.Placement) models.Stre
 		content, _ := obj["content"].(string)
 		return models.IntermediateReportDeltaEvent{Placement: placement, Content: content}
 
+	case "tool_approval_request":
+		event := models.ToolApprovalRequestEvent{
+			Placement:   placement,
+			ApprovalID:  jsonString(obj["approval_id"]),
+			ToolCallID:  jsonString(obj["tool_call_id"]),
+			ToolName:    jsonString(obj["tool_name"]),
+			DisplayName: jsonString(obj["display_name"]),
+			AgentName:   jsonString(obj["agent_name"]),
+		}
+		event.Arguments, _ = obj["arguments"].(map[string]any)
+		return event
+
+	case "tool_approval_resolved":
+		return models.ToolApprovalResolvedEvent{
+			Placement:  placement,
+			ApprovalID: jsonString(obj["approval_id"]),
+			Outcome:    jsonString(obj["outcome"]),
+		}
+
 	default:
 		return models.UnknownEvent{Placement: placement, RawData: obj}
 	}
@@ -227,8 +266,9 @@ func parseSearchDocs(raw []any) []models.SearchDoc {
 
 func jsonInt(v any) int {
 	switch n := v.(type) {
-	case float64:
-		return int(n)
+	case json.Number:
+		i, _ := n.Int64()
+		return int(i)
 	case int:
 		return n
 	default:

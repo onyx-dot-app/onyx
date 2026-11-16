@@ -1,13 +1,15 @@
 {{- /* Alert rules for the Craft Firecracker host agent. Needs
 craft.sandboxRuntime=firecracker, craft.hostAgent.metrics.enabled and
 monitoring.prometheusRules.enabled. Metrics: microvm/README.md (Metrics).
-Runbooks: microvm/RUNBOOKS.md. Thresholds: craft.hostAgent.alerts. */}}
+Runbook links: craft.hostAgent.alerts.runbookUrl + "#<alert name in lower
+case>" (docs.onyx.app; source microvm/RUNBOOKS.md). Thresholds:
+craft.hostAgent.alerts. */}}
 {{- $agent := (.Values.craft | default dict).hostAgent | default dict }}
 {{- $metrics := $agent.metrics | default dict }}
 {{- $rules := .Values.monitoring.prometheusRules | default dict }}
 {{- if and (eq (include "onyx.craftSandboxRuntime" .) "firecracker") $metrics.enabled $rules.enabled }}
 {{- $alerts := $agent.alerts | default dict }}
-{{- $runbook := $alerts.runbookUrl | default "https://github.com/onyx-dot-app/onyx/blob/main/microvm/RUNBOOKS.md" }}
+{{- $runbook := $alerts.runbookUrl | default "https://docs.onyx.app/deployment/kubernetes/craft-firecracker-operations" }}
 {{- $ns := include "onyx.craftHostAgentNamespace" . }}
 {{- $name := include "onyx.resourceName" (list . "craft-fc-host-agent") }}
 {{- $sel := printf "job=%q, namespace=%q" (include "onyx.craftHostAgentMetricsJob" .) $ns }}
@@ -57,6 +59,25 @@ spec:
             description: {{ `{{ $value }} host agent pods are available, fewer than the DaemonSet wants, for 15m. Sandbox nodes without a Ready agent take no VMs.` | quote }}
             runbook_url: {{ printf "%s#craftfchostagentpodsmissing" $runbook }}
 
+        - alert: CraftFcNodeReportsStale
+          # The agent answers scrapes but the api_server accepts no state
+          # report (for example a lost node key, or 1 h after a wrong
+          # registration secret). 0 = none yet; max keeps the old pod's
+          # value while a new pod starts.
+          expr: |
+            time() - max by (namespace, node) (craft_fc_host_agent_node_report_last_success_timestamp_seconds{ {{- $sel -}} })
+              > {{ dig "nodeReportStaleSeconds" 300 $alerts }}
+          for: 5m
+          labels:
+            severity: critical
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `The api_server accepts no node reports from {{ $labels.node }}` | quote }}
+            description: {{ `The api_server last accepted a state report from the host agent on node {{ $labels.node }} {{ $value | humanizeDuration }} ago (about 56 years: none since the agent started). After SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS (default 180 s) without a report it places no new VMs on a node that reported before. CraftFcHostAgentDown stays clear.` | quote }}
+            runbook_url: {{ printf "%s#craftfcnodereportsstale" $runbook }}
+
         - alert: CraftFcCreateFailures
           # "failed" = the start failed after admission (VMM, journal, guest
           # key). Refusals before admission are in CraftFcAdmissionRefusals.
@@ -92,7 +113,7 @@ spec:
             {{- end }}
           annotations:
             summary: {{ `Node {{ $labels.node }} refuses VMs ({{ $labels.reason }})` | quote }}
-            description: {{ `Node {{ $labels.node }} refused {{ $value | humanize }} Creates with {{ $labels.reason }} in 15m, for 15m or more.` | quote }}
+            description: {{ `Node {{ $labels.node }} refused about {{ $value | printf "%.0f" }} Creates with {{ $labels.reason }} in 15m, for 15m or more.` | quote }}
             runbook_url: {{ printf "%s#craftfcadmissionrefusals" $runbook }}
 
         - alert: CraftFcSessionTransferFailures
@@ -108,7 +129,7 @@ spec:
             {{- end }}
           annotations:
             summary: {{ `{{ $labels.method }} fails on {{ $labels.node }}` | quote }}
-            description: {{ `{{ $value | humanize }} {{ $labels.method }} calls failed on node {{ $labels.node }} in 30m. Session saves or restores may be lost or late.` | quote }}
+            description: {{ `About {{ $value | printf "%.0f" }} {{ $labels.method }} calls failed on node {{ $labels.node }} in 30m. Session saves or restores may be lost or late.` | quote }}
             runbook_url: {{ printf "%s#craftfcsessiontransferfailures" $runbook }}
 
         - alert: CraftFcRelayErrors
@@ -149,12 +170,14 @@ spec:
             runbook_url: {{ printf "%s#craftfcnodememorylow" $runbook }}
 
         - alert: CraftFcTemplateUnusable
-          # The start-up build has no metric: its failure shows only in the
-          # agent log ("template build at start-up failed").
+          # template_ready is 0 before the first build from --rootfs-dir and
+          # after a failed one (start-up or BuildTemplate).
           expr: |
             sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_admissions_total{%s, result="refused", reason=~"TEMPLATE_MISSING|TEMPLATE_INCOMPATIBLE"}` $sel) "30m") }}) > 0
             or
             sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_rpc_requests_total{%s, method="BuildTemplate", code!~"OK|Canceled"}` $sel) "30m") }}) > 0
+            or
+            max by (namespace, node) (craft_fc_host_agent_template_ready{ {{- $sel -}} }) == 0
           for: 15m
           labels:
             severity: warning
@@ -163,6 +186,6 @@ spec:
             {{- end }}
           annotations:
             summary: {{ `Template on {{ $labels.node }} cannot be built or used` | quote }}
-            description: {{ `Node {{ $labels.node }} refused Creates for a missing or incompatible template, or a BuildTemplate call failed, for 15m.` | quote }}
+            description: {{ `Node {{ $labels.node }} has no usable template from its root drive, refused Creates for a missing or incompatible template, or had a failed BuildTemplate call, for 15m.` | quote }}
             runbook_url: {{ printf "%s#craftfctemplateunusable" $runbook }}
 {{- end }}

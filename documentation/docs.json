@@ -107,6 +107,20 @@
             "pages": [
               "deployment/local/craft",
               "deployment/local/craft_kubernetes",
+              {
+                "group": "Firecracker",
+                "icon": "microchip",
+                "pages": [
+                  "deployment/kubernetes/craft-firecracker",
+                  "deployment/kubernetes/craft-firecracker-eks",
+                  "deployment/kubernetes/craft-firecracker-gke",
+                  "deployment/kubernetes/craft-firecracker-aks",
+                  "deployment/kubernetes/craft-firecracker-bare-metal",
+                  "deployment/kubernetes/craft-firecracker-operations",
+                  "deployment/kubernetes/craft-firecracker-monitoring",
+                  "deployment/kubernetes/craft-firecracker-sizing"
+                ]
+              },
               "deployment/local/craft_docker_compose"
             ]
           },

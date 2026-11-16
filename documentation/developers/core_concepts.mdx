@@ -130,6 +130,8 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
 
     **Custom Actions (MCP and OpenAPI)**
     - `custom_tool_start`, `custom_tool_args`, and `custom_tool_delta`
+    - `tool_approval_request` and `tool_approval_resolved` show a call that waits for the user's approval, and how it ended.
+    Every client must handle them. See [Tool Approvals](/developers/guides/chat_new_guide#tool-approvals)
 
     **Deep Research and Coding Agent**
     - `deep_research_plan_start`, `deep_research_plan_delta`, `research_agent_start`,

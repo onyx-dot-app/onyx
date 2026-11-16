@@ -29,7 +29,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     SearchToolDocumentsDelta,
 )
-from onyx.tools.tool_implementations.search.search_tool import MAX_QUERIES_PER_CALL
+from onyx.tools.tool_implementations.search.constants import MAX_QUERIES_PER_CALL
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_chat_session,
     final_answer,

@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from onyx.chat.mention_models import RecordedMention
 from onyx.configs.constants import MessageType, QAFeedbackType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.db.enums import AccessType
@@ -184,6 +185,7 @@ class DATestChatMessage(BaseModel):
     message: str
     message_type: MessageType | None = None
     files: list | None = None
+    mentions: list[RecordedMention] = []
     reasoning_tokens: str | None = None
 
 
@@ -227,6 +229,8 @@ class ErrorResponse(BaseModel):
 class StreamedResponse(BaseModel):
     full_message: str
     assistant_message_id: int
+    # What the question tagged, from its ID packet.
+    mentions: list[RecordedMention]
     top_documents: list[SearchDoc]
     used_tools: list[ToolResult]
     tool_call_debug: list[ToolCallDebug] = Field(default_factory=list)

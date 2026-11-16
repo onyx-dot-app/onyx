@@ -45,6 +45,7 @@ from onyx.server.features.build.sandbox.util.mcp_config import (
     craft_mcp_fingerprint,
     resolve_craft_mcp_servers,
 )
+from onyx.server.features.build.session import api as session_api_module
 from onyx.server.features.build.session import locks as session_locks
 from onyx.server.features.build.session.api import (
     reload_session_skills,
@@ -62,6 +63,7 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     record_managed_content_hashes__no_commit,
     refresh_mcp_config_hashes_for_users,
 )
+from onyx.skills.models import SandboxSkillsState
 from onyx.skills.push import compute_skill_runtime_hash
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.stubs import StubSandboxManager
@@ -80,7 +82,12 @@ def _hydrate_managed_content_for_test(
     payload = ManagedContentPayload(
         connectable_apps_section=connectable_apps_section,
         skills_files=skills_files,
-        skills_hash=compute_skill_runtime_hash(skills_files, connectable_apps_section),
+        skills_state=SandboxSkillsState(
+            skills_hash=compute_skill_runtime_hash(
+                skills_files, connectable_apps_section
+            ),
+            omissions=(),
+        ),
         mcp_fingerprint=craft_mcp_fingerprint(
             resolve_craft_mcp_servers(db_session, user)
         ),
@@ -946,6 +953,61 @@ class TestDeleteSession:
             FileOrigin.SANDBOX_SNAPSHOT,
             "application/gzip",
         )
+
+    def test_delete_session_purges_the_harness_session_after_commit(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+        session_manager_with_stub: SessionManager,
+        stub_sandbox_manager: StubSandboxManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # The Firecracker delete hook runs even for a sleeping pod sandbox,
+        # and only once the delete is committed.
+        sandbox_row = sandbox(user=test_user, status=SandboxStatus.SLEEPING)
+        purged: list[tuple[UUID, UUID]] = []
+        monkeypatch.setattr(
+            session_api_module,
+            "purge_harness_session",
+            lambda sandbox_id, session_id: purged.append((sandbox_id, session_id)),
+        )
+        monkeypatch.setattr(
+            session_api_module, "SessionManager", lambda _db: session_manager_with_stub
+        )
+        stub_sandbox_manager.cleanup_session_workspace_silent = True
+
+        def new_session() -> UUID:
+            row = BuildSession(
+                id=uuid4(),
+                user_id=test_user.id,
+                name="harness-purge",
+                status=BuildSessionStatus.ACTIVE,
+            )
+            db_session.add(row)
+            db_session.commit()
+            return row.id
+
+        kept = new_session()
+        with monkeypatch.context() as m:
+            m.setattr(
+                session_manager_with_stub,
+                "delete_session",
+                lambda *_a, **_k: (_ for _ in ()).throw(
+                    OnyxError(OnyxErrorCode.CONFLICT, "busy")
+                ),
+            )
+            with pytest.raises(OnyxError):
+                session_api_module.delete_session(
+                    kept, user=test_user, db_session=db_session
+                )
+        assert purged == []
+
+        deleted = new_session()
+        session_api_module.delete_session(
+            deleted, user=test_user, db_session=db_session
+        )
+        assert purged == [(sandbox_row.id, deleted)]
 
     def test_delete_session_failure_to_clean_workspace_logged_not_raised(
         self,

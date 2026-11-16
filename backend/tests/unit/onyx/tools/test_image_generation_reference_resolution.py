@@ -24,12 +24,15 @@ from onyx.image_gen.interfaces import ImageShape
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import AssistantMessage, ToolCall
+from onyx.tools.interface import parse_tool_arguments
 from onyx.tools.models import ToolCallException, ToolContext
 from onyx.tools.tool_implementations.images.image_generation_tool import (
-    REFERENCE_IMAGE_FILE_IDS_FIELD,
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.images.models import ImageGenerationResponse
+from onyx.tools.tool_implementations.images.models import (
+    ImageGenerationArguments,
+    ImageGenerationResponse,
+)
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
@@ -63,68 +66,61 @@ def _make_tool(
 
 
 class TestResolveReferenceImageFileIds:
-    def test_unset_returns_empty_plain_generation(self) -> None:
-        tool = _make_tool()
-        assert tool._resolve_reference_image_file_ids(llm_kwargs={}) == []
-
-    def test_empty_list_is_treated_like_unset(self) -> None:
-        tool = _make_tool()
-        result = tool._resolve_reference_image_file_ids(
-            llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: []},
+    @pytest.mark.parametrize(
+        "arguments",
+        [{}, {"reference_image_file_ids": None}, {"reference_image_file_ids": []}],
+    )
+    def test_unset_returns_empty_plain_generation(
+        self, arguments: dict[str, JsonValue]
+    ) -> None:
+        parsed = parse_tool_arguments(
+            ImageGenerationArguments, {"prompt": "test", **arguments}
         )
-        assert result == []
+        assert parsed.reference_image_file_ids == []
+        tool = _make_tool(supports_reference_images=False)
+        assert tool._resolve_reference_image_file_ids([]) == []
 
     def test_passes_llm_supplied_ids_through(self) -> None:
         tool = _make_tool()
-        result = tool._resolve_reference_image_file_ids(
-            llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: ["upload-1", "gen-1"]},
-        )
+        result = tool._resolve_reference_image_file_ids(["upload-1", "gen-1"])
         # Order preserved — first entry is the primary edit source.
         assert result == ["upload-1", "gen-1"]
 
-    def test_invalid_shape_raises(self) -> None:
-        tool = _make_tool()
-        with pytest.raises(ToolCallException):
-            tool._resolve_reference_image_file_ids(
-                llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: "not-a-list"},
+    @pytest.mark.parametrize("reference_ids", ["not-a-list", ["ok", 123]])
+    def test_invalid_reference_ids_are_rejected(self, reference_ids: JsonValue) -> None:
+        with pytest.raises(ToolCallException, match="reference_image_file_ids"):
+            parse_tool_arguments(
+                ImageGenerationArguments,
+                {"prompt": "test", "reference_image_file_ids": reference_ids},
             )
 
-    def test_non_string_element_raises(self) -> None:
-        tool = _make_tool()
-        with pytest.raises(ToolCallException):
-            tool._resolve_reference_image_file_ids(
-                llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: ["ok", 123]},
-            )
-
-    def test_deduplicates_preserving_first_occurrence(self) -> None:
-        tool = _make_tool()
-        result = tool._resolve_reference_image_file_ids(
-            llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: ["gen-1", "gen-2", "gen-1"]},
+    @pytest.mark.parametrize(
+        ("reference_ids", "cleaned"),
+        [
+            (["gen-1", "gen-2", "gen-1"], ["gen-1", "gen-2"]),
+            (["  gen-1  ", "", "   "], ["gen-1"]),
+        ],
+    )
+    def test_strips_and_deduplicates_preserving_first_occurrence(
+        self, reference_ids: JsonValue, cleaned: list[str]
+    ) -> None:
+        parsed = parse_tool_arguments(
+            ImageGenerationArguments,
+            {"prompt": "test", "reference_image_file_ids": reference_ids},
         )
-        assert result == ["gen-1", "gen-2"]
-
-    def test_strips_whitespace_and_skips_empty_strings(self) -> None:
-        tool = _make_tool()
-        result = tool._resolve_reference_image_file_ids(
-            llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: ["  gen-1  ", "", "   "]},
-        )
-        assert result == ["gen-1"]
+        assert parsed.reference_image_file_ids == cleaned
 
     def test_provider_without_reference_support_raises(self) -> None:
         tool = _make_tool(supports_reference_images=False)
         with pytest.raises(ToolCallException):
-            tool._resolve_reference_image_file_ids(
-                llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: ["gen-1"]},
-            )
+            tool._resolve_reference_image_file_ids(["gen-1"])
 
     def test_truncates_to_provider_max_preserving_head(self) -> None:
         """When the LLM lists more images than the provider allows, keep the
         HEAD of the list (the primary edit source + earliest extras) rather
         than the tail, since the LLM put the most important one first."""
         tool = _make_tool(max_reference_images=2)
-        result = tool._resolve_reference_image_file_ids(
-            llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: ["a", "b", "c", "d"]},
-        )
+        result = tool._resolve_reference_image_file_ids(["a", "b", "c", "d"])
         assert result == ["a", "b"]
 
 
@@ -285,9 +281,9 @@ def test_image_schema_accepts_null_defaults_and_rejects_invalid_shape() -> None:
     assert definition.parameters["required"] == [
         "prompt",
         "shape",
-        REFERENCE_IMAGE_FILE_IDS_FIELD,
+        "reference_image_file_ids",
     ]
     validator = Draft202012Validator(definition.parameters)
-    arguments = {"prompt": "test", "shape": None, REFERENCE_IMAGE_FILE_IDS_FIELD: None}
+    arguments = {"prompt": "test", "shape": None, "reference_image_file_ids": None}
     validator.validate(arguments)
     assert not validator.is_valid({**arguments, "shape": "unsupported"})

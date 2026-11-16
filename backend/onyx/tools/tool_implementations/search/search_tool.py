@@ -122,13 +122,13 @@ from onyx.tools.interface import (
     CITATIONS_PER_TOOL_CALL,
     Tool,
     parse_tool_arguments,
+    tool_definition_from_arguments,
     tool_message_history,
 )
 from onyx.tools.models import (
     ChatMinimalTextMessage,
     CodeModeExposure,
     CodeModeResultSpec,
-    ToolCallException,
     ToolContext,
 )
 from onyx.tools.tool_implementations.search.constants import (
@@ -139,6 +139,7 @@ from onyx.tools.tool_implementations.search.constants import (
     LLM_NON_CUSTOM_QUERY_WEIGHT,
     LLM_SEMANTIC_QUERY_WEIGHT,
     MAX_CHUNKS_FOR_RELEVANCE,
+    MAX_QUERIES_PER_CALL,
     MAX_SELECTED_SECTIONS,
     ORIGINAL_QUERY_WEIGHT,
     RERANK_POOL_SIZE,
@@ -181,8 +182,6 @@ logger = setup_logger()
 # PostHog flag for decision-model rerank and expansion (cloud rollout control).
 SEARCH_DECISION_RERANK_EXPANSION_FLAG = "onyx-search-decision-rerank-expansion"
 
-QUERIES_FIELD = "queries"
-MAX_QUERIES_PER_CALL = 3
 _CODE_MODE_RESULT = SEARCH_RESULTS_CODE_MODE_RESULT.model_copy(
     update={"usage": CODE_MODE_SEARCH_USAGE}
 )
@@ -345,7 +344,7 @@ def _trim_sections_by_tokens(
 
 
 class SearchTool(Tool):
-    merge_list_argument = QUERIES_FIELD
+    merge_list_argument = "queries"
     merge_list_limit = MAX_QUERIES_PER_CALL
 
     NAME = INTERNAL_SEARCH_TOOL_NAME
@@ -761,29 +760,8 @@ class SearchTool(Tool):
     """For explicit tool calling"""
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=self.description,
-            strict=True,
-            parameters={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    QUERIES_FIELD: {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": (
-                            f"List of up to {MAX_QUERIES_PER_CALL} search queries to "
-                            "execute, typically a single query. Later queries are "
-                            "ignored. "
-                            "Query expansion and filter extraction steps will be run "
-                            "automatically downstream, do not include time or source type "
-                            "scoping details in your query."
-                        ),
-                    },
-                },
-                "required": [QUERIES_FIELD],
-            },
+        return tool_definition_from_arguments(
+            self.name, self.description, SearchArguments, strict=True
         )
 
     @log_function_time(
@@ -881,15 +859,6 @@ class SearchTool(Tool):
         )
         if original_query is None:
             raise ValueError("Search requires a user message")
-        if QUERIES_FIELD not in invocation.arguments:
-            raise ToolCallException(
-                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
-                llm_facing_message=(
-                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
-                    f"containing an array of search queries. Please provide the queries "
-                    f'like: {{"queries": ["your search query here"]}}'
-                ),
-            )
         llm_queries = parse_tool_arguments(
             SearchArguments, invocation.arguments
         ).queries

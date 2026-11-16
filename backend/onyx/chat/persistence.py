@@ -111,6 +111,19 @@ class ChatResponsePersistence(RunStore):
                 )
             )
 
+    def report_suspended(self, run: Run) -> None:
+        """Resolve a response whose run handed off to wait for approvals; the
+        handoff saved it with its checkpoint."""
+        response = self._project(
+            run.snapshot(), None, delivery_failed=run.delivery_failed
+        )
+        with self._lock:
+            self._report(
+                ChatResponseOutcome(
+                    response=response, persistence_status=PersistenceStatus.SAVED
+                )
+            )
+
     def expire_save(self) -> None:
         with self._lock:
             pending = self._pending_save

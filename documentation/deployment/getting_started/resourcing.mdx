@@ -200,7 +200,10 @@ the calculator plans for 24 million chunks.
 | Granite, 2 copies, 1 question per second at peak | 106 GB | 38 GB | 2 nodes, 32 vCPUs, 128 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
 | Same, with 1-bit quantization | 107 GB | 2.1 GB | 2 nodes, 32 vCPUs, 64 GB RAM and 256 GB storage each | `OPENSEARCH_INDEX_NUM_SHARDS=8`, `OPENSEARCH_INDEX_NUM_REPLICAS=1` |
 
-The shard count makes the shard copies divide evenly over the nodes, so no node holds more than its share.
+The calculator picks the shard count and the node count so that the shard copies divide evenly over the nodes.
+Then no node holds more than its share. Every search runs on every primary shard,
+so the calculator raises the shard count to at most 2× the count the data needs,
+or to the count that gives every node a shard copy if that is higher. Past that, it adds nodes.
 1-bit quantization needs OpenSearch 3.6 or later. It stores vectors 32× smaller,
 so the memory for vector search drops about 18× in this example (the graph links stay the same size).
 Storage barely changes.

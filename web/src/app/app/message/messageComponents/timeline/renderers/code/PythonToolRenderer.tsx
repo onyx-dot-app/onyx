@@ -28,7 +28,10 @@ function HighlightedPythonCode({ code }: { code: string }) {
     try {
       return hljs.highlight(code, { language: "python" }).value;
     } catch {
-      return code;
+      return code
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
     }
   }, [code]);
 

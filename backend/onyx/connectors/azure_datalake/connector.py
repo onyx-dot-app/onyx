@@ -54,8 +54,7 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.db.enums import HierarchyNodeType
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import is_indexable_file_type
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -79,12 +78,10 @@ _ATTEMPT_ERRORS = (
 
 
 def has_indexable_name(path: str, *, allow_images: bool) -> bool:
-    ext: str = get_file_ext(posixpath.basename(path))
-    if ext not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
-        logger.debug("Skipping unsupported file type: %s", path)
-        return False
-    if ext in OnyxFileExtensions.IMAGE_EXTENSIONS and not allow_images:
-        logger.debug("Skipping image file: %s (images are off)", path)
+    if not is_indexable_file_type(
+        posixpath.basename(path), None, allow_images=allow_images
+    ):
+        logger.debug("Skipping file type that is not indexed: %s", path)
         return False
     return True
 

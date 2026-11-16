@@ -52,6 +52,9 @@ export interface TimelineUIStateInput {
   /** Whether a code mode program runs between tool calls; it is the current
    * activity even when the last turn group is parallel */
   codeModeWorking: boolean;
+  /** Whether a tool call waits for the user's approval; the run is still
+   * active even after display content, and the wait is its one activity */
+  awaitingApproval: boolean;
 }
 
 export interface TimelineUIStateResult {
@@ -110,7 +113,10 @@ export function useTimelineUIState(
       parallelActiveStepHasCollapsedContent,
       finalAnswerComing,
       codeModeWorking,
+      awaitingApproval,
     } = input;
+    const isActivelyExecuting =
+      !stopPacketSeen && (!hasDisplayContent || awaitingApproval);
 
     // Derive the primary UI state
     let uiState: TimelineUIState;
@@ -119,10 +125,9 @@ export function useTimelineUIState(
       uiState = TimelineUIState.EMPTY;
     } else if (hasDisplayContent && !hasPackets) {
       uiState = TimelineUIState.DISPLAY_CONTENT_ONLY;
-    } else if (!stopPacketSeen && !hasDisplayContent) {
-      // Actively executing tools
+    } else if (isActivelyExecuting) {
       uiState =
-        lastTurnGroup?.isParallel && !codeModeWorking
+        lastTurnGroup?.isParallel && !codeModeWorking && !awaitingApproval
           ? TimelineUIState.STREAMING_PARALLEL
           : TimelineUIState.STREAMING_SEQUENTIAL;
     } else if (userStopped) {
@@ -141,7 +146,6 @@ export function useTimelineUIState(
       uiState === TimelineUIState.COMPLETED_COLLAPSED ||
       uiState === TimelineUIState.COMPLETED_EXPANDED ||
       uiState === TimelineUIState.STOPPED;
-    const isActivelyExecuting = !stopPacketSeen && !hasDisplayContent;
 
     // Parallel tabs in header only when collapsed during streaming
     const showParallelTabs =

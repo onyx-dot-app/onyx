@@ -58,7 +58,7 @@ from onyx.server.features.build.db.sandbox import (
     has_active_craft_pat,
     record_cleanup_checkpoint__no_commit,
     set_sandbox_mcp_config_hashes__no_commit,
-    set_sandbox_skills_hashes__no_commit,
+    set_sandbox_skills_states__no_commit,
     sleep_running_sandbox__no_commit,
 )
 from onyx.server.features.build.preview_activity import latest_preview_activity
@@ -101,11 +101,8 @@ from onyx.server.metrics.craft_sandbox import (
     time_provision_phase,
     track_sandbox_provision_in_progress,
 )
-from onyx.skills.push import (
-    SKILLS_MOUNT_PATH,
-    build_user_skills_payload,
-    compute_skill_runtime_hash,
-)
+from onyx.skills.models import SandboxSkillsState
+from onyx.skills.push import SKILLS_MOUNT_PATH, build_user_skills_payload
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -155,7 +152,7 @@ class ManagedContentPayload:
 
     connectable_apps_section: str
     skills_files: FileSet
-    skills_hash: str
+    skills_state: SandboxSkillsState
     mcp_fingerprint: str
     library_files: FileSet
 
@@ -236,11 +233,11 @@ def build_managed_content_payload(
 ) -> ManagedContentPayload:
     """Read-only assembly of the skills/user-library payload and its hashes.
     Callers must close the read transaction before pushing externally."""
-    connectable_apps_section, skills_files = build_user_skills_payload(user, db_session)
+    skills = build_user_skills_payload(user, db_session)
     return ManagedContentPayload(
-        connectable_apps_section=connectable_apps_section,
-        skills_files=skills_files,
-        skills_hash=compute_skill_runtime_hash(skills_files, connectable_apps_section),
+        connectable_apps_section=skills.connectable_apps_section,
+        skills_files=skills.files,
+        skills_state=skills.state,
         mcp_fingerprint=craft_mcp_fingerprint(
             resolve_craft_mcp_servers(db_session, user)
         ),
@@ -298,13 +295,15 @@ def record_managed_content_hashes__no_commit(
 ) -> None:
     """Stamp the sandbox with the content state that was actually pushed.
     The MCP fingerprint is recorded regardless of the skill push (MCP config
-    is written per session), the skills hash only when the push landed."""
+    is written per session), the skills hash and the skills the run-time limit
+    left out only when the push landed."""
     set_sandbox_mcp_config_hashes__no_commit(
         db_session, {sandbox_id: payload.mcp_fingerprint}
     )
     if skills_hydrated:
-        set_sandbox_skills_hashes__no_commit(
-            db_session, {sandbox_id: payload.skills_hash}
+        set_sandbox_skills_states__no_commit(
+            db_session,
+            {sandbox_id: payload.skills_state},
         )
 
 
