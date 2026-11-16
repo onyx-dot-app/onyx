@@ -1,5 +1,4 @@
 import datetime
-import json
 import time
 from collections.abc import Generator
 from datetime import timedelta
@@ -39,7 +38,7 @@ from onyx.chat.incognito import (
     incognito_allowed_for_user,
 )
 from onyx.chat.incognito_context import teardown_incognito_session
-from onyx.chat.models import ChatFullResponse, CreateChatSessionID
+from onyx.chat.models import ChatFullResponse, CreateChatSessionID, StreamingError
 from onyx.chat.process_message import (
     gather_stream_full,
     handle_multi_model_stream,
@@ -163,6 +162,24 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter(prefix="/chat")
+
+
+def unhandled_stream_error(error: Exception) -> StreamingError:
+    """Client payload for an exception that escapes the chat stream handlers.
+
+    Only OnyxError detail is client-safe; other exception text stays in server logs.
+    """
+    if isinstance(error, OnyxError):
+        return StreamingError(
+            error=error.detail,
+            error_code=error.error_code.code,
+            is_retryable=error.status_code >= 500,
+        )
+    return StreamingError(
+        error="An unexpected error occurred. Please try again.",
+        error_code=OnyxErrorCode.INTERNAL_ERROR.code,
+        is_retryable=True,
+    )
 
 
 def _get_available_tokens_for_persona(
@@ -865,7 +882,7 @@ def handle_send_chat_message(
                     yield get_json_line(obj.model_dump())
             except Exception as e:
                 logger.exception("Error in multi-model streaming")
-                yield json.dumps({"error": str(e)})
+                yield get_json_line(unhandled_stream_error(e).model_dump())
 
         return StreamingResponse(
             multi_model_stream_generator(), media_type="text/event-stream"
@@ -941,7 +958,7 @@ def handle_send_chat_message(
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
-            yield json.dumps({"error": str(e)})
+            yield get_json_line(unhandled_stream_error(e).model_dump())
 
         finally:
             logger.debug("Stream generator finished")

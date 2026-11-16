@@ -44,6 +44,7 @@ from onyx.server.features.build.sandbox.event_schema import Error as SandboxErro
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.features.build.session.errors import OpencodeConfigReloadError
 from onyx.server.features.build.session.interrupt_signal import (
     clear_interrupt,
     is_interrupt_requested,
@@ -545,7 +546,11 @@ def _drive_interactive_turn(
                     logger.exception(
                         "Failed to finalize persistence for turn %s", turn_id
                     )
-                persist_turn_error("This turn failed unexpectedly.")
+                persist_turn_error(
+                    str(exc)
+                    if isinstance(exc, OpencodeConfigReloadError)
+                    else "This turn failed unexpectedly."
+                )
                 completion_status = TURN_STATUS_FAILED
                 completion_error = f"{type(exc).__name__}: {str(exc)[:950]}"
             finally:
