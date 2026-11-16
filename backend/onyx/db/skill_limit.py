@@ -4,8 +4,8 @@ A user's own write (turning a skill on, an upload or import, a new version of
 a skill they run) may not move them from within the limits in
 ``onyx.skills.limits`` to past them. A user who is already past them is not
 refused. Writes that change what other users get (settings, shares,
-publishing, membership) are not checked: the run-time limit and the admin
-list cover those users.
+publishing, membership) are not checked: the run-time limit, the "did not
+load" notice and the admin list cover those users.
 """
 
 from collections.abc import Iterable, Iterator

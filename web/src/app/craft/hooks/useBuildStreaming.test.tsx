@@ -3485,6 +3485,7 @@ describe("useBuildStreaming thinking packets", () => {
         agent_provider: null,
         agent_model: null,
         skills_stale: false,
+        skill_omissions: null,
         session_loaded_in_sandbox: true,
       });
       jest.mocked(fetchArtifacts).mockResolvedValue([]);
@@ -3595,6 +3596,7 @@ describe("useBuildStreaming thinking packets", () => {
         agent_provider: null,
         agent_model: null,
         skills_stale: false,
+        skill_omissions: null,
         session_loaded_in_sandbox: true,
       });
       jest.mocked(fetchArtifacts).mockResolvedValue([]);

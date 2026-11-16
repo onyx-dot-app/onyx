@@ -65,6 +65,17 @@
   Custom cards show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
   be hidden, so empty arrays do not mean a skill is personal.
+- **Skill limit notices.** A refused write of the user's own (413
+  `SKILL_LIMIT_EXCEEDED`) shows the limit where the user made the change
+  (`web/src/lib/skills/hooks.ts:useSkillLimitCopy`). Bulk and import rows
+  show the server's text. When `skill_omissions` (on the session read, the
+  reload and the 30 s `sandbox-status` poll, so a push by someone else
+  arrives) lists skills the run-time rule left out, `SkillRuntimeNotice`
+  (`web/src/app/craft/components/`) shows a card above the composer with
+  their names, **Manage skills** and **Dismiss**. Dismiss hides that list
+  only. It waits while the session is stale. The admin Skills page shows
+  `SkillLimitUsersBanner` (`web/src/sections/skills/`) when
+  `GET /skills/users-over-limit` lists users: the first 10, then a count.
 - **Skill dialog.** Owners and editors open custom cards in a single
   Details/Sharing dialog. Share actions open its Sharing tab directly. Draft
   sharing edits survive tab switches. Other recipients and built-in skills
@@ -183,7 +194,7 @@ skill mutation (server/features/skill/api.py)   compute affected users BEFORE th
          build_connectable_apps_list     guidance for unconnected apps
        compute_skill_runtime_hash        skip a sandbox whose hash matches
        push_to_sandboxes(SKILLS_MOUNT_PATH)   parallel batches of 10 sandboxes, or
-                                         fewer when a batch reaches 900 MB of files
+                                         fewer when a batch reaches 256 MB of files
        set_sandbox_skills_states__no_commit   hash + skill_omissions, only for
                                          successful pushes (omissions also on a hash skip)
   -> commit
@@ -407,8 +418,11 @@ The library preview of an external-app skill calls the same renderer
    it first fails and the user tries again. Publish and transfer
    refuse a clash with `CONFLICT`. Skill names repeat across plugins; never
    compare one with `plugin.name`. The legacy index
-   `uq_skill_automatic_name` is gone: the run-time name order picks one of
-   two automatic skills with one name. The dual write stores `AVAILABLE` for
+   `uq_skill_automatic_name` stays until the legacy column goes: an
+   organization-wide Default or Required on a second skill with the same name
+   gets `SKILL_NAME_CONFLICT` (`db/plugin.py:_apply_to_plugin__no_commit`).
+   Group settings are not in the legacy column, so the run-time name order
+   picks one of two same-name skills that group settings turn on. The dual write stores `AVAILABLE` for
    `NOT_AVAILABLE` and for no setting. The legacy `uq_user_skill_preference_name` allows one enabled
    legacy choice per user and name; `db/skill.py:_write_legacy_choice__no_commit`
    skips a legacy row it refuses, because reads use `user_plugin_preference`.
@@ -605,9 +619,9 @@ The library preview of an external-app skill calls the same renderer
     (`STORED_ZIP_DIRECTORY_MAX_BYTES`). Over the limit is a 413
     `zip_metadata_bytes`. `normalize_custom_bundle` finds duplicate and
     file-versus-folder paths by sorting the paths, not by building every parent
-    path. The push skips a Skill whose sent files would take the push over the
-    receiver's `MAX_BUNDLE_BYTES`; the run-time total counts its recorded size,
-    or its zip directory, before it reads the files ([[#runtime-skill-limit]]).
+    path. The push checks a Skill's recorded size, or its zip directory, against
+    the transport cap (`skills/limits.py:SKILL_RUNTIME_MAX_BYTES`, 900 MiB)
+    before it reads the files ([[#runtime-skill-limit]]).
 19. `plugin-tables` **Access reads come from the plugin tables;
     the skill rows are still written.** Migration `cdec9dd9ca3d` adds `plugin_marketplace`,
     `plugin`, `plugin_version`, `plugin_skill`, `plugin__user`,
@@ -761,7 +775,7 @@ The library preview of an external-app skill calls the same renderer
     user lock and the skill row, the toggle's order. Admin changes
     (settings, shares, Default access, publish, approve, transfer), app connect
     and group membership are never checked: the run-time rule and the admin
-    list handle a user they put past the limit. A user already over is not
+    banner handle a user they put past the limit. A user already over is not
     refused.
 26. `runtime-skill-limit` **A sandbox gets every plugin that fits in 900 MB
     and 10,000 files.** `skills/push.py:build_user_skills_payload` applies it,
@@ -771,10 +785,11 @@ The library preview of an external-app skill calls the same renderer
     by default; inside a group the most recent first, then id. One fit loop in
     `skills/push.py:_assemble_skills` keeps whole plugins in that order. A
     custom skill counts the larger of its recorded size and the bytes it sends
-    after `${CLAUDE_SKILL_DIR}` resolution. A skill that would pass the
-    transport cap `MAX_BUNDLE_BYTES` is skipped. Left-out plugins (`SkillOmission`:
+    after `${CLAUDE_SKILL_DIR}` resolution, so the same total keeps the
+    transport cap (see [[craft-sandboxes]]). Left-out plugins (`SkillOmission`:
     id, name, bytes, files, reason) go to `sandbox.skill_omissions` together
     with `skills_hash`, so they describe the content on that disk.
+    `SessionResponse.skill_omissions` carries them to the session UI.
     `GET /skills/users-over-limit` (`MANAGE_PLUGINS`,
     `db/skill_limit.py:users_past_write_limit`) lists active users past the
     write limit with their usage and the omission count of their sandbox. An
@@ -792,6 +807,11 @@ The library preview of an external-app skill calls the same renderer
   stale with no list of inputs to maintain.
 - **A stale notice, not an automatic reload.** Reload disposes the live
   runtime, so the user chooses when. It refuses while a turn runs.
+- **A push can change files during a turn (R30).** "A new version applies at
+  the next message" holds only for the harness. The OpenCode push swaps the
+  `/workspace/managed/skills` link at once, so a turn that is running can read
+  the new files of a Skill. The previous tree stays readable until the next
+  push to that mount or for 60 seconds.
 - **App lifecycle keeps user intent.** Disconnecting an app deletes the user's
   enabled selections for its skills and keeps opt-outs
   (`db/external_app.py`). Deleting an app resets its custom skills to

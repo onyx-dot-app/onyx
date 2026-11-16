@@ -32,7 +32,6 @@ from onyx.server.features.build.db.sandbox import (
 from onyx.server.features.build.sandbox.base import PUSH_PARALLELISM
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
-    MAX_BUNDLE_BYTES,
     MAX_FILE_BYTES,
 )
 from onyx.server.features.build.sandbox.models import FileSet
@@ -256,14 +255,12 @@ def _assemble_skills(
     The run-time limit applies to one running total: a skill that does not
     fit is left out, and later ones still load if they fit. A custom skill
     counts its recorded size, or the files sent when they are larger (with
-    ``${CLAUDE_SKILL_DIR}`` resolved). The recorded size decides before the
-    bundle is read. A skill that would pass the transport cap
-    (``MAX_BUNDLE_BYTES``) is skipped.
+    ``${CLAUDE_SKILL_DIR}`` resolved), so the total also keeps the push within
+    the transport cap. The recorded size decides before the bundle is read.
     """
     files: FileSet = {}
     omissions: list[SkillOmission] = []
     used = SkillUsage()
-    sent = 0
     seen_names: set[str] = set()
     validity_updates: list[SkillValidityUpdate] = []
     file_store = get_default_file_store()
@@ -353,16 +350,9 @@ def _assemble_skills(
         size = _larger(size, _usage_of(skill_files))
         if left_out(runtime_skill, size):
             continue
-        sent_size = _usage_of(skill_files).bytes
-        if sent + sent_size > MAX_BUNDLE_BYTES:
-            logger.warning(
-                "Skipping skill %s: the skills exceed the sandbox size limit", name
-            )
-            continue
         files.update(skill_files)
         seen_names.add(name)
         used += size
-        sent += sent_size
 
     try:
         persist_skill_validity(validity_updates)
@@ -427,11 +417,16 @@ def push_skill_to_affected_sandboxes(skill: Skill, db_session: Session) -> None:
     push_skills_for_users(user_ids, db_session)
 
 
+# Bytes of payload files one push batch holds before it is sent. Well under
+# the API pod's memory headroom; a single larger payload goes alone.
+_PUSH_BATCH_MAX_BYTES = 256 * 1024 * 1024
+
+
 def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
     """Push skill state changes and mark affected sessions for reload. Builds
-    payloads one at a time and sends them in parallel batches. A batch is sent
-    when it holds ``PUSH_PARALLELISM`` sandboxes or one run-time limit of files,
-    so a few large payloads do not all stay in memory."""
+    payloads one at a time and sends them in parallel batches of up to
+    ``PUSH_PARALLELISM`` sandboxes or ``_PUSH_BATCH_MAX_BYTES`` of files, so a
+    few large payloads do not all stay in memory."""
     if not user_ids:
         return
     try:
@@ -482,13 +477,13 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
             if current.omissions != state.omissions:
                 delivered[sandbox_id] = state
             continue
+        payload_bytes = sum(len(content) for content in payload.files.values())
+        if batch_bytes + payload_bytes > _PUSH_BATCH_MAX_BYTES:
+            send_batch()
         batch_files[sandbox_id] = payload.files
         batch_states[sandbox_id] = state
-        batch_bytes += sum(len(content) for content in payload.files.values())
-        if (
-            len(batch_files) >= PUSH_PARALLELISM
-            or batch_bytes >= SKILL_RUNTIME_MAX_BYTES
-        ):
+        batch_bytes += payload_bytes
+        if len(batch_files) >= PUSH_PARALLELISM or batch_bytes >= _PUSH_BATCH_MAX_BYTES:
             send_batch()
     send_batch()
     if not delivered:
