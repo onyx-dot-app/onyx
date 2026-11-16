@@ -263,6 +263,7 @@ class Agent:
         | None = None,
         on_finish: ReleaseHook | None = None,
         on_suspend: ReleaseHook | None = None,
+        on_release: Callable[[], None] | None = None,
         agent_id: str | None = None,
         previous_run_id: str | None = None,
         restoration: "RestorableFeature | None" = None,
@@ -296,6 +297,11 @@ class Agent:
         self.on_finish = on_finish
         # Called when the run suspends, before its state is captured.
         self.on_suspend = on_suspend
+        # Called after each finish or suspension, once the run's work (its tool
+        # threads and the work of its foreground children) has drained, on the
+        # thread that ended that work, so it must be short. Errors, including
+        # AgentCancelled, are logged and do not stop the run's cleanup.
+        self.on_release = on_release
         self._restoration = restoration
         self._state = (state or AgentState()).snapshot()
         for message in self._state.messages:
@@ -574,6 +580,7 @@ class Run:
         ) = None
         self._on_finish: ReleaseHook | None = None
         self._on_suspend: ReleaseHook | None = None
+        self._on_release: Callable[[], None] | None = None
         self._restoration: RestorableFeature | None = None
         self._step_tools: list[AgentTool] | None = None
         self.work = ExecutionWork()
@@ -1105,6 +1112,7 @@ class Run:
             self.after_tool_call = agent.after_tool_call
             self._on_finish = agent.on_finish
             self._on_suspend = agent.on_suspend
+            self._on_release = agent.on_release
             self._restoration = agent._restoration
             self._thread_context = copy_context()
             if coordinator is not None:
@@ -1325,6 +1333,7 @@ class Run:
                 self._wake_execution()
 
         def drained() -> None:
+            self._released_work()
             with self.execution_lock:
                 self._state.status = RunStatus.SUSPENDED
             self.publish_event(AgentSuspendedEvent(**self.event_context))
@@ -1511,6 +1520,25 @@ class Run:
             if amended_ids.intersection(covered):
                 self._state.checkpoint = None
 
+    def _released_work(self) -> None:
+        """Call the agent's release hook; the run's work has drained."""
+        hook = self._on_release
+        if hook is None:
+            return
+        # Cleanup goes on whatever the hook raises: the run must still become
+        # idle and reusable.
+        try:
+            hook()
+        except AgentCancelled:
+            logger.info(
+                "Run release hook stopped for cancellation after its work drained: %s",
+                self.id,
+            )
+        except Exception:
+            logger.exception(
+                "Run release hook failed after its work drained: %s", self.id
+            )
+
     def _clear_execution_config(self) -> None:
         self._token_counts.clear()
         self._llm = None
@@ -1526,6 +1554,7 @@ class Run:
         self.after_tool_call = None
         self._on_finish = None
         self._on_suspend = None
+        self._on_release = None
         self._restoration = None
 
     def _drain_workers(self) -> None:
@@ -1538,6 +1567,7 @@ class Run:
         self._execution_active = False
 
         def finish_cleanup() -> None:
+            self._released_work()
             try:
                 if self.coordination is not None:
                     self.coordination.coordinator.finish(self)

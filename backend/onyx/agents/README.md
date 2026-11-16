@@ -215,6 +215,12 @@ A hook that fails otherwise or stops for cancellation is logged; the run keeps i
 An amended result inside the compaction checkpoint drops the checkpoint, so the next request summarizes the new result.
 `on_suspend(results)` has the same contract; it runs when the run suspends, before the run captures its state.
 Chat code mode uses these hooks to stop open cells and save what they did, also for a call that Stop interrupted.
+`on_release()` runs after each finish or suspension, once the run's work has drained:
+its tool threads, including calls that ignored a Stop, and the work of its foreground children.
+Background children do not hold it back.
+It runs on the thread that ended that work, so it must be short. It returns nothing and cannot change results.
+Errors, including `AgentCancelled`, are logged; the run still becomes idle and reusable.
+Chat's root agent uses it to end the sandbox turn; subagents share the root's tools and install no release hook.
 
 Two optional tool callbacks cover interception and enrichment:
 

@@ -628,3 +628,116 @@ def test_a_suspend_hook_failure_fails_the_run_unless_the_user_stopped_it(
     finally:
         assert run.wait_for_idle(3)
         assert coordinator.close(3)
+
+
+def test_the_release_hook_of_a_stopped_run_waits_for_its_tool_thread() -> None:
+    """A Stop ends the run while a tool thread still runs; the release hook
+    runs once that thread returns."""
+    cancellation = CancellationSignal()
+    running = threading.Event()
+    leave = threading.Event()
+    returned = threading.Event()
+    released: list[bool] = []
+
+    def execute(_invocation: ToolInvocation) -> ToolResult:
+        running.set()
+        # Ignores the Stop, as a tool that cannot end its work at once does.
+        leave.wait(10)
+        returned.set()
+        return ToolResult(content="late")
+
+    agent = Agent(
+        FakeModelClient(_call_then(_answer)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=execute,
+            )
+        ],
+        on_release=lambda: released.append(returned.is_set()),
+    )
+    threading.Thread(
+        target=lambda: running.wait(10) and cancellation.cancel(), daemon=True
+    ).start()
+    run = agent.start(max_steps=2, cancellation=cancellation)
+    try:
+        run.wait_for_completion(timeout=10)
+        assert run.status == RunStatus.CANCELLED
+        assert not run.wait_for_idle(timeout=0.2)
+        assert released == []
+    finally:
+        leave.set()
+    assert run.wait_for_idle(timeout=10)
+    assert released == [True]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [AgentCancelled(), RuntimeError("the cache is unavailable")],
+    ids=["cancelled", "error"],
+)
+def test_a_failing_release_hook_still_leaves_the_run_idle_and_reusable(
+    error: BaseException,
+) -> None:
+    """A finished run becomes idle and its agent starts again; a suspended run
+    becomes idle too."""
+    released: list[bool] = []
+
+    def release() -> None:
+        released.append(True)
+        raise error
+
+    def gate(context: ToolCallContext) -> PendingToolInput | None:
+        if context.call.name != "approve":
+            return None
+        return PendingToolInput(
+            request_id="permission", prompt="Proceed?", mode=InputMode.EXECUTE
+        )
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if any(
+            isinstance(message, UserMessage) and message.text == "approve"
+            for message in request.messages
+        ):
+            return AssistantMessage(
+                content=[ToolCall(id="approve", name="approve", arguments={})]
+            )
+        return _answer()
+
+    agent = Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="approve", description="", parameters={}
+                ),
+                execute=lambda _invocation: ToolResult(content="approved"),
+            )
+        ],
+        before_tool_call=gate,
+        on_release=release,
+    )
+    for _ in range(2):
+        run = agent.start(max_steps=2)
+        run.wait_for_completion(timeout=10)
+        assert run.status == RunStatus.COMPLETE
+        assert run.wait_for_idle(timeout=10)
+    coordinator = AgentCoordinator()
+    run = agent.start(
+        messages=[UserMessage(content="approve")],
+        max_steps=2,
+        coordinator=coordinator,
+    )
+    try:
+        assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(3)
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(3)
+        assert coordinator.close(3)
+    # Two finishes, the suspension, and the finish of the cancelled run.
+    assert len(released) == 4

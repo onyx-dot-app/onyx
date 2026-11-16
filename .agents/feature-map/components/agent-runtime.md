@@ -94,7 +94,8 @@ prompt holds and the compaction prompt text.
 
 ```
 Agent (history, checkpoint, tools, prepare_step / after_step,
-       before_tool_call / after_tool_call / on_finish / on_suspend hooks)
+       before_tool_call / after_tool_call / on_finish / on_suspend /
+       on_release hooks)
   start() -> Run (one request, step budget, own cancellation signal)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish
@@ -129,6 +130,13 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   results and the run still suspends. A suspend hook that stops for
   cancellation finishes the run as cancelled. Chat uses both hooks to close
   code mode cells ([[code-execution#code-mode-interrupted-run]]).
+  `Agent.on_release` runs after each finish or suspension once the run's work
+  drains (`Run._released_work`, from `_drain_workers` and `_suspend`): its tool
+  threads and its foreground children's work (`Run.track_child_work`), not
+  background children. It cannot change results. Errors, `AgentCancelled`
+  included, are logged and the run still becomes idle and reusable. Only the
+  root `chat/agent.py:ChatAgent` installs it, to end the sandbox turn
+  ([[code-execution]]); subagents share the root's tools and install none.
   `chat/presentation.py:ResponsePresenter` renders each amendment with
   `chat/renderer.py:ToolRenderer.amend`. A call without an ended card
   completes with the amended result. An ended card renders only what the

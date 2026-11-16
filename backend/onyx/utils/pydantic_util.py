@@ -1,11 +1,21 @@
 from typing import Any, TypeVar
 
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 T = TypeVar("T")
+
+
+def _is_none(value: object) -> bool:
+    return value is None
+
+
+# Annotate a field with it (`Annotated[str | None, OMITTED_WHEN_NONE]`) to
+# leave its key out of the JSON when it has no value. Code mode stubs read
+# such a field as NotRequired.
+OMITTED_WHEN_NONE = Field(exclude_if=_is_none)
 
 
 def shallow_model_dump(model_instance: BaseModel) -> dict[str, Any]:

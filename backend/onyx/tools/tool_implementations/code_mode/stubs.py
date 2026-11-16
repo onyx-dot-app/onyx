@@ -44,6 +44,7 @@ from onyx.tools.tool_implementations.code_mode.tool_search import (
     TOOL_SEARCH_STUBS,
     ToolIndex,
 )
+from onyx.utils.pydantic_util import as_base
 
 # Bounds on each rendered function, so one tool with a large schema cannot fill
 # the tool description that the model reads on every step.
@@ -792,6 +793,13 @@ def program_value(function: ToolFunction, result: ToolResult) -> object:
     kind = function.result.kind
     if kind is CodeModeResultKind.TEXT and not result.is_error:
         return result.content
+    if kind is CodeModeResultKind.DETAILS and not result.is_error:
+        model = function.result.model
+        if model is None or not isinstance(result.details, model):
+            raise RuntimeError(
+                result.content or f"{function.function_name} returned no details"
+            )
+        return as_base(result.details, model).model_dump(mode="json")
     try:
         value: object = json.loads(result.content)
         parsed = True

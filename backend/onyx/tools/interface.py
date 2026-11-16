@@ -194,6 +194,11 @@ class Tool(abc.ABC):
     merge_list_limit: int | None = None
     # Set on tools whose calls follow an action policy; see onyx/chat/tool_approvals.py.
     approval: ToolApprovalScope | None = None
+    # Ends what the tool keeps for one run, such as a sandbox turn. The root
+    # chat agent calls it once for tools that share it, after each of its runs
+    # finishes or suspends and the run's work drains (Agent.on_release).
+    # Subagents share the root's tools and do not call it.
+    end_run: Callable[[], None] | None = None
 
     @property
     def execution_mode(self) -> ToolExecutionMode:
