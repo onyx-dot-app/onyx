@@ -152,10 +152,10 @@ Both products draw a block with the same components in
 `web/src/lib/timeline/components/` ([[chat-frontend]]): `RunCard` is the card
 (run header, fold, timer, Done or Stopped row) and `RunStep` is a step (its
 status sets the spinner, the alert icon and the failed tint). `CraftTimeline`
-and chat's `AgentTimeline` only map their steps onto them. A step's header is
-a `Content` (icon and title) in Opal's `Collapsible.Header`, so the whole row
-folds the step; every step folds its body away the same way, with `Fold`.
-Answer text (`AnswerText`) lines
+and chat's `AgentTimeline` only map their steps onto them. Each step is an
+Opal `Log` line (as in the connector check card): icon, title, a detail such as
+a command, and a chevron; the whole line folds the step's body, and a failed
+step is an `error-heavy` line. Answer text (`AnswerText`) lines
 up with the run header's text. Every block folds, even with one entry, once
 a text reply follows.
 
