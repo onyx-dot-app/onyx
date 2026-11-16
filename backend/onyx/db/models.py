@@ -6029,7 +6029,13 @@ class Integration(Base):
     """A connection from Onyx to one service: an MCP server or an HTTP API. Its
     home plugin gives its owner, scope and access. The settings of each kind
     stay on the kind's own table (``mcp_server``, ``external_app``, or the
-    OpenAPI ``tool`` row), which points here through ``integration_id``."""
+    OpenAPI ``tool`` row), which points here through ``integration_id``.
+
+    Read a kind table only for the settings of its kind: the server URL and
+    transport, the preset and URL patterns, the spec. Its name, owner, access,
+    sign-in and approval columns are old copies. The plugin, this table,
+    ``integration_oauth_client``, ``integration_connection`` and
+    ``integration_action_policy`` own those."""
 
     __tablename__ = "integration"
 
@@ -6149,10 +6155,6 @@ class IntegrationAction(Base):
             values_callable=lambda x: [e.value for e in x],
         ),
         nullable=True,
-    )
-    # False: the admin did not select the action, so no one can use it.
-    admin_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
     )
     # Set: chat can offer the action as an LLM tool.
     input_schema: Mapped[dict[str, Any] | None] = mapped_column(

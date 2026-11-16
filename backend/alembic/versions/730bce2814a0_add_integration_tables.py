@@ -3,8 +3,8 @@ OpenAPI custom tool into them, with a home plugin for each.
 
 The old tables stay the tables of each kind: mcp_server, external_app and the
 OpenAPI tool row each get an integration_id. That is the only change to them,
-and a rollback drops it. The migration moves no secret: the credential import
-(U3) does that in app code.
+and a rollback drops it. The migration is SQL only and imports no app code. It
+moves no secret: the credential import (U3) does that in app code.
 
 Revision ID: 730bce2814a0
 Revises: 7c00f53ab75f
@@ -103,12 +103,6 @@ def _create_tables() -> None:
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("read_only", sa.Boolean(), nullable=True),
         sa.Column("default_policy", sa.String(), nullable=True),
-        sa.Column(
-            "admin_enabled",
-            sa.Boolean(),
-            server_default=sa.text("true"),
-            nullable=False,
-        ),
         sa.Column("input_schema", postgresql.JSONB(), nullable=True),
         sa.Column("output_schema", postgresql.JSONB(), nullable=True),
         sa.Column("http_method", sa.String(), nullable=True),
@@ -703,82 +697,20 @@ _INSERT_OAUTH_CLIENTS = """
     WHERE auth_method = 'oauth2'
 """
 
-# Each MCP tool row. A tool that the admin did not select stays unusable.
+# Each MCP tool row. The actions of an OpenAPI spec and of a provider catalog
+# need app code to read, so the action sync writes them.
 _INSERT_MCP_ACTIONS = """
     INSERT INTO integration_action (
         integration_id, key, source, display_name, description, read_only,
-        admin_enabled, input_schema, output_schema, created_at, updated_at
+        input_schema, output_schema, created_at, updated_at
     )
     SELECT
         src.id, t.name, 'mcp_sync', coalesce(nullif(t.display_name, ''), t.name),
-        t.description, t.mcp_read_only, t.enabled, t.mcp_input_schema,
+        t.description, t.mcp_read_only, t.mcp_input_schema,
         t.mcp_output_schema, src.created_at, src.updated_at
     FROM integration_source src
     JOIN tool t ON t.mcp_server_id = src.mcp_server_id
     ORDER BY src.id, t.id
-    ON CONFLICT DO NOTHING
-"""
-
-# Each operation of an OpenAPI tool, as openapi_to_method_specs reads it. The
-# input schema is MethodSpec.to_tool_definition: the JSON request body, then
-# each query and each path parameter, a later name in place of an earlier one.
-_INSERT_OPENAPI_ACTIONS = """
-    INSERT INTO integration_action (
-        integration_id, key, source, display_name, description, read_only,
-        admin_enabled, input_schema, http_method, path_template,
-        created_at, updated_at
-    )
-    SELECT
-        src.id, op.value ->> 'operationId', 'openapi_spec',
-        op.value ->> 'operationId',
-        coalesce(
-            nullif(op.value ->> 'summary', ''), op.value ->> 'description'
-        ),
-        upper(op.key) = 'GET',
-        true,
-        jsonb_build_object('type', 'object', 'properties', props.value),
-        upper(op.key), path.key, src.created_at, src.updated_at
-    FROM integration_source src
-    JOIN tool t ON t.id = src.tool_id
-    CROSS JOIN LATERAL jsonb_each(
-        CASE WHEN jsonb_typeof(t.openapi_schema -> 'paths') = 'object'
-            THEN t.openapi_schema -> 'paths' ELSE '{}'::jsonb END
-    ) path
-    CROSS JOIN LATERAL jsonb_each(
-        CASE WHEN jsonb_typeof(path.value) = 'object'
-            THEN path.value ELSE '{}'::jsonb END
-    ) op
-    CROSS JOIN LATERAL (
-        SELECT coalesce(
-            jsonb_object_agg(field.name, field.schema ORDER BY field.rank, field.n),
-            '{}'::jsonb
-        ) AS value
-        FROM (
-            SELECT 0 AS rank, 0::bigint AS n, 'requestBody' AS name,
-                op.value -> 'requestBody' -> 'content' -> 'application/json'
-                    -> 'schema' AS schema
-            WHERE jsonb_typeof(
-                op.value -> 'requestBody' -> 'content' -> 'application/json'
-                    -> 'schema'
-            ) = 'object'
-              AND op.value -> 'requestBody' -> 'content' -> 'application/json'
-                    -> 'schema' <> '{}'::jsonb
-            UNION ALL
-            SELECT CASE param.value ->> 'in' WHEN 'query' THEN 1 ELSE 2 END,
-                param.n, param.value ->> 'name', param.value -> 'schema'
-            FROM jsonb_array_elements(
-                CASE WHEN jsonb_typeof(op.value -> 'parameters') = 'array'
-                    THEN op.value -> 'parameters' ELSE '[]'::jsonb END
-            ) WITH ORDINALITY AS param(value, n)
-            WHERE param.value ->> 'in' IN ('query', 'path')
-              AND param.value ? 'schema'
-              AND param.value ->> 'name' IS NOT NULL
-        ) field
-    ) props
-    WHERE lower(op.key) IN ('get', 'post', 'put', 'delete', 'patch')
-      AND jsonb_typeof(op.value) = 'object'
-      AND coalesce(op.value ->> 'operationId', '') <> ''
-    ORDER BY src.id, path.key, op.key
     ON CONFLICT DO NOTHING
 """
 
@@ -840,6 +772,21 @@ _POLICY_VALUE = """
         WHEN 'ASK' THEN 'ask'
         WHEN 'DENY' THEN 'blocked'
     END
+"""
+
+# An MCP tool that the admin did not select is offered nowhere today. Blocked
+# keeps it so; this row wins over a policy row for the same tool.
+_INSERT_UNSELECTED_MCP_TOOLS = """
+    INSERT INTO integration_action_policy
+        (integration_id, action, user_id, policy, created_at, updated_at)
+    SELECT ti.integration_id, ti.tool_name, NULL, 'blocked',
+        src.created_at, src.updated_at
+    FROM tool_integration ti
+    JOIN integration_source src ON src.id = ti.integration_id
+    JOIN tool t ON t.id = ti.tool_id
+    WHERE ti.kind = 'mcp_server' AND NOT t.enabled
+    ORDER BY ti.integration_id, ti.tool_name
+    ON CONFLICT DO NOTHING
 """
 
 _INSERT_ADMIN_POLICIES = f"""
@@ -986,10 +933,10 @@ def _copy_integrations() -> None:
         *_SET_KIND_INTEGRATIONS,
         _INSERT_OAUTH_CLIENTS,
         _INSERT_MCP_ACTIONS,
-        _INSERT_OPENAPI_ACTIONS,
         _CREATE_TOOL_INTEGRATIONS,
         _INSERT_MCP_USER_SHARES,
         _INSERT_MCP_GROUP_SHARES,
+        _INSERT_UNSELECTED_MCP_TOOLS,
         _INSERT_ADMIN_POLICIES,
         _INSERT_USER_POLICIES,
         _INSERT_PREFERENCES,

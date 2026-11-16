@@ -56,37 +56,11 @@ OLD_TABLES = (
     "scheduled_task_action_policy",
 )
 
-ISSUE_SCHEMA = {"type": "object", "properties": {"title": {"type": "string"}}}
 OPENAPI_SCHEMA = {
     "openapi": "3.0.0",
     "info": {"title": "t", "version": "1"},
     "servers": [{"url": "https://api.example.com"}],
-    "paths": {
-        "/issues/{id}": {
-            # A path-level key, not an operation.
-            "parameters": [{"name": "id", "in": "path", "schema": {"type": "string"}}],
-            "get": {
-                "operationId": "getIssue",
-                "summary": "Get an issue",
-                "parameters": [
-                    {"name": "id", "in": "path", "schema": {"type": "string"}},
-                    {"name": "fields", "in": "query", "schema": {"type": "string"}},
-                    {"name": "X-Trace", "in": "header", "schema": {"type": "string"}},
-                ],
-            },
-        },
-        "/issues": {
-            "post": {
-                "operationId": "createIssue",
-                "description": "Create an issue",
-                "requestBody": {
-                    "content": {"application/json": {"schema": ISSUE_SCHEMA}}
-                },
-            },
-            # No operationId: openapi_to_method_specs refuses it, so no action.
-            "delete": {"summary": "Delete all"},
-        },
-    },
+    "paths": {"/issues": {"post": {"operationId": "createIssue", "summary": "Create"}}},
 }
 
 
@@ -471,9 +445,9 @@ def _seed(conn: Connection) -> Seeded:
     conn.execute(
         text(
             "INSERT INTO approval_request (id, chat_session_id, chat_message_id, "
-            "gated_app_id, action_id, tool_call_id, tool_name, display_name) "
-            "VALUES (:id, :s, :m, :g, 'create_issue', 'call_1', 'create_issue', "
-            "'Create issue')"
+            "gated_app_id, action_id, tool_call_id, tool_name, display_name, "
+            "arguments) VALUES (:id, :s, :m, :g, 'create_issue', 'call_1', "
+            "'create_issue', 'Create issue', '{}')"
         ),
         {
             "id": uuid4(),
@@ -663,7 +637,7 @@ def _actions(conn: Connection, integration_id: int) -> list[dict[str, Any]]:
         for row in conn.execute(
             text(
                 "SELECT key, source, display_name, description, read_only, "
-                "default_policy, admin_enabled, input_schema, output_schema, "
+                "default_policy, input_schema, output_schema, "
                 "http_method, path_template FROM integration_action "
                 "WHERE integration_id = :id ORDER BY key"
             ),
@@ -820,20 +794,17 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
                 "key": "create_issue",
                 "display_name": "create_issue",
                 "read_only": False,
-                "admin_enabled": True,
             },
             {
                 **mcp_action,
                 "key": "list_issues",
                 "display_name": "list_issues",
                 "read_only": True,
-                "admin_enabled": True,
             },
         ]
-        # The admin did not select drop_table, so it stays unusable.
-        assert [(a["key"], a["admin_enabled"]) for a in _actions(conn, private.id)] == [
-            ("drop_table", False),
-            ("query", True),
+        assert [a["key"] for a in _actions(conn, private.id)] == [
+            "drop_table",
+            "query",
         ]
         assert (private.auth_mode, private.auth_method) == ("shared", "api_key")
         assert _oauth_client(conn, private.id) is None
@@ -861,43 +832,8 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         assert (app_custom.auth_mode, app_custom.auth_method) == ("none", None)
         assert _oauth_client(conn, app_custom.id) is None
         assert custom["private"].kind == "api"
-        assert _actions(conn, custom["private"].id) == [
-            {
-                "key": "createIssue",
-                "source": "openapi_spec",
-                "display_name": "createIssue",
-                "description": "Create an issue",
-                "read_only": False,
-                "default_policy": None,
-                "admin_enabled": True,
-                "input_schema": {
-                    "type": "object",
-                    "properties": {"requestBody": ISSUE_SCHEMA},
-                },
-                "output_schema": None,
-                "http_method": "POST",
-                "path_template": "/issues",
-            },
-            {
-                "key": "getIssue",
-                "source": "openapi_spec",
-                "display_name": "getIssue",
-                "description": "Get an issue",
-                "read_only": True,
-                "default_policy": None,
-                "admin_enabled": True,
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "fields": {"type": "string"},
-                        "id": {"type": "string"},
-                    },
-                },
-                "output_schema": None,
-                "http_method": "GET",
-                "path_template": "/issues/{id}",
-            },
-        ]
+        # App code reads a spec; the action sync writes its actions.
+        assert _actions(conn, custom["private"].id) == []
         assert (custom["private"].auth_mode, custom["private"].auth_method) == (
             "shared",
             "api_key",
@@ -958,8 +894,9 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         }
         assert policies == {
             (public.id, "create_issue", None): "ask",
-            # admin_enabled keeps drop_table unusable; the policy is as saved.
-            (private.id, "drop_table", None): "allow",
+            # The admin did not select drop_table: blocked wins over its
+            # saved Always allow.
+            (private.id, "drop_table", None): "blocked",
             (slack.id, "slack.messages.write", None): "blocked",
             (public.id, "list_issues", seeded.other): "allow",
         }
