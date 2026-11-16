@@ -41,13 +41,15 @@ export default function NewTeamModal() {
   const searchParams = useSearchParams();
   // The playground asks "join or start a new team" before the tenant exists
   // (/auth/error), and its "join" must not request an invite. No modal there.
-  // Settings still loading must not pass as "not the playground".
-  const { is_playground, isLoading: settingsLoading } = useSettings();
+  // The server always sends `is_playground`: undefined means the settings have
+  // not arrived (still loading, or the request failed), not "cloud".
+  const { is_playground } = useSettings();
+  const settingsLoaded = is_playground !== undefined;
   const isPlayground = is_playground === true;
 
   useEffect(() => {
     const hasNewTeamParam = searchParams?.has("new_team");
-    if (hasNewTeamParam && !settingsLoading) {
+    if (hasNewTeamParam && settingsLoaded) {
       if (!isPlayground) {
         setShowNewTeamModal(true);
         fetchTenantInfo();
@@ -68,7 +70,7 @@ export default function NewTeamModal() {
     setShowNewTeamModal,
     navigation,
     isPlayground,
-    settingsLoading,
+    settingsLoaded,
   ]);
 
   const fetchTenantInfo = async () => {
@@ -147,7 +149,7 @@ export default function NewTeamModal() {
   };
 
   // Only render if showNewTeamModal is true
-  if (!showNewTeamModal || isLoading || settingsLoading || isPlayground) {
+  if (!showNewTeamModal || isLoading || !settingsLoaded || isPlayground) {
     return null;
   }
 
