@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Text } from "@opal/components";
+import { Badge, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgSearch } from "@opal/icons";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
@@ -54,18 +54,23 @@ export function RetrievalBody({
 
   return (
     <Section alignItems="stretch" gap={0} height="auto">
-      {!compact && (
-        <SearchChipList
-          items={queries}
-          initialCount={INITIAL_QUERIES_TO_SHOW}
-          expansionCount={QUERIES_PER_EXPANSION}
-          getKey={(_, index) => index}
-          toSourceInfo={queryToSourceInfo}
-          emptyState={!isComplete ? <BlinkingBar /> : undefined}
-          showDetailsCard={false}
-          isQuery={true}
-        />
-      )}
+      {!compact &&
+        (queries.length > 0 ? (
+          // The queries the step searched with, as labels.
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            height="fit"
+            gap={1}
+            wrap
+          >
+            {queries.map((query, index) => (
+              <Badge key={index} icon={SvgSearch} title={query} size={6} />
+            ))}
+          </Section>
+        ) : (
+          !isComplete && <BlinkingBar />
+        ))}
 
       {results !== null &&
         (compact || results.length > 0 || queries.length > 0) && (
