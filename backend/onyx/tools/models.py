@@ -9,14 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo, SearchDoc
-from onyx.db.enums import GatedAppKind
 from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
 )
+from onyx.integrations.models import ActionSettings
 from onyx.tools.constants import FILE_READER_MAX_CHARS
 from onyx.tools.tool_implementations.search.models import SearchContext
-from onyx.utils.headers import HeaderItemDict
 
 
 class CustomToolErrorInfo(BaseModel):
@@ -88,6 +87,9 @@ class MemoryUpdated(BaseModel):
 
 
 class ToolConfiguration(BaseModel):
+    """A built-in tool of the agent. Integration actions come from
+    ``plugin_links``."""
+
     model_config = ConfigDict(frozen=True, from_attributes=True)
 
     id: int
@@ -96,14 +98,15 @@ class ToolConfiguration(BaseModel):
     display_name: str | None
     in_code_tool_id: str | None
     enabled: bool
-    openapi_schema: dict[str, JsonValue] | None
-    mcp_input_schema: dict[str, JsonValue] | None
-    mcp_output_schema: dict[str, JsonValue] | None
-    mcp_read_only: bool | None
-    custom_headers: list[HeaderItemDict] | None
-    passthrough_auth: bool
-    mcp_server_id: int | None
-    oauth_config_id: int | None
+
+
+class PluginLinkConfiguration(BaseModel):
+    """A plugin that the agent attaches, with its action settings."""
+
+    model_config = ConfigDict(frozen=True)
+
+    plugin_id: UUID
+    action_settings: ActionSettings
 
 
 class PersonaToolConfiguration(BaseModel):
@@ -113,6 +116,9 @@ class PersonaToolConfiguration(BaseModel):
     persona_name: str
     tools: list[ToolConfiguration]
     search: PersonaSearchInfo
+    # The persona__plugin rows of the agent. For the default agent they only
+    # give settings, such as the bot freeze, to the plugins the user runs.
+    plugin_links: list[PluginLinkConfiguration] = []
 
 
 class ChatToolSelection(BaseModel):
@@ -201,10 +207,9 @@ class ToolApprovalScope(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    # What the action policy governs, such as an MCP server and its ID.
-    app_kind: GatedAppKind
-    target_id: int
-    # Keys the action policy and session grants, e.g. the MCP tool name.
+    integration_id: int
+    # The action key: the MCP tool name or the OpenAPI operationId. With the
+    # integration, it keys the action policy and session grants.
     action_id: str
 
 

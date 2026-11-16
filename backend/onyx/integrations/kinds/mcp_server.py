@@ -129,25 +129,18 @@ class McpServerKindHandler(IntegrationKindHandler):
         if not actions:
             return []
         server = self._server(integration, db_session)
-        credentials = ctx.mcp_resolved_credentials
-        if credentials is not None and not credentials.can_authenticate_with_headers(
-            ctx.mcp_headers
-        ):
-            logger.debug("Skipping MCP server %s: credentials required", server.id)
-            return []
         return [
             MCPTool(
-                tool_id=action.id,
-                mcp_server=server,
+                integration_id=integration.id,
+                integration_name=integration.name,
+                server_url=server.server_url,
+                transport=server.transport,
                 tool_name=action.key,
                 tool_description=action.description or "",
                 tool_definition=action.input_schema or {},
                 output_schema=action.output_schema,
-                user_email=ctx.user_email or "",
-                user_id=str(ctx.user_id) if ctx.user_id is not None else "",
-                user_oauth_token=credentials.user_oauth_token if credentials else None,
+                acting_user_id=ctx.user_id,
                 additional_headers=ctx.mcp_headers,
-                resolved_credentials=credentials,
                 approval=ctx.approval_for(action.key),
             )
             for action in actions

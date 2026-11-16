@@ -139,6 +139,10 @@ def _alter_old_tables() -> None:
             postgresql_not_valid=True,
         )
 
+    # A chat approval for an integration made after the upgrade has no
+    # gated_app row. Dropping NOT NULL scans no rows.
+    op.alter_column("approval_request", "gated_app_id", nullable=True)
+
 
 def _create_tables() -> None:
     op.create_table(
@@ -1150,6 +1154,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # The old code needs a gated_app row for each chat approval.
+    op.execute("DELETE FROM approval_request WHERE gated_app_id IS NULL")
+    op.alter_column("approval_request", "gated_app_id", nullable=False)
     op.drop_column("assistant__user_specific_config", "disabled_plugin_ids")
     for table in reversed(RECORD_TABLES):
         op.drop_column(table, "integration_id")

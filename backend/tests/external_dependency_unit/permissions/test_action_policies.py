@@ -13,10 +13,8 @@ from onyx.db.action_policy import (
     get_task_action_policies,
     get_workspace_action_policies,
     list_action_policies,
-    mcp_tool_default_policy,
     replace_workspace_action_policies,
     resolve_action_policies,
-    resolve_user_action_policies,
     save_user_action_policies,
     task_app_enabled,
 )
@@ -51,7 +49,6 @@ from onyx.external_apps.models import (
     TaskAppActionPolicies,
 )
 from onyx.server.features.action_policies import api
-from onyx.tools.models import ToolConfiguration
 
 ASK = ActionPolicy.ASK
 ALLOW = ActionPolicy.ALWAYS
@@ -471,34 +468,17 @@ def test_mcp_read_only_tool_defaults_to_always_until_an_admin_asks(
             catalog_policies=get_mcp_tool_default_policies(db_session, server.id),
         )
 
-    def chat_resolved() -> dict[str, ActionPolicy]:
-        # Chat tool construction reads the hint from the captured configuration.
-        configured = [ToolConfiguration.model_validate(tool) for tool in tools]
-        return resolve_user_action_policies(
-            db_session,
-            user_id=user.id,
-            app_kind=GatedAppKind.MCP_SERVER,
-            default_policies_by_target={
-                server.id: {
-                    tool.name: mcp_tool_default_policy(tool.mcp_read_only)
-                    for tool in configured
-                }
-            },
-        )[server.id]
-
     def admin_view() -> dict[str, ActionPolicy]:
         (app,) = list_action_policies(db_session, user, gated_app_id=app_id, admin=True)
         return {a.action_id: a.workspace_policy for a in app.actions}
 
     defaults = {"read": ALLOW, "write": ASK, "plain": ASK}
     assert resolved() == defaults
-    assert chat_resolved() == defaults
     assert admin_view() == defaults
 
     replace_workspace_action_policies(db_session, app_id, {"read": ASK})
     asked = {"read": ASK, "write": ASK, "plain": ASK}
     assert resolved() == asked
-    assert chat_resolved() == asked
     assert admin_view() == asked
 
 

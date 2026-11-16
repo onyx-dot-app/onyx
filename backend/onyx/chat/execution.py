@@ -941,7 +941,7 @@ def create_chat_agent(
         filters = setup.new_msg_req.internal_search_filters
         source_types = filters.source_type if filters else None
         # Tools open DB sessions on demand, so model I/O cannot retain a connection.
-        tools_by_type = construct_tools(
+        tools = construct_tools(
             configuration=tool_configuration,
             user=user,
             llm=llm,
@@ -976,9 +976,8 @@ def create_chat_agent(
             ),
             allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
             search_usage_forcing_setting=setup.search_params.search_usage,
-            ask_for_approval=setup.ask_for_approval,
+            approval_mode=setup.approval_mode,
         )
-        tools = [tool for tool_list in tools_by_type.values() for tool in tool_list]
         # Every user with a chat skill when the turn starts gets the skill
         # tools, whatever the agent's tool selection; each call reads the
         # user's current skills. Restored and child agents receive them with
