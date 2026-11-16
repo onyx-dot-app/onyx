@@ -111,10 +111,9 @@ export default function EditFileLocations({
   return (
     <Section gap={2} alignItems="stretch" height="fit">
       <Content
+        font="main-ui-action"
         title={t("title")}
         description={t("description")}
-        sizePreset="main-ui"
-        variant="section"
       />
       {list.fileIds.length === 0 ? (
         <Text font="secondary-body" color="text-03">
@@ -126,10 +125,9 @@ export default function EditFileLocations({
           return (
             <Card key={fileId} color="background-tint-01" padding={2}>
               <ContentAction
+                font="main-ui-action"
                 icon={SvgFile}
                 title={name}
-                sizePreset="main-ui"
-                variant="section"
                 rightChildren={
                   <Button
                     icon={SvgX}

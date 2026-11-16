@@ -1,20 +1,24 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
+import { IconLoader, PageLoader } from "@opal/loaders";
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
-import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import { useAdminDocumentTitle } from "@/lib/app/hooks";
+import {
+  PendingRoute,
+  useNavigation,
+  usePathname,
+  useRouteRendering,
+} from "@opal/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { ApplicationStatus } from "@/lib/settings/types";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SvgSidebar } from "@opal/icons";
-import { RootLayout, useSidebarState } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { RootLayout, useSidebarState, Section } from "@opal/layouts";
 import { isVectorDbRequiredRoute, matchAdminRoute } from "@/lib/admin-routes";
 import {
   getFirstPermittedAdminRoute,
@@ -24,6 +28,7 @@ import {
 import { OpenSearchResourceBanner } from "@/sections/banners/OpenSearchResourceWarning";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
 import { useTranslations } from "next-intl";
+import { AdminTopBarSlotContext } from "@/layouts/chromes/AdminTopBarSlot";
 
 export interface AdminChromeProps {
   children: React.ReactNode;
@@ -39,10 +44,15 @@ export default function AdminChrome({
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
+  // The proxy serves the EE pages under /admin/… URLs, but a direct visit to
+  // /ee/admin/… keeps that URL.
+  const base = pathname.startsWith("/ee/admin") ? "/ee/admin" : "/admin";
+  const routeRendering = useRouteRendering(base);
   const { vectorDbEnabled, isLoading, application_status } = useSettings();
   useAdminDocumentTitle();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { adminCapabilities: liveAdminCapabilities, isUserLoading } = useUser();
+  const [topBarSlot, setTopBarSlot] = useState<HTMLElement | null>(null);
 
   // Seed only in flight — otherwise logout would leave the page authorized by a stale seed.
   const adminCapabilities = isUserLoading
@@ -61,15 +71,17 @@ export default function AdminChrome({
     if (!denied) return;
     // Some reach left → first permitted page; fully revoked → /app (else they'd bounce to an
     // admin page they still can't open).
-    router.replace(
+    navigation.go(
       (hasAnyAdminPermission(adminCapabilities)
         ? getFirstPermittedAdminRoute(adminCapabilities)
-        : "/app") as Route
+        : "/app") as Route,
+      { replace: true }
     );
-  }, [denied, router, adminCapabilities]);
+  }, [denied, navigation, adminCapabilities]);
 
   let content = children;
-  if (isVectorDbRequiredRoute(pathname)) {
+  // While the URL's page renders, the page being left stays as it is.
+  if (!routeRendering && isVectorDbRequiredRoute(pathname)) {
     if (isLoading) {
       content = (
         <Section padding={8}>
@@ -91,7 +103,7 @@ export default function AdminChrome({
             {markdown(t("adminChrome.paymentReminder.text"))}
           </Text>
           <div className="mt-2">
-            <Button width="full" href="/admin/billing">
+            <Button width="full" {...navigation.linkTo("/admin/billing")}>
               {t("adminChrome.paymentReminder.billingButton.label")}
             </Button>
           </div>
@@ -105,18 +117,32 @@ export default function AdminChrome({
               column always needs a control to bring it back. */}
         {isMobile && (
           <RootLayout.Header>
-            <div className="h-full flex items-center px-4 py-2">
+            <Section
+              flexDirection="row"
+              justifyContent="start"
+              gap={1}
+              padding={2}
+              width="auto"
+              className="mx-2"
+            >
               <Button
                 prominence="internal"
                 icon={SvgSidebar}
                 aria-label={t("adminChrome.openSidebar.ariaLabel")}
                 onClick={() => setFolded(false)}
               />
-            </div>
+              <div ref={setTopBarSlot} className="contents" />
+            </Section>
           </RootLayout.Header>
         )}
         <OpenSearchResourceBanner />
-        <RootLayout.MainContent>{content}</RootLayout.MainContent>
+        <AdminTopBarSlotContext.Provider value={isMobile ? topBarSlot : null}>
+          <RootLayout.MainContent>
+            <PendingRoute base={base} loader={<PageLoader />}>
+              {content}
+            </PendingRoute>
+          </RootLayout.MainContent>
+        </AdminTopBarSlotContext.Provider>
       </RootLayout.App>
     </RootLayout.Root>
   );

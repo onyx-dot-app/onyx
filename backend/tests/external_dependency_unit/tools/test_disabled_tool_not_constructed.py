@@ -1,6 +1,5 @@
 """Legacy OpenAPI disablement applies to default Chat, not custom agents."""
 
-import queue
 from collections.abc import Generator
 from typing import Any
 from uuid import uuid4
@@ -8,13 +7,15 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.emitter import Emitter
 from onyx.db.models import Persona, Tool, User
 from onyx.db.tools import capture_persona_tool_configuration
 from onyx.llm.factory import get_default_llm
 from onyx.tools.tool_constructor import construct_tools
-from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
-from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
+from onyx.tools.tool_name import normalize_external_tool_name
+from tests.external_dependency_unit.conftest import (
+    create_test_user,
+    delete_test_user,
+)
 
 USER_EMAIL_PREFIX = "disabled_tool_check_user"
 
@@ -36,8 +37,8 @@ OPENAPI_SCHEMA: dict[str, Any] = {
 
 
 @pytest.fixture(autouse=True)
-def _default_llm_provider(db_session: Session) -> None:
-    ensure_default_llm_provider(db_session)
+def _default_llm_provider(default_llm_provider: None) -> None:
+    pass
 
 
 @pytest.fixture(autouse=True)
@@ -120,7 +121,6 @@ def test_legacy_openapi_availability(db_session: Session, default_chat: bool) ->
             update={"persona_id": 0 if default_chat else persona.id}
         ),
         db_session=db_session,
-        emitter=Emitter(merged_queue=queue.Queue()),
         user=user,
         llm=get_default_llm(),
     )
@@ -142,7 +142,6 @@ def test_legacy_openapi_availability_when_whitelisted(
             update={"persona_id": 0 if default_chat else persona.id}
         ),
         db_session=db_session,
-        emitter=Emitter(merged_queue=queue.Queue()),
         user=user,
         llm=get_default_llm(),
         allowed_tool_ids=[disabled_tool.id],
@@ -164,10 +163,11 @@ def test_prepared_configuration_survives_persona_edits(db_session: Session) -> N
     tools = construct_tools(
         configuration=configuration,
         db_session=db_session,
-        emitter=Emitter(merged_queue=queue.Queue()),
         user=user,
         llm=get_default_llm(),
     )
 
     assert tool_id in tools
-    assert tools[tool_id][0].name == "test_operation"
+    assert tools[tool_id][0].name == normalize_external_tool_name(
+        f"custom__{tool_id}__test_operation"
+    )

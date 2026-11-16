@@ -80,6 +80,7 @@ export default function SwitchList({
           />
           <InputTypeIn
             variant="internal"
+            type="search"
             placeholder={searchPlaceholder}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -88,7 +89,7 @@ export default function SwitchList({
         </div>,
 
         <LineItemButton
-          sizePreset="main-ui"
+          font="main-ui-action"
           rounding={2}
           key="enable-disable-all"
           icon={allDisabled ? SvgPlug : SvgUnplug}

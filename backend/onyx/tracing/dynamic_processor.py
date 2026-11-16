@@ -74,6 +74,8 @@ def _build_langfuse_processor(config: LangfuseConfig) -> TracingProcessor:
         secret_key=config.secret_key,
         base_url=config.host or None,
         release=__version__,
+        # Required by Langfuse v4 ingestion; older servers ignore it.
+        additional_headers={"x-langfuse-ingestion-version": "4"},
     )
     return LangfuseTracingProcessor(client=client)
 

@@ -10,11 +10,12 @@ def parse_partial_object(text: str) -> dict[str, JsonValue]:
     Escapes, including surrogate pairs split across fragments, decode exactly
     as in a complete parse. Incomplete strings are kept up to their last
     complete character; incomplete numbers and literals are left out until
-    they complete. Text that is not an object yet returns an empty dict.
+    they complete. Text that does not start with `{` never becomes an object,
+    so it returns an empty dict without a parse.
 
-    Raises ValueError when the text cannot be the start of a valid JSON document.
+    Raises ValueError when the text cannot be the start of a valid JSON object.
     """
-    if not text.strip():
+    if not text.lstrip().startswith("{"):
         return {}
     try:
         parsed = from_json(text, allow_partial="trailing-strings")

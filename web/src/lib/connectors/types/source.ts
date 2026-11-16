@@ -68,6 +68,7 @@ export enum ValidSources {
   Braintrust = "braintrust",
   Lumapps = "lumapps",
   YouTrack = "youtrack",
+  AzureDatalake = "azure_datalake",
   Canvas = "canvas",
   Zoom = "zoom",
 
@@ -105,6 +106,8 @@ export const validAutoSyncSources = [
   ValidSources.Linear,
   ValidSources.Hubspot,
   ValidSources.YouTrack,
+  ValidSources.AzureDatalake,
+  ValidSources.Egnyte,
 ] as const;
 
 // Create a type from the array elements

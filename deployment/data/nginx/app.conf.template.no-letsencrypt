@@ -41,6 +41,7 @@ server {
 
     # Conditionally include MCP location configuration
     include /etc/nginx/conf.d/mcp.conf.inc;
+    include /etc/nginx/conf.d/webhook.conf.inc;
 
     # First-party health probe served directly by nginx (no upstreams),
     # used by the container healthcheck.

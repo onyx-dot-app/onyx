@@ -1,0 +1,50 @@
+---
+title: "Multi Tenant"
+description: "Self-serve cloud"
+icon: "user-group"
+---
+
+<Tip>
+  Sign up for the Onyx multi-tenant cloud at the [self-serve sign-up](https://cloud.onyx.app/signup).
+  The free trial does not need a credit card.
+</Tip>
+
+## Hosting
+
+Onyx Cloud runs on AWS.
+
+## Deployment Details
+
+The default region is US East.
+
+Managed services replace Postgres, Redis, OpenSearch, and the object store.
+
+### Data Isolation
+
+Each organization gets its own workspace (a tenant). Onyx stores each tenant's data in a separate database schema.
+Users, documents, chats, agents, and admin settings never cross workspaces.
+
+One login page serves every workspace. A user enters their email first,
+and Onyx shows the SSO options that the workspace admin configured.
+See [SSO Providers](/deployment/authentication/sso_providers).
+
+### Subprocessors
+
+- **AWS**: Cloud hosting.
+- **OpenSearch**: Vector and full text search.
+- **Grafana**: Monitoring for resources, latencies, and outages.
+- **Stripe**: Payment processing for [plans and billing](/admins/billing/overview).
+- **PostHog**: Product analytics that Onyx uses to improve the service. Customers do not get access to this data.
+- **Sentry**: Error reporting that Onyx uses to find and fix failures.
+- **OpenAI**: Provided as a default LLM option. Admins can disable this or bring their own key.
+- **Anthropic**: Provided as a default LLM option. Admins can disable this or bring their own key.
+
+Admins manage LLM providers under **Admin Panel > Language Models**.
+The admin can also enable optional services such as web search, image generation, and plugins.
+These send data to the provider you choose. See [Data Flows](/security/architecture/data_flows).
+
+## Plans
+
+The multi-tenant cloud offers the Business plan.
+Enterprise customers can also use the [single-tenant cloud](/security/onyx_cloud/single_tenant).
+See [Plans & Billing](/admins/billing/overview).

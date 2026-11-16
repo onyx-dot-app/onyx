@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+import pytest
 
 from onyx.server.features.build.sandbox.opencode.serve_client import (
     ClientTimeouts,
@@ -194,3 +195,67 @@ def test_ensure_session_does_not_retry_post_on_remoteprotocolerror() -> None:
         )
         return
     raise AssertionError("expected RemoteProtocolError to propagate, not retry")
+
+
+def test_dispose_retries_read_timeout_once_then_succeeds() -> None:
+    """Late success: the first dispose times out (the server may still have
+    finished it), the retry returns 200. Dispose is idempotent, so the repeat
+    is safe."""
+    call_count = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        assert req.method == "POST" and req.url.path == "/instance/dispose"
+        if call_count["n"] == 1:
+            raise httpx.ReadTimeout("timed out", request=req)
+        return httpx.Response(200, json=True)
+
+    client = _make_client(_RecordingTransport(handler))
+
+    client.dispose_instance(directory=_CWD)
+    assert call_count["n"] == 2
+
+
+def test_dispose_read_timeout_retry_is_bounded() -> None:
+    call_count = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        raise httpx.ReadTimeout("timed out", request=req)
+
+    client = _make_client(_RecordingTransport(handler))
+
+    with pytest.raises(httpx.ReadTimeout):
+        client.dispose_instance(directory=_CWD)
+    assert call_count["n"] == 2
+
+
+def test_idempotent_get_does_not_retry_read_timeout() -> None:
+    """Only dispose opts in to the read-timeout retry; other idempotent calls
+    keep their single-timeout behavior."""
+    call_count = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        assert req.method == "GET"
+        raise httpx.ReadTimeout("timed out", request=req)
+
+    client = _make_client(_RecordingTransport(handler))
+
+    with pytest.raises(httpx.ReadTimeout):
+        client.ensure_session(_STALE_ID, directory=_CWD)
+    assert call_count["n"] == 1
+
+
+def test_non_idempotent_post_does_not_retry_read_timeout() -> None:
+    call_count = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        raise httpx.ReadTimeout("timed out", request=req)
+
+    client = _make_client(_RecordingTransport(handler))
+
+    with pytest.raises(httpx.ReadTimeout):
+        client.ensure_session(None, directory=_CWD)
+    assert call_count["n"] == 1

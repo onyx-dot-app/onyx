@@ -1,7 +1,7 @@
 "use client";
 
+import { NavLink } from "@opal/navigation";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
 import { useId } from "react";
 import { Button, SelectCard, Text, Tooltip } from "@opal/components";
 import { SvgCodeFile } from "@opal/icons";
@@ -158,7 +158,7 @@ export function PluginRow({ plugin }: PluginRowProps) {
     >
       <SelectCard border="none" padding={0}>
         <div className="flex min-w-0 items-center gap-2 pe-3">
-          <Link
+          <NavLink
             href={pluginDetailHref({ kind: plugin.kind, id: resource.id })}
             aria-label={t(canManage ? "row.manage.label" : "row.view.label", {
               name: resource.name,
@@ -179,7 +179,7 @@ export function PluginRow({ plugin }: PluginRowProps) {
                 </Text>
               }
             />
-          </Link>
+          </NavLink>
           <PluginLifecycleMenu
             plugin={plugin}
             renderStatus={(controls) => (

@@ -14,7 +14,7 @@ export class ChatPluginsPopover {
     this.actions = new ToolsPopover(page);
     this.toggle = page.getByRole("button", { name: "Plugins", exact: true });
     this.popover = page.getByRole("dialog").filter({
-      has: page.getByRole("textbox", { name: "Search plugins", exact: true }),
+      has: page.getByRole("searchbox", { name: "Search plugins", exact: true }),
     });
     this.connectionDialog = new MemberPluginConnectionDialog(page);
   }

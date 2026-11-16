@@ -73,6 +73,9 @@ onyx-cli search "Q3 roadmap" "hiring plan" "incident postmortem template"
 # Filter by source
 onyx-cli search --source slack,google_drive "auth migration status"
 
+# Limit to document sets (list names with `onyx-cli document-sets`)
+onyx-cli search --document-set "Engineering Wiki" "on-call runbook"
+
 # Recent results only
 onyx-cli search --days 30 "recent production incidents"
 
@@ -90,6 +93,7 @@ onyx-cli search --no-query-expansion "exact error message text"
 | Flag                    | Type   | Description                                                      |
 | ----------------------- | ------ | ---------------------------------------------------------------- |
 | `--source`              | string | Filter by source type (comma-separated: slack,google_drive)      |
+| `--document-set`        | string | Filter by document set name. Repeat the flag for more than one set; commas are part of the name. Replaces the default agent's knowledge scope; cannot be combined with `--agent-id` or `--agent-name` |
 | `--days`                | int    | Only return results from the last N days                         |
 | `--agent-id`            | int    | Agent ID for scoped search (inherits filters, document sets)     |
 | `--agent-name`          | string | Agent name for scoped search (exact or unique substring)         |
@@ -125,6 +129,19 @@ onyx-cli ask --json "List all active API integrations"
 | `--quiet`      | bool | Buffer output and print once at end (no streaming)           |
 | `--prompt`     | str  | Question text (use with piped stdin context)                 |
 | `--max-output` | int  | Max bytes to print before truncating (0 to disable, default 50000 for non-TTY) |
+| `--approve`    | str  | Answer to tool approval requests: `fail` (default), `reject`, `once`, or `session` |
+
+#### Tool approvals
+
+Some tool calls need the user's approval before they run. Without a terminal, `ask` never waits for input. It uses `--approve`:
+
+- `fail` (default): rejects the tool call, prints the rest of the answer without it, and exits with code 10. Without `--json`, it prints the request to stderr. With `--json`, the request is the `tool_approval_request` event on stdout.
+- `reject`: rejects the tool call and continues the answer without it.
+- `once` or `session`: approves every tool call in the response that needs approval.
+
+After the answers, `ask` follows the response as it continues and prints the rest of the answer in the same run.
+
+On exit code 10, show the user the tool name and arguments. Without `--json`, read them from stderr, which shows at most 10 arguments and shortens long values; say so when it does. With `--json`, read them from the `tool_approval_request` event on stdout, which has every argument in full. On a terminal, the user can answer `d` to see every argument in full. A new run gives a new response, which can request different tool calls. Consent to the tool call that the user saw is not consent to `--approve=once` or `--approve=session`, because these approve every tool call in the new run without showing it. Use them only if the user agrees to approve all tool calls in the run. Otherwise, ask the user to run the command on a terminal, where `ask` shows each request and waits for an answer.
 
 ### List available agents
 
@@ -134,6 +151,15 @@ onyx-cli agents --json
 ```
 
 Prints a table of agent IDs, names, and descriptions. Use `--json` for structured JSON output. Use agent IDs with `--agent-id`, or names with `--agent-name`, on `ask`, `search`, and `chat`.
+
+### List document sets
+
+```bash
+onyx-cli document-sets
+onyx-cli document-sets --json
+```
+
+Prints the document sets the current user can search: ID, name, and description. Use `--json` for structured JSON output (`[{id, name, description}, ...]`). Pass the names to `onyx-cli search --document-set`. A name the user cannot access makes the search fail instead of returning unfiltered results.
 
 ### Validate configuration
 
@@ -164,6 +190,8 @@ Checks config exists, PAT is present, server is reachable, and credentials are v
 | 7    | Timeout        | Request timed out                |
 | 8    | ServerError    | Server returned 5xx              |
 | 9    | NotAvailable   | Feature/endpoint does not exist  |
+| 10   | ApprovalRequired | A tool call needed approval; `--approve=fail` rejected it |
+| 11   | ApprovalPending  | `ask` was interrupted at an approval prompt; the request still waits for a decision |
 
 ## Statelessness
 

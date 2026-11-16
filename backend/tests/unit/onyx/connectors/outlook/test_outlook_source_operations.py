@@ -686,7 +686,7 @@ def test_token_endpoint_5xx_keeps_its_status() -> None:
     with (
         patch(f"{MODULE}.build_msal_app"),
         patch(
-            f"{MODULE}.acquire_graph_token",
+            f"{MODULE}.acquire_app_token",
             side_effect=MsalServiceError(
                 "HTTP Error: 502", error="", error_description=""
             ),
@@ -728,7 +728,7 @@ def test_token_endpoint_failures_are_graph_errors_without_status(
 
     with (
         patch(f"{MODULE}.build_msal_app"),
-        patch(f"{MODULE}.acquire_graph_token", side_effect=failure),
+        patch(f"{MODULE}.acquire_app_token", side_effect=failure),
         pytest.raises(OutlookGraphError) as exc_info,
     ):
         gateway.check_token()
@@ -751,7 +751,7 @@ def test_certificate_credentials_reach_msal_as_a_pfx() -> None:
     with (
         patch(f"{MODULE}.build_msal_app") as build,
         patch(
-            f"{MODULE}.acquire_graph_token",
+            f"{MODULE}.acquire_app_token",
             return_value={"access_token": "tok", "expires_in": "3599"},
         ),
     ):
@@ -878,7 +878,7 @@ def test_attachment_download_streams_the_value_endpoint_with_a_cap() -> None:
     with (
         patch(f"{MODULE}.build_msal_app"),
         patch(
-            f"{MODULE}.acquire_graph_token",
+            f"{MODULE}.acquire_app_token",
             return_value={"access_token": "tok"},
         ),
         patch(
@@ -907,7 +907,7 @@ def test_attachment_download_failure_is_a_graph_error() -> None:
 
     with (
         patch(f"{MODULE}.build_msal_app"),
-        patch(f"{MODULE}.acquire_graph_token", return_value={"access_token": "tok"}),
+        patch(f"{MODULE}.acquire_app_token", return_value={"access_token": "tok"}),
         patch(
             f"{SOURCE_MODULE}.download_graph_url_with_cap",
             side_effect=http_error(404, "ErrorItemNotFound"),
@@ -927,7 +927,7 @@ def test_check_token_maps_msal_refusal() -> None:
     with (
         patch(f"{MODULE}.build_msal_app"),
         patch(
-            f"{MODULE}.acquire_graph_token",
+            f"{MODULE}.acquire_app_token",
             return_value={"error": "invalid_client", "error_description": "bad secret"},
         ),
         pytest.raises(OutlookAuthError) as exc_info,
@@ -943,7 +943,7 @@ def test_check_token_reports_expiry() -> None:
     with (
         patch(f"{MODULE}.build_msal_app"),
         patch(
-            f"{MODULE}.acquire_graph_token",
+            f"{MODULE}.acquire_app_token",
             return_value={"access_token": "tok", "expires_in": "3599"},
         ),
     ):

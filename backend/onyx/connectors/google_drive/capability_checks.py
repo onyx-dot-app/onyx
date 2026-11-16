@@ -64,6 +64,7 @@ from onyx.connectors.google_drive.connector import (
 from onyx.connectors.google_drive.constants import (
     DRIVE_FOLDER_TYPE,
     DRIVE_SHORTCUT_TYPE,
+    GOOGLE_APPS_MIME_PREFIX,
 )
 from onyx.connectors.google_drive.doc_conversion import GOOGLE_MIME_TYPES_TO_EXPORT
 from onyx.connectors.google_drive.drive_access import (
@@ -132,7 +133,6 @@ _SHARED_DRIVE_FIELD = "shared_drive_urls"
 # The URL form of a shared drive or folder that the config fields take.
 _FOLDER_URL = "https://drive.google.com/drive/folders/{}"
 
-_DISABLED_API_REASONS = frozenset({"accessNotConfigured", "SERVICE_DISABLED"})
 _SCOPE_REASONS = frozenset(
     {"insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}
 )
@@ -347,7 +347,7 @@ def _raise_google_error(
                     )
                 ),
             ) from e
-        if _DISABLED_API_REASONS.intersection(e.reasons):
+        if e.api_disabled:
             raise ConnectorValidationError(
                 f"The {api} is turned off in the Google Cloud project of the "
                 "credential. Turn it on in the Google Cloud console (APIs & "
@@ -1541,7 +1541,7 @@ class _ContentReadCheck(_GoogleDriveCheck):
         uploaded: list[tuple[int, GoogleDriveFileType]] = [
             (size, file)
             for file in files
-            if file.get("mimeType") not in GOOGLE_MIME_TYPES_TO_EXPORT
+            if not (file.get("mimeType") or "").startswith(GOOGLE_APPS_MIME_PREFIX)
             and (size := _size(file)) is not None
             and size <= _MAX_PROBE_BYTES
         ]
@@ -1738,7 +1738,7 @@ def _is_item_denial(error: GoogleDriveHttpError) -> bool:
     return (
         error.status_code in (403, 404)
         and error.access_denied
-        and not _DISABLED_API_REASONS.intersection(error.reasons)
+        and not error.api_disabled
         and not _SCOPE_REASONS.intersection(error.reasons)
     )
 

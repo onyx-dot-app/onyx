@@ -62,7 +62,7 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
   return (
     <AuthFlowContainer>
       <div className="flex flex-col items-center gap-4">
-        <Text font="heading-h2" color="text-05">
+        <Text font="heading-headline" color="text-05">
           {t("error.heading.title")}
         </Text>
         <Text font="main-content-body" color="text-03">

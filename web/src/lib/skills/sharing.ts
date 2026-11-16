@@ -15,16 +15,59 @@ export type SkillSharingDraft = Pick<
   external_app: Pick<NonNullable<CustomSkill["external_app"]>, "name"> | null;
 };
 
+/** The author, or an organization-wide skill manager, changes organization
+ * access: publish, and publish an update. An editor only saves versions. */
+export function canChangeOrganizationAccess(
+  skill: Pick<CustomSkill, "user_permission">,
+  isOrganizationManager: boolean
+): boolean {
+  return (
+    skill.user_permission === "OWNER" ||
+    (isOrganizationManager && skill.user_permission === "EDITOR")
+  );
+}
+
+/** A published skill whose current version the organization does not run. */
+export function hasUnpublishedChanges(
+  skill: Pick<
+    CustomSkill,
+    "current_version_number" | "published_version_number"
+  >
+): boolean {
+  return (
+    skill.published_version_number !== null &&
+    skill.current_version_number !== null &&
+    skill.current_version_number > skill.published_version_number
+  );
+}
+
+export function emptySkillSharingDraft(
+  name: string,
+  owner: SkillSharingDraft["owner"]
+): SkillSharingDraft {
+  return {
+    name,
+    owner,
+    ownership_vacant: false,
+    user_permission: "OWNER",
+    user_shares: [],
+    group_shares: [],
+    public_permission: null,
+    installation_policy: "AVAILABLE",
+    external_app: null,
+  };
+}
+
 export function serializeSkillSharing(
   draft: SkillSharingDraft,
-  isAdmin: boolean
+  isAdmin: boolean,
+  isOrganizationManager: boolean
 ): SkillShareUpdatePayload {
   return {
     installation_policy: isAdmin ? draft.installation_policy : undefined,
     public_permission:
       !draft.external_app &&
-      (draft.user_permission === "OWNER" ||
-        (isAdmin && draft.user_permission === "EDITOR"))
+      canChangeOrganizationAccess(draft, isOrganizationManager)
         ? draft.public_permission
         : undefined,
     user_shares: draft.user_shares

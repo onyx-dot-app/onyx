@@ -16,21 +16,28 @@ Nothing here enqueues celery work — that's the caller's job. Helpers
 return the job_id + per-request counts for the API response.
 """
 
+from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel
-from sqlalchemy import select, tuple_
+from sqlalchemy import case, select, tuple_, update
 from sqlalchemy.orm import Session
 
 from onyx.connectors.models import ConnectorFailure, DocumentFailure
-from onyx.db.enums import IndexingStatus
+from onyx.db.cc_pair_run_resolution import index_attempt_error_closure
+from onyx.db.enums import (
+    IndexAttemptErrorResolvedReason,
+    IndexingStatus,
+    IndexModelStatus,
+)
 from onyx.db.index_attempt import get_connector_config_hash_for_cc_pair
 from onyx.db.models import (
     ConnectorCredentialPair,
     IndexAttempt,
     IndexAttemptError,
+    SearchSettings,
     TargetedReindexJob,
     TargetedReindexJobTarget,
 )
@@ -292,13 +299,40 @@ def get_index_attempts_for_targeted_reindex_job(
     )
 
 
+def get_retry_attempt_ids_by_cc_pair(
+    db_session: Session, job_id: int
+) -> dict[int, int]:
+    """Each pair's attempt of the job: the current model's, when the job made
+    one per model."""
+    rows: Sequence[tuple[int, int]] = (
+        db_session.execute(
+            select(IndexAttempt.connector_credential_pair_id, IndexAttempt.id)
+            .join(SearchSettings)
+            .where(IndexAttempt.targeted_reindex_job_id == job_id)
+            .distinct(IndexAttempt.connector_credential_pair_id)
+            .order_by(
+                IndexAttempt.connector_credential_pair_id,
+                case((SearchSettings.status == IndexModelStatus.PRESENT, 0), else_=1),
+                IndexAttempt.id,
+            )
+        )
+        .tuples()
+        .all()
+    )
+    return dict(rows)
+
+
 def resolve_failure_derived_targets(
     db_session: Session,
     job_id: int,
     landed_keys: set[tuple[int, str]] | None = None,
+    retry_attempt_ids: dict[int, int] | None = None,
 ) -> tuple[int, list[dict[str, Any]]]:
-    """Mark `IndexAttemptError` rows resolved for every failure-derived
-    target. Returns `(resolved_count, summary)`.
+    """Mark `IndexAttemptError` rows resolved by retry, with the job's attempt
+    on their pair, for every failure-derived target. Rows an admin resolved
+    without retry are still open here. Returns `(resolved_count, summary)`.
+    `retry_attempt_ids` is `get_retry_attempt_ids_by_cc_pair`'s map, looked up
+    when None.
 
     `landed_keys` gates the resolution set as `(cc_pair_id, document_id)`
     tuples. The pair is required (not just `document_id`) because the
@@ -355,8 +389,28 @@ def resolve_failure_derived_targets(
         for e in error_rows
     ]
 
+    if retry_attempt_ids is None:
+        retry_attempt_ids = get_retry_attempt_ids_by_cc_pair(db_session, job_id)
+    error_ids_by_pair: defaultdict[int, list[int]] = defaultdict(list)
     for e in error_rows:
-        e.is_resolved = True
+        error_ids_by_pair[e.connector_credential_pair_id].append(e.id)
+    for cc_pair_id, pair_error_ids in error_ids_by_pair.items():
+        db_session.execute(
+            update(IndexAttemptError)
+            .where(
+                IndexAttemptError.id.in_(pair_error_ids),
+                # Rechecked under the row lock, so a concurrent Retry that
+                # closed the row first keeps its attempt and time.
+                ~IndexAttemptError.is_resolved,
+            )
+            .values(
+                **index_attempt_error_closure(
+                    IndexAttemptErrorResolvedReason.RETRY,
+                    retry_attempt_ids[cc_pair_id],
+                )
+            )
+            .execution_options(synchronize_session="fetch")
+        )
 
     return len(error_rows), summary
 

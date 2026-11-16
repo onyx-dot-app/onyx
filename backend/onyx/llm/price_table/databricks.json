@@ -29,6 +29,7 @@
       "cost": {
         "cache_read": 0.1,
         "cache_write": 1.25,
+        "cache_write_above_1hr": 1.99997,
         "input": 1,
         "output": 5
       },
@@ -61,6 +62,7 @@
       "cost": {
         "cache_read": 1.5,
         "cache_write": 18.75,
+        "cache_write_above_1hr": 29.999969999999998,
         "input": 15,
         "output": 75
       },
@@ -93,6 +95,7 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
+        "cache_write_above_1hr": 9.99999,
         "input": 5,
         "output": 25
       },
@@ -125,6 +128,7 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
+        "cache_write_above_1hr": 9.99999,
         "input": 5,
         "output": 25
       },
@@ -157,6 +161,7 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
+        "cache_write_above_1hr": 9.99999,
         "input": 5,
         "output": 25
       },
@@ -222,6 +227,7 @@
       "cost": {
         "cache_read": 0.3,
         "cache_write": 3.75,
+        "cache_write_above_1hr": 5.99998,
         "input": 3,
         "output": 15
       },
@@ -254,6 +260,7 @@
       "cost": {
         "cache_read": 0.3,
         "cache_write": 3.75,
+        "cache_write_above_1hr": 5.99998,
         "input": 3,
         "output": 15
       },
@@ -1079,6 +1086,43 @@
       "temperature": false,
       "tool_call": true
     },
+    "databricks-gpt-image-1": {
+      "cost": {
+        "cache_read": 1.24999,
+        "cache_write": 5.00003,
+        "input": 5.00003
+      },
+      "mode": "image_generation",
+      "name": "databricks-gpt-image-1"
+    },
+    "databricks-gpt-image-1-5": {
+      "cost": {
+        "cache_read": 1.24999,
+        "cache_write": 5.00003,
+        "input": 5.00003,
+        "output": 9.99999
+      },
+      "mode": "image_generation",
+      "name": "databricks-gpt-image-1-5"
+    },
+    "databricks-gpt-image-1-mini": {
+      "cost": {
+        "cache_read": 0.19999,
+        "cache_write": 1.99997,
+        "input": 1.99997
+      },
+      "mode": "image_generation",
+      "name": "databricks-gpt-image-1-mini"
+    },
+    "databricks-gpt-image-2": {
+      "cost": {
+        "cache_read": 1.24999,
+        "cache_write": 5.00003,
+        "input": 5.00003
+      },
+      "mode": "image_generation",
+      "name": "databricks-gpt-image-2"
+    },
     "databricks-gpt-oss-120b": {
       "attachment": false,
       "cost": {
@@ -1143,7 +1187,7 @@
       "cost": {
         "cache_read": 0.12999,
         "cache_write": 0.12999,
-        "input": 0.12999000000000002,
+        "input": 0.12999,
         "output": 0.0
       },
       "limit": {
@@ -1185,9 +1229,9 @@
     },
     "databricks-openjev-qwen35-4b": {
       "cost": {
-        "cache_read": 0.0,
-        "cache_write": 0.0,
-        "input": 0.0,
+        "cache_read": 0.041999999999999996,
+        "cache_write": 0.041999999999999996,
+        "input": 0.041999999999999996,
         "output": 0.0
       },
       "mode": "evaluation",
@@ -1205,6 +1249,16 @@
       },
       "mode": "embedding",
       "name": "databricks-qwen3-embedding-0-6b"
+    },
+    "databricks-typesafeai-jev-1-14-0": {
+      "cost": {
+        "cache_read": 0.041999999999999996,
+        "cache_write": 0.041999999999999996,
+        "input": 0.041999999999999996,
+        "output": 0.0
+      },
+      "mode": "evaluation",
+      "name": "databricks-typesafeai-jev-1-14-0"
     }
   },
   "models_dev_providers": [

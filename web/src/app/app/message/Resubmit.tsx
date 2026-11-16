@@ -4,10 +4,7 @@ import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Button } from "@opal/components";
 import { CopyButton } from "@opal/components";
 import { getErrorIcon, getErrorTitle } from "./errorHelpers";
-import {
-  RateLimitDetails,
-  RATE_LIMITED_ERROR_CODE,
-} from "@/app/app/interfaces";
+import { RateLimitDetails, RATE_LIMITED_ERROR_CODE } from "@/app/app/types";
 import { useTranslations } from "next-intl";
 
 const COUNTDOWN_TICK_MS = 1_000;
@@ -116,12 +113,18 @@ function RateLimitBanner({
       ? null
       : resetLineFor(describeRateLimitReset(resetMs, nowMs));
   return (
-    <div className="text-red-700 mt-4 text-sm my-auto">
+    <div
+      className="text-red-700 mt-4 text-sm my-auto"
+      data-testid="chat-error-banner"
+    >
       <Alert variant="broken">
         {getErrorIcon(errorCode)}
         <AlertTitle>{title}</AlertTitle>
         <AlertDescription className="flex flex-col gap-y-1">
           <span>{error || t("rateLimitBanner.defaultError.text")}</span>
+          {details.model && (
+            <span>{t("rateLimitBanner.otherModels.text")}</span>
+          )}
           {resetLine && (
             <span className="text-xs text-muted-foreground">{resetLine}</span>
           )}
@@ -197,7 +200,10 @@ export const ErrorBanner = ({
   }
 
   return (
-    <div className="text-red-700 mt-4 text-sm my-auto">
+    <div
+      className="text-red-700 mt-4 text-sm my-auto"
+      data-testid="chat-error-banner"
+    >
       <Alert variant="broken">
         {getErrorIcon(errorCode)}
         <AlertTitle>{title}</AlertTitle>

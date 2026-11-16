@@ -259,6 +259,26 @@ func TestPushNewBranch_verifyRunsPrePushHook(t *testing.T) {
 	}
 }
 
+func TestPushNewTag_verifyRunsPrePushHook(t *testing.T) {
+	// Precondition.
+	origin, work := gittest.InitOriginAndWork(t)
+	sha := gittest.Commit(t, work, "a.txt")
+	gittest.PublishMain(t, work)
+	gitrelHooks(t, work, map[string]string{"pre-push": "#!/bin/sh\nexit 1\n"})
+	t.Chdir(work)
+
+	// Under test.
+	err := PushNewTag(sha, "dev-build-x", true)
+
+	// Postcondition.
+	if err == nil {
+		t.Fatal("expected the pre-push hook to fail the push")
+	}
+	if out := gittest.Git(t, origin, "tag", "--list", "dev-build-x"); out != "" {
+		t.Errorf("expected no tag on origin, got %q", out)
+	}
+}
+
 func TestBranchExists(t *testing.T) {
 	// Precondition.
 	repo := newTestRepo(t)

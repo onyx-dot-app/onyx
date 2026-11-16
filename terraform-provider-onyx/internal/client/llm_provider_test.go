@@ -115,20 +115,26 @@ func TestUpsertLLMProviderUpdate(t *testing.T) {
 }
 
 func TestGetLLMProvider(t *testing.T) {
-	c, captured := newTestServer(t, http.StatusOK, llmProviderListJSON)
+	c, captured := newTestServer(t, http.StatusOK, `{
+		"id": 3,
+		"provider": "openai",
+		"api_key": "sk-****1234",
+		"is_public": true,
+		"model_configurations": [{"id": 11, "name": "gpt-6-luna", "is_visible": true}]
+	}`)
 	view, err := c.GetLLMProvider(context.Background(), 3)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// include_image_gen=true is load-bearing: without it image-generation
-	// providers are missing from the list and Read treats them as deleted.
-	if captured.Method != http.MethodGet || captured.Path != "/admin/llm/provider?include_image_gen=true" {
-		t.Errorf("got %s %s, want GET /admin/llm/provider?include_image_gen=true", captured.Method, captured.Path)
+	if captured.Method != http.MethodGet || captured.Path != "/admin/llm/provider/3" {
+		t.Errorf("got %s %s, want GET /admin/llm/provider/3", captured.Method, captured.Path)
 	}
-	if view.Provider != "openai" || len(view.ModelConfigurations) != 1 {
+	if view.ID != 3 || view.Provider != "openai" || len(view.ModelConfigurations) != 1 {
 		t.Errorf("unexpected view: %+v", view)
 	}
 
+	c, _ = newTestServer(t, http.StatusNotFound,
+		`{"error_code": "NOT_FOUND", "detail": "LLM provider 999 does not exist"}`)
 	if _, err := c.GetLLMProvider(context.Background(), 999); !IsNotFound(err) {
 		t.Errorf("missing id should return a 404 APIError, got %v", err)
 	}

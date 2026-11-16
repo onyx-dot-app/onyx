@@ -99,7 +99,7 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
 
   return (
     <main className="pt-4 mx-auto container">
-      <BackButton />
+      <BackButton fallback="/ee/admin/performance/query-history" />
 
       <CardSection className="mt-4">
         <Title>{t("detail.header.title")}</Title>

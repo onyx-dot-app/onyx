@@ -20,7 +20,7 @@ export default function PluginDirectoryToolbar({
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
         <div className="min-w-0 flex-1 md:w-64 md:flex-none">
           <InputTypeIn
-            searchIcon
+            icon="search"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder={searchLabel}

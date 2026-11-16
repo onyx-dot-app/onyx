@@ -11,7 +11,7 @@ import {
   useTierLockedOptions,
 } from "@/lib/tiers/hooks";
 import { InputHorizontal, Section } from "@opal/layouts";
-import { SvgOrganization, SvgUserSync, SvgUsers } from "@opal/icons";
+import { SvgOrganization, SvgUser, SvgUserSync, SvgUsers } from "@opal/icons";
 import { AccessType, Permission } from "@/lib/types";
 import {
   ValidAutoSyncSource,
@@ -89,7 +89,8 @@ export default function DocumentAccessField({
       ? "private"
       : "public";
 
-  // Auto Sync and Specific Groups need Business; Everyone is on every tier.
+  // Auto Sync, Specific Groups and Only Me need Business; Everyone is on every
+  // tier.
   const businessOptions = useMemo(() => {
     const built: SelectOption[] = [];
     if (isValidAutoSyncSource(connector)) {
@@ -110,6 +111,12 @@ export default function DocumentAccessField({
       title: t("specificGroups.title"),
       description: t("specificGroups.description"),
       icon: SvgUsers,
+    });
+    built.push({
+      value: "personal",
+      title: t("onlyMe.title"),
+      description: t("onlyMe.description"),
+      icon: SvgUser,
     });
     return built;
   }, [isSyncDisabledByAuth, connector, t, appName]);

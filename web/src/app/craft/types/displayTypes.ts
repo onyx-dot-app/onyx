@@ -5,7 +5,7 @@
  * Items are stored and rendered in chronological order as they arrive.
  */
 
-import type { RateLimitDetails } from "@/app/app/interfaces";
+import type { RateLimitDetails } from "@/app/app/types";
 
 export type ToolCallKind =
   | "search"

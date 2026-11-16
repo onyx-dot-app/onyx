@@ -1,9 +1,9 @@
+import { redirect } from "@opal/navigation";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS } from "@/lib/auth/svcSS";
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import Verify from "./Verify";
 import { User } from "@/lib/types";
-import { redirect } from "next/navigation";
 
 export default async function Page() {
   // catch cases where the backend is completely unreachable here

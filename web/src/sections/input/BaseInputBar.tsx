@@ -15,7 +15,7 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
-import { getTextContent } from "@/lib/contentEditable";
+import type { CaretText } from "@/lib/contentEditable";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
@@ -31,17 +31,15 @@ import {
   EMPTY_QUEUED_MESSAGES,
   MAX_QUEUED_MESSAGES,
   type QueuedMessage,
-} from "@/app/app/interfaces";
+} from "@/app/app/types";
 
 export interface BaseInputBarHandle {
   reset: () => void;
   focus: () => void;
   setMessage: (message: string) => void;
   pasteText: (text: string) => void;
-  getTextBeforeCursor: () => string | null;
-  getCaretRect: () => DOMRect | null;
-  /** Delete `token` immediately before the caret (e.g. `"/pptx"`). */
-  deleteBeforeToken: (token: string) => boolean;
+  /** Delete `token` around the caret (e.g. `/pp` before it, `tx` after). */
+  deleteToken: (token: CaretText) => boolean;
 }
 
 export interface BaseInputBarProps {
@@ -71,8 +69,7 @@ export interface BaseInputBarProps {
   onPasteText?: (text: string) => boolean;
   onPasteFiles?: (files: File[]) => void;
   onContentChange?: (text: string) => void;
-  onInputCallback?: () => void;
-  onSelectionChange?: () => void;
+  onInputCallback?: (event: SyntheticEvent<HTMLDivElement>) => void;
 }
 
 const BaseInputBar = memo(
@@ -99,7 +96,6 @@ const BaseInputBar = memo(
         onPasteFiles,
         onContentChange,
         onInputCallback,
-        onSelectionChange,
       },
       ref
     ) => {
@@ -118,7 +114,7 @@ const BaseInputBar = memo(
         message,
         setMessage,
         clearMessage,
-        deleteBeforeToken,
+        deleteToken,
         handleInput: onInput,
         handleCompositionStart,
         handleCompositionEnd,
@@ -141,11 +137,17 @@ const BaseInputBar = memo(
         disabled,
       });
 
+      const editQueuedMessage = (index: number) => {
+        const queued = queue[index];
+        if (!queued) return;
+        onRemoveQueuedMessage?.(index);
+        setMessage(queued.text);
+      };
       const queueNav = useQueuedMessageNavigation({
         messages: queue,
         inputIsEmpty: !message,
         onRemove: (index) => onRemoveQueuedMessage?.(index),
-        onEdit: setMessage,
+        onEdit: editQueuedMessage,
       });
 
       useImperativeHandle(ref, () => ({
@@ -158,37 +160,7 @@ const BaseInputBar = memo(
         },
         setMessage: (msg: string) => setMessage(msg),
         pasteText: (text: string) => pasteText(text),
-        getTextBeforeCursor: (): string | null => {
-          const el = inputRef.current;
-          if (!el) return null;
-          const sel = window.getSelection();
-          if (!sel || sel.rangeCount === 0) return null;
-          const range = sel.getRangeAt(0);
-          if (!el.contains(range.startContainer)) return null;
-          const cloned = range.cloneRange();
-          cloned.selectNodeContents(el);
-          cloned.setEnd(range.startContainer, range.startOffset);
-          const tmp = document.createElement("div");
-          tmp.appendChild(cloned.cloneContents());
-          return getTextContent(tmp);
-        },
-        getCaretRect: (): DOMRect | null => {
-          const sel = window.getSelection();
-          if (!sel || sel.rangeCount === 0) return null;
-          const range = sel.getRangeAt(0).cloneRange();
-          range.collapse(true);
-          const rect = range.getBoundingClientRect();
-          if (
-            rect.top === 0 &&
-            rect.left === 0 &&
-            rect.width === 0 &&
-            rect.height === 0
-          ) {
-            return inputRef.current?.getBoundingClientRect() ?? null;
-          }
-          return rect;
-        },
-        deleteBeforeToken,
+        deleteToken,
       }));
 
       const handlePaste = useCallback(
@@ -253,7 +225,7 @@ const BaseInputBar = memo(
       const handleInput = useCallback(
         (event: SyntheticEvent<HTMLDivElement>) => {
           onInput(event);
-          onInputCallback?.();
+          onInputCallback?.(event);
         },
         [onInput, onInputCallback]
       );
@@ -273,10 +245,6 @@ const BaseInputBar = memo(
         [handleSubmit, handleTileKeyDown, queueNav]
       );
 
-      const handleSelectionChange = useCallback(() => {
-        onSelectionChange?.();
-      }, [onSelectionChange]);
-
       const canSubmit =
         message.trim().length > 0 &&
         !disabled &&
@@ -295,9 +263,10 @@ const BaseInputBar = memo(
           {queueEnabled && (
             <QueuedMessageBar
               messages={queue}
-              highlightedIndex={queueNav.highlightedIndex}
+              highlightedId={queueNav.highlightedId}
               onDiscard={(index) => onRemoveQueuedMessage?.(index)}
-              onHighlight={queueNav.setHighlightedIndex}
+              onEdit={editQueuedMessage}
+              canEdit={!message.trim()}
             />
           )}
           <div
@@ -327,9 +296,7 @@ const BaseInputBar = memo(
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
-                onKeyUp={handleSelectionChange}
-                onMouseUp={handleSelectionChange}
-                onBlur={() => queueNav.setHighlightedIndex(null)}
+                onBlur={() => queueNav.setHighlightedId(null)}
                 className={cn(
                   "w-full h-full min-h-[44px] outline-hidden bg-transparent",
                   "whitespace-pre-wrap wrap-break-word overscroll-contain",

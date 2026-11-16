@@ -9,12 +9,17 @@ import {
   Card,
   Divider,
   Modal,
-  OverflowText,
   SelectCard,
   Text,
   Tooltip,
 } from "@opal/components";
-import { Content, ContentAction, Section, toast } from "@opal/layouts";
+import {
+  Content,
+  ContentAction,
+  KeyValue,
+  Section,
+  toast,
+} from "@opal/layouts";
 import {
   SvgArrowRightCircle,
   SvgCheckSquare,
@@ -42,35 +47,6 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { formatDateLog, formatDateTimeLog } from "@/lib/dateUtils";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
-
-interface DetailRowProps {
-  label: string;
-  value: string;
-  /** Sets the value in the mono font, as for a secret. */
-  mono?: boolean;
-}
-function DetailRow({ label, value, mono = false }: DetailRowProps) {
-  return (
-    <Section flexDirection="row" gap={4}>
-      {/* Each side is capped at the form's input column width, and a long
-      label or value is cut with its full text on hover. */}
-      <div className="min-w-0 max-w-(--block-width-form-input-column-max)">
-        <OverflowText as="p" font="main-ui-action" color="text-03">
-          {label}
-        </OverflowText>
-      </div>
-      <div className="ms-auto min-w-0 max-w-(--block-width-form-input-column-max) flex-1 text-end">
-        <OverflowText
-          as="p"
-          font={mono ? "main-ui-mono" : "main-ui-body"}
-          color="text-04"
-        >
-          {value}
-        </OverflowText>
-      </div>
-    </Section>
-  );
-}
 
 interface AuthenticationAccountCardProps {
   /** The saved account this card shows. */
@@ -366,6 +342,7 @@ export default function AuthenticationAccountCard({
               <Card border="none" padding={2} rounding={3}>
                 <Section gap={3} alignItems="stretch" width="full">
                   <ContentAction
+                    font="main-ui-action"
                     title={
                       failedToRun
                         ? t("failedToRun.title")
@@ -374,8 +351,6 @@ export default function AuthenticationAccountCard({
                           : t("notTested.title")
                     }
                     description={t("details.description")}
-                    sizePreset="main-ui"
-                    variant="section"
                     padding={0}
                     rightChildren={
                       <Section
@@ -419,7 +394,7 @@ export default function AuthenticationAccountCard({
                     }
                   />
                   {details.method && (
-                    <DetailRow
+                    <KeyValue
                       label={t("authenticationType.label")}
                       value={tCredentialCopy(
                         `methods.labels.${details.method.label}`
@@ -427,7 +402,7 @@ export default function AuthenticationAccountCard({
                     />
                   )}
                   {details.fields.map(({ key, field, value }) => (
-                    <DetailRow
+                    <KeyValue
                       key={key}
                       label={fieldCopy(key).title}
                       value={value}
@@ -497,39 +472,37 @@ export default function AuthenticationAccountCard({
               className="min-w-0"
             >
               <Content
+                font="main-ui-action"
                 icon={getSourceMetadata(source).icon}
                 title={accountName}
                 // One line; a long name is cut, in full on hover.
                 titleMaxLines={1}
                 editable={canEditAccount}
                 editTooltip={t("renameButton.tooltip")}
+                // An empty name falls back to the creator's email.
                 onTitleChange={(name) => void saveAccount({ name })}
                 suffix={t("sourceSuffix", { source: sourceName })}
                 description={t("addedOn.label", { date: addedOn })}
-                sizePreset="main-ui"
-                variant="section"
               />
               {/* One-sided padding, which Section's own padding overrides. */}
               <div className="flex flex-row gap-4 ps-5.5 pt-2">
                 <Content
+                  font="secondary-body"
                   icon={SvgLinkedDots}
                   title={t("usedBy.label", { count: credential.usages.length })}
-                  sizePreset="secondary"
-                  variant="body"
-                  color="muted"
+                  titleColor="text-03"
                   width="fit"
                 />
                 {ownerName !== null && (
                   <Content
+                    font="secondary-body"
                     icon={SvgUserKey}
                     title={
                       isOwnAccount
                         ? t("owner.you", { name: ownerName })
                         : ownerName
                     }
-                    sizePreset="secondary"
-                    variant="body"
-                    color="muted"
+                    titleColor="text-03"
                     width="fit"
                   />
                 )}

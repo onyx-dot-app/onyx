@@ -20,9 +20,8 @@ import {
   LinkButton,
   Log,
   type LogVariant,
-  OverflowText,
   SelectCard,
-  Tag,
+  Badge,
   Text,
 } from "@opal/components";
 import {
@@ -186,8 +185,15 @@ const ROW_HOVER_GROUP = "check-log";
 
 interface CheckLogProps extends CheckActions {
   check: CheckLine;
+  /** A finished check with details or docs folds open to show them. */
+  withDetails: boolean;
 }
-function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
+function CheckLog({
+  check,
+  withDetails,
+  onSkipCheck,
+  onRunCheck,
+}: CheckLogProps) {
   const t = useTranslations("admin.connectorChecks");
   const [expanded, setExpanded] = useState(false);
   const { variant, icon, detail, font, color } = CHECK_LOGS[check.state];
@@ -209,7 +215,9 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
     ),
   ];
   const expandable: boolean =
-    finished && (detailTexts.length > 0 || check.docs_link !== null);
+    withDetails &&
+    finished &&
+    (detailTexts.length > 0 || check.docs_link !== null);
   // Expected: queued, or waiting on a field.
   const expected: boolean =
     check.state === "pending" || check.state === "waiting";
@@ -219,7 +227,7 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
   const messageColor: TextColor = blocking ? "status-error-05" : color;
 
   const required = check.required ? (
-    <Tag title={t("required.label")} color="white" variant="status" />
+    <Badge title={t("required.label")} color="default" titleColor="text-04" />
   ) : undefined;
 
   // A required expected check cannot be skipped.
@@ -351,14 +359,16 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
         gap={2}
         className="min-w-0"
       >
-        <OverflowText
+        <Text
+          maxLines={1}
+          overflowTooltip
           as="p"
           font={messageFont}
           color={messageColor}
           textPosition="text-start"
         >
           {check.summary ?? (check.message || t(detail))}
-        </OverflowText>
+        </Text>
         {required}
       </Section>
     ),
@@ -391,8 +401,14 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
 interface CheckGroupProps extends CheckActions {
   label: (typeof GROUPS)[number]["label"];
   checks: CheckLine[];
+  withDetails: boolean;
 }
-function CheckGroup({ label, checks, ...actions }: CheckGroupProps) {
+function CheckGroup({
+  label,
+  checks,
+  withDetails,
+  ...actions
+}: CheckGroupProps) {
   const t = useTranslations("admin.connectorChecks");
   return (
     <Divider title={t(label, { count: checks.length })} foldable defaultOpen>
@@ -410,6 +426,7 @@ function CheckGroup({ label, checks, ...actions }: CheckGroupProps) {
           <CheckLog
             key={`${check.capability}:${check.check_id}`}
             check={check}
+            withDetails={withDetails}
             {...actions}
           />
         ))}
@@ -420,9 +437,15 @@ function CheckGroup({ label, checks, ...actions }: CheckGroupProps) {
 
 export interface CheckLineGroupsProps extends CheckActions {
   lines: CheckLine[];
+  /** Finished checks fold open to their details and docs. @default true */
+  withDetails?: boolean;
 }
 /** The lines grouped by outcome, blocking failures first. Empty groups are left out. */
-export function CheckLineGroups({ lines, ...actions }: CheckLineGroupsProps) {
+export function CheckLineGroups({
+  lines,
+  withDetails = true,
+  ...actions
+}: CheckLineGroupsProps) {
   const groups = useMemo(
     () =>
       GROUPS.map((group) => ({
@@ -440,6 +463,7 @@ export function CheckLineGroups({ lines, ...actions }: CheckLineGroupsProps) {
           key={group.label}
           label={group.label}
           checks={group.checks}
+          withDetails={withDetails}
           {...actions}
         />
       ))}
@@ -610,14 +634,13 @@ export function CheckCardView({
 
   const header = (
     <ContentAction
+      font="main-content-emphasis"
       // A run that broke has no counts, so the ring would read as complete;
       // a red X stands in, without dimming the title.
       icon={notice ? ChecksFailedIcon : progress.icon}
       title={t("title")}
       suffix={progress.suffix}
       description={summary}
-      sizePreset="main-content"
-      variant="section"
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
@@ -650,10 +673,10 @@ export function CheckCardView({
               )
             ))}
           {collapsed && requiredFailed > 0 && (
-            <Tag
+            <Badge
               icon={SvgXOctagon}
               title={t("requiredFailed", { count: requiredFailed })}
-              color="red"
+              color="error"
             />
           )}
           {/* Shown unless a run that broke left no rows to fold. */}
@@ -800,10 +823,9 @@ export default function CredentialChecksCard({
     return (
       <Card border="solid" rounding={4} padding={4}>
         <ContentAction
+          font="main-content-emphasis"
           title={promptT("title")}
           description={promptT("description", { appName })}
-          sizePreset="main-content"
-          variant="section"
           center
           padding={0}
           rightChildren={

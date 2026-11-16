@@ -25,6 +25,9 @@ const mockRouter = { push: mockPush, replace: mockReplace };
 let mockQuery = new URLSearchParams();
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => mockRouter,
   useSearchParams: () => mockQuery,
 }));
@@ -81,6 +84,7 @@ const json = (body: unknown, status = 200) =>
 beforeEach(() => {
   toast.clearAll();
   mockFullAdmin = true;
+  window.history.replaceState(null, "", "/");
   mockQuery = new URLSearchParams();
   mockPush.mockClear();
   mockReplace.mockClear();
@@ -464,7 +468,7 @@ describe("detail modal", () => {
       "true"
     );
     expect(await findToolsPreview()).toBeInTheDocument();
-    const search = screen.getByRole("textbox", { name: "Search tools" });
+    const search = screen.getByRole("searchbox", { name: "Search tools" });
     await user.type(search, "missing endpoint");
     expect(screen.queryByText("listReleases")).not.toBeInTheDocument();
     expect(screen.getByText("No tools found")).toBeVisible();

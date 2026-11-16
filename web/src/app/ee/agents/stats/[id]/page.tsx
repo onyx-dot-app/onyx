@@ -1,6 +1,6 @@
+import { redirect } from "@opal/navigation";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { unstable_noStore as noStore } from "next/cache";
-import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/svcSS";
 import { AgentStats } from "./AgentStats";
@@ -22,7 +22,7 @@ export default async function GalleryPage(props: {
   return (
     <>
       <div className="absolute top-4 start-4">
-        <BackButton />
+        <BackButton fallback="/app/agents" />
       </div>
 
       <div className="w-full py-8">

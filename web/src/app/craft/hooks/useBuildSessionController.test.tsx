@@ -7,7 +7,10 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import * as api from "@/app/craft/services/apiServices";
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: jest.fn() }),
 }));
 jest.mock("@/app/craft/hooks/usePreProvisionPolling", () => ({
   usePreProvisionPolling: jest.fn(),

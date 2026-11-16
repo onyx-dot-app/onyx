@@ -11,7 +11,8 @@ import {
   type TagItem,
 } from "@opal/components";
 import { SvgAlertTriangle, SvgCheckCircle, SvgUsers } from "@opal/icons";
-import type { ColorTypes, IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
+import type { ContentColor } from "@opal/layouts/content/components";
 import { Content, toast } from "@opal/layouts";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -91,7 +92,7 @@ interface InviteUsersModalProps {
 
 interface FieldMessage {
   icon: IconFunctionComponent;
-  color: ColorTypes;
+  color: ContentColor;
   text: string;
 }
 
@@ -239,11 +240,11 @@ export default function InviteUsersModal({
           />
           {message && (
             <Content
-              sizePreset="secondary"
-              variant="body"
+              font="secondary-body"
               icon={message.icon}
               title={message.text}
               color={message.color}
+              titleColor="text-03"
               role="status"
             />
           )}

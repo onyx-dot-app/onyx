@@ -97,8 +97,9 @@ def _stale_upload_conditions() -> list[Any]:
     """Uploads old enough for a sweep to consider, whatever claims them."""
     cutoff = datetime.now(timezone.utc) - INCOGNITO_FILE_ORPHAN_AGE
     return [
-        # Matches ix_user_file_incognito_sweep's partial predicate.
-        UserFile.incognito.is_(True),
+        # Bare column, not .is_(True): Postgres matches only this form to
+        # ix_user_file_incognito_sweep's WHERE incognito.
+        UserFile.incognito,
         UserFile.status != UserFileStatus.DELETING,
         UserFile.last_accessed_at < cutoff,
     ]

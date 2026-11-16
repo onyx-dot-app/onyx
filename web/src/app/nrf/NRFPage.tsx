@@ -1,10 +1,10 @@
 "use client";
 
+import { useSearchParams, useNavigation } from "@opal/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
-import { toast } from "@opal/layouts";
+import { toast, Section } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
@@ -19,7 +19,8 @@ import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { useAgents } from "@/lib/agents/hooks";
-import { type ProjectFile, useProjectsContext } from "@/lib/projects/providers";
+import { useProjectsContext } from "@/lib/projects/providers";
+import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import useChatController from "@/hooks/useChatController";
@@ -47,7 +48,6 @@ import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
-import { Section } from "@/layouts/general-layouts";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -65,6 +65,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { setUseOnyxAsNewTab } = useNRFPreferences();
 
   const searchParams = useSearchParams();
+  const navigation = useNavigation();
   // Shared with the tools popover in AppInputBar below. Mounted by the route.
   const { user, authTypeMetadata, refreshUser } = useUser();
 
@@ -141,6 +142,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: existingChatSessionId,
     agentId: activeAgent?.id,
+    toolConfiguration,
   });
 
   // State
@@ -283,12 +285,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     chatInputBarRef.current?.reset();
   }, [setMessage, setCurrentMessageFiles]);
 
-  const restoreInputBar = useCallback(
-    (message: string, files: ProjectFile[]) => {
-      chatInputBarRef.current?.restore(message, files);
-    },
-    []
-  );
+  const restoreInputBar = useCallback((unsent: UnsentMessage) => {
+    chatInputBarRef.current?.restore(unsent);
+  }, []);
 
   // Chat controller for submitting messages
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
@@ -305,7 +304,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     });
 
   // Chat session controller for loading sessions
-  useChatSessionController({
+  const { queue } = useChatSessionController({
     existingChatSessionId,
     searchParams: searchParams!,
     firstMessage: undefined,
@@ -330,46 +329,42 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Handle submit from AppInputBar - routes through query controller for search/chat classification
   const handleChatInputSubmit = useCallback(
-    async (submittedMessage: string) => {
-      if (!submittedMessage.trim()) return;
+    async (composed: ComposedMessage) => {
+      if (!composed.message.trim()) return;
 
       const additionalContext =
         tabReadingEnabled && currentTabUrl
           ? `The user is currently viewing: ${currentTabUrl}. Use the open_url tool to read this page and use its content as additional context for your response.`
           : undefined;
 
-      // If we already have messages (chat session started), always use chat mode
-      // (matches AppPage behavior where existing sessions bypass classification)
       const selectedModels = multiModel.isMultiModelActive
         ? multiModel.selectedModels
         : undefined;
 
-      if (hasMessages) {
-        onSubmit({
-          message: submittedMessage,
-          currentMessageFiles: currentMessageFiles,
-          deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
-          additionalContext,
-          selectedModels,
-        });
-        return;
-      }
-
       // Build an onChat closure that captures additionalContext for this submission
-      const onChat = (chatMessage: string) => {
+      const onChat = () => {
         onSubmit({
-          message: chatMessage,
+          ...composed,
           currentMessageFiles: currentMessageFiles,
           deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
           additionalContext,
           selectedModels,
         });
       };
+      // If we already have messages (chat session started), always use chat mode
+      // (matches AppPage behavior where existing sessions bypass classification)
+      if (hasMessages) {
+        onChat();
+        return;
+      }
 
       // Use submitQuery which will classify the query and either:
       // - Route to search (sets phase to "searching"/"search-results" and shows SearchUI)
       // - Route to chat (calls onChat callback)
-      await submitQuery(submittedMessage, onChat);
+      // Search cannot use mentions, so a message with mentions routes to chat.
+      await submitQuery(composed.message, onChat, {
+        chatOnly: composed.mentions.length > 0,
+      });
     },
     [
       hasMessages,
@@ -397,6 +392,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
     onSubmit({
       message: lastUserMsg.message,
+      mentions: lastUserMsg.mentions ?? [],
       currentMessageFiles: currentMessageFiles,
       deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
       messageIdToResend: lastUserMsg.messageId,
@@ -572,6 +568,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 </div>
               )}
               <AppInputBar
+                queue={queue}
                 toolConfiguration={toolConfiguration}
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
@@ -699,7 +696,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       if (window.top) {
                         window.top.location.href = "/auth/login";
                       } else {
-                        window.location.href = "/auth/login";
+                        navigation.load("/auth/login");
                       }
                     }}
                   >
@@ -717,7 +714,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           width="full"
           prominence="secondary"
           onClick={() => {
-            window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
+            navigation.load(ADMIN_ROUTES.LLM_MODELS.path);
           }}
         >
           {t("nrf.page.setupLlmButton.label")}

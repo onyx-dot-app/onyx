@@ -4,14 +4,16 @@ from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
-from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.models import ToolCallException, WebSearchToolOverrideKwargs
-from onyx.tools.tool_implementations.web_search.models import WebSearchResult
-from onyx.tools.tool_implementations.web_search.web_search_tool import (
-    WebSearchTool,
-    _normalize_queries_input,
+from onyx.agents.tools import ToolInvocation
+from onyx.llm.cancellation import CancellationSignal
+from onyx.tools.models import ToolCallException, ToolContext
+from onyx.tools.tool_implementations.web_search.models import (
+    WebSearchArguments,
+    WebSearchResult,
 )
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 
 
 def _make_result(
@@ -43,52 +45,49 @@ def _make_tool(mock_provider: Any) -> WebSearchTool:
     ):
         mock_session_ctx.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        tool = WebSearchTool(tool_id=1, emitter=MagicMock())
+        tool = WebSearchTool(tool_id=1)
 
     return tool
 
 
 def _run(tool: WebSearchTool, queries: Any) -> list[str]:
     """Call tool.run() and return the list of query strings passed to provider.search."""
-    placement = Placement(turn_index=0, tab_index=0)
-    override_kwargs = WebSearchToolOverrideKwargs(starting_citation_num=1)
-    tool.run(placement=placement, override_kwargs=override_kwargs, queries=queries)
+    tool_context = ToolContext(next_citation_num=1)
+    tool.run(
+        invocation=ToolInvocation(
+            call_id="test",
+            arguments={"queries": queries},
+            cancellation=CancellationSignal(),
+            update=lambda _progress: None,
+        ),
+        context=tool_context,
+    )
     search_mock = cast(MagicMock, tool._provider.search)  # noqa: SLF001
     return [call.args[0] for call in search_mock.call_args_list]
 
 
-class TestNormalizeQueriesInput:
-    """Unit tests for _normalize_queries_input (coercion + sanitization)."""
+@pytest.mark.parametrize(
+    ("raw", "queries"),
+    [
+        ("hello", ["hello"]),
+        ("  hello  ", ["hello"]),
+        # Control characters are removed without inserting a space.
+        ("hello\x00world", ["helloworld"]),
+        (["a", "b"], ["a", "b"]),
+        (["  a  ", "b\tb"], ["a", "bb"]),
+        (["a", None, "b"], ["a", "b"]),
+        ([1, "two"], ["1", "two"]),
+        (["a", "", "  ", "b"], ["a", "b"]),
+    ],
+)
+def test_queries_are_coerced_and_sanitized(raw: Any, queries: list[str]) -> None:
+    assert WebSearchArguments.model_validate({"queries": raw}).queries == queries
 
-    def test_bare_string_returns_single_element_list(self) -> None:
-        assert _normalize_queries_input("hello") == ["hello"]
 
-    def test_bare_string_stripped_and_sanitized(self) -> None:
-        assert _normalize_queries_input("  hello  ") == ["hello"]
-        # Control chars (e.g. null) removed; no space inserted
-        assert _normalize_queries_input("hello\x00world") == ["helloworld"]
-
-    def test_empty_string_returns_empty_list(self) -> None:
-        assert _normalize_queries_input("") == []
-        assert _normalize_queries_input("   ") == []
-
-    def test_list_of_strings_returned_sanitized(self) -> None:
-        assert _normalize_queries_input(["a", "b"]) == ["a", "b"]
-        # Leading/trailing space stripped; control chars (e.g. tab) removed
-        assert _normalize_queries_input(["  a  ", "b\tb"]) == ["a", "bb"]
-
-    def test_list_none_skipped(self) -> None:
-        assert _normalize_queries_input(["a", None, "b"]) == ["a", "b"]
-
-    def test_list_non_string_coerced(self) -> None:
-        assert _normalize_queries_input([1, "two"]) == ["1", "two"]
-
-    def test_list_whitespace_only_dropped(self) -> None:
-        assert _normalize_queries_input(["a", "", "  ", "b"]) == ["a", "b"]
-
-    def test_non_list_non_string_returns_empty_list(self) -> None:
-        assert _normalize_queries_input(42) == []
-        assert _normalize_queries_input({}) == []
+@pytest.mark.parametrize("raw", ["", "   ", ["", "  "], None, 42, {}])
+def test_no_query_left_is_a_missing_argument(raw: Any) -> None:
+    with pytest.raises(ValidationError, match="Field required"):
+        WebSearchArguments.model_validate({"queries": raw})
 
 
 class TestWebSearchToolRunQueryCoercion:
@@ -147,15 +146,18 @@ class TestWebSearchToolRunQueryCoercion:
         mock_provider = MagicMock()
         mock_provider.supports_site_filter = False
         tool = _make_tool(mock_provider)
-        placement = Placement(turn_index=0, tab_index=0)
-        override_kwargs = WebSearchToolOverrideKwargs(starting_citation_num=1)
+        tool_context = ToolContext(next_citation_num=1)
 
         with pytest.raises(ToolCallException) as exc_info:
-            tool.run(
-                placement=placement,
-                override_kwargs=override_kwargs,
-                queries="   ",
+            tool._run(
+                invocation=ToolInvocation(
+                    call_id="test",
+                    arguments={"queries": "   "},
+                    cancellation=CancellationSignal(),
+                    update=lambda _progress: None,
+                ),
+                context=tool_context,
             )
 
-        assert "No valid" in str(exc_info.value)
+        assert "queries: Field required" in str(exc_info.value)
         cast(MagicMock, mock_provider.search).assert_not_called()

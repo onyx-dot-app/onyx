@@ -1,0 +1,223 @@
+---
+title: "High Availability and Scaling"
+description: "Replicas, autoscaling, probes, graceful shutdown, and long-running requests for Onyx on Kubernetes"
+icon: "arrows-rotate"
+---
+
+<Note>
+  This page describes Onyx Helm chart **0.8.32** or later. Earlier charts do not have the default readiness probes,
+  the preStop drain, `podDisruptionBudget`, or `topologySpreadConstraints` described here.
+</Note>
+
+For resource sizing by deployment size, see the [Resourcing guide](/deployment/getting_started/resourcing)
+and the chart's [SIZING.md](https://github.com/onyx-dot-app/onyx/blob/main/deployment/helm/charts/onyx/SIZING.md).
+
+## Replicas
+
+These components are stateless. You can run more than one replica of each:
+
+- `api` and `webserver`
+- `inferenceCapability` and `indexCapability` (model servers)
+- The `celery_worker_*` workers
+
+Keep `celery_beat.replicaCount` at `1`. It is the task scheduler.
+
+The bundled PostgreSQL, Redis, and OpenSearch each run as one pod by default. For highly available dependencies,
+use managed services. See [External Services](/deployment/production/external_services).
+
+## Autoscaling
+
+Each scalable component has an `autoscaling` block. The chart creates a HorizontalPodAutoscaler by default.
+
+```yaml values.yaml
+api:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    # API memory stays near its request when idle, so a memory target keeps the HPA at maxReplicas.
+    targetMemoryUtilizationPercentage: null
+```
+
+When `autoscaling.enabled` is `true`, the chart ignores `replicaCount`.
+
+### KEDA
+
+Set `autoscaling.engine: keda` to create KEDA `ScaledObject` resources instead.
+You must install the KEDA operator yourself. Add KEDA triggers in `customTriggers`.
+
+This example scales the document processing workers on queue depth.
+It assumes that Prometheus scrapes the Onyx monitoring worker, which exports `onyx_queue_depth`.
+Set `monitoring.serviceMonitors.enabled: true` if you use the Prometheus Operator.
+
+```yaml values.yaml
+autoscaling:
+  engine: keda
+
+celery_worker_docprocessing:
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 10
+    # Remove the default CPU and memory triggers to scale on queue depth only.
+    targetCPUUtilizationPercentage: null
+    targetMemoryUtilizationPercentage: null
+    customTriggers:
+      - type: prometheus
+        metadata:
+          serverAddress: http://prometheus-operated.monitoring.svc:9090
+          query: max(onyx_queue_depth{queue="docprocessing"})
+          threshold: "20"  # Target queued tasks for each replica
+```
+
+## Probes
+
+| Component | Default readiness probe | Liveness and startup probes |
+| --- | --- | --- |
+| `api` | HTTP `GET /health` | Off. You can turn them on. |
+| `webserver` | TCP check on the HTTP port | Off. You can turn them on. |
+| `inferenceCapability` | HTTP `GET /api/health` | Off. You can turn them on. |
+| `indexCapability` | TCP check on the server port | Off. You can turn them on. |
+
+For each of these components:
+
+- `readinessProbe: {}` uses the chart default.
+- `readinessProbe: null` removes the probe.
+- A full probe spec replaces the default.
+
+Celery workers keep their probes in `celery_shared`.
+
+### Database migrations and probes
+
+<Warning>
+  The API server runs `alembic upgrade head` before it starts to serve. A large migration can take many minutes.
+  A liveness or startup probe that fails during a migration kills the pod before the migration completes.
+</Warning>
+
+If you turn on a startup probe, make `periodSeconds` × `failureThreshold` longer than your longest migration:
+
+```yaml values.yaml
+api:
+  startupProbe:
+    httpGet:
+      path: /health
+      port: api-server-port
+    periodSeconds: 10
+    failureThreshold: 180  # 30 minutes
+  livenessProbe:
+    httpGet:
+      path: /health  # Never use /health/ready here
+      port: api-server-port
+    periodSeconds: 30
+    failureThreshold: 5
+```
+
+The readiness probe never restarts a pod, so it is safe during migrations.
+
+`helm upgrade --wait` waits until the new API pods are ready, which is after the migrations complete.
+Set `--timeout` longer than your longest migration. If you use `--atomic`,
+a rollback reverts the Kubernetes objects but not the database schema.
+
+To run migrations as a separate step, set `api.runStartupMigrations: false`.
+Then run `alembic upgrade head` from the `onyxdotapp/onyx-backend` image, with the same configuration and Secrets,
+before you roll out new API pods.
+
+## Graceful shutdown
+
+The API server and web server sleep before they receive `SIGTERM`.
+This gives the ingress time to stop sending them new requests.
+The API server then waits for in-flight chat streams until the grace period ends.
+
+| Key | `api` default | `webserver` default |
+| --- | --- | --- |
+| `preStopSleepSeconds` | `15` | `15` |
+| `terminationGracePeriodSeconds` | `120` | `30` |
+
+- The sleep counts against the grace period.
+- The preStop sleep needs Kubernetes 1.30 or later. The chart leaves it out on older clusters.
+- If your chats run longer than the grace period, increase `api.terminationGracePeriodSeconds`.
+
+## Disruption budgets and spreading
+
+PodDisruptionBudgets are off by default. Set `podDisruptionBudget.enabled: true` on `api`, `webserver`,
+`inferenceCapability`, `indexCapability`, or any `celery_worker_*` component.
+
+- The default is `maxUnavailable: 1`. You can set `minAvailable` instead.
+- The chart creates the budget only when the component has more than one replica, or `autoscaling.minReplicas`
+  greater than one.
+- The chart fails to render a budget that blocks every eviction.
+
+`topologySpreadConstraints` is available on `api`, `webserver`, `inferenceCapability`, and `indexCapability`.
+
+```yaml values.yaml
+api:
+  replicaCount: 3
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app: api-server
+
+webserver:
+  replicaCount: 2
+  podDisruptionBudget:
+    enabled: true
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app: web-server
+```
+
+## Long-running requests
+
+Each chat stream holds one thread of the API threadpool until it ends.
+Deep research and code execution can hold a thread for many minutes. When all threads are busy,
+new requests wait in a queue.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `api.workers` | `1` | Uvicorn worker processes in each pod. Each process has its own threadpool. |
+| `api.threadpoolSize` | `0` (40 threads) | Threads in each worker. Each thread uses real CPU and memory. |
+| `api.limitConcurrency` | Empty (no limit) | Maximum connections for each worker. Excess requests get HTTP `503` at once, instead of a queue. |
+| `nginx.timeouts.read` and `.send` | `900` seconds | The bundled NGINX stops streams that last longer than this. |
+
+### Readiness on a full threadpool
+
+On Onyx v4.7.0 and later, `GET /health/ready` returns `503` when the threadpool has been full for 10 seconds.
+The pod then leaves the Service until threads become free.
+
+```yaml values.yaml
+api:
+  replicaCount: 3
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: api-server-port
+```
+
+- Use `/health/ready` only with more than one replica. High load fills all replicas at the same time. With one
+  replica, the Service has no ready pods.
+- Never use `/health/ready` for the liveness probe. It restarts pods during high load and causes an outage.
+
+### Stop a chat
+
+API clients can send `POST /api/chat/stop-chat-session/{chat_session_id}`. Onyx writes a stop signal to the cache,
+and the stream ends at its next check. Any API replica can receive the stop request.
+
+### Limits
+
+- Onyx has no admission control across replicas. Each pod limits only its own requests.
+- Onyx has no durable queue for chat requests. A request runs on the pod that receives it. If that pod stops, the
+  request stops.
+
+To serve more concurrent long requests, add API replicas or use the HPA.
+Use `api.limitConcurrency` to reject excess requests quickly instead of queueing them.

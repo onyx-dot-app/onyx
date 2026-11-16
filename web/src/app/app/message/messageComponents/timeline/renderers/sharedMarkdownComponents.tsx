@@ -1,31 +1,35 @@
 import type { Components } from "react-markdown";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 
 // Expanded view: normal spacing between paragraphs/lists
 export const mutedTextMarkdownComponents = {
   p: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
-    <Text as="p" dir={dir} text03 mainUiMuted className="my-1!">
-      {children}
-    </Text>
+    // A real `p` keeps `li > p` intact; Text takes no className for the margin.
+    <p dir={dir} className="my-1!">
+      <Text font="main-ui-muted" color="text-03">
+        {richNodes(children)}
+      </Text>
+    </p>
   ),
   li: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
-    <Text
-      as="li"
-      dir={dir}
-      text03
-      mainUiMuted
-      className="my-0! py-0! leading-normal"
-    >
-      {children}
+    <Text as="li" dir={dir} font="main-ui-muted" color="text-03">
+      {richNodes(children)}
     </Text>
   ),
   ul: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
-    <ul dir={dir} className="ps-0! ms-0! my-0.5! list-inside">
+    <ul
+      dir={dir}
+      className="ps-0! ms-0! my-0.5! list-inside [&>li]:my-0! [&>li]:py-0! [&>li]:leading-normal"
+    >
       {children}
     </ul>
   ),
   ol: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
-    <ol dir={dir} className="ps-0! ms-0! my-0.5! list-inside">
+    <ol
+      dir={dir}
+      className="ps-0! ms-0! my-0.5! list-inside [&>li]:my-0! [&>li]:py-0! [&>li]:leading-normal"
+    >
       {children}
     </ol>
   ),
@@ -44,28 +48,31 @@ export const mutedTextMarkdownComponents = {
 // Collapsed view: no spacing for compact display
 export const collapsedMarkdownComponents = {
   p: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
-    <Text as="p" dir={dir} text03 mainUiMuted className="my-0!">
-      {children}
-    </Text>
+    // A real `p` keeps `li > p` intact; Text takes no className for the margin.
+    <p dir={dir} className="my-0!">
+      <Text font="main-ui-muted" color="text-03">
+        {richNodes(children)}
+      </Text>
+    </p>
   ),
   li: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
-    <Text
-      as="li"
-      dir={dir}
-      text03
-      mainUiMuted
-      className="my-0! py-0! leading-normal"
-    >
-      {children}
+    <Text as="li" dir={dir} font="main-ui-muted" color="text-03">
+      {richNodes(children)}
     </Text>
   ),
   ul: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
-    <ul dir={dir} className="ps-0! ms-0! my-0! list-inside">
+    <ul
+      dir={dir}
+      className="ps-0! ms-0! my-0! list-inside [&>li]:my-0! [&>li]:py-0! [&>li]:leading-normal"
+    >
       {children}
     </ul>
   ),
   ol: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
-    <ol dir={dir} className="ps-0! ms-0! my-0! list-inside">
+    <ol
+      dir={dir}
+      className="ps-0! ms-0! my-0! list-inside [&>li]:my-0! [&>li]:py-0! [&>li]:leading-normal"
+    >
       {children}
     </ol>
   ),

@@ -1,15 +1,18 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { FullAgent } from "@/lib/agents/types";
 import { Modal } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
+import {
+  Content,
+  ContentAction,
+  InputHorizontal,
+  Section,
+} from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { Card, Divider } from "@opal/components";
+import { Card, Divider, Text } from "@opal/components";
 import { Collapsible } from "@opal/components";
 import {
   SvgActions,
@@ -28,7 +31,9 @@ import { EmptyMessageCard } from "@opal/components";
 import { InputSwitch } from "@opal/components";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import type { ComposedMessage } from "@/lib/chat/types";
 import AppInputBar from "@/sections/input/AppInputBar";
+import { useChatSessionQueue } from "@/lib/chat/hooks";
 import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { formatMmDdYyyy } from "@/lib/dateUtils";
@@ -67,10 +72,9 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
             {tools.map((tool) => (
               <Section key={tool.id} padding={1}>
                 <Content
+                  font="main-ui-action"
                   title={tool.display_name}
                   description={tool.description}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
               </Section>
             ))}
@@ -79,11 +83,10 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
       }
     >
       <ContentAction
+        font="main-ui-action"
         icon={serverIcon}
         title={server.name}
         description={server.description}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         rightChildren={
           <Button
@@ -109,11 +112,10 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
     <Card border="solid" rounding={4} padding={4}>
       <Content
+        font="main-ui-action"
         icon={SvgActions}
         title={tool.display_name}
         description={tool.description}
-        sizePreset="main-ui"
-        variant="section"
       />
     </Card>
   );
@@ -125,21 +127,23 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
  */
 interface AgentChatInputProps {
   agent: FullAgent;
-  onSubmit: (message: string) => void;
+  onSubmit: (composed: ComposedMessage) => void;
 }
 function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   const llmManager = useLlmManager(undefined, agent);
   // Over the listing, so the URL says nothing about the chat this would
   // start; the agent is named here instead.
   const toolConfiguration = useToolConfiguration(agent.id);
+  // A preview starts a new chat, so it has no pending input.
+  const queue = useChatSessionQueue(false);
 
   // This send navigates in order to send, so the configuration is left where
   // that page will find it rather than travelling with the call. Closing the
   // viewer without sending leaves nothing behind.
   const submit = useCallback(
-    (message: string) => {
+    (composed: ComposedMessage) => {
       toolConfiguration.handOffToNewChatWith(agent.id);
-      onSubmit(message);
+      onSubmit(composed);
     },
     [toolConfiguration, agent.id, onSubmit]
   );
@@ -158,6 +162,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       deepResearchEnabled={false}
       toggleDeepResearch={() => {}}
       disabled={false}
+      queue={queue}
     />
   );
 }
@@ -190,21 +195,27 @@ export interface AgentViewerModalProps {
 }
 export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
   const t = useTranslations("agents.modals");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { allRecentFiles } = useProjectsContext();
   const { llmProviders } = useLanguageModelsForAgent(agent.id);
   const { appName } = useSettings();
 
   const handleStartChat = useCallback(
-    (message: string) => {
+    ({ message, mentions }: ComposedMessage) => {
       const params = new URLSearchParams({
         [SEARCH_PARAM_NAMES.AGENT_ID]: String(agent.id),
         [SEARCH_PARAM_NAMES.USER_PROMPT]: message,
         [SEARCH_PARAM_NAMES.SEND_ON_LOAD]: "true",
       });
-      router.push(`/app?${params.toString()}`);
+      // Skill mentions travel as skill names.
+      const skills = mentions
+        .filter((mention) => mention.type === "skill")
+        .map((mention) => mention.name);
+      if (skills.length > 0)
+        params.set(SEARCH_PARAM_NAMES.SKILLS, skills.join(","));
+      navigation.go(`/app?${params.toString()}`);
     },
-    [agent.id, router]
+    [agent.id, navigation]
   );
 
   const hasKnowledge =
@@ -272,43 +283,41 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
           <Section flexDirection="row" justifyContent="start">
             {agent.is_featured && (
               <Content
+                font="main-ui-body"
                 icon={SvgStar}
                 title={t("viewer.featured.label")}
-                sizePreset="main-ui"
-                variant="body"
                 width="fit"
               />
             )}
             <Content
+              font="main-ui-body"
               icon={SvgUser}
               title={agent.owner?.email ?? "Onyx"}
-              sizePreset="main-ui"
-              variant="body"
-              color="muted"
+              titleColor="text-03"
               width="fit"
             />
             {agent.is_public && (
               <Content
+                font="main-ui-body"
                 icon={SvgOrganization}
                 title={t("viewer.public.label")}
-                sizePreset="main-ui"
-                variant="body"
-                color="muted"
+                titleColor="text-03"
                 width="fit"
               />
             )}
           </Section>
 
           {/* Description */}
-          {agent.description && <Text text03>{agent.description}</Text>}
+          {agent.description && (
+            <Text color="text-03">{agent.description}</Text>
+          )}
 
           {/* Knowledge */}
           <Divider paddingParallel={0} paddingPerpendicular={0} />
           <Section gap={2} alignItems="start">
             <Content
+              font="main-content-emphasis"
               title={t("viewer.knowledge.title")}
-              sizePreset="main-content"
-              variant="section"
             />
             {hasKnowledge ? (
               <Section
@@ -364,10 +373,9 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
             <Section gap={2} alignItems="start">
               {agent.system_prompt && (
                 <Content
+                  font="main-ui-action"
                   title={t("viewer.instructions.title")}
                   description={agent.system_prompt}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
               )}
               {defaultModel && (
@@ -377,7 +385,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
                     appName,
                   })}
                 >
-                  <Text>{defaultModel}</Text>
+                  <Text color="text-05">{defaultModel}</Text>
                 </InputHorizontal>
               )}
               {agent.search_start_date && (
@@ -385,7 +393,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
                   title={t("viewer.knowledgeCutoff.title")}
                   description={t("viewer.knowledgeCutoff.description")}
                 >
-                  <Text mainUiMono>
+                  <Text font="main-ui-mono" color="text-05">
                     {formatMmDdYyyy(agent.search_start_date)}
                   </Text>
                 </InputHorizontal>
@@ -407,10 +415,9 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
             <>
               <Divider paddingParallel={0} paddingPerpendicular={0} />
               <Content
+                font="main-content-emphasis"
                 title={t("viewer.promptReminders.title")}
                 description={agent.task_prompt}
-                sizePreset="main-content"
-                variant="section"
               />
             </>
           )}
@@ -420,24 +427,27 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
             <>
               <Divider paddingParallel={0} paddingPerpendicular={0} />
               <Content
+                font="main-content-emphasis"
                 title={t("viewer.conversationStarters.title")}
-                sizePreset="main-content"
-                variant="section"
               />
               <div className="grid grid-cols-2 gap-1 w-full">
                 {agent.starter_messages.map((starter, index) => (
                   <Interactive.Stateless
                     key={index}
-                    onClick={() => handleStartChat(starter.message)}
+                    onClick={() =>
+                      handleStartChat({
+                        message: starter.message,
+                        mentions: [],
+                      })
+                    }
                     prominence="tertiary"
                   >
                     <Interactive.Container>
                       <Content
+                        font="main-ui-body"
                         icon={SvgBubbleText}
                         title={starter.message}
-                        sizePreset="main-ui"
-                        variant="body"
-                        color="muted"
+                        titleColor="text-03"
                         width="full"
                       />
                     </Interactive.Container>

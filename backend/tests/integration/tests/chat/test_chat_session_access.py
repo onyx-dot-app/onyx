@@ -3,6 +3,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -210,3 +211,117 @@ def test_stop_chat_session_rejects_non_owner(
     # Unknown session IDs are also rejected.
     response = _stop_chat_session(str(uuid4()), second_user)
     assert response.status_code == 404
+
+
+def test_queue_and_status_routes_reject_callers_without_access(
+    basic_user: DATestUser, second_user: DATestUser
+) -> None:
+    """Only the owner can read a chat's status or read and change its queue."""
+    chat_session = ChatSessionManager.create(user_performing_action=basic_user)
+    session_url = f"{API_SERVER_URL}/chat/chat-session/{chat_session.id}"
+    pending_url = f"{session_url}/pending-messages"
+
+    def status_codes(user: DATestUser | None) -> list[int]:
+        headers = user.headers if user is not None else GENERAL_HEADERS
+        cookies = user.cookies if user is not None else None
+        return [
+            client.request(
+                method, url, json=body, headers=headers, cookies=cookies
+            ).status_code
+            for method, url, body in (
+                ("GET", f"{session_url}/status", None),
+                ("GET", pending_url, None),
+                ("POST", pending_url, {"message": "Private", "delivery": "queue"}),
+                ("DELETE", f"{pending_url}/unknown", None),
+                ("POST", f"{pending_url}/unknown/interrupt", None),
+            )
+        ]
+
+    assert status_codes(second_user) == [404] * 5
+    assert status_codes(None) == [403] * 5
+    response = client.get(
+        pending_url, headers=basic_user.headers, cookies=basic_user.cookies
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"message": " ", "delivery": "queue"},
+        {
+            "message": "text",
+            "delivery": "queue",
+            "mcp_headers": {"Authorization": "test"},
+        },
+        {"message": "text", "delivery": "queue", "target_response_id": -1},
+    ],
+)
+def test_pending_message_rejects_invalid_or_transient_fields(
+    basic_user: DATestUser, body: dict[str, str | int | dict[str, str]]
+) -> None:
+    """Pending text must be nonblank and cannot carry request-only fields."""
+    chat_session = ChatSessionManager.create(user_performing_action=basic_user)
+    response = client.post(
+        f"{API_SERVER_URL}/chat/chat-session/{chat_session.id}/pending-messages",
+        json=body,
+        headers=basic_user.headers,
+        cookies=basic_user.cookies,
+    )
+    assert response.status_code == 422
+
+
+def test_queue_routes_reject_deleted_and_incognito_sessions(
+    admin_user: DATestUser,
+) -> None:
+    """Deleted chats have no queue, and incognito chats keep no pending text."""
+    security_url = f"{API_SERVER_URL}/admin/security"
+    settings = client.get(security_url, headers=admin_user.headers)
+    settings.raise_for_status()
+    previous = {
+        key: settings.json()[key]
+        for key in ("incognito_availability", "incognito_record_mode")
+    }
+    client.put(
+        security_url,
+        json={"incognito_availability": "everyone"},
+        headers=admin_user.headers,
+    ).raise_for_status()
+    try:
+        deleted = ChatSessionManager.create(user_performing_action=admin_user)
+        assert ChatSessionManager.soft_delete(
+            chat_session=deleted, user_performing_action=admin_user
+        )
+        created = client.post(
+            f"{API_SERVER_URL}/chat/create-chat-session",
+            json=ChatSessionCreationRequest(persona_id=0, incognito=True).model_dump(
+                mode="json"
+            ),
+            headers=admin_user.headers,
+        )
+        created.raise_for_status()
+        incognito_id = created.json()["chat_session_id"]
+        for chat_id, expected in ((deleted.id, 404), (incognito_id, 400)):
+            pending_url = (
+                f"{API_SERVER_URL}/chat/chat-session/{chat_id}/pending-messages"
+            )
+            assert [
+                client.request(
+                    method, url, json=body, headers=admin_user.headers
+                ).status_code
+                for method, url, body in (
+                    ("GET", pending_url, None),
+                    ("POST", pending_url, {"message": "Private", "delivery": "queue"}),
+                    ("DELETE", f"{pending_url}/unknown", None),
+                    ("POST", f"{pending_url}/unknown/interrupt", None),
+                )
+            ] == [expected] * 4
+        client.delete(
+            f"{API_SERVER_URL}/chat/delete-chat-session/{incognito_id}",
+            headers=admin_user.headers,
+        ).raise_for_status()
+    finally:
+        client.put(
+            security_url, json=previous, headers=admin_user.headers
+        ).raise_for_status()

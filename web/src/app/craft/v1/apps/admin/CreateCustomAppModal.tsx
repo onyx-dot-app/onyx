@@ -1,9 +1,9 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useId, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
-import { useRouter } from "next/navigation";
 import isEqual from "lodash/isEqual";
 import {
   Button,
@@ -92,7 +92,7 @@ export default function CreateCustomAppModal({
     setEnabledDraft(value === savedEnabled ? null : value);
   }
   const nameId = useId();
-  const router = useRouter();
+  const navigation = useNavigation();
   // Focus the name field for new apps only; edits keep the natural tab order.
   const focusNameOnMount = useFocusOnMount<HTMLInputElement>(!isEdit);
 
@@ -209,7 +209,7 @@ export default function CreateCustomAppModal({
   function openSkillEditor(draft?: SkillCreationDraft) {
     if (!existingApp) return;
     unsavedChanges.requestLeave(() =>
-      router.push(
+      navigation.go(
         skillEditorUrlForApp(
           existingApp,
           draft ? stageSkillCreationDraft(draft) : undefined
@@ -221,7 +221,7 @@ export default function CreateCustomAppModal({
   function openExistingSkill(skillId: string) {
     if (!existingApp) return;
     unsavedChanges.requestLeave(() =>
-      router.push(skillEditUrlForApp(skillId, existingApp))
+      navigation.go(skillEditUrlForApp(skillId, existingApp))
     );
   }
 

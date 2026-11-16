@@ -429,6 +429,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
 
     assert response.approval_id == current.approval_id
     assert response.decision == ApprovalDecision.APPROVED
+    assert response.decided_via == ApprovalDecidedVia.SESSION_GRANT
 
     db_session.refresh(current)
     db_session.refresh(matching)

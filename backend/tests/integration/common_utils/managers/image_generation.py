@@ -136,6 +136,46 @@ class ImageGenerationConfigManager:
         )
 
     @staticmethod
+    def link(
+        llm_provider_id: int,
+        model_name: str,
+        user_performing_action: DATestUser,
+        is_default: bool = False,
+    ) -> DATestImageGenerationConfig:
+        """Connect a model on an existing LLM provider, without credentials."""
+        response = client.post(
+            f"{API_SERVER_URL}/admin/image-generation/config/link",
+            json={
+                "llm_provider_id": llm_provider_id,
+                "model_name": model_name,
+                "is_default": is_default,
+            },
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return DATestImageGenerationConfig(
+            image_provider_id=data["image_provider_id"],
+            model_configuration_id=data["model_configuration_id"],
+            model_name=data["model_name"],
+            llm_provider_id=data["llm_provider_id"],
+            llm_provider_name=data["llm_provider_name"],
+            is_default=data["is_default"],
+            llm_provider_owned=data["llm_provider_owned"],
+        )
+
+    @staticmethod
+    def list_llm_provider_models(
+        user_performing_action: DATestUser,
+    ) -> list[dict[str, Any]]:
+        response = client.get(
+            f"{API_SERVER_URL}/admin/image-generation/llm-providers",
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
     def delete(
         image_provider_id: str,
         user_performing_action: DATestUser,

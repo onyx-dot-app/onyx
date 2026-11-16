@@ -1,19 +1,11 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
-import Text from "@/refresh-components/texts/Text";
-import { Button, InputTypeIn } from "@opal/components";
-import {
-  OnboardingState,
-  OnboardingActions,
-  OnboardingStep,
-} from "@/lib/onboarding/types";
-import { InputAvatar } from "@opal/components";
-import { cn, clickOnKeyDown } from "@opal/utils";
-import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
+import { Card, InputTypeIn } from "@opal/components";
+import { OnboardingState, OnboardingActions } from "@/lib/onboarding/types";
+import { SvgUser } from "@opal/icons";
 import { InputHorizontal } from "@opal/layouts";
-import { Hoverable } from "@opal/core";
 import { useSettings } from "@/lib/settings/hooks";
 
 export interface NameStepProps {
@@ -26,13 +18,13 @@ const NameStep = React.memo(
     const t = useTranslations("onboarding");
     const { appName } = useSettings();
     const { userName } = onboardingState.data;
-    const { updateName, goToStep, setButtonActive, nextStep } =
-      onboardingActions;
+    const { updateName, nextStep } = onboardingActions;
 
-    const isActive = onboardingState.currentStep === OnboardingStep.Name;
-    const containerClasses = cn(
-      "flex items-center justify-between w-full p-3 bg-background-tint-00 rounded-16 border border-border-01"
-    );
+    // The step's only control: ready to type as soon as the step appears.
+    const inputRef = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+      inputRef.current?.focus();
+    }, []);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter" && userName && userName.trim().length > 0) {
@@ -41,86 +33,30 @@ const NameStep = React.memo(
       }
     };
 
-    const inputRef = useRef<HTMLInputElement>(null);
-
-    const handleEdit = () => {
-      setButtonActive(true);
-      goToStep(OnboardingStep.Name);
-    };
-
-    return isActive ? (
-      <div
-        className={containerClasses}
+    return (
+      <Card
+        border="solid"
+        padding={3}
+        rounding={4}
         role="group"
         aria-label="onboarding-name-step"
       >
-        {/* Pointer convenience only — the input is already keyboard reachable. */}
-        <div
-          role="presentation"
-          className="contents"
-          onClick={() => inputRef.current?.focus()}
+        <InputHorizontal
+          withLabel
+          fillInput
+          icon={SvgUser}
+          title={t("nameStep.title", { appName })}
+          description={t("nameStep.description")}
         >
-          <InputHorizontal
-            responsive
-            icon={SvgUser}
-            title={t("nameStep.title", { appName })}
-            description={t("nameStep.description")}
-          >
-            <InputTypeIn
-              ref={inputRef}
-              placeholder={t("nameStep.input.placeholder")}
-              value={userName || ""}
-              onChange={(e) => updateName(e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-          </InputHorizontal>
-        </div>
-      </div>
-    ) : (
-      <Hoverable.Root group="nameStep" width="full">
-        <div
-          className={containerClasses}
-          onClick={handleEdit}
-          onKeyDown={clickOnKeyDown(handleEdit)}
-          aria-label={t("nameStep.edit.ariaLabel")}
-          role="button"
-          tabIndex={0}
-        >
-          <div
-            className={cn("flex items-center gap-1", !isActive && "opacity-50")}
-          >
-            <InputAvatar
-              className={cn(
-                "flex items-center justify-center bg-background-neutral-inverted-00",
-                "w-5 h-5"
-              )}
-            >
-              <Text as="p" inverted secondaryBody>
-                {userName?.[0]?.toUpperCase()}
-              </Text>
-            </InputAvatar>
-            <Text as="p" text04 mainUiAction>
-              {userName}
-            </Text>
-          </div>
-          <div className="p-1 flex items-center gap-1">
-            <Hoverable.Item group="nameStep" variant="appear-on-hover">
-              <Button
-                prominence="internal"
-                size="sm"
-                icon={SvgEdit}
-                tooltip={t("nameStep.edit.tooltip")}
-              />
-            </Hoverable.Item>
-            <SvgCheckCircle
-              className={cn(
-                "w-4 h-4 stroke-status-success-05",
-                !isActive && "opacity-50"
-              )}
-            />
-          </div>
-        </div>
-      </Hoverable.Root>
+          <InputTypeIn
+            ref={inputRef}
+            placeholder={t("nameStep.input.placeholder")}
+            value={userName || ""}
+            onChange={(e) => updateName(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+        </InputHorizontal>
+      </Card>
     );
   }
 );

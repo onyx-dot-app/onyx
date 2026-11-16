@@ -1,7 +1,7 @@
 "use client";
 
+import { usePathname } from "@opal/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { type KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -14,6 +14,7 @@ import {
   LLMProviderResponse,
   LLMProviderView,
   ModelConfiguration,
+  ModelDisplayNameCode,
   WellKnownLLMProviderDescriptor,
 } from "@/lib/languageModels/types";
 import type {
@@ -25,8 +26,56 @@ import type {
   ModelPaging,
 } from "@/lib/languageModels/types";
 
-export function useDecisionModel() {
+// ---------------------------------------------------------------------------
+// Display names
+// ---------------------------------------------------------------------------
+
+type ModelDisplayNameLabels = Record<ModelDisplayNameCode, string>;
+
+type DisplayNameFields = Pick<
+  ModelConfiguration,
+  "name" | "display_name" | "custom_display_name" | "display_name_code"
+>;
+
+/** The one resolver for the name a model shows: the admin's name, then the
+ *  translated name the API marks by code, then display_name, then name. */
+export function resolveModelDisplayName(
+  model: DisplayNameFields,
+  labels?: ModelDisplayNameLabels
+): string {
+  return (
+    model.custom_display_name ||
+    (model.display_name_code ? labels?.[model.display_name_code] : "") ||
+    model.display_name ||
+    model.name
+  );
+}
+
+function useModelDisplayNameLabels(): ModelDisplayNameLabels {
   const t = useTranslations("admin.decisionModels.decisionModel");
+  const openAiDecisions = t("openAiDecisionsModelName");
+  return useMemo(
+    () => ({ openai_decisions: openAiDecisions }),
+    [openAiDecisions]
+  );
+}
+
+/** Resolves a name from a model's live fields, for form state whose
+ *  effectiveDisplayName goes stale while the admin renames. */
+export function useModelDisplayName(): (model: DisplayNameFields) => string {
+  const labels = useModelDisplayNameLabels();
+  return useCallback(
+    (model: DisplayNameFields) => resolveModelDisplayName(model, labels),
+    [labels]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Decision model
+// ---------------------------------------------------------------------------
+
+export function useDecisionModel() {
+  const labels = useModelDisplayNameLabels();
   const { data, error, mutate } = useSWR<
     {
       model: DefaultModel | null;
@@ -35,13 +84,9 @@ export function useDecisionModel() {
     },
     Error
   >(SWR_KEYS.decisionModel, errorHandlingFetcher);
-  const openAiDecisionName = t("openAiDecisionsModelName");
   const providers = useMemo(
-    () =>
-      data
-        ? enrichDecisionViews(data.providers, openAiDecisionName)
-        : undefined,
-    [data, openAiDecisionName]
+    () => (data ? enrichViews(data.providers, labels) : undefined),
+    [data, labels]
   );
   return {
     model: data?.model ?? null,
@@ -264,48 +309,35 @@ function useModelPaging<P extends PageableProvider>(
 // Enrichment, private helpers
 // ---------------------------------------------------------------------------
 
+// Only the decision endpoint sends display_name_code, so only it passes labels.
 function enrichModelConfiguration(
-  mc: RawModelConfiguration
+  mc: RawModelConfiguration,
+  labels?: ModelDisplayNameLabels
 ): ModelConfiguration {
-  return {
-    ...mc,
-    effectiveDisplayName: mc.custom_display_name || mc.display_name || mc.name,
-  };
+  return { ...mc, effectiveDisplayName: resolveModelDisplayName(mc, labels) };
 }
 
 function enrichDescriptors(
-  providers: RawLLMProviderDescriptor[]
+  providers: RawLLMProviderDescriptor[],
+  labels?: ModelDisplayNameLabels
 ): LLMProviderDescriptor[] {
   return providers.map((p) => ({
     ...p,
-    model_configurations: p.model_configurations.map(enrichModelConfiguration),
+    model_configurations: p.model_configurations.map((mc) =>
+      enrichModelConfiguration(mc, labels)
+    ),
   }));
 }
 
-function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
+function enrichViews(
+  providers: RawLLMProviderView[],
+  labels?: ModelDisplayNameLabels
+): LLMProviderView[] {
   return providers.map((p) => ({
     ...p,
-    model_configurations: p.model_configurations.map(enrichModelConfiguration),
-  }));
-}
-
-function enrichDecisionViews(
-  providers: RawLLMProviderView[],
-  openAiDecisionName: string
-): LLMProviderView[] {
-  return providers.map((provider) => ({
-    ...provider,
-    model_configurations: provider.model_configurations.map((model) => {
-      const enriched = enrichModelConfiguration(model);
-      return provider.provider === LLMProviderName.OPENAI &&
-        model.name === "gpt-6-luna" &&
-        !model.custom_display_name
-        ? {
-            ...enriched,
-            effectiveDisplayName: openAiDecisionName,
-          }
-        : enriched;
-    }),
+    model_configurations: p.model_configurations.map((mc) =>
+      enrichModelConfiguration(mc, labels)
+    ),
   }));
 }
 
@@ -547,7 +579,9 @@ export function useWellKnownLLMProvider(providerName: string) {
       raw
         ? {
             ...raw,
-            known_models: raw.known_models.map(enrichModelConfiguration),
+            known_models: raw.known_models.map((mc) =>
+              enrichModelConfiguration(mc)
+            ),
           }
         : raw,
     [raw]

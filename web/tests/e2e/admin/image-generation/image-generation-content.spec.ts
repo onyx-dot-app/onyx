@@ -1,157 +1,125 @@
-import { test, expect, Page, Locator } from "@playwright/test";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { test, expect, Page } from "@playwright/test";
+import { AdminImageGenerationPage } from "@tests/e2e/pages/AdminImageGenerationPage";
 import { loginAs } from "@tests/e2e/utils/auth";
-import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
-const IMAGE_GENERATION_URL = `http://localhost:3000${ADMIN_ROUTES.IMAGE_GENERATION.path}`;
+const LLM_PROVIDER_ID = 7;
+const LINKED_IMAGE_PROVIDER_ID = `llm-${LLM_PROVIDER_ID}-gpt-image-2`;
 
-// Provider IDs matching constants.ts
-const PROVIDERS = [
-  { id: "openai_gpt_image_1_5", title: "GPT Image 1.5" },
-  { id: "openai_gpt_image_2_5_flare", title: "GPT Image 2.5 Flare" },
-];
-
-// Helper to find a provider card by its aria-label
-function getProviderCard(page: Page, providerId: string): Locator {
-  return page.getByLabel(`image-gen-provider-${providerId}`, { exact: true });
+function llmProviders(linkedImageProviderId: string | null) {
+  return [
+    {
+      llm_provider_id: LLM_PROVIDER_ID,
+      llm_provider_name: "Team OpenAI",
+      provider: "openai",
+      is_public: true,
+      models: [
+        {
+          name: "gpt-image-2",
+          display_name: null,
+          is_recommended: true,
+          image_provider_id: linkedImageProviderId,
+        },
+        {
+          name: "gpt-5",
+          display_name: null,
+          is_recommended: false,
+          image_provider_id: null,
+        },
+      ],
+    },
+  ];
 }
 
-// Helper to open the provider connection modal
-async function openProviderModal(
-  page: Page,
-  providerId: string
-): Promise<void> {
-  const card = getProviderCard(page, providerId);
-  await card.waitFor({ state: "visible", timeout: 10000 });
+const LINKED_CONFIG = {
+  image_provider_id: LINKED_IMAGE_PROVIDER_ID,
+  model_configuration_id: 300,
+  model_name: "gpt-image-2",
+  llm_provider_id: LLM_PROVIDER_ID,
+  llm_provider_name: "Team OpenAI",
+  llm_provider_type: "openai",
+  llm_provider_owned: false,
+  is_default: true,
+};
 
-  // Click the Connect button within the card
-  const connectButton = card.getByRole("button", { name: "Connect" });
-  await connectButton.waitFor({ state: "visible", timeout: 5000 });
-  await connectButton.click();
+async function mockImageGenApis(
+  page: Page
+): Promise<{ linkBodies: unknown[] }> {
+  let linked = false;
+  const linkBodies: unknown[] = [];
+  await page.route("**/api/admin/image-generation/config", async (route) => {
+    await route.fulfill({ status: 200, json: linked ? [LINKED_CONFIG] : [] });
+  });
+  await page.route(
+    "**/api/admin/image-generation/llm-providers",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        json: llmProviders(linked ? LINKED_IMAGE_PROVIDER_ID : null),
+      });
+    }
+  );
+  await page.route(
+    "**/api/admin/image-generation/config/link",
+    async (route) => {
+      linkBodies.push(route.request().postDataJSON());
+      linked = true;
+      await route.fulfill({ status: 200, json: LINKED_CONFIG });
+    }
+  );
+  return { linkBodies };
 }
 
-test.describe("Image Generation Provider Configuration", () => {
+test.describe("Image Generation models from LLM providers", () => {
   test.beforeEach(async ({ page }) => {
-    // Log in as admin before each test
     await page.context().clearCookies();
     await loginAs(page, "admin");
-
-    // Navigate to image generation config page
-    await page.goto(IMAGE_GENERATION_URL);
-    await page.waitForLoadState("networkidle");
-
-    // Wait for page to fully load - look for the section heading
-    await page.waitForSelector("text=Image Generation Model", {
-      timeout: 20000,
-    });
-
-    console.log("[image-gen-test] Page loaded successfully");
   });
 
-  test("should open connection modal for all image generation providers", async ({
+  test("recommended tab hides non-image models until All is selected", async ({
     page,
   }) => {
-    for (const provider of PROVIDERS) {
-      console.log(
-        `[image-gen-test] Testing modal open for provider: ${provider.title}`
-      );
+    await mockImageGenApis(page);
+    const imageGenPage = new AdminImageGenerationPage(page);
+    await imageGenPage.goto();
 
-      // Click Connect on provider card using aria-label
-      await openProviderModal(page, provider.id);
-
-      // Verify modal opens with correct title
-      // Modal title is "Connect {providerTitle}" for new connections
-      const modalDialog = page.getByRole("dialog", {
-        name: new RegExp(`connect ${provider.title}`, "i"),
-      });
-      await expect(modalDialog).toBeVisible({ timeout: 10000 });
-
-      console.log(`[image-gen-test] Modal opened for ${provider.title}`);
-
-      // Close modal by pressing Escape
-      await page.keyboard.press("Escape");
-      await expect(modalDialog).not.toBeVisible({ timeout: 5000 });
-
-      console.log(`[image-gen-test] Modal closed for ${provider.title}`);
-    }
-
-    console.log(
-      "[image-gen-test] All provider modals opened and closed successfully"
+    await expect(imageGenPage.providerTitle("Team OpenAI")).toBeVisible();
+    await expect(
+      imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-image-2")
+    ).toBeVisible();
+    await expect(imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-5")).toHaveCount(
+      0
     );
+
+    await expect(imageGenPage.recommendedTab).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await imageGenPage.allTab.click();
+    await expect(
+      imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-5")
+    ).toBeVisible();
   });
 
-  test.describe("OpenAI GPT Image 2.5 Flare Configuration", () => {
-    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+  test("connects a provider model in one click without credentials", async ({
+    page,
+  }) => {
+    const { linkBodies } = await mockImageGenApis(page);
+    const imageGenPage = new AdminImageGenerationPage(page);
+    await imageGenPage.goto();
 
-    test.skip(!OPENAI_API_KEY, "OPENAI_API_KEY environment variable not set");
+    const card = imageGenPage.modelCard(LLM_PROVIDER_ID, "gpt-image-2");
+    await imageGenPage.connect(card);
 
-    test.afterEach(async ({ page }) => {
-      // Clean up the image generation config created during the test
-      const apiClient = new OnyxApiClient(page.request);
-      try {
-        await apiClient.deleteImageGenerationConfig(
-          "openai_gpt_image_2_5_flare"
-        );
-        console.log("[image-gen-test] Cleaned up GPT Image 2.5 Flare config");
-      } catch (error) {
-        console.warn(
-          `[image-gen-test] Failed to clean up GPT Image 2.5 Flare config: ${error}`
-        );
-      }
+    await expect(imageGenPage.currentDefaultBadge(card)).toBeVisible({
+      timeout: 10000,
     });
-
-    test.skip("should configure GPT Image 2.5 Flare with API key", async ({
-      page,
-    }) => {
-      // Click Connect on GPT Image 2.5 Flare card using aria-label
-      await openProviderModal(page, "openai_gpt_image_2_5_flare");
-
-      // Wait for modal to open
-      const modalDialog = page.getByRole("dialog", {
-        name: /connect gpt image 2\.5 flare/i,
-      });
-      await expect(modalDialog).toBeVisible({ timeout: 10000 });
-
-      // Enter API key - use getByRole("combobox") to target only the input, not the listbox
-      const apiKeyInput = modalDialog.getByRole("combobox");
-      await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
-      await apiKeyInput.clear();
-      await apiKeyInput.fill(OPENAI_API_KEY!);
-
-      // Close the dropdown by pressing Escape - it intercepts clicks on the Connect button
-      await page.keyboard.press("Escape");
-
-      // Click Connect button in modal - scope to the dialog to avoid matching other buttons
-      const modalConnectButton = modalDialog.getByRole("button", {
-        name: "Connect",
-        exact: true,
-      });
-      await expect(modalConnectButton).toBeEnabled({ timeout: 5000 });
-      await modalConnectButton.click();
-
-      console.log(
-        "[image-gen-test] Clicked Connect, waiting for validation..."
-      );
-
-      // Wait for modal to close (indicates success)
-      await expect(modalDialog).not.toBeVisible({ timeout: 30000 });
-
-      console.log(
-        "[image-gen-test] Modal closed, verifying provider is configured..."
-      );
-
-      // Wait for page to update
-      await page.waitForLoadState("networkidle");
-
-      // Verify GPT Image 2.5 Flare is now configured - should show "Current Default"
-      const gptImageCard = getProviderCard(page, "openai_gpt_image_2_5_flare");
-      await expect(
-        gptImageCard.getByRole("button", { name: "Current Default" })
-      ).toBeVisible({ timeout: 15000 });
-
-      console.log(
-        "[image-gen-test] GPT Image 2.5 Flare configured successfully"
-      );
-    });
+    await expect(imageGenPage.dialog).toHaveCount(0);
+    expect(linkBodies).toEqual([
+      {
+        llm_provider_id: LLM_PROVIDER_ID,
+        model_name: "gpt-image-2",
+        is_default: true,
+      },
+    ]);
   });
 });

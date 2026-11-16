@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { InputVertical, toast } from "@opal/layouts";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useModal } from "@opal/components";
 import { SvgFolderPlus } from "@opal/icons";
 import { Modal } from "@opal/components";

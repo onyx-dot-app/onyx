@@ -1,40 +1,22 @@
 // Pure tool key/name/completion helpers. Port of web's toolDisplayHelpers (its JSX icon factory is
 // deferred to toolIcons.ts).
 
-import { Packet, PacketType, SearchToolStart } from "@/chat/streamingModels";
+import {
+  CustomToolStart,
+  Packet,
+  PacketType,
+  SearchToolStart,
+} from "@/chat/streamingModels";
+import { isGroupEndPacket } from "@/chat/timeline/packetHelpers";
 
 export function hasToolError(packets: Packet[]): boolean {
   return packets.some((p) => p.obj.type === PacketType.ERROR);
 }
 
-// Research agents complete only on a parent-level SECTION_END (sub_turn_index null) — nested tool
-// SECTION_ENDs don't count; coding agents on CodingAgentFinal/error; others on any SECTION_END/ERROR.
+// A group is complete once a parent-level SECTION_END or ERROR arrives. Nested calls end with
+// their own SECTION_END and do not count.
 export function isToolComplete(packets: Packet[]): boolean {
-  const firstPacket = packets[0];
-  if (!firstPacket) return false;
-
-  if (firstPacket.obj.type === PacketType.RESEARCH_AGENT_START) {
-    return packets.some(
-      (p) =>
-        (p.obj.type === PacketType.SECTION_END ||
-          p.obj.type === PacketType.ERROR) &&
-        (p.placement.sub_turn_index === undefined ||
-          p.placement.sub_turn_index === null),
-    );
-  }
-
-  if (firstPacket.obj.type === PacketType.CODING_AGENT_START) {
-    return packets.some(
-      (p) =>
-        p.obj.type === PacketType.CODING_AGENT_FINAL ||
-        p.obj.type === PacketType.ERROR,
-    );
-  }
-
-  return packets.some(
-    (p) =>
-      p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR,
-  );
+  return packets.some(isGroupEndPacket);
 }
 
 export function getToolKey(turn_index: number, tab_index: number): string {
@@ -50,6 +32,12 @@ export function parseToolKey(key: string): {
     turn_index: parseInt(parts[0] ?? "0", 10),
     tab_index: parseInt(parts[1] ?? "0", 10),
   };
+}
+
+// Label a custom or MCP tool call by its display name; older servers send only
+// the tool name.
+export function customToolLabel(start: CustomToolStart): string {
+  return start.display_name || start.tool_name;
 }
 
 export function getToolName(packets: Packet[]): string {
@@ -70,7 +58,7 @@ export function getToolName(packets: Packet[]): string {
       return "Open URLs";
     case PacketType.CUSTOM_TOOL_START:
       return (
-        (firstPacket.obj as { tool_name?: string }).tool_name || "Custom Tool"
+        customToolLabel(firstPacket.obj as CustomToolStart) || "Custom Tool"
       );
     case PacketType.IMAGE_GENERATION_TOOL_START:
       return "Generate Image";

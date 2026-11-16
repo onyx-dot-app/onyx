@@ -3,7 +3,11 @@
 import React from "react";
 import { LineItemButton } from "@opal/components/buttons/line-item-button/components";
 import { InputSwitch } from "@opal/components/inputs/booleans/input-switch/components";
+import { Text } from "@opal/components/text/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
+import { isRichNodes } from "@opal/utils";
 import { rowElementId } from "@opal/components/dropdown/model";
+import type { TextFont } from "@opal/components/text/components";
 import type {
   DropdownMode,
   DropdownRow,
@@ -12,15 +16,21 @@ import type {
 } from "@opal/components/dropdown/types";
 
 /**
- * Whether a mousedown must keep its default: the target is a control that
- * needs focus to work (an input inside a custom row). Anything else keeps
- * focus on the trigger, so a pick never blurs it.
+ * Whether the pointer's target is a control that needs focus to work (an
+ * input inside a custom row, or the search field). Focus stays there;
+ * anywhere else a press gives focus back to where it was.
  */
 export function targetTakesFocus(event: React.MouseEvent): boolean {
   return (
     event.target instanceof Element &&
     event.target.closest("input, textarea, select, [contenteditable]") !== null
   );
+}
+
+/** Whether the user has text selected: a drag or a double-click on text. */
+export function selectsText(): boolean {
+  const selection = window.getSelection();
+  return selection !== null && !selection.isCollapsed;
 }
 
 interface RowProps {
@@ -58,12 +68,9 @@ export const Row = React.memo(function Row({
   const interaction = isHighlighted ? "hover" : "rest";
   const onClick = (event: React.MouseEvent) => {
     event.stopPropagation();
+    // A drag that selected text is not a pick.
+    if (selectsText()) return;
     if (!row.disabled) onActivate(row);
-  };
-  // Keep focus on the trigger: the pick must not blur it. A control inside
-  // a custom row that needs focus keeps the default.
-  const onMouseDown = (event: React.MouseEvent) => {
-    if (!targetTakesFocus(event)) event.preventDefault();
   };
 
   if (row.kind === "custom") {
@@ -75,7 +82,6 @@ export const Row = React.memo(function Row({
       "data-index": index,
       tabIndex: -1,
       onClick,
-      onMouseDown,
     };
     return <>{row.render({ highlighted: isHighlighted, props })}</>;
   }
@@ -91,9 +97,16 @@ export const Row = React.memo(function Row({
         icon={row.icon}
         title={row.title}
         description={row.description}
-        sizePreset={sizePreset}
+        font={
+          row.description
+            ? sizePreset === "secondary"
+              ? "secondary-action"
+              : "main-ui-action"
+            : sizePreset === "secondary"
+              ? "secondary-body"
+              : "main-ui-body"
+        }
         padding={sizePreset === "secondary" ? 0 : 0.5}
-        variant={row.description ? "heading" : "body"}
         // The switch only shows the state: the row is the control, so the
         // switch takes no pointer or focus of its own.
         rightChildren={
@@ -109,10 +122,21 @@ export const Row = React.memo(function Row({
           : { "aria-checked": row.checked })}
         tabIndex={-1}
         onClick={onClick}
-        onMouseDown={onMouseDown}
       />
     );
   }
+
+  // A linked option is already an <a>, so its note shows markdown links as
+  // plain text; an anchor must not hold another.
+  const info =
+    row.kind === "option" &&
+    row.href !== undefined &&
+    row.info !== undefined &&
+    !isRichNodes(row.info)
+      ? toPlainString(row.info)
+      : row.kind === "option"
+        ? row.info
+        : undefined;
 
   const content = {
     selectVariant: "select-heavy",
@@ -124,29 +148,44 @@ export const Row = React.memo(function Row({
     title: row.title,
     description: row.description,
     suffix: row.kind === "option" ? row.suffix : undefined,
-    tag: row.kind === "option" ? row.tag : undefined,
+    badge: row.kind === "option" ? row.tag : undefined,
+    rightChildren: info ? (
+      <div className="opal-dropdown-info">
+        <Text
+          as="p"
+          font="secondary-body"
+          color="inherit"
+          textPosition="text-end"
+          wordWrap="wrap-anywhere"
+        >
+          {info}
+        </Text>
+      </div>
+    ) : undefined,
     descriptionMaxLines:
       row.kind === "option" ? row.descriptionMaxLines : undefined,
-    color: row.kind === "action" && row.danger ? "danger" : undefined,
+    color: row.kind === "action" && row.danger ? "error" : undefined,
+    titleColor: row.kind === "action" && row.danger ? "text-03" : undefined,
     tooltip:
       row.kind === "action" || row.kind === "option" ? row.tooltip : undefined,
     // Beside the list, so it never covers the row above.
     tooltipSide: "end",
-    sizePreset,
     padding: sizePreset === "secondary" ? 0 : 0.5,
-    // `body` resolves to `ContentSm`, which has no description, suffix or
-    // tag slot; a row with any of them takes the `heading` layout.
-    variant:
-      row.description || (row.kind === "option" && (row.suffix || row.tag))
-        ? "heading"
-        : "body",
+    // A row with a description, suffix or badge sets its title in the
+    // action weight; a bare row in the body weight.
+    font: (row.description || (row.kind === "option" && (row.suffix || row.tag))
+      ? sizePreset === "secondary"
+        ? "secondary-action"
+        : "main-ui-action"
+      : sizePreset === "secondary"
+        ? "secondary-body"
+        : "main-ui-body") satisfies TextFont,
     id,
     "data-index": index,
     role: mode === "picker" ? "option" : "menuitem",
     ...(mode === "picker" && { "aria-selected": isSelected }),
     tabIndex: -1,
     onClick,
-    onMouseDown,
   } as const;
 
   if (row.kind === "action" && row.href !== undefined) {

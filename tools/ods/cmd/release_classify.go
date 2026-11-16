@@ -24,13 +24,17 @@ func NewReleaseClassifyCommand() *cobra.Command {
 deployment.yml pipes this into $GITHUB_OUTPUT and gates its build jobs on the
 result. The keys are:
 
-  build-desktop, build-web, build-web-cloud, build-backend, build-model-server
+  build-desktop, build-web, build-web-cloud, build-backend, build-model-server,
+  build-sandbox
   is-cloud-tag, is-beta, is-beta-standalone, is-stable, is-latest, is-test-run
   sanitized-tag, short-sha
 
 A cloud tag builds the cloud web image; every other tag builds the standard web
 image, plus the desktop app when the tag is a version that is not a beta. The
-backend and model server build for every tag. Only the highest stable tag
+backend and model server build for every tag. The sandbox image builds for
+test runs, version tags, cloud tags, and the tags that deploy a whole stack
+under one version: nightly-latest-*, edge, and dev-build-*. A dev-build-* tag
+is an ad-hoc build of an unreleased commit and is never a cloud tag. Only the highest stable tag
 (vX.Y.Z exactly) in the repository is "latest", so the repository must hold all
 tags: fetch them before running this.
 

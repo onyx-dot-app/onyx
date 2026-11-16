@@ -158,6 +158,8 @@ export function ParallelTimelineTabs({
           <TimelineRendererComponent
             key={`${activeTab}-${isExpanded}`}
             packets={activeStep.packets}
+            nestedCalls={activeStep.nestedCalls}
+            streamPackets={activeStep.streamPackets}
             chatState={chatState}
             animate={!stopPacketSeen}
             stopPacketSeen={stopPacketSeen}

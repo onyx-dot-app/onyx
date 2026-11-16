@@ -61,10 +61,14 @@ func (r *embeddingProviderResource) Schema(_ context.Context, _ resource.SchemaR
 				},
 			},
 			"provider_type": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "Provider type: `openai`, `cohere`, `voyage`, `google`, `litellm`, or `azure`. Changing it replaces the resource.",
+				Required: true,
+				MarkdownDescription: "Provider type: `openai`, `cohere`, `voyage`, `google`, `litellm`, `azure`, `bifrost`, or " +
+					"`openai_compatible`. `bifrost` needs Onyx v5.0 or later, and `openai_compatible` needs " +
+					"v5.1 or later. Changing it replaces the resource.",
 				Validators: []validator.String{
-					stringvalidator.OneOf("openai", "cohere", "voyage", "google", "litellm", "azure"),
+					stringvalidator.OneOf(
+						"openai", "cohere", "voyage", "google", "litellm", "azure", "bifrost", "openai_compatible",
+					),
 				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -112,9 +116,16 @@ func (r *embeddingProviderResource) Configure(_ context.Context, req resource.Co
 // upsertFromPlan builds the full-replace body from the plan only — a
 // GET-derived (masked) api_key written back would corrupt the stored key.
 func upsertFromPlan(plan embeddingProviderResourceModel, apiKey types.String) client.CloudEmbeddingProvider {
+	var keyChanged *bool
+	if !apiKey.IsNull() {
+		// The configured key is always the real one, never a mask echo.
+		changed := true
+		keyChanged = &changed
+	}
 	return client.CloudEmbeddingProvider{
 		ProviderType:   plan.ProviderType.ValueString(),
 		APIKey:         apiKey.ValueStringPointer(),
+		APIKeyChanged:  keyChanged,
 		APIURL:         plan.APIURL.ValueStringPointer(),
 		APIVersion:     plan.APIVersion.ValueStringPointer(),
 		DeploymentName: plan.DeploymentName.ValueStringPointer(),

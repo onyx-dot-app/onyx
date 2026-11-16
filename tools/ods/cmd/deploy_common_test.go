@@ -11,7 +11,7 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/config"
 )
 
-const deployRunJSONFields = "--json databaseId,status,conclusion,url,event,headBranch"
+const deployRunJSONFields = "--json " + workflowRunJSONFields
 
 func TestResolveDeployTarget_prefersFlagsThenSavedConfig(t *testing.T) {
 	edge := func(c *config.Config) *string { return &c.DeployEdge.TargetWorkflow }
@@ -190,7 +190,7 @@ func TestWaitForNewRun_failures(t *testing.T) {
 		reply   deployGHReply
 		wantErr string
 	}{
-		{"no new run before the timeout", deployRuns(t, workflowRun{DatabaseID: 5}), "no new run appeared within 500ms"},
+		{"no new run before the timeout", deployRuns(t, workflowRun{DatabaseID: 5}), "no matching run appeared within 500ms"},
 		{"gh failure", deployGHFailure("rate limited"), "rate limited"},
 	}
 	for _, c := range cases {

@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from uuid import UUID
@@ -20,18 +20,39 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import MultipleResultsFound
-from sqlalchemy.orm import Session, joinedload, load_only, selectinload
+from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
 from sqlalchemy.sql.expression import ColumnElement
-from sqlalchemy.sql.selectable import CTE
+from sqlalchemy.sql.selectable import CTE, Select
 
-from onyx.agents.models import CompactionCheckpoint
-from onyx.chat.response_models import HistoryLink, SessionAncestor
+from onyx.agents.models import (
+    CompactionCheckpoint,
+    InputSource,
+    MessageDelivery,
+    RunFailureKind,
+    RunStatus,
+)
+from onyx.chat.errors import chat_error
+from onyx.chat.mention_models import PickedSkillMessage, RecordedMention
+from onyx.chat.models import (
+    ChatBranch,
+    HistoryLink,
+    MessageRendering,
+    PresentationMode,
+    ResponseAncestry,
+    SessionAncestor,
+)
+from onyx.chat.response import message_thinking
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
-from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
+from onyx.db.document_set import require_document_set_access
+from onyx.db.enums import (
+    IncognitoRecordMode,
+    record_mode_persists_content,
+)
 from onyx.db.models import (
+    ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
     ChatSession,
@@ -48,11 +69,14 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
+from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
     ChatMessageDetail,
 )
+from onyx.server.query_and_chat.streaming_models import StreamingError
+from onyx.tools.models import ChatToolSelection
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -62,6 +86,8 @@ FILE_CLEANUP_BATCH_SIZE = 500
 MAX_AGENT_HISTORY_RUNS = 512
 MAX_AGENT_DEPTH = 8
 MAX_CONVERSATION_MESSAGES = 8192
+CHAT_RESPONSE_STATEMENT_TIMEOUT_MS = 30_000
+CHAT_RESPONSE_LOCK_TIMEOUT_MS = 5_000
 
 
 def visible_chat_messages_filter() -> ColumnElement[bool]:
@@ -69,7 +95,21 @@ def visible_chat_messages_filter() -> ColumnElement[bool]:
     return ChatMessage.message_type != MessageType.SUMMARY
 
 
-# Note: search/streaming packet helpers moved to streaming_utils.py
+def session_descendants(root_id: UUID | None = None) -> CTE:
+    """Map conversations to their policy-owning root for lifecycle queries."""
+    roots = select(
+        ChatSession.id, ChatSession.id.label("root_id"), ChatSession.time_created
+    ).where(ChatSession.spawned_by_message_id.is_(None))
+    if root_id is not None:
+        roots = roots.where(ChatSession.id == root_id)
+    descendants = roots.cte("session_descendants", recursive=True)
+    # UNION stops traversal if corrupt ancestry repeats a row.
+    return descendants.union(
+        select(ChatSession.id, descendants.c.root_id, ChatSession.time_created)
+        .select_from(ChatSession)
+        .join(ChatMessage, ChatMessage.id == ChatSession.spawned_by_message_id)
+        .join(descendants, ChatMessage.chat_session_id == descendants.c.id)
+    )
 
 
 def get_chat_session_by_id(
@@ -121,6 +161,19 @@ def get_chat_session_by_id(
         raise ValueError("Chat session has been deleted")
 
     return chat_session
+
+
+def get_owned_chat_session(
+    chat_session_id: UUID | str, user_id: UUID, db_session: Session
+) -> ChatSession | None:
+    """Read a root session with this exact owner, including deleted sessions."""
+    return db_session.scalar(
+        select(ChatSession).where(
+            ChatSession.id == chat_session_id,
+            ChatSession.user_id == user_id,
+            ChatSession.spawned_by_message_id.is_(None),
+        )
+    )
 
 
 def get_chat_sessions_by_slack_thread_id(
@@ -632,6 +685,7 @@ def add_chats_to_session_from_slack_thread(
     slack_chat_session_id: UUID,
     new_chat_session_id: UUID,
 ) -> None:
+    """Copy displayed conversation content and commit the new message tree."""
     source_session = db_session.get(ChatSession, slack_chat_session_id)
     if source_session and source_session.incognito_record_mode is not None:
         raise ValueError("Incognito chat sessions cannot be duplicated")
@@ -645,10 +699,11 @@ def add_chats_to_session_from_slack_thread(
         user_id=None,  # Ignore user permissions for this
         db_session=db_session,
         skip_permission_check=True,
+        prefetch_response_items=True,
     ):
         if chat_message.message_type == MessageType.SYSTEM:
             continue
-        # Duplicate the message
+        reasoning = get_chat_message_reasoning(chat_message)
         new_root_message = create_new_chat_message(
             db_session=db_session,
             chat_session_id=new_chat_session_id,
@@ -658,8 +713,10 @@ def add_chats_to_session_from_slack_thread(
             error=chat_message.error,
             token_count=chat_message.token_count,
             message_type=chat_message.message_type,
-            reasoning_tokens=chat_message.reasoning_tokens,
+            reasoning_tokens=reasoning,
+            commit=False,
         )
+    db_session.commit()
 
 
 def add_search_docs_to_chat_message(
@@ -688,14 +745,17 @@ def add_search_docs_to_tool_call(
 
     Args:
         tool_call_id: The ID of the tool call
-        search_doc_ids: List of search document IDs to link
+        search_doc_ids: Search document IDs to link, in the order the tool
+            returned them (stored as each link's position)
         db_session: The database session
     """
     from onyx.db.models import ToolCall__SearchDoc
 
-    for search_doc_id in search_doc_ids:
+    for position, search_doc_id in enumerate(search_doc_ids):
         tool_call_search_doc = ToolCall__SearchDoc(
-            tool_call_id=tool_call_id, search_doc_id=search_doc_id
+            tool_call_id=tool_call_id,
+            search_doc_id=search_doc_id,
+            position=position,
         )
         db_session.add(tool_call_search_doc)
 
@@ -707,6 +767,11 @@ def get_chat_messages_by_session(
     skip_permission_check: bool = False,
     prefetch_top_two_level_tool_calls: bool = True,
     prefetch_message_details: bool = False,
+    # Only the session replay reads tool call search docs; building chat
+    # history for a new message does not, so it skips this load.
+    prefetch_tool_call_search_docs: bool = False,
+    # Load only these messages (one page of the session); None loads all.
+    message_ids: Collection[int] | None = None,
 ) -> list[ChatMessage]:
     if not skip_permission_check:
         # bug if we ever call this expecting the permission check to not be skipped
@@ -723,9 +788,12 @@ def get_chat_messages_by_session(
         .where(ChatMessage.chat_session_id == chat_session_id)
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
+    if message_ids is not None:
+        stmt = stmt.where(ChatMessage.id.in_(message_ids))
 
     if prefetch_message_details:
         stmt = stmt.options(
+            selectinload(ChatMessage.response_items),
             selectinload(ChatMessage.chat_message_feedbacks),
             selectinload(ChatMessage.search_docs),
         )
@@ -733,17 +801,93 @@ def get_chat_messages_by_session(
     # This should handle both the top level tool calls and deep research
     # If there are future nested agents, this can be extended.
     if prefetch_top_two_level_tool_calls:
-        # Load tool_calls and their direct children (one level deep)
+        # Load tool_calls and their direct children (one level deep), and on
+        # request their search docs
+        tool_call_loads = [selectinload(ToolCall.tool_call_children)]
+        if prefetch_tool_call_search_docs:
+            tool_call_loads.append(selectinload(ToolCall.search_docs))
         stmt = stmt.options(
-            selectinload(ChatMessage.tool_calls).selectinload(
-                ToolCall.tool_call_children
-            )
+            selectinload(ChatMessage.tool_calls).options(*tool_call_loads)
         )
         result = db_session.scalars(stmt).unique().all()
     else:
         result = db_session.scalars(stmt).all()
 
     return list(result)
+
+
+def get_chat_message_page_ids(
+    chat_session_id: UUID,
+    db_session: Session,
+    limit: int,
+    before_message_id: int | None = None,
+    waiting_reply_ids: Collection[int] = (),
+) -> tuple[set[int], bool]:
+    """One page of a session's current branch, for paged loading.
+
+    The page holds the last `limit` messages of the current branch (the chain
+    of `latest_child_message_id` from the root), or of the part of it before
+    `before_message_id`. It also holds every child of those messages, so a
+    branch switcher and multi-model replies have their siblings, including the
+    siblings of the first message of the next, newer page.
+
+    The latest page also reaches back to the question of each of
+    `waiting_reply_ids` that is on the branch, or a reply to it.
+
+    Returns the message ids and whether the branch has older messages. A
+    `before_message_id` that is not on the current branch gives an empty page.
+    """
+    rows = db_session.execute(
+        select(
+            ChatMessage.id,
+            ChatMessage.parent_message_id,
+            ChatMessage.latest_child_message_id,
+        )
+        .where(ChatMessage.chat_session_id == chat_session_id)
+        .where(visible_chat_messages_filter())
+    ).all()
+
+    latest_child_by_id: dict[int, int | None] = {}
+    parent_by_id: dict[int, int | None] = {}
+    children_by_parent: dict[int, list[int]] = {}
+    root_id: int | None = None
+    for message_id, parent_id, latest_child_id in rows:
+        latest_child_by_id[message_id] = latest_child_id
+        parent_by_id[message_id] = parent_id
+        if parent_id is None:
+            root_id = message_id
+        else:
+            children_by_parent.setdefault(parent_id, []).append(message_id)
+
+    branch: list[int] = []
+    next_id = root_id
+    while next_id is not None and next_id in latest_child_by_id:
+        branch.append(next_id)
+        next_id = latest_child_by_id[next_id]
+
+    if before_message_id is not None:
+        # The branch changed since the client loaded this message.
+        if before_message_id not in branch:
+            return set(), False
+        branch = branch[: branch.index(before_message_id)]
+
+    start = max(len(branch) - limit, 0)
+    if before_message_id is None and waiting_reply_ids:
+        positions = {message_id: index for index, message_id in enumerate(branch)}
+        start = min(
+            [start]
+            + [
+                positions[message_id]
+                for reply_id in waiting_reply_ids
+                for message_id in (parent_by_id.get(reply_id), reply_id)
+                if message_id in positions
+            ]
+        )
+    page = branch[start:]
+    page_ids = set(page)
+    for message_id in page:
+        page_ids.update(children_by_parent.get(message_id, []))
+    return page_ids, start > 0
 
 
 def get_or_create_root_message(
@@ -780,54 +924,56 @@ def get_or_create_root_message(
         return new_root_message
 
 
-def reserve_message_id(
-    db_session: Session,
-    chat_session_id: UUID,
-    parent_message: int,
-    message_type: MessageType = MessageType.ASSISTANT,
-    model_display_name: str | None = None,
-) -> ChatMessage:
-    # Create an temporary holding chat message to the updated and saved at the end
-    empty_message = ChatMessage(
-        chat_session_id=chat_session_id,
-        parent_message_id=parent_message,
-        latest_child_message_id=None,
-        message="Response was terminated prior to completion, try regenerating.",
-        token_count=15,
-        message_type=message_type,
-        model_display_name=model_display_name,
+def configure_response_transaction__no_commit(session: Session) -> None:
+    """Bound database waits while a response holds its execution lease."""
+    session.execute(
+        select(
+            func.set_config(
+                "statement_timeout",
+                str(CHAT_RESPONSE_STATEMENT_TIMEOUT_MS),
+                True,
+            )
+        )
+    )
+    session.execute(
+        select(
+            func.set_config(
+                "lock_timeout",
+                str(CHAT_RESPONSE_LOCK_TIMEOUT_MS),
+                True,
+            )
+        )
     )
 
-    # Add the empty message to the session
-    db_session.add(empty_message)
-    db_session.flush()
 
-    # Get the parent message and set its child pointer to the current message
-    parent_chat_message = (
-        db_session.query(ChatMessage).filter(ChatMessage.id == parent_message).first()
-    )
-    if parent_chat_message:
-        parent_chat_message.latest_child_message_id = empty_message.id
-
-    # Committing because it's ok to recover this state. More clear to the user than it is now.
-    # Ideally there's a special UI for a case like this with a regenerate button but not needed for now.
-    db_session.commit()
-
-    return empty_message
-
-
-def reserve_multi_model_message_ids(
+def reserve_chat_response_ids(
     db_session: Session,
     chat_session_id: UUID,
     parent_message_id: int,
     model_display_names: list[str],
-) -> list[ChatMessage]:
-    """Reserve N assistant message placeholders for multi-model parallel streaming.
+) -> list[int]:
+    """Reserve assistant responses and select the last response as the active branch.
 
-    All messages share the same parent (the user message). The parent's
-    latest_child_message_id points to the LAST reserved message so that the
-    default history-chain walker picks it up.
+    Pending sends without a target were submitted while this turn prepared.
     """
+    if not model_display_names:
+        raise ValueError("At least one response model is required")
+    configure_response_transaction__no_commit(db_session)
+    # Queue submission and response reservation share the session-first lock order.
+    db_session.execute(
+        select(ChatSession.id)
+        .where(ChatSession.id == chat_session_id)
+        .with_for_update(key_share=True)
+    )
+    # A new turn resumes a queue that Stop paused.
+    db_session.execute(
+        update(ChatSession)
+        .where(
+            ChatSession.id == chat_session_id,
+            ChatSession.queue_paused_at.is_not(None),
+        )
+        .values(queue_paused_at=None)
+    )
     reserved: list[ChatMessage] = []
     for display_name in model_display_names:
         msg = ChatMessage(
@@ -835,7 +981,7 @@ def reserve_multi_model_message_ids(
             parent_message_id=parent_message_id,
             latest_child_message_id=None,
             message="Response was terminated prior to completion, try regenerating.",
-            token_count=15,  # placeholder; updated on completion by llm_loop_completion_handle
+            token_count=15,
             message_type=MessageType.ASSISTANT,
             model_display_name=display_name,
         )
@@ -854,8 +1000,89 @@ def reserve_multi_model_message_ids(
     if parent:
         parent.latest_child_message_id = reserved[-1].id
 
+    # Sends that arrived while this turn prepared go to its selected response.
+    db_session.execute(
+        update(ChatInput)
+        .where(
+            ChatInput.recipient_session_id == chat_session_id,
+            ChatInput.source == InputSource.HUMAN,
+            ChatInput.delivery == MessageDelivery.SEND,
+            ChatInput.target_response_id.is_(None),
+        )
+        .values(target_response_id=reserved[-1].id)
+    )
+
     db_session.commit()
-    return reserved
+    return [message.id for message in reserved]
+
+
+def set_response_model_names__no_commit(
+    db_session: Session, model_display_names: dict[int, str]
+) -> None:
+    """Name the models of responses reserved before their models were selected."""
+    for response_id, display_name in model_display_names.items():
+        db_session.execute(
+            update(ChatMessage)
+            .where(ChatMessage.id == response_id)
+            .values(model_display_name=display_name)
+        )
+
+
+# A selection is user input stored on the chat and loaded with it, so its size
+# is bounded before anything reads or stores it.
+MAX_TOOL_SELECTION_ITEMS = 1000
+MAX_TOOL_SELECTION_BYTES = 64 * 1024
+
+
+def set_chat_session_tool_selection__no_commit(
+    db_session: Session,
+    chat_session_id: UUID,
+    tool_selection: ChatToolSelection,
+    user: User,
+) -> ChatToolSelection | None:
+    """Save the fields set on `tool_selection`; unset fields keep their saved values.
+
+    A chat that keeps no content stores no selection, because search filters
+    carry user choices such as tag values. Returns the stored selection, or
+    None when the chat stores none.
+    """
+    chat_session = db_session.get(ChatSession, chat_session_id)
+    if chat_session is None or not record_mode_persists_content(
+        chat_session.incognito_record_mode
+    ):
+        return None
+    filters = tool_selection.internal_search_filters
+    item_lists = [
+        tool_selection.allowed_tool_ids,
+        filters.source_type if filters else None,
+        filters.document_set if filters else None,
+        filters.tags if filters else None,
+    ]
+    if (
+        any(len(items) > MAX_TOOL_SELECTION_ITEMS for items in item_lists if items)
+        or len(tool_selection.model_dump_json().encode()) > MAX_TOOL_SELECTION_BYTES
+    ):
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            "The tool selection is too large to save",
+        )
+    require_document_set_access(
+        db_session, filters.document_set if filters else None, user
+    )
+    changes = tool_selection.model_dump(include=tool_selection.model_fields_set)
+    saved = chat_session.tool_selection
+    if (
+        saved is not None
+        and ChatToolSelection.model_validate(saved.model_dump() | changes) == saved
+    ):
+        return saved
+    # Merge under the row lock, so a concurrent save keeps the fields it set.
+    db_session.refresh(chat_session, with_for_update=True)
+    current = chat_session.tool_selection or ChatToolSelection()
+    chat_session.tool_selection = ChatToolSelection.model_validate(
+        current.model_dump() | changes
+    )
+    return chat_session.tool_selection
 
 
 def set_preferred_response(
@@ -921,6 +1148,8 @@ def create_new_chat_message(
     message_type: MessageType,
     db_session: Session,
     files: list[FileDescriptor] | None = None,
+    mentions: list[RecordedMention] | None = None,
+    skill_messages: list[PickedSkillMessage] | None = None,
     error: str | None = None,
     commit: bool = True,
     reserved_message_id: int | None = None,
@@ -938,6 +1167,8 @@ def create_new_chat_message(
         existing_message.token_count = token_count
         existing_message.message_type = message_type
         existing_message.files = files
+        existing_message.mentions = mentions or []
+        existing_message.skill_messages = skill_messages or []
         existing_message.error = error
         existing_message.reasoning_tokens = reasoning_tokens
         new_chat_message = existing_message
@@ -951,6 +1182,8 @@ def create_new_chat_message(
             token_count=token_count,
             message_type=message_type,
             files=files,
+            mentions=mentions or [],
+            skill_messages=skill_messages or [],
             error=error,
             reasoning_tokens=reasoning_tokens,
         )
@@ -1086,6 +1319,33 @@ def translate_db_search_doc_to_saved_search_doc(
     )
 
 
+def get_chat_message_reasoning(chat_message: ChatMessage) -> str | None:
+    """Read displayed thinking from the accepted answer or latest partial output."""
+    # Legacy responses have no recorded SDK steps.
+    if chat_message.response_status is None:
+        return chat_message.reasoning_tokens
+    for item in sorted(
+        chat_message.response_items,
+        key=lambda item: item.step_index,
+        reverse=True,
+    ):
+        if chat_message.response_status == RunStatus.COMPLETE and not item.is_answer:
+            continue
+        rendering = (
+            MessageRendering.model_validate(item.rendering)
+            if item.rendering is not None
+            else MessageRendering()
+        )
+        if rendering.mode != PresentationMode.ANSWER:
+            continue
+        return message_thinking(
+            item.message,
+            rendering.think_tool,
+            text_as_thinking=rendering.text_as_thinking,
+        )
+    return None
+
+
 def translate_db_message_to_chat_message_detail(
     chat_message: ChatMessage,
     remove_doc_content: bool = False,
@@ -1120,20 +1380,50 @@ def translate_db_message_to_chat_message_detail(
     top_documents = sorted(
         top_documents, key=lambda doc: doc.score or 0.0, reverse=True
     )
+    request_params = (
+        GenerationRequestParams.model_validate(
+            chat_message.request_params, extra="ignore"
+        )
+        if chat_message.request_params is not None
+        else None
+    )
+    deadline_cancelled = (
+        chat_message.response_status == RunStatus.CANCELLED
+        and chat_message.response_failure is not None
+        and chat_message.response_failure.kind == RunFailureKind.DEADLINE
+    )
+    error_info = (
+        None
+        if deadline_cancelled
+        else chat_error(chat_message.response_failure)
+        if chat_message.response_failure is not None
+        else StreamingError(error=chat_message.error)
+        if chat_message.error is not None
+        else None
+    )
+    if error_info is not None and request_params is not None:
+        error_info.details = {
+            **(error_info.details or {}),
+            "model": request_params.model_name,
+            "provider": request_params.model_provider,
+        }
     chat_msg_detail = ChatMessageDetail(
         chat_session_id=chat_message.chat_session_id,
         message_id=chat_message.id,
         parent_message=chat_message.parent_message_id,
         latest_child_message=chat_message.latest_child_message_id,
         message=chat_message.message,
-        reasoning_tokens=chat_message.reasoning_tokens,
-        request_params=chat_message.request_params,
+        reasoning_tokens=get_chat_message_reasoning(chat_message),
+        request_params=request_params,
         message_type=chat_message.message_type,
         context_docs=top_documents,
         citations=converted_citations,
         time_sent=chat_message.time_sent,
         files=chat_message.files or [],
-        error=chat_message.error,
+        mentions=chat_message.mentions,
+        error=error_info.error if error_info is not None else None,
+        error_info=error_info,
+        response_status=chat_message.response_status,
         current_feedback=current_feedback,
         processing_duration_seconds=chat_message.processing_duration_seconds,
         preferred_response_id=chat_message.preferred_response_id,
@@ -1355,6 +1645,99 @@ def create_chat_history_chain(
     return mainline_messages
 
 
+def reserve_stream_id(db_session: Session) -> int:
+    """A new stream ID for a stream without a new message, such as one that
+    continues a suspended response. It comes from the message ID sequence, so
+    it never equals another stream's ID, which is a message ID."""
+    stream_id = db_session.scalar(
+        select(
+            func.nextval(func.pg_get_serial_sequence(ChatMessage.__tablename__, "id"))
+        )
+    )
+    if stream_id is None:
+        raise RuntimeError("The message ID sequence returned no value")
+    return stream_id
+
+
+def load_message_branch(
+    chat_session_id: UUID,
+    parent_id: int | None,
+    db_session: Session,
+    *,
+    any_branch: bool = False,
+) -> tuple[list[ChatMessage], ChatMessage]:
+    """Select the requested branch before adding a user message.
+
+    The parent must be on the selected branch, unless `any_branch`: then a
+    parent off it, such as the suspended response of another model of a
+    multi-model turn, brings its own ancestry."""
+    history = create_chat_history_chain(
+        chat_session_id, db_session, prefetch_top_two_level_tool_calls=False
+    )
+    root = get_or_create_root_message(chat_session_id, db_session)
+    if parent_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
+        parent = history[-1] if history else root
+    elif parent_id is None or parent_id == root.id:
+        return [], root
+    else:
+        parent_index = next(
+            (index for index, message in enumerate(history) if message.id == parent_id),
+            None,
+        )
+        if parent_index is not None:
+            history = history[: parent_index + 1]
+        else:
+            parent_message = db_session.get(ChatMessage, parent_id)
+            if (
+                not any_branch
+                or parent_message is None
+                or parent_message.chat_session_id != chat_session_id
+            ):
+                raise ValueError(
+                    "The new message sent is not on the latest mainline of messages"
+                )
+            ancestry = visible_message_ids(db_session, parent_message)[::-1]
+            by_id = {
+                message.id: message
+                for message in db_session.scalars(
+                    select(ChatMessage).where(
+                        ChatMessage.id.in_(ancestry), ChatMessage.id != root.id
+                    )
+                )
+            }
+            history = [
+                by_id[message_id] for message_id in ancestry if message_id in by_id
+            ]
+        parent = history[-1]
+
+    response_ids = [
+        message.id
+        for message in history
+        if message.message_type == MessageType.ASSISTANT
+    ]
+    if response_ids:
+        db_session.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.id.in_(response_ids))
+            .options(
+                load_only(ChatMessage.id),
+                selectinload(ChatMessage.response_items),
+                selectinload(ChatMessage.search_docs),
+                selectinload(ChatMessage.tool_calls),
+            )
+        ).all()
+    # History gives the model the skill messages of picked skills, which
+    # other reads of a chat leave unloaded.
+    picking_ids = [message.id for message in history if message.mentions]
+    if picking_ids:
+        db_session.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.id.in_(picking_ids))
+            .options(load_only(ChatMessage.id, ChatMessage.skill_messages))
+        ).all()
+    return history, parent
+
+
 def find_summary_for_ancestry(
     db_session: Session,
     session_id: UUID,
@@ -1381,6 +1764,17 @@ def find_summary_for_ancestry(
     )
 
 
+def checkpoint_from_summary(message: ChatMessage | None) -> CompactionCheckpoint | None:
+    if message is None:
+        return None
+    if message.last_summarized_message_id is None:
+        return None
+    return CompactionCheckpoint(
+        summary=message.message,
+        covered_through_message_id=message.last_summarized_message_id,
+    )
+
+
 def find_summary_for_branch(
     db_session: Session,
     chat_history: list[ChatMessage],
@@ -1395,88 +1789,59 @@ def find_summary_for_branch(
     )
 
 
-def session_descendants(root_id: UUID | None = None) -> CTE:
-    """Map conversations to their policy-owning root for lifecycle queries."""
-    roots = select(
-        ChatSession.id, ChatSession.id.label("root_id"), ChatSession.time_created
-    ).where(ChatSession.spawned_by_message_id.is_(None))
-    if root_id is not None:
-        roots = roots.where(ChatSession.id == root_id)
-    descendants = roots.cte("session_descendants", recursive=True)
-    # UNION stops traversal if corrupt ancestry repeats a row.
-    return descendants.union(
-        select(ChatSession.id, descendants.c.root_id, ChatSession.time_created)
-        .select_from(ChatSession)
-        .join(ChatMessage, ChatMessage.id == ChatSession.spawned_by_message_id)
-        .join(descendants, ChatMessage.chat_session_id == descendants.c.id)
+def get_selected_branch(
+    session: Session, chat_session_id: UUID
+) -> tuple[ChatMessage | None, ChatBranch]:
+    """Return the selected latest response and the message IDs on its branch."""
+    branch = (
+        select(
+            ChatMessage.id,
+            ChatMessage.latest_child_message_id,
+            literal(0).label("depth"),
+        )
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.parent_message_id.is_(None),
+        )
+        .cte("selected_branch", recursive=True)
     )
-
-
-def get_owned_chat_session(
-    chat_session_id: UUID | str, user_id: UUID, db_session: Session
-) -> ChatSession | None:
-    """Read a root session with this exact owner, including deleted sessions."""
-    return db_session.scalar(
-        select(ChatSession).where(
-            ChatSession.id == chat_session_id,
-            ChatSession.user_id == user_id,
-            ChatSession.spawned_by_message_id.is_(None),
+    branch = branch.union_all(
+        select(
+            ChatMessage.id,
+            ChatMessage.latest_child_message_id,
+            branch.c.depth + 1,
+        )
+        .join(branch, ChatMessage.id == branch.c.latest_child_message_id)
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            branch.c.depth < MAX_CONVERSATION_MESSAGES,
         )
     )
-
-
-def load_message_branch(
-    chat_session_id: UUID,
-    parent_id: int | None,
-    db_session: Session,
-) -> tuple[list[ChatMessage], ChatMessage]:
-    """Select the requested branch before adding a user message."""
-    history = create_chat_history_chain(
-        chat_session_id, db_session, prefetch_top_two_level_tool_calls=False
+    message_ids = list(
+        session.scalars(select(branch.c.id).order_by(branch.c.depth.desc()))
     )
-    root = get_or_create_root_message(chat_session_id, db_session)
-    if parent_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
-        parent = history[-1] if history else root
-    elif parent_id is None or parent_id == root.id:
-        return [], root
-    else:
-        parent_index = next(
-            (index for index, message in enumerate(history) if message.id == parent_id),
-            None,
-        )
-        if parent_index is None:
-            raise ValueError(
-                "The new message sent is not on the latest mainline of messages"
-            )
-        history = history[: parent_index + 1]
-        parent = history[-1]
-
-    response_ids = [
-        message.id
-        for message in history
-        if message.message_type == MessageType.ASSISTANT
-    ]
-    if response_ids:
-        db_session.scalars(
+    # Follow only IDs; queue checks do not need response content or tool results.
+    selected = (
+        session.scalar(
             select(ChatMessage)
-            .where(ChatMessage.id.in_(response_ids))
-            .options(
-                load_only(ChatMessage.id),
-                selectinload(ChatMessage.response_items),
-                selectinload(ChatMessage.tool_calls),
+            .where(
+                ChatMessage.id == message_ids[0],
+                ChatMessage.message_type == MessageType.ASSISTANT,
             )
-        ).all()
-    return history, parent
-
-
-def checkpoint_from_summary(message: ChatMessage | None) -> CompactionCheckpoint | None:
-    if message is None:
-        return None
-    if message.last_summarized_message_id is None:
-        return None
-    return CompactionCheckpoint(
-        summary=message.message,
-        covered_through_message_id=message.last_summarized_message_id,
+            .options(
+                load_only(
+                    ChatMessage.id,
+                    ChatMessage.chat_session_id,
+                    ChatMessage.parent_message_id,
+                    ChatMessage.response_status,
+                )
+            )
+        )
+        if message_ids
+        else None
+    )
+    return selected, ChatBranch(
+        chat_session_id=chat_session_id, message_ids=message_ids
     )
 
 
@@ -1557,10 +1922,11 @@ def session_ancestors(
     return {row.id: row for row in rows}
 
 
-def agent_path_from_ancestors(
+def agent_ancestor_chain(
     agent_id: UUID, ancestors: dict[UUID, SessionAncestor]
-) -> str:
-    segments: list[str] = []
+) -> list[SessionAncestor]:
+    """Return this agent and its parents, with a complete and acyclic ancestry."""
+    chain: list[SessionAncestor] = []
     visited: set[UUID] = set()
     current: UUID | None = agent_id
     while current is not None:
@@ -1570,8 +1936,18 @@ def agent_path_from_ancestors(
         ancestor = ancestors.get(current)
         if ancestor is None:
             raise ValueError("Agent parent is unavailable")
-        segments.append(ancestor.agent_name or "root")
+        chain.append(ancestor)
         current = ancestor.parent_id
+    return chain
+
+
+def agent_path_from_ancestors(
+    agent_id: UUID, ancestors: dict[UUID, SessionAncestor]
+) -> str:
+    segments = [
+        ancestor.agent_name or "root"
+        for ancestor in agent_ancestor_chain(agent_id, ancestors)
+    ]
     return "/" + "/".join(reversed(segments))
 
 
@@ -1583,22 +1959,126 @@ def agent_session_path(db_session: Session, agent: ChatSession) -> str:
     )
 
 
+def response_invocation(response: ChatMessage) -> ToolCall | None:
+    """The tool call that started a child response; its question records it."""
+    question = response.parent_message
+    return question.invoking_tool_call if question is not None else None
+
+
+def _response_ancestry_select() -> Select:
+    question = aliased(ChatMessage)
+    spawning_response = aliased(ChatMessage)
+    return (
+        select(
+            ChatMessage.id.label("message_id"),
+            ChatMessage.chat_session_id.label("session_id"),
+            ChatMessage.response_status.label("status"),
+            ChatSession.spawned_by_message_id,
+            spawning_response.chat_session_id.label("parent_session_id"),
+            ToolCall.parent_chat_message_id.label("parent_response_id"),
+            question.parent_message_id.label("previous_response_id"),
+        )
+        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .outerjoin(question, question.id == ChatMessage.parent_message_id)
+        .outerjoin(ToolCall, ToolCall.id == question.invoking_tool_call_id)
+        .outerjoin(
+            spawning_response,
+            spawning_response.id == ChatSession.spawned_by_message_id,
+        )
+    )
+
+
+def response_invocation_chain(
+    db_session: Session, response_id: int
+) -> list[ResponseAncestry]:
+    """The response, then each response whose tool call started the one before it.
+
+    The chain ends at the root response. Agents can message each other, so it
+    can be longer than the spawn depth. Each step goes to an older response, so
+    the walk ends without a length limit. Empty when the response is missing.
+    """
+    chain = (
+        _response_ancestry_select()
+        .where(ChatMessage.id == response_id)
+        .cte("response_invocation_chain", recursive=True)
+    )
+    chain = chain.union_all(
+        _response_ancestry_select()
+        .join(chain, ChatMessage.id == chain.c.parent_response_id)
+        .where(
+            chain.c.spawned_by_message_id.is_not(None),
+            ChatMessage.id < chain.c.message_id,
+        )
+    )
+    rows = TypeAdapter(list[ResponseAncestry]).validate_python(
+        db_session.execute(select(chain).order_by(chain.c.message_id.desc()))
+        .mappings()
+        .all()
+    )
+    if rows and rows[-1].spawned_by_message_id is not None:
+        raise ValueError("Child response is missing its invocation")
+    return rows
+
+
+def ownership_root_id(db_session: Session, response_id: int) -> int | None:
+    """The newest turn root that the response's run depends on.
+
+    A child run depends on the turn whose tool call started it and on the turns
+    of its previous runs. Another turn can continue an agent, so a previous run
+    can belong to a later turn than the invocation. All of these roots are on
+    one branch, so the newest is the latest. None when the response is missing.
+    """
+    question = aliased(ChatMessage)
+    nodes = (
+        select(
+            ChatMessage.id.label("message_id"),
+            ChatSession.spawned_by_message_id,
+            ToolCall.parent_chat_message_id.label("invoker_id"),
+            question.parent_message_id.label("previous_id"),
+        )
+        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .outerjoin(question, question.id == ChatMessage.parent_message_id)
+        .outerjoin(ToolCall, ToolCall.id == question.invoking_tool_call_id)
+    )
+    walk = nodes.where(ChatMessage.id == response_id).cte(
+        "ownership_root_walk", recursive=True
+    )
+    # Each step goes to an older response, so the walk ends.
+    walk = walk.union(
+        nodes.join(
+            walk,
+            or_(
+                ChatMessage.id == walk.c.invoker_id,
+                ChatMessage.id == walk.c.previous_id,
+            ),
+        ).where(
+            walk.c.spawned_by_message_id.is_not(None),
+            ChatMessage.id < walk.c.message_id,
+        )
+    )
+    return db_session.scalar(
+        select(func.max(walk.c.message_id)).where(
+            walk.c.spawned_by_message_id.is_(None)
+        )
+    )
+
+
 def root_response_id(db_session: Session, response: ChatMessage) -> int:
-    current = response
-    visited: set[int] = set()
-    while current.chat_session.spawned_by_message_id is not None:
-        if current.id in visited or len(visited) >= MAX_AGENT_DEPTH:
-            raise ValueError("Child response hierarchy is cyclic or too deep")
-        visited.add(current.id)
-        question = current.parent_message
-        invocation = question.invoking_tool_call if question else None
-        if invocation is None or invocation.parent_chat_message_id is None:
-            raise ValueError("Child response is missing its invocation")
-        parent = db_session.get(ChatMessage, invocation.parent_chat_message_id)
-        if parent is None:
-            raise ValueError("Parent response is unavailable")
-        current = parent
-    return current.id
+    """The newest turn root of the response's run; see `ownership_root_id`."""
+    root_id = ownership_root_id(db_session, response.id)
+    if root_id is None:
+        raise ValueError("Response is unavailable")
+    return root_id
+
+
+def response_on_branch(
+    db_session: Session, response: ChatMessage, branch_ids: Collection[int]
+) -> bool:
+    """Whether the turns that the response's run depends on are on the branch.
+
+    A child run belongs to every later turn of the branch that started it.
+    """
+    return root_response_id(db_session, response) in branch_ids
 
 
 def parent_session_id(db_session: Session, session: ChatSession) -> UUID | None:

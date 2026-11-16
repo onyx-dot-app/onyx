@@ -1,12 +1,12 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, MessageCard, Text } from "@opal/components";
 import { SvgArrowDownCircle } from "@opal/icons";
-import { ConfirmationModalLayout, toast } from "@opal/layouts";
+import { ConfirmationModalLayout, toast, Section } from "@opal/layouts";
 import { markdown } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
 import { downgradeToCommunity } from "@/lib/billing";
 
 const CHANGE_KEYS = [
@@ -27,13 +27,14 @@ export default function DowngradeToCommunityModal({
 }: DowngradeToCommunityModalProps) {
   const t = useTranslations("admin.billing.downgrade");
   const [isDowngrading, setIsDowngrading] = useState(false);
+  const navigation = useNavigation();
 
   async function handleDowngrade() {
     setIsDowngrading(true);
     try {
       await downgradeToCommunity();
       // Tier, gating and branding are cached all over the app, so start clean.
-      window.location.reload();
+      navigation.reload();
     } catch (error) {
       toast.error(t("failed.text"), {
         description: error instanceof Error ? error.message : undefined,

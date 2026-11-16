@@ -25,6 +25,11 @@ export {
   isTypingTarget,
   type UseHotkeyOptions,
 } from "@opal/hooks/useHotkey";
+export {
+  default as useSearchableGrid,
+  type UseSearchableGridOptions,
+  type UseSearchableGridReturn,
+} from "@opal/hooks/useSearchableGrid";
 export { default as useOnMount } from "@opal/hooks/useOnMount";
 export { default as useOverflow } from "@opal/hooks/useOverflow";
 export {

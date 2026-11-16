@@ -1,4 +1,4 @@
-import { Message } from "@/app/app/interfaces";
+import { Message } from "@/app/app/types";
 import {
   chooseImplicitPreferred,
   getMultiModelChildren,
@@ -117,6 +117,24 @@ describe("getUnresolvedMultiModelTurn", () => {
   it("returns null for single-model turns", () => {
     const tree = new Map<number, Message>();
     buildTurn(tree, ["gpt-6-sol"]);
+    expect(getUnresolvedMultiModelTurn(chainOf(tree), tree)).toBeNull();
+  });
+
+  it("returns null when the chain continues past the turn", () => {
+    const tree = new Map<number, Message>();
+    const { responses } = buildTurn(tree, ["gpt-6-sol", "claude-opus-5"]);
+    const answered = responses.at(-1)!;
+    const results = buildMessage({
+      type: "agent_results",
+      parentNodeId: answered.nodeId,
+    });
+    const followUp = buildMessage({ parentNodeId: results.nodeId });
+    answered.childrenNodeIds = [results.nodeId];
+    answered.latestChildNodeId = results.nodeId;
+    results.childrenNodeIds = [followUp.nodeId];
+    results.latestChildNodeId = followUp.nodeId;
+    tree.set(results.nodeId, results);
+    tree.set(followUp.nodeId, followUp);
     expect(getUnresolvedMultiModelTurn(chainOf(tree), tree)).toBeNull();
   });
 });

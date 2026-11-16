@@ -6,18 +6,22 @@ import {
   Divider,
   IconTooltip,
   Popover,
-  SelectButton,
   ShadowDiv,
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { LineLoader } from "@opal/loaders";
-import { SvgAlertTriangle, SvgStackLine, SvgX } from "@opal/icons";
+import { SvgAlertTriangle, SvgStackLine } from "@opal/icons";
 import { cn } from "@opal/utils";
 import useIndexAttemptStageMetrics from "@/hooks/useIndexAttemptStageMetrics";
 import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
+import {
+  DetailsCloseButton,
+  InlineDetailsCard,
+  RunDetailsHint,
+} from "@/views/admin/connectors/ConnectorDetailPage/InlineDetails";
 
 // BATCH_TOTAL feeds the header; the bucket rows hold the other batch-level stages.
 const SUMMARY_STAGE = "BATCH_TOTAL";
@@ -152,14 +156,9 @@ function isUneven({ avgMs, stdDevMs }: BucketTiming): boolean {
   return stdDevMs !== null && avgMs !== null && stdDevMs > avgMs;
 }
 
-// Column widths from the mock, in rem: the stage name, the batch count, the
-// average with its spread, the bar and the max. The actions take the rest.
-const NAME_WIDTH = 9.25;
-const BATCHES_WIDTH = 3.5;
-const AVERAGE_WIDTH = 8.5;
-const MAX_WIDTH = 4;
-// Room after the max column for the uneven marker or the close button; the bar takes the rest.
-const TRAILING_WIDTH = 6;
+/** What a stage figure shows when there is none. */
+export const NONE = "--";
+
 // Seconds with three decimals in the viewer's locale, as the mock prints every figure here.
 const SECONDS_FORMAT = {
   minimumFractionDigits: 3,
@@ -169,7 +168,7 @@ export function formatSeconds(
   format: ReturnType<typeof useFormatter>,
   ms: number | null | undefined
 ): string {
-  return ms == null ? "-" : `${format.number(ms / 1000, SECONDS_FORMAT)}s`;
+  return ms == null ? NONE : `${format.number(ms / 1000, SECONDS_FORMAT)}s`;
 }
 
 function percent(ms: number, scale: number): string {
@@ -181,48 +180,23 @@ export function barScale(buckets: BucketSummary[]): number {
   return Math.max(0, ...buckets.map(({ timing }) => timing?.maxMs ?? 0));
 }
 
-/** Opens the stage details of one attempt. Place it inside the Popover that holds the content. */
 export interface StageDetailsTriggerProps {
   /** Whether its popover is open. The open trigger shows selected. */
   open?: boolean;
 }
+/** Opens the stage details of one attempt. Place it inside the Popover that holds the content. */
 export function StageDetailsTrigger({
   open = false,
 }: StageDetailsTriggerProps) {
   const t = useTranslations("admin.connector.runs");
   return (
     <Popover.Trigger asChild>
-      <SelectButton
+      <RunDetailsHint
         icon={SvgStackLine}
-        variant="select-light"
-        state={open ? "selected" : "empty"}
-        size="xs"
-        tooltip={t("actions.stages")}
-        aria-label={t("actions.stages")}
+        label={t("actions.stages")}
+        open={open}
       />
     </Popover.Trigger>
-  );
-}
-
-interface CellProps {
-  width: number;
-  align?: "start" | "end";
-  children: React.ReactNode;
-}
-/** One fixed-width column of a row, padded as the mock's cells are. */
-function Cell({ width, align = "start", children }: CellProps) {
-  return (
-    <Section
-      alignItems={align}
-      justifyContent="start"
-      gap={0}
-      padding={1}
-      width={width}
-      height="fit"
-      className="shrink-0"
-    >
-      {children}
-    </Section>
   );
 }
 
@@ -236,20 +210,13 @@ function Average({ avgMs, stdDevMs = null }: AverageProps) {
   if (avgMs == null) {
     return (
       <Text font="secondary-mono" color="text-03">
-        -
+        {NONE}
       </Text>
     );
   }
   return (
-    <Section
-      flexDirection="row"
-      alignItems="center"
-      justifyContent="start"
-      gap={1}
-      width="full"
-      height="fit"
-    >
-      <Text font="secondary-mono-label" color="text-04">
+    <Section flexDirection="row" justifyContent="start" gap={1} height="fit">
+      <Text font="secondary-mono" color="text-04">
         {formatSeconds(format, avgMs)}
       </Text>
       {stdDevMs !== null && (
@@ -286,122 +253,196 @@ function ColumnTitle({ children }: ColumnTitleProps) {
   );
 }
 
-interface BucketRowProps {
+interface DetailLineProps {
+  name: ReactNode;
+  batches: ReactNode;
+  average: ReactNode;
+  /** The min-to-max bar of a stage line. The header leaves the room empty. */
+  bar?: ReactNode;
+  max: ReactNode;
+  action: ReactNode;
+}
+/**
+ * One line of the stage card on the run line's columns: name and a 64 px batches column across A,
+ * then from B's start the average, the bar, and a 60 px max column that ends on the counts edge, then D.
+ * Below 640 px it wraps to A + D over the rest, as a run line does.
+ */
+function DetailLine({
+  name,
+  batches,
+  average,
+  bar,
+  max,
+  action,
+}: DetailLineProps) {
+  // A container query cannot measure its own element, so the parts query this wrapper.
+  return (
+    <div className="@container w-full">
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        alignItems="start"
+        gap={0}
+        height="fit"
+        className="@max-[38.75rem]:flex-wrap"
+      >
+        {/* As wide as a run line's A: half of what the line's third, capped at 208 px, leaves. */}
+        <Section
+          flexDirection="row"
+          alignItems="start"
+          gap={4}
+          padding={1}
+          height="fit"
+          className="min-w-0 shrink-0 basis-[calc((100%-min(33.333%,13rem))/2)] @max-[38.75rem]:order-1 @max-[38.75rem]:basis-[calc(100%-4rem)]"
+        >
+          <Section
+            alignItems="start"
+            gap={0}
+            height="fit"
+            className="ms-1 min-w-0 flex-1"
+          >
+            {name}
+          </Section>
+          <Section
+            alignItems="end"
+            gap={0}
+            width={3.25}
+            height="fit"
+            className="shrink-0"
+          >
+            {batches}
+          </Section>
+        </Section>
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          gap={1}
+          padding={1}
+          height="fit"
+          className="ms-1 min-w-0 flex-1 @max-[38.75rem]:order-3"
+        >
+          <Section
+            alignItems="start"
+            gap={0}
+            width={7.75}
+            height="fit"
+            className="shrink-0"
+          >
+            {average}
+          </Section>
+          <Section
+            alignItems="stretch"
+            padding={1}
+            height="fit"
+            className="min-w-0 flex-1"
+          >
+            {bar}
+          </Section>
+          <Section
+            alignItems="end"
+            gap={0}
+            width={3.75}
+            height="fit"
+            className="me-1 shrink-0"
+          >
+            {max}
+          </Section>
+        </Section>
+        {/* No vertical padding, so a 24 px action keeps a stage line at 24 px. */}
+        <Section
+          flexDirection="row"
+          justifyContent="end"
+          alignItems="start"
+          width={3.75}
+          height="fit"
+          className="me-1 shrink-0 @max-[38.75rem]:order-2"
+        >
+          {action}
+        </Section>
+      </Section>
+    </div>
+  );
+}
+
+interface StageBarProps {
+  timing: BucketTiming;
+  /** From `barScale`. */
+  scale: number;
+}
+/** The bucket's min-to-max window on a track scaled to the slowest bucket, with its average marked. */
+function StageBar({ timing, scale }: StageBarProps) {
+  const min = timing.minMs ?? 0;
+  const max = timing.maxMs ?? 0;
+  return (
+    <div className="relative h-1 w-full rounded-02 bg-background-tint-01">
+      <div
+        className="absolute top-0 h-1 rounded-02 bg-chart-category-blue-1-20"
+        style={{
+          insetInlineStart: percent(min, scale),
+          width: `calc(${percent(max, scale)} - ${percent(min, scale)})`,
+        }}
+      />
+      {timing.avgMs !== null && (
+        <div
+          className="absolute top-0 size-1 -ms-0.5 rounded-02 bg-chart-category-blue-1"
+          style={{ insetInlineStart: percent(timing.avgMs, scale) }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface BucketLineProps {
   summary: BucketSummary;
   /** From `barScale`. */
   scale: number;
 }
-/** One row: batch count, average, a min-to-max bar with the average marked, and max. */
-function BucketRow({ summary: { bucket, timing }, scale }: BucketRowProps) {
+/** One stage line: batch count, average, a min-to-max bar with the average marked, and max. D holds the uneven marker alone, since nothing ties an error to one stage. */
+function BucketLine({ summary: { bucket, timing }, scale }: BucketLineProps) {
   const t = useTranslations("admin.connector");
   const format = useFormatter();
-  const min = timing?.minMs ?? 0;
-  const max = timing?.maxMs ?? 0;
-
   return (
-    <Section
-      flexDirection="row"
-      alignItems="center"
-      justifyContent="start"
-      gap={1}
-      padding={0.5}
-      height="fit"
-    >
-      <Cell width={NAME_WIDTH}>
+    <DetailLine
+      name={
         <Text font="secondary-action" color="text-03">
           {t(BUCKET_LABEL_KEYS[bucket])}
         </Text>
-      </Cell>
-      <Cell width={BATCHES_WIDTH} align="end">
+      }
+      batches={
         <Text font="secondary-mono" color="text-03">
-          {timing === undefined ? "-" : format.number(timing.batchCount)}
+          {timing === undefined ? NONE : format.number(timing.batchCount)}
         </Text>
-      </Cell>
-      <Cell width={AVERAGE_WIDTH}>
-        <Average avgMs={timing?.avgMs} stdDevMs={timing?.stdDevMs} />
-      </Cell>
-      <Section
-        alignItems="start"
-        justifyContent="start"
-        padding={1}
-        width="auto"
-        height="fit"
-        className="min-w-0 flex-1"
-      >
-        {timing === undefined ? (
-          <Text font="secondary-mono" color="text-03">
-            -
-          </Text>
-        ) : (
-          <div className="relative my-1.5 h-1 w-full rounded-sm bg-background-tint-01">
-            <div
-              className="absolute top-0 h-1 rounded-sm bg-theme-blue-02"
-              style={{
-                insetInlineStart: percent(min, scale),
-                width: `calc(${percent(max, scale)} - ${percent(min, scale)})`,
-              }}
-            />
-            {timing.avgMs !== null && (
-              <div
-                className="absolute top-0 h-1 w-1 -ms-0.5 rounded-sm bg-theme-blue-05"
-                style={{
-                  insetInlineStart: percent(timing.avgMs, scale),
-                }}
-              />
-            )}
-          </div>
-        )}
-      </Section>
-      <Cell width={MAX_WIDTH} align="end">
+      }
+      average={<Average avgMs={timing?.avgMs} stdDevMs={timing?.stdDevMs} />}
+      bar={timing !== undefined && <StageBar timing={timing} scale={scale} />}
+      max={
         <Text font="secondary-mono" color="text-03">
           {formatSeconds(format, timing?.maxMs)}
         </Text>
-      </Cell>
-      <Section
-        flexDirection="row"
-        alignItems="center"
-        justifyContent="end"
-        width={TRAILING_WIDTH}
-        height="fit"
-        className="shrink-0"
-      >
-        {timing !== undefined && isUneven(timing) && (
+      }
+      action={
+        timing !== undefined &&
+        isUneven(timing) && (
           <IconTooltip
             icon={UnevenIcon}
             tooltip={t("stageDetails.uneven.tooltip")}
             aria-label={t("stageDetails.uneven.tooltip")}
           />
-        )}
-      </Section>
-    </Section>
+        )
+      }
+    />
   );
 }
 
-interface StageRowsProps {
-  stages: IndexAttemptStageMetric[];
-  loaded: boolean;
-  failed: boolean;
+interface StageLinesProps {
+  buckets: BucketSummary[];
+  /** The run indexed nothing, so only the stages that ran are listed, then a note that the rest were canceled. */
+  noDocs: boolean;
 }
-function StageRows({ stages, loaded, failed }: StageRowsProps) {
+function StageLines({ buckets, noDocs }: StageLinesProps) {
   const t = useTranslations("admin.connector");
-  if (failed) {
-    return (
-      <Section padding={1} height="fit">
-        <Text font="secondary-body" color="text-03">
-          {t("stageMetrics.loadError.title")}
-        </Text>
-      </Section>
-    );
-  }
-  if (!loaded) {
-    return (
-      <Section padding={1} height="fit">
-        <LineLoader lines={3} />
-      </Section>
-    );
-  }
-  const buckets = summarizeBuckets(stages);
-  if (buckets.every(({ timing }) => timing === undefined)) {
+  const ran = buckets.filter(({ timing }) => timing !== undefined);
+  if (ran.length === 0 && !noDocs) {
     return (
       <Section padding={1} height="fit">
         <Text font="secondary-body" color="text-03">
@@ -413,97 +454,137 @@ function StageRows({ stages, loaded, failed }: StageRowsProps) {
   const scale = barScale(buckets);
   return (
     <ShadowDiv>
-      {buckets.map((summary) => (
-        <BucketRow key={summary.bucket} summary={summary} scale={scale} />
-      ))}
+      <Section alignItems="stretch" gap={1} height="fit">
+        {(noDocs ? ran : buckets).map((summary) => (
+          <BucketLine key={summary.bucket} summary={summary} scale={scale} />
+        ))}
+        {/* The stages that never ran have no figures, so the note stands alone rather than folding them away. */}
+        {noDocs && ran.length < buckets.length && (
+          <Divider title={t("stageDetails.laterCanceled")} />
+        )}
+      </Section>
     </ShadowDiv>
   );
 }
 
-interface StageDetailsBodyProps {
+interface StageDetailsProps {
   indexAttemptId: number;
+  noDocs: boolean;
+  /** Closes an inline card. Unset, the close button closes the enclosing Popover. */
+  onClose?: () => void;
 }
 
-/** How long each pipeline step took per batch of one index attempt. The header carries the attempt's totals under each column title. */
-function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
+/** How long each pipeline step took per batch of one index attempt, on the run line's columns. The header carries the attempt's totals under each column title. */
+function StageDetails({ indexAttemptId, noDocs, onClose }: StageDetailsProps) {
   const t = useTranslations("admin.connector");
   const format = useFormatter();
-  const { data, error } = useIndexAttemptStageMetrics(indexAttemptId);
+  const { data, error, mutate } = useIndexAttemptStageMetrics(indexAttemptId);
   const stages = data?.stages ?? [];
   const total = stages.find((stage) => stage.stage === SUMMARY_STAGE);
+  const buckets = summarizeBuckets(stages);
+
+  function lines(): ReactNode {
+    if (error !== undefined) {
+      return (
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          gap={1}
+          padding={1}
+          height="fit"
+        >
+          <Text font="secondary-body" color="text-03">
+            {t("stageMetrics.loadError.title")}
+          </Text>
+          <Button prominence="internal" size="sm" onClick={() => void mutate()}>
+            {t("stageDetails.retry")}
+          </Button>
+        </Section>
+      );
+    }
+    if (data === undefined) {
+      return (
+        <Section padding={1} height="fit">
+          <LineLoader lines={3} />
+        </Section>
+      );
+    }
+    // A run that indexed nothing and recorded no stage shows its header alone.
+    if (noDocs && buckets.every(({ timing }) => timing === undefined)) {
+      return null;
+    }
+    return <StageLines buckets={buckets} noDocs={noDocs} />;
+  }
+  const body = lines();
 
   return (
     <Section
       alignItems="stretch"
       gap={1}
-      padding={1}
       height="auto"
-      className="min-h-0"
+      className="my-1 min-h-0"
     >
-      <Section
-        flexDirection="row"
-        alignItems="start"
-        justifyContent="start"
-        gap={1}
-        padding={0.5}
-        height="fit"
-        className="shrink-0"
-      >
-        <Cell width={NAME_WIDTH}>
-          <ColumnTitle>{t("stageDetails.heading.top")}</ColumnTitle>
-          <ColumnTitle>{t("stageDetails.heading.bottom")}</ColumnTitle>
-        </Cell>
-        <Cell width={BATCHES_WIDTH} align="end">
-          <ColumnTitle>{t("stageDetails.calls")}</ColumnTitle>
-          <Text font="secondary-mono-label" color="text-04">
-            {total === undefined ? "-" : format.number(total.event_count)}
-          </Text>
-        </Cell>
-        <Cell width={AVERAGE_WIDTH}>
-          <ColumnTitle>{t("stageDetails.averageTime")}</ColumnTitle>
-          <Average
-            avgMs={total?.avg_duration_ms}
-            stdDevMs={total?.std_dev_duration_ms}
+      <DetailLine
+        name={
+          <>
+            <ColumnTitle>{t("stageDetails.heading.top")}</ColumnTitle>
+            <ColumnTitle>{t("stageDetails.heading.bottom")}</ColumnTitle>
+          </>
+        }
+        batches={
+          <>
+            <ColumnTitle>{t("stageDetails.calls")}</ColumnTitle>
+            <Text font="secondary-mono" color="text-04">
+              {noDocs || total === undefined
+                ? NONE
+                : format.number(total.event_count)}
+            </Text>
+          </>
+        }
+        average={
+          <>
+            <ColumnTitle>{t("stageDetails.averageTime")}</ColumnTitle>
+            {noDocs ? (
+              // One line running into the empty bar room, as the design draws it.
+              <Text
+                font="secondary-action"
+                color="text-04"
+                wordWrap="whitespace-nowrap"
+              >
+                {t("stageDetails.noDocs")}
+              </Text>
+            ) : (
+              <Average
+                avgMs={total?.avg_duration_ms}
+                stdDevMs={total?.std_dev_duration_ms}
+              />
+            )}
+          </>
+        }
+        max={
+          <>
+            <ColumnTitle>{t("stageDetails.maxTime")}</ColumnTitle>
+            <Text font="secondary-mono" color="text-03">
+              {noDocs ? NONE : formatSeconds(format, total?.max_duration_ms)}
+            </Text>
+          </>
+        }
+        action={
+          <DetailsCloseButton
+            label={t("stageDetails.close")}
+            onClose={onClose}
           />
-        </Cell>
-        <Section
-          alignItems="end"
-          justifyContent="start"
-          gap={0}
-          padding={1}
-          width="auto"
-          height="fit"
-          className="min-w-0 flex-1"
-        >
-          <ColumnTitle>{t("stageDetails.maxTime")}</ColumnTitle>
-          <Text font="secondary-mono" color="text-03">
-            {formatSeconds(format, total?.max_duration_ms)}
-          </Text>
-        </Section>
-        <Section
-          flexDirection="row"
-          alignItems="start"
-          justifyContent="end"
-          width={TRAILING_WIDTH}
-          height="fit"
-          className="shrink-0"
-        >
-          <Popover.Close asChild>
-            <Button
-              icon={SvgX}
-              prominence="tertiary"
-              size="xs"
-              aria-label={t("stageDetails.close")}
-            />
-          </Popover.Close>
-        </Section>
-      </Section>
-      <Divider paddingParallel={1} paddingPerpendicular={1} />
-      <StageRows
-        stages={stages}
-        loaded={data !== undefined}
-        failed={error !== undefined}
+        }
       />
+      {body !== null && (
+        <>
+          {/* An 8 px band around the 1 px line. */}
+          <Section height={0.5}>
+            <Divider paddingParallel={1} paddingPerpendicular={0} />
+          </Section>
+          {body}
+        </>
+      )}
     </Section>
   );
 }
@@ -526,7 +607,39 @@ export default function StageDetailsPopoverContent({
       sideOffset={-8}
       aria-label={t("stageDetails.title")}
     >
-      <StageDetailsBody indexAttemptId={indexAttemptId} />
+      <Section
+        alignItems="stretch"
+        padding={1}
+        height="auto"
+        className="min-h-0"
+      >
+        <StageDetails indexAttemptId={indexAttemptId} noDocs={false} />
+      </Section>
     </Popover.Content>
+  );
+}
+
+export interface StageDetailsCardProps {
+  indexAttemptId: number;
+  /** The run finished without indexing a document. */
+  noDocs: boolean;
+  onClose: () => void;
+}
+
+/** Stage details for one attempt in a card directly under its run line. Fetches on mount, so mount it only while open. */
+export function StageDetailsCard({
+  indexAttemptId,
+  noDocs,
+  onClose,
+}: StageDetailsCardProps) {
+  const t = useTranslations("admin.connector");
+  return (
+    <InlineDetailsCard label={t("stageDetails.title")} onClose={onClose}>
+      <StageDetails
+        indexAttemptId={indexAttemptId}
+        noDocs={noDocs}
+        onClose={onClose}
+      />
+    </InlineDetailsCard>
   );
 }

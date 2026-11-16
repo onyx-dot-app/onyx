@@ -51,6 +51,64 @@ describe("display", () => {
     );
   });
 
+  it("shows the placeholder only while empty and unfocused, and the suffix beside a value", async () => {
+    const user = setupUser();
+    const { rerender } = render(
+      <InputCurrency
+        value={null}
+        onChange={() => {}}
+        placeholder="No cost limit"
+        suffix="USD"
+      />
+    );
+    const content = screen.getByRole("group", { name: "Amount" });
+    const whole = screen.getByLabelText("Whole amount");
+    expect(content).toHaveAttribute("data-placeholder-shown");
+    expect(whole).toHaveAccessibleDescription("No cost limit USD");
+
+    await user.click(whole);
+    expect(content).not.toHaveAttribute("data-placeholder-shown");
+
+    rerender(
+      <InputCurrency
+        value={5}
+        onChange={() => {}}
+        placeholder="No cost limit"
+        suffix="USD"
+      />
+    );
+    await user.tab();
+    expect(content).not.toHaveAttribute("data-placeholder-shown");
+    expect(screen.getByText("USD")).toBeInTheDocument();
+    expect(whole).toHaveAccessibleDescription("USD");
+    expect(
+      screen.getByLabelText("Fractional amount")
+    ).toHaveAccessibleDescription("USD");
+  });
+
+  it("puts a click on the placeholder into the whole segment", async () => {
+    const user = setupUser();
+    const onChange = jest.fn();
+    render(
+      <InputCurrency
+        value={null}
+        onChange={onChange}
+        placeholder="No cost limit"
+      />
+    );
+    // The visible copy; a hidden copy describes the whole segment.
+    const shown = screen
+      .getAllByText("No cost limit")
+      .find((element) => !element.closest("[hidden]"));
+    if (!shown) throw new Error("placeholder not shown");
+    // Inert, so a link in a rich placeholder never takes focus.
+    expect(shown.closest("[inert]")).not.toBeNull();
+    await user.click(shown);
+    expect(screen.getByLabelText("Whole amount")).toHaveFocus();
+    await user.keyboard("10");
+    expect(onChange).toHaveBeenLastCalledWith(10);
+  });
+
   it("hides the fraction segment for a negative precision", () => {
     render(<InputCurrency value={3} onChange={() => {}} precision={-1} />);
     expect(screen.queryByLabelText("Fractional amount")).toBeNull();

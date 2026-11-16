@@ -50,17 +50,16 @@ from onyx.server.features.mcp.oauth import (
     make_oauth_provider,
     run_with_authorization_handoff,
 )
+from onyx.server.features.mcp.oauth_discovery import authorization_request_accepted
 from onyx.server.features.mcp.ssrf import (
     mcp_oauth_challenge_httpx_client_factory,
     mcp_ssrf_httpx_client_factory,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException
 
 logger = setup_logger()
 
 MCP_OAUTH_FLOW_TTL_SECONDS = 10 * 60
-CLIENT_METADATA_CHECK_TIMEOUT_SECONDS = 5.0
 MCP_OAUTH_ATTEMPTS = AuthorizationAttemptStore(
     cache_backend_provider=get_cache_backend,
     namespace="mcp",
@@ -236,24 +235,9 @@ async def validate_client_metadata_authorization(
     document fails here, not on its error page. Network errors fail open."""
     if not is_mcp_oauth_cimd_client_id(client_id):
         return
-    try:
-        async with (
-            asyncio.timeout(CLIENT_METADATA_CHECK_TIMEOUT_SECONDS),
-            mcp_ssrf_httpx_client_factory() as client,
-            # Only the status matters, so the page body is never read.
-            client.stream("GET", authorization_url, follow_redirects=False) as response,
-        ):
-            status_code = response.status_code
-    except (httpx.HTTPError, SSRFException, TimeoutError):
-        # The browser may reach a provider this server cannot.
-        logger.warning(
-            "Could not pre-check the MCP OAuth authorization request", exc_info=True
-        )
+    if await authorization_request_accepted(authorization_url) is not False:
         return
-    # 5xx counts too: Sentry and Canva answer 500 for an unreadable document.
-    if status_code < 400:
-        return
-    logger.warning("MCP OAuth authorization pre-check failed: status=%s", status_code)
+    logger.warning("MCP OAuth authorization pre-check rejected the client metadata")
     raise OnyxError(
         OnyxErrorCode.INVALID_INPUT,
         "The OAuth provider could not use this instance's client metadata document. "

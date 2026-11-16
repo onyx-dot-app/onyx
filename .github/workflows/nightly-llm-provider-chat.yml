@@ -29,6 +29,7 @@ jobs:
       azure_api_base: ${{ vars.NIGHTLY_LLM_AZURE_API_BASE }}
       ollama_models: ${{ vars.NIGHTLY_LLM_OLLAMA_MODELS }}
       openrouter_models: ${{ vars.NIGHTLY_LLM_OPENROUTER_MODELS }}
+      gemini_models: ${{ vars.NIGHTLY_LLM_GEMINI_MODELS }}
       strict: true
 
   notify-slack-on-failure:
@@ -83,3 +84,57 @@ jobs:
           details: ${{ steps.slack-details.outputs.details }}
           title: "🚨 Scheduled LLM Provider Chat Tests failed!"
           ref-name: ${{ github.ref_name }}
+
+  detect-image-generation-failures:
+    needs: [provider-chat-test]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      actions: read
+    outputs:
+      failed: ${{ steps.detect.outputs.failed }}
+    steps:
+      - name: Detect image generation test failures
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          failed=false
+          for job_id in $(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.conclusion == "failure") | .id'); do
+            gh api "repos/${REPO}/actions/jobs/${job_id}/logs" > job.log || continue
+            if grep -Eq 'test_nightly_provider_image_generation\.py::.* FAILED|FAILED .*test_nightly_provider_image_generation\.py::' job.log; then
+              failed=true
+            fi
+          done
+          echo "failed=${failed}" >> "${GITHUB_OUTPUT}"
+
+  # Image models that a vendor removed, or that Onyx cannot call, fail the
+  # nightly. An agent classifies each failure and opens a reviewed fix PR.
+  maintain-image-generation-models:
+    needs: [detect-image-generation-failures]
+    if: always() && needs.detect-image-generation-failures.outputs.failed == 'true'
+    uses: ./.github/workflows/reusable-agent-task-pr.yml
+    permissions:
+      contents: read
+      actions: read
+    secrets:
+      CHERRY_PICK_APP_PRIVATE_KEY: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SLACK_BOT_TOKEN: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
+    with:
+      task-name: image-generation-models
+      task-runner: claude-code
+      prompt-file: .github/prompts/image-generation-maintenance.md
+      validation-script: .github/scripts/validate_image_generation_maintenance.py
+      files: backend/onyx/llm/price_table/_supplement.json backend/onyx/image_gen
+      failure-run-id: ${{ github.run_id }}
+      branch: auto/image-generation-models
+      pr-title: "fix(image-gen): update image models after nightly failures"
+      reviewer: rohoswagger
+      slack-channel: C0C6T9W2U3X # #ai-pr-reviews
+      slack-mention: rohoswagger

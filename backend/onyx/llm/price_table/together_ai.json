@@ -366,7 +366,8 @@
         "context": 8192
       },
       "mode": "rerank",
-      "name": "Salesforce/Llama-Rank-V1"
+      "name": "Salesforce/Llama-Rank-V1",
+      "status": "deprecated"
     },
     "deepseek-ai/DeepSeek-R1": {
       "attachment": false,
@@ -651,6 +652,36 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-16",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "moonshotai/Kimi-K3.1-Pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "input": 2,
+        "output": 10
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3.1 Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
       "structured_output": true,
       "temperature": false,
       "tool_call": true

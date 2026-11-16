@@ -155,7 +155,9 @@ def world(
     )
     for pair in (private_pair, deleting_pair):
         db_session.add(
-            UserGroup__CCPairDataAccess(user_group_id=group.id, cc_pair_id=pair.id)
+            UserGroup__CCPairDataAccess(
+                user_group_id=group.id, cc_pair_id=pair.id, access_type=pair.access_type
+            )
         )
     # Manage rows grant no data access.
     db_session.add(
@@ -695,7 +697,9 @@ def restricted(
     pair = _make_pair(db_session, AccessType.SYNC_RESTRICTED)
     groupless_pair = _make_pair(db_session, AccessType.SYNC_RESTRICTED)
     db_session.add(
-        UserGroup__CCPairDataAccess(user_group_id=group.id, cc_pair_id=pair.id)
+        UserGroup__CCPairDataAccess(
+            user_group_id=group.id, cc_pair_id=pair.id, access_type=pair.access_type
+        )
     )
     db_session.commit()
 

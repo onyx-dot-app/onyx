@@ -2,6 +2,9 @@ import Page from "@/app/admin/mcp-actions/page";
 import { redirect } from "next/navigation";
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   redirect: jest.fn((href: string) => {
     throw new Error(href);
   }),

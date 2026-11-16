@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import cast
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from sqlalchemy.orm import Session
 
@@ -23,6 +24,7 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.session import llm_config
 from onyx.server.features.build.session import manager as manager_module
+from onyx.server.features.build.session.errors import OpencodeConfigReloadError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.gateway import model_catalog
 from onyx.server.gateway.models import GatewayModelDescriptor
@@ -876,12 +878,7 @@ def test_workspace_rebuild_claims_a_dispose_the_next_reconcile_honours() -> None
     sandbox_manager.read_file.return_value = expected.encode()
 
     store: dict[str, str] = {}
-    cache = MagicMock()
-    cache.set.side_effect = lambda key, value, ex=None: store.__setitem__(  # noqa: ARG005
-        key, value
-    )
-    cache.get.side_effect = store.get
-    cache.delete.side_effect = lambda key: store.pop(key, None)
+    cache = _dict_cache(store)
 
     session = cast(
         BuildSession,
@@ -906,3 +903,109 @@ def test_workspace_rebuild_claims_a_dispose_the_next_reconcile_honours() -> None
 
     sandbox_manager.dispose_opencode_instance.assert_called_once()
     assert store == {}, "the claim must be cleared once the dispose succeeded"
+
+
+def _dict_cache(store: dict[str, str]) -> MagicMock:
+    cache = MagicMock()
+    cache.set.side_effect = lambda key, value, ex=None: store.__setitem__(  # noqa: ARG005
+        key, value
+    )
+    cache.get.side_effect = lambda key: store[key].encode() if key in store else None
+    cache.delete.side_effect = lambda key: store.pop(key, None)
+    return cache
+
+
+def _live_session() -> BuildSession:
+    return cast(
+        BuildSession,
+        MagicMock(
+            id=2,
+            agent_provider=None,
+            agent_model=None,
+            opencode_session_id="ses-live",
+            nextjs_port=3010,
+        ),
+    )
+
+
+def test_dispose_timeout_after_rewrite_converges_on_next_turn() -> None:
+    """The turn that rewrote the config fails with a clear error when the
+    dispose times out. The next turn sees a matching file plus the marker,
+    disposes again, and clears the marker."""
+    config = _gateway_config()
+    manager, sandbox_manager, _ = _reconcile_manager(config)
+    expected = json.dumps(
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
+    )
+    session = _live_session()
+    sandbox = cast(Sandbox, MagicMock(id=1))
+    user = cast(User, MagicMock(spec=User, personal_name="Roshan"))
+    store: dict[str, str] = {}
+    cache = _dict_cache(store)
+
+    with (
+        patch.object(manager_module, "get_cache_backend", return_value=cache),
+        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+    ):
+        sandbox_manager.read_file.return_value = b"stale"
+        sandbox_manager.dispose_opencode_instance.side_effect = httpx.ReadTimeout(
+            "timed out"
+        )
+        with pytest.raises(OpencodeConfigReloadError):
+            manager.reconcile_session_llm_config(sandbox, session, user)
+        assert len(store) == 1, "a failed dispose must keep the marker"
+
+        sandbox_manager.read_file.return_value = expected.encode()
+        sandbox_manager.dispose_opencode_instance.side_effect = None
+        manager.reconcile_session_llm_config(sandbox, session, user)
+
+    sandbox_manager.regenerate_session_config.assert_called_once()
+    assert sandbox_manager.dispose_opencode_instance.call_count == 2
+    assert store == {}
+
+
+def test_stuck_dispose_fails_fast_after_bounded_attempts() -> None:
+    """A dispose that never completes must not cost a full timeout on every
+    turn: after the attempt limit, turns fail fast without a dispose call
+    until the backoff passes. The marker stays, so no turn runs on the old
+    config."""
+    config = _gateway_config()
+    manager, sandbox_manager, _ = _reconcile_manager(config)
+    expected = json.dumps(
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
+    )
+    sandbox_manager.read_file.return_value = expected.encode()
+    sandbox_manager.dispose_opencode_instance.side_effect = httpx.ReadTimeout(
+        "timed out"
+    )
+    session = _live_session()
+    sandbox = cast(Sandbox, MagicMock(id=1))
+    user = cast(User, MagicMock(spec=User))
+    store: dict[str, str] = {}
+    cache = _dict_cache(store)
+    max_attempts = manager_module._DISPOSE_MAX_FAILED_ATTEMPTS
+
+    with patch.object(manager_module, "get_cache_backend", return_value=cache):
+        manager_module.mark_opencode_dispose_pending(session.id)
+        messages: list[str] = []
+        for _ in range(max_attempts + 2):
+            with pytest.raises(OpencodeConfigReloadError) as exc_info:
+                manager.reconcile_session_llm_config(sandbox, session, user)
+            messages.append(str(exc_info.value))
+
+        assert sandbox_manager.dispose_opencode_instance.call_count == max_attempts
+        assert messages[-1] == manager_module._DISPOSE_BACKOFF_MESSAGE
+        assert len(store) == 1
+
+        # After the backoff, one more attempt runs; a success clears the marker.
+        (key,) = store
+        store[key] = manager_module._encode_dispose_pending(max_attempts, 0.0)
+        sandbox_manager.dispose_opencode_instance.side_effect = None
+        manager.reconcile_session_llm_config(sandbox, session, user)
+
+    assert sandbox_manager.dispose_opencode_instance.call_count == max_attempts + 1
+    assert store == {}

@@ -1,3 +1,4 @@
+from typing import NamedTuple
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -33,10 +34,18 @@ class GroupManagedCCPairsUpdateRequest(BaseModel):
         return cc_pairs
 
 
+class UserGroupMemberCounts(NamedTuple):
+    total: int
+    active: int
+
+
 class UserGroup(BaseModel):
     id: int
     name: str
+    # Empty when the list endpoint is called with include_users=false.
     users: list[UserInfo]
+    member_count: int
+    active_member_count: int
     manager_ids: list[str]
     cc_pairs: list[ConnectorCredentialPairDescriptor]
     # The group's role on each pair in cc_pairs.
@@ -60,11 +69,23 @@ class UserGroup(BaseModel):
         *,
         mask_credential_prefix: bool,
         permissions: dict[str, bool] | None = None,
+        member_counts: UserGroupMemberCounts | None = None,
     ) -> "UserGroup":
+        """Pass member_counts to send the counts without the member list; the
+        members are then not read from the model."""
+        if member_counts is None:
+            users = user_group_model.users
+            member_counts = UserGroupMemberCounts(
+                total=len(users), active=sum(1 for user in users if user.is_active)
+            )
+        else:
+            users = []
         return cls(
             permissions=permissions or {},
             id=user_group_model.id,
             name=user_group_model.name,
+            member_count=member_counts.total,
+            active_member_count=member_counts.active,
             manager_ids=[
                 str(relationship.user_id)
                 for relationship in user_group_model.user_group_relationships
@@ -83,7 +104,7 @@ class UserGroup(BaseModel):
                         chosen_assistants=user.chosen_assistants,
                     ),
                 )
-                for user in user_group_model.users
+                for user in users
             ],
             cc_pairs=[
                 ConnectorCredentialPairDescriptor(

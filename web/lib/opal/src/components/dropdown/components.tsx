@@ -968,6 +968,17 @@ function DropdownData(props: DropdownDataProps) {
             setHighlightedIndex(-1);
           }
         }}
+        // Focus would leave the list from a control inside it: hand the key
+        // to the trigger, so Tab walks on and wraps, or closes the list, as
+        // it does from the trigger.
+        onTabOut={(event) => {
+          focusTrigger();
+          handleKeyDown(event, {
+            typeIn: false,
+            typeAhead: false,
+            textField: false,
+          });
+        }}
         searchField={
           search
             ? {

@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, Optional
 from pydantic import BaseModel, model_validator
 
 from ee.onyx.configs.app_configs import (
+    AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY,
+    AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY,
     BOX_PERMISSION_DOC_SYNC_FREQUENCY,
     BOX_PERMISSION_GROUP_SYNC_FREQUENCY,
     CANVAS_PERMISSION_DOC_SYNC_FREQUENCY,
@@ -11,6 +13,8 @@ from ee.onyx.configs.app_configs import (
     CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY,
     CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY,
     DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
+    EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY,
+    EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY,
     GITHUB_PERMISSION_DOC_SYNC_FREQUENCY,
     GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY,
     GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
@@ -42,9 +46,11 @@ from ee.onyx.external_permissions.perm_sync_types import (
     GroupSyncFuncType,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.db.enums import ConnectorCredentialPairStatus
 
 if TYPE_CHECKING:
     from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
+    from ee.onyx.external_permissions.models import SyncEntityFailure  # noqa
     from onyx.access.models import DocExternalAccess, ElementExternalAccess  # noqa
     from onyx.context.search.models import InferenceChunk  # noqa
     from onyx.db.models import ConnectorCredentialPair  # noqa
@@ -86,7 +92,7 @@ def _lazy_checkpointed_doc_sync(
 def _lazy_group_sync(load: Callable[[], GroupSyncFuncType]) -> GroupSyncFuncType:
     def run(
         tenant_id: str, cc_pair: "ConnectorCredentialPair"
-    ) -> Generator["ExternalUserGroup", None, None]:
+    ) -> Generator["ExternalUserGroup | SyncEntityFailure", None, None]:
         return load()(tenant_id, cc_pair)
 
     return run
@@ -97,6 +103,22 @@ def _lazy_censoring(load: Callable[[], CensoringFuncType]) -> CensoringFuncType:
         return load()(chunks, user_email)
 
     return run
+
+
+def _load_azure_datalake_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.azure_datalake.doc_sync import (
+        azure_datalake_doc_sync,
+    )
+
+    return azure_datalake_doc_sync
+
+
+def _load_azure_datalake_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.azure_datalake.group_sync import (
+        azure_datalake_group_sync,
+    )
+
+    return azure_datalake_group_sync
 
 
 def _load_box_doc_sync() -> DocSyncFuncType:
@@ -133,6 +155,18 @@ def _load_confluence_group_sync() -> GroupSyncFuncType:
     from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 
     return confluence_group_sync
+
+
+def _load_egnyte_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.egnyte.doc_sync import egnyte_doc_sync
+
+    return egnyte_doc_sync
+
+
+def _load_egnyte_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.egnyte.group_sync import egnyte_group_sync
+
+    return egnyte_group_sync
 
 
 def _load_github_doc_sync() -> DocSyncFuncType:
@@ -476,6 +510,33 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),
+    DocumentSource.EGNYTE: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_egnyte_doc_sync),
+            # The crawl reads each folder's permissions with its listing.
+            initial_index_should_sync=True,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_egnyte_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    DocumentSource.AZURE_DATALAKE: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_azure_datalake_doc_sync),
+            # Indexing carries no access, so a file stays private until the
+            # first doc sync lists it.
+            initial_index_should_sync=False,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_azure_datalake_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
     DocumentSource.MOCK_CONNECTOR: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
@@ -545,6 +606,33 @@ def source_requires_external_group_sync(source: DocumentSource) -> bool:
     if source not in _SOURCE_TO_SYNC_CONFIG:
         return False
     return _SOURCE_TO_SYNC_CONFIG[source].group_sync_config is not None
+
+
+def doc_permission_sync_seconds(
+    source: DocumentSource, status: ConnectorCredentialPairStatus, indexed: bool
+) -> int | None:
+    """Seconds between a pair's doc permission syncs, before the Cloud multiplier.
+    None when its doc sync cannot run now: the source has none, the pair is not
+    active, or the source waits for the pair's first successful index."""
+    config: SyncConfig | None = _SOURCE_TO_SYNC_CONFIG.get(source)
+    doc: DocSyncConfig | None = config.doc_sync_config if config else None
+    if doc is None or status != ConnectorCredentialPairStatus.ACTIVE:
+        return None
+    if doc.initial_index_should_sync and not indexed:
+        return None
+    return doc.doc_sync_frequency
+
+
+def external_group_sync_seconds(
+    source: DocumentSource, status: ConnectorCredentialPairStatus
+) -> int | None:
+    """Seconds between a pair's group syncs. None when its group sync cannot run
+    now: the source has none, or the pair is paused, invalid, or being deleted."""
+    config: SyncConfig | None = _SOURCE_TO_SYNC_CONFIG.get(source)
+    group: GroupSyncConfig | None = config.group_sync_config if config else None
+    if group is None or not status.is_active():
+        return None
+    return group.group_sync_frequency
 
 
 def get_source_perm_sync_config(source: DocumentSource) -> SyncConfig | None:

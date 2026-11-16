@@ -4,43 +4,42 @@ A window rollup: rows accumulate in place per (user, window,
 model, flow, provider, incognito), not an append-only per-call ledger."""
 
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from datetime import datetime, timedelta
-from math import ceil
-from threading import RLock
 from typing import Any, cast
 
-from cachetools import TTLCache
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, insert, literal, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
+from onyx.configs.constants import TokenRateLimitPeriod
 from onyx.db.enums import UsageActorKind
 from onyx.db.llm_usage import LLMUsageRecord, build_usage_upsert_values
-from onyx.db.models import TokenRateLimit, User, User__UserGroup, UserUsage
+from onyx.db.models import (
+    USAGE_MODEL_CONFIGURATION_KEY,
+    TokenRateLimit,
+    TokenRateLimitUsageBaseline,
+    User,
+    User__UserGroup,
+    UserUsage,
+)
 from onyx.utils.datetime import datetime_to_utc, get_window_start
-from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-
-logger = setup_logger()
 
 USER_USAGE_BUCKET_SECONDS = 24 * 60 * 60
-USER_USAGE_BUCKET_HOURS = USER_USAGE_BUCKET_SECONDS // (60 * 60)
-TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
-COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
-COST_BUDGET_PERIOD_HOURS = {24, 168, 720}
-_INVALID_COST_BUDGET_WARNING_TTL_SECONDS = 5 * 60
-_invalid_cost_budget_warning_lock = RLock()
-# Keyed by the raw contextvar value, not get_current_tenant_id, which raises when
-# the contextvar is unset (non-request callers). A warn path must never raise.
-_invalid_cost_budget_warning_cache: TTLCache[tuple[str | None, int, int], None] = (
-    TTLCache(maxsize=10_000, ttl=_INVALID_COST_BUDGET_WARNING_TTL_SECONDS)
-)
 # Not email-shaped on purpose: it can never collide with a real address.
 DELETED_USER_EXPORT_EMAIL = "(deleted user)"
-_CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider", "incognito"]
+_CONFLICT_COLS = [
+    "user_id",
+    "window_start",
+    "model",
+    "flow",
+    "provider",
+    "incognito",
+    USAGE_MODEL_CONFIGURATION_KEY,
+]
 _USER_ACTOR_INDEX_PREDICATE = text("actor_kind = 'USER'")
 
 
@@ -49,118 +48,101 @@ class TokenUsageBucket(BaseModel):
     tokens: int
 
 
-def normalize_token_period_hours(period_hours: int) -> int:
-    """Round legacy periods up to whole UTC days."""
-    return max(
-        USER_USAGE_BUCKET_HOURS,
-        ceil(period_hours / USER_USAGE_BUCKET_HOURS) * USER_USAGE_BUCKET_HOURS,
+def get_period_window_start(now: datetime, period: TokenRateLimitPeriod) -> datetime:
+    """Start of the current UTC calendar window for `period`."""
+    today = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
+    if period == TokenRateLimitPeriod.DAILY:
+        return today
+    if period == TokenRateLimitPeriod.WEEKLY:
+        return today - timedelta(days=today.weekday())
+    return today.replace(day=1)
+
+
+def get_usage_bucket_start(dt: datetime) -> datetime:
+    return get_window_start(dt, USER_USAGE_BUCKET_SECONDS)
+
+
+def _reset_bucket_in_period(
+    now: datetime, period: TokenRateLimitPeriod, usage_reset_at: datetime | None
+) -> datetime | None:
+    """The bucket that holds the limit's usage reset, when the reset is in the
+    current period."""
+    if usage_reset_at is None:
+        return None
+    reset_bucket = get_usage_bucket_start(usage_reset_at)
+    return (
+        reset_bucket if reset_bucket >= get_period_window_start(now, period) else None
     )
 
 
-def get_token_window_start(now: datetime, period_hours: int) -> datetime:
-    period_hours = normalize_token_period_hours(period_hours)
-    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    return current_bucket - timedelta(hours=period_hours - USER_USAGE_BUCKET_HOURS)
-
-
-def _get_cost_period_seconds(period_hours: int) -> int:
-    period_seconds = period_hours * 60 * 60
-    if period_hours not in COST_BUDGET_PERIOD_HOURS:
-        raise ValueError("Cost budget periods must be daily, weekly, or monthly")
-    return period_seconds
-
-
-def _warn_for_invalid_cost_budget_period(rate_limit: TokenRateLimit) -> None:
-    cache_key = (
-        CURRENT_TENANT_ID_CONTEXTVAR.get(),
-        rate_limit.id,
-        rate_limit.period_hours,
-    )
-    with _invalid_cost_budget_warning_lock:
-        if cache_key in _invalid_cost_budget_warning_cache:
-            return
-        _invalid_cost_budget_warning_cache[cache_key] = None
-
-    logger.warning(
-        "Skipping cost budget on token_rate_limit id=%s: unsupported period_hours=%s",
-        rate_limit.id,
-        rate_limit.period_hours,
-    )
-
-
-def cost_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
-    """Return enforceable cost limits and warn about unsupported stored periods."""
-    valid: list[TokenRateLimit] = []
-    for rate_limit in rate_limits:
-        if rate_limit.cost_budget_cents is None:
-            continue
-        if rate_limit.period_hours not in COST_BUDGET_PERIOD_HOURS:
-            _warn_for_invalid_cost_budget_period(rate_limit)
-            continue
-        valid.append(rate_limit)
-    return valid
-
-
-def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
-    """Start of the current fixed UTC cost-budget period."""
-    _get_cost_period_seconds(period_hours)
-    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    if period_hours == 24:
-        return current_bucket
-    if period_hours == 168:
-        return current_bucket - timedelta(days=current_bucket.weekday())
-    return current_bucket.replace(day=1)
-
-
-def cost_budget_fetch_cutoff(
-    now: datetime, cost_limits: Sequence[TokenRateLimit]
+def get_limit_usage_start(
+    now: datetime, period: TokenRateLimitPeriod, usage_reset_at: datetime | None
 ) -> datetime:
-    """Earliest window start across the limits, so one fetch covers every window."""
-    return min(get_cost_window_start(now, limit.period_hours) for limit in cost_limits)
+    """Earliest bucket that counts toward a limit: its current period's start,
+    or the bucket of a usage reset in the period."""
+    return _reset_bucket_in_period(
+        now, period, usage_reset_at
+    ) or get_period_window_start(now, period)
 
 
-def get_token_window_reset(now: datetime, period_hours: int) -> datetime:
-    period_hours = normalize_token_period_hours(period_hours)
-    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    return current_bucket + timedelta(hours=period_hours)
+def sum_limit_usage(
+    buckets: Iterable[tuple[datetime, float]],
+    now: datetime,
+    period: TokenRateLimitPeriod,
+    usage_reset_at: datetime | None,
+    baseline: float,
+) -> float:
+    """Usage that counts toward a limit this period. After a reset, the reset
+    day's bucket counts only what it gained since the reset: `baseline` is
+    what it held at the reset."""
+    start = get_limit_usage_start(now, period, usage_reset_at)
+    reset_bucket = _reset_bucket_in_period(now, period, usage_reset_at)
+    used = 0.0
+    reset_day = 0.0
+    for bucket_start, amount in buckets:
+        if bucket_start < start:
+            continue
+        if bucket_start == reset_bucket:
+            reset_day += amount
+        else:
+            used += amount
+    if reset_bucket is None:
+        return used + reset_day
+    return used + max(0.0, reset_day - baseline)
 
 
-def get_cost_window_reset(now: datetime, period_hours: int) -> datetime:
-    window_start = get_cost_window_start(now, period_hours)
-    if period_hours == 24:
+def get_period_window_reset(now: datetime, period: TokenRateLimitPeriod) -> datetime:
+    window_start = get_period_window_start(now, period)
+    if period == TokenRateLimitPeriod.DAILY:
         return window_start + timedelta(days=1)
-    if period_hours == 168:
+    if period == TokenRateLimitPeriod.WEEKLY:
         return window_start + timedelta(days=7)
     if window_start.month == 12:
         return window_start.replace(year=window_start.year + 1, month=1)
     return window_start.replace(month=window_start.month + 1)
 
 
-def earliest_window_reset(
-    now: datetime,
-    period_hours: int,
-    buckets: Sequence[tuple[datetime, float]],
-    threshold: float,
+def period_fetch_cutoff(
+    now: datetime, rate_limits: Sequence[TokenRateLimit]
 ) -> datetime:
-    """First future UTC-day boundary at which the trailing-window sum drops below
-    `threshold`, assuming no further usage.
+    """Earliest usage start across the limits, so one fetch covers every window."""
+    return min(
+        get_limit_usage_start(now, limit.period, limit.usage_reset_at)
+        for limit in rate_limits
+    )
 
-    Usage is bucketed by whole UTC days and the window slides forward one day at
-    a time, so the reset is always a midnight. As each day rolls off, the trailing
-    sum can only drop; this returns the first boundary where it clears. Equals the
-    full-window expiry when even the current day alone is over threshold.
-    `period_hours` must be a whole number of days.
-    """
-    day = timedelta(seconds=USER_USAGE_BUCKET_SECONDS)
-    today = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-    period_days = period_hours // USER_USAGE_BUCKET_HOURS
-    window_start = today - day * (period_days - 1)
-    for days_elapsed in range(1, period_days + 1):
-        cutoff = window_start + day * days_elapsed
-        remaining = sum(amount for ws, amount in buckets if ws >= cutoff)
-        if remaining < threshold:
-            return today + day * days_elapsed
-    return today + day * period_days
+
+def token_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
+    # A non-positive budget can only come from legacy rows; never block on it.
+    return [
+        limit
+        for limit in rate_limits
+        if limit.token_budget is not None and limit.token_budget > 0
+    ]
+
+
+def cost_budget_limits(rate_limits: Sequence[TokenRateLimit]) -> list[TokenRateLimit]:
+    return [limit for limit in rate_limits if limit.cost_budget_cents is not None]
 
 
 class UserUsageByDay(BaseModel):
@@ -207,6 +189,7 @@ def record_user_usage(
         flow=usage.flow,
         provider=provider,
         incognito=incognito,
+        model_configuration_id=usage.model_configuration_id,
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
         cache_read_tokens=usage.cache_read_tokens,
@@ -378,21 +361,27 @@ def get_usage_reset_window_start(
     now: datetime, rate_limits: Sequence[TokenRateLimit]
 ) -> datetime:
     """Return the earliest bucket included by any applicable limit."""
-    window_starts = [get_window_start(now, USER_USAGE_BUCKET_SECONDS)]
-    window_starts.extend(
-        get_token_window_start(now, rate_limit.period_hours)
-        for rate_limit in rate_limits
-        if rate_limit.token_budget is not None
+    return min(
+        [
+            get_window_start(now, USER_USAGE_BUCKET_SECONDS),
+            *(get_period_window_start(now, limit.period) for limit in rate_limits),
+        ]
     )
-    window_starts.extend(
-        get_cost_window_start(now, rate_limit.period_hours)
-        for rate_limit in cost_budget_limits(rate_limits)
-    )
-    return min(window_starts)
 
 
 def reset_user_usage(db_session: Session, user_id: str, window_start: datetime) -> int:
-    """Clear a user's usage within the active enforcement window."""
+    """Clear a user's usage within the active enforcement window, with the
+    user's limit-reset baselines for buckets in it: a baseline must not be
+    subtracted again from usage that is gone."""
+    reset_in_window = select(TokenRateLimit.id).where(
+        TokenRateLimit.usage_reset_at >= window_start
+    )
+    db_session.execute(
+        delete(TokenRateLimitUsageBaseline).where(
+            TokenRateLimitUsageBaseline.user_id == user_id,
+            TokenRateLimitUsageBaseline.token_rate_limit_id.in_(reset_in_window),
+        )
+    )
     result = cast(
         CursorResult[Any],
         db_session.execute(
@@ -437,10 +426,18 @@ def get_user_cost_cents_since(
     return float(total)
 
 
+def _model_clause(model_configuration_id: int | None) -> list[ColumnElement[bool]]:
+    """No filter for None: all-models limits count usage of every model."""
+    if model_configuration_id is None:
+        return []
+    return [UserUsage.model_configuration_id == model_configuration_id]
+
+
 def get_user_cost_cents_buckets_since(
     db_session: Session,
     user_id: str,
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> list[tuple[datetime, float]]:
     """Per-window cost buckets for one user — Python-side multi-period windowing."""
     rows = db_session.execute(
@@ -449,6 +446,7 @@ def get_user_cost_cents_buckets_since(
             func.coalesce(func.sum(UserUsage.cost_cents), 0.0),
         )
         .where(
+            *_model_clause(model_configuration_id),
             UserUsage.user_id == user_id,
             UserUsage.window_start >= cutoff,
         )
@@ -473,6 +471,7 @@ def get_total_cost_cents_since(
 def get_total_cost_cents_buckets_since(
     db_session: Session,
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> list[tuple[datetime, float]]:
     """Tenant-wide per-window cost buckets for multi-period global budgets."""
     rows = db_session.execute(
@@ -480,7 +479,7 @@ def get_total_cost_cents_buckets_since(
             UserUsage.window_start,
             func.coalesce(func.sum(UserUsage.cost_cents), 0.0),
         )
-        .where(UserUsage.window_start >= cutoff)
+        .where(*_model_clause(model_configuration_id), UserUsage.window_start >= cutoff)
         .group_by(UserUsage.window_start)
     ).all()
     return [(datetime_to_utc(window_start), float(cost)) for window_start, cost in rows]
@@ -507,6 +506,7 @@ def get_group_cost_cents_buckets_since(
     db_session: Session,
     user_group_ids: list[int],
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> dict[int, list[tuple[datetime, float]]]:
     """Per-group (window_start, cents) buckets in one query for Python windowing."""
     rows = db_session.execute(
@@ -517,6 +517,7 @@ def get_group_cost_cents_buckets_since(
         )
         .join(User__UserGroup, User__UserGroup.user_id == UserUsage.user_id)
         .where(
+            *_model_clause(model_configuration_id),
             User__UserGroup.user_group_id.in_(user_group_ids),
             UserUsage.window_start >= cutoff,
         )
@@ -533,6 +534,7 @@ def get_user_token_buckets_since(
     db_session: Session,
     user_id: str,
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> list[TokenUsageBucket]:
     """Provider input + output tokens across all recorded flows for one user."""
     rows = db_session.execute(
@@ -540,7 +542,11 @@ def get_user_token_buckets_since(
             UserUsage.window_start,
             func.sum(UserUsage.input_tokens + UserUsage.output_tokens),
         )
-        .where(UserUsage.user_id == user_id, UserUsage.window_start >= cutoff)
+        .where(
+            *_model_clause(model_configuration_id),
+            UserUsage.user_id == user_id,
+            UserUsage.window_start >= cutoff,
+        )
         .group_by(UserUsage.window_start)
         .order_by(UserUsage.window_start)
     ).all()
@@ -553,6 +559,7 @@ def get_user_token_buckets_since(
 def get_total_token_buckets_since(
     db_session: Session,
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> list[TokenUsageBucket]:
     """Tenant-wide provider input + output tokens across all recorded flows."""
     rows = db_session.execute(
@@ -560,7 +567,7 @@ def get_total_token_buckets_since(
             UserUsage.window_start,
             func.sum(UserUsage.input_tokens + UserUsage.output_tokens),
         )
-        .where(UserUsage.window_start >= cutoff)
+        .where(*_model_clause(model_configuration_id), UserUsage.window_start >= cutoff)
         .group_by(UserUsage.window_start)
         .order_by(UserUsage.window_start)
     ).all()
@@ -574,6 +581,7 @@ def get_group_token_buckets_since(
     db_session: Session,
     user_group_ids: list[int],
     cutoff: datetime,
+    model_configuration_id: int | None = None,
 ) -> dict[int, list[TokenUsageBucket]]:
     """Provider input + output tokens across all recorded flows per group."""
     rows = db_session.execute(
@@ -584,6 +592,7 @@ def get_group_token_buckets_since(
         )
         .join(User__UserGroup, User__UserGroup.user_id == UserUsage.user_id)
         .where(
+            *_model_clause(model_configuration_id),
             User__UserGroup.user_group_id.in_(user_group_ids),
             UserUsage.window_start >= cutoff,
         )
@@ -599,3 +608,71 @@ def get_group_token_buckets_since(
             )
         )
     return result
+
+
+class PoolUsageBuckets(BaseModel):
+    tokens: list[tuple[datetime, float]]
+    cost_cents: list[tuple[datetime, float]]
+
+
+def get_pool_usage_buckets_since(
+    db_session: Session,
+    cutoff: datetime,
+    model_configuration_id: int | None,
+    user_group_id: int | None,
+) -> PoolUsageBuckets:
+    """Per-bucket usage of the workspace pool, or of one group's pool."""
+    if user_group_id is None:
+        token_rows = get_total_token_buckets_since(
+            db_session, cutoff, model_configuration_id
+        )
+        cost = get_total_cost_cents_buckets_since(
+            db_session, cutoff, model_configuration_id
+        )
+    else:
+        token_rows = get_group_token_buckets_since(
+            db_session, [user_group_id], cutoff, model_configuration_id
+        ).get(user_group_id, [])
+        cost = get_group_cost_cents_buckets_since(
+            db_session, [user_group_id], cutoff, model_configuration_id
+        ).get(user_group_id, [])
+    return PoolUsageBuckets(
+        tokens=[(bucket.window_start, float(bucket.tokens)) for bucket in token_rows],
+        cost_cents=cost,
+    )
+
+
+def insert_user_usage_baselines__no_commit(
+    db_session: Session,
+    token_rate_limit_id: int,
+    bucket_start: datetime,
+    model_configuration_id: int | None,
+) -> None:
+    """Store every user's usage in one bucket as the limit's reset baselines.
+    Every user, not only those the limit covers now: one who joins a group
+    later still has their pre-reset usage subtracted."""
+    query = (
+        select(
+            literal(token_rate_limit_id),
+            UserUsage.user_id,
+            func.sum(UserUsage.input_tokens + UserUsage.output_tokens),
+            func.coalesce(func.sum(UserUsage.cost_cents), 0.0),
+        )
+        .where(
+            *_model_clause(model_configuration_id),
+            UserUsage.window_start == bucket_start,
+            UserUsage.user_id.is_not(None),
+        )
+        .group_by(UserUsage.user_id)
+    )
+    db_session.execute(
+        insert(TokenRateLimitUsageBaseline).from_select(
+            [
+                TokenRateLimitUsageBaseline.token_rate_limit_id,
+                TokenRateLimitUsageBaseline.user_id,
+                TokenRateLimitUsageBaseline.tokens,
+                TokenRateLimitUsageBaseline.cost_cents,
+            ],
+            query,
+        )
+    )

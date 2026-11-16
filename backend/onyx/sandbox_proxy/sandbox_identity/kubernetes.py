@@ -3,9 +3,13 @@
 Background thread watches sandbox pods and maintains a `{pod_ip:
 SandboxIdentity}` cache. On any error or EOF the watch loop reconnects with
 exponential backoff capped at `_RECONNECT_MAX_SECONDS`; on 410 Gone we relist.
+Every reconnect relists. `is_synced()` reports false when the last relist is
+too old to trust, so a stuck watch fails `/healthz` instead of serving a frozen
+cache.
 """
 
 import threading
+import time
 from uuid import UUID
 
 from kubernetes import client, watch
@@ -29,11 +33,20 @@ from onyx.utils.logger import setup_logger
 _RECONNECT_INITIAL_SECONDS = 1.0
 _RECONNECT_MAX_SECONDS = 30.0
 _WATCH_TIMEOUT_SECONDS = 300
-# Connect deadline for the long-lived watch. It must opt out of the boot client's
-# short read deadline (an idle watch reads nothing for up to
-# `_WATCH_TIMEOUT_SECONDS`), but a connect deadline still lets a half-open
-# reconnect fail fast into the backoff loop.
+# Connect deadline for the long-lived watch. A half-open reconnect fails fast
+# into the backoff loop.
 _WATCH_CONNECT_TIMEOUT_S = 15.0
+# Read deadline for the long-lived watch. An idle watch can read nothing until
+# the server ends it after `_WATCH_TIMEOUT_SECONDS`, so the deadline must be
+# longer than that. A connection that stays silent past it is half-open: the
+# read raises `ReadTimeoutError` and the loop reconnects and relists, instead of
+# blocking forever on a frozen cache.
+_WATCH_READ_TIMEOUT_S = _WATCH_TIMEOUT_SECONDS + 60.0
+# A healthy informer relists at least once per watch. A relist older than one
+# bounded watch plus a reconnect means the cache may be missing pods.
+_SYNC_STALE_AFTER_S = (
+    _WATCH_READ_TIMEOUT_S + _WATCH_CONNECT_TIMEOUT_S + _RECONNECT_MAX_SECONDS
+)
 
 _SANDBOX_POD_SELECTOR = ",".join(
     [
@@ -98,6 +111,8 @@ class K8sInformerLookup(SandboxIPLookup):
         self._initial_sync_done = threading.Event()
         self._stop_event = threading.Event()
         self._synced = threading.Event()
+        # Monotonic time of the last successful list, which replaces the cache.
+        self._last_list_at = 0.0
 
         self._thread = threading.Thread(
             target=self._run, name="sandbox-proxy-informer", daemon=True
@@ -115,7 +130,10 @@ class K8sInformerLookup(SandboxIPLookup):
         return self._initial_sync_done.wait(timeout=timeout_seconds)
 
     def is_synced(self) -> bool:
-        return self._synced.is_set()
+        return (
+            self._synced.is_set()
+            and time.monotonic() - self._last_list_at <= _SYNC_STALE_AFTER_S
+        )
 
     def lookup(self, src_ip: str) -> SandboxIdentity | None:
         with self._cache_lock:
@@ -187,6 +205,7 @@ class K8sInformerLookup(SandboxIPLookup):
 
         with self._cache_lock:
             self._cache = new_cache
+        self._last_list_at = time.monotonic()
 
         logger.info("Informer initial sync: %d sandbox pods cached.", len(new_cache))
 
@@ -208,7 +227,7 @@ class K8sInformerLookup(SandboxIPLookup):
                 label_selector=_SANDBOX_POD_SELECTOR,
                 resource_version=resource_version,
                 timeout_seconds=_WATCH_TIMEOUT_SECONDS,
-                _request_timeout=(_WATCH_CONNECT_TIMEOUT_S, None),
+                _request_timeout=(_WATCH_CONNECT_TIMEOUT_S, _WATCH_READ_TIMEOUT_S),
             )
             for event in stream:
                 if self._stop_event.is_set():

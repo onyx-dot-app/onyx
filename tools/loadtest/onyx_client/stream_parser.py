@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from typing import Any
 
 # Packet type strings (subset of StreamingType in
 # backend/onyx/server/query_and_chat/streaming_models.py — keep in sync).
@@ -22,6 +23,8 @@ SEARCH_TOOL_START = "search_tool_start"
 SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta"
 DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
 RESEARCH_AGENT_START = "research_agent_start"
+CODE_MODE_START = "code_mode_start"
+CODE_MODE_DELTA = "code_mode_delta"
 STOP = "stop"
 ERROR = "error"
 CHAT_HEARTBEAT = "chat_heartbeat"
@@ -33,6 +36,15 @@ FIRST_ANSWER_TOKEN = "first_answer_token"
 FIRST_DR_PLAN = "first_dr_plan"
 FIRST_RESEARCH_AGENT = "first_research_agent"
 
+# Final code_mode_delta statuses of a program that did not finish its work.
+# "running" is not final: a later wait_code observation reports the end.
+CODE_FAILED_STATUSES = frozenset({"failed", "timed_out", "cancelled", "terminated"})
+# BUSY_MESSAGE in backend/onyx/tools/tool_implementations/code_mode/sandbox.py.
+CODE_SANDBOX_BUSY = "The code sandbox is busy"
+
+# A packet group: the turn and tab of its placement.
+Group = tuple[object, object]
+
 
 @dataclass
 class StreamSummary:
@@ -43,6 +55,15 @@ class StreamSummary:
     search_calls: int = 0
     reasoning_packets: int = 0
     citations: int = 0
+    # Code mode: execute_code programs, wait_code observations, searches that
+    # programs made, each once (also counted in search_calls), and failed
+    # observations.
+    code_programs: int = 0
+    code_waits: int = 0
+    nested_search_calls: int = 0
+    code_failures: int = 0
+    # First failed code mode observation; it fails the turn.
+    code_error: str | None = None
     saw_message_start: bool = False
     saw_stop: bool = False
     error: str | None = None
@@ -62,6 +83,13 @@ class ChatStreamAnalyzer:
 
     def __init__(self) -> None:
         self.summary = StreamSummary()
+        # Code mode call identity, as CodeModeRenderer in
+        # backend/onyx/chat/renderer.py states it: a call is its cell and its
+        # sub_turn_index, and each observation of the cell reports it again
+        # until it ends. A cell is keyed by the placement of its first group.
+        self._code_mode_groups: dict[Group, Group] = {}
+        self._cells: dict[int, Group] = {}
+        self._program_searches: set[tuple[Group, object]] = set()
 
     def feed(self, line: str) -> list[str]:
         if not line:
@@ -95,9 +123,10 @@ class ChatStreamAnalyzer:
             return hit
 
         packet_type = obj.get("type")
-        self.summary.search_calls += packet_type == SEARCH_TOOL_START
         self.summary.reasoning_packets += packet_type == "reasoning_delta"
         self.summary.citations += packet_type == "citation_info"
+        if self._tool_work(packet_type, obj, data.get("placement")):
+            return hit
         if packet_type == ERROR or obj.get("error"):
             self.summary.error = str(obj.get("error") or "streaming error packet")
         elif packet_type == CHAT_HEARTBEAT:
@@ -127,6 +156,61 @@ class ChatStreamAnalyzer:
 
         return hit
 
+    def _count_search(self, placement: dict[str, Any]) -> None:
+        """Count each search once, also one that several observations report."""
+        sub_turn_index = placement.get("sub_turn_index")
+        cell = self._code_mode_groups.get(_group(placement))
+        if sub_turn_index is not None and cell is not None:
+            call = (cell, sub_turn_index)
+            if call in self._program_searches:
+                return
+            self._program_searches.add(call)
+            self.summary.nested_search_calls += 1
+        self.summary.search_calls += 1
+
+    def _tool_work(
+        self, packet_type: object, obj: dict[str, Any], placement: object
+    ) -> bool:
+        """Count searches and code mode work; True when the packet is a code
+        mode packet."""
+        if not isinstance(placement, dict):
+            placement = {}
+        if packet_type == SEARCH_TOOL_START:
+            self._count_search(placement)
+            return False
+        group = _group(placement)
+        cell_id = obj.get("cell_id")
+        if packet_type == CODE_MODE_START:
+            # A wait_code observation names its cell; execute_code starts one.
+            cell = self._cells.get(cell_id) if isinstance(cell_id, int) else None
+            self._code_mode_groups[group] = cell or group
+            if obj.get("observation") or 0:
+                self.summary.code_waits += 1
+            else:
+                self.summary.code_programs += 1
+            return True
+        if packet_type == CODE_MODE_DELTA:
+            # The final delta of execute_code names the cell it started.
+            if isinstance(cell_id, int):
+                self._cells.setdefault(
+                    cell_id, self._code_mode_groups.get(group, group)
+                )
+            # Its `error` is the program's, judged by status, not a stream error.
+            self._code_status(obj)
+            return True
+        return False
+
+    def _code_status(self, obj: dict[str, Any]) -> None:
+        status = obj.get("status")
+        error = str(obj.get("error") or "")
+        busy = CODE_SANDBOX_BUSY in error
+        if status not in CODE_FAILED_STATUSES and not busy:
+            return
+        self.summary.code_failures += 1
+        if self.summary.code_error is None:
+            label = "code sandbox busy" if busy else f"code program {status}"
+            self.summary.code_error = f"{label}: {error[:200]}" if error else label
+
     def _mark(self, milestone: str, hit: list[str]) -> None:
         if milestone not in self.summary.milestones_hit:
             self.summary.milestones_hit.add(milestone)
@@ -137,6 +221,7 @@ class ChatStreamAnalyzer:
         # is a failure even if answer content already arrived.
         return (
             self.summary.error is None
+            and self.summary.code_error is None
             and self.summary.saw_message_start
             and self.summary.answer_chars > 0
             and self.summary.saw_stop
@@ -145,6 +230,8 @@ class ChatStreamAnalyzer:
     def failure_reason(self) -> str:
         if self.summary.error:
             return self.summary.error
+        if self.summary.code_error:
+            return self.summary.code_error
         if not self.summary.saw_message_start or not self.summary.answer_chars:
             return (
                 "stream ended without answer content "
@@ -157,3 +244,7 @@ class ChatStreamAnalyzer:
                 f"answer_chars={self.summary.answer_chars})"
             )
         return "unknown failure"
+
+
+def _group(placement: dict[str, Any]) -> Group:
+    return placement.get("turn_index"), placement.get("tab_index") or 0

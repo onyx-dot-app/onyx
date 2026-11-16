@@ -1,12 +1,11 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { Card, InputNumber } from "@opal/components";
-import { Content, InputHorizontal, toast } from "@opal/layouts";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Content, InputHorizontal, toast, Section } from "@opal/layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useSettings } from "@/lib/settings/hooks";
 import type { Settings } from "@/lib/settings/types";
@@ -40,7 +39,7 @@ function inRange(value: number, max: number): boolean {
  */
 export default function EmbeddingRateLimitCard() {
   const t = useTranslations("admin.indexSettings.embeddingRateLimit");
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
 
   const savedRequests = settings.embedding_rate_limit_requests ?? null;
@@ -84,7 +83,7 @@ export default function EmbeddingRateLimitCard() {
           embedding_rate_limit_requests: nextRequests,
           embedding_rate_limit_period_seconds: nextPeriod,
         });
-        router.refresh();
+        navigation.refresh();
         await mutate(SWR_KEYS.settings);
       } catch (error) {
         // The stored values are unknown now, so the next commit always saves.
@@ -99,20 +98,14 @@ export default function EmbeddingRateLimitCard() {
   }
 
   return (
-    <GeneralLayouts.Section
-      gap={3}
-      height="fit"
-      alignItems="stretch"
-      justifyContent="start"
-    >
+    <Section gap={3} height="fit" alignItems="stretch" justifyContent="start">
       <Content
+        font="main-content-emphasis"
         title={t("title")}
         description={t("description")}
-        sizePreset="main-content"
-        variant="section"
       />
       <Card border="solid" rounding={4}>
-        <GeneralLayouts.Section width="full" alignItems="stretch">
+        <Section width="full" alignItems="stretch">
           <InputHorizontal
             title={t("requests.title")}
             description={t("requests.description")}
@@ -157,8 +150,8 @@ export default function EmbeddingRateLimitCard() {
               placeholder={String(DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS)}
             />
           </InputHorizontal>
-        </GeneralLayouts.Section>
+        </Section>
       </Card>
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

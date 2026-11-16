@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import {
   Table,
   TableBody,
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/DeleteButton";
-import { Button } from "@opal/components";
+import { Button, useCreateModal } from "@opal/components";
 import { InputSwitch } from "@opal/components";
 import { SvgEdit, SvgServer } from "@opal/icons";
 import { EmptyMessageCard } from "@opal/components";
@@ -33,10 +33,11 @@ interface Props {
 export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
   const t = useTranslations("admin.discordBot");
   const locale = useLocale();
-  const router = useRouter();
+  const navigation = useNavigation();
   const [guildToDelete, setGuildToDelete] = useState<DiscordGuildConfig | null>(
     null
   );
+  const deleteModal = useCreateModal();
   const [updatingGuildIds, setUpdatingGuildIds] = useState<Set<number>>(
     new Set()
   );
@@ -51,7 +52,7 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
         err instanceof Error ? err.message : t("guilds.deleteError.toast")
       );
     } finally {
-      setGuildToDelete(null);
+      deleteModal.toggle(false);
     }
   };
 
@@ -81,19 +82,10 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
     }
   };
 
-  if (guilds.length === 0) {
-    return (
-      <EmptyMessageCard
-        sizePreset="main-ui"
-        icon={SvgServer}
-        title={t("guilds.empty.title")}
-        description={t("guilds.empty.description")}
-      />
-    );
-  }
-
-  return (
-    <>
+  // Rendered first in both branches, so deleting the last guild keeps the
+  // confirm mounted while it animates out.
+  const deleteConfirm = (
+    <deleteModal.Provider>
       {guildToDelete && (
         <ConfirmEntityModal
           danger
@@ -102,11 +94,31 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
             guildToDelete.guild_name ||
             t("guilds.fallbackName", { id: guildToDelete.id })
           }
-          onClose={() => setGuildToDelete(null)}
+          onClose={() => deleteModal.toggle(false)}
           onSubmit={() => handleDelete(guildToDelete.id)}
           additionalDetails={t("guilds.deleteModal.additionalDetails")}
         />
       )}
+    </deleteModal.Provider>
+  );
+
+  if (guilds.length === 0) {
+    return (
+      <>
+        {deleteConfirm}
+        <EmptyMessageCard
+          sizePreset="main-ui"
+          icon={SvgServer}
+          title={t("guilds.empty.title")}
+          description={t("guilds.empty.description")}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {deleteConfirm}
       <Table>
         <TableHeader>
           <TableRow>
@@ -124,7 +136,9 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
                 <Button
                   disabled={!guild.guild_id}
                   prominence="internal"
-                  onClick={() => router.push(`/admin/discord-bot/${guild.id}`)}
+                  onClick={() =>
+                    navigation.go(`/admin/discord-bot/${guild.id}`)
+                  }
                   icon={SvgEdit}
                 >
                   {guild.guild_name ||
@@ -157,7 +171,12 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
                 )}
               </TableCell>
               <TableCell>
-                <DeleteButton onClick={() => setGuildToDelete(guild)} />
+                <DeleteButton
+                  onClick={() => {
+                    setGuildToDelete(guild);
+                    deleteModal.toggle(true);
+                  }}
+                />
               </TableCell>
             </TableRow>
           ))}

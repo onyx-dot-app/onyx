@@ -6,12 +6,10 @@ import { useLocale, useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { PageLoader } from "@opal/loaders";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { Section } from "@/layouts/general-layouts";
-import { ContentAction, toast } from "@opal/layouts";
+import { ContentAction, toast, Section } from "@opal/layouts";
 import { SettingsLayouts } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
 import { Callout } from "@/components/ui/callout";
-import { Button, MessageCard, Card } from "@opal/components";
+import { Button, MessageCard, Card, Text } from "@opal/components";
 import { SvgServer } from "@opal/icons";
 import { InputSingleSelect } from "@opal/components";
 import {
@@ -91,10 +89,9 @@ function GuildDetailContent({
       <Card border="solid" rounding={4} disabled={disabled}>
         <Section alignItems="start" height="fit">
           <ContentAction
+            font="main-content-emphasis"
             title={t("channels.section.title")}
             description={t("channels.section.description")}
-            sizePreset="main-content"
-            variant="section"
             rightChildren={
               isRegistered && !channelsLoading && !channelsError ? (
                 <Section
@@ -124,7 +121,7 @@ function GuildDetailContent({
           />
 
           {!isRegistered ? (
-            <Text text03 secondaryBody>
+            <Text font="secondary-body" color="text-03">
               {t("channels.awaitingRegistration.text")}
             </Text>
           ) : channelsLoading ? (
@@ -357,10 +354,9 @@ export default function Page({ params }: Props) {
         <Card border="solid" rounding={4} disabled={!guild?.enabled}>
           <Section alignItems="start" height="fit">
             <ContentAction
+              font="main-content-emphasis"
               title={t("defaultAgent.section.title")}
               description={t("defaultAgent.section.description")}
-              sizePreset="main-content"
-              variant="section"
               rightChildren={
                 <InputSingleSelect
                   value={guild?.default_persona_id?.toString() ?? "default"}

@@ -58,7 +58,8 @@ class _UsageRecord:
     system_attribution: SystemUsageAttribution | None
     model: str
     routed_model: str | None
-    # Keys admin cost overrides; None when the call ran no saved configuration.
+    # Keys admin cost overrides and per-model spend; None when the call ran no
+    # saved configuration.
     model_configuration_id: int | None
     flow: str
     provider: str | None
@@ -325,6 +326,7 @@ class UserUsageTracingProcessor(TracingProcessor):
             model=record.model,
             flow=record.flow,
             provider=record.provider,
+            model_configuration_id=record.model_configuration_id,
             input_tokens=record.input_tokens,
             output_tokens=record.output_tokens,
             cache_read_tokens=record.cache_read_tokens,

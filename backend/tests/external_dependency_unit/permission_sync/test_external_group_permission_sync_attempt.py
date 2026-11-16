@@ -34,14 +34,10 @@ from onyx.db.permission_sync_attempt import (
     create_external_group_sync_attempt,
     get_external_group_sync_attempt,
     get_external_group_sync_retry_after,
-    get_recent_external_group_sync_attempts_for_cc_pair,
     mark_external_group_sync_attempt_failed,
     mark_external_group_sync_attempt_in_progress,
 )
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.permission_sync.conftest import (
-    create_finished_external_group_sync_attempt,
-)
 
 
 def _create_test_connector_credential_pair(
@@ -83,15 +79,6 @@ def _create_test_connector_credential_pair(
     db_session.commit()
 
     return cc_pair
-
-
-def _cleanup_global_external_group_sync_attempts(db_session: Session) -> None:
-    """Clean up any existing global external group sync attempts from previous test runs."""
-    # Delete all global attempts (where connector_credential_pair_id is None)
-    db_session.query(ExternalGroupPermissionSyncAttempt).filter(
-        ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.is_(None)
-    ).delete()
-    db_session.commit()
 
 
 class TestExternalGroupPermissionSyncAttempt:
@@ -247,87 +234,6 @@ class TestExternalGroupPermissionSyncAttempt:
         assert attempt.error_message == error_msg
         assert attempt.full_exception_trace == full_trace
 
-    def test_get_recent_external_group_sync_attempts_for_cc_pair(
-        self, db_session: Session
-    ) -> None:
-        """Test retrieving recent external group sync attempts for a connector credential pair."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
-
-        # Create multiple attempts for the cc_pair
-        attempt_ids = []
-        for _ in range(5):
-            attempt_id = create_finished_external_group_sync_attempt(
-                cc_pair.id, db_session
-            )
-            attempt_ids.append(attempt_id)
-
-        # Get recent attempts
-        recent_attempts = get_recent_external_group_sync_attempts_for_cc_pair(
-            cc_pair_id=cc_pair.id,
-            limit=3,
-            db_session=db_session,
-        )
-
-        assert len(recent_attempts) == 3
-
-        # Verify they are ordered by time_created descending (most recent first)
-        for i in range(len(recent_attempts) - 1):
-            assert (
-                recent_attempts[i].time_created >= recent_attempts[i + 1].time_created
-            )
-
-        # Verify they all belong to the correct cc_pair
-        for attempt in recent_attempts:
-            assert attempt.connector_credential_pair_id == cc_pair.id
-
-        # Test with different cc_pair (should return empty)
-        other_cc_pair = _create_test_connector_credential_pair(
-            db_session, source=DocumentSource.SLACK
-        )
-        other_attempts = get_recent_external_group_sync_attempts_for_cc_pair(
-            cc_pair_id=other_cc_pair.id,
-            limit=10,
-            db_session=db_session,
-        )
-        assert len(other_attempts) == 0
-
-    def test_get_recent_global_external_group_sync_attempts(
-        self, db_session: Session
-    ) -> None:
-        """Test retrieving recent global external group sync attempts."""
-        # Clean up any existing global attempts from previous test runs
-        _cleanup_global_external_group_sync_attempts(db_session)
-
-        # Create a cc_pair specific attempt
-        cc_pair = _create_test_connector_credential_pair(db_session)
-        create_external_group_sync_attempt(cc_pair.id, db_session)
-
-        # Create multiple global attempts
-        global_attempt_ids = []
-        for _ in range(3):
-            attempt_id = create_external_group_sync_attempt(None, db_session)  # Global
-            global_attempt_ids.append(attempt_id)
-
-        # Get recent global attempts
-        recent_global_attempts = get_recent_external_group_sync_attempts_for_cc_pair(
-            cc_pair_id=None,  # Global
-            limit=5,
-            db_session=db_session,
-        )
-
-        assert len(recent_global_attempts) == 3
-
-        # Verify they are all global (cc_pair_id is None)
-        for attempt in recent_global_attempts:
-            assert attempt.connector_credential_pair_id is None
-
-        # Verify they are ordered by time_created descending
-        for i in range(len(recent_global_attempts) - 1):
-            assert (
-                recent_global_attempts[i].time_created
-                >= recent_global_attempts[i + 1].time_created
-            )
-
     def test_status_enum_methods(self, db_session: Session) -> None:
         """Test the status enum helper methods."""
         cc_pair = _create_test_connector_credential_pair(db_session)
@@ -469,41 +375,6 @@ class TestExternalGroupPermissionSyncAttempt:
                 total_group_memberships_synced=600,
                 errors_encountered=5,
             )
-
-    def test_global_vs_connector_specific_attempts(self, db_session: Session) -> None:
-        """Test that global and connector-specific attempts are properly separated."""
-        # Clean up any existing global attempts from previous test runs
-        _cleanup_global_external_group_sync_attempts(db_session)
-
-        cc_pair = _create_test_connector_credential_pair(db_session)
-
-        # Create connector-specific attempts
-        cc_attempt_1 = create_finished_external_group_sync_attempt(
-            cc_pair.id, db_session
-        )
-        cc_attempt_2 = create_finished_external_group_sync_attempt(
-            cc_pair.id, db_session
-        )
-
-        # Create global attempts
-        global_attempt_1 = create_external_group_sync_attempt(None, db_session)
-        global_attempt_2 = create_external_group_sync_attempt(None, db_session)
-
-        # Verify connector-specific attempts
-        cc_attempts = get_recent_external_group_sync_attempts_for_cc_pair(
-            cc_pair_id=cc_pair.id, limit=10, db_session=db_session
-        )
-        assert len(cc_attempts) == 2
-        cc_attempt_ids = {attempt.id for attempt in cc_attempts}
-        assert cc_attempt_ids == {cc_attempt_1, cc_attempt_2}
-
-        # Verify global attempts
-        global_attempts = get_recent_external_group_sync_attempts_for_cc_pair(
-            cc_pair_id=None, limit=10, db_session=db_session
-        )
-        assert len(global_attempts) == 2
-        global_attempt_ids = {attempt.id for attempt in global_attempts}
-        assert global_attempt_ids == {global_attempt_1, global_attempt_2}
 
     def test_external_group_sync_attempt_not_stuck_on_early_failure(
         self, db_session: Session

@@ -10,7 +10,12 @@ if TYPE_CHECKING:
 
 
 from onyx.agents.execution_records import completed_tool_call_ids
-from onyx.agents.models import CompactionCheckpoint, CompactionMetadata, ContextBudget
+from onyx.agents.models import (
+    CompactionCheckpoint,
+    CompactionMetadata,
+    ContextBudget,
+    InputMessageMetadata,
+)
 from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
@@ -56,6 +61,30 @@ def count_tokens(text: str, *, cached_counts: Mapping[str, int] | None = None) -
     if cached_counts is not None and (count := cached_counts.get(text)) is not None:
         return count
     return len(_encoder().encode(text, disallowed_special=()))
+
+
+def head_and_tail_tokens(text: str, max_tokens: int) -> tuple[str, str, int]:
+    """The head and tail of `text`, decoded, that together hold `max_tokens`
+    tokens, and the token count of `text`. A text that fits is the head."""
+    tokens = _encoder().encode(text, disallowed_special=())
+    if len(tokens) <= max_tokens:
+        return text, "", len(tokens)
+    # Token boundaries can split a UTF-8 character; the parts keep whole ones.
+    head_end = max_tokens // 2
+    while (head := _strict_decode(tokens[:head_end])) is None:
+        head_end -= 1
+    tail_start = len(tokens) - (max_tokens - max_tokens // 2)
+    while (tail := _strict_decode(tokens[tail_start:])) is None:
+        tail_start += 1
+    return head, tail, len(tokens)
+
+
+def _strict_decode(tokens: list[int]) -> str | None:
+    """The text of `tokens`, or None when they start or end inside a character."""
+    try:
+        return _encoder().decode_bytes(tokens).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
 
 
 def message_tokens(
@@ -113,15 +142,18 @@ def context_budget(model: LLM) -> ContextBudget:
 
 
 def checkpoint_boundary(
-    messages: list[Message], checkpoint: CompactionCheckpoint
+    messages: list[Message],
+    checkpoint: CompactionCheckpoint,
+    *,
+    input_start: int | None = None,
 ) -> int:
     """Locate the inclusive cutoff without comparing reconstructed message content."""
     for index, message in enumerate(messages):
         if message.id == checkpoint.covered_through_message_id:
             boundary = index + 1
-            if boundary not in history_boundaries(messages):
+            if boundary not in history_boundaries(messages, input_start=input_start):
                 raise CheckpointMismatchError(
-                    "Compaction cutoff splits a tool call from its result"
+                    "Compaction cutoff splits a tool exchange or covers unanswered input"
                 )
             return boundary
     raise CheckpointMismatchError(
@@ -130,22 +162,43 @@ def checkpoint_boundary(
 
 
 def working_messages(
-    messages: list[Message], checkpoint: CompactionCheckpoint | None
+    messages: list[Message],
+    checkpoint: CompactionCheckpoint | None,
+    *,
+    input_start: int | None = None,
 ) -> list[Message]:
     if checkpoint is None:
         return list(messages)
-    boundary = checkpoint_boundary(messages, checkpoint)
+    boundary = checkpoint_boundary(messages, checkpoint, input_start=input_start)
+    return messages_after_compaction(messages, boundary, summary=checkpoint.summary)
+
+
+def is_input_context(message: Message) -> bool:
+    """Whether a message is context of the user message before it, such as a
+    picked skill, and not a user turn."""
+    return (
+        isinstance(message.metadata, CompactionMetadata)
+        and message.metadata.is_input_context
+    )
+
+
+def messages_after_compaction(
+    messages: list[Message], boundary: int, *, summary: str
+) -> list[Message]:
+    """Apply a validated cutoff while preserving system messages and the user's task."""
     prefix = messages[:boundary]
     retained: list[Message] = [m for m in prefix if isinstance(m, SystemMessage)]
-    if checkpoint.summary:
-        retained.append(
-            SystemMessage(content=f"Conversation summary:\n{checkpoint.summary}")
-        )
+    if summary:
+        retained.append(SystemMessage(content=f"Conversation summary:\n{summary}"))
+    # Between-step input and input context do not replace the question that
+    # started this task. A retained question keeps no context messages.
     latest_user = next(
         (
             index
             for index in range(len(messages) - 1, -1, -1)
             if isinstance(messages[index], UserMessage)
+            and not isinstance(messages[index].metadata, InputMessageMetadata)
+            and not is_input_context(messages[index])
         ),
         None,
     )
@@ -154,18 +207,38 @@ def working_messages(
     return retained + messages[boundary:]
 
 
-def history_boundaries(messages: list[Message]) -> list[int]:
+def history_boundaries(
+    messages: list[Message], *, input_start: int | None = None
+) -> list[int]:
+    """Preserve tool exchanges, input context and unanswered input from
+    input_start onward.
+
+    Without a run boundary, retain the whole trailing unanswered input group.
+    """
     boundaries: list[int] = []
     pending: set[str] = set()
+    unanswered_input_start: int | None = None
     for index, message in enumerate(messages):
         if isinstance(message, AssistantMessage):
+            unanswered_input_start = None
             pending = {
                 call.id for call in message.tool_calls
             } & completed_tool_call_ids(messages, index)
         elif isinstance(message, ToolResultMessage):
             pending.discard(message.tool_call_id)
-        if not pending:
+        elif (
+            isinstance(message, UserMessage)
+            and unanswered_input_start is None
+            and (input_start is None or index >= input_start)
+        ):
+            unanswered_input_start = index
+        if not pending and not (
+            index + 1 < len(messages) and is_input_context(messages[index + 1])
+        ):
             boundaries.append(index + 1)
+    # Files and request context can precede the question as separate user messages.
+    if unanswered_input_start is not None:
+        return [end for end in boundaries if end <= unanswered_input_start]
     return boundaries
 
 
@@ -207,18 +280,9 @@ class _SummaryInput:
             if available <= 0:
                 break
             end = min(len(self.tokens), self.offset + available)
-            text = ""
             # A token boundary can split a UTF-8 character.
-            while end > self.offset:
-                try:
-                    text = (
-                        _encoder()
-                        .decode_bytes(self.tokens[self.offset : end])
-                        .decode("utf-8")
-                    )
-                    break
-                except UnicodeDecodeError:
-                    end -= 1
+            while (text := _strict_decode(self.tokens[self.offset : end])) is None:
+                end -= 1
             if end == self.offset and self.tokens:
                 break
             parts.append(header + text)
@@ -235,10 +299,20 @@ def compact_history(
     previous: CompactionCheckpoint | None,
     generation_context: GenerationContext,
     token_counter: Callable[[str], int] = count_tokens,
+    *,
+    input_start: int | None = None,
 ) -> CompactionCheckpoint:
     budget = context_budget(model)
-    start = checkpoint_boundary(history, previous) if previous else 0
-    boundaries = [end for end in history_boundaries(history) if end > start]
+    start = (
+        checkpoint_boundary(history, previous, input_start=input_start)
+        if previous
+        else 0
+    )
+    boundaries = [
+        end
+        for end in history_boundaries(history, input_start=input_start)
+        if end > start
+    ]
     if not boundaries:
         raise ContextLimitError("No completed history is available for compaction")
     cutoff = boundaries[-1]
@@ -335,10 +409,12 @@ def compact_history(
         covered_through_message_id=cutoff_message_id,
     )
     before = sum(
-        message_tokens(m, token_counter) for m in working_messages(history, previous)
+        message_tokens(m, token_counter)
+        for m in working_messages(history, previous, input_start=input_start)
     )
     after = sum(
-        message_tokens(m, token_counter) for m in working_messages(history, checkpoint)
+        message_tokens(m, token_counter)
+        for m in working_messages(history, checkpoint, input_start=input_start)
     )
     if after >= before:
         raise ContextLimitError("Compaction did not reduce the model context")

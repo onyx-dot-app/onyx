@@ -15,10 +15,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.analytics import user_can_view_assistant_stats
-from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
-from ee.onyx.server.token_rate_limits.api import (
-    _authorize_group_token_rate_limit_write,
-    get_group_token_limit_settings,
+from ee.onyx.server.spending_limits.api import (
+    _authorize_group_write,
+    get_group_spending_limits,
 )
 from ee.onyx.server.user_group.api import delete_user_group, set_user_group_permissions
 from onyx.auth.permission_projection import (
@@ -77,8 +76,6 @@ from onyx.db.models import (
     Persona__User,
     Persona__UserGroup,
     Skill,
-    Skill__UserGroup,
-    TokenRateLimit__UserGroup,
     Tool,
     User,
     User__UserGroup,
@@ -95,8 +92,8 @@ from onyx.db.persona import (
     is_persona_editable_by_user,
     persona_edit_within_scope,
 )
-from onyx.db.skill import get_group_ids_for_skill
-from onyx.db.token_limit import insert_global_token_rate_limit
+from onyx.db.plugin import create_skill_plugin__no_commit, legacy_skill_version_content
+from onyx.db.skill import get_group_ids_for_skill, replace_skill_shares
 from onyx.db.tools import can_manage_mcp_server, can_manage_tool
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.credential import (
@@ -125,7 +122,6 @@ from onyx.server.features.tool.api import (
     list_tools,
 )
 from onyx.server.manage.administrative import create_deletion_attempt_for_connector_id
-from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -969,8 +965,14 @@ def _make_skill(
     )
     db_session.add(skill)
     db_session.flush()
-    for group in groups:
-        db_session.add(Skill__UserGroup(skill_id=skill.id, user_group_id=group.id))
+    create_skill_plugin__no_commit(
+        skill, legacy_skill_version_content(skill), None, db_session
+    )
+    replace_skill_shares(
+        skill=skill,
+        group_shares={group.id: SkillSharePermission.VIEWER for group in groups},
+        db_session=db_session,
+    )
     db_session.commit()
     return skill
 
@@ -1136,7 +1138,7 @@ def test_mcp_projection_matches_gates(db_session: Session) -> None:
 
 def test_skill_projection_matches_gates(db_session: Session) -> None:
     """edit/manage_access track the assert_within_scope guard on the skill's groups;
-    delete is FULL_ADMIN; publish (make public) is global MANAGE_SKILLS. A scoped manager
+    delete is FULL_ADMIN; publish (make public) is global MANAGE_PLUGINS. A scoped manager
     edits/re-grants a managed skill but can never delete or publish it."""
     managed = _make_group(db_session)
 
@@ -1159,7 +1161,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
             assert_within_scope,
             actor,
             db_session,
-            permission=Permission.MANAGE_SKILLS,
+            permission=Permission.MANAGE_PLUGINS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
             is_non_public=skill.public_permission is None,
@@ -1169,7 +1171,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
             assert_within_scope,
             actor,
             db_session,
-            permission=Permission.MANAGE_SKILLS,
+            permission=Permission.MANAGE_PLUGINS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
             is_non_public=False,
@@ -1177,14 +1179,14 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
         can_edit = within_scope(
             actor,
             db_session,
-            permission=Permission.MANAGE_SKILLS,
+            permission=Permission.MANAGE_PLUGINS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
             is_non_public=skill.public_permission is None,
         )
         assert can_edit == edit_enforced, actor.email
         is_full_admin = has_global_permission(actor, Permission.FULL_ADMIN_PANEL_ACCESS)
-        is_skills_admin = has_global_permission(actor, Permission.MANAGE_SKILLS)
+        is_skills_admin = has_global_permission(actor, Permission.MANAGE_PLUGINS)
         tags = custom_skill_permissions(
             can_edit=can_edit,
             is_full_admin=is_full_admin,
@@ -1193,14 +1195,14 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
         assert tags["edit"] == edit_enforced
         assert tags["manage_access"] == edit_enforced
         assert tags["delete"] == is_full_admin
-        assert tags["publish"] == publish_enforced  # global MANAGE_SKILLS
+        assert tags["publish"] == publish_enforced  # global MANAGE_PLUGINS
 
     # in-scope manager edits/re-grants but can't delete or publish
     assert custom_skill_permissions(
         can_edit=within_scope(
             in_scope,
             db_session,
-            permission=Permission.MANAGE_SKILLS,
+            permission=Permission.MANAGE_PLUGINS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
             is_non_public=skill.public_permission is None,
@@ -1208,7 +1210,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
         is_full_admin=has_global_permission(
             in_scope, Permission.FULL_ADMIN_PANEL_ACCESS
         ),
-        is_skills_admin=has_global_permission(in_scope, Permission.MANAGE_SKILLS),
+        is_skills_admin=has_global_permission(in_scope, Permission.MANAGE_PLUGINS),
     ) == {"edit": True, "manage_access": True, "delete": False, "publish": False}
 
 
@@ -1224,8 +1226,8 @@ def test_actions_and_skill_key_coverage() -> None:
 
 def test_user_group_projection_matches_gates(db_session: Session) -> None:
     """Each flag is pinned to its real route, not the bool that built it: manage and
-    edit_token_limits → assert_manages_group (per-group scoped — the token read route now
-    admits scope), delete → delete-group (global MANAGE_USER_GROUPS), edit_permissions →
+    edit_token_limits → assert_manages_group (per-group scoped — the spending-limits group
+    read route admits scope), delete → delete-group (global MANAGE_USER_GROUPS), edit_permissions →
     permission-toggle (FULL_ADMIN). groups_admin (global MANAGE_USER_GROUPS, not full admin)
     separates the two levels; out_scope (manages a different group) pins the per-group gate."""
     managed = _make_group(db_session)
@@ -1248,7 +1250,7 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
         manage_enforced = not _guard_raises(
             assert_manages_group, actor, db_session, group_id=managed.id
         )
-        # the token-limit POST guard (scoped create) is the same managed-scope decision
+        # the group spending-limit write guard is the same managed-scope decision
         token_create_enforced = not _guard_raises(
             assert_within_scope,
             actor,
@@ -1281,9 +1283,9 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
         assert tags["edit_permissions"] == _route_admits(
             set_user_group_permissions, "user", actor
         ), actor.email
-        # edit_token_limits rides the token read route: GATE 1 admits scope, GATE 2 is
-        # assert_manages_group — net per-group decision, so AND the two.
-        token_read_gate1 = _route_admits(get_group_token_limit_settings, "user", actor)
+        # edit_token_limits rides the group spending-limit read route: GATE 1 admits
+        # scope, GATE 2 is assert_manages_group — net per-group decision, so AND the two.
+        token_read_gate1 = _route_admits(get_group_spending_limits, "user", actor)
         assert tags["edit_token_limits"] == (token_read_gate1 and manage_enforced), (
             actor.email
         )
@@ -1398,20 +1400,11 @@ def test_user_group_key_coverage() -> None:
     ) == set(USER_GROUP_ACTIONS)
 
 
-def test_group_token_rate_limit_write_scope(db_session: Session) -> None:
-    """A group token-limit write needs the caller to manage the group AND the limit to
-    belong to it — so a group admin fully manages its limits, but a global/per-user limit or
-    another group's limit can't be reached through the group path."""
+def test_group_spending_limit_write_scope(db_session: Session) -> None:
+    """A group spending-limit write needs the caller to manage the group: a group
+    admin manages its own group's pool, and nobody reaches another group's cards."""
     managed = _make_group(db_session)
     other = _make_group(db_session)
-
-    # Disabled: these tests check write authorization only, and an enabled
-    # global limit left in the shared DB would be enforced on later suites.
-    args = TokenRateLimitArgs(enabled=False, token_budget=1000, period_hours=24)
-    managed_limit = insert_user_group_token_rate_limit(
-        db_session=db_session, token_rate_limit_settings=args, group_id=managed.id
-    )
-    global_limit = insert_global_token_rate_limit(db_session, args)
 
     in_scope = create_test_user(db_session, "proj-trl-in")
     _manage(db_session, in_scope, managed)
@@ -1430,78 +1423,12 @@ def test_group_token_rate_limit_write_scope(db_session: Session) -> None:
     plain.effective_permissions = []
     db_session.commit()
 
-    def denied(actor: User, group_id: int, rate_limit_id: int) -> bool:
-        return _guard_raises(
-            _authorize_group_token_rate_limit_write,
-            actor,
-            db_session,
-            group_id=group_id,
-            rate_limit_id=rate_limit_id,
-        )
+    def denied(actor: User, group_id: int) -> bool:
+        return _guard_raises(_authorize_group_write, actor, db_session, group_id)
 
-    assert not denied(admin, managed.id, managed_limit.id)
-    assert not denied(groups_admin, managed.id, managed_limit.id)
-    assert not denied(in_scope, managed.id, managed_limit.id)
-    assert denied(out_scope, managed.id, managed_limit.id)
-    assert denied(plain, managed.id, managed_limit.id)
-
-    # a global limit can't be reached through the group path — even for a full admin
-    assert denied(admin, managed.id, global_limit.id)
-
-    # the limit must belong to the claimed group (can't reach managed's limit via other)
-    assert denied(out_scope, other.id, managed_limit.id)
-    assert denied(in_scope, other.id, managed_limit.id)
-
-    # an unknown id folds into the same OnyxError 404, not the helper's raw ValueError
-    nonexistent_limit_id = -1
-    assert denied(in_scope, managed.id, nonexistent_limit_id)
-    assert denied(admin, managed.id, nonexistent_limit_id)
-
-
-def test_group_token_rate_limit_write_multi_group_scope(db_session: Session) -> None:
-    """Defensive: no API path attaches a limit to more than one group, but the schema allows
-    many-to-many. If a limit ever spanned groups, a mutation would hit all of them, so a manager
-    of only one attached group must be denied — the guard checks every attached group, not one
-    arbitrary association; global holders manage all groups so they pass. Builds the multi-group
-    state directly (no API can) to lock in the guard's behavior if that ever changes."""
-    managed = _make_group(db_session)
-    unmanaged = _make_group(db_session)
-
-    # Disabled: these tests check write authorization only, and an enabled
-    # global limit left in the shared DB would be enforced on later suites.
-    args = TokenRateLimitArgs(enabled=False, token_budget=1000, period_hours=24)
-    # limit attached to BOTH a managed and an unmanaged group
-    shared_limit = insert_user_group_token_rate_limit(
-        db_session=db_session, token_rate_limit_settings=args, group_id=managed.id
-    )
-    db_session.add(
-        TokenRateLimit__UserGroup(
-            rate_limit_id=shared_limit.id, user_group_id=unmanaged.id
-        )
-    )
-    db_session.commit()
-
-    in_scope = create_test_user(db_session, "proj-trl-multi-in")
-    _manage(db_session, in_scope, managed)
-    in_scope.effective_permissions = []
-
-    groups_admin = create_test_user(db_session, "proj-trl-multi-groupsadmin")
-    groups_admin.effective_permissions = [Permission.MANAGE_USER_GROUPS.value]
-
-    admin = create_test_user(db_session, "proj-trl-multi-admin", is_admin=True)
-    db_session.commit()
-
-    def denied(actor: User) -> bool:
-        return _guard_raises(
-            _authorize_group_token_rate_limit_write,
-            actor,
-            db_session,
-            group_id=managed.id,
-            rate_limit_id=shared_limit.id,
-        )
-
-    # manager of `managed` only: mutating the shared limit would also hit `unmanaged`, so deny
-    assert denied(in_scope)
-    # global MANAGE_USER_GROUPS holders manage every group, so the shared limit is reachable
-    assert not denied(groups_admin)
-    assert not denied(admin)
+    assert not denied(admin, managed.id)
+    assert not denied(groups_admin, managed.id)
+    assert not denied(in_scope, managed.id)
+    assert denied(out_scope, managed.id)
+    assert denied(plain, managed.id)
+    assert denied(in_scope, other.id)

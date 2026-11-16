@@ -11,18 +11,20 @@ export class AdminConnectorDetailPage {
 
   /** Rendered only once the cc-pair has resolved. */
   readonly indexingSection: Locator;
-  /** The run list at the bottom of the page. */
+  /** Opens the run list and the chart. Disabled until the pair's first run starts. */
+  readonly indexingTab: Locator;
+  /** The chart card on the Indexing tab, hidden while its window holds no indexing. */
+  readonly documentIndexingCard: Locator;
+  /** The run list on the Indexing tab. */
   readonly runsSection: Locator;
   /** The run-type filter, shown only when the pair runs more than indexing. */
   readonly runKindFilter: Locator;
-  /** The status card's time window, shared with the run list's time filter. */
+  /** The chart card's time window, shared with the run list's time filter. */
   readonly timeWindowPicker: Locator;
-  /** The run list's time filter, shared with the status card's window. */
+  /** The run list's time filter, shared with the chart card's window. */
   readonly runsTimeFilter: Locator;
-  /** The logs action of every run that has logs, newest first. */
+  /** The enabled logs action of every run that recorded a trace or message, newest first. Each run line has one, disabled when there is nothing to open. */
   readonly runLogsButtons: Locator;
-  /** The run list's empty state, shown once the feed has loaded with no runs. */
-  readonly noRunsMessage: Locator;
   /** The failures and errors panel beside the page's own column. */
   readonly activityPanel: Locator;
   /** Opens the action menu. Present only when the caller may operate. */
@@ -41,17 +43,19 @@ export class AdminConnectorDetailPage {
   constructor(page: Page) {
     this.page = page;
     this.indexingSection = page.getByTestId("connector-indexing-status");
+    this.indexingTab = page.getByRole("tab", { name: "Indexing", exact: true });
+    this.documentIndexingCard = page.getByTestId("connector-document-indexing");
     this.runsSection = page.getByTestId("connector-runs");
     this.runKindFilter = page.getByRole("button", { name: "All Types" });
-    this.timeWindowPicker = this.indexingSection.getByRole("button", {
+    this.timeWindowPicker = this.documentIndexingCard.getByRole("button", {
       name: /^(Last \d+ (hours|days)|All time)$/,
     });
     this.runsTimeFilter = this.runsSection
       .getByRole("button", { name: /Last \d+ (hours|days)|All time/ })
       .first();
-    this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
-    this.noRunsMessage = page.getByText("No recent indexing runs", {
-      exact: true,
+    this.runLogsButtons = page.getByRole("button", {
+      name: "View Logs",
+      disabled: false,
     });
     this.activityPanel = page.getByTestId("connector-activity");
     // without exact, a "managed-*" connector's title button also matches
@@ -94,8 +98,13 @@ export class AdminConnectorDetailPage {
     await this.filesEditButton.click();
   }
 
-  async goto(ccPairId: number): Promise<void> {
-    await this.page.goto(`/admin/connector/${ccPairId}`);
+  /** Opens the page on Connector Configurations, or on the Indexing tab through ?tab=indexing. */
+  async goto(
+    ccPairId: number,
+    tab: "configurations" | "indexing" = "configurations"
+  ): Promise<void> {
+    const query = tab === "indexing" ? "?tab=indexing" : "";
+    await this.page.goto(`/admin/connector/${ccPairId}${query}`);
   }
 
   async expectLoaded(): Promise<void> {
@@ -112,20 +121,15 @@ export class AdminConnectorDetailPage {
     await this.page.getByRole("option", { name: label }).click();
   }
 
-  /** Waits for the feed to load and show no runs. */
-  async expectNoRuns(): Promise<void> {
-    await expect(this.noRunsMessage).toBeVisible({ timeout: 30000 });
-  }
-
   /** The activity panel has loaded and shows `text`, such as a failed run's error. */
   async expectActivityShows(text: string): Promise<void> {
     await expect(this.activityPanel).toContainText(text, { timeout: 30000 });
   }
 
-  /** The activity panel shows exactly these group headings, such as "2 Failures". */
-  async expectActivityGroups(headings: string[]): Promise<void> {
+  /** The activity panel shows exactly these section headings, such as "2 Failures" or "Resolved". */
+  async expectActivitySections(headings: string[]): Promise<void> {
     await expect(
-      this.activityPanel.getByText(/^\d+ (Failures?|Errors?|Resolved)$/)
+      this.activityPanel.getByTestId("activity-section-title")
     ).toHaveText(headings);
   }
 

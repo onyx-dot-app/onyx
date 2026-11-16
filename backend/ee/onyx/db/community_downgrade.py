@@ -14,6 +14,7 @@ from onyx.db.enums import (
     AccountType,
     Permission,
     PersonaSharePermission,
+    PluginInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.models import (
@@ -32,13 +33,13 @@ from onyx.db.models import (
     Persona,
     Persona__UserFile,
     Persona__UserGroup,
+    Plugin,
+    Plugin__UserGroup,
     PublicExternalUserGroup,
     ScimToken,
     Skill,
-    Skill__UserGroup,
     StandardAnswer,
     TokenRateLimit,
-    TokenRateLimit__UserGroup,
     User,
     User__ExternalUserGroupId,
     User__UserGroup,
@@ -48,12 +49,20 @@ from onyx.db.models import (
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.plugin import (
+    get_or_create_organization_library__no_commit,
+    lock_skill_plugin__no_commit,
+    publish_plugin__no_commit,
+)
 from onyx.db.users import (
     DEFAULT_ADMIN_GROUP_NAME,
     DEFAULT_BASIC_GROUP_NAME,
     fetch_default_group,
     lock_group_membership,
 )
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # Link tables whose rows the group row's deletion does not cascade to.
 _UNCASCADED_GROUP_LINKS = (
@@ -64,7 +73,6 @@ _UNCASCADED_GROUP_LINKS = (
     DocumentSet__UserGroup,
     Credential__UserGroup,
     MCPServer__UserGroup,
-    TokenRateLimit__UserGroup,
 )
 
 
@@ -88,6 +96,9 @@ def make_all_cc_pairs_public__no_commit(db_session: Session) -> list[int]:
             .with_for_update(key_share=True)
         )
     )
+    # Group rows first: their foreign key rejects a pair leaving a group type
+    # while it still has them.
+    db_session.execute(delete(UserGroup__CCPairDataAccess))
     if cc_pair_ids:
         db_session.execute(
             update(ConnectorCredentialPair)
@@ -107,7 +118,6 @@ def make_all_cc_pairs_public__no_commit(db_session: Session) -> list[int]:
     # Not scoped to the changed pairs: with every pair public, nothing may keep a
     # data-access group or a synced permission, whichever pair wrote it. A sync
     # already in flight can still write some back, which grants nothing on a public pair.
-    db_session.execute(delete(UserGroup__CCPairDataAccess))
     db_session.execute(delete(User__ExternalUserGroupId))
     db_session.execute(delete(PublicExternalUserGroup))
     db_session.execute(
@@ -209,18 +219,53 @@ def _make_group_shared_resources_public__no_commit(
         )
         .values(is_public=True)
     )
-    db_session.execute(
-        update(Skill)
+    # A private plugin shared with one of these groups is published, so its
+    # members keep it. A group row with no permission or with NOT_AVAILABLE
+    # never publishes. The downgrade cannot stop, so a plugin whose name the
+    # Organization library already has takes the next free name (deploy-2).
+    # Logs each plugin that changes.
+    library_id = get_or_create_organization_library__no_commit(db_session)
+    shared_plugin_ids = select(Plugin__UserGroup.plugin_id).where(
+        Plugin__UserGroup.user_group_id.in_(group_ids),
+        Plugin__UserGroup.permission.is_not(None),
+        or_(
+            Plugin__UserGroup.installation_policy.is_(None),
+            Plugin__UserGroup.installation_policy
+            != PluginInstallationPolicy.NOT_AVAILABLE,
+        ),
+    )
+    # Skill rows first, then their plugin rows in id order.
+    skills: Sequence[Skill] = db_session.scalars(
+        select(Skill)
         .where(
             Skill.id.in_(
-                select(Skill__UserGroup.skill_id).where(
-                    Skill__UserGroup.user_group_id.in_(group_ids)
+                select(Plugin.id).where(
+                    Plugin.id.in_(shared_plugin_ids),
+                    Plugin.marketplace_id != library_id,
                 )
             ),
-            Skill.public_permission.is_(None),
+            Skill.built_in_skill_id.is_(None),
         )
-        .values(public_permission=SkillSharePermission.VIEWER)
-    )
+        .order_by(Skill.id)
+        .with_for_update()
+    ).all()
+    plugin_ids = [
+        lock_skill_plugin__no_commit(skill, db_session).id for skill in skills
+    ]
+    for skill in skills:
+        skill.public_permission = SkillSharePermission.VIEWER
+    db_session.flush()
+    for skill, plugin_id in zip(skills, plugin_ids, strict=True):
+        publish_plugin__no_commit(plugin_id, "rename", db_session)
+        published_name = db_session.scalar(
+            select(Plugin.name).where(Plugin.id == plugin_id)
+        )
+        logger.info(
+            "Community downgrade published skill %s (%s) to the organization as '%s'",
+            skill.name,
+            plugin_id,
+            published_name,
+        )
 
 
 def _add_to_default_group__no_commit(
@@ -315,19 +360,8 @@ def remove_custom_user_groups__no_commit(db_session: Session) -> int:
     ]
     _keep_members_in_default_groups__no_commit(db_session, group_ids, member_ids)
 
-    # A group's limit means nothing without the group.
-    group_rate_limit_ids: list[int] = list(
-        db_session.scalars(
-            select(TokenRateLimit__UserGroup.rate_limit_id).where(
-                TokenRateLimit__UserGroup.user_group_id.in_(group_ids)
-            )
-        )
-    )
     for link in _UNCASCADED_GROUP_LINKS:
         db_session.execute(delete(link).where(link.user_group_id.in_(group_ids)))
-    db_session.execute(
-        delete(TokenRateLimit).where(TokenRateLimit.id.in_(group_rate_limit_ids))
-    )
     db_session.execute(delete(UserGroup).where(UserGroup.id.in_(group_ids)))
 
     recompute_user_permissions__no_commit(member_ids, db_session)
@@ -338,7 +372,6 @@ def disable_paid_features__no_commit(db_session: Session) -> None:
     """Switches off the paid features whose leftover rows keep taking effect.
     Their admin routes are refused below their tier, so a row left active could
     not be turned off afterwards. Each one gets what its own delete does."""
-    db_session.execute(delete(TokenRateLimit__UserGroup))
     db_session.execute(delete(TokenRateLimit))
     db_session.execute(
         update(Hook)

@@ -8,7 +8,12 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
+from ee.onyx.configs.app_configs import LOG_EXPORT_KUBERNETES_ENABLED
 from ee.onyx.server.log_export.collection import get_default_log_directories
+from ee.onyx.server.log_export.kubernetes_collection import (
+    KUBERNETES_WORKER_NAME,
+    collect_kubernetes_logs_into_file_store,
+)
 from ee.onyx.server.log_export.models import (
     LogExportManifest,
     LogExportStartResponse,
@@ -39,6 +44,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 from onyx.utils.logger import setup_logger
+from onyx.utils.platform_utils import is_running_in_kubernetes
+from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -105,6 +112,12 @@ WORKER_COLLECT_QUEUES: dict[str, str] = {
     "monitoring": OnyxCeleryQueues.MONITORING,
 }
 
+# Covers every replica, stdout, and crashed containers, which file collection
+# on one replica per worker type cannot.
+KUBERNETES_COLLECTION_ENABLED = (
+    LOG_EXPORT_KUBERNETES_ENABLED and is_running_in_kubernetes()
+)
+
 # Serializes export starts. A successful start holds it until the status
 # endpoint first observes that export ready, or failing that (nobody polls, or
 # the poll lands on another replica) until the TTL expires at the collection
@@ -131,13 +144,23 @@ def _release_export_slot_if_active(export_id: str) -> None:
     _ASYNC_EXPORT_LOCK.release(active[1])
 
 
+def _run_kubernetes_collection(export_id: str, deadline: datetime) -> None:
+    try:
+        collect_kubernetes_logs_into_file_store(export_id=export_id, deadline=deadline)
+    except Exception:
+        # Only the receipt write can raise here; without a receipt the export
+        # still reports ready at its deadline.
+        logger.exception("Log export Kubernetes receipt failed: %s", export_id)
+
+
 @router.post("/admin/log-export")
 def start_log_export(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> LogExportStartResponse:
     """
     Starts an export: fans out one collector task per worker type, collects the
-    api_server's logs inline, and returns the export ID to poll.
+    api_server's logs inline, starts the Kubernetes API collection in the
+    background when running in Kubernetes, and returns the export ID to poll.
 
     The fan-out is skipped on deployments that have no celery broker (the
     onyx-lite overlay); a failing broker degrades the export to the workers
@@ -212,9 +235,23 @@ def start_log_export(
             deadline=deadline,
             requester_email=user.email,
             onyx_version=__version__,
-            worker_names=[API_SERVER_WORKER_NAME, *enqueued_worker_names],
+            worker_names=[
+                API_SERVER_WORKER_NAME,
+                *enqueued_worker_names,
+                *([KUBERNETES_WORKER_NAME] if KUBERNETES_COLLECTION_ENABLED else []),
+            ],
         )
         save_manifest(manifest)
+
+        # Reading every pod's logs can take most of the collection window, so it
+        # runs off the request path.
+        if KUBERNETES_COLLECTION_ENABLED:
+            start_thread_with_context(
+                _run_kubernetes_collection,
+                name=f"log-export-kubernetes-{export_id}",
+                daemon=True,
+                kwargs={"export_id": export_id, "deadline": deadline},
+            )
 
         # No celery worker runs in the api_server container, so its logs are
         # collected inline.

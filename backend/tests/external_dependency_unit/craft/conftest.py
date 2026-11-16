@@ -36,9 +36,12 @@ from onyx.db.models import (
     Sandbox,
     ScheduledTask,
     Skill,
-    Skill__UserGroup,
     User,
     UserGroup,
+)
+from onyx.db.plugin import (
+    create_skill_plugin__no_commit,
+    legacy_skill_version_content,
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
@@ -57,7 +60,10 @@ from tests.common.craft.skill_table_isolation import (
 )
 from tests.common.craft.stubs import StubSandboxManager
 from tests.common.models import CI_OPENAI_MODEL
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_user,
+    share_skill_with_group,
+)
 
 
 def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
@@ -334,11 +340,15 @@ def seeded_skill(
             author_user_id=author_user_id,
         )
         db_session.add(skill)
+        db_session.flush()
+        create_skill_plugin__no_commit(
+            skill, legacy_skill_version_content(skill), None, db_session
+        )
         db_session.commit()
         db_session.refresh(skill)
 
         for group in groups or []:
-            db_session.add(Skill__UserGroup(skill_id=skill.id, user_group_id=group.id))
+            share_skill_with_group(db_session, skill, group)
         db_session.commit()
         return skill
 

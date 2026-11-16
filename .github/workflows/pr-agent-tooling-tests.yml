@@ -1,0 +1,63 @@
+name: Agent Tooling Tests
+concurrency:
+  group: Agent-Tooling-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
+
+# Tests for the agent hooks and the feature-map scripts in .agents/. They need
+# no app services and live outside backend/, so app test workflows do not run
+# for agent-tooling changes. The job reports on every pull request, so it can be
+# a required check; it skips the work when no agent-tooling file changed.
+on:
+  merge_group:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths:
+      - ".agents/hooks/**"
+      - ".agents/feature-map/*.py"
+      - ".agents/tests/**"
+      - "backend/requirements/dev.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  agent-tooling-tests:
+    name: Agent Tooling Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Detect agent-tooling changes
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
+        with:
+          filters: |
+            tooling:
+              - '.agents/hooks/**'
+              - '.agents/feature-map/*.py'
+              - '.agents/tests/**'
+              - 'backend/requirements/dev.txt'
+              - '.github/workflows/pr-agent-tooling-tests.yml'
+              - '.github/actions/setup-python-and-install-dependencies/**'
+
+      - name: Setup Python and Install Dependencies
+        if: steps.filter.outputs.tooling != 'false'
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/dev.txt
+
+      - name: Run Tests
+        if: steps.filter.outputs.tooling != 'false'
+        run: py.test -o junit_family=xunit2 -v -n auto .agents/tests

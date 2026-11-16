@@ -13,6 +13,10 @@ import type { AppActionPoliciesView } from "@/lib/plugins/types";
 import type { SkillsList } from "@/lib/skills/types";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { NextIntlClientProvider } from "next-intl";
+import type { ReactNode } from "react";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   builtinFixture,
   customFixture,
@@ -27,8 +31,12 @@ import {
 } from "@/sections/plugins/__tests__/memberPluginFixtures";
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
   usePathname: () => "/app/plugins",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 let mockCraftEnabled: boolean | undefined = true;
@@ -127,10 +135,15 @@ function show(
   plugin: MemberPlugin,
   onDisconnected = jest.fn(),
   surface?: "all" | "craft",
-  options: { initialTab?: "approvals"; onClose?: () => void } = {}
+  options: {
+    initialTab?: "approvals";
+    onClose?: () => void;
+    beside?: ReactNode;
+  } = {}
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={memberPluginMessages}>
+      {options.beside}
       <MemberPluginDetailModal
         plugin={plugin}
         surface={surface}
@@ -297,7 +310,9 @@ test("Craft App details share the connection card and searchable Skills tab with
   expect(screen.getByRole("tab", { name: "Tools" })).toBeVisible();
   await setupUser().click(screen.getByRole("tab", { name: "Skills" }));
   expect(await screen.findByText("GitHub workflow")).toBeVisible();
-  expect(screen.getByRole("textbox", { name: "Search skills" })).toBeVisible();
+  expect(
+    screen.getByRole("searchbox", { name: "Search skills" })
+  ).toBeVisible();
   expect(screen.getByRole("link", { name: "Review skills" })).toHaveAttribute(
     "href",
     "/craft/v1/skills?externalAppId=7"
@@ -452,11 +467,9 @@ test("Tools tab searches stored tools and expands full descriptions without live
   expect(screen.getByText("Search issues")).toBeVisible();
   expect(screen.getByText(description.trim())).toBeVisible();
   expect(screen.getByText("1 tool")).toBeVisible();
-  expect(screen.getByRole("textbox", { name: "Search tools" })).toBeVisible();
+  expect(screen.getByRole("searchbox", { name: "Search tools" })).toBeVisible();
   expect(requests).toHaveBeenCalledTimes(1);
-  expect(requests).toHaveBeenCalledWith(
-    "/api/build/action-policies/mcp_server/7"
-  );
+  expect(requests).toHaveBeenCalledWith("/api/action-policies/mcp_server/7");
   expect(screen.queryByText("Read")).not.toBeInTheDocument();
   expect(screen.queryByText("Ask first")).not.toBeInTheDocument();
 });
@@ -486,9 +499,7 @@ test("canceling MCP disconnect returns to Connection without a request", async (
   );
   expect(screen.queryByText("Search issues")).not.toBeInTheDocument();
   expect(requests).toHaveBeenCalledTimes(1);
-  expect(requests).toHaveBeenCalledWith(
-    "/api/build/action-policies/mcp_server/7"
-  );
+  expect(requests).toHaveBeenCalledWith("/api/action-policies/mcp_server/7");
 });
 
 test("empty MCP tools use the stored-catalog empty state", async () => {
@@ -709,7 +720,7 @@ test("OpenAPI tools search matches name and description and reports no results",
   });
   const user = setupUser();
   await user.click(screen.getByRole("tab", { name: "Tools" }));
-  const search = screen.getByRole("textbox", { name: "Search tools" });
+  const search = screen.getByRole("searchbox", { name: "Search tools" });
   for (const query of ["createDeployment", "Schedule"]) {
     await user.clear(search);
     await user.type(search, query);
@@ -886,13 +897,87 @@ test("external app Tools shows approval settings without nested tabs", async () 
   ).not.toBeInTheDocument();
 });
 
+test.each([false, undefined])(
+  "MCP approval settings do not need Craft when Craft access is %s",
+  async (enabled) => {
+    mockCraftEnabled = enabled;
+    const requests = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async (input) =>
+        jsonResponse(
+          String(input).includes("/action-policies/") ? approvalApp : {}
+        )
+      );
+    show({
+      ...approvalPlugin,
+      server: memberServer({ id: 7, available_in_craft: false }),
+    });
+    const user = setupUser();
+    await user.click(screen.getByRole("tab", { name: "Tools" }));
+    await user.click(screen.getByRole("tab", { name: "Approval settings" }));
+    await user.click(
+      within(
+        await screen.findByRole("group", { name: "Send report" })
+      ).getByRole("button", { name: "Ask" })
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(requests).toHaveBeenCalledWith(
+        "/api/action-policies/mcp_server/7",
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ action_policies: { send: "ASK" } }),
+        })
+      )
+    );
+  }
+);
+
+test("MCP approval settings stay hidden when the workspace manages them", async () => {
+  const requests = jest
+    .spyOn(global, "fetch")
+    .mockResolvedValue(jsonResponse(approvalApp));
+  show(
+    {
+      ...approvalPlugin,
+      tools: [storedMcpTool],
+      server: memberServer({ id: 7, users_can_manage_policies: false }),
+    },
+    jest.fn(),
+    "all",
+    { initialTab: "approvals" }
+  );
+  await setupUser().click(screen.getByRole("tab", { name: "Tools" }));
+  expect(screen.getByText("Search issues")).toBeVisible();
+  expect(
+    screen.queryByRole("tab", { name: "Approval settings" })
+  ).not.toBeInTheDocument();
+  expect(requests).not.toHaveBeenCalledWith(
+    "/api/action-policies/mcp_server/7"
+  );
+});
+
+test("external app approval settings need Craft", () => {
+  mockCraftEnabled = false;
+  const requests = jest.spyOn(global, "fetch");
+  show({
+    kind: "external-app",
+    app: memberApp({ authenticated: true }),
+    connection: { kind: "connected", ownership: "user" },
+  });
+  expect(screen.queryByRole("tab", { name: "Tools" })).not.toBeInTheDocument();
+  expect(
+    requests.mock.calls.some(([input]) =>
+      String(input).includes("/action-policies/")
+    )
+  ).toBe(false);
+});
+
 test("approval loading retains the available tools until the editor is ready", async () => {
   const pending = deferred<Response>();
   const requests = jest.spyOn(global, "fetch").mockReturnValue(pending.promise);
   show({ ...approvalPlugin, tools: [storedMcpTool] });
-  expect(requests).toHaveBeenCalledWith(
-    "/api/build/action-policies/mcp_server/7"
-  );
+  expect(requests).toHaveBeenCalledWith("/api/action-policies/mcp_server/7");
   expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute(
     "aria-selected",
     "true"
@@ -930,7 +1015,7 @@ test("Craft Tools groups available actions and approval settings without writing
   expect(await screen.findByText("Send report")).toBeVisible();
   expect(screen.queryByText("Delete report")).not.toBeInTheDocument();
   await user.type(
-    screen.getByRole("textbox", {
+    screen.getByRole("searchbox", {
       name: memberPluginMessages.actions.mcpTools.search,
     }),
     "missing"
@@ -1002,7 +1087,7 @@ test("loads a fresh approval snapshot and saves displayed choices including pers
   await user.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(requests).toHaveBeenCalledWith(
-    "/api/build/action-policies/42",
+    "/api/action-policies/mcp_server/7",
     expect.objectContaining({
       body: JSON.stringify({ action_policies: { send: "DENY" } }),
     })
@@ -1066,7 +1151,7 @@ test("reset clears personal overrides only when saved", async () => {
   await user.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() =>
     expect(requests).toHaveBeenCalledWith(
-      "/api/build/action-policies/42",
+      "/api/action-policies/mcp_server/7",
       expect.objectContaining({ body: JSON.stringify({ action_policies: {} }) })
     )
   );
@@ -1293,6 +1378,13 @@ test("skill enable changes stay drafts across tabs and save only on Save", async
       )
     );
   const onClose = jest.fn();
+  // Stands in for the chat input's skill list.
+  function ChatSkillsReader() {
+    useSWR(SWR_KEYS.chatSkills, errorHandlingFetcher);
+    return null;
+  }
+  const chatSkillFetches = () =>
+    requests.mock.calls.filter(([url]) => url === SWR_KEYS.chatSkills).length;
   show(
     {
       kind: "external-app",
@@ -1301,9 +1393,10 @@ test("skill enable changes stay drafts across tabs and save only on Save", async
     },
     jest.fn(),
     "craft",
-    { onClose }
+    { onClose, beside: <ChatSkillsReader /> }
   );
   const user = setupUser();
+  await waitFor(() => expect(chatSkillFetches()).toBe(1));
   expect(screen.getByRole("status")).toHaveTextContent("Ready to use");
   expect(await screen.findByText("Issues")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Review skills" }));
@@ -1323,6 +1416,7 @@ test("skill enable changes stay drafts across tabs and save only on Save", async
       body: JSON.stringify({ enabled: true, replace_conflict: false }),
     })
   );
+  await waitFor(() => expect(chatSkillFetches()).toBe(2));
 });
 
 test("reverting a skill draft leaves Save disabled without writing", async () => {
@@ -1449,6 +1543,8 @@ test("skill saves disable conflicts first and retry only unsaved changes", async
     "craft",
     { onClose }
   );
+  const skillListFetches = () =>
+    requests.mock.calls.filter(([url]) => url === SWR_KEYS.userSkills).length;
   const user = setupUser();
   await user.click(screen.getByRole("tab", { name: "Skills" }));
   const enable = await screen.findByRole("switch", {
@@ -1457,9 +1553,12 @@ test("skill saves disable conflicts first and retry only unsaved changes", async
   const disable = screen.getByRole("switch", { name: "Disable report-writer" });
   await user.click(enable);
   await user.click(disable);
+  const fetchesBeforeSave = skillListFetches();
   await user.click(screen.getByRole("button", { name: "Save" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Enable failed");
   expect(onClose).not.toHaveBeenCalled();
+  // The disable that succeeded before the failure refreshes the skill lists.
+  await waitFor(() => expect(skillListFetches()).toBe(fetchesBeforeSave + 1));
   expect(
     requests.mock.calls
       .filter(([, init]) => init?.method === "PUT")

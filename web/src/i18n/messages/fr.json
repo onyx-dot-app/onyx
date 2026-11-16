@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "Commit"
+      },
+      "commitDate": {
+        "label": "Date du commit"
+      },
+      "instanceUrl": {
+        "label": "URL de l’instance"
+      },
+      "label": "À propos",
+      "ref": {
+        "label": "Réf."
+      },
+      "unavailable": "Non disponible",
+      "version": {
+        "label": "Version"
+      }
+    },
     "accountFallback": {
       "label": "Compte"
     },
@@ -103,6 +122,9 @@
       "authenticate": {
         "label": "S'authentifier"
       },
+      "codingAgentIncognito": {
+        "tooltip": "L'agent de code n'est pas disponible en mode incognito"
+      },
       "configure": {
         "tooltip": "Configurer"
       },
@@ -120,6 +142,9 @@
       },
       "selectSearchSources": {
         "label": "Sélectionner les sources de recherche"
+      },
+      "preference": {
+        "tooltip": "{description}\nPrivilégier cet outil pour cette conversation. L’agent peut répondre sans l’utiliser."
       }
     },
     "addMcpModal": {
@@ -154,7 +179,7 @@
         "title": "Contrôle d’accès",
         "description": "Choisissez qui peut utiliser ce MCP.",
         "public": {
-          "label": "Public",
+          "label": "Organisation",
           "description": "Toute personne de votre organisation peut utiliser ce MCP"
         },
         "groups": {
@@ -167,7 +192,6 @@
           "description": "Choisissez au moins un groupe que vous gérez."
         },
         "retainedUsers": "{count, plural, one {Également partagé directement avec # utilisateur.} other {Également partagé directement avec # utilisateurs.}}",
-        "planTag": "Business",
         "planNote": "L’accès par groupe nécessite un forfait Business."
       },
       "defaultChat": {
@@ -332,7 +356,7 @@
         "clientMetadataRejected": "Le fournisseur n’a pas pu utiliser le document de métadonnées du client. Si cette instance n’est pas accessible depuis Internet, désactivez « Utiliser le document de métadonnées client » et reconnectez-vous.",
         "discoveryFailed": "Les paramètres de connexion OAuth sont introuvables. Vérifiez l’URL du serveur ou saisissez les points de terminaison de votre fournisseur.",
         "connectionFailed": "Le serveur est inaccessible. Vérifiez l’URL du serveur et réessayez.",
-        "oauthFailed": "La connexion OAuth n’a pas pu démarrer. Vérifiez les paramètres de votre client et réessayez.",
+        "oauthFailed": "La connexion OAuth a échoué. Réessayez ou vérifiez les paramètres OAuth du serveur.",
         "oauthInitFailed": "Échec du lancement de OAuth : {detail}"
       },
       "header": {
@@ -412,8 +436,7 @@
       },
       "cimd": {
         "label": "Utiliser le document de métadonnées client",
-        "description": "Lorsque cette option est activée, le fournisseur récupère le document de métadonnées client de {appName} via l'Internet public. Désactivez-la si cette instance de {appName} est privée. {appName} utilise alors l'enregistrement automatique du client.",
-        "turnOff": "Désactiver le document de métadonnées du client"
+        "description": "Lorsque cette option est activée, le fournisseur récupère le document de métadonnées client de {appName} via l'Internet public. Désactivez-la si cette instance de {appName} est privée. {appName} utilise alors l'enregistrement automatique du client."
       },
       "discovery": {
         "checking": "Vérification de la configuration automatique…",
@@ -797,6 +820,7 @@
       "search": {
         "placeholder": "Rechercher des actions..."
       },
+      "selectionSaveFailed": "Impossible d’enregistrer la sélection d’outils de ce chat.",
       "serverFallback": {
         "label": "serveur"
       },
@@ -1115,18 +1139,6 @@
         "openapi": "Ajouter un plugin OpenAPI"
       },
       "catalog": {
-        "slack": {
-          "summary": "Recherchez des conversations et envoyez des messages",
-          "description": "Recherchez des conversations et envoyez des messages. Nécessite une application Slack enregistrée."
-        },
-        "hubspot": {
-          "summary": "Gérez les contacts et les transactions",
-          "description": "Gérez les contacts et les transactions. Nécessite un connecteur MCP HubSpot."
-        },
-        "asana": {
-          "summary": "Gérez les tâches et les projets",
-          "description": "Gérez les tâches et les projets. Nécessite un client OAuth enregistré."
-        },
         "linear": {
           "summary": "Gérez les tickets, les projets et les équipes",
           "description": "Gérez les tickets, les projets et les équipes."
@@ -1218,6 +1230,10 @@
       "blocked": "Cette URL est bloquée par vos paramètres de sécurité sortante.",
       "publicDetected": "Aucune authentification requise",
       "oauthDetected": "OAuth détecté",
+      "clientMetadata": "Document de métadonnées client",
+      "clientMetadataSupported": "Pris en charge",
+      "clientMetadataUnsupported": "Non pris en charge",
+      "clientMetadataUnknown": "Non vérifié",
       "manualRequired": "Choisir l’authentification manuellement",
       "chooseAuthentication": "Nous n’avons pas pu déterminer la méthode d’authentification de ce serveur. Choisissez une méthode ci-dessous.",
       "connect": "Connecter",
@@ -1254,7 +1270,7 @@
       "decisionModel": {
         "title": "Modèle de décision",
         "openAiDecisionsModelName": "Décisions OpenAI (GPT-6 Luna)",
-        "description": "Sélectionnez un modèle pour les futures fonctions de classification et de révision. Onyx n’utilise pas encore ce modèle.",
+        "description": "La recherche interne utilise ce modèle pour classer les résultats et choisir la quantité de contexte à ajouter. Vous pouvez aussi le définir dans les préférences de chat.",
         "clear": "Effacer",
         "notConfigured": "Non configuré",
         "saveFailed": "Impossible de mettre à jour le modèle de décision"
@@ -1444,6 +1460,9 @@
         },
         "s3": {
           "description": "Buckets de stockage AWS"
+        },
+        "azureDatalake": {
+          "description": "Fichiers dans des conteneurs Azure Data Lake Storage"
         },
         "r2": {
           "description": "Buckets de stockage cloud"
@@ -1646,7 +1665,7 @@
             "label": "Privé"
           },
           "public": {
-            "label": "Public"
+            "label": "Organisation"
           },
           "shared": {
             "label": "Partagé"
@@ -1920,7 +1939,7 @@
             "text": "Les contrôles d'accès sont supprimés de ce déploiement. **Cela lance une réindexation** pour que les résultats de recherche reflètent le changement, ce qui peut prendre du temps sur un grand index."
           },
           "madePublic": {
-            "text": "**Rendus publics :** tous les connecteurs, ainsi que les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et compétences partagés avec un groupe d'utilisateurs ;"
+            "text": "**Ouverts à votre organisation :** tous les connecteurs, ainsi que les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et compétences partagés avec un groupe d'utilisateurs ;"
           },
           "reset": {
             "text": "**Réinitialisés :** personnalisation de la marque et politique de conservation des conversations."
@@ -2222,9 +2241,10 @@
         "description": "Génère les titres des sessions. Un modèle rapide et peu coûteux convient bien.",
         "title": "Modèle de nommage des chats"
       },
-      "searchSelectionModel": {
-        "description": "Sélectionne et vérifie les documents récupérés. Un modèle rapide et peu coûteux peut réduire les coûts de recherche, mais peut affecter la qualité des réponses.",
-        "title": "Modèle de sélection de recherche"
+      "searchDecisionModel": {
+        "description": "Sélectionne les documents récupérés et décide de la quantité de contexte à ajouter. Un modèle de décision les classe en un seul appel. Un modèle de langage les sélectionne comme avant.",
+        "title": "Modèle de décision de recherche",
+        "decisionSection": "Modèles de décision"
       },
       "taskModels": {
         "loadFailed": "Impossible de charger les modèles de tâches",
@@ -2405,7 +2425,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "Échec de la mise à jour du modèle de nommage des discussions",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
-        "searchSelectionUpdateFailed": "Échec de la mise à jour du modèle de sélection pour la recherche",
+        "searchDecisionUpdateFailed": "Échec de la mise à jour du modèle de décision de recherche",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "systemPromptUpdateFailed": "Échec de la mise à jour du prompt système",
         "toolsUpdateFailed": "Échec de la mise à jour des outils",
@@ -2605,8 +2625,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "Tout le monde conserve l'accès synchronisé depuis la source.",
-          "title": "Aucune restriction tant qu'aucun groupe n'est ajouté"
+          "description": "La restriction nécessite un groupe. Désactivez-la pour conserver l’accès synchronisé depuis la source.",
+          "title": "Choisissez au moins un groupe"
         },
         "loadError": "Impossible de charger les groupes. Rechargez la page pour réessayer.",
         "memberCount": "{count, plural, one {# membre} other {# membres}}",
@@ -2635,7 +2655,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Supprimer"
+          "label": "Supprimer le connecteur",
+          "description": "Supprimer définitivement tous les documents indexés."
         },
         "reIndex": {
           "tooltip": {
@@ -2674,7 +2695,7 @@
         },
         "syncPermissions": {
           "label": "Synchroniser les autorisations",
-          "description": "Récupérer maintenant depuis la source qui peut lire chaque document.",
+          "description": "Récupérer les autorisations des documents depuis la source.",
           "tooltip": {
             "syncing": "Une synchronisation des autorisations est déjà en file d'attente ou en cours"
           }
@@ -2801,20 +2822,22 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} docs/min",
-        "indexingSpeedTooltip": "Documents indexés par minute depuis la création du connecteur",
         "lastIndexed": {
           "value": "Dernière indexation {when}"
         },
+        "deletionStarted": {
+          "value": "Démarré {when}"
+        },
         "documents": {
           "totalLabel": "Total des documents dans l'index",
-          "recentLabel": "Documents traités récemment",
-          "syncedPermissionsLabel": "Autorisations synchronisées",
-          "syncedMembershipsLabel": "Adhésions aux groupes synchronisées"
+          "recentLabel": "Documents traités dernièrement",
+          "indexedLabel": "Documents indexés"
         },
         "throughput": {
           "ariaLabel": "Documents indexés au fil du temps",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
+          "lineTooltip": "{failures, plural, one {# échec} other {# échecs}}, {errors, plural, one {# erreur} other {# erreurs}}",
+          "barLabel": "{count, plural, one {# document} other {# documents}}, {range}",
           "loadError": "Le graphique n'a pas pu être chargé.",
           "rangeFilter": "Exécutions créées dans cette tranche du graphique"
         },
@@ -2830,13 +2853,33 @@
         "title": "État de l'indexation",
         "sync": {
           "permissionsTitle": "État de la synchronisation des autorisations",
-          "groupsTitle": "État de la synchronisation des adhésions aux groupes",
           "last": "Dernière synchronisation {when}",
           "never": "Pas encore synchronisé",
-          "neverTooltip": "Les documents indexés peuvent ne pas être consultables tant que leurs autorisations ne sont pas synchronisées.",
-          "waitingForFirstIndex": "En attente de la première indexation"
+          "neverTooltip": "Les documents indexés ne seront pas consultables tant que leurs autorisations ne seront pas synchronisées.",
+          "waitingForFirstIndex": "En attente de la première indexation",
+          "docsLabel": "Documents aux autorisations synchronisées",
+          "groupsLabel": "Adhésions aux groupes"
         },
-        "accessTitle": "Accès aux documents du connecteur"
+        "actions": {
+          "showActivities": "Afficher les activités",
+          "hideActivities": "Masquer les activités",
+          "viewDetails": "Voir les détails",
+          "hideDetails": "Masquer les détails",
+          "viewIndexingRun": "Voir l'exécution d'indexation",
+          "viewPruningRun": "Voir l'exécution d'élagage",
+          "viewChecksRun": "Voir l'exécution des vérifications"
+        },
+        "types": {
+          "count": "{count, plural, one {Type de document} other {Types de document}}",
+          "header": "Type de document",
+          "indexed": "Indexés",
+          "size": "Taille",
+          "other": "Autres",
+          "countWithSize": "{count} ({size})",
+          "bytes": "octets",
+          "loadError": "Impossible de charger les types de document.",
+          "sizeValue": "{value} {unit}"
+        }
       },
       "toasts": {
         "completeReindexStarted": "Réindexation complète démarrée avec succès",
@@ -2929,6 +2972,7 @@
           "sync": "Accès aux documents **synchronisé avec {source}**",
           "managedByAdmins": "Géré par les **administrateurs**",
           "managedByGroups": "Géré par **{count, plural, one {# groupe} other {# groupes}}**",
+          "onlyMe": "Documents visibles via ce connecteur **uniquement par son propriétaire**",
           "syncRestricted": "Accès aux documents **synchronisé avec {source}**, limité à **{count, plural, one {# groupe} other {# groupes}}**",
           "groupsPending": "Documents partagés avec **des groupes spécifiques**",
           "syncRestrictedPending": "Accès aux documents **synchronisé avec {source}**, limité à **des groupes spécifiques**"
@@ -2966,6 +3010,7 @@
           "all": "Tous les types",
           "indexing": "Index des documents",
           "backfill": "Rattrapage des documents",
+          "retry": "Index des documents - Nouvelle tentative",
           "doc_permission_sync": "Synchronisation des autorisations",
           "group_sync": "Synchronisation des membres des groupes",
           "pruning": "Élagage des documents",
@@ -2973,9 +3018,10 @@
         },
         "detail": {
           "queued": "En file d'attente",
+          "starting": "Démarrage de la synchronisation",
           "running": "En cours",
           "rate": "{rate} docs/min",
-          "finished": "{time} ({duration})",
+          "runtime": "Durée d'exécution {duration}",
           "rateFinished": "{rate} docs/min ({duration})",
           "membershipRate": "{rate} adhésions/min",
           "membershipRateFinished": "{rate} adhésions/min ({duration})"
@@ -2984,6 +3030,7 @@
           "stages": "Voir les métriques par étape",
           "cancel": "Annuler",
           "logs": "Voir les journaux",
+          "noLogs": "Aucun journal enregistré",
           "checks": "Voir les résultats des vérifications"
         },
         "warnings": {
@@ -3018,16 +3065,12 @@
           "skippedChecks": "{count, plural, one {# vérification ignorée} other {# vérifications ignorées}}",
           "syncedDocs": "{count, plural, one {# document synchronisé} other {# documents synchronisés}}"
         },
-        "search": {
-          "placeholder": "Rechercher dans les erreurs d'exécution…"
-        },
         "window": {
           "label": "Période",
           "all": "Toute la période",
           "h1": "Dernière heure",
           "h24": "24 dernières heures",
-          "d7": "7 derniers jours",
-          "d30": "30 derniers jours"
+          "d7": "7 derniers jours"
         },
         "statusGroups": {
           "label": "Statut",
@@ -3038,14 +3081,13 @@
           "canceled": "Annulées"
         },
         "loadError": {
-          "title": "Impossible de charger les exécutions."
+          "title": "Impossible de charger les exécutions.",
+          "retry": "Réessayer"
         },
         "empty": {
           "title": "Aucune exécution d'indexation récente",
           "filteredTitle": "Aucune exécution ne correspond à ces filtres.",
           "pastRuns": "{count, plural, one {# exécution passée} other {# exécutions passées}}",
-          "view": "Afficher",
-          "viewAria": "{count, plural, one {Afficher # exécution passée} other {Afficher # exécutions passées}}",
           "description": "Les exécutions sont planifiées en arrière-plan et peuvent mettre un moment à apparaître."
         },
         "units": "{count, plural, one {exécution} other {exécutions}}",
@@ -3080,15 +3122,24 @@
           "all": "Tous niveaux",
           "failures": "Échecs",
           "errors": "Erreurs",
-          "other": "Autres",
+          "running": "En cours",
+          "success": "Réussies",
+          "canceled": "Annulées",
           "resolved": "Résolu",
-          "toggle": "Filtres"
+          "connectors": "Connecteurs",
+          "connectorsLoading": "Chargement des connecteurs…",
+          "connectorsLoadError": "Impossible de charger les connecteurs.",
+          "connectorsRetry": "Réessayer",
+          "toggleShow": "Afficher les filtres",
+          "toggleHide": "Masquer les filtres"
         },
         "groups": {
           "failures": "{count, plural, =0 {Échecs} one {# échec} other {# échecs}}",
           "errors": "{count, plural, =0 {Erreurs} one {# erreur} other {# erreurs}}",
-          "other": "Autres",
-          "resolved": "{count, plural, one {# résolue} other {# résolues}}"
+          "running": "{count, number} en cours",
+          "resolved": "Résolues",
+          "success": "Réussies",
+          "canceled": "Annulées"
         },
         "title": {
           "indexing": {
@@ -3099,9 +3150,8 @@
             "errors": "Indexation terminée avec des erreurs.",
             "resolved": "Erreurs d'indexation résolues.",
             "succeeded": "Indexation terminée avec succès.",
-            "queued": "Indexation en file d'attente.",
             "inProgress": "Indexation en cours.",
-            "canceled": "Indexation arrêtée."
+            "canceled": "Indexation annulée."
           },
           "doc_permission_sync": {
             "failed": "La synchronisation des autorisations a échoué.",
@@ -3111,9 +3161,8 @@
             "errors": "Autorisations synchronisées avec des erreurs.",
             "resolved": "Erreurs de synchronisation des autorisations résolues.",
             "succeeded": "Permissions synchronisées avec succès.",
-            "queued": "Synchronisation des permissions en file d'attente.",
             "inProgress": "Synchronisation des permissions en cours.",
-            "canceled": "Synchronisation des permissions arrêtée."
+            "canceled": "Synchronisation des permissions annulée."
           },
           "group_sync": {
             "failed": "La synchronisation des appartenances aux groupes a échoué.",
@@ -3123,9 +3172,8 @@
             "errors": "Appartenances aux groupes synchronisées avec des erreurs.",
             "resolved": "Erreurs de synchronisation des appartenances aux groupes résolues.",
             "succeeded": "Appartenances aux groupes synchronisées avec succès.",
-            "queued": "Synchronisation des appartenances aux groupes en file d'attente.",
             "inProgress": "Synchronisation des appartenances aux groupes.",
-            "canceled": "Synchronisation des groupes arrêtée."
+            "canceled": "Synchronisation des groupes annulée."
           },
           "pruning": {
             "failed": "L'élagage a échoué.",
@@ -3135,9 +3183,8 @@
             "errors": "Élagage terminé avec des erreurs.",
             "resolved": "Erreurs d'élagage résolues.",
             "succeeded": "Élagage terminé avec succès.",
-            "queued": "Élagage en file d'attente.",
             "inProgress": "Élagage en cours.",
-            "canceled": "Élagage arrêté."
+            "canceled": "Élagage annulé."
           },
           "checks": {
             "failed": "Les vérifications du connecteur ont échoué.",
@@ -3147,9 +3194,8 @@
             "errors": "Vérifications du connecteur terminées avec des erreurs.",
             "resolved": "Erreurs des vérifications du connecteur résolues.",
             "succeeded": "Vérifications du connecteur réussies.",
-            "queued": "Vérifications du connecteur en file d'attente.",
             "inProgress": "Vérifications du connecteur en cours.",
-            "canceled": "Vérifications du connecteur arrêtées."
+            "canceled": "Vérifications du connecteur annulées."
           }
         },
         "description": {
@@ -3164,22 +3210,18 @@
           "stackTrace": "Trace de la pile",
           "indexing": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "indexingItems": "{count, plural, one {# élément en échec} other {# éléments en échec}}",
-          "doc_permission_sync": "{count, plural, one {Permissions de # document non synchronisées} other {Permissions de # documents non synchronisées}}",
-          "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
+          "users": "{count, plural, one {# utilisateur non synchronisé} other {# utilisateurs non synchronisés}}",
+          "groups": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "resolved": "Résolu",
-          "resolvedDocs": "{count, plural, one {# élément résolu} other {# éléments résolus}}",
           "superseded": "Remplacé"
         },
         "more": "Afficher plus",
         "empty": {
           "title": "Aucune activité récente",
-          "resolved": "Aucune exécution résolue",
-          "filtered": "Rien ne correspond à cette recherche.",
-          "failures": "Aucun échec",
-          "errors": "Aucune erreur",
-          "other": "Aucune autre exécution"
+          "past": "Activités passées",
+          "filtered": "Rien ne correspond à cette recherche."
         },
         "loadError": {
           "title": "Impossible de charger l'activité."
@@ -3187,19 +3229,32 @@
         "docs": {
           "title": "Éléments en échec",
           "search": {
-            "placeholder": "Rechercher des éléments…"
+            "placeholder": "Rechercher des documents…"
           },
-          "resolveAll": "Tout réessayer",
-          "resolveAllTooltip": "Réindexer tous les documents en échec de cette exécution",
-          "resolveAllUnsupported": "Ce connecteur ne peut pas réindexer des documents individuels. Réindexez le connecteur pour les réessayer.",
-          "resolveOne": "Réessayer ce document",
-          "retry": "{count, plural, one {Réessayer # document} other {Réessayer # documents}}",
+          "resolveAll": "Relancer tous les documents",
+          "resolveOne": "Relancer le document",
+          "resolveWithoutRetry": "Résoudre sans relancer",
           "more": "Plus",
           "less": "Moins",
           "unknownDocument": "Document inconnu",
-          "empty": "Aucune erreur ouverte",
+          "empty": "Aucun document en échec",
           "loadError": "Impossible de charger les éléments en échec.",
-          "open": "Ouvrir le document"
+          "open": "Ouvrir le document",
+          "resolvedGroup": "Erreurs résolues",
+          "resolvedWithoutRetry": "Résolu sans relance",
+          "resolvedByLaterRun": "Résolu par une exécution ultérieure"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "Utilisateurs en échec",
+            "search": "Rechercher des utilisateurs…",
+            "empty": "Aucun utilisateur en échec"
+          },
+          "groups": {
+            "title": "Groupes en échec",
+            "search": "Rechercher des groupes…",
+            "empty": "Aucun groupe en échec"
+          }
         },
         "trace": {
           "header": "Trace de la pile • ID d'exécution : {id}",
@@ -3207,17 +3262,18 @@
           "runId": "ID d'exécution : {id}"
         },
         "actions": {
-          "resolve": "Résoudre"
+          "resolve": "Résoudre",
+          "resolveWithoutRetry": "Résoudre sans relancer",
+          "retryDocs": "Relancer les documents"
         },
         "resolveAll": {
-          "button": "Résoudre tout l’affichage",
-          "title": "Résoudre toutes les exécutions affichées ?",
-          "description": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel. Elles conservent leur statut et passent dans les éléments résolus.",
-          "fleetDescription": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel, sur les connecteurs que vous gérez. Elles conservent leur statut et passent dans les éléments résolus.",
+          "button": "Tout résoudre",
+          "title": "Résoudre toutes les activités affichées",
+          "body": "{count, plural, one {Cette action résout # activité correspondant au filtre actuel : {failures} et {errors}. Onyx ne relance pas ses éléments en échec. L’activité conserve son statut et passe dans Résolues.} other {Cette action résout # activités correspondant au filtre actuel : {failures} et {errors}. Onyx ne relance pas leurs éléments en échec. Les activités conservent leur statut et passent dans Résolues.}}",
+          "body2": "Une exécution encore en cours peut signaler de nouvelles erreurs. Elles réapparaissent comme ouvertes. Vous pourrez relancer plus tard un document résolu depuis sa liste de documents en échec.",
+          "failures": "{count, plural, =0 {aucun échec} one {# échec} other {# échecs}}",
+          "errors": "{count, plural, =0 {aucune exécution avec erreurs} one {# exécution avec erreurs} other {# exécutions avec erreurs}}",
           "confirm": "Tout résoudre"
-        },
-        "resolved": {
-          "label": "Résolues"
         }
       },
       "stageDetails": {
@@ -3229,10 +3285,22 @@
         "calls": "Lots",
         "averageTime": "Temps moyen",
         "maxTime": "Temps max",
+        "noDocs": "Aucun document n'a terminé l'indexation",
+        "laterCanceled": "Étapes suivantes annulées",
+        "retry": "Réessayer",
         "uneven": {
           "tooltip": "Les temps par lot varient fortement pour cette étape"
         },
         "close": "Fermer les détails des étapes"
+      },
+      "tabs": {
+        "configurations": "Configurations du connecteur",
+        "indexing": "Indexation",
+        "indexingDisabled": "Disponible dès le début de la première exécution."
+      },
+      "indexingTab": {
+        "chartHeading": "Indexation des documents",
+        "runsHeading": "Exécutions d'indexation"
       }
     },
     "connectorTitle": {
@@ -3685,18 +3753,22 @@
         "documentAccess": {
           "description": "Contrôlez qui peut accéder aux documents indexés par ce connecteur.",
           "everyone": {
-            "description": "Les documents indexés par ce connecteur seront publics pour tout le monde dans votre organisation.",
+            "description": "Les documents indexés par ce connecteur sont accessibles à tous les membres de votre organisation.",
             "title": "Tout le monde dans votre organisation"
+          },
+          "onlyMe": {
+            "description": "Seul le propriétaire des identifiants de ce connecteur y accède par son biais ; pour une source sans identifiants, seule la personne qui l'a créé.",
+            "title": "Moi uniquement"
           },
           "specificGroups": {
             "description": "Indiquez les groupes qui peuvent accéder aux documents de ce connecteur.",
-            "required": "Choisissez au moins un groupe.",
             "title": "Groupes spécifiques"
           },
           "sync": {
             "description": "{appName} synchronise les autorisations avec la source. Les utilisateurs ne peuvent rechercher que ce qu'ils voient dans la source.",
             "disabledReason": "La méthode d'authentification de l'identifiant actuel ne prend pas en charge la synchronisation automatique des permissions. Veuillez passer à une méthode d'authentification prise en charge.",
-            "title": "Synchroniser avec {source}"
+            "title": "Synchroniser avec {source}",
+            "restrictionRequired": "Choisissez au moins un groupe ou désactivez la restriction."
           },
           "title": "Accès aux documents"
         },
@@ -4593,6 +4665,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Configurer le connecteur Azure Data Lake Storage",
+          "fields": {
+            "account_name": {
+              "label": "Nom du Compte de Stockage",
+              "description": "Le nom du compte de stockage, par ex. contosodata. Le compte doit avoir un espace de noms hiérarchique."
+            },
+            "container_name": {
+              "label": "Nom du Conteneur",
+              "description": "Le conteneur (système de fichiers) à indexer."
+            },
+            "path_prefix": {
+              "label": "Préfixe de Chemin",
+              "description": "Un répertoire du conteneur, par ex. reports/2026. Laissez vide pour indexer tout le conteneur."
+            }
+          }
+        },
         "r2": {
           "description": "Configurer le connecteur R2",
           "fields": {
@@ -5096,6 +5185,27 @@
       "unavailable": {
         "description": "Craft est activé déploiement par déploiement par Onyx. Contactez votre représentant Onyx pour y accéder.",
         "title": "Craft n'est pas disponible sur ce déploiement"
+      },
+      "publishing": {
+        "title": "Publication des compétences",
+        "open": {
+          "label": "Ouverte",
+          "description": "Les auteurs publient pour l'organisation immédiatement."
+        },
+        "requiresReview": {
+          "label": "Examen requis",
+          "description": "Un administrateur approuve chaque publication et chaque mise à jour."
+        },
+        "off": {
+          "label": "Désactivée",
+          "description": "Seuls les administrateurs publient des compétences pour l'organisation."
+        },
+        "saveSuccess": {
+          "message": "Paramètre de publication enregistré."
+        },
+        "saveError": {
+          "message": "Impossible d'enregistrer le paramètre de publication."
+        }
       }
     },
     "credentials": {
@@ -5195,6 +5305,8 @@
         "integrationToken": "Jeton d'intégration {source}",
         "accessKey": "Clé d'accès {source}",
         "accessKeySecret": "Secret de la clé d'accès {source}",
+        "storageAccountName": "Nom du Compte de Stockage",
+        "accountKey": "Clé de Compte {source}",
         "key": "Clé {source}",
         "secret": "Secret {source}",
         "roleArn": "ARN du rôle {source}",
@@ -5216,6 +5328,7 @@
         "jiraUserEmail": "Obligatoire pour Jira Cloud.",
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
         "youtrackToken": "Un jeton permanent d'un utilisateur YouTrack qui peut lire tous les projets à indexer. Créez-le dans votre profil YouTrack, sous Sécurité du compte.",
+        "azureDatalakeAccountKey": "Dans le portail Azure, ouvrez le compte de stockage, puis Sécurité + mise en réseau, puis Clés d'accès.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
         "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
@@ -5228,6 +5341,7 @@
           "certificateAuthentication": "Authentification par certificat",
           "certificate": "Certificat",
           "accessKeyAndSecret": "Clé d'accès et secret",
+          "accountKey": "Clé de Compte",
           "iamRole": "Rôle IAM",
           "assumeRole": "Endosser un rôle",
           "serviceAccount": "Compte de service",
@@ -5240,6 +5354,9 @@
           "teamsCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe. Obligatoire pour Inclure les pièces jointes, qui lit les fichiers des canaux et leurs lecteurs depuis SharePoint.",
           "outlookClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire et le secret.",
           "outlookCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe.",
+          "azureDatalakeClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Indiquez l'ID client, l'ID d'annuaire et le secret. Donnez à l'application le rôle Storage Blob Data Reader sur le conteneur.",
+          "azureDatalakeCertificate": "Le connecteur se connecte avec un certificat chargé dans l'inscription d'application. Indiquez l'ID client, l'ID d'annuaire, le fichier PFX et son mot de passe. Donnez à l'application le rôle Storage Blob Data Reader sur le conteneur.",
+          "azureDatalakeAccountKey": "Le connecteur signe chaque requête avec une clé du compte de stockage. Indiquez le nom du compte et l'une de ses clés d'accès.",
           "s3AssumeRole": "Dans ce mode, l'instance Amazon EC2 endosse son rôle existant pour accéder à S3. Aucun autre identifiant n'est nécessaire."
         }
       },
@@ -5622,7 +5739,7 @@
             "label": "Privé"
           },
           "public": {
-            "label": "Public"
+            "label": "Organisation"
           }
         },
         "connector": {
@@ -5743,7 +5860,7 @@
             "header": "Nom"
           },
           "public": {
-            "header": "Public"
+            "header": "Accès"
           },
           "status": {
             "header": "Statut"
@@ -5808,6 +5925,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {# fichier téléversé} other {# fichiers téléversés}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {# fichier téléversé} other {# fichiers téléversés}}, incomplet : {error}"
         }
       },
       "sensitiveWarning": {
@@ -6217,13 +6337,6 @@
           "title": "Autorisations du groupe"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} utilise désormais des autorisations basées sur les groupes. L'accès se configure par groupe : les autorisations d'un utilisateur sont donc la somme de celles de tous ses groupes.",
-        "learnMore": {
-          "label": "En savoir plus"
-        },
-        "title": "Les autorisations ont changé."
-      },
       "sharedResources": {
         "agent": {
           "description": "agent"
@@ -6273,28 +6386,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "Ajouter une limite"
-        },
-        "costLimit": {
-          "header": "Limite de coût",
-          "placeholder": "Limite de coût",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "Les limites de débit de jetons sont disponibles uniquement dans la [version Enterprise d'Onyx](/admin/billing).",
-        "section": {
-          "description": "Limitez le nombre de jetons que ce groupe peut utiliser sur une période donnée.",
-          "title": "Limite de débit de jetons"
-        },
-        "timeWindow": {
-          "header": "Fenêtre de temps",
-          "unit": "(jours UTC)"
-        },
-        "tokenLimit": {
-          "header": "Limite de jetons",
-          "placeholder": "Limite de jetons (milliers)",
-          "unit": "(milliers)"
-        }
+        "disabledTooltip": "Les limites de débit de jetons sont disponibles uniquement dans la [version Enterprise d'Onyx](/admin/billing)."
       },
       "builtIn": {
         "admin": {
@@ -6305,9 +6397,6 @@
           "name": "Basique",
           "description": "Groupe par défaut pour tous les utilisateurs avec des autorisations de base."
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6587,11 +6676,24 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "Modèles d'image de vos fournisseurs LLM connectés. Connectez-en un pour l'utiliser dans le chat.",
+        "title": "Modèles disponibles"
+      },
       "configureSuccess": {
         "message": "Fournisseur configuré avec succès"
       },
+      "connectButton": {
+        "label": "Connecter"
+      },
+      "connectedModels": {
+        "title": "Modèles connectés"
+      },
       "deselectError": {
         "message": "Échec de la désélection"
+      },
+      "disconnectButton": {
+        "ariaLabel": "Déconnecter {title}"
       },
       "disconnectError": {
         "message": "Échec de la déconnexion"
@@ -6609,6 +6711,9 @@
         "header": {
           "description": "Cette action supprimera les identifiants enregistrés de ce fournisseur.",
           "title": "Déconnecter *{title}*"
+        },
+        "linkedHeader": {
+          "description": "Le fournisseur LLM et ses identifiants restent connectés."
         },
         "noDefaultOption": {
           "description": "(Désactiver la génération d'images)",
@@ -6630,6 +6735,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} déconnecté"
+      },
+      "editButton": {
+        "ariaLabel": "Modifier {title}"
       },
       "emptyState": {
         "title": "Connectez un modèle de génération d'images à utiliser dans la discussion."
@@ -6709,12 +6817,30 @@
         "description": "Paramètres de la génération d'images dans la discussion.",
         "title": "Génération d'images"
       },
+      "linkError": {
+        "message": "Échec de la connexion du modèle"
+      },
+      "linkSuccess": {
+        "message": "{title} connecté"
+      },
+      "linkedModel": {
+        "description": "Depuis {provider}"
+      },
       "loadError": {
         "message": "Échec du chargement de la configuration. Actualisez la page."
       },
       "model": {
         "description": "Sélectionnez un modèle pour générer des images dans la discussion.",
+        "placeholder": "Sélectionnez un modèle par défaut",
         "title": "Modèle de génération d'images"
+      },
+      "modelFilter": {
+        "all": "Tous",
+        "recommended": "Recommandés"
+      },
+      "noImageModels": {
+        "description": "Connectez sur la page Modèles de langage un fournisseur LLM qui propose des modèles d'image. Pour voir tous les modèles de vos fournisseurs connectés, ouvrez l'onglet Tous.",
+        "title": "Aucun modèle d'image disponible"
       },
       "providers": {
         "azureGptImage1": {
@@ -7025,7 +7151,6 @@
           "tag": "GPU recommandé"
         },
         "legacy": {
-          "tag": "Ancien",
           "tooltip": "Vous ne pouvez pas sélectionner ce modèle pour un nouvel index. Il continue de fonctionner jusqu'à ce que vous changiez de modèle."
         },
         "selectButton": {
@@ -7078,9 +7203,6 @@
       "multipass": {
         "description": "Indexez les documents en segments de tailles variables pour mieux identifier les sources pertinentes.",
         "disabledTooltip": "L'indexation multi-passes est désactivée temporairement et sera disponible plus tard.",
-        "tag": {
-          "label": "temporairement indisponible"
-        },
         "title": "Indexation multi-passes"
       },
       "openaiCompatible": {
@@ -7232,6 +7354,7 @@
       },
       "vectorQuantization": {
         "description": "Stockez les vecteurs des documents avec moins de bits pour que la recherche vectorielle utilise moins de mémoire. Moins de bits peuvent réduire la qualité de la recherche. Si vous modifiez uniquement ce paramètre, l'index est reconstruit à partir des vecteurs stockés, sans recalculer les embeddings.",
+        "needsVersion": "Nécessite OpenSearch {version}+",
         "none": {
           "description": "Précision complète sur 32 bits.",
           "label": "Aucune"
@@ -7244,7 +7367,8 @@
           "description": "Environ 4 fois moins de mémoire pour la recherche vectorielle. Presque aucune perte de qualité de recherche.",
           "label": "7 bits"
         },
-        "title": "Quantification des vecteurs"
+        "title": "Quantification des vecteurs",
+        "unsupportedTooltip": "Ce cluster utilise OpenSearch {current}. Mettez OpenSearch à jour vers {version} ou une version ultérieure pour utiliser ce niveau."
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Ce connecteur sera supprimé} other {Ces # connecteurs seront supprimés}}",
@@ -7359,37 +7483,26 @@
       }
     },
     "indexing": {
+      "addConnector": "Ajouter un connecteur",
       "connectorCreated": {
         "toast": "Connecteur créé avec succès"
       },
       "overview": {
-        "connectors": {
-          "caption": "En cours d'indexation / actifs",
-          "label": "Connecteurs"
-        },
-        "documents": {
-          "caption": "Dans l'index",
-          "label": "Documents",
-          "tooltip": "Additionne les documents de chaque connecteur : un document présent dans deux connecteurs compte deux fois."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "Impossible de charger la vue d'ensemble.",
-        "processed": {
-          "caption": "Traités sur la période",
-          "label": "Documents",
-          "tooltip": "Une estimation, car le total de chaque exécution est réparti uniformément sur sa durée. Un document compte à chaque fois qu'une exécution le traite, échecs compris, ce chiffre peut donc dépasser le nombre de documents de l'index."
-        }
+        "activeConnectors": "Connecteurs actifs",
+        "pausedConnectors": "Connecteurs en pause",
+        "indexingConnectors": "Connecteurs en cours d'indexation",
+        "loadError": "Impossible de charger la vue d'ensemble."
       },
       "activities": {
         "title": "Activités",
-        "history": "Historique complet de l'activité",
-        "viewLogs": "Afficher les journaux",
         "panel": {
-          "title": "Historique de l'activité",
+          "title": "Activités",
           "close": "Fermer le panneau",
           "pairTitle": "Historique de l'activité de {name}"
+        },
+        "panelButton": {
+          "show": "Afficher les activités",
+          "hide": "Masquer les activités"
         }
       },
       "list": {
@@ -7398,21 +7511,23 @@
         },
         "statusFilter": {
           "label": "Statut",
-          "all": "Tous les statuts"
+          "all": "Tous les statuts",
+          "running": "En cours"
         },
         "counts": {
           "indexed": "{count, plural, one {# connecteur indexé} other {# connecteurs indexés}}",
-          "indexing": "{count, plural, one {# connecteur en cours d'indexation} other {# connecteurs en cours d'indexation}}",
+          "running": "{indexing, plural, other {# en indexation}}, {syncing, plural, other {# en synchronisation}}",
           "failed": "{count, plural, one {# connecteur en échec} other {# connecteurs en échec}}",
           "paused": "{count, plural, one {# connecteur en pause} other {# connecteurs en pause}}",
           "scheduled": "{count, plural, one {# connecteur planifié} other {# connecteurs planifiés}}",
           "deleting": "{count, plural, one {# connecteur en cours de suppression} other {# connecteurs en cours de suppression}}"
         },
         "access": {
-          "public": "Public",
-          "private": "Privé",
-          "sync": "Synchronisation automatique",
-          "sync_restricted": "Synchronisation automatique, restreinte"
+          "public": "Public pour votre organisation",
+          "private": "{count, plural, =0 {Privé} one {Partagé avec # groupe} other {Partagé avec # groupes}}",
+          "sync": "Synchronisation automatique des autorisations",
+          "sync_restricted": "Synchronisation automatique des autorisations",
+          "personal": "Moi uniquement"
         },
         "detail": {
           "queued": "{position, selectordinal, one {#er} other {#e}} dans la file d'attente",
@@ -7421,7 +7536,7 @@
         },
         "docs": {
           "label": "docs",
-          "processed": "{count, number} traités",
+          "processed": "{count, number} traités récemment",
           "processedTooltip": {
             "running": "Documents traités jusqu'ici par l'exécution en cours, échecs compris. Un document traité deux fois par l'exécution compte deux fois, ce chiffre peut donc dépasser le nombre de documents du connecteur.",
             "finished": "Documents traités par la dernière exécution, échecs compris. Un document traité deux fois compte deux fois, et les documents supprimés depuis ne comptent plus pour le connecteur, ce chiffre peut donc dépasser le nombre de documents du connecteur."
@@ -7432,6 +7547,8 @@
           "manageFederated": "Gérer le connecteur fédéré",
           "expand": "Voir les détails",
           "collapse": "Masquer les détails",
+          "viewErrors": "Voir les erreurs",
+          "viewAllRuns": "Voir toutes les exécutions",
           "pause": "Suspendre",
           "resume": "Reprendre"
         },
@@ -7444,7 +7561,8 @@
           "filteredTitle": "Aucun connecteur ne correspond à ces filtres."
         },
         "loadError": "Impossible de charger les connecteurs.",
-        "units": "{count, plural, one {connecteur} other {connecteurs}}"
+        "units": "{count, plural, one {connecteur} other {connecteurs}}",
+        "sourceGroup": "{source} ({count, number})"
       },
       "title": "État de l'indexation des connecteurs"
     },
@@ -7536,7 +7654,7 @@
             "targetUriParseFailed": "Échec de l'analyse de l'URI cible — les valeurs d'origine sont utilisées."
           },
           "validation": {
-            "targetUriInvalid": "L'URI cible doit être une URL valide, avec le paramètre de requête api-version et soit un nom de déploiement dans le chemin, soit /openai/responses",
+            "targetUriInvalid": "L'URI cible doit être une URL valide : une URL /openai/v1/, ou une URL avec le paramètre de requête api-version et soit un nom de déploiement dans le chemin, soit /openai/responses",
             "targetUriRequired": "L'URI cible est obligatoire"
           }
         },
@@ -7750,7 +7868,6 @@
           "row": {
             "defaultLabel": "Modèle par défaut",
             "decisionTag": {
-              "label": "Décision",
               "decisionOnly": "Modèle de décision. Non disponible dans le sélecteur de modèles de chat.",
               "chatAndDecision": "Prend en charge les tâches de chat et de décision."
             },
@@ -7759,9 +7876,6 @@
             },
             "setDefaultButton": {
               "label": "Définir par défaut"
-            },
-            "visionMarker": {
-              "title": "Vision"
             }
           },
           "selectAllButton": {
@@ -7957,9 +8071,6 @@
         "title": "Configurez un fournisseur LLM pour commencer à discuter."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "Par défaut"
-        },
         "deleteButton": {
           "ariaLabel": "Supprimer {provider}"
         },
@@ -9037,8 +9148,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "Toutes les connaissances publiques",
-            "sublabel": "Laissez OnyxBot répondre à partir des informations de tous les connecteurs publics"
+            "label": "Toutes les connaissances de l'organisation",
+            "sublabel": "Laissez OnyxBot répondre à partir des informations de tous les connecteurs de l'organisation"
           },
           "documentSets": {
             "label": "Ensembles de documents précis",
@@ -9805,169 +9916,6 @@
         "helpUrl": "https://docs.onyx.app"
       }
     },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "Jusqu'à {cost} ou {tokens} jetons",
-          "cost": "Jusqu'à {cost}",
-          "none": "Aucun budget défini",
-          "tokens": "Jusqu'à {tokens} jetons"
-        },
-        "cadence": {
-          "label": "{days, plural, one {Réinitialisation chaque jour à minuit UTC} other {Réinitialisation tous les # jours à minuit UTC}}"
-        },
-        "deleteFailed": {
-          "error": "Échec de la suppression de la limite de débit de jetons"
-        },
-        "empty": {
-          "message": "Aucune limite pour l'instant. Créez une limite de dépenses pour plafonner l'utilisation."
-        },
-        "loadFailed": {
-          "error": "Échec du chargement des limites de débit de jetons"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "Supprimer {label}",
-            "tooltip": "Supprimer la limite"
-          },
-          "disable": {
-            "ariaLabel": "Désactiver {label}"
-          },
-          "enable": {
-            "ariaLabel": "Activer {label}"
-          },
-          "label": "{budget}, {cadence}"
-        },
-        "updateFailed": {
-          "error": "Échec de la mise à jour de la limite de débit de jetons"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "Annuler"
-        },
-        "costBudget": {
-          "description": "Dépense maximale par période de réinitialisation. Définissez un budget de coût, un budget de jetons, ou les deux.",
-          "placeholder": "Aucune limite de coût",
-          "title": "Budget de coût",
-          "unit": "USD"
-        },
-        "errors": {
-          "budgetRequired": "Saisissez un budget de coût, un budget de jetons, ou les deux",
-          "costMax": "Le budget de coût maximal est de {amount, number} $",
-          "costMinCents": "Le budget de coût doit être d'au moins 0,01 $",
-          "costMoreThanZero": "Le budget de coût doit être supérieur à 0",
-          "groupRequired": "Sélectionnez un groupe d'utilisateurs",
-          "periodInteger": "Saisissez un nombre entier de jours",
-          "periodMin": "Utilisez au moins 1 jour",
-          "periodRequired": "Saisissez une période de réinitialisation",
-          "scopeRequired": "La portée cible est un champ obligatoire",
-          "tokenIncrement": "Utilisez des incréments de 1 000 jetons",
-          "tokenInteger": "Saisissez un nombre entier de jetons",
-          "tokenMax": "Le budget de jetons maximal est de 1 000 milliards",
-          "tokenMin": "Utilisez au moins 1 000 jetons"
-        },
-        "groupMenu": {
-          "empty": "Aucun groupe d'utilisateurs pour l'instant. Créez-en un dans Utilisateurs et groupes."
-        },
-        "groupPicker": {
-          "placeholder": "Choisissez un groupe"
-        },
-        "header": {
-          "title": "Créer une limite de dépenses"
-        },
-        "period": {
-          "description": "Les budgets sont réinitialisés à minuit UTC",
-          "title": "Période de réinitialisation",
-          "unit": "jours"
-        },
-        "scope": {
-          "caption": {
-            "global": "Tout le monde dans l'espace de travail partage un seul budget.",
-            "group": "Les membres de {group} partagent un seul budget.",
-            "groupUnchosen": "Les membres du groupe choisi partagent un seul budget.",
-            "user": "Chaque utilisateur dispose de son propre budget."
-          },
-          "title": "S'applique à"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "Espace de travail"
-          },
-          "user": {
-            "title": "Par utilisateur"
-          },
-          "userGroup": {
-            "title": "Groupe d'utilisateurs"
-          }
-        },
-        "submit": {
-          "label": "Créer la limite"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} ou {tokens} jetons",
-            "tokens": "{tokens} jetons"
-          },
-          "global": "{days, plural, one {Tout le monde dans l'espace de travail partage jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Tout le monde dans l'espace de travail partage jusqu'à {budget} tous les # jours. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
-          "group": "{days, plural, one {Les membres de {group} partagent jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Les membres de {group} partagent jusqu'à {budget} tous les # jours. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
-          "groupUnchosen": "{days, plural, one {Les membres du groupe choisi partagent jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Les membres du groupe choisi partagent jusqu'à {budget} tous les # jours. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}",
-          "user": "{days, plural, one {Chaque utilisateur peut dépenser jusqu'à {budget} chaque jour. L'utilisation est bloquée jusqu'à la réinitialisation de la période.} other {Chaque utilisateur peut dépenser jusqu'à {budget} tous les # jours. L'utilisation est bloquée jusqu'à la réinitialisation de la période.}}"
-        },
-        "tokenBudget": {
-          "description": "Nombre maximal de jetons par période de réinitialisation",
-          "placeholder": "Aucune limite de jetons",
-          "title": "Budget de jetons",
-          "unit": "jetons"
-        },
-        "userGroup": {
-          "description": "Choisissez le groupe qui partage ce budget",
-          "title": "Groupe d'utilisateurs"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "Créer une limite de dépenses"
-        },
-        "createFailed": {
-          "error": "Échec de la création de la limite de dépenses"
-        },
-        "created": {
-          "message": "Limite de dépenses créée !"
-        },
-        "embedded": {
-          "description": "Définissez des garde-fous pour l'utilisation de l'espace de travail, des utilisateurs et des groupes. Les limites peuvent être activées ou désactivées sans supprimer leur configuration.",
-          "title": "Gérer les limites de dépenses"
-        },
-        "global": {
-          "description": "Les limites globales s'appliquent à tous les utilisateurs, groupes d'utilisateurs et clés d'API. Quand la limite globale est atteinte, plus aucun jeton ne peut être dépensé."
-        },
-        "intro": {
-          "description": "Les limites de dépenses vous aident à contrôler le nombre de jetons dépensés sur une période donnée.",
-          "groupLimit": "Définissez des limites pour les groupes d'utilisateurs afin de contrôler les dépenses des équipes.",
-          "toggleLimit": "Activez et désactivez les limites selon vos besoins.",
-          "userLimit": "Définissez des limites pour les utilisateurs afin qu'aucun utilisateur ne dépense trop.",
-          "workspaceLimit": "Définissez une limite pour tout l'espace de travail afin d'encadrer les dépenses globales de votre équipe."
-        },
-        "tabs": {
-          "global": {
-            "name": "Global"
-          },
-          "groups": {
-            "name": "Groupes"
-          },
-          "users": {
-            "name": "Utilisateurs"
-          }
-        },
-        "user": {
-          "description": "Les limites par utilisateur s'appliquent à chaque utilisateur individuellement. Quand un utilisateur atteint une limite, il ne peut temporairement plus dépenser de jetons."
-        },
-        "userGroup": {
-          "description": "Les limites de groupe s'appliquent à tous les utilisateurs d'un groupe. Si un utilisateur appartient à plusieurs groupes, la limite la plus permissive s'applique."
-        }
-      }
-    },
     "tracing": {
       "disconnectModal": {
         "body": "Les traces des appels LLM ne seront plus envoyées à **{label}**. Les traces déjà envoyées ne sont pas affectées.",
@@ -10322,13 +10270,6 @@
           "label": "Inviter des utilisateurs"
         },
         "title": "Utilisateurs et demandes"
-      },
-      "permissionsNotice": {
-        "description": "{appName} utilise désormais des autorisations basées sur les groupes. Les rôles Curator et Global Curator sont remplacés par des autorisations de groupe configurables, avec des gestionnaires par groupe pour une administration limitée à leur périmètre.",
-        "learnMoreButton": {
-          "label": "En savoir plus"
-        },
-        "title": "Les autorisations ont changé"
       },
       "resetPasswordModal": {
         "copyButton": {
@@ -11096,6 +11037,200 @@
         "scoped": "Éléments ajoutés ou modifiés uniquement",
         "failures": "{count, plural, one {# échec} other {# échecs}}"
       }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "Définissez des limites de dépenses pour encadrer les dépenses LLM de votre organisation.",
+        "loadFailed": "Impossible de charger les limites de dépenses."
+      },
+      "workspace": {
+        "title": "Limites de l'espace de travail",
+        "description": "S'appliquent à tous les utilisateurs et comptes de cette organisation.",
+        "pool": {
+          "title": "Budget partagé",
+          "description": "Limite partagée entre tous par période de réinitialisation. Définissez une limite de coût ou de jetons, ou les deux.",
+          "empty": "Aucune limite globale de l'espace de travail",
+          "target": "Limite globale de l'espace de travail",
+          "emptyDescription": "Limite partagée entre tous par période de réinitialisation."
+        },
+        "perUser": {
+          "title": "Limite par utilisateur",
+          "description": "Limite individuelle pour chaque utilisateur de l'organisation. Définissez une limite de coût ou de jetons, ou les deux.",
+          "empty": "Aucune limite par utilisateur",
+          "target": "Limite globale par utilisateur",
+          "emptyDescription": "Limite individuelle pour chaque utilisateur de l'organisation."
+        }
+      },
+      "groups": {
+        "title": "Limites de groupe",
+        "description": "S'appliquent à certains groupes de cette organisation.",
+        "add": {
+          "label": "Ajouter une limite de groupe"
+        },
+        "picker": {
+          "placeholder": "Sélectionnez un groupe",
+          "limitSet": "Limite définie :"
+        },
+        "members": "{count, plural, one {# membre} other {# membres}}",
+        "empty": "Définissez des limites de coût/jetons pour l'utilisation de l'espace de travail, des utilisateurs et des groupes.",
+        "pool": {
+          "title": "Budget partagé du groupe",
+          "description": "Limite partagée pour tous les membres de ce groupe. Définissez une limite de coût ou de jetons, ou les deux.",
+          "empty": "Aucun budget partagé du groupe",
+          "target": "Limite de groupe",
+          "emptyDescription": "Limite partagée pour tous les membres de ce groupe.",
+          "members": "{count, plural, one {# membre} other {# membres}}"
+        },
+        "perMember": {
+          "title": "Limite par membre",
+          "description": "Limite individuelle pour chaque membre de ce groupe. Définissez une limite de coût ou de jetons, ou les deux.",
+          "adminOnly": "Seul un administrateur peut modifier les limites par membre, car elles peuvent placer un membre au-dessus de la limite de l'espace de travail.",
+          "empty": "Aucune limite par membre",
+          "target": "Limite de groupe par membre",
+          "emptyDescription": "Limite individuelle pour chaque membre de ce groupe.",
+          "members": "Limite par membre • {count, plural, one {# membre} other {# membres}}"
+        },
+        "kind": {
+          "placeholder": "Sélectionnez un type de limite"
+        },
+        "field": {},
+        "new": {
+          "title": "Nouvelle limite de groupe",
+          "pool": {
+            "description": "Limite partagée pour tous les membres d'un groupe donné. Définissez une limite de coût ou de jetons, ou les deux."
+          },
+          "perMember": {
+            "description": "Limite individuelle pour chaque membre d'un groupe donné. Définissez une limite de coût ou de jetons, ou les deux."
+          }
+        }
+      },
+      "groupPage": {
+        "title": "Limites de dépenses",
+        "description": "Limitez ce que ce groupe peut dépenser en utilisation de LLM."
+      },
+      "card": {
+        "addLimit": "Ajouter une limite",
+        "addModelBudget": "Ajouter un budget de modèle",
+        "modelBudget": {
+          "title": "Budget de modèle",
+          "description": "Plafonnez les dépenses sur des modèles précis. Elles comptent aussi dans le budget partagé."
+        },
+        "cancel": "Annuler",
+        "save": "Enregistrer les modifications",
+        "saved": "Limites de dépenses enregistrées",
+        "saveFailed": "Impossible d'enregistrer les limites de dépenses : {error}",
+        "create": "Créer la limite",
+        "reenable": "Réactiver",
+        "disable": {
+          "tooltip": "Désactiver toutes les limites"
+        },
+        "expand": {
+          "tooltip": "Gérer"
+        },
+        "collapse": {
+          "tooltip": "Réduire"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> ou <b>{tokens}</b> jetons / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> jetons / {period}",
+          "period": {
+            "DAILY": "jour",
+            "WEEKLY": "semaine",
+            "MONTHLY": "mois"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, one {# budget de modèle} other {# budgets de modèle}}",
+          "nextReset": "Prochaine réinitialisation : {at}",
+          "inactive": "Limite inactive",
+          "used": "<b>{percent} %</b> utilisé",
+          "prefix": "{name} - "
+        }
+      },
+      "alerts": {
+        "title": "Alertes",
+        "description": "Limites d'alerte définies via l'API. Elles ne bloquent pas l'utilisation et restent inchangées lors d'un enregistrement ici.",
+        "row": "{model}, {period} : {target}",
+        "allModels": "Tous les modèles",
+        "percent": "{percent} % de la limite",
+        "tokens": "{tokens} jetons"
+      },
+      "row": {
+        "model": {
+          "title": "Modèle",
+          "placeholder": "Rechercher des modèles…"
+        },
+        "period": {
+          "title": "Période de réinitialisation",
+          "options": {
+            "DAILY": {
+              "title": "Limite quotidienne",
+              "description": "Réinitialisée chaque jour",
+              "helper": "Réinitialisée chaque jour à 00:00 UTC."
+            },
+            "WEEKLY": {
+              "title": "Limite hebdomadaire",
+              "description": "Réinitialisée chaque lundi",
+              "helper": "Réinitialisée chaque lundi à 00:00 UTC."
+            },
+            "MONTHLY": {
+              "title": "Limite mensuelle",
+              "description": "Réinitialisée le 1er de chaque mois",
+              "helper": "Réinitialisée le 1er de chaque mois à 00:00 UTC."
+            }
+          }
+        },
+        "nextReset": "Prochaine réinitialisation",
+        "resetUsage": {
+          "label": "Réinitialiser l'utilisation de la limite maintenant",
+          "done": "Utilisation réinitialisée. Cette limite compte à partir de maintenant jusqu'à sa prochaine réinitialisation.",
+          "failed": "Impossible de réinitialiser l'utilisation : {error}"
+        },
+        "remove": {
+          "tooltip": "Supprimer la limite"
+        },
+        "cost": {
+          "title": "Limite de coût",
+          "placeholder": "Aucune limite de coût",
+          "suffix": "USD"
+        },
+        "tokens": {
+          "title": "Limite de jetons",
+          "placeholder": "Aucune limite de jetons",
+          "suffix": "k",
+          "unit": "jetons"
+        },
+        "usage": {
+          "spent": "<mono>{amount}</mono> dépensés",
+          "tokens": "<mono>{tokens}</mono> jetons utilisés",
+          "percent": "{percent} %",
+          "blocked": {
+            "all": "L'utilisation restera bloquée jusqu'à la prochaine réinitialisation.",
+            "model": "L'utilisation du modèle restera bloquée jusqu'à la prochaine réinitialisation."
+          }
+        },
+        "whenReached": {
+          "title": "Quand cette limite est atteinte",
+          "blockAll": {
+            "title": "Bloquer toute l'utilisation à la limite",
+            "description": "L'utilisation de tous les modèles, y compris le chat, la recherche, le bot et les appels API, s'arrête jusqu'à la prochaine réinitialisation."
+          },
+          "blockModel": {
+            "title": "Bloquer l'utilisation du modèle à la limite",
+            "description": "L'utilisation de ce modèle, y compris le chat, le bot et les appels API, s'arrête jusqu'à la prochaine réinitialisation.",
+            "summary": "Bloquer l'utilisation du modèle à la limite"
+          }
+        },
+        "errors": {
+          "budgetOutOfRange": "Définissez un coût d'au moins 0,01 $ et au plus 1 000 milliards de jetons.",
+          "budgetRequired": "Définissez une limite de coût, de jetons, ou les deux.",
+          "duplicate": "Une autre limite utilise déjà cette période.",
+          "modelRequired": "Choisissez un modèle."
+        },
+        "edit": {
+          "tooltip": "Modifier"
+        }
+      }
     }
   },
   "agents": {
@@ -11108,6 +11243,9 @@
       },
       "pin": {
         "tooltip": "Épingler à la barre latérale"
+      },
+      "pinFailed": {
+        "message": "Impossible de mettre à jour l’épinglage. Réessayez."
       },
       "share": {
         "tooltip": "Partager l'agent"
@@ -11415,7 +11553,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "Changer l'autorisation publique"
+          "ariaLabel": "Changer l'autorisation de l'organisation"
         },
         "row": {
           "updateAccess": {
@@ -11499,16 +11637,18 @@
           "title": "Rappels de prompt"
         },
         "public": {
-          "label": "Public dans votre organisation"
+          "label": "Disponible pour votre organisation"
         }
       }
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {Agent} other {Agents}}"
+        "label": "{count, plural, one {# Agent} other {# Agents}}"
       },
       "empty": {
-        "description": "Aucun agent trouvé"
+        "description": "Les agents que vous créez et ceux partagés avec vous apparaissent ici.",
+        "filteredDescription": "Aucun agent ne correspond à l’onglet et aux filtres sélectionnés.",
+        "item": "agents"
       },
       "header": {
         "description": "Personnalisez le comportement et les connaissances de l'IA pour vos cas d'usage et ceux de votre équipe.",
@@ -11522,9 +11662,6 @@
       },
       "page": {
         "ariaLabel": "Page des agents"
-      },
-      "search": {
-        "placeholder": "Rechercher des agents..."
       },
       "sections": {
         "all": {
@@ -12014,9 +12151,6 @@
         "builtin": {
           "label": "Intégrée"
         },
-        "custom": {
-          "label": "Personnalisée"
-        },
         "invalid": {
           "label": "Non valide"
         },
@@ -12028,6 +12162,16 @@
         },
         "unavailable": {
           "label": "Indisponible - cliquez pour en savoir plus"
+        },
+        "shared": {
+          "label": "Partagée"
+        },
+        "organization": {
+          "label": "Organisation"
+        },
+        "unpublished": {
+          "label": "Modifications non publiées",
+          "tooltip": "L'organisation utilise encore la version {number}."
         }
       },
       "toggle": {
@@ -12093,6 +12237,12 @@
       },
       "failedFiles": {
         "toast": "{count, plural, one {Un fichier a échoué et a été supprimé : {names}} other {Des fichiers ont échoué et ont été supprimés : {names}}}"
+      },
+      "firstOpenLoader": {
+        "ariaLabel": "Chargement de la discussion"
+      },
+      "olderMessagesLoader": {
+        "ariaLabel": "Chargement des messages plus anciens"
       },
       "newChatButton": {
         "label": "Démarrer une nouvelle discussion"
@@ -12303,6 +12453,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "Sous-agents en cours",
         "attachFilesButton": {
           "tooltip": "Joindre des fichiers"
         },
@@ -12311,6 +12462,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "La recherche approfondie est désactivée en mode multi-modèle",
+          "incognitoTooltip": "La recherche approfondie n'est pas disponible en mode incognito",
           "label": "Recherche approfondie"
         },
         "incognitoNotice": {
@@ -12328,7 +12480,9 @@
           "speakingPlaceholder": "{appName} parle..."
         },
         "sendButton": {
-          "processingFilesTooltip": "En attente de la fin du traitement des fichiers joints"
+          "processingFilesTooltip": "En attente de la fin du traitement des fichiers joints",
+          "stoppingLabel": "Arrêt en cours…",
+          "reloadLabel": "Vérifier à nouveau"
         },
         "tabReadingButton": {
           "readLabel": "Lire cet onglet",
@@ -12337,6 +12491,24 @@
         "voiceSetupButton": {
           "ariaLabel": "Configurer la voix",
           "tooltip": "La voix n'est pas configurée. Configurez-la dans les paramètres d'administration."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Entrée pour envoyer · Ctrl ou Commande + Entrée pour mettre en attente",
+          "multiModelHint": "La file d'attente n'est pas disponible pendant la comparaison de modèles. Choisissez un modèle pour mettre des messages en file.",
+          "attachmentsHint": "Envoyez les pièces jointes une fois cette réponse terminée.",
+          "chooseResponseHint": "Choisissez une réponse avant de mettre un message en file.",
+          "incognitoHint": "Attendez la fin de la réponse dans le chat incognito.",
+          "sendHint": "Envoyer à la prochaine étape de cette réponse",
+          "interruptHint": "Interrompre le travail en cours et envoyer ce message",
+          "sendLabel": "Envoyer",
+          "queueLabel": "En attente",
+          "interruptKeyboardHint": "Entrée pour interrompre · Ctrl ou Commande + Entrée pour mettre en attente",
+          "interruptLabel": "Interrompre",
+          "waitHint": "Attendez la fin de la réponse.",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "Arrêter les sous-agents"
         }
       },
       "baseInputBar": {
@@ -12386,9 +12558,6 @@
         "content": {
           "ariaLabel": "Sélecteur de compétences"
         },
-        "empty": {
-          "text": "Aucune compétence correspondante"
-        },
         "mcpServersGroup": {
           "label": "Serveurs MCP"
         },
@@ -12427,6 +12596,19 @@
           "tooltip": "Remplacer cette vignette par son texte complet en ligne"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Retirer {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Texte collé : {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Retirer le texte collé"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "Ouvrir le menu d'ajout",
@@ -12435,16 +12617,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "Retirer le message en attente"
+          "tooltip": "Retirer le message en attente",
+          "ariaLabel": "Retirer le message en attente : {message}"
         },
         "editHint": {
           "label": "modifier ·"
         },
-        "item": {
-          "ariaLabel": "Basculer le message en attente"
-        },
         "removeHint": {
           "label": "retirer"
+        },
+        "editButton": {
+          "tooltip": "Modifier le message en file",
+          "clearDraftTooltip": "Videz votre brouillon pour modifier un message en file",
+          "ariaLabel": "Modifier le message en attente : {message}"
+        },
+        "sendButton": {
+          "tooltip": "Interrompre le travail en cours et envoyer ce message",
+          "ariaLabel": "Envoyer maintenant : {message}"
+        },
+        "sendHint": {
+          "label": "envoyer maintenant ·"
         }
       },
       "sharedAppInputBar": {
@@ -12454,6 +12646,17 @@
         "startSessionButton": {
           "label": "Démarrer une nouvelle session"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Impossible d’envoyer le message.",
+        "withdrawFailed": "Impossible de retirer le message en attente.",
+        "loadFailed": "Impossible de charger les messages en attente.",
+        "alreadyAccepted": "Ce message a déjà été accepté et n’est plus en attente.",
+        "interruptFailed": "Impossible d’envoyer ce message maintenant. Il reste en attente.",
+        "stopSubagentsFailed": "Impossible d'arrêter les sous-agents."
+      },
+      "pendingToolApproval": {
+        "toast": "Approuvez ou refusez d'abord les appels d'outils en attente."
       }
     },
     "mcpApiKey": {
@@ -12545,7 +12748,13 @@
       "agentMessage": {
         "stoppedGeneration": {
           "text": "L'utilisateur a arrêté la génération"
+        },
+        "timedOut": {
+          "text": "La réponse s'est arrêtée, car elle a atteint sa limite de temps."
         }
+      },
+      "agentResults": {
+        "received": "Résultats des sous-agents reçus"
       },
       "codeBlock": {
         "copyButton": {
@@ -12680,9 +12889,6 @@
         }
       },
       "imageTool": {
-        "defaultStatus": {
-          "text": "Génération d'images"
-        },
         "emptyState": {
           "text": "Aucune image générée"
         },
@@ -12692,11 +12898,11 @@
         "generatedStatus": {
           "text": "{count, plural, one {# image générée} other {# images générées}}"
         },
-        "generatingImagesStatus": {
-          "text": "Génération des images..."
-        },
         "generatingStatus": {
           "text": "Génération de l'image..."
+        },
+        "stoppedStatus": {
+          "text": "Génération d'images arrêtée"
         }
       },
       "memoizedLink": {
@@ -12761,6 +12967,9 @@
         },
         "tryAgainNow": {
           "text": "Vous pouvez réessayer maintenant."
+        },
+        "otherModels": {
+          "text": "Les autres modèles restent disponibles."
         }
       },
       "resubmit": {
@@ -12780,6 +12989,9 @@
         "codingAgent": {
           "bashExit": {
             "header": "Bash · sortie {exitCode}"
+          },
+          "bashFailed": {
+            "header": "Bash · échec"
           },
           "bashRequest": {
             "label": "Requête"
@@ -12858,9 +13070,6 @@
           "executingTool": {
             "label": "Exécution de l'outil"
           },
-          "generatingImage": {
-            "label": "Génération de l'image..."
-          },
           "generatingImages": {
             "label": "Génération des images"
           },
@@ -12887,6 +13096,12 @@
           },
           "updatingMemory": {
             "label": "Mise à jour de la mémoire..."
+          },
+          "working": {
+            "label": "En cours"
+          },
+          "waitingForApproval": {
+            "label": "En attente de votre approbation"
           }
         },
         "internalSearch": {
@@ -13023,6 +13238,9 @@
             "status": "Recherche sur le web"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} veut exécuter {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -13211,14 +13429,14 @@
           "title": "Votre organisation"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "Modifier"
+          "canEdit": {
+            "label": "Peut modifier"
+          },
+          "canUse": {
+            "label": "Peut utiliser"
           },
           "removeAccess": {
             "label": "Retirer l'accès"
-          },
-          "viewAndChat": {
-            "label": "Voir et discuter"
           }
         },
         "privateOption": {
@@ -13633,6 +13851,10 @@
       "incognito": {
         "title": "Vous êtes en navigation privée"
       }
+    },
+    "readiness": {
+      "stopFailed": "Impossible d’arrêter la réponse. Réessayez.",
+      "checkFailed": "Impossible de confirmer la fin de la réponse. Vérifiez à nouveau avant d’envoyer un autre message."
     }
   },
   "common": {
@@ -14070,11 +14292,11 @@
         "text": "Chargement..."
       },
       "makePublic": {
-        "label": "Rendre ce {objectName} public ?",
+        "label": "Rendre ce {objectName} disponible pour votre organisation ?",
         "subtext": "Si activé, ce {objectName} sera utilisable par <b>tous les {publicToWhom}</b>. Sinon, seuls les <b>administrateurs</b> et les <b>{publicToWhom}</b> ayant reçu un accès explicite à ce {objectName} (par ex. via un groupe d'utilisateurs) y auront accès."
       },
       "publicDisabled": {
-        "message": "Ce {objectName} est public et accessible à tous les utilisateurs."
+        "message": "Ce {objectName} est accessible à tous les membres de votre organisation."
       },
       "usersFallback": {
         "text": "Utilisateurs"
@@ -14109,6 +14331,11 @@
       },
       "completeFailed": {
         "message": "Impossible de finaliser l'autorisation"
+      },
+      "desktopHandoff": {
+        "button": "Ouvrir Onyx",
+        "description": "Votre navigateur ouvre l'application de bureau Onyx pour terminer la connexion. Vous pouvez fermer cet onglet une fois l'application ouverte.",
+        "title": "Retour à Onyx"
       },
       "genericError": {
         "description": "Une erreur est survenue pendant le processus OAuth. Veuillez réessayer.",
@@ -14166,10 +14393,7 @@
       "upgrade": {
         "label": "Mettre à niveau l'offre"
       },
-      "availableFor": "Disponible avec l’{plan}",
-      "beta": {
-        "title": "bêta"
-      }
+      "availableFor": "Disponible avec l’{plan}"
     },
     "placeholders": {
       "email": "e-mail@votreentreprise.com",
@@ -14203,6 +14427,86 @@
     },
     "appFooter": {
       "slogan": "Plateforme d'IA open source"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "Aucun élément : {item}",
+        "title": "Aucun élément"
+      },
+      "noResults": {
+        "description": "Aucun résultat correspondant à ce terme de recherche n’a été trouvé.",
+        "itemTitle": "Aucun élément trouvé : {item}",
+        "title": "Aucun résultat"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "Rechercher des {item} ou appuyer sur « / » pour activer...",
+      "placeholder": "Rechercher ou appuyer sur « / » pour activer..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "alpha",
+        "beta": "bêta",
+        "comingSoon": "bientôt disponible",
+        "deprecated": "obsolète",
+        "temporarilyUnavailable": "temporairement indisponible",
+        "legacy": "ancien"
+      },
+      "labels": {
+        "default": "Par défaut"
+      },
+      "modelTypes": {
+        "decision": "Décision",
+        "vision": "Vision"
+      }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "Aucune donnée."
+      },
+      "showLess": {
+        "button": "Afficher moins"
+      },
+      "showMore": {
+        "button": "Afficher plus"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "Approuver pour ce chat",
+        "tooltip": "Approuver maintenant et exécuter cet outil sans redemander pendant le reste de ce chat"
+      },
+      "approveOnce": {
+        "ariaLabel": "Approuver cette action une fois",
+        "button": "Approuver une fois"
+      },
+      "approveSession": {
+        "button": "Approuver pour la session",
+        "tooltip": "Approuver les actions correspondantes pour cette session"
+      },
+      "deadline": "Approuver avant {time}",
+      "header": {
+        "required": "Approbation demandée : {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
+        "singleAction": "{action} dans {app}"
+      },
+      "reject": {
+        "ariaLabel": "Rejeter cette action",
+        "button": "Rejeter"
+      },
+      "record": {
+        "approved": "Approuvé : {headline}",
+        "closed": "N'attend plus : {headline}",
+        "disabled": "Désactivé : {headline}",
+        "expired": "Délai dépassé : {headline}",
+        "rejected": "Non approuvé : {headline}",
+        "approvedForChat": "Approuvé pour ce chat : {headline}",
+        "approvedForSession": "Approuvé pour cette session : {headline}"
+      },
+      "submitError": "Impossible d'envoyer votre décision. Réessayez.",
+      "actionWithDescription": "{action} : {description}"
     }
   },
   "craft": {
@@ -14215,50 +14519,6 @@
       },
       "switch": {
         "ariaLabel": "Changer d'agent"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Approuver cette action une fois",
-        "button": "Approuver une fois"
-      },
-      "approveSession": {
-        "button": "Approuver pour la session",
-        "tooltip": "Approuver les actions correspondantes pour cette session"
-      },
-      "details": {
-        "hideAriaLabel": "Masquer les détails",
-        "showAriaLabel": "Afficher les détails"
-      },
-      "header": {
-        "required": "Approbation requise : {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
-        "singleAction": "{action} dans {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "Aucune donnée."
-        },
-        "showLess": {
-          "button": "Afficher moins"
-        },
-        "showMore": {
-          "button": "Afficher plus"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Rejeter cette action",
-        "button": "Rejeter"
-      },
-      "status": {
-        "approved": "Approuvé",
-        "rejected": "Rejeté",
-        "expired": "Expirée"
-      },
-      "submit": {
-        "errorFallback": "Échec de l'envoi de la décision"
       }
     },
     "apps": {
@@ -14310,7 +14570,7 @@
         "promote": {
           "cancelButton": "Annuler",
           "confirmButton": "Rendre disponible pour l'organisation",
-          "description": "Les compétences associées à une app doivent être disponibles pour tous. Ce changement est appliqué lorsque vous enregistrez l'app.",
+          "description": "Les compétences associées à une app doivent être disponibles pour tous. Lorsque vous enregistrez l'app, la compétence est publiée dans l'organisation. La publication est irréversible.",
           "title": "Rendre « {name} » disponible pour toute l'organisation ?"
         },
         "search": {
@@ -14396,7 +14656,7 @@
         "duplicateSkillName": "L'app « {appName} » a déjà une compétence associée nommée « {skillName} ». Importez une compétence avec un autre nom."
       },
       "mcpPolicy": {
-        "description": "Configurez ce que l'agent Craft peut faire avec les outils de ce serveur MCP.",
+        "description": "Choisissez les outils qui s'exécutent automatiquement, demandent une approbation ou sont désactivés dans le chat et dans Craft.",
         "emptyPolicies": "Aucun outil activé sur ce serveur. Activez d'abord les outils sur la page des actions MCP.",
         "saveButton": "Enregistrer",
         "title": "Modifier {name}"
@@ -14724,6 +14984,10 @@
       },
       "plusMenu": {
         "tooltip": "Ajouter des fichiers ou des compétences"
+      },
+      "contextRing": {
+        "label": "Utilisation de la fenêtre de contexte",
+        "tooltip": "{percent} % du contexte utilisé"
       }
     },
     "interruptHint": {
@@ -14735,9 +14999,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BÊTA"
-      },
       "returnHome": {
         "button": "Retour à l'accueil"
       },
@@ -15238,6 +15499,10 @@
         "trigger": {
           "runNow": "Exécuter une fois",
           "schedule": "Planification"
+        },
+        "markAllViewed": {
+          "label": "Tout marquer comme vu",
+          "error": "Impossible de marquer les exécutions comme vues. Réessayez."
         }
       },
       "scheduleEditor": {
@@ -15269,7 +15534,8 @@
           "tue": "Mar",
           "wed": "Mer"
         }
-      }
+      },
+      "unviewedResults": "Nouveaux résultats"
     },
     "todoList": {
       "empty": {
@@ -15587,7 +15853,7 @@
     "actionPolicies": {
       "appTitle": "Paramètres d’approbation de {name}",
       "title": "Paramètres d’approbation",
-      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft et les nouvelles tâches ; les tâches existantes conservent leurs propres paramètres.",
+      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft, les nouvelles tâches et les appels d’outils MCP dans le chat ; les tâches existantes conservent leurs propres paramètres.",
       "taskDescription": "Choisissez les plugins de cette tâche et les actions à exécuter automatiquement. Les modifications concernent uniquement cette tâche.",
       "newTaskDescription": "Activez un plugin pour partir de vos paramètres actuels des actions.",
       "workspace_disabled": "Désactivée pour cet espace de travail",
@@ -15603,9 +15869,6 @@
       "saveError": "Impossible d’enregistrer les paramètres d’approbation.",
       "emptyActions": "Aucune action connue. Les actions inconnues nécessitent une approbation.",
       "emptyApps": "Aucune application disponible.",
-      "expired": "Le délai d’approbation a expiré. L’action n’a pas été exécutée.",
-      "rejected": "Demande rejetée. Cette demande n’a pas été exécutée.",
-      "deadline": "Approuver avant {time}",
       "agentPermissionRequired": "Cette exécution s’est arrêtée car une action nécessitait une approbation. Vérifiez les autorisations, puis relancez la tâche.",
       "enableForTask": "Activer pour cette tâche",
       "enableAppForTask": "Activer {app} pour cette tâche",
@@ -15829,6 +16092,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "Terminer la configuration"
+      },
+      "nextButton": {
+        "label": "Suivant"
+      },
       "progress": {
         "label": "Étape {current} sur {total}"
       }
@@ -15840,13 +16109,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# modèle connecté} other {# modèles connectés}}"
       },
-      "customProvider": {
-        "subtitle": "API compatibles LiteLLM",
-        "title": "Fournisseur de LLM personnalisé"
-      },
       "description": "{appName} prend en charge les modèles auto-hébergés et les fournisseurs populaires.",
       "edit": {
         "ariaLabel": "Modifier les fournisseurs de LLM"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "Voir"
+        },
+        "description": "Configurer dans le panneau d'administration",
+        "title": "Plus de fournisseurs"
       },
       "providerCard": {
         "connect": {
@@ -15854,7 +16126,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Paramètres du fournisseur"
-        }
+        },
+        "settingsLoadError": "Impossible de charger les paramètres de ce fournisseur. Réessayez."
       },
       "title": "Connectez vos modèles LLM"
     },
@@ -15881,28 +16154,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "Terminer la configuration"
-        },
-        "title": "Tout est prêt. Consultez les paramètres facultatifs ou cliquez sur Terminer la configuration"
-      },
       "llmSetup": {
-        "button": {
-          "label": "Suivant"
-        },
-        "title": "Presque terminé ! Connectez vos modèles pour commencer à discuter."
+        "title": "Connectez un modèle pour commencer à discuter."
       },
       "name": {
-        "button": {
-          "label": "Suivant"
-        },
-        "title": "Prenons un moment pour vous configurer."
+        "title": "Dites-nous comment vous appeler."
       },
-      "welcome": {
-        "button": {
-          "label": "C'est parti"
-        },
+      "optionalSetup": {
+        "title": "Configurez quelques options supplémentaires."
+      },
+      "postStep": {
+        "title": "Tout est prêt."
+      },
+      "preStep": {
         "title": "Prenons un moment pour vous configurer."
       }
     }
@@ -15981,14 +16245,16 @@
     "inputMultiUpload": {
       "placeholder": "Ajouter des fichiers…",
       "dropToAdd": "Déposez les fichiers ici pour les ajouter",
-      "dropToAddMore": "Déposez ici pour ajouter d’autres fichiers"
+      "dropToAddMore": "Déposez ici pour ajouter d’autres fichiers",
+      "select": "Sélectionner des fichiers"
     },
     "inputUpload": {
       "placeholder": "Ajouter un fichier…",
       "pasted": "Texte collé",
       "attached": "Fichier joint",
       "dropToAdd": "Déposez le fichier ici pour l’ajouter",
-      "dropToReplace": "Déposez ici pour remplacer le fichier"
+      "dropToReplace": "Déposez ici pour remplacer le fichier",
+      "select": "Sélectionner un fichier"
     },
     "inputImage": {
       "alt": "Image",
@@ -16237,6 +16503,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "Échec de l'enregistrement des préférences"
+      },
+      "sendBehavior": {
+        "title": "Comportement d’Envoi Pendant le Travail",
+        "description": "Choisissez l’action d’Entrée et du bouton d’envoi pendant une réponse. Ctrl/Cmd+Entrée met toujours le message en attente.",
+        "afterStep": "Après l’étape en cours",
+        "interrupt": "Interrompre le travail en cours"
       }
     },
     "connectors": {
@@ -16418,7 +16690,7 @@
       "row": {
         "contentPlaceholder": "Fournissez un résumé concis en 1 à 2 phrases de ce qui suit :",
         "promptPlaceholder": "Résumer",
-        "publicTooltip": "Impossible de supprimer les raccourcis d'invite publics.",
+        "publicTooltip": "Impossible de supprimer les raccourcis d'invite de l'organisation.",
         "removeAriaLabel": "Supprimer le raccourci"
       },
       "title": "Raccourcis d'invite",
@@ -16642,6 +16914,12 @@
         },
         "webSearch": {
           "label": "Recherche web"
+        },
+        "skills": {
+          "label": "Compétences"
+        },
+        "spendingLimits": {
+          "label": "Limites de dépenses"
         }
       },
       "sections": {
@@ -16943,6 +17221,13 @@
         "savingChanges": "Enregistrement des modifications...",
         "savingSkill": "Enregistrement de la compétence..."
       },
+      "staleVersion": {
+        "description": "Quelqu’un a enregistré une version plus récente. Rechargez pour l’obtenir. Vos modifications non enregistrées seront perdues.",
+        "reload": {
+          "label": "Recharger"
+        },
+        "title": "Cette compétence a changé depuis son ouverture"
+      },
       "toasts": {
         "created": "« {name} » créée",
         "deleteFailed": "Échec de la suppression de la compétence",
@@ -16955,6 +17240,9 @@
         "inspectFailed": "Échec de l'inspection du paquet de compétence",
         "saveFailed": "Échec de l'enregistrement de la compétence",
         "saved": "« {name} » enregistrée"
+      },
+      "creationAccess": {
+        "title": "Accès"
       }
     },
     "modals": {
@@ -16993,6 +17281,13 @@
           "singleSkill": "Téléversez une seule compétence à la fois.",
           "title": "Exigences pour les fichiers",
           "zip": "Les fichiers ZIP doivent contenir un fichier SKILL.md."
+        },
+        "batch": {
+          "title": "Accès aux compétences téléversées",
+          "selected": "{count, plural, one {# paquet de compétence sélectionné} other {# paquets de compétences sélectionnés}}",
+          "result": "{imported, plural, one {# compétence importée} other {# compétences importées}}. {failed, plural, one {# échec} other {# échecs}}.",
+          "failure": "{name} : {reason}",
+          "requirement": "Sélectionnez plusieurs fichiers ZIP pour importer des compétences ensemble. Chaque ZIP doit contenir une compétence."
         }
       },
       "importGithub": {
@@ -17069,6 +17364,11 @@
         "unavailableFallback": "Cette compétence ne peut pas être importée.",
         "unavailableTag": {
           "label": "Importation impossible"
+        },
+        "sharing": {
+          "title": "Accès aux compétences importées",
+          "configureButton": "Configurer l’accès",
+          "description": "Ces paramètres d’accès s’appliquent à {count, plural, one {la compétence sélectionnée} other {toutes les # compétences sélectionnées}}."
         }
       },
       "nameConflict": {
@@ -17128,14 +17428,9 @@
           "message": "Chargement des détails de partage..."
         },
         "noOwnerTitle": "Aucun propriétaire actif",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Changer l'autorisation de l'organisation"
-        },
         "ownerLabel": "Propriétaire",
         "permissionMenu": {
-          "ariaLabel": "Mettre à jour l'accès de {name}",
-          "canUse": "Peut utiliser",
-          "canEdit": "Peut modifier"
+          "ariaLabel": "Mettre à jour l'accès de {name}"
         },
         "saveButton": {
           "label": "Enregistrer"
@@ -17173,15 +17468,82 @@
         "peopleTitle": "Personnes ayant accès",
         "manageIndividualAccess": "Gérer les accès individuels",
         "individualAccessTitle": "Accès individuels",
-        "ownershipTitle": "Propriété"
+        "ownershipTitle": "Propriété",
+        "published": {
+          "title": "Organisation",
+          "description": "Publiée. Tout le monde dans l'organisation peut utiliser cette compétence."
+        },
+        "publishWarning": {
+          "title": "La publication est irréversible",
+          "description": "Après l'enregistrement, tout le monde dans l'organisation peut utiliser cette compétence. Vous ne pourrez plus la rendre privée. Seul un administrateur peut la supprimer.",
+          "reviewDescription": "La compétence reste privée jusqu'à ce qu'un administrateur approuve la demande. Après l'approbation, vous ne pourrez plus la rendre privée."
+        },
+        "reviewRequestedToast": {
+          "message": "Votre demande de publication a été envoyée à un administrateur pour examen."
+        },
+        "publishOff": {
+          "title": "La publication est désactivée",
+          "description": "Un administrateur a désactivé la publication dans l'organisation. Demandez à un administrateur de publier cette compétence."
+        }
       },
       "placeholders": {
         "githubRepository": "proprietaire/depot ou https://github.com/proprietaire/depot"
+      },
+      "tabs": {
+        "details": "Détails",
+        "sharing": "Partage",
+        "versions": "Versions"
+      },
+      "versions": {
+        "tableLabel": "Versions de la compétence",
+        "columns": {
+          "version": "Version",
+          "madeBy": "Créée par",
+          "date": "Date"
+        },
+        "versionLabel": "Version {number}",
+        "currentBadge": "Actuelle",
+        "unknownAuthor": "Inconnu",
+        "previewRow": {
+          "ariaLabel": "Aperçu de la version {number}"
+        },
+        "restore": {
+          "label": "Restaurer",
+          "ariaLabel": "Restaurer la version {number}",
+          "successToast": "Version {number} restaurée en tant que version {newNumber}.",
+          "unchangedToast": "La version {number} a les mêmes fichiers que la version actuelle.",
+          "failedToast": "Impossible de restaurer cette version.",
+          "unsavedChanges": {
+            "title": "Enregistrez d'abord vos modifications",
+            "description": "Enregistrez ou annulez les modifications de l'éditeur avant de restaurer une version."
+          }
+        },
+        "loadError": {
+          "title": "Impossible de charger les versions",
+          "description": "Réessayez plus tard."
+        },
+        "preview": {
+          "back": "Toutes les versions",
+          "loadError": {
+            "title": "Impossible de charger cette version"
+          }
+        },
+        "status": {
+          "pending": "Examen en attente",
+          "published": "Publiée"
+        },
+        "publishUpdate": {
+          "label": "Publier la mise à jour",
+          "successToast": "Version {number} publiée pour l'organisation.",
+          "failedToast": "Impossible de publier cette mise à jour.",
+          "sentForReviewToast": "La version {number} a été envoyée à un administrateur pour examen.",
+          "offNotice": "La publication est désactivée. Demandez à un administrateur de publier cette mise à jour."
+        }
       }
     },
     "page": {
       "browse": {
-        "title": "Parcourir les compétences"
+        "title": "Sélectionner des compétences"
       },
       "countSeparator": {
         "label": "{count, plural, one {Compétence} other {Compétences}}"
@@ -17209,8 +17571,8 @@
           "title": "Aucune compétence correspondante"
         },
         "noSkills": {
-          "description": "Aucune compétence personnalisée n'a encore été partagée avec vous et aucune compétence intégrée n'est configurée.",
-          "title": "Aucune compétence disponible"
+          "title": "Aucune compétence personnalisée pour le moment",
+          "description": "Créez ou importez une compétence pour l’ajouter à votre bibliothèque."
         }
       },
       "focusedApp": {
@@ -17247,6 +17609,9 @@
         "disableFailed": "Échec de la désactivation de {name}",
         "enableFailed": "Échec de l'activation de {name}",
         "refreshFailed": "{name} a été mise à jour, mais la liste des compétences n'a pas pu être actualisée."
+      },
+      "builtins": {
+        "title": "Compétences intégrées ({count, number})"
       }
     },
     "sections": {
@@ -17301,6 +17666,65 @@
         "error": {
           "readFailed": "Impossible de lire le fichier téléversé."
         }
+      }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {Tout le monde dans l’organisation peut accéder à cette compétence.} other {Tout le monde dans l’organisation peut accéder à ces compétences.}}",
+      "selected": "Partagée avec {users, plural, one {# personne} other {# personnes}} et {groups, plural, one {# groupe} other {# groupes}}.",
+      "private": "{count, plural, one {Vous seul pouvez accéder à cette compétence.} other {Vous seul pouvez accéder à ces compétences.}}"
+    },
+    "bulk": {
+      "adminDescription": "Gérez les compétences et les accès dans votre organisation.",
+      "selectAll": "Sélectionner toutes les compétences personnalisées visibles",
+      "selected": "{count, plural, one {# sélectionnée} other {# sélectionnées}}",
+      "share": "Partager",
+      "enable": "Activer pour moi",
+      "disable": "Désactiver pour moi",
+      "delete": "Supprimer",
+      "selectSkill": "Sélectionner {name}",
+      "updated": "{count, plural, one {# compétence mise à jour} other {# compétences mises à jour}}",
+      "failed": "Impossible de mettre à jour les compétences. Réessayez.",
+      "partialFailure": "{count, plural, one {# compétence n’a pas pu être mise à jour} other {# compétences n’ont pas pu être mises à jour}}",
+      "deleteTitle": "{count, plural, one {Supprimer # compétence ?} other {Supprimer # compétences ?}}",
+      "deleteDescription": "{count, plural, one {La compétence sélectionnée sera supprimée pour toutes les personnes qui y ont accès. Cette action est irréversible.} other {Les # compétences sélectionnées seront supprimées pour toutes les personnes qui y ont accès. Cette action est irréversible.}}",
+      "shareTitle": "{count, plural, one {Mettre à jour l’accès à # compétence} other {Mettre à jour l’accès à # compétences}}",
+      "shareDescription": "Appliquez ces modifications à chaque compétence sélectionnée. Les paramètres non modifiés conservent leurs valeurs actuelles.",
+      "unchanged": "Ne pas modifier",
+      "everyone": "Tout le monde dans l’organisation",
+      "addAccessDescription": "Ajoutez ces personnes et groupes à chaque compétence sélectionnée. Les personnes et groupes indiqués reçoivent la permission choisie. Les autres conservent leur accès actuel.",
+      "apply": "{count, plural, one {Appliquer à # compétence} other {Appliquer à # compétences}}",
+      "moreActions": "Plus d’actions",
+      "publishWarning": {
+        "title": "La publication est irréversible",
+        "description": "Après l'application, tout le monde dans l'organisation peut utiliser les compétences sélectionnées. Les compétences publiées ne peuvent plus redevenir privées. Seul un administrateur peut les supprimer."
+      }
+    },
+    "reviewRequests": {
+      "title": "Demandes de publication",
+      "description": "Approuvez ou refusez les demandes de publication de compétences pour l'organisation.",
+      "columns": {
+        "skill": "Compétence",
+        "version": "Version",
+        "author": "Auteur",
+        "saved": "Enregistrée"
+      },
+      "unnamedSkill": "Compétence sans nom",
+      "review": {
+        "label": "Examiner",
+        "ariaLabel": "Examiner {name}"
+      },
+      "approve": {
+        "label": "Approuver"
+      },
+      "deny": {
+        "label": "Refuser"
+      },
+      "approvedToast": "Version {number} de {name} publiée.",
+      "deniedToast": "Version {number} de {name} refusée.",
+      "failedToast": "Impossible de mettre à jour cette demande.",
+      "version": {
+        "firstPublish": "v{number} · Première publication",
+        "update": "v{number} · Mise à jour depuis v{published}"
       }
     }
   },

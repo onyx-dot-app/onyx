@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 from typing import NotRequired, TypedDict, cast
 
+import remote
 from runtime import Cluster
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -459,7 +460,7 @@ def doctor(args: argparse.Namespace) -> int:
             report("FAIL", "Sandbox PodTemplate unavailable; run make craft-up")
 
     if available["telepresence"]:
-        result = probe("telepresence", "status", "--format", "json")
+        result = probe("telepresence", "status", "--output", "json")
         status = (
             json.loads(result.stdout)
             if result is not None and result.returncode == 0
@@ -635,7 +636,7 @@ def pause_resume(args: argparse.Namespace) -> None:
     if args.command == "pause":
         # Never quit a Telepresence connection to another cluster.
         status = json.loads(
-            run("telepresence", "status", "--format", "json", capture=True)
+            run("telepresence", "status", "--output", "json", capture=True)
         )
         connection = status.get("user_daemon", {})
         if connection.get("kubernetes_context") == f"kind-{args.cluster_name}":
@@ -737,6 +738,17 @@ def main() -> int:
     parser.add_argument("--cluster-name", default="onyx-dev")
     parser.add_argument("--namespace", default="onyx")
     parser.add_argument("--sandbox-namespace", default="onyx-sandboxes")
+    parser.add_argument(
+        "--target",
+        choices=("kind", remote.TARGET),
+        default=os.environ.get("CRAFT_TARGET", "kind"),
+    )
+    parser.add_argument(
+        "--profile", type=Path, help=f"{remote.TARGET} profile; or {remote.PROFILE_ENV}"
+    )
+    parser.add_argument(
+        "--context", help=f"A context the {remote.TARGET} profile allows"
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     image_parser = commands.add_parser("images")
     image_parser.add_argument("--only", choices=list(IMAGES))
@@ -768,6 +780,16 @@ def main() -> int:
     migration.add_argument("operation", choices=["status", "upgrade"])
     migration.add_argument("--env-file", type=Path, help="Defaults to .vscode/.env.k8s")
     args = parser.parse_args()
+    if args.target == remote.TARGET:
+        if args.command != "doctor":
+            print(
+                f"error: only doctor supports --target {remote.TARGET}; use launch.py for the api",
+                file=sys.stderr,
+            )
+            return 1
+        return remote.doctor(
+            ROOT, args.profile, args.context or os.environ.get(remote.CONTEXT_ENV)
+        )
     try:
         if args.command == "images":
             return images(args)

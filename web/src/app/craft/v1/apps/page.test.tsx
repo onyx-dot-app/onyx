@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation";
 import Page from "@/app/craft/v1/apps/page";
 
-jest.mock("next/navigation", () => ({ redirect: jest.fn() }));
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  redirect: jest.fn(),
+}));
 
 beforeEach(() => jest.clearAllMocks());
 
