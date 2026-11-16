@@ -292,10 +292,11 @@ it deletes the old one.
   SearchSettings row from NONE to 7-bit at startup, before the index is
   created. The migration that creates the first row predates quantization, so
   a column default cannot do it. The rule skips on any sign of earlier use: an
-  index for the row, other SearchSettings rows, documents, connectors, user
-  files, a FUTURE row, multi-tenant, or a cluster older than 2.16 or not
-  reachable. Quantization is part of the mapping, so it must not change once
-  the index exists.
+  index for the row, documents, connectors, user files, a FUTURE row,
+  multi-tenant, or a cluster older than 2.16 or not reachable. A new
+  deployment already has a PAST row from migrations, so the row count is not a
+  sign. Quantization is part of the mapping, so it must not change once the
+  index exists.
 
 ## Known issues
 

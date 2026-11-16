@@ -42,7 +42,6 @@ from onyx.db.llm import (
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import (
     get_active_search_settings,
-    get_all_search_settings,
     get_current_search_settings,
     update_current_search_settings,
 )
@@ -275,13 +274,12 @@ def set_new_deployment_vector_quantization(
 
     Quantization is part of the index mapping, so it changes only when no index
     exists yet. Any sign of earlier use leaves the settings as they are: an
-    index for these settings, other search settings, documents, connectors or
-    user files. A cluster that is not reachable, or does not report a version
+    index for these settings, documents, connectors or user files. Other search
+    settings rows are not a sign: migrations leave a PAST row on a new
+    deployment. A cluster that is not reachable, or does not report a version
     that supports the quantization, also leaves them as they are.
     """
     if search_settings.vector_quantization != VectorQuantization.NONE:
-        return
-    if len(get_all_search_settings(db_session)) > 1:
         return
     if (
         check_docs_exist(db_session)

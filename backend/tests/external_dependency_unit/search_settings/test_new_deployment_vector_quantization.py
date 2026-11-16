@@ -49,11 +49,7 @@ def _set_default(
     search_settings = SearchSettings(
         index_name=index_name, vector_quantization=VectorQuantization.NONE
     )
-    other_settings = [search_settings]
-    if used_by == "other_search_settings":
-        other_settings.append(SearchSettings())
     with (
-        patch.object(setup, "get_all_search_settings", return_value=other_settings),
         patch.object(setup, "check_docs_exist", return_value=used_by == _USE_CHECKS[0]),
         patch.object(
             setup, "check_connectors_exist", return_value=used_by == _USE_CHECKS[1]
@@ -79,7 +75,7 @@ def test_existing_index_keeps_its_quantization(
     assert _set_default(db_session, index_name) == VectorQuantization.NONE
 
 
-@pytest.mark.parametrize("used_by", [*_USE_CHECKS, "other_search_settings"])
+@pytest.mark.parametrize("used_by", _USE_CHECKS)
 def test_earlier_use_keeps_its_quantization(
     db_session: Session, index_name: str, used_by: str
 ) -> None:
