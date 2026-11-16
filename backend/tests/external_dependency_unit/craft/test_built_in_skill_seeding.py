@@ -27,7 +27,11 @@ from onyx.db.skill import (
     list_runtime_skills_for_user,
     list_skills,
 )
-from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
+from onyx.skills.built_in import (
+    BUILT_IN_SKILLS,
+    EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
+    BuiltInSkillDefinition,
+)
 from tests.external_dependency_unit.craft.db_helpers import (
     make_built_in_skill_row,
     make_skill,
@@ -111,10 +115,12 @@ class TestAvailabilityGate:
         }
         # Some built-ins gate on environment availability (e.g. image-generation
         # needs a configured provider); only those available here must be visible.
+        # An app built-in shows only to a user who runs a plugin of its preset.
         available_built_ins = {
             built_in_skill_id
             for built_in_skill_id, definition in BUILT_IN_SKILLS.items()
             if definition.is_available(db_session)
+            and built_in_skill_id not in EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
         }
         assert available_built_ins <= visible_built_ins
 

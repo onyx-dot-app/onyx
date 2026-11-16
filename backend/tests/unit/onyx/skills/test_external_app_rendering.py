@@ -78,7 +78,7 @@ def test_file_renderer_substitutes_the_configured_account(
         )
 
     monkeypatch.setattr(
-        "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: _App()
+        "onyx.skills.rendering.get_external_app_by_id", lambda *_: _App()
     )
     monkeypatch.setattr(
         "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
@@ -86,7 +86,7 @@ def test_file_renderer_substitutes_the_configured_account(
 
     rendered = render_external_app_files(
         cast(Session, None),
-        cast(Skill, SimpleNamespace(id=uuid4())),
+        1,
         ExternalAppType.ZENDESK,
         BUILT_IN_SKILLS["zendesk"].source_dir,
     )
@@ -108,7 +108,7 @@ def test_an_unresolvable_app_config_still_renders(
         )
 
     monkeypatch.setattr(
-        "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: _BrokenApp()
+        "onyx.skills.rendering.get_external_app_by_id", lambda *_: _BrokenApp()
     )
     monkeypatch.setattr(
         "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
@@ -116,7 +116,7 @@ def test_an_unresolvable_app_config_still_renders(
 
     rendered = render_external_app_files(
         cast(Session, None),
-        cast(Skill, SimpleNamespace(id=uuid4())),
+        1,
         ExternalAppType.ZENDESK,
         BUILT_IN_SKILLS["zendesk"].source_dir,
     )
@@ -138,7 +138,7 @@ def test_a_helper_template_is_rendered_beside_the_skill(
         )
 
     monkeypatch.setattr(
-        "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: _App()
+        "onyx.skills.rendering.get_external_app_by_id", lambda *_: _App()
     )
     monkeypatch.setattr(
         "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
@@ -146,7 +146,7 @@ def test_a_helper_template_is_rendered_beside_the_skill(
 
     rendered = render_external_app_files(
         cast(Session, None),
-        cast(Skill, SimpleNamespace(id=uuid4())),
+        1,
         ExternalAppType.ZENDESK,
         BUILT_IN_SKILLS["zendesk"].source_dir,
     )
@@ -178,9 +178,6 @@ def test_static_and_rendered_files_share_source_exclusions(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
     monkeypatch.setattr("onyx.skills.built_in.BUILTIN_SKILLS_PATH", tmp_path)
-    monkeypatch.setattr(
-        "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: None
-    )
     skill = cast(Skill, SimpleNamespace(id=uuid4(), name="zendesk"))
     definition = BuiltInSkillDefinition(built_in_skill_id="zendesk")
 
@@ -189,7 +186,7 @@ def test_static_and_rendered_files_share_source_exclusions(
     assert static == {"zendesk/helper.py": b"print('ready')"}
 
     rendered = render_external_app_files(
-        cast(Session, None), skill, ExternalAppType.ZENDESK, definition.source_dir
+        cast(Session, None), None, ExternalAppType.ZENDESK, definition.source_dir
     )
     assert set(rendered) == {
         "SKILL.md",
@@ -221,16 +218,14 @@ def test_rendered_files_withhold_secret_credential_fields(
             }
         ),
     )
-    monkeypatch.setattr(
-        "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: app
-    )
+    monkeypatch.setattr("onyx.skills.rendering.get_external_app_by_id", lambda *_: app)
     monkeypatch.setattr(
         "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
     )
     monkeypatch.setattr(ZendeskProvider, "skill_template_values", capture_values)
     rendered = render_external_app_files(
         cast(Session, None),
-        cast(Skill, SimpleNamespace(id=uuid4())),
+        1,
         ExternalAppType.ZENDESK,
         BUILT_IN_SKILLS["zendesk"].source_dir,
     )

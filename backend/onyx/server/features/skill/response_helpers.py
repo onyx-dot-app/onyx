@@ -4,15 +4,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, has_permission
+from onyx.db.app_skill import built_in_app_skills_for_user
 from onyx.db.enums import (
     Permission,
     PermissionAuthority,
     SkillAccessLevel,
     SkillSharePermission,
-)
-from onyx.db.external_app import (
-    SkillExternalAppDependencyState,
-    get_skill_external_app_dependencies,
 )
 from onyx.db.models import Skill, User
 from onyx.db.persona_sharing import (
@@ -28,7 +25,6 @@ from onyx.db.skill import SkillUserState, may_delete_skill, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.models import (
-    SkillExternalAppDependencyResponse,
     SkillGroupSummary,
     SkillPreviewResponse,
     SkillResponse,
@@ -47,19 +43,6 @@ from onyx.skills.rendering import render_external_app_files
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-def _dependency_response(
-    dependency: SkillExternalAppDependencyState | None,
-) -> SkillExternalAppDependencyResponse | None:
-    if dependency is None:
-        return None
-    return SkillExternalAppDependencyResponse(
-        external_app_id=dependency.external_app_id,
-        name=dependency.name,
-        enabled=dependency.enabled,
-        ready=dependency.ready,
-    )
 
 
 def user_permission_for_skill(
@@ -170,7 +153,6 @@ def skill_response_for_user(
             db_session,
             enabled=state.enabled,
             can_toggle=state.can_toggle,
-            external_app=_dependency_response(state.external_app_dependency),
         )
 
     if user_group_ids is None:
@@ -207,7 +189,6 @@ def skill_response_for_user(
             user_permission_for_skill(skill, access, user, user_group_ids),
             managed_user_group_ids,
         ),
-        external_app=_dependency_response(state.external_app_dependency),
         current_version_id=shown_version_id,
     )
 
@@ -259,23 +240,18 @@ def skill_preview_response(
     user: User,
     db_session: Session,
 ) -> SkillPreviewResponse:
-    # Both sources can be gated on an external app — a built-in provider's
-    # associated skill is a built-in row.
-    external_app = _dependency_response(
-        get_skill_external_app_dependencies(
-            db_session,
-            user,
-            [skill.id],
-        ).get(skill.id)
-    )
     if skill.built_in_skill_id is not None:
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
         app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
         if app_type is not None and definition.has_template:
+            # The app of the plugin the user runs gives the template values.
+            external_app_id = built_in_app_skills_for_user(user.id, db_session).get(
+                definition.built_in_skill_id
+            )
             rendered = render_external_app_files(
-                db_session, skill, app_type, definition.source_dir
+                db_session, external_app_id, app_type, definition.source_dir
             )
             instructions = strip_skill_md_frontmatter(rendered[SKILL_MD_NAME])
         else:
@@ -283,7 +259,6 @@ def skill_preview_response(
         return SkillPreviewResponse.from_builtin(
             skill,
             instructions_markdown=instructions,
-            external_app=external_app,
         )
 
     access = load_plugin_access([skill.id], user.id, db_session).get(skill.id)
@@ -295,5 +270,4 @@ def skill_preview_response(
         instructions_markdown=read_version_contents(
             access.version_user_runs, db_session
         ).instructions_markdown,
-        external_app=external_app,
     )

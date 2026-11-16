@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 from sqlalchemy import delete, select
@@ -12,7 +12,7 @@ from onyx.db.external_app import (
     create_external_app,
     upsert_external_app_user_credential,
 )
-from onyx.db.models import ExternalApp, ExternalApp__Skill, Skill, User
+from onyx.db.models import ExternalApp, Skill, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.credentials import resolve_injection_headers
@@ -95,16 +95,7 @@ def test_create_persists_gateway_without_creating_skill_content(
     assert response.app_type == ExternalAppType.CUSTOM
     assert response.name == "My Custom App"
     assert response.upstream_url_patterns == _UPSTREAM
-    assert response.associated_skills == []
     assert _skill_ids(db_session) == skills_before
-    assert (
-        db_session.scalar(
-            select(ExternalApp__Skill).where(
-                ExternalApp__Skill.external_app_id == response.id
-            )
-        )
-        is None
-    )
 
     app = db_session.get(ExternalApp, response.id)
     assert app is not None
@@ -126,7 +117,6 @@ def test_zero_skill_app_can_match_and_inject_user_credentials(
     )
     app = db_session.get(ExternalApp, response.id)
     assert app is not None
-    assert app.associated_skills == []
 
     matched = resolve_app_for_url(
         "https://api.example.com/v10/users/@me",
@@ -147,22 +137,28 @@ def test_zero_skill_app_can_match_and_inject_user_credentials(
     _delete_app(db_session, response.id)
 
 
+def _free_built_in_app_type(db_session: Session) -> ExternalAppType:
+    used = set(db_session.scalars(select(ExternalApp.app_type)))
+    for app_type in EXTERNAL_APP_BUILT_IN_SKILL_IDS:
+        if app_type not in used:
+            return app_type
+    pytest.skip("Each built-in app type has an app in this database.")
+
+
 def test_built_in_provisioning_reuses_an_orphaned_system_skill(
     db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    built_in_skill_id = f"test-provider-{uuid4().hex[:8]}"
-    monkeypatch.setitem(
-        EXTERNAL_APP_BUILT_IN_SKILL_IDS,
-        ExternalAppType.CUSTOM,
-        built_in_skill_id,
+    app_type = _free_built_in_app_type(db_session)
+    built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[app_type]
+    db_session.execute(
+        delete(Skill).where(Skill.built_in_skill_id == built_in_skill_id)
     )
 
     first_app = create_external_app(
         db_session=db_session,
         name="First provider",
-        app_type=ExternalAppType.CUSTOM,
-        upstream_url_patterns=_UPSTREAM,
+        app_type=app_type,
+        upstream_url_patterns=[],
         auth_template={},
         organization_credentials={},
     )
@@ -180,8 +176,8 @@ def test_built_in_provisioning_reuses_an_orphaned_system_skill(
     second_app = create_external_app(
         db_session=db_session,
         name="Recreated provider",
-        app_type=ExternalAppType.CUSTOM,
-        upstream_url_patterns=_UPSTREAM,
+        app_type=app_type,
+        upstream_url_patterns=[],
         auth_template={},
         organization_credentials={},
     )
@@ -190,7 +186,6 @@ def test_built_in_provisioning_reuses_an_orphaned_system_skill(
 
     assert second_skill.id == first_skill_id
     assert second_skill.public_permission == SkillSharePermission.VIEWER
-    assert second_app.associated_skills == [second_skill]
     assert (
         len(
             list(
@@ -201,6 +196,20 @@ def test_built_in_provisioning_reuses_an_orphaned_system_skill(
         )
         == 1
     )
+
+    # A second app of one built-in type is refused.
+    third_app = create_external_app(
+        db_session=db_session,
+        name="Duplicate provider",
+        app_type=app_type,
+        upstream_url_patterns=[],
+        auth_template={},
+        organization_credentials={},
+    )
+    with pytest.raises(OnyxError) as exc_info:
+        associate_built_in_skill__no_commit(db_session, third_app)
+    assert exc_info.value.error_code == OnyxErrorCode.DUPLICATE_RESOURCE
+    db_session.rollback()
 
     _delete_app(db_session, second_app.id)
     db_session.execute(delete(Skill).where(Skill.id == first_skill_id))
@@ -244,7 +253,6 @@ def test_create_allows_allowlist_only_app(
 
     assert response.auth_template == {}
     assert response.organization_credentials == {}
-    assert response.associated_skills == []
     _delete_app(db_session, response.id)
 
 
@@ -269,7 +277,6 @@ def test_edit_changes_only_gateway_configuration(
 
     assert edited.name == "Renamed App"
     assert edited.upstream_url_patterns == ["https://api.example.com/v2/*"]
-    assert edited.associated_skills == []
     assert _skill_ids(db_session) == skills_before
     app = db_session.get(ExternalApp, created.id)
     assert app is not None

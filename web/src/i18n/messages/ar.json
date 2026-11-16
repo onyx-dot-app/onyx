@@ -982,7 +982,6 @@
         "emptyDescription": "جرّب عامل تصفية اتصال آخر أو اطلب من مسؤول مساحة العمل إضافة إحدى الإضافات."
       },
       "detail": {
-        "issuesTitle": "مشكلات",
         "noAuthentication": "لا يلزم المصادقة",
         "connection": "الاتصال",
         "tools": "الأدوات",
@@ -1047,17 +1046,6 @@
         "chatOnly": "الدردشة فقط",
         "chatOnlyDescription": "هذه الإضافة متاحة في الدردشة، وليس في Craft."
       },
-      "appSkills": {
-        "preview": "معاينة",
-        "search": "البحث في المهارات",
-        "count": "{count, plural, one {# مهارة} other {# مهارات}}",
-        "empty": "لا توجد مهارات مرتبطة بهذا التطبيق.",
-        "noMatches": "لا توجد مهارات تطابق بحثك.",
-        "error": "تعذر تحميل المهارات.",
-        "enabled": "مفعّل",
-        "disabled": "معطّل",
-        "loading": "جارٍ تحميل المهارات…"
-      },
       "externalApp": {
         "description": "استخدم حسابك في Craft.",
         "craftOnly": "Craft فقط",
@@ -1099,8 +1087,7 @@
       "craftApp": {
         "tabs": {
           "configuration": "الإعدادات",
-          "permissions": "الأذونات",
-          "skills": "المهارات"
+          "permissions": "الأذونات"
         }
       },
       "disableConfirmation": {
@@ -5994,7 +5981,6 @@
         },
         "deleteModal": {
           "description": "يحذف هذا التطبيق لمؤسستك بأكملها: تهيئته واتصال كل عضو وأي مهارات يديرها الموفر.",
-          "retainedSkills": "{count, plural, =0 {لن تُحذف أي مهارات مخصصة مرتبطة.} one {سيُحتفظ بمهارة مخصصة مرتبطة واحدة، وستُفصل عن هذا التطبيق وتُعطّل للجميع.} other {سيُحتفظ بـ # مهارات مخصصة مرتبطة، وستُفصل عن هذا التطبيق وتُعطّل للجميع.}}",
           "submit": {
             "label": "حذف التطبيق"
           },
@@ -12141,13 +12127,6 @@
       }
     },
     "skill": {
-      "dependency": {
-        "appDisabled": "التطبيق “{app}” معطّل",
-        "connectToEnable": "اربط التطبيق “{app}” للتفعيل",
-        "connectToUse": "اربط التطبيق “{app}” للاستخدام",
-        "nameConflict": "توجد مهارة أخرى مفعّلة بهذا الاسم",
-        "usesApp": "تستخدم التطبيق “{app}”"
-      },
       "edit": {
         "tooltip": "تعديل المهارة"
       },
@@ -12155,9 +12134,6 @@
         "description": "احذف هذه المهارة غير الصالحة وأنشئ واحدة جديدة."
       },
       "tags": {
-        "appSkill": {
-          "label": "مهارة تطبيق"
-        },
         "builtin": {
           "label": "مدمجة"
         },
@@ -12188,19 +12164,11 @@
         "disable": {
           "ariaLabel": "تعطيل {name}"
         },
-        "disableForApp": {
-          "ariaLabel": "تعطيل {name} لـ {app}"
-        },
         "enable": {
           "ariaLabel": "تفعيل {name}"
-        },
-        "enableForApp": {
-          "ariaLabel": "تفعيل {name} لـ {app}"
         }
       },
       "tooltips": {
-        "appDisabled": "التطبيق “{app}” معطّل من قبل مسؤول.",
-        "connectApp": "اربط التطبيق “{app}” من صفحة التطبيقات لاستخدام هذه المهارة.",
         "invalid": "هذه المهارة غير صالحة. احذفها وأنشئ مهارة جديدة.",
         "unavailable": "المهارة غير متاحة حاليًا. انقر لعرض التفاصيل."
       }
@@ -14553,58 +14521,6 @@
           "title": "إضافة تطبيق"
         }
       },
-      "associatedSkills": {
-        "associateButton": "ربط مهارة موجودة",
-        "create": {
-          "github": {
-            "description": "إذا كانت مهاراتك على GitHub، فاستوردها أولًا من صفحة المهارات، ثم اربطها بهذا التطبيق.",
-            "label": "استيراد من GitHub"
-          },
-          "scratch": {
-            "description": "اكتب التعليمات وأضف الملفات الداعمة.",
-            "label": "البدء من الصفر"
-          },
-          "upload": {
-            "description": "استورد ملف SKILL.md أو ملف ZIP أو مجلد مهارة.",
-            "label": "رفع مهارة"
-          }
-        },
-        "createSkillButton": "إنشاء مهارة",
-        "description": "تمنح المهارات Craft تعليمات لاستخدام هذا التطبيق. وهي على مستوى المؤسسة؛ قد يحتاج المستخدمون إلى تفعيلها جميعًا ليعمل التطبيق بشكل صحيح.",
-        "editButton": "تعديل",
-        "empty": {
-          "label": "لم يتم العثور على مهارات قابلة للتعديل."
-        },
-        "invalidTag": "غير صالحة",
-        "loading": {
-          "label": "جارٍ تحميل المهارات…"
-        },
-        "noneAssociated": {
-          "label": "لا توجد مهارات مرتبطة بعد. يمكن حفظ هذا التطبيق واستخدامه دون مهارة."
-        },
-        "promote": {
-          "cancelButton": "إلغاء",
-          "confirmButton": "إتاحتها على مستوى المؤسسة",
-          "description": "يجب أن تكون المهارات المرتبطة بالتطبيق متاحة للجميع. عند حفظ التطبيق، تُنشر المهارة في المؤسسة. لا يمكن التراجع عن النشر.",
-          "title": "هل تريد جعل «{name}» متاحة على مستوى المؤسسة؟"
-        },
-        "search": {
-          "placeholder": "البحث في المهارات القابلة للتعديل..."
-        },
-        "title": "المهارات المرتبطة",
-        "unavailable": {
-          "duplicateName": "توجد مهارة باسم «{name}» مرتبطة بالفعل.",
-          "invalid": "مهارة غير صالحة. أصلحها قبل ربطها.",
-          "otherApp": "مرتبطة بالفعل بالتطبيق «{name}»."
-        },
-        "unlink": {
-          "button": "إلغاء الربط",
-          "cancelButton": "إلغاء",
-          "confirm": "هل تريد إلغاء ربط «{name}» بهذا التطبيق؟"
-        },
-        "unlinkAriaLabel": "إلغاء ربط {name}",
-        "viewButton": "عرض"
-      },
       "configureProvider": {
         "addButton": "إضافة",
         "addTitle": "إضافة {name}",
@@ -14667,9 +14583,6 @@
           "allowedUrl": "https://api.example.com/*"
         }
       },
-      "errors": {
-        "duplicateSkillName": "التطبيق «{appName}» لديه بالفعل مهارة مرتبطة باسم «{skillName}». ارفع مهارة باسم مختلف."
-      },
       "mcpPolicy": {
         "description": "اختر الأدوات التي تعمل تلقائيًا أو تطلب الموافقة أو تكون معطلة في المحادثة وفي Craft.",
         "emptyPolicies": "لا توجد أدوات مفعّلة على هذا الخادم. فعّل الأدوات أولًا من صفحة إجراءات MCP.",
@@ -14704,14 +14617,9 @@
         "loading": {
           "label": "جارٍ التحميل…"
         },
-        "reviewSkillsButton": "مراجعة المهارات",
         "status": {
           "connected": "متصل",
-          "connectedNeedsSkills": "متصل · ليست كل المهارات المرتبطة مفعّلة",
-          "notAvailable": "غير متاح لحسابك، اسأل أحد المسؤولين",
-          "skillWarningAriaLabel": "مطلوب إعداد المهارات",
-          "skillWarningTooltip": "ليست كل المهارات المرتبطة مفعّلة. قد لا يعمل هذا التطبيق بشكل صحيح.",
-          "skillWarningSummary": "ليست كل المهارات المرتبطة مفعّلة."
+          "notAvailable": "غير متاح لحسابك، اسأل أحد المسؤولين"
         }
       },
       "policyEditor": {
@@ -14732,16 +14640,6 @@
           "description": "عيّن سياسة لكل إجراء على حدة.",
           "title": "متقدم"
         }
-      },
-      "skillsStep": {
-        "description": "اختياري: اربط مهارات موجودة أو أنشئ واحدة لهذا التطبيق.",
-        "errors": {
-          "saveFailedTitle": "تعذّر الحفظ"
-        },
-        "saveButton": "حفظ المهارات",
-        "savingButton": "جارٍ الحفظ…",
-        "skipButton": "التخطي الآن",
-        "title": "إضافة مهارات إلى {name}"
       },
       "userCredentials": {
         "cancelButton": "إلغاء",
@@ -17133,10 +17031,6 @@
   },
   "skills": {
     "editor": {
-      "appConflict": {
-        "description": "التطبيق “{appName}” لديه بالفعل مهارة مرتبطة باسم “{skillName}”.",
-        "title": "اختر اسم مهارة مختلفًا"
-      },
       "confirmUpload": {
         "importBody": "يتضمن هذا الرفع ملف SKILL.md. ستؤدي المتابعة إلى استبدال الاسم والوصف والتعليمات والملفات الحالية بالحزمة المرفوعة.",
         "importSubmit": {
@@ -17193,9 +17087,7 @@
         "updating": "جارٍ تحديث ملفات المهارة..."
       },
       "header": {
-        "appFallbackName": "تطبيق خارجي",
         "createDescription": "أنشئ مهارة شخصية",
-        "createForAppDescription": "أضف مهارة مؤسسة إلى التطبيق “{appName}”",
         "createTitle": "إنشاء مهارة",
         "editDescription": "حدّث تفاصيل المهارة وملفاتها",
         "editTitle": "تعديل المهارة",
@@ -17416,17 +17308,12 @@
         "metadata": {
           "createdBy": {
             "label": "أنشأها"
-          },
-          "externalApp": {
-            "label": "تطبيق خارجي"
           }
         },
         "noInstructions": {
           "message": "لم يتم العثور على تعليمات."
         },
         "unavailable": {
-          "appDisabled": "التطبيق “{appName}” معطّل من قبل مسؤول.",
-          "appNotConnected": "اربط التطبيق “{appName}” من صفحة التطبيقات لاستخدام هذه المهارة.",
           "title": "المهارة غير متاحة"
         }
       },
@@ -17441,7 +17328,6 @@
         "doneButton": {
           "label": "تم"
         },
-        "externalAppNotice": "يلزم منح صلاحية عرض على مستوى المؤسسة ما دامت هذه المهارة مرتبطة بالتطبيق “{appName}”.",
         "header": {
           "transferTitle": "نقل *{name}*"
         },
@@ -17603,13 +17489,6 @@
           "title": "لا توجد مهارات مخصصة بعد",
           "description": "أنشئ مهارة أو استوردها لإضافتها إلى مكتبتك."
         }
-      },
-      "focusedApp": {
-        "description": "فعّل كل المهارات المرتبطة بالتطبيق “{appName}”. قد لا يعمل التطبيق بشكل صحيح بدونها. إذا كانت مهارة أخرى بالاسم نفسه مفعّلة، فإن تفعيل مهارة التطبيق سيعطّل المهارة الأخرى لك.",
-        "showAll": {
-          "label": "عرض جميع المهارات"
-        },
-        "title": "مهارات التطبيق “{appName}”"
       },
       "header": {
         "description": "حزم قدرات يمكن لوكيل Craft الخاص بك استخدامها. تعرض هذه الصفحة المهارات المدمجة والمهارات المشاركة معك ومهاراتك الشخصية.",

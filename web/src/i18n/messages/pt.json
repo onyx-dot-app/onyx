@@ -982,7 +982,6 @@
         "emptyDescription": "Tente outro filtro de conexão ou peça ao administrador do seu espaço de trabalho para adicionar um plugin."
       },
       "detail": {
-        "issuesTitle": "Problemas",
         "noAuthentication": "Não é necessária autenticação",
         "connection": "Conexão",
         "tools": "Ferramentas",
@@ -1047,17 +1046,6 @@
         "chatOnly": "Somente Chat",
         "chatOnlyDescription": "Este plugin está disponível no Chat, não no Craft."
       },
-      "appSkills": {
-        "preview": "Prévia",
-        "search": "Buscar habilidades",
-        "count": "{count, plural, one {# habilidade} other {# habilidades}}",
-        "empty": "Nenhuma habilidade está associada a este aplicativo.",
-        "noMatches": "Nenhuma habilidade corresponde à busca.",
-        "error": "Não foi possível carregar as habilidades.",
-        "enabled": "Ativada",
-        "disabled": "Desativada",
-        "loading": "Carregando habilidades…"
-      },
       "externalApp": {
         "description": "Use sua conta no Craft.",
         "craftOnly": "Somente Craft",
@@ -1099,8 +1087,7 @@
       "craftApp": {
         "tabs": {
           "configuration": "Configuração",
-          "permissions": "Permissões",
-          "skills": "Habilidades"
+          "permissions": "Permissões"
         }
       },
       "disableConfirmation": {
@@ -5994,7 +5981,6 @@
         },
         "deleteModal": {
           "description": "Isso exclui o aplicativo para toda a sua organização: a configuração, a conexão de cada membro e as habilidades gerenciadas pelo provedor.",
-          "retainedSkills": "{count, plural, =0 {Nenhuma habilidade personalizada associada será excluída.} one {# habilidade personalizada associada será mantida, desvinculada deste aplicativo e desativada para todos.} other {# habilidades personalizadas associadas serão mantidas, desvinculadas deste aplicativo e desativadas para todos.}}",
           "submit": {
             "label": "Excluir aplicativo"
           },
@@ -12141,13 +12127,6 @@
       }
     },
     "skill": {
-      "dependency": {
-        "appDisabled": "O aplicativo “{app}” está desativado",
-        "connectToEnable": "Conecte o aplicativo “{app}” para ativar",
-        "connectToUse": "Conecte o aplicativo “{app}” para usar",
-        "nameConflict": "Outra habilidade com este nome está ativada",
-        "usesApp": "Usa o aplicativo “{app}”"
-      },
       "edit": {
         "tooltip": "Editar habilidade"
       },
@@ -12155,9 +12134,6 @@
         "description": "Exclua esta habilidade inválida e crie uma nova."
       },
       "tags": {
-        "appSkill": {
-          "label": "Habilidade de aplicativo"
-        },
         "builtin": {
           "label": "Integrada"
         },
@@ -12188,19 +12164,11 @@
         "disable": {
           "ariaLabel": "Desativar {name}"
         },
-        "disableForApp": {
-          "ariaLabel": "Desativar {name} para {app}"
-        },
         "enable": {
           "ariaLabel": "Ativar {name}"
-        },
-        "enableForApp": {
-          "ariaLabel": "Ativar {name} para {app}"
         }
       },
       "tooltips": {
-        "appDisabled": "O aplicativo “{app}” foi desativado por um administrador.",
-        "connectApp": "Conecte o aplicativo “{app}” na página Aplicativos para usar esta habilidade.",
         "invalid": "Esta habilidade é inválida. Exclua-a e crie uma nova habilidade.",
         "unavailable": "A habilidade está indisponível no momento. Clique para ver os detalhes."
       }
@@ -14553,58 +14521,6 @@
           "title": "Adicionar um app"
         }
       },
-      "associatedSkills": {
-        "associateButton": "Associar existente",
-        "create": {
-          "github": {
-            "description": "Se suas habilidades estão no GitHub, importe-as primeiro na página de Habilidades e depois associe-as a este app.",
-            "label": "Importar do GitHub"
-          },
-          "scratch": {
-            "description": "Escreva instruções e adicione arquivos de apoio.",
-            "label": "Começar do zero"
-          },
-          "upload": {
-            "description": "Importe um arquivo SKILL.md, um arquivo ZIP ou uma pasta de habilidade.",
-            "label": "Enviar uma habilidade"
-          }
-        },
-        "createSkillButton": "Criar habilidade",
-        "description": "As habilidades dão ao Craft instruções para usar este app. Elas valem para toda a organização; os usuários podem precisar habilitar todas para o app funcionar corretamente.",
-        "editButton": "Editar",
-        "empty": {
-          "label": "Nenhuma habilidade editável encontrada."
-        },
-        "invalidTag": "Inválida",
-        "loading": {
-          "label": "Carregando habilidades…"
-        },
-        "noneAssociated": {
-          "label": "Nenhuma habilidade associada ainda. Este app ainda pode ser salvo e usado sem uma."
-        },
-        "promote": {
-          "cancelButton": "Cancelar",
-          "confirmButton": "Disponibilizar para toda a organização",
-          "description": "Habilidades associadas a um app devem estar disponíveis para todos. Quando você salva o app, a habilidade é publicada na organização. A publicação não pode ser desfeita.",
-          "title": "Tornar “{name}” disponível para toda a organização?"
-        },
-        "search": {
-          "placeholder": "Pesquisar habilidades editáveis..."
-        },
-        "title": "Habilidades associadas",
-        "unavailable": {
-          "duplicateName": "Uma habilidade chamada “{name}” já está associada.",
-          "invalid": "Habilidade inválida. Corrija-a antes de associar.",
-          "otherApp": "Já associada ao app “{name}”."
-        },
-        "unlink": {
-          "button": "Desvincular",
-          "cancelButton": "Cancelar",
-          "confirm": "Desvincular “{name}” deste app?"
-        },
-        "unlinkAriaLabel": "Desvincular {name}",
-        "viewButton": "Visualizar"
-      },
       "configureProvider": {
         "addButton": "Adicionar",
         "addTitle": "Adicionar {name}",
@@ -14667,9 +14583,6 @@
           "allowedUrl": "https://api.example.com/*"
         }
       },
-      "errors": {
-        "duplicateSkillName": "O app “{appName}” já tem uma habilidade associada chamada “{skillName}”. Envie uma habilidade com outro nome."
-      },
       "mcpPolicy": {
         "description": "Escolha quais ferramentas são executadas automaticamente, pedem aprovação ou ficam desativadas no chat e no Craft.",
         "emptyPolicies": "Nenhuma ferramenta habilitada neste servidor. Habilite as ferramentas primeiro na página de ações MCP.",
@@ -14704,14 +14617,9 @@
         "loading": {
           "label": "Carregando…"
         },
-        "reviewSkillsButton": "Revisar habilidades",
         "status": {
           "connected": "Conectado",
-          "connectedNeedsSkills": "Conectado · nem todas as habilidades associadas estão habilitadas",
-          "notAvailable": "Não disponível para sua conta: fale com um administrador",
-          "skillWarningAriaLabel": "Configuração de habilidades necessária",
-          "skillWarningTooltip": "Nem todas as habilidades associadas estão habilitadas. Este app pode não funcionar corretamente.",
-          "skillWarningSummary": "Nem todas as habilidades associadas estão habilitadas."
+          "notAvailable": "Não disponível para sua conta: fale com um administrador"
         }
       },
       "policyEditor": {
@@ -14732,16 +14640,6 @@
           "description": "Defina uma política para cada ação individualmente.",
           "title": "Avançado"
         }
-      },
-      "skillsStep": {
-        "description": "Opcional: associe habilidades existentes ou crie uma para este app.",
-        "errors": {
-          "saveFailedTitle": "Não foi possível salvar"
-        },
-        "saveButton": "Salvar habilidades",
-        "savingButton": "Salvando…",
-        "skipButton": "Pular por enquanto",
-        "title": "Adicionar habilidades a {name}"
       },
       "userCredentials": {
         "cancelButton": "Cancelar",
@@ -17133,10 +17031,6 @@
   },
   "skills": {
     "editor": {
-      "appConflict": {
-        "description": "O aplicativo “{appName}” já tem uma habilidade associada chamada “{skillName}”.",
-        "title": "Escolha outro nome para a habilidade"
-      },
       "confirmUpload": {
         "importBody": "Este envio inclui SKILL.md. Continuar substituirá o nome, a descrição, as instruções e os arquivos atuais pelo pacote enviado.",
         "importSubmit": {
@@ -17193,9 +17087,7 @@
         "updating": "Atualizando os arquivos da habilidade..."
       },
       "header": {
-        "appFallbackName": "Aplicativo externo",
         "createDescription": "Crie uma habilidade pessoal",
-        "createForAppDescription": "Adicione uma habilidade da organização ao aplicativo “{appName}”",
         "createTitle": "Criar habilidade",
         "editDescription": "Atualize os detalhes e arquivos da habilidade",
         "editTitle": "Editar habilidade",
@@ -17416,17 +17308,12 @@
         "metadata": {
           "createdBy": {
             "label": "Criada por"
-          },
-          "externalApp": {
-            "label": "Aplicativo externo"
           }
         },
         "noInstructions": {
           "message": "Nenhuma instrução encontrada."
         },
         "unavailable": {
-          "appDisabled": "O aplicativo “{appName}” foi desativado por um administrador.",
-          "appNotConnected": "Conecte o aplicativo “{appName}” na página Aplicativos para usar esta habilidade.",
           "title": "Habilidade indisponível"
         }
       },
@@ -17441,7 +17328,6 @@
         "doneButton": {
           "label": "Concluído"
         },
-        "externalAppNotice": "É necessário acesso de visualização para toda a organização enquanto esta habilidade estiver associada ao aplicativo “{appName}”.",
         "header": {
           "transferTitle": "Transferir *{name}*"
         },
@@ -17603,13 +17489,6 @@
           "title": "Ainda não há habilidades personalizadas",
           "description": "Crie ou importe uma habilidade para adicioná-la à sua biblioteca."
         }
-      },
-      "focusedApp": {
-        "description": "Ative todas as habilidades associadas ao aplicativo “{appName}”. O aplicativo pode não funcionar corretamente sem elas. Se outra habilidade com o mesmo nome estiver ativada, ativar a habilidade associada ao aplicativo desativará a outra habilidade para você.",
-        "showAll": {
-          "label": "Mostrar todas as habilidades"
-        },
-        "title": "Habilidades para o aplicativo “{appName}”"
       },
       "header": {
         "description": "Pacotes de capacidades que seu agente do Craft pode usar. Esta página mostra habilidades integradas, habilidades compartilhadas com você e suas habilidades pessoais.",

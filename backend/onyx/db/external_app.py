@@ -1,10 +1,9 @@
-from collections.abc import Iterable
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from onyx.db.action_policy import (
     get_or_create_gated_app_id,
@@ -14,29 +13,14 @@ from onyx.db.enums import (
     ActionPolicy,
     ExternalAppType,
     GatedAppKind,
-    SkillInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.external_app_readiness import (
-    SkillExternalAppDependencyState,
-    app_dependency_states,
-    is_user_authenticated_for_app,
-)
+from onyx.db.external_app_readiness import is_user_authenticated_for_app
 from onyx.db.models import (
     ExternalApp,
-    ExternalApp__Skill,
     ExternalAppUserCredential,
-    Plugin,
     Skill,
     User,
-    UserSkillPreference,
-)
-from onyx.db.plugin import (
-    delete_plugin_preferences__no_commit,
-    get_plugin_version_validity,
-    lock_skill_plugin__no_commit,
-    make_plugins_available_by_default__no_commit,
-    publish_plugin__no_commit,
 )
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -107,45 +91,8 @@ def get_external_app_by_id(
     db_session: Session,
     external_app_id: int,
 ) -> ExternalApp | None:
-    stmt = (
-        select(ExternalApp)
-        .options(selectinload(ExternalApp.associated_skills))
-        .where(ExternalApp.id == external_app_id)
-    )
-    return db_session.scalar(stmt)
-
-
-def get_external_app_by_skill_id(
-    db_session: Session,
-    skill_id: UUID,
-) -> ExternalApp | None:
-    """Return the app that ``skill_id`` depends on, if one is associated."""
-    stmt = (
-        select(ExternalApp)
-        .join(
-            ExternalApp__Skill,
-            ExternalApp__Skill.external_app_id == ExternalApp.id,
-        )
-        .where(ExternalApp__Skill.skill_id == skill_id)
-    )
-    return db_session.scalar(stmt)
-
-
-def get_skills_for_external_app(
-    db_session: Session,
-    external_app_id: int,
-) -> list[Skill]:
-    """Return every skill associated with an external app in stable order."""
-    return list(
-        db_session.scalars(
-            select(Skill)
-            .join(
-                ExternalApp__Skill,
-                ExternalApp__Skill.skill_id == Skill.id,
-            )
-            .where(ExternalApp__Skill.external_app_id == external_app_id)
-            .order_by(Skill.name, Skill.id)
-        )
+    return db_session.scalar(
+        select(ExternalApp).where(ExternalApp.id == external_app_id)
     )
 
 
@@ -166,30 +113,12 @@ def get_connectable_apps_for_user(
     ]
 
 
-def get_skill_external_app_dependencies(
-    db_session: Session,
-    user: User,
-    skill_ids: Iterable[UUID] | None = None,
-) -> dict[UUID, SkillExternalAppDependencyState]:
-    """Return dependency state for all or selected associated skills."""
-    return {
-        skill_id: state
-        for (_, skill_id), state in app_dependency_states(
-            [user.id], db_session, skill_ids
-        ).items()
-    }
-
-
 def get_external_apps(
     db_session: Session,
     *,
     enabled_only: bool = False,
 ) -> list[ExternalApp]:
-    stmt = (
-        select(ExternalApp)
-        .options(selectinload(ExternalApp.associated_skills))
-        .order_by(ExternalApp.id)
-    )
+    stmt = select(ExternalApp).order_by(ExternalApp.id)
     if enabled_only:
         stmt = stmt.where(ExternalApp.enabled.is_(True))
     return list(db_session.scalars(stmt).all())
@@ -211,11 +140,7 @@ def get_built_in_external_app(
             f"get_built_in_external_app requires a built-in app type, got "
             f"'{app_type.value}'.",
         )
-    stmt = (
-        select(ExternalApp)
-        .options(selectinload(ExternalApp.associated_skills))
-        .where(ExternalApp.app_type == app_type)
-    )
+    stmt = select(ExternalApp).where(ExternalApp.app_type == app_type)
     return db_session.scalars(stmt).one_or_none()
 
 
@@ -259,7 +184,7 @@ def create_external_app(
     """Create an external-app gateway row and its policy state.
 
     Flush only; callers own the transaction. Built-in provisioning separately
-    associates its system skill with ``associate_built_in_skill__no_commit``.
+    makes its system skill row with ``associate_built_in_skill__no_commit``.
     """
     # No existing app to restore from on create, so a masked value is rejected.
     organization_credentials = resolve_masked_credentials(
@@ -289,13 +214,23 @@ def associate_built_in_skill__no_commit(
     db_session: Session,
     app: ExternalApp,
 ) -> Skill:
-    """Create or reuse a provider's canonical built-in skill and link it to app.
-
-    The association is non-owning. Reusing an orphaned row lets a deleted and
-    later recreated provider recover its system skill without manufacturing a
-    duplicate. Flush only; callers own the transaction.
+    """Create or reuse the provider's built-in skill row for a new app. No row
+    links the skill to the app: a user gets the skill through a plugin that
+    holds the app's integration (``onyx.db.app_skill``). Refuses a second app
+    of one built-in type. Flush only; callers own the transaction.
     """
     from onyx.db.skill import add_new_skill__no_commit
+
+    other_app_id = db_session.scalar(
+        select(ExternalApp.id)
+        .where(ExternalApp.app_type == app.app_type, ExternalApp.id != app.id)
+        .limit(1)
+    )
+    if other_app_id is not None:
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"The built-in app '{app.app_type.value}' is already configured.",
+        )
 
     built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app.app_type)
     if built_in_skill_id is None:
@@ -323,228 +258,10 @@ def associate_built_in_skill__no_commit(
             ),
             db_session,
         )
-    elif get_external_app_by_skill_id(db_session, skill.id) is not None:
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"The built-in app '{app.app_type.value}' is already configured.",
-        )
 
     skill.public_permission = SkillSharePermission.VIEWER
-    app.associated_skills.append(skill)
     db_session.flush()
     return skill
-
-
-def associate_custom_skill_with_external_app__no_commit(
-    db_session: Session,
-    *,
-    external_app_id: int,
-    skill_id: UUID,
-) -> Skill:
-    """Associate a custom skill with an app and publish it to the organization
-    (VIEWER). A name clash in the Organization library is refused with
-    CONFLICT.
-
-    The skill row is locked so concurrent association attempts serialize.
-    Existing user preferences and explicit editor grants are preserved.
-    """
-    app = db_session.scalar(
-        select(ExternalApp).where(ExternalApp.id == external_app_id).with_for_update()
-    )
-    if app is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"External app with id {external_app_id} not found.",
-        )
-
-    skill = db_session.scalar(
-        select(Skill).where(Skill.id == skill_id).with_for_update()
-    )
-    if skill is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found.")
-    if not skill.is_custom:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Built-in skills cannot be associated through the admin workflow.",
-        )
-    # A skill with no plugin gets one first, so its validity is read too.
-    plugin = lock_skill_plugin__no_commit(skill, db_session)
-    if (
-        get_plugin_version_validity([skill.id], "current", db_session).get(skill.id)
-        is False
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Invalid skill '{skill.name}' cannot be associated with an app.",
-        )
-
-    existing_app = get_external_app_by_skill_id(db_session, skill.id)
-    if existing_app is not None:
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            (
-                f"Skill '{skill.name}' is already associated with "
-                f"app '{existing_app.name}'."
-            ),
-        )
-
-    conflicting_skill_id = db_session.scalar(
-        select(Skill.id)
-        .join(
-            ExternalApp__Skill,
-            ExternalApp__Skill.skill_id == Skill.id,
-        )
-        .where(
-            ExternalApp__Skill.external_app_id == app.id,
-            Skill.name == skill.name,
-            Skill.id != skill.id,
-        )
-        .limit(1)
-    )
-    if conflicting_skill_id is not None:
-        raise OnyxError(
-            OnyxErrorCode.SKILL_NAME_CONFLICT,
-            (f"App '{app.name}' already has an associated skill named '{skill.name}'."),
-        )
-
-    skill.public_permission = SkillSharePermission.VIEWER
-    db_session.add(ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id))
-    db_session.flush()
-    publish_plugin__no_commit(plugin.id, "raise", db_session)
-    make_plugins_available_by_default__no_commit([plugin.id], db_session)
-    return skill
-
-
-def replace_custom_skill_associations__no_commit(
-    db_session: Session,
-    *,
-    external_app_id: int,
-    skill_ids: Iterable[UUID],
-) -> list[Skill]:
-    """Replace an app's custom-skill associations and return affected skills.
-
-    Built-in provider associations are preserved. Each associated skill is
-    published to the organization (VIEWER); a name clash in the Organization
-    library is refused with CONFLICT. A newly linked skill with no own setting
-    gets an explicit AVAILABLE, so a stricter Default Access does not hide it. Removed skills stay published, because
-    publishing is one-way.
-    """
-    requested_ids = list(skill_ids)
-    target_ids = set(requested_ids)
-    if len(target_ids) != len(requested_ids):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "associated_skill_ids must not contain duplicates.",
-        )
-
-    app = db_session.scalar(
-        select(ExternalApp).where(ExternalApp.id == external_app_id).with_for_update()
-    )
-    if app is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"External app with id {external_app_id} not found.",
-        )
-
-    target_skills = (
-        list(
-            db_session.scalars(
-                select(Skill)
-                .where(Skill.id.in_(target_ids))
-                .order_by(Skill.id)
-                .with_for_update()
-            )
-        )
-        if target_ids
-        else []
-    )
-    if len(target_skills) != len(target_ids):
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "One or more skills were not found.")
-    if any(not skill.is_custom for skill in target_skills):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Built-in skills cannot be associated through the admin workflow.",
-        )
-    # target_skills is in id order, so the plugins lock in id order. A skill
-    # with no plugin gets one first, so its validity is read too.
-    plugin_ids = [
-        lock_skill_plugin__no_commit(skill, db_session).id for skill in target_skills
-    ]
-    # Associating publishes the current version.
-    validity = get_plugin_version_validity(target_ids, "current", db_session)
-    invalid_skill = next(
-        (skill for skill in target_skills if validity.get(skill.id) is False),
-        None,
-    )
-    if invalid_skill is not None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Invalid skill '{invalid_skill.name}' cannot be associated with an app.",
-        )
-
-    associated_skills = get_skills_for_external_app(db_session, app.id)
-    provider_skills = [skill for skill in associated_skills if not skill.is_custom]
-    current_custom_skills = [skill for skill in associated_skills if skill.is_custom]
-    seen_names: set[str] = set()
-    conflicting_name: str | None = None
-    for skill in [*provider_skills, *target_skills]:
-        if skill.name in seen_names:
-            conflicting_name = skill.name
-            break
-        seen_names.add(skill.name)
-    if conflicting_name is not None:
-        raise OnyxError(
-            OnyxErrorCode.SKILL_NAME_CONFLICT,
-            (
-                f"App '{app.name}' cannot have more than one associated skill "
-                f"named '{conflicting_name}'."
-            ),
-        )
-
-    conflicting_app = db_session.execute(
-        select(Skill.name, ExternalApp.name)
-        .select_from(ExternalApp__Skill)
-        .join(Skill, Skill.id == ExternalApp__Skill.skill_id)
-        .join(ExternalApp, ExternalApp.id == ExternalApp__Skill.external_app_id)
-        .where(
-            ExternalApp__Skill.skill_id.in_(target_ids),
-            ExternalApp__Skill.external_app_id != app.id,
-        )
-        .limit(1)
-    ).one_or_none()
-    if conflicting_app is not None:
-        skill_name, app_name = conflicting_app
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"Skill '{skill_name}' is already associated with app '{app_name}'.",
-        )
-
-    current_ids = {skill.id for skill in current_custom_skills}
-
-    removed_ids = current_ids - target_ids
-    if removed_ids:
-        db_session.execute(
-            delete(ExternalApp__Skill).where(
-                ExternalApp__Skill.external_app_id == app.id,
-                ExternalApp__Skill.skill_id.in_(removed_ids),
-            )
-        )
-
-    for skill in target_skills:
-        skill.public_permission = SkillSharePermission.VIEWER
-        if skill.id not in current_ids:
-            db_session.add(
-                ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id)
-            )
-
-    db_session.flush()
-    for plugin_id in plugin_ids:
-        publish_plugin__no_commit(plugin_id, "raise", db_session)
-    # Plugin ids equal skill ids. A skill linked before keeps its setting.
-    make_plugins_available_by_default__no_commit(target_ids - current_ids, db_session)
-    return current_custom_skills + [
-        skill for skill in target_skills if skill.id not in current_ids
-    ]
 
 
 def update_external_app(
@@ -649,11 +366,9 @@ def delete_external_app(
     db_session: Session,
     external_app_id: int,
 ) -> None:
-    """Delete an app, detach custom skills, and remove provider-owned skills.
-
-    Detached custom skills stay published. Their company setting goes back to
-    the Organization library default, group settings stay, and every user
-    choice is deleted. Flush only; the caller owns the transaction.
+    """Delete an app. Skills of the app's plugins stay as they are. The
+    provider's built-in skill row goes when no other app of the same type
+    remains. Flush only; the caller owns the transaction.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -662,33 +377,20 @@ def delete_external_app(
             f"External app with id {external_app_id} not found.",
         )
 
-    skills = get_skills_for_external_app(db_session, app.id)
-    custom_skills = _lock_custom_skills(
-        db_session, [skill.id for skill in skills if skill.is_custom]
-    )
-    custom_skill_ids = [skill.id for skill in custom_skills]
-    plugin_ids = [
-        lock_skill_plugin__no_commit(skill, db_session).id for skill in custom_skills
-    ]
-    for skill in custom_skills:
-        skill.installation_policy = SkillInstallationPolicy.AVAILABLE
-    if custom_skill_ids:
-        db_session.execute(
-            delete(UserSkillPreference).where(
-                UserSkillPreference.skill_id.in_(custom_skill_ids)
-            )
-        )
-    # No setting: the plugin follows its marketplace default, as legacy
-    # AVAILABLE does.
-    db_session.execute(
-        update(Plugin).where(Plugin.id.in_(plugin_ids)).values(installation_policy=None)
-    )
-    delete_plugin_preferences__no_commit(plugin_ids, db_session)
-
+    built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app.app_type)
     db_session.delete(app)
-    for skill in skills:
-        if not skill.is_custom:
-            db_session.delete(skill)
+    db_session.flush()
+    if built_in_skill_id is None:
+        return
+    other_app_id = db_session.scalar(
+        select(ExternalApp.id).where(ExternalApp.app_type == app.app_type).limit(1)
+    )
+    if other_app_id is not None:
+        return
+    for skill in db_session.scalars(
+        select(Skill).where(Skill.built_in_skill_id == built_in_skill_id)
+    ):
+        db_session.delete(skill)
     db_session.flush()
 
 
@@ -764,7 +466,7 @@ def disconnect_external_app_for_user(
     external_app_id: int,
     user_id: UUID,
 ) -> None:
-    """Remove app credentials and enabled selections; preserve explicit opt-outs.
+    """Remove the user's credentials for the app. Skill choices stay.
 
     Flush only; the caller refreshes the user's sandbox and commits.
     """
@@ -774,45 +476,4 @@ def disconnect_external_app_for_user(
             ExternalAppUserCredential.user_id == user_id,
         )
     )
-    associated_skills = _lock_custom_skills(
-        db_session,
-        db_session.scalars(
-            select(ExternalApp__Skill.skill_id).where(
-                ExternalApp__Skill.external_app_id == external_app_id
-            )
-        ),
-    )
-    plugin_ids = [
-        lock_skill_plugin__no_commit(skill, db_session).id
-        for skill in associated_skills
-    ]
-    associated_skill_ids = select(ExternalApp__Skill.skill_id).where(
-        ExternalApp__Skill.external_app_id == external_app_id
-    )
-    db_session.execute(
-        delete(UserSkillPreference).where(
-            UserSkillPreference.user_id == user_id,
-            UserSkillPreference.skill_id.in_(associated_skill_ids),
-            UserSkillPreference.enabled.is_(True),
-        )
-    )
-    delete_plugin_preferences__no_commit(
-        plugin_ids, db_session, user_id=user_id, enabled_only=True
-    )
     db_session.flush()
-
-
-def _lock_custom_skills(db_session: Session, skill_ids: Iterable[UUID]) -> list[Skill]:
-    """Lock the custom skill rows among ``skill_ids`` in id order, before their
-    plugin rows."""
-    ids = set(skill_ids)
-    if not ids:
-        return []
-    return list(
-        db_session.scalars(
-            select(Skill)
-            .where(Skill.id.in_(ids), Skill.built_in_skill_id.is_(None))
-            .order_by(Skill.id)
-            .with_for_update()
-        )
-    )

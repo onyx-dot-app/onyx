@@ -58,7 +58,6 @@ const app: ExternalAppAdminResponse = {
   organization_credentials: {},
   credential_placeholder_keys: [],
   actions: [],
-  associated_skills: [],
   is_onyx_managed: false,
   users_can_manage_policies: true,
 };
@@ -141,28 +140,10 @@ test("non-full admins cannot open external app lifecycle controls", () => {
 });
 
 test("deletes an external app only after confirmation", async () => {
-  render(
-    <PluginLifecycleMenu
-      plugin={{
-        kind: "external-app",
-        app: {
-          ...app,
-          associated_skills: [
-            { id: "skill-read", name: "lookup", is_valid: true },
-            { id: "skill-write", name: "update", is_valid: true },
-          ],
-        },
-      }}
-    />
-  );
+  render(<PluginLifecycleMenu plugin={{ kind: "external-app", app }} />);
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Delete" }));
   expect(writes).toEqual([]);
-  expect(
-    screen.getByText(
-      "2 associated custom skills will be kept, unlinked from this app, and disabled for everyone."
-    )
-  ).toBeInTheDocument();
   await user.click(
     within(screen.getByRole("dialog")).getByRole("button", {
       name: "Delete app",

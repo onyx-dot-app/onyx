@@ -982,7 +982,6 @@
         "emptyDescription": "Essayez un autre filtre de connexion ou demandez à votre administrateur d’ajouter un plugin à votre espace de travail."
       },
       "detail": {
-        "issuesTitle": "Problèmes",
         "noAuthentication": "Aucune authentification requise",
         "connection": "Connexion",
         "tools": "Outils",
@@ -1047,17 +1046,6 @@
         "chatOnly": "Chat uniquement",
         "chatOnlyDescription": "Ce plugin est disponible dans Chat, pas dans Craft."
       },
-      "appSkills": {
-        "preview": "Aperçu",
-        "search": "Rechercher des compétences",
-        "count": "{count, plural, one {# compétence} other {# compétences}}",
-        "empty": "Aucune compétence n’est associée à cette application.",
-        "noMatches": "Aucune compétence ne correspond à votre recherche.",
-        "error": "Impossible de charger les compétences.",
-        "enabled": "Activée",
-        "disabled": "Désactivée",
-        "loading": "Chargement des compétences…"
-      },
       "externalApp": {
         "description": "Utilisez votre compte dans Craft.",
         "craftOnly": "Craft uniquement",
@@ -1099,8 +1087,7 @@
       "craftApp": {
         "tabs": {
           "configuration": "Configuration",
-          "permissions": "Autorisations",
-          "skills": "Compétences"
+          "permissions": "Autorisations"
         }
       },
       "disableConfirmation": {
@@ -5994,7 +5981,6 @@
         },
         "deleteModal": {
           "description": "Cette action supprime l'application pour toute votre organisation : sa configuration, la connexion de chaque membre et toutes les compétences gérées par le fournisseur.",
-          "retainedSkills": "{count, plural, =0 {Aucune compétence personnalisée associée ne sera supprimée.} one {# compétence personnalisée associée sera conservée, dissociée de cette application et désactivée pour tout le monde.} other {# compétences personnalisées associées seront conservées, dissociées de cette application et désactivées pour tout le monde.}}",
           "submit": {
             "label": "Supprimer l'application"
           },
@@ -12141,13 +12127,6 @@
       }
     },
     "skill": {
-      "dependency": {
-        "appDisabled": "L'application “{app}” est désactivée",
-        "connectToEnable": "Connectez l'application “{app}” pour activer",
-        "connectToUse": "Connectez l'application “{app}” pour utiliser",
-        "nameConflict": "Une autre compétence portant ce nom est activée",
-        "usesApp": "Utilise l'application “{app}”"
-      },
       "edit": {
         "tooltip": "Modifier la compétence"
       },
@@ -12155,9 +12134,6 @@
         "description": "Supprimez cette compétence non valide et créez-en une nouvelle."
       },
       "tags": {
-        "appSkill": {
-          "label": "Compétence d'application"
-        },
         "builtin": {
           "label": "Intégrée"
         },
@@ -12188,19 +12164,11 @@
         "disable": {
           "ariaLabel": "Désactiver {name}"
         },
-        "disableForApp": {
-          "ariaLabel": "Désactiver {name} pour {app}"
-        },
         "enable": {
           "ariaLabel": "Activer {name}"
-        },
-        "enableForApp": {
-          "ariaLabel": "Activer {name} pour {app}"
         }
       },
       "tooltips": {
-        "appDisabled": "L'application “{app}” est désactivée par un administrateur.",
-        "connectApp": "Connectez l'application “{app}” depuis la page Applications pour utiliser cette compétence.",
         "invalid": "Cette compétence n'est pas valide. Supprimez-la et créez une nouvelle compétence.",
         "unavailable": "La compétence est actuellement indisponible. Cliquez pour voir les détails."
       }
@@ -14553,58 +14521,6 @@
           "title": "Ajouter une app"
         }
       },
-      "associatedSkills": {
-        "associateButton": "Associer une existante",
-        "create": {
-          "github": {
-            "description": "Si vos compétences sont sur GitHub, importez-les d'abord sur la page Compétences, puis associez-les à cette app.",
-            "label": "Importer depuis GitHub"
-          },
-          "scratch": {
-            "description": "Rédigez des instructions et ajoutez des fichiers annexes.",
-            "label": "Partir de zéro"
-          },
-          "upload": {
-            "description": "Importez un fichier SKILL.md, un fichier ZIP ou un dossier de compétence.",
-            "label": "Importer une compétence"
-          }
-        },
-        "createSkillButton": "Créer une compétence",
-        "description": "Les compétences donnent à Craft des instructions pour utiliser cette app. Elles s'appliquent à toute l'organisation ; les utilisateurs peuvent devoir toutes les activer pour que l'app fonctionne correctement.",
-        "editButton": "Modifier",
-        "empty": {
-          "label": "Aucune compétence modifiable trouvée."
-        },
-        "invalidTag": "Non valide",
-        "loading": {
-          "label": "Chargement des compétences…"
-        },
-        "noneAssociated": {
-          "label": "Aucune compétence associée pour le moment. Cette app peut quand même être enregistrée et utilisée sans."
-        },
-        "promote": {
-          "cancelButton": "Annuler",
-          "confirmButton": "Rendre disponible pour l'organisation",
-          "description": "Les compétences associées à une app doivent être disponibles pour tous. Lorsque vous enregistrez l'app, la compétence est publiée dans l'organisation. La publication est irréversible.",
-          "title": "Rendre « {name} » disponible pour toute l'organisation ?"
-        },
-        "search": {
-          "placeholder": "Rechercher des compétences modifiables..."
-        },
-        "title": "Compétences associées",
-        "unavailable": {
-          "duplicateName": "Une compétence nommée « {name} » est déjà associée.",
-          "invalid": "Compétence non valide. Corrigez-la avant de l'associer.",
-          "otherApp": "Déjà associée à l'app « {name} »."
-        },
-        "unlink": {
-          "button": "Dissocier",
-          "cancelButton": "Annuler",
-          "confirm": "Dissocier « {name} » de cette app ?"
-        },
-        "unlinkAriaLabel": "Dissocier {name}",
-        "viewButton": "Afficher"
-      },
       "configureProvider": {
         "addButton": "Ajouter",
         "addTitle": "Ajouter {name}",
@@ -14667,9 +14583,6 @@
           "allowedUrl": "https://api.example.com/*"
         }
       },
-      "errors": {
-        "duplicateSkillName": "L'app « {appName} » a déjà une compétence associée nommée « {skillName} ». Importez une compétence avec un autre nom."
-      },
       "mcpPolicy": {
         "description": "Choisissez les outils qui s'exécutent automatiquement, demandent une approbation ou sont désactivés dans le chat et dans Craft.",
         "emptyPolicies": "Aucun outil activé sur ce serveur. Activez d'abord les outils sur la page des actions MCP.",
@@ -14704,14 +14617,9 @@
         "loading": {
           "label": "Chargement…"
         },
-        "reviewSkillsButton": "Vérifier les compétences",
         "status": {
           "connected": "Connectée",
-          "connectedNeedsSkills": "Connectée · toutes les compétences associées ne sont pas activées",
-          "notAvailable": "Indisponible pour votre compte : contactez un administrateur",
-          "skillWarningAriaLabel": "Configuration des compétences requise",
-          "skillWarningTooltip": "Toutes les compétences associées ne sont pas activées. Cette app peut ne pas fonctionner correctement.",
-          "skillWarningSummary": "Toutes les compétences associées ne sont pas activées."
+          "notAvailable": "Indisponible pour votre compte : contactez un administrateur"
         }
       },
       "policyEditor": {
@@ -14732,16 +14640,6 @@
           "description": "Définissez une politique pour chaque action individuellement.",
           "title": "Avancé"
         }
-      },
-      "skillsStep": {
-        "description": "Facultatif : associez des compétences existantes ou créez-en une pour cette app.",
-        "errors": {
-          "saveFailedTitle": "Impossible d'enregistrer"
-        },
-        "saveButton": "Enregistrer les compétences",
-        "savingButton": "Enregistrement…",
-        "skipButton": "Ignorer pour l'instant",
-        "title": "Ajouter des compétences à {name}"
       },
       "userCredentials": {
         "cancelButton": "Annuler",
@@ -17133,10 +17031,6 @@
   },
   "skills": {
     "editor": {
-      "appConflict": {
-        "description": "L'application « {appName} » a déjà une compétence associée nommée « {skillName} ».",
-        "title": "Choisissez un autre nom de compétence"
-      },
       "confirmUpload": {
         "importBody": "Ce téléversement inclut SKILL.md. Continuer remplacera le nom, la description, les instructions et les fichiers actuels par le paquet téléversé.",
         "importSubmit": {
@@ -17193,9 +17087,7 @@
         "updating": "Mise à jour des fichiers de la compétence..."
       },
       "header": {
-        "appFallbackName": "Application externe",
         "createDescription": "Créez une compétence personnelle",
-        "createForAppDescription": "Ajouter une compétence d'organisation à l'application « {appName} »",
         "createTitle": "Créer une compétence",
         "editDescription": "Mettez à jour les détails et fichiers de la compétence",
         "editTitle": "Modifier la compétence",
@@ -17416,17 +17308,12 @@
         "metadata": {
           "createdBy": {
             "label": "Créée par"
-          },
-          "externalApp": {
-            "label": "Application externe"
           }
         },
         "noInstructions": {
           "message": "Aucune instruction trouvée."
         },
         "unavailable": {
-          "appDisabled": "L'application “{appName}” est désactivée par un administrateur.",
-          "appNotConnected": "Connectez l'application “{appName}” depuis la page Applications pour utiliser cette compétence.",
           "title": "Compétence indisponible"
         }
       },
@@ -17441,7 +17328,6 @@
         "doneButton": {
           "label": "Terminé"
         },
-        "externalAppNotice": "L'accès en lecture pour toute l'organisation est obligatoire tant que cette compétence est associée à l'application “{appName}”.",
         "header": {
           "transferTitle": "Transférer *{name}*"
         },
@@ -17603,13 +17489,6 @@
           "title": "Aucune compétence personnalisée pour le moment",
           "description": "Créez ou importez une compétence pour l’ajouter à votre bibliothèque."
         }
-      },
-      "focusedApp": {
-        "description": "Activez toutes les compétences associées à l'application « {appName} ». L'application peut ne pas fonctionner correctement sans elles. Si une autre compétence du même nom est activée, activer la compétence associée à l'application désactive l'autre compétence pour vous.",
-        "showAll": {
-          "label": "Afficher toutes les compétences"
-        },
-        "title": "Compétences pour l'application « {appName} »"
       },
       "header": {
         "description": "Ensembles de capacités que votre agent Craft peut mobiliser. Cette page présente les compétences intégrées, celles partagées avec vous et vos compétences personnelles.",

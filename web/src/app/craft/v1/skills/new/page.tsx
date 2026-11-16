@@ -1,12 +1,7 @@
 import SkillEditorPage from "@/views/SkillEditorPage";
-import { externalAppContextFromSearchParams } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 
 interface CreateSkillPageProps {
-  searchParams: Promise<{
-    draft?: string | string[];
-    externalAppId?: string | string[];
-    externalAppName?: string | string[];
-  }>;
+  searchParams: Promise<{ draft?: string | string[] }>;
 }
 
 export default async function CreateSkillPage({
@@ -16,7 +11,6 @@ export default async function CreateSkillPage({
   return (
     <SkillEditorPage
       draftId={typeof params.draft === "string" ? params.draft : undefined}
-      {...externalAppContextFromSearchParams(params)}
     />
   );
 }

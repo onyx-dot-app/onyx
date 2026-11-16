@@ -25,7 +25,7 @@ task, the next fire records a skipped run instead of running
 
 **Plugins.** The admin sees built-in apps, custom apps and MCP servers on one
 Plugins page. For each one the admin can turn it on or off for Craft, set
-credentials, attach skills, and set a policy per action: Auto-approve
+credentials, and set a policy per action: Auto-approve
 (`ALWAYS`), Ask (`ASK`) or Disabled (`DENY`). A switch decides whether users
 may override the workspace policy with their own choices. When the agent later
 tries a Disabled action, the call fails with a policy error. When it tries an
@@ -169,6 +169,9 @@ then the chat default.
    differently.** The external-app PATCH commits, then calls
    `skills/push.py:push_skills_for_users` so the skill file lists DENY actions as
    unavailable (`skills/rendering.py:build_action_availability_section`).
+   The PATCH and the delete push to the users who can see a plugin that holds
+   the app's integration (`db/app_skill.py:plugin_ids_holding_external_app`),
+   because only they get its built-in skill ([[skills#built-in-app-skill-rule]]).
    Built-in create and app delete push before commit, so a push failure rolls
    the write back. Custom create pushes nothing. The MCP routes only restamp
    `mcp_config_hash`; tool policies need no push because the proxy reads them
@@ -188,8 +191,8 @@ then the chat default.
    only when `MULTI_TENANT`.** `backend/onyx/server/features/build/external_apps/api.py:_to_admin_response` blanks
    credentials, auth template and URL patterns. The create and delete routes
    refuse them. The PATCH route silently ignores those three fields and
-   applies the rest (`enabled`, name, policies, the user-management switch and
-   skill associations). Self-hosted built-ins of the same type
+   applies the rest (`enabled`, name, policies and the user-management
+   switch). Self-hosted built-ins of the same type
    stay editable. A new admin field for apps needs the same `managed` check.
 9. `masked-credentials-round-trip` **Masked credentials round-trip.** The
    admin response masks organization credentials. The write path restores
@@ -241,7 +244,7 @@ then the chat default.
 - [[mcp-and-custom-tools]]: MCP server routes and data that share the policy
   tables.
 - [[craft-sandboxes]]: renders organization instructions into `AGENTS.md`.
-- [[skills]]: `push_skills_for_users` and skill association rules.
+- [[skills]]: `push_skills_for_users` and the built-in app skill rule.
 - [[llm-providers]]: the `CRAFT` model flow.
 - [[editions-and-gating]]: `tier_at_least` and the PostHog flag provider.
 - [[authorization]]: `require_permission` and the group-scoped action manager.

@@ -14,6 +14,7 @@ from onyx.db.action_policy import (
     replace_workspace_action_policies,
     users_can_manage_policies,
 )
+from onyx.db.app_skill import plugin_ids_holding_external_app
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     ActionPolicy,
@@ -29,9 +30,7 @@ from onyx.db.external_app import (
     disconnect_external_app_for_user,
     get_external_app_by_id,
     get_external_apps,
-    get_skills_for_external_app,
     get_user_credentials_by_app_id,
-    replace_custom_skill_associations__no_commit,
     update_external_app,
     upsert_external_app_user_credential,
     validate_auth_template,
@@ -41,8 +40,7 @@ from onyx.db.external_app_readiness import (
     required_user_credential_keys,
 )
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
-from onyx.db.plugin import get_plugin_version_validity
-from onyx.db.skill import affected_user_ids_for_skill
+from onyx.db.plugin_access import affected_user_ids_for_plugins
 from onyx.db.utils import UNSET, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -64,7 +62,6 @@ from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
     CreateCustomExternalAppRequest,
     ExternalAppAdminResponse,
-    ExternalAppAssociatedSkill,
     ExternalAppUserResponse,
     UpdateExternalAppRequest,
     UpsertUserCredentialsRequest,
@@ -102,14 +99,6 @@ def _to_admin_response(
 ) -> ExternalAppAdminResponse:
     # ``stored`` is the app's approval policy overrides.
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
-    custom_skills = sorted(
-        (skill for skill in app.associated_skills if skill.is_custom),
-        key=lambda skill: (skill.name, str(skill.id)),
-    )
-    # The organization runs the published version of an associated skill.
-    validity = get_plugin_version_validity(
-        (skill.id for skill in custom_skills), "organization", db_session
-    )
     return ExternalAppAdminResponse(
         id=app.id,
         name=app.name,
@@ -129,14 +118,6 @@ def _to_admin_response(
         users_can_manage_policies=users_can_manage_policies(
             db_session, GatedAppKind.EXTERNAL_APP, app.id
         ),
-        associated_skills=[
-            ExternalAppAssociatedSkill(
-                id=skill.id,
-                name=skill.name,
-                is_valid=validity.get(skill.id),
-            )
-            for skill in custom_skills
-        ],
         is_onyx_managed=managed,
     )
 
@@ -297,9 +278,6 @@ def update_external_app_admin(
             UrlGlob.parse(pattern)
 
     action_policies = request.action_policies
-    affected_skills_by_id = {
-        skill.id: skill for skill in get_skills_for_external_app(db_session, app.id)
-    }
     app = update_external_app(
         db_session=db_session,
         external_app_id=external_app_id,
@@ -323,28 +301,16 @@ def update_external_app_admin(
             None,
             users_can_manage=request.users_can_manage_policies,
         )
-    if request.associated_skill_ids is not None:
-        affected_skills_by_id.update(
-            {
-                skill.id: skill
-                for skill in replace_custom_skill_associations__no_commit(
-                    db_session,
-                    external_app_id=external_app_id,
-                    skill_ids=request.associated_skill_ids,
-                )
-            }
-        )
     sync_actions_for_integration_id__no_commit(app.integration_id, db_session)
-    affected: set[UUID] = set()
-    for skill in affected_skills_by_id.values():
-        affected.update(affected_user_ids_for_skill(skill, db_session))
+    # The app renders the built-in skill of the users who run its plugins.
+    affected = affected_user_ids_for_plugins(
+        plugin_ids_holding_external_app(db_session, app), db_session
+    )
 
     # The database is the source of truth; sandbox files are a derived,
-    # best-effort projection of the committed app and association state.
+    # best-effort projection of the committed app state.
     db_session.commit()
     push_skills_and_commit(affected, db_session)
-    if request.associated_skill_ids is not None:
-        db_session.expire(app, ["associated_skills"])
     return _to_admin_response(
         app,
         stored=get_workspace_action_policies(
@@ -433,19 +399,19 @@ def delete_external_app_admin(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    """Delete an app and its provider-owned skills. Associated custom skills
-    are detached and left disabled. Returns 404 if the app is absent.
+    """Delete an app. The skills of its plugins stay. Returns 404 if the app
+    is absent.
     """
-    # Resolve affected users before deleting the associations.
     app = _get_app_or_404(db_session, external_app_id)
     if MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx and cannot be deleted.",
         )
-    affected: set[UUID] = set()
-    for skill in get_skills_for_external_app(db_session, app.id):
-        affected.update(affected_user_ids_for_skill(skill, db_session))
+    # Users who run its plugins lose the built-in skill of the app.
+    affected = affected_user_ids_for_plugins(
+        plugin_ids_holding_external_app(db_session, app), db_session
+    )
 
     delete_external_app(db_session=db_session, external_app_id=external_app_id)
 
