@@ -288,15 +288,17 @@ it deletes the old one.
   Stored text is not preloaded: only the top hits read it. AWS managed indexes
   do not set it. The setting applies only when the index is created.
 - **A new self-hosted deployment starts with 7-bit quantization.**
-  `setup.py:set_new_deployment_vector_quantization` changes the present
-  SearchSettings row from NONE to 7-bit at startup, before the index is
-  created. The migration that creates the first row predates quantization, so
-  a column default cannot do it. The rule skips on any sign of earlier use: an
+  `document_index/opensearch/new_deployment.py:set_new_deployment_vector_quantization`
+  changes a SearchSettings row from NONE to 7-bit just before its first index
+  is created. Two paths can create it, so both call the rule: startup
+  (`setup.py:setup_onyx`) and the swap (`db/swap_index.py`). On a new
+  deployment the migrations leave the old default as PRESENT and the default
+  model as FUTURE, and the first swap, often from a Celery worker before the
+  API starts, creates the index. A column default cannot do this: the first
+  rows predate quantization. The rule skips on any sign of earlier use: an
   index for the row, documents, connectors, user files, a FUTURE row,
-  multi-tenant, or a cluster older than 2.16 or not reachable. A new
-  deployment already has a PAST row from migrations, so the row count is not a
-  sign. Quantization is part of the mapping, so it must not change once the
-  index exists.
+  multi-tenant, or a cluster older than 2.16 or not reachable. Quantization is
+  part of the mapping, so it must not change once the index exists.
 
 ## Known issues
 

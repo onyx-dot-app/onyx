@@ -62,6 +62,9 @@ from onyx.db.user_file import (
     sample_ported_user_file_ids,
 )
 from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.opensearch.new_deployment import (
+    set_new_deployment_vector_quantization,
+)
 from onyx.document_index.opensearch.port_copy import (
     find_documents_missing_from_index,
     find_documents_with_no_chunks,
@@ -187,7 +190,10 @@ def _perform_index_swap(
         new_search_settings.contextual_rag_model_configuration_id = None
         db_session.commit()
 
-    # Check for and possibly create the index for the new search settings.
+    # Check for and possibly create the index for the new search settings. On a
+    # new deployment this creates the first index, for the default model's
+    # FUTURE row from the migrations.
+    set_new_deployment_vector_quantization(db_session, new_search_settings)
     document_index = get_default_document_index(new_search_settings, None)
 
     WAIT_SECONDS = 5

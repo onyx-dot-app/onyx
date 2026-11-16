@@ -13,10 +13,10 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx import setup
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexModelStatus, VectorQuantization
 from onyx.db.models import SearchSettings
+from onyx.document_index.opensearch import new_deployment
 from onyx.document_index.opensearch.client import (
     OpenSearchIndexClient,
     wait_for_opensearch_with_timeout,
@@ -56,15 +56,26 @@ def _set_default(
             index_name=index_name, vector_quantization=VectorQuantization.NONE
         )
     with (
-        patch.object(setup, "check_docs_exist", return_value=used_by == _USE_CHECKS[0]),
         patch.object(
-            setup, "check_connectors_exist", return_value=used_by == _USE_CHECKS[1]
+            new_deployment, "get_secondary_search_settings", return_value=None
         ),
         patch.object(
-            setup, "check_user_files_exist", return_value=used_by == _USE_CHECKS[2]
+            new_deployment, "check_docs_exist", return_value=used_by == _USE_CHECKS[0]
+        ),
+        patch.object(
+            new_deployment,
+            "check_connectors_exist",
+            return_value=used_by == _USE_CHECKS[1],
+        ),
+        patch.object(
+            new_deployment,
+            "check_user_files_exist",
+            return_value=used_by == _USE_CHECKS[2],
         ),
     ):
-        setup.set_new_deployment_vector_quantization(db_session, search_settings)
+        new_deployment.set_new_deployment_vector_quantization(
+            db_session, search_settings
+        )
     return search_settings.vector_quantization
 
 
