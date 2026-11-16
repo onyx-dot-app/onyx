@@ -66,6 +66,7 @@ export function StepContainer({
     return (
       <>
         <Log
+          padding={0}
           variant={variant}
           icon={icon}
           title={title}
@@ -79,6 +80,7 @@ export function StepContainer({
 
   return (
     <Log
+      padding={0}
       variant={variant}
       icon={icon}
       title={title}
