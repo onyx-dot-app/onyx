@@ -131,7 +131,9 @@ test("uses the text cursor without adding a second progress cursor", () => {
     isStreaming: true,
     timelineEvents: [text("Writing")],
   });
-  expect(screen.getAllByTestId("blinking-bar")).toHaveLength(1);
+  // The text cursor is the inline `[*]()` marker in the (mocked) markdown.
+  expect(screen.getByText(/Writing \[\*\]\(\)/)).toBeInTheDocument();
+  expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
 });
 
 test("shows a cursor when a live turn has only saved history", () => {
