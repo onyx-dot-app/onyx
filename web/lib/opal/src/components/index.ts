@@ -169,14 +169,18 @@ export {
   type IconTooltipStatus,
 } from "@opal/components/icon-tooltip/components";
 
-/* Log */
+/* Lines */
 export {
-  Log,
-  type LogProps,
-  type LogStatus,
-  type LogVariant,
-  type LogWeight,
-} from "@opal/components/log/components";
+  Line,
+  type LineProps,
+  type LineStatus,
+  type LineVariant,
+  type LineWeight,
+} from "@opal/components/lines/line/components";
+export {
+  LogLine,
+  type LogLineProps,
+} from "@opal/components/lines/log-line/components";
 
 /* Divider */
 export {

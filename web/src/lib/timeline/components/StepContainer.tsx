@@ -1,6 +1,7 @@
 import React, { FunctionComponent } from "react";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
-import { Button, Log } from "@opal/components";
+import { Button, Line } from "@opal/components";
+import { Section } from "@opal/layouts";
 import { SvgChevronRight } from "@opal/icons";
 import { cn } from "@opal/utils";
 import type { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
@@ -11,10 +12,8 @@ export interface StepContainerProps {
   children?: React.ReactNode;
   /** Step icon component */
   stepIcon?: FunctionComponent<IconProps>;
-  /** The step's title, in the log line's title column */
+  /** The step's title; it fills the line */
   header?: string | RichStr;
-  /** What the step acted on (a command, a path), after the title */
-  detail?: React.ReactNode;
   /** Rendered at the inline end of the line, before the fold button */
   headerAccessory?: React.ReactNode;
   /** Controlled expanded state */
@@ -38,15 +37,14 @@ export interface StepContainerProps {
 }
 
 /**
- * One step of a run, as an Opal `Log` line: the icon, the title and its
- * detail, and the body folding open below it. A failed step is an
- * `error-heavy` line, tinted with its body.
+ * One step of a run, as an Opal `Line`: the icon, the title, trailing
+ * content and the chevron, and the body folding open below it. A failed step
+ * is an `error-heavy` line, tinted with its body.
  */
 export function StepContainer({
   children,
   stepIcon,
   header,
-  detail,
   headerAccessory,
   isExpanded = true,
   onToggle,
@@ -65,12 +63,11 @@ export function StepContainer({
   if (!foldable) {
     return (
       <>
-        <Log
+        <Line
           padding={0}
           variant={variant}
           icon={icon}
           title={title}
-          centerChildren={detail}
           rightChildren={headerAccessory}
         />
         {children}
@@ -79,30 +76,31 @@ export function StepContainer({
   }
 
   return (
-    <Log
+    <Line
       padding={0}
       variant={variant}
       icon={icon}
       title={title}
-      centerChildren={detail}
-      rightChildren={headerAccessory}
       onClick={onToggle}
-      endButton={
-        // As in the connector check card: points right closed and turns down
-        // open. Its click reaches the line's, which toggles the step.
-        <div
-          className={cn(
-            "transition-transform duration-200 ease-in-out",
-            isExpanded && "rotate-90"
-          )}
-        >
-          <Button
-            icon={SvgChevronRight}
-            prominence="tertiary"
-            size="md"
-            aria-expanded={isExpanded}
-          />
-        </div>
+      rightChildren={
+        <Section flexDirection="row" width="fit" height="fit" gap={1}>
+          {headerAccessory}
+          {/* As in the connector check card: points right closed and turns
+              down open. Its click reaches the line's, which toggles the step. */}
+          <div
+            className={cn(
+              "transition-transform duration-200 ease-in-out",
+              isExpanded && "rotate-90"
+            )}
+          >
+            <Button
+              icon={SvgChevronRight}
+              prominence="tertiary"
+              size="md"
+              aria-expanded={isExpanded}
+            />
+          </div>
+        </Section>
       }
       expandable
       expanded={isExpanded}

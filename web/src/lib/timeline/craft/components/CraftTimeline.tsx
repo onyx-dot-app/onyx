@@ -87,14 +87,12 @@ function CraftTimelineStep({
     );
   }
 
-  const header = renderToolCallHeader(toolCall);
   return (
     <RunStep
       status={entry.status}
       position={position}
       icon={getToolCallIcon(toolCall)}
-      title={header.title}
-      detail={header.detail}
+      title={renderToolCallHeader(toolCall)}
       headerAccessory={
         toolCall.skillName && toolCall.toolName !== "skill" ? (
           <SkillBadge name={toolCall.skillName} />

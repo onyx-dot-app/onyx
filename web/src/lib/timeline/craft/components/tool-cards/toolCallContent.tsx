@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Text } from "@opal/components";
-import type { IconFunctionComponent } from "@opal/types";
+import { markdown } from "@opal/utils";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import BashBody from "@/lib/timeline/craft/components/tool-cards/BashBody";
 import DiffBody from "@/lib/timeline/craft/components/tool-cards/DiffBody";
@@ -23,49 +23,53 @@ function primaryText(toolCall: ToolCallState): string {
   return toolCall.description || toolCall.title;
 }
 
-export interface ToolCallHeader {
-  /** The short title, in the log line's title column. */
-  title: string;
-  /** What the call acted on (a command, a pattern, a path), as a code chip. */
-  detail?: ReactNode;
+/** Text that inline markdown shows as written. */
+function plain(text: string): string {
+  return text.replace(/[\\`*_~[\]<>#|]/g, "\\$&");
 }
 
-/** A code-formatted chip for the detail column. */
-function codeChip(text: string): ReactNode {
-  return (
-    <span className="min-w-0 rounded-sm bg-background-tint-01 px-1">
-      <Text font="secondary-mono" color="text-03" maxLines={1}>
-        {text}
-      </Text>
-    </span>
+/** A code span that holds any text, backticks included. */
+function code(text: string): string {
+  const longestRun = Math.max(
+    0,
+    ...(text.match(/`+/g) ?? []).map((run) => run.length)
   );
+  const fence = "`".repeat(longestRun + 1);
+  return `${fence} ${text} ${fence}`;
+}
+
+/** A plain verb, then the command, pattern, skill or path as a code span. */
+function verbWithCode(verb: string, chip: string): RichStr {
+  return markdown(`${plain(verb)} ${code(chip)}`);
 }
 
 /**
- * The step's title and detail. Bash/execute, search, skills and read/edit get
- * a verb as the title and the actual command, pattern, skill or file path as a
- * code chip; everything else is plain text.
+ * The step's title. Bash/execute, search, skills and read/edit lead with a
+ * verb, then the actual command, pattern, skill or file path in a code span;
+ * everything else is plain text.
  */
-export function renderToolCallHeader(toolCall: ToolCallState): ToolCallHeader {
+export function renderToolCallHeader(
+  toolCall: ToolCallState
+): string | RichStr {
   if (toolCall.kind === "execute" && toolCall.command) {
     if (toolCall.skillName && toolCall.description) {
-      return { title: toolCall.description };
+      return toolCall.description;
     }
-    return { title: "Running", detail: codeChip(toolCall.command) };
+    return verbWithCode("Running", toolCall.command);
   }
   if (toolCall.kind === "search" && toolCall.description) {
-    return { title: "Searching for", detail: codeChip(toolCall.description) };
+    return verbWithCode("Searching for", toolCall.description);
   }
   if (toolCall.toolName === "skill" && toolCall.skillName) {
-    return { title: "Using skill", detail: codeChip(toolCall.skillName) };
+    return verbWithCode("Using skill", toolCall.skillName);
   }
   if (
     (toolCall.kind === "read" || toolCall.kind === "edit") &&
     toolCall.description
   ) {
-    return { title: toolCall.title, detail: codeChip(toolCall.description) };
+    return verbWithCode(toolCall.title, toolCall.description);
   }
-  return { title: primaryText(toolCall) };
+  return primaryText(toolCall);
 }
 
 export function renderToolCallBody(toolCall: ToolCallState): ReactNode {

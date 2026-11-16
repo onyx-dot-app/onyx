@@ -1,0 +1,51 @@
+@reference "#reference.css";
+
+/* ── Line ────────────────────────────────────────────────────────────────────
+   The status colours the icon (icons stroke with `currentColor`, so a `text-*`
+   colour sets it), and the heavy weight tints the line and its body. A row of
+   your own brings its own colours. An interactive line takes its hover and
+   press colours from `Interactive.Stateless`. */
+
+.opal-line {
+  @apply rounded-08;
+}
+
+/* The body starts under the content: past the line's padding (0.5rem), the
+   icon's column (1.25rem) and the gap (0.25rem). */
+.opal-line-body {
+  @apply ps-8 pe-2 pb-2;
+}
+
+/* Without the outer padding, the body keeps its place under the content. */
+.opal-line[data-opal-line-padding="0"] .opal-line-body {
+  @apply ps-7 pe-1 pb-1;
+}
+
+.opal-line .opal-line-icon {
+  @apply shrink-0 text-text-03;
+}
+.opal-line[data-opal-line-status="info"] .opal-line-icon {
+  @apply text-status-info-05;
+}
+.opal-line[data-opal-line-status="success"] .opal-line-icon {
+  @apply text-status-success-05;
+}
+.opal-line[data-opal-line-status="warning"] .opal-line-icon {
+  @apply text-status-warning-05;
+}
+.opal-line[data-opal-line-status="error"] .opal-line-icon {
+  @apply text-status-error-05;
+}
+
+.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="info"] {
+  @apply bg-status-info-00;
+}
+.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="success"] {
+  @apply bg-status-success-00;
+}
+.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="warning"] {
+  @apply bg-status-warning-00;
+}
+.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="error"] {
+  @apply bg-status-error-00;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/components/log/styles.css";
+import "@opal/components/lines/line/styles.css";
 import { Section } from "@opal/layouts/general/components";
 import { Text } from "@opal/components/text/components";
 import { Fold } from "@opal/components/fold/components";
@@ -11,71 +11,79 @@ import type { IconFunctionComponent, RichStr, StatusColor } from "@opal/types";
 // Types
 // ---------------------------------------------------------------------------
 
-/** The statuses a log line can show. */
-type LogStatus = Extract<
+/** The statuses a line can show. */
+type LineStatus = Extract<
   StatusColor,
   "default" | "info" | "success" | "warning" | "error"
 >;
 
 /** How much a line stands out: `heavy` adds a tinted background. */
-type LogWeight = "heavy" | "light";
+type LineWeight = "heavy" | "light";
 
 /**
  * A status and its weight, e.g. `"error-heavy"`. `default` has no weight: it
  * is never tinted.
  */
-type LogVariant = "default" | `${Exclude<LogStatus, "default">}-${LogWeight}`;
+type LineVariant =
+  | "default"
+  | `${Exclude<LineStatus, "default">}-${LineWeight}`;
 
-type LogBaseProps = {
-  /** Colours the icon; a heavy variant also tints the line. */
-  variant?: LogVariant;
+type LineCommonProps = {
+  /** Colours the icon; a heavy variant also tints the line and its body. */
+  variant?: LineVariant;
   /**
    * The line's outer padding, as a spacing step (`N / 4` rem): `1` is
-   * 0.25rem, `0` none, for a log inside a container that pads it already.
+   * 0.25rem, `0` none, for a line inside a container that pads it already.
    * The line is 1.75rem tall plus this padding, and the body follows it.
    * @default 1
    */
   padding?: 0 | 1;
   /** Shown at 1rem, in the status colour. */
   icon: IconFunctionComponent;
-  /** What the line is about. One line, in a 10rem column. */
-  title: string | RichStr;
   /**
-   * What happened, filling the rest of the row from its start. Any content:
-   * the caller sets its colour and how it fits on one line.
+   * Trailing content at the very end, such as a tag, actions or a fold
+   * chevron. It sits outside the inner 0.25rem the rest of the line has, so a
+   * button there is nearer the edge. Not padded.
    */
-  centerChildren?: React.ReactNode;
-  /** Trailing content, such as a tag or an action. Not padded. */
   rightChildren?: React.ReactNode;
   /**
-   * A button at the very end, such as a fold chevron. It sits outside the
-   * inner 0.25rem the rest of the line has, so it is nearer the edge.
-   */
-  endButton?: React.ReactNode;
-  /**
-   * Makes the log interactive: the line and its body hover and press as one,
-   * and a click anywhere on them, except on a link, calls this. A button
+   * Makes the line interactive: the line and its body hover and press as
+   * one, and a click anywhere on them, except on a link, calls this. A button
    * inside (e.g. a chevron) is its keyboard target; that button's click
    * reaches this too.
    */
   onClick?: () => void;
 };
 
-type LogExpandableProps =
+type LineContentProps =
+  | {
+      /** What the line is about. Fills the row, on one line. */
+      title: string | RichStr;
+      children?: never;
+    }
+  | {
+      /** A row of your own between the icon and `rightChildren`. */
+      children: React.ReactNode;
+      title?: never;
+    };
+
+type LineExpandableProps =
   | { expandable?: false; expanded?: never; expandedContent?: never }
   | {
       /** Adds a body below the line that opens and closes. */
       expandable: true;
       /** Whether the body is open. Controlled: the caller owns the state. */
       expanded: boolean;
-      /** The body, aligned under the title. */
+      /** The body, aligned under the content. */
       expandedContent: React.ReactNode;
     };
 
-type LogProps = LogBaseProps & LogExpandableProps;
+type LineProps = LineCommonProps & LineContentProps & LineExpandableProps;
 
-// The title is always text-03; `centerChildren` brings its own colour.
-const VARIANTS: Record<LogVariant, { status: LogStatus; weight: LogWeight }> = {
+const VARIANTS: Record<
+  LineVariant,
+  { status: LineStatus; weight: LineWeight }
+> = {
   default: { status: "default", weight: "light" },
   "info-heavy": { status: "info", weight: "heavy" },
   "info-light": { status: "info", weight: "light" },
@@ -88,31 +96,30 @@ const VARIANTS: Record<LogVariant, { status: LogStatus; weight: LogWeight }> = {
 };
 
 // ---------------------------------------------------------------------------
-// Log
+// Line
 // ---------------------------------------------------------------------------
 
 /**
- * One line of a log or report: an icon, a title, centre content and trailing
- * content, 2.25rem tall. The variant colours the icon; a heavy variant also
- * tints the line, and its body when expanded. A title too long for its column
- * shows in full in a tooltip.
+ * One line of a list, a log or a timeline: an icon, a title (or a row of your
+ * own) and trailing content, 1.75rem tall plus its padding. The variant
+ * colours the icon; a heavy variant also tints the line, and its body when
+ * expanded. A title too long for the row shows in full in a tooltip.
  *
  * With `onClick`, the line is interactive. With `expandable`, a body opens
  * below it while `expanded`.
  */
-function Log({
+function Line({
   variant = "default",
   padding = 1,
   icon: Icon,
   title,
-  centerChildren,
+  children,
   rightChildren,
-  endButton,
   onClick,
   expandable,
   expanded,
   expandedContent,
-}: LogProps) {
+}: LineProps) {
   const { status, weight } = VARIANTS[variant];
 
   const line = (
@@ -123,10 +130,10 @@ function Log({
       height={1.75 + (padding * 2) / 4}
       padding={padding}
       gap={0}
-      className="opal-log-line"
+      className="opal-line-row"
     >
-      {/* Everything but `endButton` takes another 0.25rem, so the button
-          sits nearer the edge with a larger hover area around it. */}
+      {/* Everything but `rightChildren` takes another 0.25rem, so a button
+          there sits nearer the edge with a larger hover area around it. */}
       <Section
         flexDirection="row"
         justifyContent="start"
@@ -136,24 +143,15 @@ function Log({
         className="min-w-0 flex-1"
       >
         <Section width="fit" height="fit" padding={0.5}>
-          <Icon size={16} className="opal-log-icon" />
+          <Icon size={16} className="opal-line-icon" />
         </Section>
 
-        {/* The title, the centre content and the trailing content sit 1rem
-            apart, wider than the line's gap, so the columns read apart. */}
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          height="fit"
-          gap={4}
-          className="min-w-0 flex-1"
-        >
+        {children ?? (
           <Section
             flexDirection="row"
             justifyContent="start"
-            width={10}
             height="fit"
-            className="shrink-0"
+            className="min-w-0 flex-1"
           >
             <Text
               maxLines={1}
@@ -164,39 +162,28 @@ function Log({
               {title}
             </Text>
           </Section>
-
-          <Section
-            flexDirection="row"
-            justifyContent="start"
-            height="fit"
-            className="min-w-0 flex-1"
-          >
-            {centerChildren}
-          </Section>
-
-          {rightChildren}
-        </Section>
+        )}
       </Section>
 
-      {endButton}
+      {rightChildren}
     </Section>
   );
 
   const body = expandable && (
     <Fold open={expanded}>
-      <div className="opal-log-body">{expandedContent}</div>
+      <div className="opal-line-body">{expandedContent}</div>
     </Fold>
   );
 
   return (
     <div
-      className="opal-log"
-      data-opal-log-status={status}
-      data-opal-log-weight={weight}
-      data-opal-log-padding={padding}
+      className="opal-line"
+      data-opal-line-status={status}
+      data-opal-line-weight={weight}
+      data-opal-line-padding={padding}
     >
       {onClick ? (
-        // The whole log is one surface: the line and its body hover and
+        // The whole line is one surface: the line and its body hover and
         // press together, and a click anywhere toggles it. A link inside
         // keeps its own click.
         <Interactive.Stateless
@@ -228,4 +215,12 @@ function Log({
   );
 }
 
-export { Log, type LogProps, type LogStatus, type LogVariant, type LogWeight };
+export {
+  Line,
+  type LineProps,
+  type LineCommonProps,
+  type LineExpandableProps,
+  type LineStatus,
+  type LineVariant,
+  type LineWeight,
+};
