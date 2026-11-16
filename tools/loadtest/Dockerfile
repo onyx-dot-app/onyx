@@ -16,7 +16,9 @@ USER locust
 
 # prometheus-client isn't in the base image. The rest ship in it at vulnerable
 # versions. Pins match the root lockfile's `loadtest` group, so bump them with it.
-RUN pip install --no-cache-dir \
+# uv is mounted for this step only, so it never reaches the shipped image.
+RUN --mount=from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9,source=/uv,target=/bin/uv \
+    uv pip install --python /opt/venv/bin/python --no-cache-dir \
     prometheus-client==0.23.1 \
     brotli==1.2.1 \
     certifi==2026.10.19 \
