@@ -13,8 +13,8 @@ events and read the last one, an `ExecCommandResult`, or call
 
 Exec contract (Codex `exec_command` / `write_stdin`):
 - `exec_command` starts a command and waits up to `yield_time_ms`. If the
-  command ended, the result has its exit code. Otherwise it has an
-  `exec_session_id` for `write_stdin`.
+  command ended, the result has its exit code. Otherwise it has a
+  `session_id` for `write_stdin`.
 - `write_stdin` with no chars polls for new output. Chars go to the
   command's stdin. "\\x03" interrupts the command.
 - Output of one call keeps at most `EXEC_CALL_OUTPUT_MAX_BYTES` (head and
@@ -22,16 +22,21 @@ Exec contract (Codex `exec_command` / `write_stdin`):
 - Exec session IDs stay valid across turns and API pods until the command's
   record is evicted, or the sandbox stops (idle stop, restore): then the call
   raises `ExecSessionEndedError`.
+- A cancel of the current signal (`onyx.llm.cancellation`: a Stop, or the
+  end of the code mode cell that made the call) ends the wait at once and
+  kills the command (SIGKILL); the call raises `AgentCancelled`.
 """
 
 import abc
-from collections.abc import Iterator
+import posixpath
+from collections.abc import Iterator, Sequence
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
     HarnessSandboxRef,
+    SandboxPathInfo,
 )
 
 # Parent of each chat session's working directory in the sandbox.
@@ -117,6 +122,30 @@ class SandboxFileTooLargeError(HarnessSandboxError):
     pass
 
 
+class SandboxFileNotFoundError(HarnessSandboxError):
+    def __init__(self, path: str) -> None:
+        super().__init__(f"{path!r} does not exist")
+
+
+def session_relative_path(ref: HarnessSandboxRef, path: str) -> str:
+    """The session-relative form of `path` ("" = the session directory).
+    Accepts a relative path or an absolute path in the session directory."""
+    root = session_workspace(ref.session_id)
+    normalized = posixpath.normpath(path or ".")
+    if posixpath.isabs(normalized):
+        if normalized == root:
+            return ""
+        if not normalized.startswith(root + "/"):
+            raise SandboxPathError(
+                f"{path!r} is outside the session directory {root}; use "
+                "exec_command elsewhere"
+            )
+        return normalized[len(root) + 1 :]
+    if normalized == ".." or normalized.startswith("../"):
+        raise SandboxPathError(f"{path!r} leaves the session directory")
+    return "" if normalized == "." else normalized
+
+
 class HarnessSandbox(abc.ABC):
     """What the harness calls. All methods block; see the module docstring."""
 
@@ -151,17 +180,36 @@ class HarnessSandbox(abc.ABC):
         """Write to a running command, or poll it with empty chars."""
 
     # Files: only what exec_command cannot do well. view_image needs exact
-    # bytes (exec output is text), and apply_patch needs an exact write of
-    # any content (no shell quoting). Listing, moving and deleting go
-    # through exec_command.
+    # bytes (exec output is text), and apply_patch needs exact writes of any
+    # content (no shell quoting) and typed path facts. Paths are relative to
+    # the session directory, or absolute inside it.
 
     @abc.abstractmethod
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
-        """Raises SandboxFileTooLargeError over max_bytes."""
+        """Follows links inside the session directory. Raises
+        SandboxFileNotFoundError for a missing file and
+        SandboxFileTooLargeError over max_bytes."""
 
     @abc.abstractmethod
-    def write_file(self, ref: HarnessSandboxRef, path: str, data: bytes) -> None:
-        """Atomic replace; creates parent directories."""
+    def write_file(
+        self, ref: HarnessSandboxRef, path: str, data: bytes, *, mode: int = 0o644
+    ) -> None:
+        """Atomic replace (a link is replaced, not followed); creates parent
+        directories. `mode`: permission bits."""
+
+    @abc.abstractmethod
+    def stat_files(
+        self, ref: HarnessSandboxRef, paths: Sequence[str]
+    ) -> list[SandboxPathInfo]:
+        """The kernel's facts about each path, in order, from one call.
+        Missing paths and paths whose links lead outside the session directory
+        are reported, not refused. A path whose links loop raises
+        HarnessSandboxError."""
+
+    @abc.abstractmethod
+    def delete_file(self, ref: HarnessSandboxRef, path: str) -> bool:
+        """Delete a file or a link (not a directory). False when nothing was
+        at the path."""
 
     @abc.abstractmethod
     def publish_artifact(

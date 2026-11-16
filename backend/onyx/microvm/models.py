@@ -191,7 +191,8 @@ class VmRequest(BaseModel):
 
     tenant_id: str
     sandbox_id: UUID
-    # The sandbox's provisioning attempt number (the existing attempt fence).
+    # The lowest attempt that may serve the request: a running VM of an older
+    # attempt is a conflict, and a new VM starts at this attempt or later.
     attempt: int
     # Template version; vcpus and mem_mib come from the node's template.
     template: str

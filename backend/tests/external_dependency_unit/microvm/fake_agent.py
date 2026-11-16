@@ -4,6 +4,7 @@ daemon behind its pass-through."""
 import hashlib
 import io
 import itertools
+import posixpath
 import shlex
 import threading
 import time
@@ -30,6 +31,9 @@ from onyx.microvm.daemon_client import (
 )
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2, hostagent_pb2_grpc
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2, sandboxd_pb2_grpc
+from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
+    STAT_FILES_SCRIPT,
+)
 
 _REASON_CODES: dict[HostAgentErrorReason, grpc.StatusCode] = {
     HostAgentErrorReason.CAPACITY_MEMORY: grpc.StatusCode.RESOURCE_EXHAUSTED,
@@ -147,6 +151,10 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.executions: dict[str, dict[str, FakeExecution]] = {}
         # (sandbox_id, session_id, path) -> bytes of a regular file.
         self.files: dict[tuple[str, str, str], bytes] = {}
+        # Permission bits of a file in `files`; 0o644 when absent.
+        self.file_modes: dict[tuple[str, str, str], int] = {}
+        # (sandbox_id, session_id, path) -> target of a symlink, as stored.
+        self.links: dict[tuple[str, str, str], str] = {}
         # ZipFiles fails with LIMIT_EXCEEDED over this many input bytes.
         self.zip_max_input_bytes: int | None = None
         # Spooled captures by ID, and "object storage" by presigned URL.
@@ -162,6 +170,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self._ids = itertools.count(1)
         # Execution IDs of every Cancel.
         self.cancel_calls: list[str] = []
+        # Cancel fails with this reason, and the execution goes on.
+        self.cancel_error: SandboxDaemonErrorReason | None = None
         # Start and Run refuse with EXECUTION_CAP_REACHED at this many
         # running executions of a VM.
         self.max_running_executions = 64
@@ -379,6 +389,9 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             del self.managed_active[slot_key]
         for key in [k for k in self.files if k[0] == sandbox_id]:
             del self.files[key]
+            self.file_modes.pop(key, None)
+        for key in [k for k in self.links if k[0] == sandbox_id]:
+            del self.links[key]
 
     def _check_instance(
         self,
@@ -800,9 +813,12 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         sandbox_id = self._ready(context)
         argv = list(command.argv)
         script = argv
-        if argv[:2] == ["bash", "-c"] and len(argv) == 3:
+        if argv[:3] == ["bash", "-c", STAT_FILES_SCRIPT]:
+            script = ["stat_files"]
+        elif argv[:2] == ["bash", "-c"] and len(argv) == 3:
             script = shlex.split(argv[2])
         if not script or script[0] not in (
+            "stat_files",
             "echo",
             "fail",
             "cat",
@@ -828,7 +844,13 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             env=dict(command.env),
         )
         argv = script
-        if argv[0] in ("mkdir", "true"):
+        if argv[0] == "stat_files":
+            # bash -c script $0 path...
+            execution.stdout = self._stat_files(
+                sandbox_id, command.session_id, list(command.argv[4:])
+            )
+            execution.end(sandboxd_pb2.EXITED, 0)
+        elif argv[0] in ("mkdir", "true"):
             execution.end(sandboxd_pb2.EXITED, 0)
         elif argv[0] == "echo":
             execution.stdout = (" ".join(argv[1:]) + "\n").encode()
@@ -840,6 +862,111 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             execution
         )
         return execution
+
+    def _realpath(self, sandbox_id: str, session_id: str, path: str) -> str:
+        """`realpath -m` (gnulib canonicalize, missing components allowed) of
+        a path relative to the session directory, over the in-memory links.
+        After 20 links it remembers each (directory, rest of the name) at a
+        link; on a repeat, as in a loop, it keeps that link as spelled and goes
+        on. Call with the lock held."""
+        root = f"{WORKSPACES}/{session_id}"
+        resolved = root
+        parts = path.split("/")
+        links = 0
+        seen: set[tuple[str, tuple[str, ...]]] = set()
+        while parts:
+            part = parts.pop(0)
+            if part in ("", "."):
+                continue
+            if part == "..":
+                resolved = posixpath.dirname(resolved)
+                continue
+            candidate = posixpath.join(resolved, part)
+            target = (
+                self.agent.links.get(
+                    (sandbox_id, session_id, candidate[len(root) + 1 :])
+                )
+                if candidate.startswith(root + "/")
+                else None
+            )
+            if target is not None:
+                if links < 20:
+                    links += 1
+                else:
+                    visit = (resolved, (part, *parts))
+                    if visit in seen:
+                        target = None
+                    seen.add(visit)
+            if target is None:
+                resolved = candidate
+                continue
+            if target.startswith("/"):
+                resolved = "/"
+            parts = target.split("/") + parts
+        return resolved
+
+    def _stat_files(self, sandbox_id: str, session_id: str, paths: list[str]) -> bytes:
+        """What STAT_FILES_SCRIPT prints for `paths` (relative to the session
+        directory) over the in-memory files and links. Nothing exists outside
+        the session directory. Call with the lock held."""
+        root = f"{WORKSPACES}/{session_id}"
+        keys = [
+            key[2]
+            for key in itertools.chain(self.agent.files, self.agent.links)
+            if key[:2] == (sandbox_id, session_id)
+        ]
+
+        def inside(path: str) -> str | None:
+            if path == root:
+                return ""
+            return path[len(root) + 1 :] if path.startswith(root + "/") else None
+
+        def raw_mode(path: str) -> int | None:
+            """lstat's st_mode of an absolute path."""
+            rel = inside(path)
+            if rel is None:
+                return None
+            key = (sandbox_id, session_id, rel)
+            if key in self.agent.links:
+                return 0o120777
+            if key in self.agent.files:
+                return 0o100000 | self.agent.file_modes.get(key, 0o644)
+            if rel == "" or any(k.startswith(rel + "/") for k in keys):
+                return 0o040755
+            return None
+
+        def printed(real_path: str) -> str:
+            """The script's real path field: empty when the path passes
+            through a link, as on a loop."""
+            ancestor = real_path
+            while len(ancestor) > 1:
+                rel = inside(ancestor)
+                if (
+                    rel is not None
+                    and (sandbox_id, session_id, rel) in self.agent.links
+                ):
+                    return ""
+                ancestor = posixpath.dirname(ancestor)
+            return real_path
+
+        out = bytearray()
+        for path in paths:
+            parent = self._realpath(sandbox_id, session_id, posixpath.dirname(path))
+            own = raw_mode(
+                posixpath.join(parent, posixpath.basename(path))
+                if path != "."
+                else root
+            )
+            real = self._realpath(sandbox_id, session_id, path)
+            followed = raw_mode(real)
+            if followed == 0o120777:
+                # A link loop: stat -L fails.
+                followed = None
+            for mode in (own, followed):
+                out += (b"" if mode is None else f"{mode:x}".encode()) + b"\0"
+            out += printed(real).encode() + b"\0"
+            out += printed(parent).encode() + b"\0"
+        return bytes(out)
 
     def _execution(
         self, context: grpc.ServicerContext, execution_id: str
@@ -993,6 +1120,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         with self.agent.lock:
             execution = self._execution(context, request.execution_id)
             self.agent.cancel_calls.append(request.execution_id)
+            if self.agent.cancel_error is not None:
+                abort_daemon(context, self.agent.cancel_error, "cancel failed")
             already_ended = execution.result is not None
             soft = request.signal in (
                 sandboxd_pb2.CANCEL_SIGNAL_SIGINT,
@@ -1034,7 +1163,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 ]
             )
 
-    # Files: an in-memory tree of regular files; directories are implied.
+    # Files: an in-memory tree of regular files and symlinks; directories
+    # are implied.
 
     @staticmethod
     def _check_path(context: grpc.ServicerContext, path: str) -> str:
@@ -1051,7 +1181,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
 
     @staticmethod
     def _info(
-        path: str, size: int, *, directory: bool = False
+        path: str, size: int, *, directory: bool = False, mode: int = 0o644
     ) -> sandboxd_pb2.FileInfo:
         return sandboxd_pb2.FileInfo(
             path=path,
@@ -1060,8 +1190,28 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             if directory
             else sandboxd_pb2.FILE_TYPE_REGULAR,
             size=size,
-            mode=0o755 if directory else 0o644,
+            mode=0o755 if directory else mode,
         )
+
+    def _followed(
+        self, context: grpc.ServicerContext, key: tuple[str, str, str]
+    ) -> tuple[str, str, str]:
+        """The file a path names through its links, inside the session
+        directory as the daemon's root confines it. Call with the lock held."""
+        for _ in range(40):
+            target = self.agent.links.get(key)
+            if target is None:
+                return key
+            joined = posixpath.normpath(
+                posixpath.join(posixpath.dirname(key[2]), target)
+            )
+            if posixpath.isabs(target) or joined.startswith(".."):
+                abort_daemon(
+                    context, SandboxDaemonErrorReason.INVALID_ARGUMENT, "escapes"
+                )
+            key = (key[0], key[1], joined)
+        abort_daemon(context, SandboxDaemonErrorReason.INVALID_ARGUMENT, "loop")
+        raise AssertionError("unreachable")
 
     def ReadFile(  # noqa: N802
         self, request: sandboxd_pb2.ReadFileRequest, context: grpc.ServicerContext
@@ -1069,13 +1219,15 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         with self.agent.lock:
             sandbox_id = self._ready(context)
             path = self._check_path(context, request.path)
-            data = self.agent.files.get((sandbox_id, request.session_id, path))
+            key = self._followed(context, (sandbox_id, request.session_id, path))
+            data = self.agent.files.get(key)
             if data is None:
                 abort_daemon(context, SandboxDaemonErrorReason.FILE_NOT_FOUND, path)
                 raise AssertionError("unreachable")
+            mode = self.agent.file_modes.get(key, 0o644)
         end = request.offset + request.length if request.length else len(data)
         body = data[request.offset : end]
-        yield sandboxd_pb2.ReadFileResponse(info=self._info(path, len(data)))
+        yield sandboxd_pb2.ReadFileResponse(info=self._info(path, len(data), mode=mode))
         for start in range(0, len(body), 64 << 10):
             yield sandboxd_pb2.ReadFileResponse(data=body[start : start + (64 << 10)])
 
@@ -1094,7 +1246,12 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             abort_daemon(
                 context, SandboxDaemonErrorReason.INVALID_ARGUMENT, "size or sha256"
             )
-        self.agent.files[(sandbox_id, session_id, path)] = data
+        key = (sandbox_id, session_id, path)
+        self.agent.files[key] = data
+        # A write replaces a link, as the daemon's rename does.
+        self.agent.links.pop(key, None)
+        mode = header.mode if isinstance(header, sandboxd_pb2.WriteFileHeader) else 0
+        self.agent.file_modes[key] = mode or 0o644
         return hashlib.sha256(data).hexdigest()
 
     def WriteFile(  # noqa: N802
@@ -1119,7 +1276,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 context, sandbox_id, header.session_id, path, data, header
             )
             return sandboxd_pb2.WriteFileResponse(
-                info=self._info(path, len(data)), sha256=digest
+                info=self._info(path, len(data), mode=self.agent.file_modes[key]),
+                sha256=digest,
             )
 
     def UploadFile(  # noqa: N802
@@ -1202,7 +1360,11 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 return sandboxd_pb2.DeleteFileResponse(deleted=bool(gone))
             path = self._check_path(context, request.path)
             key = (sandbox_id, request.session_id, path)
-            if self.agent.files.pop(key, None) is not None:
+            self.agent.file_modes.pop(key, None)
+            if (
+                self.agent.files.pop(key, None) is not None
+                or self.agent.links.pop(key, None) is not None
+            ):
                 return sandboxd_pb2.DeleteFileResponse(deleted=True)
             below = [
                 k

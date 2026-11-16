@@ -58,6 +58,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     ExecSessionEndedError,
     HarnessSandboxError,
     HarnessSandboxRef,
+    SandboxFileNotFoundError,
     collect_exec_result,
 )
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -237,8 +238,8 @@ def test_sleep_saves_the_session_and_the_next_use_restores_it(
     result = collect_exec_result(
         sandbox.exec_command(ref, "sleep 60", yield_time_ms=250)
     )
-    assert result.exec_session_id is not None
-    collect_exec_result(sandbox.write_stdin(ref, result.exec_session_id, "\x03"))
+    assert result.session_id is not None
+    collect_exec_result(sandbox.write_stdin(ref, result.session_id, "\x03"))
 
     assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
     save = harness_state.get_session_save(tenant_cache, ref.session_id)
@@ -329,8 +330,8 @@ def test_a_busy_sandbox_is_not_saved_or_stopped(
     assert node.agent.stop_calls == []
 
     # Idle now: the save runs and the command's session ends with the VM.
-    assert result.exec_session_id is not None
-    collect_exec_result(sandbox.write_stdin(ref, result.exec_session_id, "\x03"))
+    assert result.session_id is not None
+    collect_exec_result(sandbox.write_stdin(ref, result.session_id, "\x03"))
     assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
 
 
@@ -375,18 +376,18 @@ def test_exec_sessions_end_after_a_sleep(
 ) -> None:
     sandbox = make_sandbox()
     started = collect_exec_result(sandbox.exec_command(ref, "cat", yield_time_ms=250))
-    assert started.exec_session_id is not None
+    assert started.session_id is not None
     assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.KEPT_BUSY
 
     # The command ends with no poll: its record stays until the VM stops.
     record = harness_state.get_exec_session(
-        tenant_cache, ref.sandbox_id, started.exec_session_id
+        tenant_cache, ref.sandbox_id, started.session_id
     )
     assert record is not None
     sandbox._session_vm(ref)[1].cancel(record.execution_id)
     assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
     with pytest.raises(ExecSessionEndedError):
-        collect_exec_result(sandbox.write_stdin(ref, started.exec_session_id))
+        collect_exec_result(sandbox.write_stdin(ref, started.session_id))
 
 
 def test_the_idle_evictor_stops_only_an_idle_saved_sandbox(
@@ -442,7 +443,7 @@ def test_the_eviction_policy_is_off_without_harness_sandboxes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(harness_factory, "_instance", None)
-    monkeypatch.setattr(harness_factory, "FIRECRACKER_ENABLED", False)
+    monkeypatch.setattr(harness_factory, "HARNESS_SANDBOX_ENABLED", False)
     checkpointer, _ = harness_factory.get_eviction_policy()
     assert isinstance(checkpointer, NoCheckpointSupport)
 
@@ -492,7 +493,7 @@ def test_file_calls_of_a_new_session_work_when_command_slots_are_full(
     sandbox = make_sandbox()
     node.agent.max_running_executions = 1
     first = collect_exec_result(sandbox.exec_command(ref, "cat", yield_time_ms=250))
-    assert first.exec_session_id is not None
+    assert first.session_id is not None
 
     other = ref.model_copy(update={"session_id": uuid4()})
     sandbox.write_file(other, "a.txt", b"x")
@@ -523,7 +524,7 @@ def test_a_session_without_a_directory_saves_nothing_and_keeps_its_save(
     assert saved is not None and saved.file_id is not None
 
     # The next VM has no directory for the session: the save stays.
-    with pytest.raises(SandboxDaemonError):
+    with pytest.raises(SandboxFileNotFoundError):
         sandbox.read_file(ref, "missing.txt", max_bytes=10)
     monkeypatch.setattr(SandboxDaemonClient, "list_files", no_directory)
     assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
@@ -588,7 +589,7 @@ def test_a_file_store_config_error_turns_eviction_off(
 
     monkeypatch.setattr(harness_factory, "_instance", None)
     monkeypatch.setattr(harness_factory, "_eviction_error_logged", False)
-    monkeypatch.setattr(harness_factory, "FIRECRACKER_ENABLED", True)
+    monkeypatch.setattr(harness_factory, "HARNESS_SANDBOX_ENABLED", True)
     monkeypatch.setattr(harness_factory, "SANDBOX_FC_TEMPLATE", "tpl-1")
     monkeypatch.setattr(session_saves, "default_archive_store", broken)
     for _ in range(2):
@@ -627,11 +628,12 @@ def test_a_wake_after_sleep_starts_past_the_stopped_attempt(
     ref: HarnessSandboxRef,
 ) -> None:
     sandbox = make_sandbox()
-    later = ref.model_copy(update={"attempt": 3})
-    sandbox.write_file(later, "src/a.txt", b"x")
+    sandbox.write_file(ref, "src/a.txt", b"x")
+    # The sandbox's VMs have reached attempt 3.
+    harness_state.record_attempt(tenant_cache, ref.sandbox_id, 3)
     assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
 
-    # The row's attempt (1) is lower; the agent will not create 3 again.
+    # The agent will not create a stopped attempt again.
     assert sandbox.read_file(ref, "src/a.txt", max_bytes=10) == b"x"
     placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
     assert placement is not None and placement.attempt == 4
