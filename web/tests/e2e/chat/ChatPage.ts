@@ -190,6 +190,20 @@ export class ChatPage {
     await expect(table.getByRole("row")).toHaveCount(rows);
   }
 
+  /** Hovers the answer table and clicks its copy button. */
+  async copyAnswerTable(): Promise<void> {
+    const message = this.aiMessage();
+    await message.locator(".markdown-table-card").hover();
+    await message.getByTestId("markdown-table-copy-button").click();
+  }
+
+  /** Needs the clipboard-read permission. */
+  async expectClipboardText(text: string): Promise<void> {
+    await expect
+      .poll(() => this.page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(text);
+  }
+
   async expectAnswerListItem(text: string): Promise<void> {
     await expect(
       this.aiMessage().getByRole("listitem").filter({ hasText: text })

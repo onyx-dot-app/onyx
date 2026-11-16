@@ -193,6 +193,8 @@ credential per user (`server/features/build/db/user_library.py:build_document_id
 Uploads and deletes push the full file set to the user's sandbox when it is
 `RUNNING` (`server/features/build/sandbox/user_library.py:sync_user_library_to_active_sandboxes`).
 Provisioning pushes it again with the other managed content.
+No connector class backs `CRAFT_FILE`, so `should_index` never schedules these
+pairs and a legacy embedding swap does not count them (`db/swap_index.py`).
 
 **Skills reload.** `SessionManager.reload_session_skills` refuses while the
 sandbox is `PROVISIONING` and while a turn holds the prompt slot. It rewrites

@@ -60,6 +60,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewCheckLazyImportsCommand())
 	cmd.AddCommand(NewCherryPickCommand())
 	cmd.AddCommand(NewCraftDevCommand())
+	cmd.AddCommand(NewCraftFCCommand())
 	cmd.AddCommand(NewDBCommand())
 	cmd.AddCommand(NewDeployCommand())
 	cmd.AddCommand(NewOpenAPICommand())

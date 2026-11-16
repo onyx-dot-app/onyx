@@ -165,7 +165,13 @@ def test_agent_pod_spec() -> None:
     # The agent joins $POD_IP and the listen port itself (it brackets IPv6).
     assert not [a for a in args if a.startswith("--advertise-address")]
     assert env["POD_IP"]["valueFrom"]["fieldRef"]["fieldPath"] == "status.podIP"
-    assert "--egress-proxy=onyx-sandbox-proxy.onyx.svc.cluster.local:8080" in args
+    # The relays reach sandbox-proxy only on its mTLS relay port.
+    assert "--egress-proxy=onyx-sandbox-proxy.onyx.svc.cluster.local:8443" in args
+    assert "--egress-proxy-tls-ca=/etc/craft-fc/relay-tls/ca.crt" in args
+    assert (
+        "--egress-proxy-tls-server-name=onyx-sandbox-proxy.onyx.svc.cluster.local"
+        in args
+    )
     assert any(a.startswith("--api-server-url=http") for a in args)
     assert env["NODE_NAME"]["valueFrom"]["fieldRef"]["fieldPath"] == "spec.nodeName"
     assert "--watch-node-drain" in args
@@ -504,17 +510,41 @@ def test_headless_service_targets_agent_pods() -> None:
     assert service["spec"]["ports"][0]["port"] == 7443
 
 
-def test_agent_pods_reach_sandbox_proxy() -> None:
-    sources = _proxy_ingress_sources(_FIRECRACKER)
+def test_agent_pods_reach_the_proxy_relay_port() -> None:
+    policy = _render(_FIRECRACKER, _PROXY_POLICY_TEMPLATE)[0]
+    plain, relay = policy["spec"]["ingress"]
     pod_labels = _by_kind(_render(_FIRECRACKER), "DaemonSet")["spec"]["template"][
         "metadata"
     ]["labels"]
 
-    # Pod sandboxes keep their access; agent pods are added.
+    # Pod sandboxes keep the plain port. Agent pods get the mTLS port, and
+    # the plain port stays open to agents that have not rolled yet.
+    assert plain["from"][0] == {"namespaceSelector": _ns_selector("onyx-sandboxes")}
+    assert plain["from"][1]["namespaceSelector"] == _ns_selector(_AGENT_NS)
+    assert plain["ports"] == [{"protocol": "TCP", "port": 8080}]
+    (agent,) = relay["from"]
+    assert agent["namespaceSelector"] == _ns_selector(_AGENT_NS)
+    assert agent["podSelector"]["matchLabels"].items() <= pod_labels.items()
+    assert relay["ports"] == [{"protocol": "TCP", "port": 8443}]
+
+
+def test_relay_tls_off_keeps_the_plain_proxy_port() -> None:
+    args = [*_FIRECRACKER, "--set", "craft.hostAgent.relayTls.enabled=false"]
+    sources = _proxy_ingress_sources(args)
+    container = _by_kind(_render(args), "DaemonSet")["spec"]["template"]["spec"][
+        "containers"
+    ][0]
+
     assert sources[0] == {"namespaceSelector": _ns_selector("onyx-sandboxes")}
     assert sources[1]["namespaceSelector"] == _ns_selector(_AGENT_NS)
-    assert sources[1]["podSelector"]["matchLabels"].items() <= pod_labels.items()
     assert len(sources) == 2
+    assert len(_render(args, _PROXY_POLICY_TEMPLATE)[0]["spec"]["ingress"]) == 1
+    assert (
+        "--egress-proxy=onyx-sandbox-proxy.onyx.svc.cluster.local:8080"
+        in container["args"]
+    )
+    assert not [a for a in container["args"] if a.startswith("--egress-proxy-tls")]
+    assert "relay-tls" not in {m["name"] for m in container["volumeMounts"]}
 
 
 def test_only_agent_clients_reach_agent_listener() -> None:

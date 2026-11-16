@@ -12915,6 +12915,11 @@
           "text": "Bildgenerierung gestoppt"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Tabelle kopieren"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Frage"

@@ -139,7 +139,9 @@
   chat attaches again and later output, such as an approval card, still
   appears.
 - **A user rates, copies or shares an answer.** Copy turns markdown tables into
-  tab-separated text so a spreadsheet keeps the columns. A share link opens a
+  tab-separated text so a spreadsheet keeps the columns. Each answer table
+  also has its own copy button, which writes HTML with links and full source
+  names (`app/app/message/tableCopyUtils.ts`). A share link opens a
   read-only copy. The page needs a session, so a visitor with none goes to
   sign-in.
 - **The incognito start button** appears only on the new chat page when

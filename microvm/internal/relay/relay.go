@@ -3,7 +3,9 @@ package relay
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -47,7 +49,10 @@ type VM struct {
 type Relay struct {
 	Signer *Signer
 	// Upstream is the proxy address (host:port).
-	Upstream    string
+	Upstream string
+	// TLS, if set, wraps every upstream connection in mTLS. A failed
+	// handshake fails the connection; the relay never falls back to plain TCP.
+	TLS         *UpstreamTLS
 	IdleTimeout time.Duration
 	HeadTimeout time.Duration
 	DialTimeout time.Duration
@@ -82,6 +87,12 @@ func (p *pair) close() {
 	if p.up != nil {
 		_ = p.up.Close()
 	}
+}
+
+func (p *pair) isClosed() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.closed
 }
 
 // setUp stores the upstream connection. It returns false if the pair is
@@ -281,7 +292,7 @@ func (r *Relay) handle(vmConn net.Conn, vm VM) {
 	if dial == nil {
 		dial = (&net.Dialer{KeepAlive: 30 * time.Second}).DialContext
 	}
-	up, err := dial(ctx, "tcp", r.Upstream)
+	up, err := r.dialUpstream(ctx, dial)
 	cancel()
 	if err != nil {
 		_, _ = io.WriteString(vmConn, "HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
@@ -295,34 +306,76 @@ func (r *Relay) handle(vmConn net.Conn, vm VM) {
 		return
 	}
 	if _, err := up.Write(head.Bytes()); err != nil {
+		if r.TLS != nil {
+			r.refused(p, vm, err)
+		}
 		return
 	}
 	// The VM may have sent body bytes after the head.
 	if n := br.Buffered(); n > 0 {
 		buf, _ := br.Peek(n)
 		if _, err := up.Write(buf); err != nil {
+			if r.TLS != nil {
+				r.refused(p, vm, err)
+			}
 			return
 		}
 	}
-	r.splice(p, up)
+	r.splice(p, up, vm)
+}
+
+func (r *Relay) dialUpstream(ctx context.Context, dial func(ctx context.Context, network, addr string) (net.Conn, error)) (net.Conn, error) {
+	up, err := dial(ctx, "tcp", r.Upstream)
+	if err != nil || r.TLS == nil {
+		return up, err
+	}
+	cfg, err := r.TLS.config()
+	if err != nil {
+		_ = up.Close()
+		return nil, fmt.Errorf("upstream TLS: %w", err)
+	}
+	tc := tls.Client(up, cfg)
+	if err := tc.HandshakeContext(ctx); err != nil {
+		_ = tc.Close()
+		return nil, fmt.Errorf("upstream TLS handshake: %w", err)
+	}
+	return tc, nil
+}
+
+// refused answers the VM when the proxy ends a TLS connection before its
+// first byte.
+func (r *Relay) refused(p *pair, vm VM, err error) {
+	_, _ = io.WriteString(p.vm, "HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
+	r.event(EventUpstreamFailed)
+	r.Log.Warn("relay upstream refused the TLS connection", "sandbox_id", vm.SandboxID, "err", err)
 }
 
 // splice copies both ways. When either side ends or fails, both sides close:
 // Firecracker vsock does not carry a half-close.
-func (r *Relay) splice(p *pair, up net.Conn) {
+func (r *Relay) splice(p *pair, up net.Conn, vm VM) {
 	var last atomic.Int64
 	last.Store(time.Now().UnixNano())
+	var gotUp atomic.Bool
 	idle := r.idle()
-	done := make(chan struct{}, 2)
+	// Each copy reports its error; vmEnded is true when the VM side ended.
+	type end struct {
+		vmEnded bool
+		err     error
+	}
+	done := make(chan end, 2)
 	cp := func(dst, src net.Conn) {
-		defer func() { done <- struct{}{} }()
+		fromVM := src == p.vm
 		buf := make([]byte, bufSize)
 		for {
 			_ = src.SetReadDeadline(time.Now().Add(idle))
 			n, err := src.Read(buf)
 			if n > 0 {
+				if !fromVM {
+					gotUp.Store(true)
+				}
 				last.Store(time.Now().UnixNano())
 				if _, werr := dst.Write(buf[:n]); werr != nil {
+					done <- end{vmEnded: !fromVM, err: werr}
 					return
 				}
 			}
@@ -331,13 +384,20 @@ func (r *Relay) splice(p *pair, up net.Conn) {
 				if errors.As(err, &ne) && ne.Timeout() && time.Since(time.Unix(0, last.Load())) < idle {
 					continue
 				}
+				done <- end{vmEnded: fromVM, err: err}
 				return
 			}
 		}
 	}
 	go cp(up, p.vm)
 	go cp(p.vm, up)
-	<-done
+	first := <-done
+	// In TLS 1.3 the proxy refuses a client certificate after the relay's
+	// handshake ends: an alert, a close (SAN pin) or a reset before its first
+	// byte. Tell the VM, unless the VM ended first or CloseAll ran.
+	if r.TLS != nil && !first.vmEnded && !gotUp.Load() && !p.isClosed() {
+		r.refused(p, vm, first.err)
+	}
 	p.close()
 	<-done
 }

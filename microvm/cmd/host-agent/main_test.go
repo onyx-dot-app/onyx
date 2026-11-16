@@ -6,6 +6,8 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"github.com/onyx-dot-app/onyx/microvm/internal/testcerts"
 )
 
 func TestCheckRanges(t *testing.T) {
@@ -203,5 +205,37 @@ func TestLoopStoreEnv(t *testing.T) {
 	fs, _, _ = newFS()
 	if err := loopStoreEnv(fs, env(map[string]string{"CRAFT_FC_LOOP_STORE_GIB": "lots"})); err == nil {
 		t.Error("a bad $CRAFT_FC_LOOP_STORE_GIB was accepted")
+	}
+}
+
+func TestEgressTLS(t *testing.T) {
+	certs, err := testcerts.Write(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := flags{egressProxy: "onyx-sandbox-proxy.onyx.svc:8443", egressTLSCA: certs.ServerCA,
+		egressTLSCert: certs.GoodCert, egressTLSKey: certs.GoodKey}
+	if u, err := egressTLS(flags{egressProxy: "p:8080"}); u != nil || err != nil {
+		t.Fatalf("no TLS flags: %v %v", u, err)
+	}
+	u, err := egressTLS(full)
+	if err != nil || u.ServerName != "onyx-sandbox-proxy.onyx.svc" {
+		t.Fatalf("full: %+v %v", u, err)
+	}
+	named := full
+	named.egressTLSName = "proxy.example.internal"
+	if u, err := egressTLS(named); err != nil || u.ServerName != "proxy.example.internal" {
+		t.Fatalf("server name: %+v %v", u, err)
+	}
+	noKey := full
+	noKey.egressTLSKey = ""
+	noProxy := full
+	noProxy.egressProxy = ""
+	badCert := full
+	badCert.egressTLSCert = certs.ServerCA
+	for name, f := range map[string]flags{"no key": noKey, "no --egress-proxy": noProxy, "unloadable cert": badCert} {
+		if _, err := egressTLS(f); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
 }

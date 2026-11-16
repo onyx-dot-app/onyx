@@ -49,7 +49,7 @@ The platform guides add the steps for each cloud and for your own hardware.
 | **Host agent** | A privileged DaemonSet in its own namespace (default `onyx-sandbox-runtime`), one pod on each KVM node. It starts each microVM from a node template, relays microVM egress, and moves session files. |
 | **Root drive** | The microVM file system. An init container copies it to the node, and the host agent builds the node template from it at start. |
 | **API server and workers** | Place each sandbox on a KVM node and call the host agent over mutual TLS on port 7443. |
-| **Sandbox proxy** | Receives all microVM egress from the host agent. It applies the same policies and credential injection as for pod sandboxes. |
+| **Sandbox proxy** | Receives all microVM egress from the host agent over mutual TLS on port 8443. It applies the same policies and credential injection as for pod sandboxes. |
 | **File store** | Keeps session files while a microVM is stopped. The host agent uploads and downloads them with presigned URLs. It has no storage credentials. |
 
 {/* depends: harness release (D8). State here which Craft sessions run on microVMs and which stay on pods. */}
@@ -245,8 +245,11 @@ With `craft.sandboxRuntime: firecracker`, the chart:
 - sets `SANDBOX_RUNTIME=firecracker` on the backend and the sandbox proxy;
 - deploys the host agent DaemonSet in `craft.hostAgent.namespace` with Pod Security `privileged`;
 - lets only the API server, the heavy worker, and the Scheduled Task worker reach the agent port (7443);
-- lets the host agent pods reach the sandbox proxy;
-- makes the mutual TLS certificates for the host agent and its clients. See [Certificates](#certificates).
+- lets the host agent pods reach the mutual TLS relay port of the sandbox proxy (8443). Pod sandboxes keep port
+  8080. Port 8080 stays open to the host agent pods, so that host agents that have not restarted keep egress during
+  an upgrade;
+- makes the mutual TLS certificates for the host agent, its clients, and the relay to the sandbox proxy.
+  See [Certificates](#certificates).
 
 ### Versions
 
@@ -263,7 +266,9 @@ For Onyx `v5.2.0`, the chart uses:
 Keep these defaults. The API server, the host agent, and the root drive of one release work together.
 To use another root drive, set `craft.hostAgent.rootfs.version`. It sets the root drive tag (`rootfs-<version>`)
 and `SANDBOX_FC_TEMPLATE` together. `craft.hostAgent.image.tag` overrides the host agent tag,
-for example for a hotfix image. If you set `craft.hostAgent.rootfs.image.tag` directly,
+for example for a hotfix image.
+A host agent image older than the chart can lack the relay TLS flags and then does not start. With such an image,
+set `craft.hostAgent.relayTls.enabled: false`. If you set `craft.hostAgent.rootfs.image.tag` directly,
 also set `configMap.SANDBOX_FC_TEMPLATE` to the version of that root drive. To pull the images from your own registry,
 see [Sizing and images](/deployment/kubernetes/craft-firecracker-sizing#mirror-the-images).
 
@@ -285,11 +290,17 @@ Most deployments keep the defaults. These settings change often:
 
 ### Certificates
 
-By default, the chart makes a private CA, the host agent certificate, and the client certificate.
-It keeps them in two Secrets:
-`<release>-craft-fc-host-agent-tls` in the host agent namespace and `<release>-craft-fc-host-agent-client-tls` in the
-release namespace. The certificates are valid for 10 years.
-The chart renews them at the first upgrade in their last 30 days. To rotate them,
+By default, the chart makes two private CAs and their certificates. The certificates are valid for 10 years.
+The chart renews each set at the first upgrade in its last 30 days.
+
+| Set | Secrets | Use |
+| --- | --- | --- |
+| Host agent | `<release>-craft-fc-host-agent-tls` (host agent namespace), `<release>-craft-fc-host-agent-client-tls` (release namespace) | The API server and the workers call the host agents. |
+| Relay | `<release>-craft-fc-host-agent-relay-tls` (host agent namespace), `<release>-sandbox-proxy-relay-tls` (release namespace) | The host agents send microVM egress to the sandbox proxy. |
+
+The sandbox proxy accepts only the chart's relay certificate on port 8443.
+It still checks the signed token of each connection. If the TLS handshake fails,
+the host agent closes the microVM connection. It never sends the token without TLS. To rotate the certificates,
 see [Rotate the certificates](/deployment/kubernetes/craft-firecracker-operations#rotate-the-certificates).
 
 <Warning>
@@ -326,8 +337,8 @@ craft:
     registrationExistingSecret: craft-fc-node-registration
 ```
 
-**Certificates.** The host agent accepts TLS 1.3 only, and both sides check the peer certificate. Make two Secrets,
-and set both `existingSecret` values. Set both or neither.
+**Certificates.** The host agent and the relay port accept TLS 1.3 only, and both sides check the peer certificate.
+For the host agent, make two Secrets, and set both `existingSecret` values. Set both or neither.
 | Secret | Namespace | Keys | Content |
 | --- | --- | --- | --- |
 | `craft.hostAgent.tls.existingSecret` | Host agent namespace | `tls.crt`, `tls.key`, `ca.crt` | The host agent server certificate (extended key usage `serverAuth`, a DNS SAN), and the CA that signs the client certificates |
@@ -350,6 +361,30 @@ Set `clientAllowedSans` to accept only client certificates with one of these SAN
 When it is empty with the chart-made certificates, the chart sets it to the chart's client certificate name.
 When it is empty with `existingSecret`, the host agent accepts every client certificate that its CA signed. Set it,
 so that an agent certificate from the same CA cannot call the other agents.
+
+**Relay certificates.** For the relay to the sandbox proxy, make two more Secrets, and set both values.
+Set both or neither.
+
+| Secret | Namespace | Keys | Content |
+| --- | --- | --- | --- |
+| `craft.hostAgent.relayTls.existingSecret` | Host agent namespace | `tls.crt`, `tls.key`, `ca.crt` | The relay client certificate (extended key usage `clientAuth`), and the CA that signs the sandbox proxy certificate |
+| `craft.hostAgent.relayTls.proxyExistingSecret` | Release namespace | `tls.crt`, `tls.key`, `ca.crt` | The sandbox proxy certificate (extended key usage `serverAuth`, a DNS SAN), and the CA that signs the relay certificates |
+
+```yaml
+craft:
+  hostAgent:
+    relayTls:
+      existingSecret: craft-fc-relay-tls
+      proxyExistingSecret: sandbox-proxy-relay-tls
+      serverName: onyx-sandbox-proxy.onyx.svc.cluster.local
+      clientAllowedSans: craft-fc-relay.onyx-sandbox-runtime.svc
+```
+
+The host agent connects to the sandbox proxy host (`configMap.SANDBOX_PROXY_HOST`,
+by default the Service name `<release>-sandbox-proxy.<namespace>.svc.cluster.local`).
+It checks `relayTls.serverName` in the proxy certificate. When `relayTls.serverName` is empty, it checks the proxy host.
+Set `relayTls.clientAllowedSans` to accept only relay certificates with one of these SANs.
+When it is empty with `existingSecret`, the sandbox proxy accepts every certificate that its relay CA signed.
 
 ## Verify the deployment
 
@@ -386,6 +421,28 @@ so that an agent certificate from the same CA cannot call the other agents.
     ```
 
     The `key_id` must be the same as in the host agent log.
+  </Step>
+
+  <Step title="Run the smoke test">
+    ```bash
+    kubectl -n onyx exec deploy/onyx-api-server -c api-server -- python -m scripts.craft_fc_smoke
+    ```
+
+    The smoke test starts a microVM for a test user and checks each step of a Craft session on Firecracker:
+    a command runs as uid 1000, a file reads back with the same SHA-256, egress goes through the sandbox proxy,
+    the session saves to the file store and the microVM stops, a new microVM restores the files,
+    and a session delete removes the saved archive. The test takes about 70 seconds. Each step prints `PASS`, `FAIL`,
+    or `SKIP`, and the last line is `RESULT PASS` or `RESULT FAIL`.
+    The exit code is 0 when all steps pass and 1 when a step fails.
+
+    The Deployment name is `<fullname>-api-server` (`onyx-api-server` for the release `onyx`).
+    The test user cannot log in and does not use a license seat. At the end, the test deletes the user, its microVM,
+    and its files, also when a step fails.
+
+    - The egress check opens `https://pypi.org/simple/`. If your egress rules block that URL, add
+    `--egress-url <url>` with an HTTPS URL that they allow. If the cluster has no internet access, add `--skip-egress`.
+    - If you stop the test before it ends, or the `cleanup` step fails, run it again with `--cleanup-leaked`.
+    This deletes the test users and microVMs that earlier runs left.
   </Step>
 
   <Step title="Run a Craft session">
@@ -517,6 +574,13 @@ Sessions that need a microVM cannot start until you turn Firecracker on again.
   </Accordion>
 
   <Accordion title="microVM egress fails">
+    A host agent log line `relay dial` with `upstream TLS handshake` means that the host agent does not trust the
+    sandbox proxy certificate. The error names the cause: an unknown CA,
+    or a server name that is not in the certificate.
+    A host agent log line `relay upstream refused the TLS connection` means that the sandbox proxy does not accept the
+    relay certificate. The sandbox proxy then logs `relay_tls_rejected`:
+    `reason=handshake` for an unknown CA or an expired certificate,
+    and `reason=san` for a SAN that is not in `craft.hostAgent.relayTls.clientAllowedSans`.
     Read the sandbox proxy log for `identity_signed_rejected`. The `reason` field explains the rejection:
     `unknown_signing_key` means that the node is not registered,
     and `not_placed` means that the API server has no placement record for the sandbox.
