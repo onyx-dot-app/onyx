@@ -2,14 +2,14 @@ import {
   SvgActions,
   SvgAlertCircle,
   SvgCheckCircle,
-  SvgCircle,
+  SvgLightbulbSimple,
   SvgCpu,
   SvgEdit,
   SvgFileText,
   SvgGlobe,
   SvgImage,
   SvgLoader,
-  SvgSearchMenu,
+  SvgSearch,
   SvgSparkle,
   SvgTerminal,
 } from "@opal/icons";
@@ -22,11 +22,11 @@ function SpinningLoader({ className, ...props }: IconProps) {
 
 /** The rail's step icons, one per kind of step, shared by chat and Craft. */
 export const STEP_ICONS = {
-  thinking: SvgCircle,
+  thinking: SvgLightbulbSimple,
   execute: SvgTerminal,
-  search: SvgSearchMenu,
+  search: SvgSearch,
   webSearch: SvgGlobe,
-  fetch: SvgEdit,
+  fetch: SvgGlobe,
   edit: SvgEdit,
   read: SvgFileText,
   tool: SvgActions,
