@@ -21,6 +21,12 @@
   @apply ps-7 pe-1 pb-1;
 }
 
+/* `start` pads only the start, to sit under the content, and the top, to
+   space the body from the row. */
+.opal-line .opal-line-body[data-opal-line-body-inset="start"] {
+  @apply pt-1 pe-0 pb-0;
+}
+
 .opal-line .opal-line-icon {
   @apply shrink-0 text-text-03;
 }

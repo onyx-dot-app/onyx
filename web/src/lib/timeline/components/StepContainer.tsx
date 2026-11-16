@@ -1,6 +1,6 @@
 import React, { FunctionComponent } from "react";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
-import { Button, Line } from "@opal/components";
+import { Button, Line, type LineVariant } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgChevronRight } from "@opal/icons";
 import { cn } from "@opal/utils";
@@ -34,6 +34,8 @@ export interface StepContainerProps {
   isHover?: boolean;
   /** `error` shows the step as a failed log line */
   surfaceBackground?: TimelineSurfaceBackground;
+  /** The line's variant; it wins over `surfaceBackground`. */
+  variant?: LineVariant;
 }
 
 /**
@@ -52,26 +54,30 @@ export function StepContainer({
   supportsCollapsible = false,
   hideHeader = false,
   surfaceBackground,
+  variant: variantProp,
 }: StepContainerProps) {
   if (hideHeader) return <>{children}</>;
 
-  const variant = surfaceBackground === "error" ? "error-heavy" : "default";
+  const variant: LineVariant =
+    variantProp ?? (surfaceBackground === "error" ? "error-heavy" : "default");
   const icon = (stepIcon ?? STEP_ICONS.thinking) as IconFunctionComponent;
   const title = header ?? "";
   const foldable = collapsible && supportsCollapsible && !!onToggle;
 
+  // A step that cannot fold keeps its body open, so every step's body has the
+  // same place under its header.
   if (!foldable) {
-    return (
-      <>
-        <Line
-          padding={0}
-          variant={variant}
-          icon={icon}
-          title={title}
-          rightChildren={headerAccessory}
-        />
-        {children}
-      </>
+    const line = {
+      padding: 0,
+      variant,
+      icon,
+      title,
+      rightChildren: headerAccessory,
+    } as const;
+    return children == null || children === false ? (
+      <Line {...line} />
+    ) : (
+      <Line {...line} expandable expanded expandedContent={children} />
     );
   }
 

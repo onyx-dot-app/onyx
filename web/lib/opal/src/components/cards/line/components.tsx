@@ -69,7 +69,11 @@ function Line({
   return (
     <LineRoot variant={variant} padding={padding}>
       {onClick ? <LineSurface onClick={onClick}>{row}</LineSurface> : row}
-      {expandable && <LineBody expanded={expanded}>{expandedContent}</LineBody>}
+      {expandable && (
+        <LineBody expanded={expanded} inset="start">
+          {expandedContent}
+        </LineBody>
+      )}
     </LineRoot>
   );
 }

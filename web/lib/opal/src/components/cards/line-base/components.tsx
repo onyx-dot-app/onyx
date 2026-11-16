@@ -155,14 +155,23 @@ function LineRow({
 
 interface LineBodyProps {
   expanded: boolean;
+  /**
+   * Where the body is padded. `around`: on the start, end and bottom, the
+   * line's padding. `start`: only on the start, to sit under the content,
+   * and 0.25rem on the top, inside the fold, to space it from the row.
+   * @default "around"
+   */
+  inset?: "around" | "start";
   children: React.ReactNode;
 }
 
 /** The body that opens below the line, indented to start under the content. */
-function LineBody({ expanded, children }: LineBodyProps) {
+function LineBody({ expanded, inset = "around", children }: LineBodyProps) {
   return (
     <Fold open={expanded}>
-      <div className="opal-line-body">{children}</div>
+      <div className="opal-line-body" data-opal-line-body-inset={inset}>
+        {children}
+      </div>
     </Fold>
   );
 }

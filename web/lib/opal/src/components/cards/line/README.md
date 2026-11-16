@@ -51,8 +51,9 @@ that fits the state (for example a spinner or an alert).
   in `rightChildren` (e.g. a chevron) as its keyboard target: that button's
   click reaches `onClick` too. A button with its own action stops its click
   from bubbling.
-- With `expandable`, the body opens below the row in a `Fold`, indented to
-  start under the content. It sits outside the row's surface: it does not
+- With `expandable`, the body opens below the row in a `Fold`, 0.25rem under
+  it and indented to start under the content, with no padding at its end or below
+  it. It sits outside the row's surface: it does not
   hover, and its clicks and text selection stay its own. A heavy variant tints
   the body too, and the row's hover fill then squares its bottom corners to
   join the open body: they square as the body opens and round as it closes,

@@ -1,16 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Text } from "@opal/components";
+import { Badge, Tag, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgSearch } from "@opal/icons";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ValidSources } from "@/lib/connectors/types/source";
+import { getSourceMetadata } from "@/lib/connectors/utils";
+import type { IconFunctionComponent } from "@opal/types";
 import { openExternalLink } from "@/lib/search/utils";
-import {
-  SearchChipList,
-  type SourceInfo,
-} from "@/lib/timeline/components/bodies/SearchChipList";
+import type { SourceInfo } from "@/lib/timeline/components/bodies/SearchChipList";
 
 export const INITIAL_QUERIES_TO_SHOW = 3;
 export const QUERIES_PER_EXPANSION = 5;
@@ -24,6 +24,11 @@ export function queryToSourceInfo(query: string, index: number): SourceInfo {
     sourceType: ValidSources.Web,
     icon: SvgSearch,
   };
+}
+
+/** A source's own icon, else its connector's logo. */
+function sourceIcon(source: SourceInfo): IconFunctionComponent {
+  return source.icon ?? getSourceMetadata(source.sourceType).icon;
 }
 
 interface RetrievalBodyProps {
@@ -51,12 +56,19 @@ export function RetrievalBody({
   compact = false,
 }: RetrievalBodyProps) {
   const t = useTranslations("chat.messages.timeline");
+  const [visibleResults, setVisibleResults] = useState(INITIAL_RESULTS_TO_SHOW);
+
+  const showResults =
+    results !== null && (compact || results.length > 0 || queries.length > 0);
+  const resultList = results ?? [];
+  const hiddenResults = Math.max(0, resultList.length - visibleResults);
 
   return (
-    <Section alignItems="stretch" gap={0} height="auto">
+    // 0.25rem between the queries, "Reading" and the results, and between
+    // the labels in each row.
+    <Section alignItems="stretch" gap={1} height="auto">
       {!compact &&
         (queries.length > 0 ? (
-          // The queries the step searched with, as labels.
           <Section
             flexDirection="row"
             justifyContent="start"
@@ -72,35 +84,51 @@ export function RetrievalBody({
           !isComplete && <BlinkingBar />
         ))}
 
-      {results !== null &&
-        (compact || results.length > 0 || queries.length > 0) && (
-          <>
-            {!compact && (
-              <Text as="p" font="main-ui-muted" color="text-04">
-                {t("internalSearch.reading.status")}
-              </Text>
+      {showResults && !compact && (
+        <Text as="p" font="secondary-body" color="text-03">
+          {t("internalSearch.reading.status")}
+        </Text>
+      )}
+
+      {showResults &&
+        (resultList.length > 0 ? (
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            height="fit"
+            gap={1}
+            wrap
+          >
+            {resultList.slice(0, visibleResults).map((source) => {
+              const url = source.sourceUrl;
+              return (
+                <Tag
+                  key={source.id}
+                  icon={sourceIcon(source)}
+                  title={source.title}
+                  truncate
+                  onClick={url ? () => openExternalLink(url) : undefined}
+                />
+              );
+            })}
+            {hiddenResults > 0 && (
+              <Tag
+                title={t("searchChips.showMore.label", {
+                  count: hiddenResults,
+                })}
+                onClick={() =>
+                  setVisibleResults((count) => count + RESULTS_PER_EXPANSION)
+                }
+              />
             )}
-            <SearchChipList
-              items={results}
-              initialCount={INITIAL_RESULTS_TO_SHOW}
-              expansionCount={RESULTS_PER_EXPANSION}
-              getKey={(source) => source.id}
-              toSourceInfo={(source) => source}
-              onClick={(source) => {
-                if (source.sourceUrl) openExternalLink(source.sourceUrl);
-              }}
-              emptyState={
-                !isComplete ? (
-                  <BlinkingBar />
-                ) : (
-                  <Text as="p" font="main-ui-muted" color="text-03">
-                    {t("internalSearch.noResults.text")}
-                  </Text>
-                )
-              }
-            />
-          </>
-        )}
+          </Section>
+        ) : !isComplete ? (
+          <BlinkingBar />
+        ) : (
+          <Text as="p" font="main-ui-muted" color="text-03">
+            {t("internalSearch.noResults.text")}
+          </Text>
+        ))}
     </Section>
   );
 }
