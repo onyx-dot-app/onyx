@@ -312,7 +312,10 @@ pods and sets `SANDBOX_FC_AGENT_CLIENT_CERT_PATH`,
 `SANDBOX_FC_AGENT_CLIENT_KEY_PATH` and `SANDBOX_FC_AGENT_CA_PATH`. The clients
 dial agent pod IPs. If your agent certificates do not carry the pod IPs, set
 `craft.hostAgent.client.tlsServerName` to a DNS name in the agent certificate.
-To accept only some client certificates, set `craft.hostAgent.clientAllowedSans`.
+With chart-made certificates, the agents accept only the chart's client
+certificate (one CA signs both sides). With your own PKI, set
+`craft.hostAgent.clientAllowedSans` to the SANs of your client certificates, so
+that an agent certificate from the same CA cannot call the other agents.
 
 ```yaml
 global:
