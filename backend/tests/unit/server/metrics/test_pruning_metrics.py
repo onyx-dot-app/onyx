@@ -5,7 +5,9 @@ import pytest
 from onyx.server.metrics.pruning_metrics import (
     PRUNING_DIFF_DURATION,
     PRUNING_ENUMERATION_DURATION,
+    PRUNING_FAILURES,
     PRUNING_RATE_LIMIT_ERRORS,
+    inc_pruning_failure,
     inc_pruning_rate_limit_error,
     observe_pruning_diff_duration,
     observe_pruning_enumeration_duration,
@@ -128,3 +130,29 @@ class TestIncPruningRateLimitError:
             lambda **_: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         inc_pruning_rate_limit_error("google_drive")
+
+
+class TestIncPruningFailure:
+    def test_increments_counter(self) -> None:
+        before = PRUNING_FAILURES.labels(connector_type="s3")._value.get()
+
+        inc_pruning_failure("s3")
+
+        after = PRUNING_FAILURES.labels(connector_type="s3")._value.get()
+        assert after == before + 1
+
+    def test_empty_connector_type_is_unknown(self) -> None:
+        before = PRUNING_FAILURES.labels(connector_type="unknown")._value.get()
+
+        inc_pruning_failure("")
+
+        after = PRUNING_FAILURES.labels(connector_type="unknown")._value.get()
+        assert after == before + 1
+
+    def test_does_not_raise_on_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            PRUNING_FAILURES,
+            "labels",
+            lambda **_: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        inc_pruning_failure("s3")
