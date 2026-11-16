@@ -1,6 +1,6 @@
-"""The adaptive pool grows its worker limit by one per interval while the
-service keeps up and halves it on pushback. A cut applies to the next task
-start. A task can return follow-up tasks. A drain stops new starts and returns
+"""The adaptive pool grows its worker limit by one per interval while every
+worker is busy and the service keeps up. It halves the limit on pushback, at
+most once per cooldown. A cut applies to the next task start. A task can return follow-up tasks. A drain stops new starts and returns
 when nothing runs. The first failure is raised after the running tasks end."""
 
 import collections.abc
@@ -38,15 +38,15 @@ def test_the_limit_halves_on_pushback_and_recovers() -> None:
     observer = PushbackObserver()
     concurrency = AdaptiveConcurrency(observer, initial=2, maximum=8)
 
-    concurrency.observe()
-    concurrency.observe()
+    concurrency.observe(in_flight=2)
+    concurrency.observe(in_flight=3)
     assert concurrency.limit == 4
     for _ in range(3):
         observer.record()
-    concurrency.observe()
+    concurrency.observe(in_flight=4)
     # One burst of pushback is one cut, however many hits it has.
     assert concurrency.limit == 2
-    concurrency.observe()
+    concurrency.observe(in_flight=2)
     assert concurrency.limit == 3
 
 
@@ -57,14 +57,53 @@ def test_growth_is_paced_by_time_not_by_calls() -> None:
     )
     # The initial limit holds for the first interval.
     for _ in range(50):
-        concurrency.observe()
+        concurrency.observe(in_flight=concurrency.limit)
     assert concurrency.limit == 2
     now += threadpool_concurrency.ADAPTIVE_GROW_INTERVAL_SECONDS
     for _ in range(50):
-        concurrency.observe()
+        concurrency.observe(in_flight=concurrency.limit)
     assert concurrency.limit == 3
     now += threadpool_concurrency.ADAPTIVE_GROW_INTERVAL_SECONDS
-    concurrency.observe()
+    concurrency.observe(in_flight=concurrency.limit)
+    assert concurrency.limit == 4
+
+
+def test_the_limit_grows_only_while_every_worker_is_busy() -> None:
+    now = 100.0
+    concurrency = AdaptiveConcurrency(
+        PushbackObserver(), initial=4, maximum=128, clock=lambda: now
+    )
+    # One or two tasks for a long time: the limit does not climb to a load
+    # the service never saw.
+    for _ in range(200):
+        now += threadpool_concurrency.ADAPTIVE_GROW_INTERVAL_SECONDS
+        concurrency.observe(in_flight=2)
+    assert concurrency.limit == 4
+    now += threadpool_concurrency.ADAPTIVE_GROW_INTERVAL_SECONDS
+    concurrency.observe(in_flight=4)
+    assert concurrency.limit == 5
+
+
+def test_one_cut_per_cooldown() -> None:
+    """Rejections of requests that were in flight at the cut arrive over the
+    next second. They do not cut again."""
+    now = 100.0
+    observer = PushbackObserver()
+    concurrency = AdaptiveConcurrency(
+        observer, initial=16, maximum=128, clock=lambda: now
+    )
+    observer.record()
+    concurrency.observe(in_flight=16)
+    assert concurrency.limit == 8
+    for _ in range(4):
+        now += 0.25
+        observer.record()
+        concurrency.observe(in_flight=8)
+    assert concurrency.limit == 8
+    # Pushback after the cooldown is a new signal.
+    now += threadpool_concurrency.ADAPTIVE_COOLDOWN_SECONDS
+    observer.record()
+    concurrency.observe(in_flight=8)
     assert concurrency.limit == 4
 
 
@@ -72,19 +111,20 @@ def test_a_cut_holds_through_the_cooldown() -> None:
     observer = PushbackObserver()
     concurrency = AdaptiveConcurrency(observer, initial=4, maximum=8)
     observer.record()
-    concurrency.observe()
+    concurrency.observe(in_flight=4)
     assert concurrency.limit == 2
-    concurrency.observe()
+    concurrency.observe(in_flight=2)
     assert concurrency.limit == 2
 
 
+@pytest.mark.usefixtures("no_pacing")
 def test_the_limit_stays_between_one_and_the_maximum() -> None:
     observer = PushbackObserver()
     concurrency = AdaptiveConcurrency(observer, initial=500, maximum=4)
     assert concurrency.limit == 4
     for _ in range(5):
         observer.record()
-        concurrency.observe()
+        concurrency.observe(in_flight=concurrency.limit)
     assert concurrency.limit == 1
 
 
@@ -281,6 +321,67 @@ def test_the_limit_grows_while_long_tasks_run() -> None:
     pool.run()
 
     assert concurrency.limit == 2
+
+
+@pytest.mark.usefixtures("no_pacing")
+def test_one_page_chain_does_not_grow_the_limit() -> None:
+    concurrency = AdaptiveConcurrency(PushbackObserver(), initial=2, maximum=128)
+    pool = AdaptiveTaskPool(concurrency)
+    pages = 0
+
+    def page() -> list[AdaptiveTask]:
+        nonlocal pages
+        pages += 1
+        time.sleep(0.002)
+        return [page] if pages < 100 else []
+
+    pool.add(page)
+    pool.run()
+
+    assert pages == 100
+    assert concurrency.limit == 2
+
+
+class _WaitForFirstFailure(PushbackObserver):
+    """At the second read, the batch is starting: wait until the first task
+    has failed."""
+
+    def __init__(self, failed: threading.Event) -> None:
+        super().__init__()
+        self.reads = 0
+        self._failed = failed
+
+    def take_hits(self) -> int:
+        self.reads += 1
+        if self.reads == 2:
+            assert self._failed.wait(timeout=5)
+            # The future is done a moment after the task body raises.
+            time.sleep(0.1)
+        return 0
+
+
+def test_a_failure_stops_the_batch_that_is_starting() -> None:
+    failed = threading.Event()
+    concurrency = AdaptiveConcurrency(
+        _WaitForFirstFailure(failed), initial=8, maximum=8
+    )
+    pool = AdaptiveTaskPool(concurrency)
+    started: list[int] = []
+
+    def run(item: int) -> None:
+        started.append(item)
+        if item == 0:
+            failed.set()
+            raise RuntimeError("boom")
+
+    for item in range(8):
+        pool.add(lambda item=item: run(item))
+    with pytest.raises(RuntimeError, match="boom"):
+        pool.run()
+    # The second start can read the limit before the failure is done. No
+    # start comes after the failure is seen.
+    assert started[0] == 0
+    assert len(started) <= 2
 
 
 def test_the_first_failure_stops_new_work_and_is_raised() -> None:
