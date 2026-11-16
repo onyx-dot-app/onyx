@@ -1050,7 +1050,7 @@ class PluginInstallationPolicy(str, PyEnum):
 
 
 class IntegrationKind(str, PyEnum):
-    MCP_SERVER = "mcp_server"
+    MCP = "mcp"
     # An HTTP API: an OpenAPI custom tool or an external app.
     API = "api"
 

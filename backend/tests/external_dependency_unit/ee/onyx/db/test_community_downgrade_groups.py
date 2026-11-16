@@ -393,7 +393,7 @@ def test_group_shared_integration_is_published(db_session: Session) -> None:
             PluginVersion(id=plugin_id, plugin_id=plugin_id, version_number=1)
         )
         integration = Integration(
-            kind=IntegrationKind.MCP_SERVER,
+            kind=IntegrationKind.MCP,
             name="downgrade-mcp",
             auth_mode=IntegrationAuthMode.NONE,
         )
@@ -451,7 +451,7 @@ def test_group_shared_library_integration_stays_not_available(
             PluginVersion(id=plugin_id, plugin_id=plugin_id, version_number=1)
         )
         integration = Integration(
-            kind=IntegrationKind.MCP_SERVER,
+            kind=IntegrationKind.MCP,
             name="downgrade-mcp",
             auth_mode=IntegrationAuthMode.NONE,
         )

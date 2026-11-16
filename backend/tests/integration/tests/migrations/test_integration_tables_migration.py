@@ -889,7 +889,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             assert _kind_integration(conn, "tool", tool_id) is None
 
         # Kind, actions and sign-in settings, with no secret.
-        assert public.kind == "mcp_server"
+        assert public.kind == "mcp"
         assert (public.auth_mode, public.auth_method) == ("individual", "oauth2")
         assert _oauth_client(conn, public.id) == {
             "provider_mode": "discovery",

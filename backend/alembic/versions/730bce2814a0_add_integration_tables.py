@@ -172,7 +172,7 @@ def _create_tables() -> None:
         # The value checks of these tables: SQL migrations write the columns
         # as plain strings, past the enum type of the model. A value outside
         # the enum makes each ORM read of the row raise.
-        sa.CheckConstraint("kind IN ('mcp_server', 'api')", name="ck_integration_kind"),
+        sa.CheckConstraint("kind IN ('mcp', 'api')", name="ck_integration_kind"),
         sa.CheckConstraint(
             "auth_mode IN ('none', 'shared', 'individual')",
             name="ck_integration_auth_mode",
@@ -512,7 +512,7 @@ _CREATE_SOURCES = f"""
         SELECT
             m.gated_app_id,
             CASE WHEN m.gated_app_id IS NULL THEN 0 END,
-            'mcp_server',
+            'mcp',
             NULL,
             m.id,
             NULL,
@@ -926,7 +926,7 @@ _INSERT_UNSELECTED_MCP_TOOLS = """
     FROM tool_integration ti
     JOIN integration_source src ON src.id = ti.integration_id
     JOIN tool t ON t.id = ti.tool_id
-    WHERE ti.kind = 'mcp_server' AND NOT t.enabled
+    WHERE ti.kind = 'mcp' AND NOT t.enabled
     ORDER BY ti.integration_id, ti.tool_name
     ON CONFLICT DO NOTHING
 """
@@ -1040,7 +1040,7 @@ _INSERT_PERSONA_PLUGINS = f"""
         pt.persona_id,
         ti.plugin_id,
         CASE
-            WHEN ti.kind = 'mcp_server' THEN jsonb_build_object(
+            WHEN ti.kind = 'mcp' THEN jsonb_build_object(
                 'default', 'blocked',
                 'actions', jsonb_object_agg(
                     ti.tool_name,
