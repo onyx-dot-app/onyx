@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Fold } from "@opal/components";
+import { Fold, Presence } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
 import {
@@ -147,10 +147,15 @@ export function RunCard<S extends RunCardStep>({
           </TimelineHeaderRow>
           {steps.map((step, index) => (
             <Fold key={step.id} open={isOpen}>
-              {renderStep(step, {
-                isFirst: index === 0,
-                isLast: index === steps.length - 1,
-              })}
+              {/* A step that streams in rises in, after the card opens room
+                  for it. Steps already there when the card mounts (a saved
+                  run) appear at once. */}
+              <Presence appear={isRunning} grow>
+                {renderStep(step, {
+                  isFirst: index === 0,
+                  isLast: index === steps.length - 1,
+                })}
+              </Presence>
             </Fold>
           ))}
         </Section>
