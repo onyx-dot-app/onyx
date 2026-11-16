@@ -8,10 +8,8 @@ import {
   Text,
   InputSingleSelect,
   InputTypeIn,
-  InputSwitch,
   Tooltip,
 } from "@opal/components";
-import { ContentAction } from "@opal/layouts";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
@@ -200,34 +198,5 @@ export default function PolicyEditor({
         ))}
       </div>
     </div>
-  );
-}
-
-interface UserManagementSwitchProps {
-  value: boolean;
-  disabled?: boolean;
-  onChange: (value: boolean) => void;
-}
-export function UserManagementSwitch({
-  value,
-  onChange,
-  disabled = false,
-}: UserManagementSwitchProps) {
-  const t = useTranslations("craft.actionPolicies");
-  return (
-    <ContentAction
-      font="main-ui-action"
-      title={t("userManagement")}
-      description={t("userManagementDescription")}
-      padding={0}
-      rightChildren={
-        <InputSwitch
-          disabled={disabled}
-          checked={value}
-          onCheckedChange={onChange}
-          aria-label={t("userManagement")}
-        />
-      }
-    />
   );
 }

@@ -148,9 +148,6 @@
       }
     },
     "addMcpModal": {
-      "addHeader": {
-        "title": "Add MCP Server"
-      },
       "cancelButton": {
         "label": "Cancel"
       },
@@ -164,35 +161,15 @@
         "required": "Server name is required",
         "title": "Server Name"
       },
-      "serverUrl": {
-        "invalid": "Must be a valid URL",
-        "title": "MCP Server URL"
-      },
       "submitButton": {
-        "saveLabel": "Save Changes",
         "savingLabel": "Saving..."
-      },
-      "toasts": {
-        "updateFailed": "Failed to update MCP server"
       },
       "access": {
         "title": "Access control",
         "description": "Choose who can use this MCP.",
-        "public": {
-          "label": "Organization",
-          "description": "Anyone in your organization can use this MCP"
-        },
         "groups": {
-          "label": "User groups",
-          "description": "Selected user groups can use this MCP.",
-          "placeholder": "Add user groups",
-          "required": "Select at least one user group."
-        },
-        "scoped": {
-          "description": "Choose at least one group you manage."
-        },
-        "retainedUsers": "{count, plural, one {Also shared directly with # user.} other {Also shared directly with # users.}}",
-        "planNote": "Group access requires a Business plan."
+          "description": "Selected user groups can use this MCP."
+        }
       },
       "defaultChat": {
         "title": "Available in default Onyx Chat"
@@ -215,9 +192,6 @@
         "subDescription": "Specify an OpenAPI schema that defines the APIs you want to make available as part of this plugin. You can use the placeholders `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, and `USER_EMAIL` anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the current request's values at call time. Learn more about [OpenAPI plugins]({docsUrl}).",
         "title": "OpenAPI Schema Definition"
       },
-      "editConfigsButton": {
-        "disabledTooltip": "Only the plugin's creator or an admin can manage authentication"
-      },
       "editHeader": {
         "title": "Edit OpenAPI plugin"
       },
@@ -239,8 +213,6 @@
       },
       "toasts": {
         "actionCreated": "OpenAPI plugin created successfully",
-        "actionUpdated": "OpenAPI plugin updated successfully",
-        "createFailed": "Failed to create OpenAPI plugin",
         "invalidJson": "Invalid JSON format in OpenAPI schema definition",
         "updateFailed": "Failed to update OpenAPI plugin"
       },
@@ -294,52 +266,30 @@
       "additionalAuthParams": {
         "label": "Additional Auth Params (JSON)"
       },
-      "apiKey": {
-        "required": "API token is required"
-      },
-      "apiKeyTabs": {
-        "admin": {
-          "label": "Shared token"
-        },
-        "perUser": {
-          "label": "Personal token"
-        }
-      },
-      "authPerformer": {
-        "label": "Credentials",
-        "required": "Choose personal or shared credentials."
-      },
       "authType": {
         "apiToken": {
-          "label": "API Key",
           "description": "Use per-user individual API key or organization-wide shared API key."
         },
-        "label": "Authentication Method",
         "none": {
           "label": "No authentication",
           "description": "Not Recommended"
         },
         "oauth": {
-          "label": "OAuth",
           "description": "Each user need to authenticate via OAuth with their own credentials."
         },
         "placeholder": "Select method",
         "ptOauth": {
-          "label": "OAuth Pass-through",
           "description": "Forward the user's OAuth access token used to authenticate {appName}."
-        },
-        "required": "Authentication type is required"
+        }
       },
       "authorizationEndpoint": {
-        "label": "Authorization Endpoint",
-        "required": "Enter the authorization endpoint from your provider."
+        "label": "Authorization Endpoint"
       },
       "cancelButton": {
         "label": "Cancel"
       },
       "clientId": {
-        "label": "Client ID",
-        "required": "Enter your OAuth client ID."
+        "label": "Client ID"
       },
       "clientSecret": {
         "label": "Client Secret"
@@ -348,15 +298,8 @@
         "additionalParamsInvalid": "Invalid additional auth params JSON",
         "additionalParamsInvalidWithReason": "Invalid additional auth params JSON: {reason}",
         "additionalParamsNotObject": "Additional auth params must be a JSON object",
-        "saveAuthFailed": "Failed to save authentication configuration",
         "saveConfigFailed": "Failed to save server configuration",
-        "saveStage": "Could not save connection settings",
         "loadStage": "Could not load connection settings",
-        "clientRegistrationFailed": "Automatic client registration failed. Use your own OAuth client, or check the provider’s setup requirements.",
-        "clientMetadataRejected": "The provider could not use the client metadata document. If this instance is not reachable from the public internet, turn off “Use client metadata document” and connect again.",
-        "discoveryFailed": "OAuth sign-in settings could not be found. Check the server URL or enter the endpoints from your provider.",
-        "connectionFailed": "The server could not be reached. Check the server URL and try again.",
-        "oauthFailed": "OAuth sign-in failed. Try again, or check the server's OAuth settings.",
         "oauthInitFailed": "Failed to initiate OAuth: {detail}"
       },
       "header": {
@@ -365,16 +308,13 @@
         "title": "Configure *{name}*"
       },
       "noAuthNotice": {
-        "description": "Users can use this server without signing in. Configured custom headers are still sent.",
         "title": "No authentication required"
       },
       "oauthInfo": {
-        "discovery": "Each user signs in with their own account.",
         "manualRegistration": "Register this redirect URI with your provider.",
         "title": "OAuth configuration"
       },
       "passThroughNotice": {
-        "description": "{appName} will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider.",
         "title": "Use pass-through for services with shared identity provider."
       },
       "providerMode": {
@@ -396,32 +336,14 @@
       "scopesOverride": {
         "label": "Scopes Override (comma-separated)"
       },
-      "sharedApiKey": {
-        "description": "This key is used to test the setup and connect everyone with access. Use a workspace key, not a personal key.",
-        "label": "API Key",
-        "placeholder": "Shared API key for your organization"
-      },
       "submitButton": {
-        "label": "Save Changes",
-        "pendingLabel": "Saving…"
+        "label": "Save Changes"
       },
       "tokenEndpoint": {
-        "label": "Token Endpoint",
-        "required": "Enter the token endpoint from your provider."
-      },
-      "transport": {
-        "required": "Transport is required",
-        "label": "Connection transport",
-        "description": "Use Streamable HTTP unless your server requires legacy SSE. This setting is not detected from the server.",
-        "httpLabel": "Streamable HTTP",
-        "sseLabel": "SSE (legacy)"
-      },
-      "advancedSettings": {
-        "title": "Advanced settings"
+        "label": "Token Endpoint"
       },
       "apiTokenInfo": {
-        "title": "API key configuration",
-        "description": "Choose whether each user connects with a personal token or everyone uses a shared token."
+        "title": "API key configuration"
       },
       "oauthSetup": {
         "label": "OAuth setup",
@@ -438,19 +360,6 @@
         "label": "Use client metadata document",
         "description": "When on, the provider fetches {appName}'s client metadata document over the public internet. Turn this off if this {appName} instance is private. {appName} then uses automatic client registration instead."
       },
-      "discovery": {
-        "checking": "Checking automatic setup…",
-        "supported": "Automatic setup is available",
-        "requiresClient": "This server does not advertise automatic client registration. We recommend you set up your own OAuth client. You may still attempt automatic registration.",
-        "missing": "Check the server URL or enter the sign-in and token endpoints from your provider.",
-        "unreachable": "The server may be unavailable or blocking discovery requests.",
-        "retry": "Check again",
-        "manual": "Enter OAuth settings manually",
-        "useOwnClient": "Use your own OAuth client",
-        "unreachableTitle": "Could not determine if automatic setup is available",
-        "missingTitle": "Could not find OAuth endpoints",
-        "requiresClientTitle": "Automatic setup may be unavailable"
-      },
       "advanced": {
         "description": "Configure a known OAuth provider with explicit authorization and token endpoints instead of automatic discovery.",
         "title": "Advanced"
@@ -462,7 +371,6 @@
     "mcpCard": {
       "deleteModal": {
         "body": {
-          "confirmation": "Are you sure you want to delete this MCP server?",
           "description": "This deletes <emphasis>{title}</emphasis> and all its tools for everyone in your organization. Deletion is irreversible."
         },
         "submitButton": {
@@ -525,55 +433,15 @@
       "empty": {
         "description": "Connect MCP server to add custom actions."
       },
-      "errors": {
-        "unknown": "Unknown error"
-      },
       "toasts": {
         "deleteFailed": "Failed to delete MCP Server",
         "disconnectFailed": "Failed to disconnect MCP Server",
-        "fetchToolsFailed": "Failed to fetch tools: {error}",
-        "reconnectFailed": "Failed to reconnect MCP Server",
-        "serverDeleted": "MCP Server deleted successfully"
+        "reconnectFailed": "Failed to reconnect MCP Server"
       }
     },
     "openApiAuthModal": {
-      "authMethod": {
-        "customHeader": {
-          "description": "Send custom headers with every request.",
-          "label": "Custom Authorization Header"
-        },
-        "label": "Authentication Method",
-        "oauth": {
-          "description": "Each user authenticates via OAuth with their own credentials.",
-          "label": "OAuth"
-        },
-        "placeholder": "Select method",
-        "ptOauth": {
-          "description": "Forward the user's OAuth access token used to authenticate {appName}.",
-          "label": "OAuth Pass-through"
-        },
-        "required": "Authentication method is required"
-      },
-      "authorizationUrl": {
-        "label": "Authorization URL",
-        "required": "Authorization URL is required"
-      },
       "cancelButton": {
         "label": "Cancel"
-      },
-      "clientId": {
-        "description": "Leave blank to keep the current client ID.",
-        "label": "OAuth Client ID",
-        "required": "Client ID is required"
-      },
-      "clientSecret": {
-        "description": "Leave blank to keep the current client secret.",
-        "label": "OAuth Client Secret",
-        "required": "Client secret is required"
-      },
-      "errors": {
-        "invalidUrl": "Enter a valid URL",
-        "loadConfigFailed": "Failed to load existing OAuth configuration. Re-enter the details to update it."
       },
       "header": {
         "description": "Authenticate your connection to start using this OpenAPI plugin."
@@ -581,42 +449,13 @@
       "headers": {
         "addButton": {
           "label": "Add Header"
-        },
-        "description": "Specify custom headers for all requests sent to this plugin's API endpoint.",
-        "keyRequired": "Header key is required",
-        "keyTitle": "Header",
-        "minRequired": "Add at least one authentication header",
-        "title": "Authentication Headers",
-        "valueRequired": "Header value is required",
-        "valueTitle": "Value"
+        }
       },
       "loading": {
         "label": "Loading existing configuration..."
       },
-      "passThroughNotice": {
-        "description": "{appName} will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider.",
-        "title": "Use pass-through for services with shared identity provider."
-      },
-      "redirectUri": {
-        "copyTooltip": "Copy redirect URI",
-        "label": "Use <emphasis>redirect URI</emphasis>:"
-      },
-      "scopes": {
-        "description": "Comma-separated list of OAuth scopes to request.",
-        "label": "Scopes <optional>(Optional)</optional>",
-        "placeholder": "e.g. repo, user"
-      },
       "submitButton": {
-        "label": "Connect",
-        "pendingLabel": "Connecting..."
-      },
-      "tokenUrl": {
-        "label": "Token URL",
-        "required": "Token URL is required"
-      },
-      "pkce": {
-        "label": "Use PKCE",
-        "description": "Enable only when the OAuth provider supports PKCE with the S256 challenge method."
+        "label": "Connect"
       },
       "connectionCheck": {
         "discovery": {
@@ -626,9 +465,7 @@
           "unsupported": "Provider does not advertise S256 PKCE support.",
           "unknown": "Could not verify PKCE support. You can still choose the setting manually."
         },
-        "description": "Tests these unsaved settings without saving configuration or tokens. Provider consent may grant this app access to your account.",
         "testing": "Testing connection…",
-        "test": "Test connection",
         "successPkce": "Authorization succeeded with PKCE parameters. This does not prove the provider enforces PKCE.",
         "success": "Authorization succeeded without PKCE.",
         "result": {
@@ -673,11 +510,8 @@
         "description": "Add custom actions from OpenAPI schemas."
       },
       "toasts": {
-        "authSaveFailed": "Failed to save authentication settings.",
-        "authSaved": "{name} authentication saved successfully.",
         "deleteFailed": "Failed to delete tool.",
-        "disconnectFailed": "Failed to disconnect OpenAPI action.",
-        "toolDeleted": "{name} deleted successfully."
+        "disconnectFailed": "Failed to disconnect OpenAPI action."
       }
     },
     "perUserAuth": {
@@ -685,23 +519,13 @@
         "placeholder": "Enter {field}"
       },
       "credentials": {
-        "perUserDescription": "Use your credentials to test this MCP and load its tools. They are saved to your account only.",
-        "sharedDescription": "These values are used for every user in your organization.",
         "perUserTitle": "Only for your own account",
         "sharedTitle": "Shared organization values"
       },
       "headers": {
         "addButton": {
           "label": "Add Header"
-        },
-        "error": {
-          "message": "At least one header value must include the {apiKey} placeholder."
-        },
-        "keyTitle": "Header Name",
-        "label": "Custom Headers",
-        "perUserDescription": "Use <mono>{apiKey}</mono> for each user’s API key. <mono>{userEmail}</mono> uses their email automatically. Other placeholders ask users for a value.",
-        "sharedDescription": "Format the headers sent with your organization's shared credentials. Use placeholders like <mono>{apiKey}</mono> in at least one header value; it is replaced with your organization's shared key.",
-        "valueTitle": "Header Value"
+        }
       }
     },
     "policyToggle": {
@@ -730,15 +554,11 @@
     },
     "toolsList": {
       "disableAllButton": {
-        "ariaLabel": "Disable all tools",
         "tooltip": "Disable all tools"
       },
       "empty": {
         "message": "No tools available",
         "searchMessage": "No tools found"
-      },
-      "enableAllButton": {
-        "label": "Enable all"
       },
       "showAllButton": {
         "ariaLabel": "Show all tools",
@@ -864,10 +684,7 @@
       }
     },
     "placeholders": {
-      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
-      "oauthTokenUrl": "https://example.com/oauth/access_token",
-      "oauthScope": "https://www.googleapis.com/auth/logging.read",
-      "mcpServerUrl": "https://your-mcp-server.com/mcp"
+      "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
     "memberPlugins": {
       "chat": {
@@ -1105,15 +922,7 @@
           "viewTools": "View tools",
           "saveToUpdate": "Save changes to update tools."
         },
-        "createTitle": "Add an OpenAPI plugin",
-        "detailDescription": "Manage this API and the tools available to your agents.",
-        "detailsTitle": "Configuration",
-        "schemaTitle": "OpenAPI schema",
-        "notFound": "Plugin not found",
-        "loadFailed": "Could not load this plugin",
-        "unavailable": "This plugin may have been deleted, or you may not have access.",
-        "readOnly": "You can view this plugin. Your account cannot change its settings.",
-        "deleteDescription": "This permanently deletes the OpenAPI plugin and its configuration."
+        "schemaTitle": "OpenAPI schema"
       },
       "title": "Plugins",
       "description": "Connect tools and apps to your workspace.",
@@ -1122,7 +931,6 @@
       },
       "add": {
         "label": "Add",
-        "mcp": "Add custom MCP server",
         "openapi": "Add OpenAPI plugin"
       },
       "catalog": {
@@ -1140,37 +948,16 @@
         },
         "atlassian": {
           "summary": "Work with Jira and Confluence",
-          "description": "Work with Jira and Confluence.",
-          "approvalNote": "Your Atlassian organization may require admin approval."
+          "description": "Work with Jira and Confluence."
         },
-        "setupGuide": "Setup guide",
         "add": {
           "label": "Add {name}"
         }
       },
-      "row": {
-        "externalAppKind": "Craft App",
-        "manage": {
-          "label": "Manage {name}"
-        },
-        "view": {
-          "label": "View {name}"
-        }
-      },
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "Craft Apps"
-      },
       "filters": {
-        "label": "Plugin type",
-        "all": "All",
-        "apps": "Craft Apps"
+        "label": "Plugin type"
       },
       "state": {
-        "mcpError": "MCP servers could not be loaded.",
-        "listErrorDescription": "We couldn't load this plugin list. Try again in a moment.",
-        "openapiError": "OpenAPI plugins could not be loaded.",
         "retry": {
           "label": "Retry"
         },
@@ -1181,73 +968,34 @@
           "explore": {
             "label": "Explore plugins"
           }
-        },
-        "noResults": {
-          "title": "No plugins found",
-          "description": "Try another name, description, or server URL.",
-          "clear": {
-            "label": "View all plugins"
-          }
-        },
-        "externalAppsError": "Apps could not load"
+        }
       }
     },
     "mcpSetup": {
-      "connectTo": "Connect to {name}",
       "contactingServer": "Contacting server",
       "detectingAuthentication": "Detecting authentication",
-      "stagePending": "In progress",
-      "stageSuccess": "Complete",
-      "stageError": "Failed",
       "stageWaiting": "Waiting",
       "progress": "Setup progress",
       "serverStep": "Server",
       "connectionStep": "Connection",
-      "permissionDenied": "You do not have permission to add MCP servers.",
-      "reviewSettings": "Review the server settings before connecting.",
-      "urlDescription": "Enter the server URL to detect its connection and authentication settings.",
       "detectedTransport": "Transport: {transport}",
-      "retry": "Check again",
       "authenticationUndetected": "Choose the authentication method on the next page.",
-      "configureManually": "Configure manually",
       "details": "Details",
       "checking": "Checking server…",
-      "unreachable": "Could not connect to this MCP server",
-      "retryCheck": "Check the URL and server availability, then try again.",
-      "blocked": "This URL is blocked by your outbound security settings.",
-      "publicDetected": "No authentication required",
-      "oauthDetected": "OAuth detected",
-      "clientMetadata": "Client metadata document",
-      "clientMetadataSupported": "Supported",
-      "clientMetadataUnsupported": "Not supported",
-      "clientMetadataUnknown": "Not checked",
-      "manualRequired": "Choose authentication manually",
-      "chooseAuthentication": "We could not determine how this server authenticates. Choose a method below.",
-      "connect": "Connect",
-      "publicDetails": "Available tools: {count}",
       "serverDetails": "Server details",
       "authentication": "Authentication",
       "continue": "Continue",
       "back": "Back"
     },
     "mcpTools": {
-      "title": "Tools",
       "enabledTab": "Available tools",
       "policiesTab": "Approval settings",
-      "refresh": "Refresh tools",
-      "loadError": "Could not load tools",
-      "saveError": "Could not save tool settings",
-      "refreshError": "Could not refresh tools",
       "search": "Search tools",
       "enabledCount": "Tools enabled: {enabled} of {total}"
     },
     "mcpDetail": {
-      "configuration": "Configuration",
-      "authentication": "Authentication",
       "loadError": "Could not load MCP server",
       "notFound": "MCP server not found",
-      "unavailable": "This server may have been deleted, or you may not have access.",
-      "retry": "Try again",
       "availabilitySaved": "Availability updated"
     }
   },
@@ -5987,8 +5735,7 @@
           "title": "Delete “{name}”?"
         },
         "toasts": {
-          "deleteFailed": "Failed to delete \"{name}\"",
-          "enableFailed": "Failed to enable \"{name}\""
+          "deleteFailed": "Failed to delete \"{name}\""
         }
       },
       "loading": {
@@ -6005,9 +5752,6 @@
       },
       "page": {
         "description": "Set up the apps your organization's Craft agent can use. Each member connects their own account on Craft's Apps page."
-      },
-      "warnings": {
-        "providerUnavailable": "provider unavailable"
       }
     },
     "federated": {
@@ -11091,7 +10835,6 @@
         "kind": {
           "placeholder": "Select a limit type"
         },
-        "field": {},
         "new": {
           "title": "New Group Limit",
           "pool": {
@@ -11475,7 +11218,10 @@
             "serverUrl": "Server URL",
             "serverUrlError": "Enter a valid server URL.",
             "urlPatterns": "URL Patterns",
-            "urlPatternsDescription": "Put one URL pattern on each line."
+            "urlPatternsDescription": "Put one URL pattern on each line.",
+            "schema": "OpenAPI Schema",
+            "schemaDescription": "Onyx syncs the actions again when you save a changed schema.",
+            "schemaError": "Enter the schema as a JSON object."
           },
           "signIn": {
             "title": "Sign-in",
@@ -14811,10 +14557,6 @@
       "addCatalog": {
         "addButton": "Add",
         "createButton": "Create",
-        "customApp": {
-          "description": "Credentials and network access for your own integration.",
-          "title": "Custom app"
-        },
         "mcpHint": {
           "label": "Need an MCP server instead? Connect it in Actions, then enable it for Craft here.",
           "openActionsButton": "Open Actions"
@@ -14825,70 +14567,21 @@
         }
       },
       "configureProvider": {
-        "addButton": "Add",
         "addTitle": "Add {name}",
         "editTitle": "Edit {name}",
-        "emptyPolicies": "This provider has no actions to configure.",
-        "fields": {
-          "name": {
-            "description": "A label for this connection. Use a distinct name when adding multiple instances of the same provider (e.g. \"{name} — Engineering\").",
-            "label": "Name"
-          }
-        },
-        "managedDescription": "Provided by Onyx — configure what the agent may do.",
-        "managedNote": "Onyx manages credentials. Set action policies under Permissions. Members connect from Plugins.",
-        "saveButton": "Save"
+        "managedDescription": "Provided by Onyx — configure what the agent may do."
       },
       "customApp": {
-        "cancelButton": "Cancel",
-        "createButton": "Create",
         "createDescription": "Configure how the egress proxy reaches and authenticates this app. A skill is not required.",
-        "createTitle": "Create custom app",
-        "creatingButton": "Creating…",
-        "disabled": {
-          "nameMissing": "Enter a name before creating this custom app.",
-          "patternMissing": "Add at least one upstream URL pattern. Type a pattern and press Enter.",
-          "pristine": "Make a change before saving.",
-          "saving": "Save is already in progress."
-        },
         "editDescription": "Update gateway settings and manage associated skills.",
         "editTitle": "Edit {name}",
-        "errors": {
-          "saveFailedTitle": "Couldn't save"
-        },
         "fields": {
-          "headers": {
-            "addButton": "Add header",
-            "description": "Optional — headers injected into outbound requests. Use '{placeholder}' for values the user (or org below) supplies, e.g. \"Bearer '{api_key}'\". Leave empty to allowlist the upstream patterns without injecting credentials.",
-            "keyTitle": "Header",
-            "label": "Header credential pattern",
-            "valueTitle": "Value"
-          },
           "name": {
-            "label": "Name",
             "placeholder": "My Custom App"
-          },
-          "orgCredentials": {
-            "addButton": "Add credential",
-            "description": "Optional — values your org pre-fills for every user. Leave empty for apps where each user supplies their own credentials.",
-            "keyTitle": "Credential key",
-            "label": "Organization credentials",
-            "valueTitle": "Value"
-          },
-          "upstreamPatterns": {
-            "description": "Outbound URLs the proxy may inject credentials into. Use * to match any characters (e.g. https://api.example.com/* covers every path on that host). The host must be literal, with no wildcards before the first slash. Type a pattern and press Enter.",
-            "label": "Upstream URL patterns"
           }
-        },
-        "saveButton": "Save",
-        "savingButton": "Saving…",
-        "placeholders": {
-          "allowedUrl": "https://api.example.com/*"
         }
       },
       "mcpPolicy": {
-        "description": "Choose which tools run automatically, ask for approval, or are disabled in chat and Craft.",
-        "emptyPolicies": "No enabled tools on this server. Enable tools on the MCP actions page first.",
         "saveButton": "Save",
         "title": "Edit {name}"
       },
@@ -14926,19 +14619,14 @@
         }
       },
       "policyEditor": {
-        "cancelButton": "Cancel",
         "loading": {
           "label": "Loading…"
         },
         "permissions": {
-          "askOption": "Ask",
-          "autoApproveOption": "Allow",
-          "customOption": "Custom",
           "defaultOption": "Default",
           "description": "Choose what the agent may do. “Ask” requests approval before each action; “Allow” runs without prompting.",
           "title": "Permissions"
         },
-        "savingButton": "Saving…",
         "advanced": {
           "description": "Set a policy for each action individually.",
           "title": "Advanced"

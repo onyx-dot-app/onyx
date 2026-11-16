@@ -259,8 +259,6 @@ export const SWR_KEYS = {
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
   adminMcpServers: "/api/admin/mcp/servers",
-  adminMcpServerToolSnapshots: (serverId: number) =>
-    `/api/admin/mcp/server/${serverId}/tools/snapshots?source=db`,
   mcpServers: "/api/mcp/servers",
   mcpServersCraft: "/api/mcp/servers/craft",
   agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
@@ -320,7 +318,6 @@ export const SWR_KEYS = {
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
   buildExternalApps: "/api/build/apps",
   buildExternalAppsAdmin: "/api/build/admin/apps",
-  buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
   buildBaseInstructions: "/api/build/admin/base-instructions",
   buildSessionApprovalStatus: (sessionId: string) =>
     `/api/build/approvals/sessions/${sessionId}/status`,
@@ -372,11 +369,6 @@ export const SWR_KEYS = {
   // ── Query History (EE) ────────────────────────────────────────────────────
   adminChatSessionHistory: "/api/admin/chat-session-history",
   adminChatSession: (id: string) => `/api/admin/chat-session-history/${id}`,
-
-  // ── MCP Server (per-ID) ───────────────────────────────────────────────────
-  adminMcpServer: (id: number) => `/api/admin/mcp/servers/${id}`,
-  adminMcpOAuthDiscovery: (id: number) =>
-    ["admin-mcp-oauth-discovery", id] as const,
 
   // ── Document Processing ───────────────────────────────────────────────────
   unstructuredApiKeySet: "/api/search-settings/unstructured-api-key-set",

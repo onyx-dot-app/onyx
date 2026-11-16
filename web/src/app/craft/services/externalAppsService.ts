@@ -4,11 +4,7 @@
  * construction live in one place.
  */
 
-import {
-  ActionPolicy,
-  ExternalAppAdminResponse,
-  ExternalAppType,
-} from "@/app/craft/v1/apps/registry";
+import { ActionPolicy, ExternalAppType } from "@/app/craft/v1/apps/registry";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
@@ -32,25 +28,6 @@ interface CreateBuiltInExternalAppBody {
   action_policies?: Record<string, ActionPolicy>;
 }
 
-/**
- * Create a built-in external app (`POST /admin/apps/built-in`). Built-in
- * providers only — custom apps use {@link createCustomExternalApp}. Updates go
- * through {@link updateExternalApp}.
- */
-export async function createBuiltInExternalApp(
-  body: CreateBuiltInExternalAppBody
-): Promise<ExternalAppAdminResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/admin/apps/built-in`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(await readErrorDetail(res, "Save failed"));
-  }
-  return res.json();
-}
-
 interface CreateCustomExternalAppInput {
   enabled?: boolean;
   users_can_manage_policies?: boolean;
@@ -58,24 +35,6 @@ interface CreateCustomExternalAppInput {
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
-}
-
-/**
- * Create a CUSTOM external app (`POST /admin/apps/custom`). Skill content is
- * created and managed independently through the Skills experience.
- */
-export async function createCustomExternalApp(
-  input: CreateCustomExternalAppInput
-): Promise<ExternalAppAdminResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/admin/apps/custom`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!res.ok) {
-    throw new Error(await readErrorDetail(res, "Save failed"));
-  }
-  return res.json();
 }
 
 interface UpdateExternalAppBody {
@@ -88,35 +47,6 @@ interface UpdateExternalAppBody {
   organization_credentials?: Record<string, string>;
   // Full replace when present; omit to leave stored policies untouched.
   action_policies?: Record<string, ActionPolicy>;
-}
-
-/**
- * Partial update of any app (PATCH /admin/apps/{id}). For Onyx-managed built-ins
- * the gateway-config fields are ignored server-side (only policies
- * apply).
- */
-export async function updateExternalApp(
-  id: number,
-  body: UpdateExternalAppBody
-): Promise<ExternalAppAdminResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/admin/apps/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(await readErrorDetail(res, "Save failed"));
-  }
-  return res.json();
-}
-
-export async function deleteExternalApp(id: number): Promise<void> {
-  const res = await fetch(`${BUILD_API_BASE}/admin/apps/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    throw new Error(await readErrorDetail(res, "Delete failed"));
-  }
 }
 
 interface OAuthStartResponse {

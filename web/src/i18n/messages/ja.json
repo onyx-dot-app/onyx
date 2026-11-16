@@ -148,9 +148,6 @@
       }
     },
     "addMcpModal": {
-      "addHeader": {
-        "title": "MCP サーバーを追加"
-      },
       "cancelButton": {
         "label": "キャンセル"
       },
@@ -164,35 +161,15 @@
         "required": "サーバー名は必須です",
         "title": "サーバー名"
       },
-      "serverUrl": {
-        "invalid": "有効な URL を入力してください",
-        "title": "MCP サーバー URL"
-      },
       "submitButton": {
-        "saveLabel": "変更を保存",
         "savingLabel": "保存中..."
-      },
-      "toasts": {
-        "updateFailed": "MCP サーバーの更新に失敗しました"
       },
       "access": {
         "title": "アクセス制御",
         "description": "このMCPを使用できるユーザーを選択します。",
-        "public": {
-          "label": "組織",
-          "description": "組織内の誰でもこのMCPを使用できます"
-        },
         "groups": {
-          "label": "ユーザーグループ",
-          "description": "選択したユーザーグループはこのMCPを使用できます。",
-          "placeholder": "ユーザーグループを追加",
-          "required": "ユーザーグループを1つ以上選択してください。"
-        },
-        "scoped": {
-          "description": "管理しているグループを1つ以上選択してください。"
-        },
-        "retainedUsers": "{count, plural, other {#人のユーザーとも直接共有されています。}}",
-        "planNote": "グループアクセスにはBusinessプランが必要です。"
+          "description": "選択したユーザーグループはこのMCPを使用できます。"
+        }
       },
       "defaultChat": {
         "title": "Onyx のデフォルトチャットで利用可能"
@@ -215,9 +192,6 @@
         "subDescription": "このプラグインで利用可能にする API を定義する OpenAPI スキーマを指定します。スキーマ内のどこでも (サーバー URL、パス、パラメーターの既定値など) プレースホルダー `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID`、`USER_EMAIL` を使用できます。呼び出し時に、現在のリクエストの値に置き換えられます。詳細は [OpenAPI プラグイン]({docsUrl}) を参照してください。",
         "title": "OpenAPI スキーマ定義"
       },
-      "editConfigsButton": {
-        "disabledTooltip": "認証を管理できるのは、プラグインの作成者または管理者のみです"
-      },
       "editHeader": {
         "title": "OpenAPI プラグインを編集"
       },
@@ -239,8 +213,6 @@
       },
       "toasts": {
         "actionCreated": "OpenAPI プラグインを作成しました",
-        "actionUpdated": "OpenAPI プラグインを更新しました",
-        "createFailed": "OpenAPI プラグインの作成に失敗しました",
         "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です",
         "updateFailed": "OpenAPI プラグインの更新に失敗しました"
       },
@@ -294,52 +266,30 @@
       "additionalAuthParams": {
         "label": "追加の認証パラメーター (JSON)"
       },
-      "apiKey": {
-        "required": "API token は必須です"
-      },
-      "apiKeyTabs": {
-        "admin": {
-          "label": "共有トークン"
-        },
-        "perUser": {
-          "label": "個人用トークン"
-        }
-      },
-      "authPerformer": {
-        "label": "認証情報",
-        "required": "個人用または共有の認証情報を選択してください。"
-      },
       "authType": {
         "apiToken": {
-          "label": "API キー",
           "description": "ユーザーごとの個別 API キー、または組織全体の共有 API キーを使用します。"
         },
-        "label": "認証方法",
         "none": {
           "label": "認証なし",
           "description": "推奨しません"
         },
         "oauth": {
-          "label": "OAuth",
           "description": "各ユーザーが自分の資格情報で OAuth 認証を行う必要があります。"
         },
         "placeholder": "方法を選択",
         "ptOauth": {
-          "label": "OAuth パススルー",
           "description": "{appName} の認証に使用したユーザーの OAuth アクセストークンを転送します。"
-        },
-        "required": "認証タイプは必須です"
+        }
       },
       "authorizationEndpoint": {
-        "label": "認可エンドポイント",
-        "required": "プロバイダーの認可エンドポイントを入力してください。"
+        "label": "認可エンドポイント"
       },
       "cancelButton": {
         "label": "キャンセル"
       },
       "clientId": {
-        "label": "クライアント ID",
-        "required": "OAuthクライアントIDを入力してください。"
+        "label": "クライアント ID"
       },
       "clientSecret": {
         "label": "クライアントシークレット"
@@ -348,15 +298,8 @@
         "additionalParamsInvalid": "追加の認証パラメーターの JSON が無効です",
         "additionalParamsInvalidWithReason": "追加の認証パラメーターの JSON が無効です: {reason}",
         "additionalParamsNotObject": "追加の認証パラメーターは JSON オブジェクトである必要があります",
-        "saveAuthFailed": "認証設定の保存に失敗しました",
         "saveConfigFailed": "サーバー設定の保存に失敗しました",
-        "saveStage": "接続設定を保存できませんでした",
         "loadStage": "接続設定を読み込めませんでした",
-        "clientRegistrationFailed": "クライアントの自動登録に失敗しました。独自のOAuthクライアントを使用するか、プロバイダーの設定要件を確認してください。",
-        "clientMetadataRejected": "プロバイダーがクライアントメタデータドキュメントを使用できませんでした。このインスタンスがインターネットからアクセスできない場合は、「クライアントメタデータドキュメントを使用」をオフにして、もう一度接続してください。",
-        "discoveryFailed": "OAuthサインイン設定が見つかりませんでした。サーバーURLを確認するか、プロバイダーのエンドポイントを入力してください。",
-        "connectionFailed": "サーバーに接続できませんでした。サーバーURLを確認して再試行してください。",
-        "oauthFailed": "OAuth サインインに失敗しました。もう一度お試しいただくか、サーバーの OAuth 設定を確認してください。",
         "oauthInitFailed": "OAuth の開始に失敗しました: {detail}"
       },
       "header": {
@@ -365,16 +308,13 @@
         "title": "*{name}*を設定"
       },
       "noAuthNotice": {
-        "description": "ユーザーはサインインせずにこのサーバーを使用できます。設定済みのカスタムヘッダーは引き続き送信されます。",
         "title": "認証不要"
       },
       "oauthInfo": {
-        "discovery": "各ユーザーは自分のアカウントでサインインします。",
         "manualRegistration": "このリダイレクトURIをプロバイダーに登録してください。",
         "title": "OAuth設定"
       },
       "passThroughNotice": {
-        "description": "{appName} はユーザーの OAuth アクセストークンを Authorization ヘッダーとしてサーバーに直接転送します。サーバーが同じプロバイダーでの認証に対応していることを確認してください。",
         "title": "ID プロバイダーを共有するサービスにはパススルーを使用してください。"
       },
       "providerMode": {
@@ -396,32 +336,14 @@
       "scopesOverride": {
         "label": "スコープの上書き (カンマ区切り)"
       },
-      "sharedApiKey": {
-        "description": "このキーは設定のテストと、アクセス権を持つ全員の接続に使用します。個人用ではなく、ワークスペース用のキーを使用してください。",
-        "label": "API キー",
-        "placeholder": "組織の共有 API キー"
-      },
       "submitButton": {
-        "label": "変更を保存",
-        "pendingLabel": "保存中…"
+        "label": "変更を保存"
       },
       "tokenEndpoint": {
-        "label": "トークンエンドポイント",
-        "required": "プロバイダーのトークンエンドポイントを入力してください。"
-      },
-      "transport": {
-        "required": "トランスポートは必須です",
-        "label": "接続トランスポート",
-        "description": "サーバーが従来のSSEを必要としない限り、Streamable HTTPを使用してください。この設定はサーバーから自動検出されません。",
-        "httpLabel": "Streamable HTTP",
-        "sseLabel": "SSE（従来方式）"
-      },
-      "advancedSettings": {
-        "title": "詳細設定"
+        "label": "トークンエンドポイント"
       },
       "apiTokenInfo": {
-        "title": "APIキー設定",
-        "description": "各ユーザーが個人用トークンで接続するか、全員が共有トークンを使用するかを選択します。"
+        "title": "APIキー設定"
       },
       "oauthSetup": {
         "label": "OAuth設定",
@@ -438,19 +360,6 @@
         "label": "クライアントメタデータドキュメントを使用",
         "description": "オンの場合、プロバイダーは公開インターネット経由で {appName} のクライアントメタデータドキュメントを取得します。この {appName} インスタンスが非公開の場合はオフにしてください。その場合 {appName} は自動クライアント登録を使用します。"
       },
-      "discovery": {
-        "checking": "自動設定を確認しています…",
-        "supported": "自動設定を利用できます",
-        "requiresClient": "このサーバーはクライアントの自動登録への対応を明示していません。独自のOAuthクライアントを設定することをお勧めします。自動登録を試すこともできます。",
-        "missing": "サーバーURLを確認するか、プロバイダーのサインインおよびトークンのエンドポイントを入力してください。",
-        "unreachable": "サーバーが利用できないか、検出リクエストをブロックしている可能性があります。",
-        "retry": "再確認",
-        "manual": "OAuth設定を手動入力",
-        "useOwnClient": "独自のOAuthクライアントを使用",
-        "unreachableTitle": "自動設定を利用できるか確認できませんでした",
-        "missingTitle": "OAuthエンドポイントが見つかりませんでした",
-        "requiresClientTitle": "自動設定を利用できない可能性があります"
-      },
       "advanced": {
         "description": "自動検出の代わりに、認可エンドポイントとトークンエンドポイントを明示的に指定して、既知の OAuth プロバイダーを設定します。",
         "title": "詳細設定"
@@ -462,7 +371,6 @@
     "mcpCard": {
       "deleteModal": {
         "body": {
-          "confirmation": "この MCP サーバーを削除してもよろしいですか？",
           "description": "組織内のすべてのユーザーに対して、<emphasis>{title}</emphasis> とそのすべてのツールが削除されます。削除は取り消せません。"
         },
         "submitButton": {
@@ -525,55 +433,15 @@
       "empty": {
         "description": "MCP サーバーに接続して、カスタムアクションを追加します。"
       },
-      "errors": {
-        "unknown": "不明なエラー"
-      },
       "toasts": {
         "deleteFailed": "MCP サーバーの削除に失敗しました",
         "disconnectFailed": "MCP サーバーの切断に失敗しました",
-        "fetchToolsFailed": "ツールの取得に失敗しました: {error}",
-        "reconnectFailed": "MCP サーバーの再接続に失敗しました",
-        "serverDeleted": "MCP サーバーを削除しました"
+        "reconnectFailed": "MCP サーバーの再接続に失敗しました"
       }
     },
     "openApiAuthModal": {
-      "authMethod": {
-        "customHeader": {
-          "description": "すべてのリクエストにカスタムヘッダーを送信します。",
-          "label": "カスタム Authorization ヘッダー"
-        },
-        "label": "認証方法",
-        "oauth": {
-          "description": "各ユーザーが自分の資格情報で OAuth 認証を行います。",
-          "label": "OAuth"
-        },
-        "placeholder": "方法を選択",
-        "ptOauth": {
-          "description": "{appName} の認証に使用したユーザーの OAuth アクセストークンを転送します。",
-          "label": "OAuth パススルー"
-        },
-        "required": "認証方法は必須です"
-      },
-      "authorizationUrl": {
-        "label": "認可 URL",
-        "required": "認可 URL は必須です"
-      },
       "cancelButton": {
         "label": "キャンセル"
-      },
-      "clientId": {
-        "description": "現在のクライアント ID を維持するには、空欄のままにしてください。",
-        "label": "OAuth クライアント ID",
-        "required": "クライアント ID は必須です"
-      },
-      "clientSecret": {
-        "description": "現在のクライアントシークレットを維持するには、空欄のままにしてください。",
-        "label": "OAuth クライアントシークレット",
-        "required": "クライアントシークレットは必須です"
-      },
-      "errors": {
-        "invalidUrl": "有効な URL を入力してください",
-        "loadConfigFailed": "既存の OAuth 設定の読み込みに失敗しました。更新するには、内容を再入力してください。"
       },
       "header": {
         "description": "接続を認証すると、OpenAPI プラグインを使用できます。"
@@ -581,42 +449,13 @@
       "headers": {
         "addButton": {
           "label": "ヘッダーを追加"
-        },
-        "description": "このプラグインの API エンドポイントに送信するすべてのリクエストに、カスタムヘッダーを指定します。",
-        "keyRequired": "ヘッダーのキーは必須です",
-        "keyTitle": "ヘッダー",
-        "minRequired": "認証ヘッダーを 1 つ以上追加してください",
-        "title": "認証ヘッダー",
-        "valueRequired": "ヘッダーの値は必須です",
-        "valueTitle": "値"
+        }
       },
       "loading": {
         "label": "既存の設定を読み込み中..."
       },
-      "passThroughNotice": {
-        "description": "{appName} はユーザーの OAuth アクセストークンを Authorization ヘッダーとしてサーバーに直接転送します。サーバーが同じプロバイダーでの認証に対応していることを確認してください。",
-        "title": "ID プロバイダーを共有するサービスにはパススルーを使用してください。"
-      },
-      "redirectUri": {
-        "copyTooltip": "リダイレクト URI をコピー",
-        "label": "<emphasis>リダイレクト URI</emphasis> を使用:"
-      },
-      "scopes": {
-        "description": "リクエストする OAuth スコープのカンマ区切りリストです。",
-        "label": "スコープ <optional>(任意)</optional>",
-        "placeholder": "例: repo, user"
-      },
       "submitButton": {
-        "label": "接続",
-        "pendingLabel": "接続中..."
-      },
-      "tokenUrl": {
-        "label": "トークン URL",
-        "required": "トークン URL は必須です"
-      },
-      "pkce": {
-        "label": "PKCE を使用",
-        "description": "OAuth プロバイダーが S256 チャレンジ方式の PKCE に対応している場合のみ有効にしてください。"
+        "label": "接続"
       },
       "connectionCheck": {
         "discovery": {
@@ -626,9 +465,7 @@
           "unsupported": "プロバイダーは S256 PKCE への対応を公表していません。",
           "unknown": "PKCE の対応状況を確認できませんでした。設定は手動で選択できます。"
         },
-        "description": "設定やトークンを保存せず、未保存の設定をテストします。プロバイダーで同意すると、このアプリにアカウントへのアクセスが許可される場合があります。",
         "testing": "接続をテスト中…",
-        "test": "接続をテスト",
         "successPkce": "PKCE パラメーターを使った認可に成功しました。ただし、プロバイダーが PKCE を強制している証明にはなりません。",
         "success": "PKCE を使わない認可に成功しました。",
         "result": {
@@ -673,11 +510,8 @@
         "description": "OpenAPI スキーマからカスタムアクションを追加します。"
       },
       "toasts": {
-        "authSaveFailed": "認証設定の保存に失敗しました。",
-        "authSaved": "{name} の認証を保存しました。",
         "deleteFailed": "ツールの削除に失敗しました。",
-        "disconnectFailed": "OpenAPI アクションの切断に失敗しました。",
-        "toolDeleted": "{name} を削除しました。"
+        "disconnectFailed": "OpenAPI アクションの切断に失敗しました。"
       }
     },
     "perUserAuth": {
@@ -685,23 +519,13 @@
         "placeholder": "{field} を入力"
       },
       "credentials": {
-        "perUserDescription": "自分の認証情報を使ってこのMCPをテストし、ツールを読み込みます。認証情報は自分のアカウントにのみ保存されます。",
-        "sharedDescription": "これらの値は組織内のすべてのユーザーに使用されます。",
         "perUserTitle": "自分のアカウント専用",
         "sharedTitle": "組織で共有する値"
       },
       "headers": {
         "addButton": {
           "label": "ヘッダーを追加"
-        },
-        "error": {
-          "message": "少なくとも 1 つのヘッダーの値に {apiKey} プレースホルダーを含めてください。"
-        },
-        "keyTitle": "ヘッダー名",
-        "label": "カスタムヘッダー",
-        "perUserDescription": "各ユーザーのAPIキーには<mono>{apiKey}</mono>を使用します。<mono>{userEmail}</mono>にはユーザーのメールアドレスが自動で入ります。他のプレースホルダーはユーザーに値の入力を求めます。",
-        "sharedDescription": "組織の共有資格情報とともに送信するヘッダーの形式を設定します。少なくとも 1 つのヘッダーの値に <mono>{apiKey}</mono> などのプレースホルダーを使用してください。組織の共有キーに置き換えられます。",
-        "valueTitle": "ヘッダーの値"
+        }
       }
     },
     "policyToggle": {
@@ -730,15 +554,11 @@
     },
     "toolsList": {
       "disableAllButton": {
-        "ariaLabel": "すべてのツールを無効化",
         "tooltip": "すべてのツールを無効化"
       },
       "empty": {
         "message": "利用できるツールがありません",
         "searchMessage": "ツールが見つかりません"
-      },
-      "enableAllButton": {
-        "label": "すべて有効化"
       },
       "showAllButton": {
         "ariaLabel": "すべてのツールを表示",
@@ -864,10 +684,7 @@
       }
     },
     "placeholders": {
-      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
-      "oauthTokenUrl": "https://example.com/oauth/access_token",
-      "oauthScope": "https://www.googleapis.com/auth/logging.read",
-      "mcpServerUrl": "https://mcp-sabaa.com/mcp"
+      "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
     "memberPlugins": {
       "chat": {
@@ -1105,15 +922,7 @@
           "viewTools": "ツールを表示",
           "saveToUpdate": "変更を保存してツールを更新してください。"
         },
-        "createTitle": "OpenAPI プラグインを追加",
-        "detailDescription": "この API とエージェントが使用できるツールを管理します。",
-        "detailsTitle": "設定",
-        "schemaTitle": "OpenAPI スキーマ",
-        "notFound": "プラグインが見つかりません",
-        "loadFailed": "このプラグインを読み込めませんでした",
-        "unavailable": "このプラグインは削除されたか、アクセス権がない可能性があります。",
-        "readOnly": "このプラグインは表示できますが、設定を変更する権限はありません。",
-        "deleteDescription": "OpenAPI プラグインとその設定が完全に削除されます。"
+        "schemaTitle": "OpenAPI スキーマ"
       },
       "title": "プラグイン",
       "description": "ツールやアプリをワークスペースに接続します。",
@@ -1122,7 +931,6 @@
       },
       "add": {
         "label": "追加",
-        "mcp": "カスタム MCP サーバーを追加",
         "openapi": "OpenAPI プラグインを追加"
       },
       "catalog": {
@@ -1140,37 +948,16 @@
         },
         "atlassian": {
           "summary": "Jira と Confluence を使用します",
-          "description": "Jira と Confluence を使用します。",
-          "approvalNote": "Atlassian の組織で管理者の承認が必要な場合があります。"
+          "description": "Jira と Confluence を使用します。"
         },
-        "setupGuide": "設定ガイド",
         "add": {
           "label": "{name} を追加"
         }
       },
-      "row": {
-        "externalAppKind": "Craft アプリ",
-        "manage": {
-          "label": "{name} を管理"
-        },
-        "view": {
-          "label": "{name} を表示"
-        }
-      },
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "Craft アプリ"
-      },
       "filters": {
-        "label": "プラグインの種類",
-        "all": "すべて",
-        "apps": "Craft アプリ"
+        "label": "プラグインの種類"
       },
       "state": {
-        "mcpError": "MCP サーバーを読み込めませんでした。",
-        "listErrorDescription": "このプラグイン一覧を読み込めませんでした。しばらくしてから再試行してください。",
-        "openapiError": "OpenAPI プラグインを読み込めませんでした。",
         "retry": {
           "label": "再試行"
         },
@@ -1181,73 +968,34 @@
           "explore": {
             "label": "プラグインを探す"
           }
-        },
-        "noResults": {
-          "title": "プラグインが見つかりません",
-          "description": "別の名前、説明、サーバー URL で検索してください。",
-          "clear": {
-            "label": "すべてのプラグインを表示"
-          }
-        },
-        "externalAppsError": "アプリを読み込めませんでした"
+        }
       }
     },
     "mcpSetup": {
-      "connectTo": "{name} に接続",
       "contactingServer": "サーバーに接続中",
       "detectingAuthentication": "認証方式を検出中",
-      "stagePending": "処理中",
-      "stageSuccess": "完了",
-      "stageError": "失敗",
       "stageWaiting": "待機中",
       "progress": "設定の進行状況",
       "serverStep": "サーバー",
       "connectionStep": "接続",
-      "permissionDenied": "MCPサーバーを追加する権限がありません。",
-      "reviewSettings": "接続する前にサーバー設定を確認してください。",
-      "urlDescription": "サーバーURLを入力して、接続と認証の設定を検出します。",
       "detectedTransport": "トランスポート: {transport}",
-      "retry": "再確認",
       "authenticationUndetected": "次のページで認証方法を選択してください。",
-      "configureManually": "手動で設定",
       "details": "詳細",
       "checking": "サーバーを確認中…",
-      "unreachable": "このMCPサーバーに接続できませんでした",
-      "retryCheck": "URLとサーバーの稼働状況を確認して、もう一度お試しください。",
-      "blocked": "このURLは送信セキュリティ設定によってブロックされています。",
-      "publicDetected": "認証は不要です",
-      "oauthDetected": "OAuthを検出しました",
-      "clientMetadata": "クライアントメタデータドキュメント",
-      "clientMetadataSupported": "対応",
-      "clientMetadataUnsupported": "非対応",
-      "clientMetadataUnknown": "未確認",
-      "manualRequired": "認証方法を手動で選択",
-      "chooseAuthentication": "このサーバーの認証方法を確認できませんでした。以下から方法を選択してください。",
-      "connect": "接続",
-      "publicDetails": "利用可能なツール数: {count}",
       "serverDetails": "サーバーの詳細",
       "authentication": "認証",
       "continue": "続ける",
       "back": "戻る"
     },
     "mcpTools": {
-      "title": "ツール",
       "enabledTab": "利用可能なツール",
       "policiesTab": "承認設定",
-      "refresh": "ツールを更新",
-      "loadError": "ツールを読み込めませんでした",
-      "saveError": "ツールの設定を保存できませんでした",
-      "refreshError": "ツールを更新できませんでした",
       "search": "ツールを検索",
       "enabledCount": "有効なツール: {total} 個中 {enabled} 個"
     },
     "mcpDetail": {
-      "configuration": "設定",
-      "authentication": "認証",
       "loadError": "MCPサーバーを読み込めませんでした",
       "notFound": "MCPサーバーが見つかりません",
-      "unavailable": "このサーバーは削除されたか、アクセス権がない可能性があります。",
-      "retry": "再試行",
       "availabilitySaved": "利用設定を更新しました"
     }
   },
@@ -5987,8 +5735,7 @@
           "title": "「{name}」を削除しますか？"
         },
         "toasts": {
-          "deleteFailed": "「{name}」を削除できませんでした",
-          "enableFailed": "「{name}」を有効にできませんでした"
+          "deleteFailed": "「{name}」を削除できませんでした"
         }
       },
       "loading": {
@@ -6005,9 +5752,6 @@
       },
       "page": {
         "description": "組織の Craft エージェントが使用できるアプリを設定します。各メンバーは Craft のアプリページで自分のアカウントを接続します。"
-      },
-      "warnings": {
-        "providerUnavailable": "プロバイダーを利用できません"
       }
     },
     "federated": {
@@ -11091,7 +10835,6 @@
         "kind": {
           "placeholder": "上限の種類を選択"
         },
-        "field": {},
         "new": {
           "title": "新しいグループ上限",
           "pool": {
@@ -11475,7 +11218,10 @@
             "serverUrl": "サーバー URL",
             "serverUrlError": "有効なサーバー URL を入力してください。",
             "urlPatterns": "URL パターン",
-            "urlPatternsDescription": "1 行に 1 つの URL パターンを入力します。"
+            "urlPatternsDescription": "1 行に 1 つの URL パターンを入力します。",
+            "schema": "OpenAPI スキーマ",
+            "schemaDescription": "変更したスキーマを保存すると、Onyx はアクションを再同期します。",
+            "schemaError": "スキーマを JSON オブジェクトとして入力してください。"
           },
           "signIn": {
             "title": "ログイン",
@@ -14811,10 +14557,6 @@
       "addCatalog": {
         "addButton": "追加",
         "createButton": "作成",
-        "customApp": {
-          "description": "独自のインテグレーション向けの認証情報とネットワークアクセス。",
-          "title": "カスタムアプリ"
-        },
         "mcpHint": {
           "label": "MCP サーバーが必要な場合は、まず「アクション」で接続してから、ここで Craft 向けに有効化してください。",
           "openActionsButton": "アクションを開く"
@@ -14825,70 +14567,21 @@
         }
       },
       "configureProvider": {
-        "addButton": "追加",
         "addTitle": "{name} を追加",
         "editTitle": "{name} を編集",
-        "emptyPolicies": "このプロバイダーには設定できるアクションがありません。",
-        "fields": {
-          "name": {
-            "description": "この接続のラベルです。同じプロバイダーを複数追加する場合は、区別できる名前を付けてください（例:「{name} — エンジニアリング」）。",
-            "label": "名前"
-          }
-        },
-        "managedDescription": "Onyx が提供。エージェントに許可する操作を設定してください。",
-        "managedNote": "認証情報は Onyx が管理します。「権限」でアクションのポリシーを設定します。メンバーは「プラグイン」から接続します。",
-        "saveButton": "保存"
+        "managedDescription": "Onyx が提供。エージェントに許可する操作を設定してください。"
       },
       "customApp": {
-        "cancelButton": "キャンセル",
-        "createButton": "作成",
         "createDescription": "エグレスプロキシがこのアプリに到達し認証する方法を設定します。スキルは必須ではありません。",
-        "createTitle": "カスタムアプリを作成",
-        "creatingButton": "作成中…",
-        "disabled": {
-          "nameMissing": "このカスタムアプリを作成する前に名前を入力してください。",
-          "patternMissing": "アップストリーム URL パターンを 1 つ以上追加してください。パターンを入力して Enter を押します。",
-          "pristine": "保存する前に変更を加えてください。",
-          "saving": "保存処理がすでに進行中です。"
-        },
         "editDescription": "ゲートウェイ設定を更新し、関連スキルを管理します。",
         "editTitle": "{name} を編集",
-        "errors": {
-          "saveFailedTitle": "保存できませんでした"
-        },
         "fields": {
-          "headers": {
-            "addButton": "ヘッダーを追加",
-            "description": "任意。送信リクエストに挿入されるヘッダーです。ユーザー（または下記の組織）が提供する値には '{placeholder}' を使います（例: \"Bearer '{api_key}'\"）。空のままにすると、認証情報を挿入せずにアップストリームパターンを許可します。",
-            "keyTitle": "ヘッダー",
-            "label": "ヘッダー認証情報パターン",
-            "valueTitle": "値"
-          },
           "name": {
-            "label": "名前",
             "placeholder": "マイカスタムアプリ"
-          },
-          "orgCredentials": {
-            "addButton": "認証情報を追加",
-            "description": "任意。組織が全ユーザー向けに事前入力する値です。各ユーザーが自分の認証情報を入力するアプリでは空のままにしてください。",
-            "keyTitle": "認証情報キー",
-            "label": "組織の認証情報",
-            "valueTitle": "値"
-          },
-          "upstreamPatterns": {
-            "description": "プロキシが認証情報を挿入できる送信先 URL です。* は任意の文字に一致します（例: https://api.example.com/* はそのホストのすべてのパスに一致）。ホストはリテラルで指定し、最初のスラッシュより前にワイルドカードは使えません。パターンを入力して Enter を押してください。",
-            "label": "アップストリーム URL パターン"
           }
-        },
-        "saveButton": "保存",
-        "savingButton": "保存中…",
-        "placeholders": {
-          "allowedUrl": "https://api.example.com/*"
         }
       },
       "mcpPolicy": {
-        "description": "チャットと Craft で、自動実行、承認を求める、無効にするツールを選択します。",
-        "emptyPolicies": "このサーバーには有効なツールがありません。まず MCP アクションページでツールを有効にしてください。",
         "saveButton": "保存",
         "title": "{name} を編集"
       },
@@ -14926,19 +14619,14 @@
         }
       },
       "policyEditor": {
-        "cancelButton": "キャンセル",
         "loading": {
           "label": "読み込み中…"
         },
         "permissions": {
-          "askOption": "確認する",
-          "autoApproveOption": "許可",
-          "customOption": "カスタム",
           "defaultOption": "デフォルト",
           "description": "エージェントに許可する操作を選択します。「確認」は各アクションの前に承認を求め、「許可」は確認なしで実行します。",
           "title": "権限"
         },
-        "savingButton": "保存中…",
         "advanced": {
           "description": "アクションごとに個別のポリシーを設定します。",
           "title": "詳細設定"

@@ -25,53 +25,6 @@ export async function updateToolUserPreferences(
     .validateSync(await response.json(), { strict: true });
 }
 
-export interface ToolStatusUpdateRequest {
-  tool_ids: number[];
-  enabled: boolean;
-}
-
-export interface ToolStatusUpdateResponse {
-  updated_count: number;
-  tool_ids: number[];
-}
-
-/**
- * Update status (enable/disable) for one or more tools
- */
-export async function updateToolsStatus(
-  toolIds: number[],
-  enabled: boolean
-): Promise<ToolStatusUpdateResponse> {
-  const response = await fetch("/api/admin/tool/status", {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      tool_ids: toolIds,
-      enabled: enabled,
-    } satisfies ToolStatusUpdateRequest),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await parseErrorDetail(response, "Failed to update tool status")
-    );
-  }
-
-  return await response.json();
-}
-
-/**
- * Update status for a single tool
- */
-export async function updateToolStatus(
-  toolId: number,
-  enabled: boolean
-): Promise<ToolStatusUpdateResponse> {
-  return updateToolsStatus([toolId], enabled);
-}
-
 export async function validateToolDefinition(toolData: {
   definition: Record<string, any>;
 }): Promise<ApiResponse<MethodSpec[]>> {
@@ -136,32 +89,6 @@ type ToolUpdatePayload = {
   passthrough_auth?: boolean;
   oauth_config_id?: number | null;
 };
-
-export async function updateCustomTool(
-  toolId: number,
-  toolData: ToolUpdatePayload
-): Promise<ApiResponse<ToolSnapshot>> {
-  try {
-    const response = await fetch(`/api/admin/tool/custom/${toolId}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(toolData),
-    });
-
-    if (!response.ok) {
-      const errorDetail = (await response.json()).detail;
-      return { data: null, error: `Failed to update tool: ${errorDetail}` };
-    }
-
-    const updatedTool: ToolSnapshot = await response.json();
-    return { data: updatedTool, error: null };
-  } catch (error) {
-    console.error("Error updating tool:", error);
-    return { data: null, error: "Error updating tool" };
-  }
-}
 
 export async function deleteCustomTool(
   toolId: number

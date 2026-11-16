@@ -216,6 +216,53 @@ test("sends a changed server URL with the configuration", async () => {
   );
 });
 
+test("sends an edited OpenAPI schema and rejects one that is not JSON", async () => {
+  const spec = { openapi: "3.0.0", info: { title: "Reports" } };
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: { shape: "openapi", openapi_spec: spec },
+    }),
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const schema = await screen.findByRole("textbox", {
+    name: detailCopy.configuration.connection.schema,
+  });
+  expect(schema).toHaveValue(JSON.stringify(spec, null, 2));
+  const save = screen.getByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+
+  await u.clear(schema);
+  await u.type(schema, "not json");
+  await u.click(save);
+  expect(
+    screen.getByText(detailCopy.configuration.connection.schemaError)
+  ).toBeInTheDocument();
+  expect(
+    fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")
+  ).toBe(false);
+
+  await u.clear(schema);
+  await u.click(schema);
+  await u.paste('{"openapi":"3.1.0"}');
+  await u.click(save);
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual(
+      expect.objectContaining({
+        config: { shape: "openapi", openapi_spec: { openapi: "3.1.0" } },
+      })
+    )
+  );
+});
+
 test("connects the organization account with an API key", async () => {
   const shared = makeDetail({
     auth_mode: "shared",

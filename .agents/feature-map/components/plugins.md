@@ -75,9 +75,7 @@ through `POST /admin/mcp/probe` to suggest the sign-in, and reuses
 (`sections/integrations/IntegrationActionsTab.tsx`) is built from
 `PolicyEditor` and `PolicyToggle` and converts the API values
 `allow|ask|blocked` to their `ALWAYS|ASK|DENY` at the edge
-(`lib/integrations/utils.ts`). The old detail components
-(`MCPServerDetailPage`, `OpenAPIPluginDetailPage`, `ExternalAppPluginDetail`)
-have no route now.
+(`lib/integrations/utils.ts`).
 
 **Member flow.** `lib/plugins/member.ts:useMemberPlugins` reads only member
 endpoints (MCP servers, tools, the user's OAuth token status and Craft apps),
@@ -165,12 +163,10 @@ only the configuration of a chat that does not exist yet.
    A refresh (`backend/onyx/integrations/service.py:refresh_actions__no_commit`)
    never writes `Persona__Tool` or agent settings. A new action follows the
    admin default row and the agent's `default` setting.
-7. `explicit-enable-intent` **Only an explicit Enable action turns a server on
-   through authentication.** `sections/actions/mcpChatEnableIntent.ts` writes a
-   one-time record to session storage, bound to the user, the server and the
-   origin, that expires after five minutes. The detail page and the
-   authentication page enable the server only when they verify that record. A
-   query flag alone must never enable tools for the whole workspace.
+7. `no-workspace-enable-from-url` **A URL never turns an integration on.**
+   Only the admin's Enabled switch on the Overview tab (`PATCH
+   /admin/integrations/{id}` with `enabled`) changes it. A query flag alone must
+   never enable tools for the whole workspace.
 8. `connection-status-is-credential-state` **`connection_status` is credential
    state, not a UI decision.** It is `not_connected`, `connected` or
    `reauth_required`, and null only without a user. Whether a Connect action
@@ -191,10 +187,10 @@ only the configuration of a chat that does not exist yet.
     ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]).
     `integrations/chat_tools.py:build_integration_chat_tools` gives each
     integration tool, `CustomTool` too, the approval scope of an Ask action and
-    leaves out a Blocked action. The admin tools
-    editor (`sections/actions/MCPServerToolsEditor.tsx`) shows the policies with
-    or without Craft, and so does the user-management switch
-    (`sections/actions/modals/MCPServerDetailsPage.tsx`). The member approval
+    leaves out a Blocked action. The Actions tab
+    (`web/src/sections/integrations/IntegrationActionsTab.tsx`) shows the
+    policies with or without Craft, and so does the "Users Can Save Always
+    Allow" switch on the Configuration tab. The member approval
     tab (`sections/plugins/MemberPluginDetailModal.tsx`) shows for a connected
     MCP server whose `users_can_manage_policies` is on, with or without Craft.
     It reads and writes
@@ -238,13 +234,12 @@ only the configuration of a chat that does not exist yet.
   `admin.integrations.shape` in all nine locales.
 - `plugin-kind` **A plugin kind.** Copy the `openapi` kind; list the kinds in
   `PluginReference` in `web/src/lib/plugins/types.ts`. Extend the `MemberPlugin`
-  union and its connection helper in `web/src/lib/plugins/member.ts`, and the
-  detail routes in `lib/plugins/routes.ts`. Decide whether it is a Chat kind
+  union and its connection helper in `web/src/lib/plugins/member.ts`. Decide whether it is a Chat kind
   (`ChatPluginReference`).
 - `mcp-auth-type-ui` **The UI for a new MCP auth type.** Copy the `API_TOKEN`
   branches in `web/src/lib/mcp/auth.ts:getMcpAuthenticationFlow`, the
-  `mcpConnection` helper in `web/src/lib/plugins/member.ts`, and
-  `web/src/sections/actions/modals/mcpAuthForm.ts`.
+  `mcpConnection` helper in `web/src/lib/plugins/member.ts`, and the sign-in
+  fields in `web/src/sections/integrations/signIn.ts`.
 - `investigate-missing-default-chat-tool` **Investigate "a plugin is on, but its
   tool is missing in Default Chat".** Check, in order: the tool has a
   `Persona__Tool` row on the default assistant
