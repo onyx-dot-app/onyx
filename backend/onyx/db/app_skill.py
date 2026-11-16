@@ -1,7 +1,7 @@
 """Which built-in app skills each user gets.
 
 A user gets the built-in skill of a preset when the user runs a plugin that
-holds an integration made from that preset: the integration's
+holds an enabled integration made from that preset: the integration's
 ``external_app`` row has an ``app_type`` in ``EXTERNAL_APP_BUILT_IN_SKILL_IDS``.
 This module is the only place of that rule."""
 
@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.models import ExternalApp, Plugin__Integration
+from onyx.db.models import ExternalApp, Integration, Plugin__Integration
 from onyx.db.plugin_access import UserPluginState, load_user_plugin_states
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 
@@ -23,7 +23,8 @@ def built_in_app_skills_by_user(
 ) -> dict[UUID, dict[str, int]]:
     """For each user, the built-in skill id of each preset the user gets,
     mapped to the external app that renders it. "Runs" is a plugin the user
-    can see and has enabled. When the user runs more than one integration of
+    can see and has enabled. Only an integration the admin turned on counts
+    (``integration.enabled``). When the user runs more than one integration of
     one preset, the one with the lowest integration id renders the skill.
     ``states``: the users' plugin states, when the caller has them."""
     users = set(user_ids)
@@ -44,7 +45,9 @@ def built_in_app_skills_by_user(
             ExternalApp,
             ExternalApp.integration_id == Plugin__Integration.integration_id,
         )
+        .join(Integration, Integration.id == Plugin__Integration.integration_id)
         .where(
+            Integration.enabled.is_(True),
             Plugin__Integration.plugin_id.in_(list(running)),
             ExternalApp.app_type.in_(list(EXTERNAL_APP_BUILT_IN_SKILL_IDS)),
         )
