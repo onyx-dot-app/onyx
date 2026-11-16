@@ -468,6 +468,111 @@ onyx.app/craft-fc-cert-revision: {{ (get $stored "revision" | default .Release.R
 {{- end -}}
 {{- end }}
 
+{{/*
+mTLS on the relay → sandbox-proxy hop (craft.hostAgent.relayTls). On with
+craft.sandboxRuntime=firecracker unless relayTls.enabled=false. Its own CA,
+apart from the agent set: the two sets renew on their own, and an agent or
+client certificate never opens the proxy relay port. With no existingSecret,
+craft-fc-relay-tls.yaml makes the certificates.
+*/}}
+{{- define "onyx.craftFcRelayTls.enabled" -}}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- if ne (toString (dig "hostAgent" "relayTls" "enabled" true (.Values.craft | default dict))) "false" -}}true{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{- define "onyx.craftFcRelayTls.values" -}}
+{{- toYaml (dig "hostAgent" "relayTls" dict (.Values.craft | default dict)) -}}
+{{- end }}
+
+{{- define "onyx.craftFcRelayTls.port" -}}
+{{- (include "onyx.craftFcRelayTls.values" . | fromYaml).port | default 8443 | int -}}
+{{- end }}
+
+{{/* "true" when the customer brings the relay certificates. */}}
+{{- define "onyx.craftFcRelayTls.existing" -}}
+{{- $r := include "onyx.craftFcRelayTls.values" . | fromYaml -}}
+{{- if ne (empty $r.existingSecret) (empty $r.proxyExistingSecret) -}}
+{{- fail "set both craft.hostAgent.relayTls.existingSecret and craft.hostAgent.relayTls.proxyExistingSecret, or neither (the chart then makes the certificates)" -}}
+{{- end -}}
+{{- if $r.existingSecret -}}true{{- end -}}
+{{- end }}
+
+{{/* Agent namespace: the relay client certificate and the proxy CA. */}}
+{{- define "onyx.craftFcRelayTls.relaySecretName" -}}
+{{- $r := include "onyx.craftFcRelayTls.values" . | fromYaml -}}
+{{- $r.existingSecret | default (printf "%s-relay-tls" (include "onyx.resourceName" (list . "craft-fc-host-agent"))) -}}
+{{- end }}
+
+{{/* Release namespace: the proxy certificate and the relay CA. */}}
+{{- define "onyx.craftFcRelayTls.proxySecretName" -}}
+{{- $r := include "onyx.craftFcRelayTls.values" . | fromYaml -}}
+{{- $r.proxyExistingSecret | default (printf "%s-relay-tls" (include "onyx.resourceName" (list . "sandbox-proxy"))) -}}
+{{- end }}
+
+{{- define "onyx.craftFcRelayTls.serverName" -}}
+{{- (include "onyx.craftFcRelayTls.values" . | fromYaml).serverName | default (include "onyx.sandboxProxyHost" .) -}}
+{{- end }}
+
+{{/* DNS names of the chart-made proxy certificate. */}}
+{{- define "onyx.craftFcRelayTls.proxyNames" -}}
+{{- $svc := include "onyx.resourceName" (list . "sandbox-proxy") -}}
+{{- toYaml (uniq (list (include "onyx.craftFcRelayTls.serverName" .) (printf "%s.%s.svc" $svc .Release.Namespace) (include "onyx.serviceFqdn" (list . $svc)))) -}}
+{{- end }}
+
+{{- define "onyx.craftFcRelayTls.clientName" -}}
+{{- printf "%s.%s.svc" (include "onyx.resourceName" (list . "craft-fc-relay")) (include "onyx.craftHostAgentNamespace" .) -}}
+{{- end }}
+
+{{/* SANs the proxy accepts. Chart-made: only the relay certificate name. */}}
+{{- define "onyx.craftFcRelayTls.allowedSans" -}}
+{{- $sans := (include "onyx.craftFcRelayTls.values" . | fromYaml).clientAllowedSans -}}
+{{- if and (not $sans) (not (include "onyx.craftFcRelayTls.existing" .)) -}}
+{{- $sans = include "onyx.craftFcRelayTls.clientName" . -}}
+{{- end -}}
+{{- $sans -}}
+{{- end }}
+
+{{/*
+The stored chart-made relay set as YAML when it can be reused: both Secrets
+exist with the same CA, the names are the same, and renewal is not due.
+Else "" and craft-fc-relay-tls.yaml makes a new set.
+*/}}
+{{- define "onyx.craftFcRelayTls.namesKey" -}}
+{{- join "," (concat (include "onyx.craftFcRelayTls.proxyNames" . | fromYamlArray) (list (include "onyx.craftFcRelayTls.clientName" .))) -}}
+{{- end }}
+
+{{- define "onyx.craftFcRelayTls.stored" -}}
+{{- $old := lookup "v1" "Secret" .Release.Namespace (include "onyx.craftFcRelayTls.proxySecretName" .) | default dict -}}
+{{- $oldRelay := lookup "v1" "Secret" (include "onyx.craftHostAgentNamespace" .) (include "onyx.craftFcRelayTls.relaySecretName" .) | default dict -}}
+{{- $proxy := $old.data | default dict -}}
+{{- $relay := $oldRelay.data | default dict -}}
+{{- $annotations := dig "metadata" "annotations" dict $old -}}
+{{- $renewAfter := index $annotations "onyx.app/craft-fc-relay-cert-renew-after" | default "0" | int64 -}}
+{{- if and (index $proxy "ca.crt") (index $proxy "tls.crt") (index $proxy "tls.key") (index $relay "tls.crt") (index $relay "tls.key") (eq (index $proxy "ca.crt") (index $relay "ca.crt" | default "")) (eq (index $annotations "onyx.app/craft-fc-relay-names" | default "") (include "onyx.craftFcRelayTls.namesKey" .)) (lt (now | unixEpoch | int64) $renewAfter) -}}
+{{- toYaml (dict "proxy" $proxy "relay" $relay "renewAfter" (toString $renewAfter) "revision" (index $annotations "onyx.app/craft-fc-relay-cert-revision" | default "0")) -}}
+{{- end -}}
+{{- end }}
+
+{{/* NetworkPolicy peer: the host agent pods in their namespace. */}}
+{{- define "onyx.craftFcRelayTls.agentPeer" -}}
+namespaceSelector:
+  matchLabels:
+    kubernetes.io/metadata.name: {{ include "onyx.craftHostAgentNamespace" . }}
+podSelector:
+  matchLabels:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+{{- end }}
+
+{{/* sandbox-proxy pod annotation: a new chart-made relay set restarts the proxy, which loads its certificate once. */}}
+{{- define "onyx.craftFcRelayTls.podAnnotations" -}}
+{{- if and (include "onyx.craftFcRelayTls.enabled" .) (not (include "onyx.craftFcRelayTls.existing" .)) -}}
+{{- $stored := include "onyx.craftFcRelayTls.stored" . | fromYaml -}}
+onyx.app/craft-fc-relay-cert-revision: {{ (get $stored "revision" | default .Release.Revision) | toString | quote }}
+{{- end -}}
+{{- end }}
+
 {{- define "onyx.craftFcAgentClient.env" -}}
 {{- if include "onyx.craftFcAgentClient.secretName" . -}}
 - name: SANDBOX_FC_AGENT_CLIENT_CERT_PATH

@@ -72,6 +72,10 @@ type flags struct {
 	logLevel       string
 	nodeID         string
 	egressProxy    string
+	egressTLSCA    string
+	egressTLSCert  string
+	egressTLSKey   string
+	egressTLSName  string
 	apiServerURL   string
 	stateReport    time.Duration
 	endedRetention time.Duration
@@ -141,6 +145,10 @@ func main() {
 	flag.StringVar(&f.logLevel, "firecracker-log-level", "Warning", "Firecracker log level")
 	flag.StringVar(&f.nodeID, "node-id", os.Getenv("NODE_NAME"), "node name in the signed egress identity (default $NODE_NAME)")
 	flag.StringVar(&f.egressProxy, "egress-proxy", "", "sandbox-proxy relay listener host:port; empty turns VM egress off")
+	flag.StringVar(&f.egressTLSCA, "egress-proxy-tls-ca", "", "CA file (PEM) of the sandbox-proxy certificate; with --egress-proxy-tls-cert and -key, every relay connection uses mTLS and fails if the handshake fails")
+	flag.StringVar(&f.egressTLSCert, "egress-proxy-tls-cert", "", "relay client certificate file (PEM) for the sandbox-proxy mTLS port")
+	flag.StringVar(&f.egressTLSKey, "egress-proxy-tls-key", "", "relay client key file (PEM) for the sandbox-proxy mTLS port")
+	flag.StringVar(&f.egressTLSName, "egress-proxy-tls-server-name", "", "DNS name to check in the sandbox-proxy certificate (default: the --egress-proxy host)")
 	flag.StringVar(&f.apiServerURL, "api-server-url", "", "api_server URL for the node key registration (needs $SANDBOX_NODE_REGISTRATION_SECRET)")
 	flag.DurationVar(&f.stateReport, "state-report-interval", nodereport.DefaultInterval, "how often the agent sends its VM state to --api-server-url, signed with the node key (0 = off)")
 	flag.DurationVar(&f.endedRetention, "ended-retention", agent.DefaultEndedRetention, "how long each state report lists a VM that exited or stopped (0 = not listed)")
@@ -706,9 +714,16 @@ func (p pushers) leave(taints func() []string, refresh func(context.Context), lo
 // Manager. Its pushers keep the key registered with the api_server and send
 // the node state reports.
 func setupEgress(f flags, m *agent.Manager, log *slog.Logger) (pushers, error) {
+	upTLS, err := egressTLS(f)
+	if err != nil {
+		return pushers{}, err
+	}
 	if f.egressProxy == "" {
 		log.Warn("no --egress-proxy: VMs have no egress")
 		return pushers{}, nil
+	}
+	if upTLS == nil {
+		log.Warn("no --egress-proxy-tls-*: the relay sends signed tokens to the proxy in plain TCP")
 	}
 	if f.nodeID == "" {
 		return pushers{}, errors.New("--egress-proxy needs --node-id (or $NODE_NAME)")
@@ -726,7 +741,7 @@ func setupEgress(f flags, m *agent.Manager, log *slog.Logger) (pushers, error) {
 	}
 	signer := relay.NewSigner(f.nodeID, kid, key)
 	m.UseEgress(&relay.AgentEgress{Relay: &relay.Relay{
-		Signer: signer, Upstream: f.egressProxy, IdleTimeout: f.relayIdle, MaxConns: f.relayMaxConns, Log: log,
+		Signer: signer, Upstream: f.egressProxy, TLS: upTLS, IdleTimeout: f.relayIdle, MaxConns: f.relayMaxConns, Log: log,
 	}})
 	if f.apiServerURL == "" {
 		log.Warn("no --api-server-url: the node signing key is not registered, so the proxy rejects VM egress")
@@ -910,6 +925,31 @@ func checkRanges(f flags) error {
 		return fmt.Errorf("--scale-down-guard-grace %v must be 0 or more", f.guardGrace)
 	}
 	return nil
+}
+
+// egressTLS returns the relay → proxy mTLS setup, or nil when no
+// --egress-proxy-tls-* flag is set. A partial or unloadable setup is an
+// error, so the agent never starts with plain TCP by mistake.
+func egressTLS(f flags) (*relay.UpstreamTLS, error) {
+	if f.egressTLSCA == "" && f.egressTLSCert == "" && f.egressTLSKey == "" && f.egressTLSName == "" {
+		return nil, nil
+	}
+	if f.egressProxy == "" {
+		return nil, errors.New("--egress-proxy-tls-* flags need --egress-proxy")
+	}
+	name := f.egressTLSName
+	if name == "" {
+		host, _, err := net.SplitHostPort(f.egressProxy)
+		if err != nil {
+			return nil, fmt.Errorf("--egress-proxy %q: %w", f.egressProxy, err)
+		}
+		name = host
+	}
+	u := &relay.UpstreamTLS{CAFile: f.egressTLSCA, CertFile: f.egressTLSCert, KeyFile: f.egressTLSKey, ServerName: name}
+	if err := u.Check(); err != nil {
+		return nil, fmt.Errorf("--egress-proxy-tls-*: %w", err)
+	}
+	return u, nil
 }
 
 // checkListen rejects a TCP listener without its TLS files, TLS flags

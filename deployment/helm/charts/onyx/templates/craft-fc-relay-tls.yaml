@@ -1,0 +1,67 @@
+{{/*
+Chart-made certificates for the relay → sandbox-proxy mTLS hop
+(craft.hostAgent.relayTls, helpers onyx.craftFcRelayTls.*). One relay CA
+signs the proxy certificate (DNS names: onyx.craftFcRelayTls.proxyNames) and
+the relay client certificate (onyx.craftFcRelayTls.clientName). The set is
+reused on upgrade (lookup) while the names stay the same and renewal is not
+due. A new set changes the sandbox-proxy pod annotation, so the proxy
+restarts; the agents reload the files at their next relay connection.
+*/}}
+{{- if and (include "onyx.craftFcRelayTls.enabled" .) (not (include "onyx.craftFcRelayTls.existing" .)) }}
+{{- $names := include "onyx.craftFcRelayTls.proxyNames" . | fromYamlArray }}
+{{- $stored := include "onyx.craftFcRelayTls.stored" . | fromYaml }}
+{{- $proxyData := $stored.proxy }}
+{{- $relayData := $stored.relay }}
+{{- $renewAfter := $stored.renewAfter }}
+{{- $revision := $stored.revision }}
+{{- if not $stored }}
+{{- $ips := list }}
+{{- $dns := list }}
+{{- range $names }}
+{{- if regexMatch "^[0-9.]+$|:" . }}
+{{- $ips = append $ips . }}
+{{- else }}
+{{- $dns = append $dns . }}
+{{- end }}
+{{- end }}
+{{- $clientName := include "onyx.craftFcRelayTls.clientName" . }}
+{{- $ca := genCA (printf "%s-craft-fc-relay-ca" (include "onyx.fullname" .)) 3650 }}
+{{- $proxy := genSignedCert (first $names) $ips $dns 3650 $ca }}
+{{- $relay := genSignedCert $clientName nil (list $clientName) 3650 $ca }}
+{{- $proxyData = dict "ca.crt" ($ca.Cert | b64enc) "tls.crt" ($proxy.Cert | b64enc) "tls.key" ($proxy.Key | b64enc) }}
+{{- $relayData = dict "ca.crt" ($ca.Cert | b64enc) "tls.crt" ($relay.Cert | b64enc) "tls.key" ($relay.Key | b64enc) }}
+{{- $renewAfter = toString (add (now | unixEpoch | int64) (mul 3620 86400)) }}
+{{- $revision = toString .Release.Revision }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "onyx.craftFcRelayTls.proxySecretName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-proxy
+  annotations:
+    onyx.app/craft-fc-relay-names: {{ include "onyx.craftFcRelayTls.namesKey" . | quote }}
+    onyx.app/craft-fc-relay-cert-renew-after: {{ $renewAfter | quote }}
+    onyx.app/craft-fc-relay-cert-revision: {{ $revision | quote }}
+type: kubernetes.io/tls
+data:
+  ca.crt: {{ index $proxyData "ca.crt" }}
+  tls.crt: {{ index $proxyData "tls.crt" }}
+  tls.key: {{ index $proxyData "tls.key" }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "onyx.craftFcRelayTls.relaySecretName" . }}
+  namespace: {{ include "onyx.craftHostAgentNamespace" . }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+type: kubernetes.io/tls
+data:
+  ca.crt: {{ index $relayData "ca.crt" }}
+  tls.crt: {{ index $relayData "tls.crt" }}
+  tls.key: {{ index $relayData "tls.key" }}
+{{- end }}
