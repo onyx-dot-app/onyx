@@ -75,6 +75,7 @@ describe("useAuthErrors", () => {
           type: PacketType.USER_MESSAGE,
           id: "accepted",
           message: "Try again",
+          mentions: [],
         },
       },
       ...authError(2, "custom__7__get_user", "Get user", 7),
@@ -107,6 +108,7 @@ describe("useAuthErrors", () => {
           type: PacketType.USER_MESSAGE,
           id: "accepted",
           message: "Try again",
+          mentions: [],
         },
       },
       ...authError(2, "custom__7__get_user", "Get user", 7)

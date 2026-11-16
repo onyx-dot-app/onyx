@@ -62,6 +62,7 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.auth.schemas import UserRole
+from onyx.chat.mention_models import Mention, PickedSkillMessage, RecordedMention
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
@@ -3609,6 +3610,79 @@ class ChatResponseCheckpoint(Base):
         BigInteger, default=0, server_default="0"
     )
     state: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB)
+    # The foreground child runs that the parked run waits for, by response ID,
+    # so finding resumable runs reads no state.
+    child_run_ids: Mapped[list[int]] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=False, default=list, server_default="{}"
+    )
+    # The file IDs of the parked programs' dumps that this checkpoint saved.
+    # They are deleted when the checkpoint ends or a new one replaces it.
+    dump_file_ids: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
+    )
+
+
+class ApprovalRequest(Base):
+    """An action in a chat that waits for the user's decision.
+
+    The ID is the waiter's request ID, such as a run's input request ID.
+    ``decision IS NULL`` is pending. A ``SESSION_GRANT`` approval also approves
+    later requests of the same action in the chat session.
+    """
+
+    __tablename__ = "approval_request"
+    __table_args__ = (
+        Index(
+            "ix_approval_request_session_action",
+            "chat_session_id",
+            "gated_app_id",
+            "action_id",
+        ),
+        Index("ix_approval_request_chat_message", "chat_message_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The response that waits for the decision.
+    chat_message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=False
+    )
+    gated_app_id: Mapped[int] = mapped_column(
+        ForeignKey("gated_app.id", ondelete="CASCADE"), nullable=False
+    )
+    # The action that the request asks to run, such as an MCP tool name. It
+    # keys the action policy and session grants.
+    action_id: Mapped[str] = mapped_column(String, nullable=False)
+    # The call of the response's step whose card shows the request: the call
+    # that waits, or the call whose tool, such as a program, made it. Places
+    # the request's record when the saved response is shown again.
+    tool_call_id: Mapped[str] = mapped_column(String, nullable=False)
+    # The name and display name of the tool of the call that waits, for the
+    # request's record and the result the model sees.
+    tool_name: Mapped[str] = mapped_column(String, nullable=False)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    # The arguments of the call that waits, as its card shows them.
+    arguments: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    decision: Mapped[ApprovalDecision | None] = mapped_column(
+        Enum(ApprovalDecision, native_enum=False, name="approvaldecision"),
+        nullable=True,
+    )
+    decided_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    decided_via: Mapped[ApprovalDecidedVia | None] = mapped_column(
+        Enum(ApprovalDecidedVia, native_enum=False, name="approvaldecidedvia"),
+        nullable=True,
+    )
 
 
 class ChatMessage(Base):
@@ -3698,6 +3772,22 @@ class ChatMessage(Base):
     files: Mapped[list[FileDescriptor] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # What the user tagged in the question, as the turn accepted it. A skill
+    # keeps the version the user ran.
+    mentions: Mapped[list[RecordedMention]] = mapped_column(
+        PydanticListType(RecordedMention),
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    # The `<skill>` message of each picked skill, which follows the question
+    # in history; empty in a row that keeps no conversation content. Only
+    # the history the model gets loads it.
+    skill_messages: Mapped[list[PickedSkillMessage]] = mapped_column(
+        PydanticListType(PickedSkillMessage),
+        default=list,
+        server_default=text("'[]'::jsonb"),
+        deferred=True,
+    )
 
     # Maps the citation numbers to a SearchDoc id
     citations: Mapped[dict[int, int] | None] = mapped_column(
@@ -3775,13 +3865,21 @@ class ChatMessage(Base):
     )
 
 
-class AcceptedChatInput(BaseModel):
-    """A message a model generation accepted, with its provenance."""
+class AcceptedChatInputRecord(BaseModel):
+    """A message a model generation accepted, with its provenance and the
+    records of what a user message picked."""
 
     id: str
     source: InputSource
     source_run_id: str | None = None
     content: str
+    mentions: list[RecordedMention] = Field(default_factory=list)
+
+
+class AcceptedChatInput(AcceptedChatInputRecord):
+    """An accepted message as stored, with the `<skill>` message of each pick."""
+
+    skill_messages: list[PickedSkillMessage] = Field(default_factory=list)
 
 
 class ChatResponseItem(Base):
@@ -3910,6 +4008,11 @@ class ChatInput(Base):
     # The model the composer showed when a queued or interrupting message was sent.
     llm_override: Mapped[LLMOverride | None] = mapped_column(
         PydanticType(LLMOverride), nullable=True
+    )
+    # What the user tagged in a queued or interrupting message; its turn
+    # resolves the mentions when it accepts the message.
+    mentions: Mapped[list[Mention]] = mapped_column(
+        PydanticListType(Mention), default=list, server_default=text("'[]'::jsonb")
     )
     max_steps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_timeout_s: Mapped[float | None] = mapped_column(Float, nullable=True)

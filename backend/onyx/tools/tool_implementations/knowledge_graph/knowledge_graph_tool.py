@@ -3,13 +3,11 @@ from sqlalchemy.orm import Session
 from onyx.agents.tools import ToolInvocation
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import Tool
-from onyx.tools.models import CodeModeExposure, ToolContext
+from onyx.tools.interface import Tool, tool_definition_from_arguments
+from onyx.tools.models import CodeModeExposure, KnowledgeGraphArguments, ToolContext
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-QUERY_FIELD = "query"
 
 
 class KnowledgeGraphTool(Tool):
@@ -52,21 +50,8 @@ class KnowledgeGraphTool(Tool):
         return kg_configs.KG_ENABLED and kg_configs.KG_EXPOSED
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=self.description,
-            strict=True,
-            parameters={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    QUERY_FIELD: {
-                        "type": "string",
-                        "description": "What to search for",
-                    },
-                },
-                "required": [QUERY_FIELD],
-            },
+        return tool_definition_from_arguments(
+            self.name, self.description, KnowledgeGraphArguments, strict=True
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:

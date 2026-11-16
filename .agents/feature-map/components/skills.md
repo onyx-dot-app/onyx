@@ -1,6 +1,6 @@
 # Skills
 
-> Agent Skills for Craft: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, where the coding agent reads them. This component owns skill sharing, installation policy, per-user rendering and the hashed push; skills do not reach the chat product.
+> Agent Skills: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, and that chat agents list and read as custom skills. This component owns skill sharing, installation policy, per-user rendering, the hashed push and the chat skill tools.
 
 **Verified against:** `73e0ae3c31` (2026-10-28)
 **Edition:** CE. Group shares need the EE group tables.
@@ -46,6 +46,53 @@
 - **Access at import.** GitHub import and multiple-ZIP upload accept one set
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.
+- **In chat**, the agent sees the names and descriptions of the user's
+  enabled custom skills. In this catalog, a skill's
+  `metadata.short-description` replaces its description when it has one;
+  `skills_list` shows the full description. The agent reads a skill's
+  SKILL.md with `skills_read` when the task matches. Deep Research and its
+  research agents get the same catalog and both tools.
+  A skill the user mentions in a message adds its SKILL.md, frontmatter
+  included, right after the message, as it was read when the message was
+  accepted, at the version the user ran. A SKILL.md over 8,000 bytes is cut
+  there, with a note that tells the model to continue with `skills_read`. History keeps that text, so a later edit, a deletion or lost access
+  does not change what earlier turns see. A skill that cannot be read when
+  the message is accepted is not applied. Built-in skills
+  and skills of an external app do not reach chat, because they need the
+  Craft sandbox. Chat cannot open a skill's other files or run its scripts.
+  In the chat input, `@` at the start of a word opens a picker of these
+  skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
+  filtered by name prefix without case. A row shows the skill's short
+  description when it has one, else its description. A skill change in the
+  library, the skill editor, a plugin's Skills tab or a Craft app connection
+  fetches the list again (`lib/skills/cache.ts:refreshSkillLists`). Other
+  changes, such as one from another tab or user, show after the chat input
+  gains focus, unless a fetch of the list started in the last minute; a
+  window focus does not fetch the list. A message mentions at most 20 skills: at that
+  limit, the picker offers only the skills already picked, and each request
+  sends only the first 20 (`lib/chat/mentions.ts:requestMentions`). The query
+  is the whole word, from the `@` through the caret to the next whitespace.
+  Only typing or deleting opens the picker or changes its query. A paste, a
+  drop and any other caret move, such as a click or an arrow key, close it,
+  and a word that matches no skill closes it. Esc hides it until the user deletes the
+  `@`. A pick replaces the whole word with a mention tile that reads `@name`.
+  Craft's `/` pickers, in the input bar and in the scheduled task prompt,
+  follow the same rules and match a substring
+  (`lib/skills/hooks.ts:useEntryPicker`). The tiles are the mentions: only a pick
+  mentions a skill, so typed or pasted `@name` text does not. Removing a tile
+  by delete or cut removes its mention, and undo brings it back. A draft,
+  a failed send's restore and voice input keep each tile where it was, also
+  against other text such as `(` or a word typed after it, and leave typed
+  `@name` text as text. Voice auto-send sends only the mentions whose
+  `@name` is still in the sent text. A message with picks that the user sends while a
+  response runs carries its mentions like any pending input: a send applies
+  them in the running response when the response accepts the message, and a
+  queued or interrupting message applies them in its own turn. While the picker is open, the `/` prompt shortcuts stay closed. In the owner's chat
+  view, a sent question shows each skill it mentioned as a chip, first from
+  the picks and then from the recorded mentions. A message accepted during a
+  response shows the mentions of its `user_message` packet, live and after
+  reload. A shared view of the chat
+  gets no mentions, and Craft shows plain text.
 - **In a running Craft session**, a skill change does not reach the agent at
   once. The session shows a stale-skills notice with a reload action. The
   reload restarts the agent's runtime with the current skills.
@@ -79,8 +126,8 @@ Neighbours own the rest:
   injection at call time. The sandbox proxy enforces policy, not the skill
   text.
 - [[file-store-and-user-files]]: stores custom bundles as blobs.
-- The chat product does not read skills. The chat loop has no reference to
-  them; a "skill" in a chat bug report is something else.
+- [[context-assembly]]: where the chat skills catalog and mentioned skills
+  go in the prompt. [[tools-framework]]: how the chat skill tools run.
 
 ---
 
@@ -146,6 +193,113 @@ and triggers the same reload.
 `skills/push.py:_render_template`. `company-search` lists the user's connected
 sources. External-app skills fill app values, cloud-only blocks, and a list of
 actions the admin denied (`skills/rendering.py:render_external_app_skill`).
+**Chat.** `db/skill.py:list_chat_skills` is the one definition of the skills
+chat gets: one query over the same predicates as
+`list_runtime_skills_for_user` (`_where_user_runs_skill`: visible, enabled,
+and a version the user runs that is not invalid), less built-in skills and
+skills of an external app, with the name, description,
+`metadata.short-description` and id of the version the user runs. Anonymous
+users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
+turn's picks and reservation, each agent reads it once when it is built (for
+its catalog), each skill tool call reads it, and so does each accepted
+mid-run message with picks. The `@` picker reads it through
+`server/features/skill/api.py:list_chat_skills_for_current_user`, which
+returns `description` and `short_description`. `skills/models.py:ChatSkill`
+makes each description one line (runs of whitespace become one space), and a
+blank short description counts as none. Only the catalog and the picker
+prefer the short description; `skills_list` shows the full one.
+`skills/chat.py:render_skills_catalog` renders the catalog with Codex's
+limits: 2% of the context window in tokens, where each line, newline
+included, costs one token per 4 UTF-8 bytes, rounded up; 1,024 characters for
+one description. If every line fits, descriptions are whole; else description
+characters go to each skill in turn. Only the 1,024-character cut adds `...`;
+a cut to fit the budget adds no ellipsis. If even the names do not fit, the
+catalog keeps each name that still fits, in order, and ends with a line that
+counts the omitted skills; if not even that line fits, there is no catalog. `tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`
+is the one builder of the catalog message for chat, Deep Research and
+research agents. A pick is structured input,
+as in Codex's mentions: a mention (`chat/mention_models.py`) is a
+discriminated union on `type`, and a skill (`SkillMention`, `{type: "skill",
+name}`) is its only kind. Later kinds, such as plugins and MCP servers, join
+the union; the request rejects a kind it does not know. The client sends the
+mentions in `SendMessageRequest.mentions`, or in
+`PendingChatMessageRequest.mentions`, which `ChatInput.mentions` keeps for
+the pending message. The server never parses message text. A message's
+picks are accepted once, by `skills/chat.py:accept_picked_skills`, against a
+skill list: it resolves each skill in that list and reads the SKILL.md of all
+picks in one batched read with the user's current access
+(`skills/content.py:read_versions_skill_md`). The read gives the whole
+SKILL.md, frontmatter included, as Codex does. Each text over 8,000 bytes is
+cut there, with a note that tells the model to continue with `skills_read`.
+A skill that is not in the list or whose SKILL.md cannot be read is not
+recorded. The result (`AcceptedPicks`) keeps two lists: the records
+(`RecordedSkillMention`: type, name and version id) and, for each record,
+the `<skill>` message it gives the model (`PickedSkillMessage`: version id,
+content and the token count taken at acceptance).
+`prepare_chat_turn` accepts a question's picks against the turn's list,
+after the checks that can reject the question (the Deep Research and
+incognito checks), and stores the records in `chat_message.mentions` and the
+messages in the deferred column `chat_message.skill_messages`;
+regeneration reuses them. Only `db/chat.py:load_message_branch`, the branch
+load for model history, loads `skill_messages`. Chat loads for display,
+shared views and exports do not. A row of a content-free session stores no
+skill messages; temporary history holds them. A send into a running response
+is accepted when the run accepts it
+(`chat/run_store.py:ChatRunStore.receive_inputs`), against the user's
+current chat skills, and its picks apply in that response. The accepted input (`ChatResponseItem.inputs`,
+`AcceptedChatInput`) stores its `mentions` and `skill_messages`. Loading a
+chat for display reads this column, so it parses the skill text of sends with
+picks and drops it; that is accepted because such sends are rare. EE query
+history returns its own type (`AcceptedInputSnapshot`) with the records only. API
+fields and packets carry only the records, so no client gets the text. The
+turn's ID packet and the message detail carry the records
+(`ChatTurnSetup.mentions`), and the `user_message` packet of an accepted
+send carries its records. A shared view empties both.
+`AgentMessage` passes them to `HumanMessageBubble`, the chip path of a sent
+question.
+The composer (`sections/input/AppInputBar.tsx`) holds the mentions as
+mention tiles in its input (`hooks/useContentEditable.ts`), so undo, cut and
+code that replaces the text change them with the text. A send reads the text
+and the tiles as one `lib/chat/types.ts:ComposedMessage`: one mention per
+tile, each with `index`, where its `@name` starts in the text
+(`lib/contentEditable.ts:readContent`). The server gets each mention once,
+without `index`, and at most 20 of them
+(`lib/chat/mentions.ts:requestMentions`). The draft, a failed
+send's restore and voice transcription keep the indexes, so
+`useContentEditable`'s `setMessage` puts each tile back at its index. Only
+server data has no index: a withdrawn queued message, an edited question and
+the chips of a sent question place each recorded mention on the first
+`@name` of its skill that no other tile holds, longer names first
+(`lib/chat/mentions.ts:placeMentions`). Older drafts, plain text or mentions
+without an index, restore by that rule too. The `@` menu uses
+the Craft picker's `PickerSections`: chat fills only `skills`, and a new kind
+adds its section and maps its picker entry to a mention. The picker opens at
+a word start (`lib/skills/picker.ts:detectPickerTrigger`), but a tile can sit
+against any text. An edit sends the recorded mentions that its text still
+has, and a resend or regeneration sends the recorded mentions. The agent preview passes its skill mentions to
+the new chat in the `skills` URL parameter. Each stored skill message
+becomes a user-role `<skill>` message right after the message that picked
+it: `chat/chat_utils.py:convert_chat_history` for a question and
+`chat/models.py:accepted_input_messages` for an accepted send
+([[context-assembly]]). Old turns are never read again, so a deleted or
+revoked skill keeps its text in old turns, as in Codex. The read
+(`db/plugin.py:get_visible_versions_skill_md`) returns text only for versions
+of skills the user can see at acceptance: the pinned version decides the
+content, and current access decides whether it is read.
+`chat/execution.py:create_chat_agent` adds `skills_list` and `skills_read`
+(`tools/tool_implementations/skills/skill_tools.py`) when the user has a chat
+skill when the turn starts (`ChatTurnSetup.has_chat_skills`), whatever the
+agent's tool selection; restored and child agents get them with the other
+configured tools. The Deep Research orchestrator binds both in its research
+phase, and its research agents bind both. The tools hold only the user: each
+call reads the user's current chat skills (`list_chat_skills`), and
+`skills_read` reads the SKILL.md, frontmatter included, of the version the
+user runs now, with the same access check, in parts of up to 32,000
+characters that a `start_char` offset continues. The catalog is a snapshot:
+each agent loads the user's chat skills once, when it is built
+(`tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`), and renders it for its own
+model's window, so the catalog stays the same across the agent's steps.
+
 The library preview of an external-app skill calls the same renderer
 (`server/features/skill/response_helpers.py:skill_preview_response`). The
 `company-search` preview shows the unrendered template.
@@ -471,6 +625,22 @@ The library preview of an external-app skill calls the same renderer
     `created_at`, and the admin approves or denies from a view of the version
     preview. The web hook `usePublishAction` mirrors the setting for the
     share dialog and the Versions tab.
+24. `chat-skills-one-definition` **Chat's skills have one definition and
+    mentions are records.** Change which skills chat gets only in
+    `db/skill.py:list_chat_skills`; the turn, the tools and the `@` picker all
+    read it, and the web client does not decide which skills chat gets (the
+    composer only limits a message to 20 picks). A skill
+    mention is accepted only once, when its message is accepted
+    (`skills/chat.py:accept_picked_skills`), and stored as a record (type,
+    name, version id) and a `<skill>` message with the cut SKILL.md and its
+    token count (`chat_message.mentions` and the deferred
+    `chat_message.skill_messages`, or the accepted input). Never parse message text for mentions, and do not resolve or read
+    stored mentions again against the user's current skills, or old turns
+    change their prompt and chips. API fields carry the record without the
+    text. Load `skill_messages` only for model history
+    (`db/chat.py:load_message_branch`). A content-free incognito row keeps the
+    record and no skill message
+    ([[chat-persistence#incognito-decision-per-field]]).
 
 ---
 

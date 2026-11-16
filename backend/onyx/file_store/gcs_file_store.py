@@ -72,6 +72,11 @@ _SIGN_BLOB_HELP = (
 class GCSBackedFileStore(PresignableFileStore):
     """Google Cloud Storage backed file store with ADC/Workload Identity support."""
 
+    def is_transient_error(self, error: Exception) -> bool:
+        from google.api_core.retry import if_transient_error
+
+        return if_transient_error(error)
+
     def __init__(
         self,
         bucket_name: str,

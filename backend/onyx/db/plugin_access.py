@@ -225,10 +225,11 @@ def version_user_runs(plugin: type[Plugin], user_id: UserIdExpr) -> ColumnElemen
 
 
 def frontmatter_in_version(
-    key: str, version_id: ColumnElement[UUID]
+    key: str | tuple[str, ...], version_id: ColumnElement[UUID]
 ) -> ColumnElement[str]:
-    """A frontmatter value of the version's first skill, by path. A skill
-    plugin has one skill, at the bundle root."""
+    """A frontmatter value of the version's first skill, by path. A key
+    tuple reads a nested value. A skill plugin has one skill, at the bundle
+    root."""
     return (
         select(PluginSkill.frontmatter[key].astext)
         .where(PluginSkill.plugin_version_id == version_id)

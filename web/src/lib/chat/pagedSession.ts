@@ -2,12 +2,18 @@ import type { BackendChatSession, Message } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { readWaitingToolApprovals } from "@/lib/chat/toolApprovals";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 
 /** Messages of the current branch that one page of a chat holds. */
 export const CHAT_PAGE_SIZE = 20;
 
-/** Keep loaded history when the latest page attaches to the selected branch. */
+/**
+ * Keep loaded history when the latest page attaches to the selected branch.
+ * The latest page holds every reply with a waiting approval card, so a loaded
+ * older reply outside it that still shows one is stale; the older history is
+ * then dropped and loads again on scroll.
+ */
 export function mergeLatestChatPage(
   page: BackendChatSession,
   current: ChatHistoryPage
@@ -18,7 +24,11 @@ export function mergeLatestChatPage(
   const localChain = getLatestMessageChain(local);
   if (
     first?.parentNodeId == null ||
-    !localChain.some((message) => message.messageId === first.parentNodeId)
+    !localChain.some((message) => message.messageId === first.parentNodeId) ||
+    readWaitingToolApprovals(local).some(
+      ({ response }) =>
+        response.messageId != null && !saved.has(response.messageId)
+    )
   ) {
     return {
       messageTree: saved,
@@ -173,6 +183,7 @@ export async function reloadLatestChatPage(sessionId: string): Promise<void> {
     );
     store.updateSessionData(sessionId, {
       hasOlderMessages: page.has_older_messages ?? false,
+      approvalsVersion: page.approvals_version,
     });
   } catch (error) {
     console.error("Failed to reload the chat", { sessionId, error });

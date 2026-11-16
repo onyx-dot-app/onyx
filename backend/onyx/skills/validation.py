@@ -20,7 +20,7 @@ from onyx.skills.bundle import (
     read_bundle_file,
 )
 from onyx.skills.metadata import parse_skill_document
-from onyx.skills.models import SKILL_NAME_PATTERN
+from onyx.skills.models import SKILL_NAME_MAX_LENGTH, SKILL_NAME_PATTERN
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ def validate_stored_custom_skill(
 ) -> SkillValidationResult:
     """Validate the stored bundle of one plugin version. ``name`` is the name
     in the version's frontmatter."""
-    if len(name) > 64 or not SKILL_NAME_PATTERN.fullmatch(name):
+    if len(name) > SKILL_NAME_MAX_LENGTH or not SKILL_NAME_PATTERN.fullmatch(name):
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,

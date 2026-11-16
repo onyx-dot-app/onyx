@@ -8,6 +8,7 @@ import {
   within,
 } from "@tests/setup/test-utils";
 import SkillsPage from "@/views/SkillsPage";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
 
 const mockSetSkillEnabled = jest.fn();
@@ -575,6 +576,7 @@ describe("SkillsPage preference toggles", () => {
         screen.queryByRole("switch", { name: "invalid-skill" })
       ).not.toBeInTheDocument()
     );
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
 
   it("refreshes associated apps after deletion without masking a successful delete on refresh failure", async () => {
@@ -709,6 +711,8 @@ describe("SkillsPage preference toggles", () => {
       await mutation.promise;
     });
     await waitFor(() => expect(firstSwitch).toBeEnabled());
+    // The `@` menu in chat offers only enabled skills.
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
 
   it("does not flash an unchanged same-named skill while enabling another", async () => {
@@ -798,14 +802,7 @@ describe("SkillsPage preference toggles", () => {
     const user = setupUser();
     const updated = enabledCustomAt(0);
     mockSetSkillEnabled.mockResolvedValueOnce(updated);
-    mockRefresh
-      .mockImplementationOnce(
-        async (updater: (value: SkillsList) => SkillsList) => {
-          skillsData = updater(skillsData);
-          return skillsData;
-        }
-      )
-      .mockRejectedValueOnce(new Error("Refresh failed"));
+    mockMutate.mockRejectedValue(new Error("Refresh failed"));
     render(<SkillsPage />);
 
     await user.click(screen.getByRole("switch", { name: "first-skill" }));

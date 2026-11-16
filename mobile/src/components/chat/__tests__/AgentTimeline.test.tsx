@@ -348,5 +348,19 @@ describe("AgentTimeline", () => {
       // No search renderer is registered yet, so the branch body is empty rather than reasoning.
       expect(screen.queryByText("branch one thinking")).toBeNull();
     });
+
+    it("shows the approval wait instead of the branch tabs", () => {
+      const { turnGroups } = turnGroupsFor(parallelPackets);
+      render(
+        <AgentTimeline
+          turnGroups={turnGroups}
+          chatState={chatState}
+          awaitingApproval
+        />,
+      );
+
+      expect(screen.getByText("Waiting for your approval")).toBeTruthy();
+      expect(screen.queryByText("Web Search")).toBeNull();
+    });
   });
 });

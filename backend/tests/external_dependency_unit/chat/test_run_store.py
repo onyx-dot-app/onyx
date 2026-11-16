@@ -329,8 +329,8 @@ def spawning_root(
     )
 
 
-def never_restore(reason: str) -> Callable[[ExecutionCheckpoint], Agent]:
-    def restore(_: ExecutionCheckpoint) -> Agent:
+def never_restore(reason: str) -> Callable[[ExecutionCheckpoint, int], Agent]:
+    def restore(_: ExecutionCheckpoint, _depth: int) -> Agent:
         raise AssertionError(reason)
 
     return restore
@@ -576,7 +576,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
     if scenario == "permissions":
         tools.append(agent_tool("blocked", execute))
 
-    def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
+    def rebuild(checkpoint: ExecutionCheckpoint, _depth: int) -> Agent:
         if scenario == "permissions":
             progress = checkpoint.run_state.progress
             assert progress is not None
@@ -653,10 +653,11 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
 
             def slow_files(
                 checkpoint: ExecutionCheckpoint, *, session_id: UUID
-            ) -> None:
-                persist_checkpoint_files(checkpoint, session_id=session_id)
+            ) -> list[str]:
+                dumps = persist_checkpoint_files(checkpoint, session_id=session_id)
                 threading.Event().wait(1.5)
                 assert remote.read_run_status(run.id, "") == RunStatus.RUNNING
+                return dumps
 
             with patch(
                 "onyx.chat.run_store.persist_checkpoint_files", side_effect=slow_files
@@ -771,7 +772,7 @@ def _resume_response_in_process(session_id: str, message_id: str, run_id: str) -
     def unexpected_tool(_: ToolInvocation) -> ToolResult:
         raise RuntimeError("Recorded tools must not execute again")
 
-    def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
+    def rebuild(checkpoint: ExecutionCheckpoint, _depth: int) -> Agent:
         return fake_agent(
             answering("done"),
             agent_id=checkpoint.run_state.agent_id,
@@ -947,7 +948,6 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                     agent_id=str(branch[0]),
                     status=RunStatus.SUSPENDED,
                     progress=RunProgress(
-                        tool_configuration_digest="test-tool-configuration",
                         step_limit=2,
                         feature_state=feature.capture_state().model_dump(mode="json"),
                     ),
@@ -973,9 +973,11 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             )
             rebuilt = restore_chat_agent(
                 restored,
+                0,
                 llm=feature.llm,
                 tools=feature.configured_tools,
                 user_identity=None,
+                subagent_factory=lambda _depth: pytest.fail("No agent tools"),
             )
             assert isinstance(rebuilt, ChatAgent)
             assert [tool.name for tool in rebuilt.tools] == [
@@ -1266,7 +1268,9 @@ def test_root_start_failure_releases_reserved_response_for_retry(
 def test_resumed_child_keeps_its_original_response_tree(
     branch: tuple[UUID, int], db_session: Session, user_message: UserMessage
 ) -> None:
-    owner = store(branch)
+    # Neither store polls: a polled store resumes a parked run once no approval
+    # request of it waits, and this child waits for an answer.
+    owner = unpolled_store(branch)
     first, second = AgentCoordinator(), AgentCoordinator()
     child_ids: list[str] = []
     grandchild_ids: list[str] = []
@@ -1289,7 +1293,7 @@ def test_resumed_child_keeps_its_original_response_tree(
         ),
     ]
 
-    def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
+    def rebuild(checkpoint: ExecutionCheckpoint, _depth: int) -> Agent:
         return fake_agent(
             replies(calls(call("nested", "delegate")), text("child done")),
             agent_id=checkpoint.run_state.agent_id,
@@ -1337,7 +1341,7 @@ def test_resumed_child_keeps_its_original_response_tree(
         )
         db_session.add(sibling)
         db_session.commit()
-        remote = store(
+        remote = unpolled_store(
             (branch[0], next_response.id), visible_response_ids=[original.id]
         )
         remote.bind(second, build_agent=rebuild)
@@ -3186,6 +3190,7 @@ def test_spawn_takes_the_chat_lock_before_its_parent_response(
                 delivery=MessageDelivery.SEND,
                 target_response_id=branch[1],
                 turn_preparing=False,
+                mentions=[],
             )
             assert pending.target_response_id == branch[1]
             sending.commit()

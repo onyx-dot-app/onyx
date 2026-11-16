@@ -392,6 +392,11 @@ class ProgramStore:
         self._write_total = 0
 
     @property
+    def snapshot(self) -> StoreSnapshot:
+        """The store that the program started with."""
+        return self._snapshot
+
+    @property
     def writes(self) -> dict[str, JsonValue]:
         """The last value written to each key, None deleting it; also writes that
         do not change the store."""

@@ -85,6 +85,9 @@ from onyx.server.documents.document import router as document_router
 from onyx.server.documents.index_monitoring import router as index_monitoring_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
 from onyx.server.documents.targeted_reindex import router as targeted_reindex_router
+from onyx.server.features.action_policies.api import (
+    router as action_policies_router,
+)
 from onyx.server.features.admin_banner.api import admin_router as admin_banner_router
 from onyx.server.features.build.api import admin_router as build_admin_router
 from onyx.server.features.build.api import router as build_router
@@ -659,6 +662,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, federated_router)
     include_router_with_global_prefix_prepended(application, mcp_router)
     include_router_with_global_prefix_prepended(application, mcp_admin_router)
+    include_router_with_global_prefix_prepended(application, action_policies_router)
     include_router_with_global_prefix_prepended(application, skill_router)
 
     include_router_with_global_prefix_prepended(application, pat_router)

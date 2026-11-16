@@ -32,6 +32,7 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.chat.errors import chat_error
+from onyx.chat.mention_models import PickedSkillMessage, RecordedMention
 from onyx.chat.models import (
     ChatBranch,
     HistoryLink,
@@ -820,6 +821,7 @@ def get_chat_message_page_ids(
     db_session: Session,
     limit: int,
     before_message_id: int | None = None,
+    waiting_reply_ids: Collection[int] = (),
 ) -> tuple[set[int], bool]:
     """One page of a session's current branch, for paged loading.
 
@@ -828,6 +830,9 @@ def get_chat_message_page_ids(
     `before_message_id`. It also holds every child of those messages, so a
     branch switcher and multi-model replies have their siblings, including the
     siblings of the first message of the next, newer page.
+
+    The latest page also reaches back to the question of each of
+    `waiting_reply_ids` that is on the branch, or a reply to it.
 
     Returns the message ids and whether the branch has older messages. A
     `before_message_id` that is not on the current branch gives an empty page.
@@ -843,10 +848,12 @@ def get_chat_message_page_ids(
     ).all()
 
     latest_child_by_id: dict[int, int | None] = {}
+    parent_by_id: dict[int, int | None] = {}
     children_by_parent: dict[int, list[int]] = {}
     root_id: int | None = None
     for message_id, parent_id, latest_child_id in rows:
         latest_child_by_id[message_id] = latest_child_id
+        parent_by_id[message_id] = parent_id
         if parent_id is None:
             root_id = message_id
         else:
@@ -864,11 +871,23 @@ def get_chat_message_page_ids(
             return set(), False
         branch = branch[: branch.index(before_message_id)]
 
-    page = branch[-limit:]
+    start = max(len(branch) - limit, 0)
+    if before_message_id is None and waiting_reply_ids:
+        positions = {message_id: index for index, message_id in enumerate(branch)}
+        start = min(
+            [start]
+            + [
+                positions[message_id]
+                for reply_id in waiting_reply_ids
+                for message_id in (parent_by_id.get(reply_id), reply_id)
+                if message_id in positions
+            ]
+        )
+    page = branch[start:]
     page_ids = set(page)
     for message_id in page:
         page_ids.update(children_by_parent.get(message_id, []))
-    return page_ids, len(branch) > limit
+    return page_ids, start > 0
 
 
 def get_or_create_root_message(
@@ -1129,6 +1148,8 @@ def create_new_chat_message(
     message_type: MessageType,
     db_session: Session,
     files: list[FileDescriptor] | None = None,
+    mentions: list[RecordedMention] | None = None,
+    skill_messages: list[PickedSkillMessage] | None = None,
     error: str | None = None,
     commit: bool = True,
     reserved_message_id: int | None = None,
@@ -1146,6 +1167,8 @@ def create_new_chat_message(
         existing_message.token_count = token_count
         existing_message.message_type = message_type
         existing_message.files = files
+        existing_message.mentions = mentions or []
+        existing_message.skill_messages = skill_messages or []
         existing_message.error = error
         existing_message.reasoning_tokens = reasoning_tokens
         new_chat_message = existing_message
@@ -1159,6 +1182,8 @@ def create_new_chat_message(
             token_count=token_count,
             message_type=message_type,
             files=files,
+            mentions=mentions or [],
+            skill_messages=skill_messages or [],
             error=error,
             reasoning_tokens=reasoning_tokens,
         )
@@ -1395,6 +1420,7 @@ def translate_db_message_to_chat_message_detail(
         citations=converted_citations,
         time_sent=chat_message.time_sent,
         files=chat_message.files or [],
+        mentions=chat_message.mentions,
         error=error_info.error if error_info is not None else None,
         error_info=error_info,
         response_status=chat_message.response_status,
@@ -1619,12 +1645,32 @@ def create_chat_history_chain(
     return mainline_messages
 
 
+def reserve_stream_id(db_session: Session) -> int:
+    """A new stream ID for a stream without a new message, such as one that
+    continues a suspended response. It comes from the message ID sequence, so
+    it never equals another stream's ID, which is a message ID."""
+    stream_id = db_session.scalar(
+        select(
+            func.nextval(func.pg_get_serial_sequence(ChatMessage.__tablename__, "id"))
+        )
+    )
+    if stream_id is None:
+        raise RuntimeError("The message ID sequence returned no value")
+    return stream_id
+
+
 def load_message_branch(
     chat_session_id: UUID,
     parent_id: int | None,
     db_session: Session,
+    *,
+    any_branch: bool = False,
 ) -> tuple[list[ChatMessage], ChatMessage]:
-    """Select the requested branch before adding a user message."""
+    """Select the requested branch before adding a user message.
+
+    The parent must be on the selected branch, unless `any_branch`: then a
+    parent off it, such as the suspended response of another model of a
+    multi-model turn, brings its own ancestry."""
     history = create_chat_history_chain(
         chat_session_id, db_session, prefetch_top_two_level_tool_calls=False
     )
@@ -1638,11 +1684,30 @@ def load_message_branch(
             (index for index, message in enumerate(history) if message.id == parent_id),
             None,
         )
-        if parent_index is None:
-            raise ValueError(
-                "The new message sent is not on the latest mainline of messages"
-            )
-        history = history[: parent_index + 1]
+        if parent_index is not None:
+            history = history[: parent_index + 1]
+        else:
+            parent_message = db_session.get(ChatMessage, parent_id)
+            if (
+                not any_branch
+                or parent_message is None
+                or parent_message.chat_session_id != chat_session_id
+            ):
+                raise ValueError(
+                    "The new message sent is not on the latest mainline of messages"
+                )
+            ancestry = visible_message_ids(db_session, parent_message)[::-1]
+            by_id = {
+                message.id: message
+                for message in db_session.scalars(
+                    select(ChatMessage).where(
+                        ChatMessage.id.in_(ancestry), ChatMessage.id != root.id
+                    )
+                )
+            }
+            history = [
+                by_id[message_id] for message_id in ancestry if message_id in by_id
+            ]
         parent = history[-1]
 
     response_ids = [
@@ -1660,6 +1725,15 @@ def load_message_branch(
                 selectinload(ChatMessage.search_docs),
                 selectinload(ChatMessage.tool_calls),
             )
+        ).all()
+    # History gives the model the skill messages of picked skills, which
+    # other reads of a chat leave unloaded.
+    picking_ids = [message.id for message in history if message.mentions]
+    if picking_ids:
+        db_session.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.id.in_(picking_ids))
+            .options(load_only(ChatMessage.id, ChatMessage.skill_messages))
         ).all()
     return history, parent
 

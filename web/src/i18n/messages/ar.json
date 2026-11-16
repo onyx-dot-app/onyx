@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "منتقي المهارات"
         },
-        "empty": {
-          "text": "لا توجد مهارات مطابقة"
-        },
         "mcpServersGroup": {
           "label": "خوادم MCP"
         },
@@ -12597,6 +12594,19 @@
         "expandButton": {
           "label": "توسيع في شريط الإدخال",
           "tooltip": "استبدال هذه البطاقة بنصها الكامل مباشرة"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "إزالة {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "نص ملصق: {preview}، {meta}",
+          "removeButton": {
+            "ariaLabel": "إزالة النص الملصق"
+          }
         }
       },
       "plusMenuButton": {
@@ -12644,6 +12654,9 @@
         "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولم تعد قيد الانتظار.",
         "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار.",
         "stopSubagentsFailed": "تعذّر إيقاف الوكلاء الفرعيين."
+      },
+      "pendingToolApproval": {
+        "toast": "وافق على استدعاءات الأدوات المعلقة أو ارفضها أولاً."
       }
     },
     "mcpApiKey": {
@@ -13086,6 +13099,9 @@
           },
           "working": {
             "label": "قيد العمل"
+          },
+          "waitingForApproval": {
+            "label": "في انتظار موافقتك"
           }
         },
         "internalSearch": {
@@ -13222,6 +13238,9 @@
             "status": "جارٍ البحث في الويب"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "يريد {agent} تشغيل {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14440,6 +14459,54 @@
         "decision": "قرار",
         "vision": "رؤية"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "لا توجد بيانات."
+      },
+      "showLess": {
+        "button": "عرض أقل"
+      },
+      "showMore": {
+        "button": "عرض المزيد"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "موافقة لهذه المحادثة",
+        "tooltip": "وافق الآن وشغّل هذه الأداة دون السؤال مرة أخرى لبقية هذه المحادثة"
+      },
+      "approveOnce": {
+        "ariaLabel": "الموافقة على هذا الإجراء مرة واحدة",
+        "button": "الموافقة مرة واحدة"
+      },
+      "approveSession": {
+        "button": "الموافقة للجلسة",
+        "tooltip": "الموافقة على الإجراءات المطابقة لهذه الجلسة"
+      },
+      "deadline": "الموافقة قبل {time}",
+      "header": {
+        "required": "تم طلب الموافقة: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# إجراء} other {# إجراءات}} في {app}",
+        "singleAction": "{action} في {app}"
+      },
+      "reject": {
+        "ariaLabel": "رفض هذا الإجراء",
+        "button": "رفض"
+      },
+      "record": {
+        "approved": "تمت الموافقة: {headline}",
+        "closed": "لم يعد في الانتظار: {headline}",
+        "disabled": "معطّل: {headline}",
+        "expired": "انتهت المهلة: {headline}",
+        "rejected": "لم تتم الموافقة: {headline}",
+        "approvedForChat": "تمت الموافقة لهذه المحادثة: {headline}",
+        "approvedForSession": "تمت الموافقة لهذه الجلسة: {headline}"
+      },
+      "submitError": "تعذر إرسال قرارك. حاول مرة أخرى.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14452,50 +14519,6 @@
       },
       "switch": {
         "ariaLabel": "تبديل الوكيل"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "الموافقة على هذا الإجراء مرة واحدة",
-        "button": "الموافقة مرة واحدة"
-      },
-      "approveSession": {
-        "button": "الموافقة للجلسة",
-        "tooltip": "الموافقة على الإجراءات المطابقة لهذه الجلسة"
-      },
-      "details": {
-        "hideAriaLabel": "إخفاء التفاصيل",
-        "showAriaLabel": "عرض التفاصيل"
-      },
-      "header": {
-        "required": "الموافقة مطلوبة: {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# إجراء} other {# إجراءات}} في {app}",
-        "singleAction": "{action} في {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "لا توجد بيانات."
-        },
-        "showLess": {
-          "button": "عرض أقل"
-        },
-        "showMore": {
-          "button": "عرض المزيد"
-        }
-      },
-      "reject": {
-        "ariaLabel": "رفض هذا الإجراء",
-        "button": "رفض"
-      },
-      "status": {
-        "approved": "تمت الموافقة",
-        "rejected": "مرفوض",
-        "expired": "انتهت الصلاحية"
-      },
-      "submit": {
-        "errorFallback": "فشل إرسال القرار"
       }
     },
     "apps": {
@@ -14633,7 +14656,7 @@
         "duplicateSkillName": "التطبيق «{appName}» لديه بالفعل مهارة مرتبطة باسم «{skillName}». ارفع مهارة باسم مختلف."
       },
       "mcpPolicy": {
-        "description": "قم بإعداد ما يمكن لوكيل Craft فعله بأدوات خادم MCP هذا.",
+        "description": "اختر الأدوات التي تعمل تلقائيًا أو تطلب الموافقة أو تكون معطلة في المحادثة وفي Craft.",
         "emptyPolicies": "لا توجد أدوات مفعّلة على هذا الخادم. فعّل الأدوات أولًا من صفحة إجراءات MCP.",
         "saveButton": "حفظ",
         "title": "تعديل {name}"
@@ -15830,7 +15853,7 @@
     "actionPolicies": {
       "appTitle": "إعدادات الموافقة لـ {name}",
       "title": "إعدادات الموافقة",
-      "personalDescription": "تحدد هذه الإعدادات ما إذا كانت الإجراءات تُنفّذ تلقائيًا أو تتطلب موافقة في محادثات Craft والمهام الجديدة؛ وتحتفظ المهام الحالية بإعداداتها الخاصة.",
+      "personalDescription": "تحدد هذه الإعدادات ما إذا كانت الإجراءات تُنفّذ تلقائيًا أو تتطلب موافقة في محادثات Craft والمهام الجديدة واستدعاءات أدوات MCP في الدردشة؛ وتحتفظ المهام الحالية بإعداداتها الخاصة.",
       "taskDescription": "اختر الإضافات التي يمكن للمهمة استخدامها، ثم حدّد الإجراءات التي تعمل تلقائيًا. تنطبق التغييرات على هذه المهمة فقط.",
       "newTaskDescription": "فعّل إضافة للبدء بإعدادات الإجراءات الحالية.",
       "workspace_disabled": "معطل لمساحة العمل",
@@ -15846,9 +15869,6 @@
       "saveError": "تعذّر حفظ إعدادات الموافقة.",
       "emptyActions": "لا توجد إجراءات معروفة. تتطلب الإجراءات غير المعروفة الموافقة.",
       "emptyApps": "لا توجد تطبيقات متاحة.",
-      "expired": "انتهت مهلة الموافقة. لم يتم تنفيذ الإجراء.",
-      "rejected": "رُفض الطلب. لم يُنفذ هذا الطلب.",
-      "deadline": "الموافقة قبل {time}",
       "agentPermissionRequired": "توقف هذا التشغيل لأن إجراءً احتاج إلى موافقة. راجع الأذونات ثم شغّل المهمة مجددًا.",
       "enableForTask": "تفعيل لهذه المهمة",
       "enableAppForTask": "تفعيل {app} لهذه المهمة",
