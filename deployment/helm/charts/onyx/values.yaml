@@ -1747,7 +1747,8 @@ auth:
       private_key: ""
   # Shared credential that Craft Firecracker host agents send to register
   # their node signing key (craft.sandboxRuntime=firecracker). The api_server
-  # rejects every registration while it is unset.
+  # rejects every registration while it is unset. An inline value must be at
+  # least 32 characters (the chart fails otherwise).
   sandboxNodeRegistration:
     enabled: false
     allPods: false  # Restricted: only the API server checks it (plus the other restricted pods)
@@ -2098,6 +2099,11 @@ craft:
     # Most open egress relay connections per VM; the agent closes new ones
     # over the cap.
     relayMaxConns: 256
+    # Most open egress relay connections of all VMs on the node together.
+    # Each one uses up to about 100 KiB of agent memory, so keep
+    # resources.limits.memory above 256Mi + relayMaxConnsNode x 100 KiB
+    # (2048: about 456Mi).
+    relayMaxConnsNode: 2048
     # Most open Dial streams per VM; more fail with DIAL_LIMIT.
     dialMaxStreams: 64
     # Most VMs per node, template build VMs included (--max-vms). Over it,
@@ -2106,6 +2112,14 @@ craft:
     # 2 vCPU make random running VMs fail, so the default is 60. On bare
     # metal, raise it or set 0 (no cap).
     maxVms: 60
+    # memory.max of the host slice of all VMs (fcvms.slice), in percent of
+    # the node's memory; the agent sets it at start (--slice-memory-percent).
+    # Idle guests give memory back, so the agent can start more VMs than the
+    # node holds. When they use it again, the kernel then kills a VM inside
+    # the slice, not kubelet or containerd. Keep the rest for kubelet,
+    # containerd, the host agent and the system. 0: no limit (the agent
+    # removes a limit of an earlier start).
+    sliceMemoryPercent: 85
     # Comma-separated DNS or URI SANs; the client certificate must have one.
     # Empty = the client certificate name with chart-made certificates, or
     # any certificate that the client CA (tls ca.crt) signed with existingSecret.
@@ -2205,8 +2219,10 @@ craft:
     # cluster-autoscaler.kubernetes.io/scale-down-disabled=true. It removes
     # the annotation when the node has had no VMs for grace. The agent never
     # removes a value that it did not set. The chart gives the agent "get"
-    # and "patch" on nodes. false: no patch RBAC; remove an annotation that
-    # is left on a node by hand (microvm/RUNBOOKS.md).
+    # and "patch" on nodes, and a ValidatingAdmissionPolicy (when the cluster
+    # serves admissionregistration.k8s.io/v1) limits the patch to these
+    # annotations. false: no patch RBAC; remove an annotation that is left on
+    # a node by hand (microvm/RUNBOOKS.md).
     scaleDownGuard:
       enabled: true
       grace: 10m

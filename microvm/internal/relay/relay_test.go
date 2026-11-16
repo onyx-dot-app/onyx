@@ -655,6 +655,50 @@ func TestConnectionCap(t *testing.T) {
 	})
 }
 
+// TestNodeConnectionCap checks the cap of all VMs together: a VM under its
+// own cap is refused while other VMs hold the node's connections.
+func TestNodeConnectionCap(t *testing.T) {
+	up := newUpstream(t)
+	r, sock, vm := newRelay(t, up, func(r *Relay) { r.MaxConns = 10; r.MaxConnsNode = 2 })
+	sock2 := shortSock(t, "relay-2")
+	ln, err := net.Listen("unix", sock2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vm2 := VM{SandboxID: "2b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69", Subject: "s2", Generation: 1}
+	r.Start(ln, vm2)
+	t.Cleanup(func() { r.Detach(vm2.SandboxID) })
+
+	a := connect(t, sock)
+	defer func() { _ = a.Close() }()
+	b := connect(t, sock2)
+	over, err := net.Dial("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = over.Close() }()
+	_ = over.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if _, err := over.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
+		t.Fatalf("connection over the node cap: %v, want EOF", err)
+	}
+	if got := r.Live(vm.SandboxID); got != 1 {
+		t.Fatalf("live connections of the first VM = %d, want 1", got)
+	}
+	_ = b.Close()
+	waitFor(t, func() bool { return r.Live(vm2.SandboxID) == 0 })
+	waitFor(t, func() bool {
+		c, err := net.Dial("unix", sock)
+		if err != nil {
+			return false
+		}
+		defer func() { _ = c.Close() }()
+		_ = c.SetDeadline(time.Now().Add(time.Second))
+		_, _ = io.WriteString(c, "GET http://x/ HTTP/1.1\r\nHost: x\r\n\r\n")
+		_, err = http.ReadResponse(bufio.NewReader(c), nil)
+		return err == nil
+	})
+}
+
 // flakyListener fails its first Accept calls with a passing error.
 type flakyListener struct {
 	net.Listener

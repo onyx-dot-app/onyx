@@ -32,6 +32,11 @@ on:
   pull_request:
     paths:
       - "backend/**"
+      # Connector tests do not run unit or external-dependency tests.
+      - "!backend/tests/unit/**"
+      - "!backend/tests/external_dependency_unit/**"
+      # Imported by backend/tests/daily/connectors/gmail/.
+      - "backend/tests/unit/onyx/connectors/utils.py"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/pr-python-connector-tests.yml"

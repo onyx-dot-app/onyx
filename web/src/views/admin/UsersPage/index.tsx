@@ -15,6 +15,7 @@ import type { StatusFilter } from "./types";
 import UsersSummary from "./UsersSummary";
 import UsersTable from "./UsersTable";
 import InviteUsersModal from "./InviteUsersModal";
+import { useClosePrivateSkillsToastOnLeave } from "./UserActionModals";
 
 // ---------------------------------------------------------------------------
 // Users page content
@@ -73,6 +74,7 @@ function UsersContent() {
 export default function UsersPage() {
   const t = useTranslations("admin.users");
   const [inviteOpen, setInviteOpen] = useState(false);
+  useClosePrivateSkillsToastOnLeave();
 
   return (
     <SettingsLayouts.Root width="lg">

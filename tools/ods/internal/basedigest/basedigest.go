@@ -82,8 +82,9 @@ func (r Ref) Family() string {
 }
 
 // TrackedFiles returns the tracked files under root that may pin a base image
-// digest: every Dockerfile, plus the workflow and composite-action YAML that
-// carries an image reference of its own.
+// digest: every Dockerfile, every HCL file (docker buildx bake defaults), plus
+// the workflow and composite-action YAML that carries an image reference of its
+// own.
 func TrackedFiles(root string) ([]string, error) {
 	cmd := exec.Command("git", "ls-files", "-z")
 	cmd.Dir = root
@@ -101,7 +102,8 @@ func TrackedFiles(root string) ([]string, error) {
 		ext := filepath.Ext(entry)
 		inCI := strings.HasPrefix(entry, ".github/workflows/") ||
 			strings.HasPrefix(entry, ".github/actions/")
-		if strings.HasPrefix(base, "Dockerfile") || (inCI && (ext == ".yml" || ext == ".yaml")) {
+		if strings.HasPrefix(base, "Dockerfile") || ext == ".hcl" ||
+			(inCI && (ext == ".yml" || ext == ".yaml")) {
 			paths = append(paths, entry)
 		}
 	}

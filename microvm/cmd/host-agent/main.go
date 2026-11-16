@@ -81,6 +81,7 @@ type flags struct {
 	endedRetention time.Duration
 	relayIdle      time.Duration
 	relayMaxConns  int
+	relayMaxNode   int
 	listen         string
 	tlsCert        string
 	tlsKey         string
@@ -104,6 +105,7 @@ type flags struct {
 	managedBuilds  int
 	swapTimeout    time.Duration
 	memOverhead    uint
+	slicePercent   uint
 	watchDrain     bool
 	drainTaints    string
 	drainPoll      time.Duration
@@ -154,6 +156,7 @@ func main() {
 	flag.DurationVar(&f.endedRetention, "ended-retention", agent.DefaultEndedRetention, "how long each state report lists a VM that exited or stopped (0 = not listed)")
 	flag.DurationVar(&f.relayIdle, "relay-idle-timeout", relay.DefaultIdleTimeout, "close a relay connection after this long without traffic (at least 180s)")
 	flag.IntVar(&f.relayMaxConns, "relay-max-conns", relay.DefaultMaxConns, "most open relay connections per VM; new ones over the cap are closed")
+	flag.IntVar(&f.relayMaxNode, "relay-max-conns-node", relay.DefaultMaxConnsNode, "most open relay connections of all VMs together (about 100 KiB of agent memory each); new ones over the cap are closed")
 	flag.StringVar(&f.listen, "listen", "", "mTLS TCP address for the api_server (for example :7443); empty: Unix socket only")
 	flag.StringVar(&f.tlsCert, "tls-cert", "", "server certificate file (PEM) for --listen")
 	flag.StringVar(&f.tlsKey, "tls-key", "", "server key file (PEM) for --listen")
@@ -176,6 +179,7 @@ func main() {
 	flag.IntVar(&f.managedFiles, "managed-max-files", managed.DefaultLimits.MaxEntries, "most files and directories in a managed bundle")
 	flag.IntVar(&f.managedBuilds, "managed-max-builds", 1, "most managed bundle uploads that receive and build at once")
 	flag.DurationVar(&f.swapTimeout, "managed-swap-timeout", 30*time.Second, "limit for the managed drive swap of one VM")
+	flag.UintVar(&f.slicePercent, "slice-memory-percent", jailer.DefaultSliceMemoryPercent, "memory.max of --slice in percent of the node's MemTotal, set at start (10 to 100; 0: no limit)")
 	flag.UintVar(&f.memOverhead, "vm-mem-overhead-mib", jailer.DefaultMemOverheadMiB, "memory each VM scope gets on top of the guest memory (cgroup memory.max = mem_mib + this)")
 	flag.BoolVar(&f.watchDrain, "watch-node-drain", false, "read this pod's Node (--node-id) and drain while it has a --drain-taints taint; needs RBAC get on nodes")
 	flag.StringVar(&f.drainTaints, "drain-taints", strings.Join(nodewatch.DefaultTaintKeys, ","), "comma-separated taint keys that drain the node")
@@ -234,6 +238,9 @@ func run(f flags, log *slog.Logger) error {
 		Slice: f.slice, HostMountNS: f.hostMountNS, LogLevel: f.logLevel,
 	}
 	if err := checkSystemdRun(cmd); err != nil {
+		return err
+	}
+	if err := capVMSlice(cmd, f.slicePercent, stats, log); err != nil {
 		return err
 	}
 	kernel, err := binaries.InstallKernel(filepath.Join(f.artifactsDir, "vmlinux"), filepath.Join(f.dataDir, "kernel"))
@@ -731,6 +738,9 @@ func setupEgress(f flags, m *agent.Manager, log *slog.Logger) (pushers, error) {
 	if f.relayMaxConns < 1 {
 		return pushers{}, fmt.Errorf("--relay-max-conns %d must be 1 or more", f.relayMaxConns)
 	}
+	if f.relayMaxNode < 1 {
+		return pushers{}, fmt.Errorf("--relay-max-conns-node %d must be 1 or more", f.relayMaxNode)
+	}
 	_, key, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		return pushers{}, err
@@ -741,7 +751,7 @@ func setupEgress(f flags, m *agent.Manager, log *slog.Logger) (pushers, error) {
 	}
 	signer := relay.NewSigner(f.nodeID, kid, key)
 	m.UseEgress(&relay.AgentEgress{Relay: &relay.Relay{
-		Signer: signer, Upstream: f.egressProxy, TLS: upTLS, IdleTimeout: f.relayIdle, MaxConns: f.relayMaxConns, Log: log,
+		Signer: signer, Upstream: f.egressProxy, TLS: upTLS, IdleTimeout: f.relayIdle, MaxConns: f.relayMaxConns, MaxConnsNode: f.relayMaxNode, Log: log,
 	}})
 	if f.apiServerURL == "" {
 		log.Warn("no --api-server-url: the node signing key is not registered, so the proxy rejects VM egress")
@@ -915,6 +925,9 @@ func checkRanges(f flags) error {
 		return fmt.Errorf("--image-gc-interval %v must be 0 or at least 1m, and --image-gc-grace %v at least 10m",
 			f.imageGCEvery, f.imageGCGrace)
 	}
+	if f.slicePercent != 0 && (f.slicePercent < 10 || f.slicePercent > 100) {
+		return fmt.Errorf("--slice-memory-percent %d must be 0 or 10 to 100", f.slicePercent)
+	}
 	if f.memOverhead < 16 || f.memOverhead > 4096 {
 		return fmt.Errorf("--vm-mem-overhead-mib %d must be 16 to 4096", f.memOverhead)
 	}
@@ -1025,6 +1038,32 @@ func splitList(s string) []string {
 		}
 	}
 	return out
+}
+
+// capVMSlice sets MemoryMax of the VM slice to percent of MemTotal.
+// kubelet does not see VM memory, so without the cap an overcommitted node
+// runs out of memory outside the slice. percent 0 removes a limit of an
+// earlier start; a failure then only logs, so 0 also works where systemctl
+// set-property does not.
+func capVMSlice(c jailer.Command, percent uint, stats hostinfo.Stats, log *slog.Logger) error {
+	if percent == 0 {
+		argv := c.SliceMemoryMaxArgv(0)
+		if out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput(); err != nil {
+			log.Warn("VM slice memory limit not removed", "slice", c.Slice, "err", err, "output", strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	total, _, err := stats.MemInfo()
+	if err != nil {
+		return fmt.Errorf("slice memory cap: %w", err)
+	}
+	limit := jailer.SliceMemoryMax(total, percent)
+	argv := c.SliceMemoryMaxArgv(limit)
+	if out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput(); err != nil {
+		return fmt.Errorf("%s: %w: %s", strings.Join(argv, " "), err, strings.TrimSpace(string(out)))
+	}
+	log.Info("VM slice memory cap", "slice", c.Slice, "memory_max_bytes", limit, "percent", percent, "mem_total_mib", total)
+	return nil
 }
 
 func checkSystemdRun(c jailer.Command) error {
