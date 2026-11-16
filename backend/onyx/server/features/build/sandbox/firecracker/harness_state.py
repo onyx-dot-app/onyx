@@ -54,6 +54,7 @@ PURGED_SANDBOX_PREFIX = "sandbox_fc:purged_sandbox:"
 SESSION_SAVE_LOCK_PREFIX = "sandbox_fc:session_save_lock:"
 # Longer than any save in progress (one session takes 35 min at most).
 PURGE_MARK_SECONDS = 24 * 3600
+_RETENTION_MARK = "retention"
 WANTED_SECONDS = 600
 # Per-sandbox records that a sandbox purge deletes at its end (the
 # saved-session and artifact indexes empty as their files go).
@@ -262,11 +263,25 @@ def mark_purged(
     *,
     sandbox_id: UUID | None = None,
     session_id: UUID | None = None,
+    retention: bool = False,
 ) -> None:
+    """`retention`: a retention purge, whose session mark goes again after
+    the purge (`clear_retention_mark`). It never replaces a delete's mark;
+    a delete replaces it."""
     if sandbox_id is not None:
         cache.set(PURGED_SANDBOX_PREFIX + str(sandbox_id), "1", ex=PURGE_MARK_SECONDS)
     if session_id is not None:
-        cache.set(PURGED_SESSION_PREFIX + str(session_id), "1", ex=PURGE_MARK_SECONDS)
+        key = PURGED_SESSION_PREFIX + str(session_id)
+        if retention:
+            cache.set_if_absent(key, _RETENTION_MARK, ex=PURGE_MARK_SECONDS)
+        else:
+            cache.set(key, "1", ex=PURGE_MARK_SECONDS)
+
+
+def clear_retention_mark(cache: CacheBackend, session_id: UUID) -> None:
+    cache.delete_if_value(
+        PURGED_SESSION_PREFIX + str(session_id), _RETENTION_MARK.encode()
+    )
 
 
 def is_sandbox_purged(cache: CacheBackend, sandbox_id: UUID) -> bool:

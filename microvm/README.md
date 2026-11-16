@@ -748,8 +748,8 @@ go mod tidy
 
 - Unit tests: `go test -race ./...`. They use a fake VMM and run in CI.
 - KVM tests: build tag `kvm`, on a KVM host. The older tests use the kit rootfs (`onyxdotapp/sandbox`
-  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and guest
-  kernel 6.18.25. The egress and pass-through tests use the proxy harness in
+  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and the
+  pinned guest kernel. The egress and pass-through tests use the proxy harness in
   `internal/kvmtest/testdata/harness`.
 - `check-kvm.sh smoke|full ARTIFACTS_DIR SOURCE_IMAGE` (as root) prepares a host and runs them: the data
   dir, the root drives, the agent image, then one test at a time. CI
