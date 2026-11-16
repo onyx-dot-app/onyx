@@ -1,6 +1,8 @@
 package audit
 
 import (
+	"errors"
+	"os"
 	"slices"
 	"testing"
 
@@ -94,5 +96,70 @@ func TestScanImage_matchesRustBuiltPyPIToolsOnPyPI(t *testing.T) {
 	}
 	if f := findings[0]; f.ID != "PYSEC-2026-4321" || f.Source != SourceImage || f.Manifest != ref {
 		t.Errorf("finding = %+v, want PYSEC-2026-4321 from the image", f)
+	}
+}
+
+func TestScanImage_reportsAFailedPyPIScan(t *testing.T) {
+	t.Cleanup(func() {
+		containerScan = osvscanner.DoContainerScan
+		scanPyPIRequirements = scanRequirements
+	})
+	containerScan = func(osvscanner.ScannerActions) (models.VulnerabilityResults, error) {
+		return models.VulnerabilityResults{Results: []models.PackageSource{{Packages: []models.PackageVulns{
+			{Package: models.PackageInfo{Name: "uv", Version: "0.13.8", Ecosystem: "crates.io"}},
+		}}}}, nil
+	}
+	scanPyPIRequirements = func([]string) ([]Finding, error) { return nil, errors.New("osv down") }
+
+	if _, err := scanImage("example.test/image:1", true); err == nil {
+		t.Fatal("scanImage succeeded, want the PyPI scan error")
+	}
+}
+
+func TestPyPIRequirementsFromCrates_keepsOnlyMappedCrates(t *testing.T) {
+	res := models.VulnerabilityResults{Results: []models.PackageSource{
+		{Packages: []models.PackageVulns{
+			{Package: models.PackageInfo{Name: "uv", Version: "0.13.8", Ecosystem: "crates.io"}},
+			{Package: models.PackageInfo{Name: "uv", Version: "0.13.8", Ecosystem: "PyPI"}},
+			{Package: models.PackageInfo{Name: "uv", Version: "", Ecosystem: "crates.io"}},
+		}},
+		{Packages: []models.PackageVulns{
+			{Package: models.PackageInfo{Name: "uv", Version: "0.13.8", Ecosystem: "crates.io"}},
+			{Package: models.PackageInfo{Name: "uv", Version: "0.11.25", Ecosystem: "crates.io"}},
+		}},
+	}}
+	if got, want := pypiRequirementsFromCrates(res), []string{"uv==0.11.25", "uv==0.13.8"}; !slices.Equal(got, want) {
+		t.Errorf("requirements = %v, want %v", got, want)
+	}
+}
+
+func TestScanRequirements_scansAPinnedRequirementsFile(t *testing.T) {
+	t.Cleanup(func() { requirementsScan = scanLockfiles })
+	var content string
+	requirementsScan = func(paths []string, strict bool) ([]Finding, error) {
+		if len(paths) != 1 || !strict {
+			t.Errorf("paths = %v strict = %v, want one strict path", paths, strict)
+		}
+		data, err := os.ReadFile(paths[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		content = string(data)
+		return []Finding{{ID: "PYSEC-1"}}, nil
+	}
+
+	findings, err := scanRequirements([]string{"uv==0.11.25"})
+	if err != nil || len(findings) != 1 {
+		t.Fatalf("scanRequirements = %v, %v", findings, err)
+	}
+	if content != "uv==0.11.25\n" {
+		t.Errorf("requirements file = %q", content)
+	}
+}
+
+func TestScanRequirements_reportsAMissingTempDir(t *testing.T) {
+	t.Setenv("TMPDIR", "/nonexistent/ods-test")
+	if _, err := scanRequirements([]string{"uv==0.11.25"}); err == nil {
+		t.Fatal("scanRequirements succeeded, want a temp dir error")
 	}
 }

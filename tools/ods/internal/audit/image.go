@@ -38,6 +38,7 @@ var scanOSImage = scanImage
 var (
 	containerScan        = osvscanner.DoContainerScan
 	scanPyPIRequirements = scanRequirements
+	requirementsScan     = scanLockfiles
 )
 
 // pypiToolsFromCrates maps crates.io names the image scanner records for
@@ -197,7 +198,7 @@ func scanRequirements(reqs []string) ([]Finding, error) {
 	if err := os.WriteFile(path, []byte(strings.Join(reqs, "\n")+"\n"), 0o600); err != nil {
 		return nil, err
 	}
-	return scanLockfiles([]string{path}, true)
+	return requirementsScan([]string{path}, true)
 }
 
 // imageFindingsFromResults maps osv-scanner's container results into Findings,
