@@ -15,6 +15,7 @@ from onyx.background.celery.tasks.docprocessing.batch_counters import (
     on_docprocessing_task_postrun,
     on_docprocessing_task_prerun,
 )
+from onyx.configs.app_configs import GOOGLE_DRIVE_CONVERSION_WORKERS
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_DOCCONVERSION_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.server.metrics.celery_task_metrics import (
@@ -33,6 +34,19 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+# Connections for work outside the conversion threads, for example the
+# watchdog and the metrics.
+DOCCONVERSION_POOL_OVERFLOW = 8
+
+
+def docconversion_pool_size(concurrency: int) -> int:
+    """The Postgres pool of a docconversion worker. Each task converts up
+    to GOOGLE_DRIVE_CONVERSION_WORKERS files at once, and each file thread
+    can hold a connection, for example to store a staged file. The task's
+    own thread holds one more."""
+    return concurrency * (GOOGLE_DRIVE_CONVERSION_WORKERS + 1)
+
 
 celery_app = Celery(__name__)
 celery_app.config_from_object("onyx.background.celery.configs.docconversion")
@@ -114,12 +128,11 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_DOCCONVERSION_APP_NAME)
 
-    # rkuo: Transient errors keep happening in the indexing watchdog threads.
-    # "SSL connection has been closed unexpectedly"
-    # actually setting the spawn method in the cloud fixes 95% of these.
-    # setting pre ping might help even more, but not worrying about that yet
-    pool_size = cast(int, sender.concurrency)  # ty: ignore[unresolved-attribute]
-    SqlEngine.init_engine(pool_size=pool_size, max_overflow=8)
+    concurrency = cast(int, sender.concurrency)  # ty: ignore[unresolved-attribute]
+    SqlEngine.init_engine(
+        pool_size=docconversion_pool_size(concurrency),
+        max_overflow=DOCCONVERSION_POOL_OVERFLOW,
+    )
 
     # Conversion reads the source and writes document batches to the file
     # store. It does not use the document index.
