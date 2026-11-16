@@ -16,6 +16,10 @@ data "aws_availability_zones" "available" {
 
 data "aws_region" "current" {}
 
+data "aws_caller_identity" "current" {}
+
+data "aws_partition" "current" {}
+
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.0.0"
@@ -56,7 +60,7 @@ data "aws_route_tables" "this" {
 resource "aws_vpc_endpoint" "s3" {
   count             = var.create_s3_vpc_endpoint ? 1 : 0
   vpc_id            = module.vpc.vpc_id
-  service_name      = "com.amazonaws.${data.aws_region.current.name}.s3"
+  service_name      = "com.amazonaws.${data.aws_region.current.region}.s3"
   vpc_endpoint_type = "Gateway"
   route_table_ids   = data.aws_route_tables.this[0].ids
   tags              = var.tags
@@ -111,9 +115,11 @@ resource "aws_iam_role_policy" "vpc_flow_logs" {
 resource "aws_flow_log" "vpc_flow_log" {
   iam_role_arn         = aws_iam_role.vpc_flow_logs.arn
   log_destination_type = "cloud-watch-logs"
-  log_group_name       = "/aws/vpc/flow-logs/${var.vpc_name}"
-  traffic_type         = "ALL"
-  vpc_id               = module.vpc.vpc_id
+  # Provider 6 removed log_group_name. This ARN is the value the API already
+  # stores for flow logs created with log_group_name, so no replacement.
+  log_destination = "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/vpc/flow-logs/${var.vpc_name}"
+  traffic_type    = "ALL"
+  vpc_id          = module.vpc.vpc_id
 
   tags = merge(var.tags, {
     Name = "${var.vpc_name}-flow-logs"

@@ -1,0 +1,70 @@
+---
+title: "Data Storage"
+description: "How data is persisted in the Onyx system"
+icon: "hard-drive"
+---
+
+<Info>
+  For Onyx Cloud, all data is encrypted at rest with AES-256 encryption and in transit with TLS 1.3.
+</Info>
+
+Onyx runs as a set of containers and persists data in volumes or managed services.
+Admins can set a chat retention period under **Admin Panel > Chat Preferences** so that Onyx deletes old chat sessions
+after a number of days.
+
+<Warning>
+  If you self-host, you are responsible for encrypting and locking down the containers and their storage.
+  Most cloud providers turn these settings on by default. Confirm that they are on in your environment.
+</Warning>
+
+## Relational Database - Postgres
+
+Stores:
+- Users, groups, permissions, preferences, and settings
+- Chat sessions and query history
+- Credentials for LLM providers, connectors, and actions
+- Document metadata and document access control information
+- Craft sessions, approvals, and scheduled tasks
+
+**Encryption**: Relies on the disk encryption of the deployment.
+Onyx also encrypts stored credentials with AES when you set `ENCRYPTION_KEY_SECRET` (Enterprise Edition).
+See [Configuration](/deployment/configuration/configuration).
+
+**Access**: Protected by database user authentication with configurable credentials and optional IAM authentication.
+
+## Vector Database + Search Engine - OpenSearch
+
+Stores:
+- Document chunks and metadata
+- Vector representations of document chunks
+- Document access control information
+
+**Encryption**: Relies on the disk encryption of the deployment.
+
+**Access**: Protected by OpenSearch authentication and access controls.
+
+## Cache - Redis
+
+Stores:
+- Login sessions
+- Background task queues, locks, and short-lived state
+
+**Encryption**: Data is held in memory. Snapshots, if enabled, rely on the disk encryption of the deployment.
+
+**Access**: Protected by Redis authentication. Onyx Lite uses Postgres instead of Redis.
+
+## Object Storage
+
+The bundled object store runs SeaweedFS. You can replace it with AWS S3, Google Cloud Storage, Azure Blob Storage,
+or any S3-compatible service. Onyx Lite stores files in Postgres instead.
+
+Stores:
+- Original documents from connectors and user uploads (PDFs, Word documents, and so on)
+- Document attachments and media files
+- Chat attachments, generated images, Craft sandbox snapshots, and branding assets
+- Temporary files during document processing
+
+**Encryption**: Relies on the disk encryption of the deployment.
+
+**Access**: Protected by the store's access keys and S3-compatible authentication.
+The object store exposes only its S3 port, and its internal ports listen on loopback.

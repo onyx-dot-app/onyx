@@ -1,26 +1,45 @@
 "use client";
 
-import React, {
-  useRef,
-  RefObject,
-  useMemo,
-  useEffect,
-  useLayoutEffect,
-} from "react";
-import { Packet, StopReason } from "@/app/app/services/streamingModels";
+import {
+  getToolKey,
+  parseToolKey,
+} from "@/app/app/message/messageComponents/toolDisplayHelpers";
+
+import React, { useRef, useMemo, useEffect, useLayoutEffect } from "react";
+import {
+  Packet,
+  PacketType,
+  StopReason,
+  type UserMessage,
+  type GeneratedImage,
+} from "@/app/app/services/streamingModels";
 import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
+import ToolApprovalCard from "@/app/app/message/messageComponents/ToolApprovalCard";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
-import { FeedbackType } from "@/app/app/interfaces";
+import { FeedbackType } from "@/app/app/types";
+import { Section } from "@opal/layouts";
+import { HumanMessageBubble } from "@/app/app/message/HumanMessage";
+import type { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
+import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
 import { handleCopy } from "@/app/app/message/copyingUtils";
-import { useAuthErrors } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
+import {
+  type AuthError,
+  useAuthErrors,
+} from "@/app/app/message/messageComponents/hooks/useAuthErrors";
+import { useToolApprovals } from "@/lib/chat/hooks";
+import {
+  orderApprovalsByTurn,
+  type ToolApproval,
+} from "@/lib/chat/toolApprovals";
 import { getMessageSwitching } from "@/app/app/message/messageComponents/messageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
+import { GeneratedImageGrid } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
 import { usePacketProcessor } from "@/app/app/message/messageComponents/timeline/hooks/usePacketProcessor";
 import { usePacedTurnGroups } from "@/app/app/message/messageComponents/timeline/hooks/usePacedTurnGroups";
 import MessageToolbar from "@/app/app/message/messageComponents/MessageToolbar";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { Message } from "@/app/app/interfaces";
-import Text from "@/refresh-components/texts/Text";
+import { Message } from "@/app/app/types";
+import { Text } from "@opal/components";
 import { AgentTimeline } from "@/app/app/message/messageComponents/timeline/AgentTimeline";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
@@ -32,11 +51,11 @@ import { useTranslations } from "next-intl";
 export type RegenerationFactory = (regenerationRequest: {
   messageId: number;
   parentMessage: Message;
-  forceSearch?: boolean;
 }) => (modelOverride: LlmDescriptor) => Promise<void>;
 
 export interface AgentMessageProps {
   rawPackets: Packet[];
+  restoredPacketCount?: number;
   packetCount?: number; // Tracked separately for React memo comparison (avoids reading from mutated array)
   chatState: FullChatState;
   nodeId: number;
@@ -53,10 +72,20 @@ export interface AgentMessageProps {
   processingDurationSeconds?: number;
   /** Hide the feedback/toolbar footer (used in multi-model non-preferred panels) */
   hideFooter?: boolean;
-  /** Skip TTS streaming (used in multi-model where voice doesn't apply) */
+  /** Disable autoplay for non-primary or failed responses. */
   disableTTS?: boolean;
   /** When on, drop the message's reading-width padding so it sits flush with the chat edge. */
   fullWidthChat?: boolean;
+}
+
+interface ResponseSection {
+  userMessage: UserMessage | null;
+  turnIndex: number;
+  toolGroups: TurnGroup[];
+  displayGroups: GroupedPacket[];
+  images: GeneratedImage[];
+  authErrors: AuthError[];
+  toolApprovals: ToolApproval[];
 }
 
 // TODO: Consider more robust comparisons:
@@ -74,6 +103,9 @@ function arePropsEqual(
     // Compare packetCount (primitive) instead of rawPackets.length
     // The array is mutated in place, so reading .length from prev and next would return same value
     prev.packetCount === next.packetCount &&
+    // A replay or reload replaces the array, possibly at the same length.
+    prev.rawPackets === next.rawPackets &&
+    prev.restoredPacketCount === next.restoredPacketCount &&
     prev.chatState.agent?.id === next.chatState.agent?.id &&
     prev.chatState.docs === next.chatState.docs &&
     prev.chatState.citations === next.chatState.citations &&
@@ -86,6 +118,7 @@ function arePropsEqual(
       next.llmManager?.isLoadingProviders &&
     prev.processingDurationSeconds === next.processingDurationSeconds &&
     prev.hideFooter === next.hideFooter &&
+    prev.disableTTS === next.disableTTS &&
     prev.fullWidthChat === next.fullWidthChat
     // Skip: chatState.regenerate, chatState.setPresentingDocument,
     //       most of llmManager, onMessageSelection (function/object props)
@@ -95,6 +128,7 @@ function arePropsEqual(
 const AgentMessage = React.memo(function AgentMessage({
   rawPackets,
   packetCount,
+  restoredPacketCount: replayPacketCount = 0,
   chatState,
   nodeId,
   messageId,
@@ -109,9 +143,18 @@ const AgentMessage = React.memo(function AgentMessage({
   disableTTS,
   fullWidthChat,
 }: AgentMessageProps) {
+  // Returning to a mounted session restores its retained output immediately.
+  const mountedPrefix = useRef({ nodeId, count: rawPackets.length });
+  const mounted =
+    mountedPrefix.current.nodeId === nodeId
+      ? mountedPrefix.current
+      : { nodeId, count: rawPackets.length };
+  useEffect(() => {
+    mountedPrefix.current = mounted;
+  }, [mounted]);
+  const restoredPacketCount = Math.max(replayPacketCount, mounted.count);
   const t = useTranslations("chat.messages");
-  const markdownRef = useRef<HTMLDivElement>(null);
-  const finalAnswerRef = useRef<HTMLDivElement>(null);
+  const answerRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Process streaming packets: returns data and callbacks
   // Hook handles all state internally, exposes clean API
@@ -121,17 +164,56 @@ const AgentMessage = React.memo(function AgentMessage({
     documentMap,
     toolGroups,
     toolTurnGroups,
+    codeModeWorking,
     displayGroups,
-    hasSteps,
     stopPacketSeen,
     stopReason,
-    isGeneratingImage,
-    generatedImageCount,
+    generatedImages,
     isComplete,
     onRenderComplete,
     finalAnswerComing,
     toolProcessingDuration,
+    acceptedPacketCount,
   } = usePacketProcessor(rawPackets, nodeId);
+
+  // Show preceding output in full before revealing an accepted user message.
+  const visiblePacketCount = Math.max(restoredPacketCount, acceptedPacketCount);
+  const visiblePrefix = useRef<{
+    nodeId: number;
+    lastPacket: Packet | undefined;
+    groups: Map<string, number>;
+  }>({ nodeId, lastPacket: undefined, groups: new Map() });
+  const lastVisiblePacket =
+    rawPackets[Math.min(visiblePacketCount, rawPackets.length) - 1];
+  const visibleGroups = useMemo(() => {
+    if (
+      visiblePrefix.current.nodeId === nodeId &&
+      visiblePrefix.current.lastPacket === lastVisiblePacket
+    ) {
+      return visiblePrefix.current.groups;
+    }
+    const groups = new Map<string, number>();
+    for (const packet of rawPackets.slice(0, visiblePacketCount)) {
+      const key = getToolKey(
+        packet.placement.turn_index,
+        packet.placement.tab_index
+      );
+      const textLength =
+        packet.obj.type === PacketType.MESSAGE_DELTA ||
+        packet.obj.type === PacketType.MESSAGE_START
+          ? (packet.obj.content?.length ?? 0)
+          : 0;
+      groups.set(key, (groups.get(key) ?? 0) + textLength);
+    }
+    return groups;
+  }, [nodeId, lastVisiblePacket, rawPackets, visiblePacketCount]);
+  useEffect(() => {
+    visiblePrefix.current = {
+      nodeId,
+      lastPacket: lastVisiblePacket,
+      groups: visibleGroups,
+    };
+  }, [nodeId, lastVisiblePacket, visibleGroups]);
 
   // Apply pacing delays between different tool types for smoother visual transitions
   const { pacedTurnGroups, pacedDisplayGroups, pacedFinalAnswerComing } =
@@ -140,8 +222,79 @@ const AgentMessage = React.memo(function AgentMessage({
       displayGroups,
       stopPacketSeen,
       nodeId,
-      finalAnswerComing
+      finalAnswerComing,
+      visibleGroups
     );
+
+  const authErrors = useAuthErrors(rawPackets);
+  const toolApprovals = useToolApprovals(rawPackets);
+
+  const sections = useMemo(() => {
+    const sections: ResponseSection[] = [
+      {
+        userMessage: null,
+        turnIndex: -1,
+        toolGroups: [],
+        displayGroups: [],
+        images: [],
+        authErrors: [],
+        toolApprovals: [],
+      },
+    ];
+    let current = sections[0]!;
+    for (const group of pacedDisplayGroups) {
+      const input = group.packets[0]?.obj;
+      if (input?.type === PacketType.USER_MESSAGE) {
+        current = {
+          userMessage: input,
+          turnIndex: group.turn_index,
+          toolGroups: [],
+          displayGroups: [],
+          images: [],
+          authErrors: [],
+          toolApprovals: [],
+        };
+        sections.push(current);
+      } else {
+        current.displayGroups.push(group);
+      }
+    }
+    let index = 0;
+    for (const group of pacedTurnGroups) {
+      // Timeline turns are renumbered; compare the packet turn of the step.
+      const packetTurn = parseToolKey(group.steps[0]!.groupKey).turn_index;
+      while (
+        index + 1 < sections.length &&
+        packetTurn > sections[index + 1]!.turnIndex
+      ) {
+        index++;
+      }
+      sections[index]!.toolGroups.push(group);
+    }
+    for (const image of generatedImages) {
+      sections
+        .findLast((section) => section.turnIndex < image.turnIndex)!
+        .images.push(image);
+    }
+    for (const error of authErrors) {
+      sections
+        .findLast((section) => section.turnIndex < error.turnIndex)!
+        .authErrors.push(error);
+    }
+    for (const approval of toolApprovals.records) {
+      sections
+        .findLast((section) => section.turnIndex < approval.turnIndex)!
+        .toolApprovals.push(approval);
+    }
+    return sections;
+  }, [
+    pacedDisplayGroups,
+    pacedTurnGroups,
+    generatedImages,
+    authErrors,
+    toolApprovals.records,
+  ]);
+  const lastAnswerGroup = sections.at(-1)!.displayGroups.at(-1);
 
   // Merge streaming citation/document data with chatState props.
   // NOTE: citationMap and documentMap from usePacketProcessor are mutated in
@@ -187,8 +340,6 @@ const AgentMessage = React.memo(function AgentMessage({
     ]
   );
 
-  const authErrors = useAuthErrors(rawPackets);
-
   const {
     currentMessageInd,
     includeMessageSwitcher,
@@ -201,7 +352,11 @@ const AgentMessage = React.memo(function AgentMessage({
   });
 
   // Streaming TTS integration
-  const { streamTTS, resetTTS, stopTTS } = useVoiceMode();
+  const { streamTTS, resetTTS, stopTTS, activeMessageNodeId } = useVoiceMode();
+  const activeTTSNodeIdRef = useRef(activeMessageNodeId);
+  useEffect(() => {
+    activeTTSNodeIdRef.current = activeMessageNodeId;
+  }, [activeMessageNodeId]);
   const ttsCompletedRef = useRef(false);
   const hasStreamedIncompleteRef = useRef(false);
   const hasObservedPacketGrowthRef = useRef(false);
@@ -226,8 +381,16 @@ const AgentMessage = React.memo(function AgentMessage({
     // Skip if we've already finished TTS for this message
     if (ttsCompletedRef.current) return;
 
-    // Multi-model: skip TTS entirely
-    if (disableTTS) return;
+    // A failed answer must close any autoplay session it already started.
+    if (disableTTS) {
+      if (hasStreamedIncompleteRef.current) {
+        stopTTS();
+        ttsCompletedRef.current = true;
+      }
+      return;
+    }
+    // Autoplay belongs to locally started answers, not restored history.
+    if (replayPacketCount > 0) return;
 
     // If user cancelled generation, do not send more text to TTS.
     if (stopPacketSeen && stopReason === StopReason.USER_CANCELLED) {
@@ -253,7 +416,17 @@ const AgentMessage = React.memo(function AgentMessage({
       streamTTSRef.current(textContent, true, nodeId);
       ttsCompletedRef.current = true;
     }
-  }, [packetCount, isComplete, rawPackets, nodeId, stopPacketSeen, stopReason]); // packetCount triggers on new packets since rawPackets is mutated in place
+  }, [
+    disableTTS,
+    stopTTS,
+    packetCount,
+    replayPacketCount,
+    isComplete,
+    rawPackets,
+    nodeId,
+    stopPacketSeen,
+    stopReason,
+  ]); // packetCount triggers on new packets since rawPackets is mutated in place
 
   // Stop TTS immediately when user cancels generation.
   useEffect(() => {
@@ -270,10 +443,12 @@ const AgentMessage = React.memo(function AgentMessage({
     lastSeenPacketCountRef.current = packetCount ?? rawPackets.length;
   }, [nodeId]);
 
-  // Reset TTS when component unmounts or nodeId changes
+  // Reset TTS when this message unmounts or its nodeId changes, if it is the
+  // one speaking. A chat unmounts rows far from the viewport, and that must
+  // not stop another message's audio.
   useEffect(() => {
     return () => {
-      resetTTS();
+      if (activeTTSNodeIdRef.current === nodeId) resetTTS();
     };
   }, [nodeId, resetTTS]);
 
@@ -282,82 +457,139 @@ const AgentMessage = React.memo(function AgentMessage({
       className="flex flex-col gap-3"
       data-testid={isComplete ? "onyx-ai-message" : undefined}
     >
-      {/* Row 1: Two-column layout for tool steps */}
+      {sections.map((section, sectionIndex) => {
+        const isLastSection = sectionIndex === sections.length - 1;
+        return (
+          <React.Fragment key={section.userMessage?.id ?? "initial"}>
+            {section.userMessage && (
+              <Section height="fit" alignItems="end" gap={0}>
+                <HumanMessageBubble
+                  content={section.userMessage.message}
+                  mentions={section.userMessage.mentions}
+                />
+              </Section>
+            )}
 
-      <AgentTimeline
-        turnGroups={pacedTurnGroups}
-        chatState={effectiveChatState}
-        stopPacketSeen={stopPacketSeen}
-        stopReason={stopReason}
-        hasDisplayContent={pacedDisplayGroups.length > 0}
-        processingDurationSeconds={processingDurationSeconds}
-        isGeneratingImage={isGeneratingImage}
-        generatedImageCount={generatedImageCount}
-        finalAnswerComing={pacedFinalAnswerComing}
-        toolProcessingDuration={toolProcessingDuration}
-      />
+            <AgentTimeline
+              turnGroups={section.toolGroups}
+              chatState={effectiveChatState}
+              stopPacketSeen={stopPacketSeen || !isLastSection}
+              stopReason={isLastSection ? stopReason : undefined}
+              hasDisplayContent={section.displayGroups.length > 0}
+              processingDurationSeconds={processingDurationSeconds}
+              generatedImageCount={section.images.length}
+              finalAnswerComing={!isLastSection || pacedFinalAnswerComing}
+              toolProcessingDuration={toolProcessingDuration}
+              codeModeWorking={isLastSection && codeModeWorking}
+              awaitingApproval={isLastSection && toolApprovals.awaitingApproval}
+            />
 
-      {/* Row 2: Display content + MessageToolbar */}
-      <div
-        ref={markdownRef}
-        className={cn(
-          "overflow-x-visible focus:outline-hidden select-text cursor-text",
-          !fullWidthChat && "px-3"
-        )}
-        onCopy={(e) => {
-          if (markdownRef.current) {
-            handleCopy(e, markdownRef as RefObject<HTMLDivElement>);
-          }
-        }}
-      >
-        {pacedDisplayGroups.length > 0 && (
-          <div ref={finalAnswerRef} className="flex flex-col gap-3">
-            {authErrors.map((authError, i) => (
-              <CustomToolAuthCard
-                key={`auth-error-${i}`}
-                toolName={authError.toolName}
-                toolId={authError.toolId}
-                tools={effectiveChatState.agent.tools}
-                agentId={effectiveChatState.agent.id}
-              />
-            ))}
-            {pacedDisplayGroups.map((displayGroup, index) => (
-              <RendererComponent
-                key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
-                packets={displayGroup.packets}
-                chatState={effectiveChatState}
-                messageNodeId={nodeId}
-                hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}
-                onComplete={() => {
-                  // Only mark complete on the last display group
-                  // Hook handles the finalAnswerComing check internally
-                  if (index === pacedDisplayGroups.length - 1) {
-                    onRenderComplete();
-                  }
-                }}
-                animate={!stopPacketSeen}
-                stopPacketSeen={stopPacketSeen}
-                stopReason={stopReason}
-              >
-                {(results) => (
-                  <>
-                    {results.map((r, i) => (
-                      <div key={i}>{r.content}</div>
-                    ))}
-                  </>
+            {/* Row 2: Display content + MessageToolbar */}
+            <div
+              className={cn(
+                "overflow-x-visible focus:outline-hidden select-text cursor-text",
+                !fullWidthChat && "px-3"
+              )}
+              onCopy={(e) => {
+                handleCopy(e, { current: e.currentTarget });
+              }}
+            >
+              {/* Images from every image generation step lead the answer */}
+              {section.images.length > 0 && (
+                <div className="mb-3">
+                  <GeneratedImageGrid images={section.images} />
+                </div>
+              )}
+              {(section.displayGroups.length > 0 ||
+                section.authErrors.length > 0 ||
+                section.toolApprovals.length > 0) && (
+                <div
+                  ref={(element) => {
+                    answerRefs.current[sectionIndex] = element;
+                  }}
+                  className="flex flex-col gap-3"
+                >
+                  {section.authErrors.map((authError, i) => (
+                    <CustomToolAuthCard
+                      key={`auth-error-${i}`}
+                      toolName={authError.toolName}
+                      toolId={authError.toolId}
+                      tools={effectiveChatState.agent.tools}
+                      agentId={effectiveChatState.agent.id}
+                    />
+                  ))}
+                  {orderApprovalsByTurn(
+                    section.displayGroups,
+                    section.toolApprovals
+                  ).map((entry) => {
+                    if (entry.kind === "approval") {
+                      return (
+                        <ToolApprovalCard
+                          key={entry.approval.request.approval_id}
+                          approval={entry.approval}
+                        />
+                      );
+                    }
+                    return (
+                      <RendererComponent
+                        key={getToolKey(
+                          entry.group.turn_index,
+                          entry.group.tab_index
+                        )}
+                        packets={entry.group.packets}
+                        nestedCalls={entry.group.nestedCalls}
+                        streamPackets={entry.group.streamPackets}
+                        chatState={effectiveChatState}
+                        messageNodeId={nodeId}
+                        hasTimelineThinking={section.toolGroups.length > 0}
+                        onComplete={() => {
+                          // Only mark complete on the last display group
+                          // Hook handles the finalAnswerComing check internally
+                          if (entry.group === lastAnswerGroup) {
+                            onRenderComplete();
+                          }
+                        }}
+                        restoredTextLength={visibleGroups.get(
+                          getToolKey(
+                            entry.group.turn_index,
+                            entry.group.tab_index
+                          )
+                        )}
+                        animate={!stopPacketSeen && isLastSection}
+                        stopPacketSeen={stopPacketSeen}
+                        stopReason={stopReason}
+                      >
+                        {(results) => (
+                          <>
+                            {results.map((r, i) => (
+                              <div key={i}>{r.content}</div>
+                            ))}
+                          </>
+                        )}
+                      </RendererComponent>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Show stopped message when user cancelled and no display content */}
+              {isLastSection &&
+                section.displayGroups.length === 0 &&
+                stopReason === StopReason.USER_CANCELLED && (
+                  <Text as="p" font="secondary-body" color="text-04">
+                    {t("agentMessage.stoppedGeneration.text")}
+                  </Text>
                 )}
-              </RendererComponent>
-            ))}
-          </div>
-        )}
-        {/* Show stopped message when user cancelled and no display content */}
-        {pacedDisplayGroups.length === 0 &&
-          stopReason === StopReason.USER_CANCELLED && (
-            <Text as="p" secondaryBody text04>
-              {t("agentMessage.stoppedGeneration.text")}
-            </Text>
-          )}
-      </div>
+              {isLastSection &&
+                stopPacketSeen &&
+                stopReason === StopReason.TIMED_OUT && (
+                  <Text as="p" font="secondary-body" color="text-04">
+                    {t("agentMessage.timedOut.text")}
+                  </Text>
+                )}
+            </div>
+          </React.Fragment>
+        );
+      })}
 
       {/* Feedback buttons - only show when streaming and rendering complete */}
       {isComplete && !hideFooter && (
@@ -371,7 +603,7 @@ const AgentMessage = React.memo(function AgentMessage({
           getNextMessage={getNextMessage}
           onMessageSelection={onMessageSelection}
           rawPackets={rawPackets}
-          finalAnswerRef={finalAnswerRef}
+          answerRefs={answerRefs}
           currentFeedback={currentFeedback}
           onRegenerate={onRegenerate}
           parentMessage={parentMessage}

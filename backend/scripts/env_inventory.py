@@ -71,6 +71,8 @@ CONFIG_DIR_MARKERS = ("/configs/", "/shared_configs/")
 ENV_HELPER_FUNCS = {
     "_non_negative_int_env": "int",
     "lock_timeout_from_env": "int",
+    "_fc_env_int": "int",
+    "_fc_env_float": "float",
 }
 
 # Deployment files to cross-reference.

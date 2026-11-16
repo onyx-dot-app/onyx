@@ -5,7 +5,8 @@
 
 An upload control for many files. Each file is a removable tag inside the input chrome, as on
 `InputMultiSelect` (it uses the same `TagField`). A click focuses the field, so copied files can be
-pasted; a double click, Enter or Space opens the file picker; and files can be dropped on it. Each
+pasted; a double click, Enter or Space opens the file picker; and files can be dropped on it. A "Select
+Files" secondary button at the end of the field is always shown, is a tab stop, and opens the picker too. Each
 pick, paste or drop **adds** files, skipping ones it
 already holds. Backspace arms the last tag and Backspace or Delete removes an armed one; the clear
 button removes them all.
@@ -37,8 +38,8 @@ picker does not count as leaving the field, so a form does not mark it touched m
 `InputMultiUploadField` binds it to a Formik `File[]` field, holding `null` when empty so a required
 check fails.
 
-Labels come from `OpalStrings`: `inputMultiUploadPlaceholder`, `inputMultiUploadDropToAdd` and
-`inputMultiUploadDropToAddMore`.
+Labels come from `OpalStrings`: `inputMultiUploadPlaceholder`, `inputMultiUploadDropToAdd`,
+`inputMultiUploadDropToAddMore` and `inputMultiUploadSelect`.
 
 ## Usage
 

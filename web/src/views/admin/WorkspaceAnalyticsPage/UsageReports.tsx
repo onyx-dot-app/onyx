@@ -74,8 +74,7 @@ function PendingReportRow({ rangeLabel, slow }: PendingReportRowProps) {
       data-testid="pending-report-row"
     >
       <ContentAction
-        sizePreset="main-ui"
-        variant="section"
+        font="main-ui-action"
         icon={SvgSpreadsheetFile}
         title={t("reports.pendingRow.title")}
         description={
@@ -114,8 +113,7 @@ function ReportRow({ report, justArrived }: ReportRowProps) {
       }
     >
       <ContentAction
-        sizePreset="main-ui"
-        variant="section"
+        font="main-ui-action"
         icon={SvgSpreadsheetFile}
         title={label}
         description={t("reports.row.description", {
@@ -436,7 +434,7 @@ export default function UsageReports() {
           width="full"
           height="fit"
         >
-          <Text font="heading-h3">{t("reports.title")}</Text>
+          <Text font="heading-section">{t("reports.title")}</Text>
           <Text font="secondary-body" color="text-03">
             {t("reports.description")}
           </Text>

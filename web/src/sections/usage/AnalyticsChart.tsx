@@ -187,7 +187,7 @@ export function AnalyticsChart({
             width="full"
             height="fit"
           >
-            <Text font="heading-h3">{title}</Text>
+            <Text font="heading-section">{title}</Text>
             <Text font="secondary-body" color="text-03">
               {description}
             </Text>

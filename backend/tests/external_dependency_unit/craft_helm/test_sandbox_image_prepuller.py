@@ -250,7 +250,7 @@ def test_prepuller_ships_no_cluster_scoped_objects() -> None:
     of everything else.
 
     The class was removed rather than worked around: it bought very little (see
-    docs/craft/sandbox/image-and-spinup.md), and an operator who wants one
+    the template's header comment), and an operator who wants one
     points `priorityClassName` at their own. Keep this template namespaced —
     cluster-scoped objects also collide between releases sharing a name in
     different namespaces, which is why the removed class needed a

@@ -6,7 +6,7 @@ An embeddable, lightweight chat widget that brings AI-powered conversations to a
 
 The widget runs in the browser, so whatever credential it holds is visible to the visitor. Pick one of the two modes below.
 
-- **JWT passthrough** — the host page supplies the visitor's own identity-provider token, and each visitor acts as their own Onyx user. No shared secret goes in the page. Use this when the host page already signs the visitor in with the same IdP as Onyx. Single-tenant (self-hosted) deployments only. See [docs/WIDGET_JWT_PASSTHROUGH.md](../docs/WIDGET_JWT_PASSTHROUGH.md).
+- **JWT passthrough** — the host page supplies the visitor's own identity-provider token, and each visitor acts as their own Onyx user. No shared secret goes in the page. Use this when the host page already signs the visitor in with the same IdP as Onyx. Single-tenant (self-hosted) deployments only. See [JWT passthrough](https://docs.onyx.app/deployment/configuration/website_widget#jwt-passthrough-self-hosted-only).
 - **API key** — ⚠️ **always use a limited-scope API key.** The key is visible in client-side code, so it should have restricted permissions and rate limits. Never use admin or full-access keys.
 
 ## Features
@@ -206,7 +206,7 @@ The stored transcript is scoped to the token subject, so a second person signing
 
 `tokenProvider` is a JavaScript property, not an HTML attribute, because attributes cannot hold functions. Assign it at any time — the widget reads the property when it sends a request, not when it mounts.
 
-Onyx must be configured to accept these tokens. The setup, the required claims, and the CORS and provisioning caveats are in [docs/WIDGET_JWT_PASSTHROUGH.md](../docs/WIDGET_JWT_PASSTHROUGH.md).
+Onyx must be configured to accept these tokens. The setup, the required claims, and the CORS and provisioning caveats are in the [website widget docs](https://docs.onyx.app/deployment/configuration/website_widget#jwt-passthrough-self-hosted-only).
 
 **Precedence**: when both are present, `tokenProvider` wins. When neither resolves to a credential, the widget shows an error instead of sending the request.
 

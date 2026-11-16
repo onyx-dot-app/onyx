@@ -14,7 +14,11 @@ import {
 import type { MinimalAgent } from "@/lib/agents/types";
 import { sendMessage } from "@/app/app/services/lib";
 import { enabledChatToolIds } from "@/lib/plugins/chat";
-import { useToolConfiguration } from "@/lib/tools/hooks";
+import {
+  type ToolConfigurationHandle,
+  useToolConfiguration,
+} from "@/lib/tools/hooks";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import ToolsPopover from "@/lib/tools/components/ToolsPopover";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { MCPAuthenticationType } from "@/lib/mcp/types";
@@ -30,6 +34,9 @@ const mockRouter = { push: jest.fn(), replace: jest.fn() };
 let mockChatId: string | null = "chat-a";
 let mockProjectId: number | null = null;
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => mockRouter,
   usePathname: () => "/app",
   useSearchParams: () =>
@@ -37,18 +44,22 @@ jest.mock("next/navigation", () => ({
       mockChatId ? `chatId=${mockChatId}` : `projectId=${mockProjectId}`
     ),
 }));
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     chat: () => mockChatId,
     agent: () => null,
     project: () => mockProjectId,
   }),
 }));
+let mockActiveAgent: MinimalAgent | undefined;
 jest.mock("@/lib/agents/hooks", () => ({
-  useActiveAgent: () => ({ id: 5 }),
+  useActiveAgent: () => mockActiveAgent,
 }));
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ vectorDbEnabled: true }),
+}));
+jest.mock("@/providers/IncognitoProvider", () => ({
+  useIncognito: () => ({ incognitoEnabled: false }),
 }));
 jest.mock("@/lib/projects/providers", () => ({
   useProjectsContext: () => ({
@@ -95,12 +106,30 @@ const agent: MinimalAgent = {
   user_permission: "VIEWER",
 };
 
+// The composer's configuration as the harness last rendered it.
+let lastConfiguration: ToolConfigurationHandle | undefined;
+
+/** Opens chat-a with these tools switched off in its saved selection. */
+function openChatWithDisabled(disabledToolIds: number[]): void {
+  useChatSessionStore.getState().createSession("chat-a", {
+    incognito: false,
+    toolSelection: {
+      allowed_tool_ids: attachedTools
+        .map((tool) => tool.id)
+        .filter((id) => !disabledToolIds.includes(id)),
+      preferred_tool_id: null,
+      internal_search_filters: null,
+    },
+  });
+}
+
 function PickerHarness({
   selectedAgent = agent,
 }: {
   selectedAgent?: MinimalAgent;
 }) {
   const configuration = useToolConfiguration();
+  lastConfiguration = configuration;
   return (
     <>
       <ToolsPopover agent={selectedAgent} toolConfiguration={configuration} />
@@ -111,7 +140,7 @@ function PickerHarness({
             chatSessionId: mockChatId ?? "new-chat",
             parentMessageId: null,
             filters: null,
-            forcedToolId: configuration.forcedToolId,
+            preferredToolId: configuration.preferredToolId,
             enabledToolIds: enabledChatToolIds(
               selectedAgent.tools,
               configuration
@@ -209,6 +238,15 @@ beforeEach(() => {
   sessionStorage.clear();
   mockChatId = "chat-a";
   mockProjectId = null;
+  mockActiveAgent = agent;
+  lastConfiguration = undefined;
+  // Existing chats whose details carry no saved selection yet.
+  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
+  for (const chatSessionId of ["chat-a", "chat-b"]) {
+    useChatSessionStore
+      .getState()
+      .createSession(chatSessionId, { incognito: false, toolSelection: null });
+  }
 });
 afterEach(() => jest.restoreAllMocks());
 
@@ -255,7 +293,7 @@ test("the Plugins flyout stays horizontal while toggling and searches its own ro
   expect(toggle).not.toBeChecked();
   expect(screen.getByTestId("tool-options")).toBeVisible();
   await user.type(
-    screen.getByRole("textbox", { name: "Search plugins" }),
+    screen.getByRole("searchbox", { name: "Search plugins" }),
     "Reports"
   );
   expect(
@@ -274,7 +312,9 @@ test("keyboard navigation returns from the flyout before dismissing Actions", as
   const row = screen.getByRole("button", { name: "Plugins" });
   act(() => row.focus());
   await user.keyboard("{ArrowRight}");
-  expect(screen.getByRole("textbox", { name: "Search plugins" })).toHaveFocus();
+  expect(
+    screen.getByRole("searchbox", { name: "Search plugins" })
+  ).toHaveFocus();
   await user.keyboard("{ArrowLeft}");
   expect(row).toHaveFocus();
   expect(
@@ -338,10 +378,7 @@ test("switching agents closes a pending connection without applying it to the ne
       return Promise.resolve(jsonResponse({ mcp_servers: [] }));
     return fetchFixture(input, init);
   });
-  sessionStorage.setItem(
-    "onyx:tools:chat:chat-a",
-    JSON.stringify({ 71: "disabled", 72: "disabled" })
-  );
+  openChatWithDisabled([71, 72]);
   const { rerender } = render(<PickerHarness />);
   const user = setupUser();
   await openPlugins(user);
@@ -352,9 +389,9 @@ test("switching agents closes a pending connection without applying it to the ne
   rerender(<PickerHarness selectedAgent={{ ...agent, id: 8, tools: [] }} />);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   await act(async () => save.resolve(jsonResponse({})));
-  expect(
-    JSON.parse(sessionStorage.getItem("onyx:tools:chat:chat-a") ?? "{}")
-  ).toMatchObject({ tools: { 71: "disabled", 72: "disabled" } });
+  expect(lastConfiguration?.disabledToolIds).toEqual(
+    expect.arrayContaining([71, 72])
+  );
   await openPlugins(user);
   expect(
     await screen.findByText("No plugins are available in this chat.")
@@ -391,7 +428,7 @@ test("an MCP group toggle serializes every attached ID through the send service"
   await waitFor(() =>
     expect(requests[0]).toMatchObject({
       allowed_tool_ids: [1, 2, 7],
-      forced_tool_id: null,
+      preferred_tool_id: null,
       chat_session_id: "chat-a",
     })
   );
@@ -413,7 +450,7 @@ test("an attached private MCP server stays visible and can be excluded from the 
   await waitFor(() =>
     expect(requests[0]).toMatchObject({
       allowed_tool_ids: [1, 2, 7],
-      forced_tool_id: null,
+      preferred_tool_id: null,
       chat_session_id: "chat-a",
     })
   );
@@ -440,7 +477,7 @@ test("an OAuth status failure allows disabling a selected plugin but blocks enab
   await waitFor(() =>
     expect(requests[0]).toMatchObject({
       allowed_tool_ids: [1, 2, 71, 72],
-      forced_tool_id: null,
+      preferred_tool_id: null,
       chat_session_id: "chat-a",
     })
   );
@@ -448,10 +485,7 @@ test("an OAuth status failure allows disabling a selected plugin but blocks enab
 
 test("the shared connection dialog reconnects without replacing the chat page", async () => {
   const { fetchSpy } = network({ credentials: true });
-  sessionStorage.setItem(
-    "onyx:tools:chat:chat-a",
-    JSON.stringify({ 71: "disabled", 72: "disabled" })
-  );
+  openChatWithDisabled([71, 72]);
   render(<PickerHarness />);
   const user = setupUser();
   await openPlugins(user);
@@ -489,10 +523,7 @@ test("the shared connection dialog reconnects without replacing the chat page", 
 
 test("connection failure stays in the dialog and preserves disabled selection", async () => {
   network({ credentials: true, credentialFailure: true });
-  sessionStorage.setItem(
-    "onyx:tools:chat:chat-a",
-    JSON.stringify({ 71: "disabled", 72: "disabled" })
-  );
+  openChatWithDisabled([71, 72]);
   render(<PickerHarness />);
   const user = setupUser();
   await openPlugins(user);
@@ -504,9 +535,9 @@ test("connection failure stays in the dialog and preserves disabled selection", 
     messages.actions.memberPlugins.connection.errors.request_failed
   );
   expect(screen.getByRole("dialog")).toBeVisible();
-  expect(
-    JSON.parse(sessionStorage.getItem("onyx:tools:chat:chat-a") ?? "{}")
-  ).toMatchObject({ tools: { 71: "disabled", 72: "disabled" } });
+  expect(lastConfiguration?.disabledToolIds).toEqual(
+    expect.arrayContaining([71, 72])
+  );
 });
 
 test("browse retains the current chat and a partial roster failure offers retry", async () => {
@@ -559,12 +590,8 @@ test("Actions keeps built-in search and Sources while custom plugins appear only
   expect(notion).toBeChecked();
   await user.click(notion);
   expect(notion).not.toBeChecked();
-  await waitFor(() =>
-    expect(
-      JSON.parse(sessionStorage.getItem("onyx:tools:chat:chat-a") ?? "{}")
-    ).toMatchObject({
-      tools: { 1: "forced" },
-      filters: { selectedSources: ["slack"] },
-    })
-  );
+  await waitFor(() => {
+    expect(lastConfiguration?.preferredToolId).toBe(1);
+    expect(lastConfiguration?.filters.selectedSources).toEqual(["slack"]);
+  });
 });

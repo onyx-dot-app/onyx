@@ -14,7 +14,11 @@ from ee.onyx.external_permissions.google_drive.models import (
 from ee.onyx.external_permissions.google_drive.permission_retrieval import (
     get_permissions_by_ids,
 )
-from ee.onyx.external_permissions.utils import credential_json
+from ee.onyx.external_permissions.models import SyncEntityFailure
+from ee.onyx.external_permissions.utils import (
+    MAX_FAILED_ENTITY_FRACTION,
+    credential_json,
+)
 from onyx.access.utils import build_domain_group_id
 from onyx.configs.app_configs import PERMISSION_SYNC_TIMEOUT
 from onyx.connectors.factory import build_connector_kwargs
@@ -23,6 +27,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveHttpError,
     GoogleDriveSourceOperations,
 )
+from onyx.db.enums import SyncEntityKind
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
@@ -59,7 +64,7 @@ def _get_all_folders(
     google_drive_connector: GoogleDriveConnector,
     skip_folders_without_permissions: bool,
     deadline: float | None = None,
-) -> Generator[FolderInfo, None, None]:
+) -> Generator[FolderInfo | SyncEntityFailure, None, None]:
     """Have to get all folders since the group syncing system assumes all groups
     are returned every time.
 
@@ -68,7 +73,6 @@ def _get_all_folders(
 
     TODO: tweak things so we can fetch deltas.
     """
-    MAX_FAILED_PERCENTAGE = 0.5
     # Skips are counted and logged in aggregate: per-folder lines here produce
     # millions of records on large domains (every folder is revisited for every
     # enumerated user).
@@ -167,8 +171,11 @@ def _get_all_folders(
             else:
                 logger.exception("Error getting folders for user %s", user_email)
             failed_count += 1
+            yield SyncEntityFailure(
+                kind=SyncEntityKind.USER, id=user_email, message=str(e)
+            )
 
-            if failed_count > MAX_FAILED_PERCENTAGE * len(user_emails):
+            if failed_count > MAX_FAILED_ENTITY_FRACTION * len(user_emails):
                 raise RuntimeError("Too many failed folder fetches during group sync")
 
     if skipped_no_permissions or skipped_already_seen:
@@ -370,7 +377,7 @@ def _google_group_to_onyx_group(
 def gdrive_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
-) -> Generator[ExternalUserGroup, None, None]:
+) -> Generator[ExternalUserGroup | SyncEntityFailure, None, None]:
     # Initialize connector and build credential/service objects
     google_drive_connector = GoogleDriveConnector(
         **build_connector_kwargs(
@@ -390,11 +397,28 @@ def gdrive_group_sync(
     # Get all group emails
     all_group_emails = _get_all_google_groups(ops, sync_deadline)
 
-    # Each google group is an Onyx group, yield those
+    # Each google group is an Onyx group, yield those. A group whose members
+    # cannot be read is left out of the map, so drives and folders shared
+    # with it grant its members nothing.
     group_email_to_member_emails_map: dict[str, list[str]] = {}
+    failed_group_count: int = 0
     for group_email in all_group_emails:
         _check_sync_deadline(sync_deadline)
-        onyx_group = _google_group_to_onyx_group(ops, group_email, sync_deadline)
+        try:
+            onyx_group = _google_group_to_onyx_group(ops, group_email, sync_deadline)
+        except TimeoutError:
+            raise
+        except Exception as e:
+            logger.exception("Error getting members for group %s", group_email)
+            failed_group_count += 1
+            yield SyncEntityFailure(
+                kind=SyncEntityKind.GROUP, id=group_email, message=str(e)
+            )
+            if failed_group_count > MAX_FAILED_ENTITY_FRACTION * len(all_group_emails):
+                raise RuntimeError(
+                    "Too many failed group member fetches during group sync"
+                )
+            continue
         group_email_to_member_emails_map[group_email] = onyx_group.user_emails
         yield onyx_group
 
@@ -411,6 +435,9 @@ def gdrive_group_sync(
         deadline=sync_deadline,
     )
     for folder in folder_info:
+        if isinstance(folder, SyncEntityFailure):
+            yield folder
+            continue
         yield _drive_folder_to_onyx_group(folder, group_email_to_member_emails_map)
 
     # "Everyone at <domain>" Drive shares resolve to this group. Only this

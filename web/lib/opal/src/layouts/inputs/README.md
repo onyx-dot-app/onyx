@@ -3,8 +3,8 @@
 **Import:** `import { InputVertical, InputHorizontal, ... } from "@opal/layouts";`
 
 Layout primitives for form fields. Arrange title, description, input controls, and Formik error
-messages in vertical or horizontal orientations with optional `<label>` wrapping. Uses
-`sizePreset="main-ui"` internally for all text sizing.
+messages in vertical or horizontal orientations with optional `<label>` wrapping. Titles use
+`font="main-ui-action"`; descriptions, sub-descriptions and error messages use `secondary-body`.
 
 ## Components
 

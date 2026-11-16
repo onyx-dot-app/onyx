@@ -5,7 +5,7 @@ This tests the deletion of a user group with the following foreign key constrain
 - credential
 - llm_provider
 - document_set
-- token_rate_limit (Not Implemented)
+- token_rate_limit
 - persona
 """
 
@@ -19,6 +19,9 @@ from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
+from tests.integration.common_utils.managers.spending_limits import (
+    SpendingLimitsManager,
+)
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import (
@@ -85,6 +88,15 @@ def test_user_group_deletion(
         groups=[user_group.id],
         user_performing_action=admin_user,
     )
+    # Disabled: only the rows' lifetime matters here, not enforcement.
+    for card in ("pool", "per-member"):
+        response = SpendingLimitsManager.put_card(
+            f"groups/{user_group.id}/{card}",
+            [{"period": "DAILY", "cost_budget_cents": 100}],
+            admin_user,
+            enabled=False,
+        )
+        response.raise_for_status()
 
     UserGroupManager.wait_for_sync(
         user_groups_to_check=[user_group], user_performing_action=admin_user
@@ -130,3 +142,8 @@ def test_user_group_deletion(
         persona=persona,
         user_performing_action=admin_user,
     )
+
+    assert user_group.id not in {
+        group.user_group_id
+        for group in SpendingLimitsManager.get_all(admin_user).groups
+    }

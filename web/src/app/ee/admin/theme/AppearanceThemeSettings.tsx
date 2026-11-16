@@ -9,7 +9,7 @@ import {
   InputTypeIn,
   InputSwitch,
   Tabs,
-  Tag,
+  Badge,
 } from "@opal/components";
 import Preview from "@/app/ee/admin/theme/Preview";
 import CharacterCount from "@/refresh-components/CharacterCount";
@@ -530,7 +530,7 @@ export const AppearanceThemeSettings = forwardRef<
           >
             <FormField.Label>
               {t("helpLink.label")}
-              {!enterpriseTier && <PlanTag plan={Tier.ENTERPRISE} size="sm" />}
+              {!enterpriseTier && <PlanTag plan={Tier.ENTERPRISE} />}
             </FormField.Label>
             <FormField.Control asChild>
               <InputTypeIn

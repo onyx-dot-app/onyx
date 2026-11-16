@@ -14,10 +14,13 @@ import (
 
 // ImageOptions configures a container image audit run.
 type ImageOptions struct {
-	Image     string
-	Format    string // comma-separated list of text|json|sarif
-	FailOn    Severity
-	IgnoreURL string
+	SBOMOnly        bool
+	Image           string
+	SBOMs           []string // Required inventory paths inside the image.
+	UpdatePolicyURL string
+	Format          string // comma-separated list of text|json|sarif
+	FailOn          Severity
+	IgnoreURL       string
 	// Strict fails a scan that extracts no packages, for callers that read a
 	// missing finding as a resolved one. Every image ships OS packages.
 	Strict bool
@@ -26,21 +29,73 @@ type ImageOptions struct {
 	Stderr io.Writer
 }
 
+var scanOSImage = scanImage
+
 // RunImage scans a container image for known vulnerabilities, applies the same
 // S3 allowlist used by Run, renders a report to opts.Stdout/opts.Stderr, and
 // returns the result. Findings at or above opts.FailOn are reported as Blocking,
 // which is how it gates a release.
 func RunImage(opts ImageOptions) (*Result, error) {
-	findings, err := scanImage(opts.Image, opts.Strict)
-	if err != nil {
-		return nil, fmt.Errorf("image scan failed: %w", err)
+	if opts.SBOMOnly && len(opts.SBOMs) == 0 {
+		return nil, fmt.Errorf("SBOM-only audit requires an inventory")
+	}
+	var findings []Finding
+	var err error
+	if !opts.SBOMOnly {
+		findings, err = scanOSImage(opts.Image, opts.Strict)
+		if err != nil {
+			return nil, fmt.Errorf("image scan failed: %w", err)
+		}
 	}
 
-	ignores, err := FetchIgnores(opts.IgnoreURL)
+	var updates []UpdateStatus
+	var packages []ScannedPackage
+	var policy UpdatePolicy
+	if len(opts.SBOMs) > 0 && opts.UpdatePolicyURL != "" {
+		policy, err = ReadUpdatePolicy(opts.UpdatePolicyURL)
+		if err != nil {
+			return nil, err
+		}
+	}
+	for _, inventory := range opts.SBOMs {
+		extra, err := scanSBOM(opts.Image, inventory, opts.Stderr)
+		if err != nil {
+			return nil, err
+		}
+		findings = append(findings, extra.Findings...)
+		if policy != nil {
+			for _, component := range extra.Components {
+				entry, ok := policy[component.Name]
+				if !ok {
+					return nil, fmt.Errorf("missing update policy for %s", component.Name)
+				}
+				status, err := CheckUpdate(component.Name, component.Version, entry, time.Now())
+				if err != nil {
+					return nil, err
+				}
+				updates = append(updates, status)
+			}
+		}
+		packages = append(packages, extra.ScannedPackages...)
+	}
+
+	result := filterFindings(findings, opts.IgnoreURL, opts.FailOn)
+	result.ScannedPackages = packages
+	result.Updates = updates
+	if err := renderReport(opts.Stdout, opts.Stderr, opts.Format, result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// filterFindings dedupes findings, applies the allowlist at ignoreURL and marks
+// the kept findings at or above failOn as blocking.
+func filterFindings(findings []Finding, ignoreURL string, failOn Severity) *Result {
+	ignores, err := FetchIgnores(ignoreURL)
 	if err != nil {
 		// Err toward blocking: proceed with an empty allowlist so unignored
 		// criticals still fail the gate rather than slipping through.
-		log.Warnf("Could not fetch allowlist from %s: %v (continuing with no suppressions)", opts.IgnoreURL, err)
+		log.Warnf("Could not fetch allowlist from %s: %v (continuing with no suppressions)", ignoreURL, err)
 		ignores = nil
 	}
 
@@ -50,16 +105,11 @@ func RunImage(opts ImageOptions) (*Result, error) {
 	sortFindings(kept)
 	sortFindings(suppressed)
 
-	result := &Result{
+	return &Result{
 		Findings: kept,
 		Ignored:  suppressed,
-		Blocking: blockingFindings(kept, opts.FailOn),
+		Blocking: blockingFindings(kept, failOn),
 	}
-
-	if err := renderReport(opts.Stdout, opts.Stderr, opts.Format, result); err != nil {
-		return nil, err
-	}
-	return result, nil
 }
 
 // scanImage runs osv-scanner's layer-aware container scanner (as a library)

@@ -140,11 +140,10 @@ function CredentialField({
     return (
       <Label>
         <Content
+          font="main-ui-action"
           icon={checkboxIcon}
           title={label}
           description={copy.description}
-          sizePreset="main-ui"
-          variant="section"
         />
       </Label>
     );

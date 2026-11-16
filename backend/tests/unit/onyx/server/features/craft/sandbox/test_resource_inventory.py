@@ -113,6 +113,36 @@ def test_docker_inventory_rejects_foreign_network_with_matching_compose_project(
     ]
 
 
+def test_docker_runtime_tenant_listing_requires_deployment_ownership() -> None:
+    manager = object.__new__(dsm.DockerSandboxManager)
+    manager._cleanup_docker = MagicMock()
+    manager._network_name = "deployment-network"
+    manager._compose_project = "onyx"
+    containers = []
+    for tenant_id, network in (
+        ("tenant-a", "deployment-network"),
+        ("tenant-b", "deployment-network"),
+        ("tenant-foreign", "other-network"),
+    ):
+        item = MagicMock()
+        item.name = tenant_id
+        item.id = tenant_id
+        item.labels = dsm.build_sandbox_labels(
+            uuid4(), tenant_id, None, compose_project="onyx"
+        )
+        item.labels[dsm.LABEL_DOCKER_NETWORK] = network
+        item.attrs = {"Labels": item.labels, "Created": "2026-10-21T10:00:00Z"}
+        containers.append(item)
+    manager._cleanup_docker.containers.list.return_value = containers
+    manager._cleanup_docker.volumes.list.return_value = []
+
+    tenant_ids = manager.list_resource_tenant_ids(time.monotonic() + 30)
+
+    assert tenant_ids == {"tenant-a", "tenant-b"}
+    filters = manager._cleanup_docker.containers.list.call_args.kwargs["filters"]
+    assert LABEL_TENANT_ID in filters["label"]
+
+
 def test_pod_log_stream_preserves_lines_without_an_idle_read_timeout() -> None:
     manager = object.__new__(KubernetesSandboxManager)
     manager._namespace = "sandbox-test"
@@ -234,6 +264,40 @@ def test_inventory_paginates_and_excludes_other_tenants() -> None:
     assert len(secret_selectors) == 2
     assert "onyx.app/tenant-id=tenant-a" in secret_selectors[0]
     assert "!onyx.app/tenant-id" in secret_selectors[1]
+
+
+def test_runtime_tenant_listing_paginates_without_a_tenant_filter() -> None:
+    first, second = _resource(), _resource()
+    second = second.model_copy(update={"tenant_id": "tenant-b"})
+    manager = object.__new__(KubernetesSandboxManager)
+    manager._namespace = "sandbox-test"
+    manager._core_api = MagicMock()
+    manager._core_api.list_namespaced_pod.side_effect = [
+        client.V1PodList(
+            items=[client.V1Pod(metadata=_metadata(first))],
+            metadata=client.V1ListMeta(_continue="next"),
+        ),
+        client.V1PodList(
+            items=[client.V1Pod(metadata=_metadata(second))],
+            metadata=client.V1ListMeta(),
+        ),
+    ]
+    manager._core_api.list_namespaced_service.return_value = client.V1ServiceList(
+        items=[], metadata=client.V1ListMeta()
+    )
+    manager._core_api.list_namespaced_secret.return_value = client.V1SecretList(
+        items=[], metadata=client.V1ListMeta()
+    )
+
+    tenant_ids = manager.list_resource_tenant_ids(time.monotonic() + 10)
+
+    assert tenant_ids == {"tenant-a", "tenant-b"}
+    calls = manager._core_api.list_namespaced_pod.call_args_list
+    assert calls[1].kwargs["_continue"] == "next"
+    selector = calls[0].kwargs["label_selector"]
+    assert f",{LABEL_TENANT_ID}," in selector
+    assert f"{LABEL_TENANT_ID}=" not in selector
+    assert manager._core_api.list_namespaced_secret.call_count == 1
 
 
 def test_readiness_watch_uses_remaining_operation_budget(

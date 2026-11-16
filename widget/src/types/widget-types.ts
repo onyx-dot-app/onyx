@@ -3,6 +3,7 @@
  */
 
 import { ResolvedCitation } from "@/types/api-types";
+import type { ApprovalEntry } from "@/services/approvals";
 
 /**
  * Returns the bearer credential for a single request. Called before every
@@ -50,4 +51,8 @@ export interface ChatMessage {
   timestamp: number;
   isStreaming?: boolean;
   citations?: ResolvedCitation[];
+  // Tool calls of this response that asked for the user's approval
+  approvals?: ApprovalEntry[];
+  // The stream stopped while the response waits for decisions
+  awaitingApproval?: boolean;
 }

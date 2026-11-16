@@ -476,7 +476,9 @@ test.describe("Permission gating: MANAGE_DOCUMENT_SETS", () => {
       const publicToggle = page.locator("#checkbox-is_public");
       await expect(publicToggle).toBeAttached({ timeout: 10000 });
       const publicToggleLabel = page
-        .getByText("Make this Document Set Public?", { exact: false })
+        .getByText("Make this document set available to your organization?", {
+          exact: false,
+        })
         .first();
       await expect(publicToggleLabel).toBeVisible({ timeout: 10000 });
 

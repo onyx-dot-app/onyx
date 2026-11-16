@@ -1,0 +1,25 @@
+---
+title: "Web Search"
+description: "Give agents access to the public web"
+icon: "globe"
+---
+
+Out of the box, agents only know what's in the wiki.
+**Admin → Web Search** connects them to the public web through two providers, each with its own API key:
+
+- **[Serper](https://serper.dev)** answers search queries — this is what powers the `web_search` tool.
+- **[Firecrawl](https://firecrawl.dev)** fetches full page contents — this is what powers the
+  `open_urls` tool, so an agent can actually read a result rather than just see its snippet.
+
+Keys are stored encrypted in the database and never echoed back to the browser.
+
+## What it unlocks
+
+With the keys in place,
+agents can ground their work in sources outside the wiki — verify a claim before writing it into a page,
+pull details from a linked ticket or announcement, or answer chat questions the wiki alone can't.
+
+Each capability follows its own key: with only Serper configured, agents can search but not open the results;
+with only Firecrawl, they can open URLs they already have but not search for them.
+A missing key doesn't produce errors — the corresponding tool simply isn't offered to agents,
+the same way [AI features sit idle](/agent-wiki/admin/language_models) without a model provider.

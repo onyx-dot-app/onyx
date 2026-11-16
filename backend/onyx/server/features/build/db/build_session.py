@@ -596,6 +596,18 @@ def mark_user_sessions_idle__no_commit(db_session: Session, user_id: UUID) -> in
     return result
 
 
+def get_webapp_session_ids(db_session: Session, user_id: UUID) -> list[UUID]:
+    """Sessions of a user that have a Next.js port, so an app preview."""
+    return list(
+        db_session.scalars(
+            select(BuildSession.id).where(
+                BuildSession.user_id == user_id,
+                BuildSession.nextjs_port.isnot(None),
+            )
+        ).all()
+    )
+
+
 def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:
     """Clear nextjs_port for all sessions belonging to a user.
 

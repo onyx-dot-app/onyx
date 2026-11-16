@@ -8,8 +8,12 @@ from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import PRUNE_FAILURE_BACKOFF_SECONDS
+from onyx.configs.app_configs import (
+    DOCUMENT_CLEANUP_BATCH_SIZE,
+    PRUNE_FAILURE_BACKOFF_SECONDS,
+)
 from onyx.configs.constants import (
+    CELERY_DOCUMENT_CLEANUP_TASK_EXPIRES,
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_PRUNING_LOCK_TIMEOUT,
     OnyxCeleryPriority,
@@ -174,8 +178,8 @@ class RedisConnectorPrune:
     def generator_failed(self) -> bool:
         return bool(self.redis.exists(self.generator_failed_key))
 
-    def increment_failed_docs(self) -> None:
-        self.redis.incr(self.failed_docs_key)
+    def increment_failed_docs(self, count: int) -> None:
+        self.redis.incrby(self.failed_docs_key, count)
         self.redis.expire(self.failed_docs_key, self.FENCE_TTL)
 
     @property
@@ -185,8 +189,8 @@ class RedisConnectorPrune:
 
     @property
     def generator_complete(self) -> int | None:
-        """the fence payload is an int representing the starting number of
-        pruning tasks to be processed ... just after the generator completes."""
+        """the fence payload is an int representing the number of docs queued
+        for pruning ... just after the generator completes."""
         fence_bytes = self.redis.get(self.generator_complete_key)
         if fence_bytes is None:
             return None
@@ -210,9 +214,11 @@ class RedisConnectorPrune:
         db_session: Session,
         lock: RedisLock | None,
     ) -> int | None:
+        """Queues cleanup for the docs to prune, in tasks of
+        DOCUMENT_CLEANUP_BATCH_SIZE docs. Returns the docs queued, or None when
+        the cc_pair is gone."""
         last_lock_time = time.monotonic()
 
-        async_results = []
         cc_pair = get_connector_credential_pair_from_id(
             db_session=db_session,
             cc_pair_id=int(self.id),
@@ -220,7 +226,8 @@ class RedisConnectorPrune:
         if not cc_pair:
             return None
 
-        for doc_id in documents_to_prune:
+        doc_ids = sorted(documents_to_prune)
+        for start in range(0, len(doc_ids), DOCUMENT_CLEANUP_BATCH_SIZE):
             current_time = time.monotonic()
             if lock and current_time - last_lock_time >= (
                 CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4
@@ -239,10 +246,12 @@ class RedisConnectorPrune:
             self.redis.expire(self.taskset_key, self.TASKSET_TTL)
 
             # Priority on sync's triggered by new indexing should be medium
-            result = celery_app.send_task(
-                OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
+            celery_app.send_task(
+                OnyxCeleryTask.DOCUMENT_BATCH_BY_CC_PAIR_CLEANUP_TASK,
                 kwargs={
-                    "document_id": doc_id,
+                    "document_ids": doc_ids[
+                        start : start + DOCUMENT_CLEANUP_BATCH_SIZE
+                    ],
                     "connector_id": cc_pair.connector_id,
                     "credential_id": cc_pair.credential_id,
                     "tenant_id": self.tenant_id,
@@ -252,11 +261,10 @@ class RedisConnectorPrune:
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,
                 ignore_result=True,
+                expires=CELERY_DOCUMENT_CLEANUP_TASK_EXPIRES,
             )
 
-            async_results.append(result)
-
-        return len(async_results)
+        return len(doc_ids)
 
     def reset(self) -> None:
         self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)

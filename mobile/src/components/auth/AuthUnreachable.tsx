@@ -20,7 +20,11 @@ export function AuthUnreachable({ onRetry, retrying }: AuthUnreachableProps) {
     >
       <View className="items-center">
         <Icon as={SvgAlertCircle} size={44} className="text-status-error-05" />
-        <Text font="heading-h3" color="text-05" className="mt-16 text-center">
+        <Text
+          font="heading-section"
+          color="text-05"
+          className="mt-16 text-center"
+        >
           Can&apos;t reach your Onyx instance
         </Text>
         <Text font="main-ui-muted" color="text-03" className="mt-4 text-center">

@@ -96,6 +96,8 @@ describe("useBuildStreaming thinking packets", () => {
       run_id: "scheduled-run",
       task_id: "task",
       task_name: "Task",
+      revision: 0,
+      viewed_revision: null,
       status: "SUCCEEDED",
       started_at: "2026-10-10T00:00:00Z",
       finished_at: null,
@@ -3275,6 +3277,8 @@ describe("useBuildStreaming thinking packets", () => {
         run_id: "scheduled-run",
         task_id: "task",
         task_name: "Task",
+        revision: 0,
+        viewed_revision: null,
         started_at: "2026-10-10T00:00:00Z",
         finished_at: null,
       };
@@ -3343,6 +3347,8 @@ describe("useBuildStreaming thinking packets", () => {
         run_id: "scheduled-run",
         task_id: "task",
         task_name: "Task",
+        revision: 0,
+        viewed_revision: null,
         started_at: "2026-10-12",
         finished_at: null,
       };
@@ -3872,6 +3878,8 @@ describe("useBuildStreaming thinking packets", () => {
         run_id: "scheduled-run",
         task_id: "task",
         task_name: "Task",
+        revision: 0,
+        viewed_revision: null,
         started_at: "2026-10-12T00:00:00Z",
         finished_at: null,
       };

@@ -70,11 +70,11 @@ type UserGroupCreate struct {
 	CCPairIDs []int64  `json:"cc_pair_ids"`
 }
 
-// userGroupUpdate mirrors UserGroupUpdate. Both fields are a full replace, so
-// the connector ids must always carry the current set — see SetUserGroupMembers.
+// userGroupUpdate mirrors UserGroupUpdate. user_ids is a full replace. A null
+// cc_pair_ids keeps the connector links, which belong to onyx_cc_pair.
 type userGroupUpdate struct {
 	UserIDs   []string `json:"user_ids"`
-	CCPairIDs []int64  `json:"cc_pair_ids"`
+	CCPairIDs *[]int64 `json:"cc_pair_ids"`
 }
 
 type userGroupRename struct {
@@ -89,12 +89,6 @@ type userGroupIncognitoUpdate struct {
 type setGroupManagerRequest struct {
 	UserID    string `json:"user_id"`
 	IsManager bool   `json:"is_manager"`
-}
-
-// addUsersToUserGroupRequest mirrors AddUsersToUserGroupRequest. It carries no
-// connector ids: Onyx keeps the stored ones itself.
-type addUsersToUserGroupRequest struct {
-	UserIDs []string `json:"user_ids"`
 }
 
 type bulkSetPermissionsRequest struct {
@@ -132,83 +126,27 @@ func (c *Client) ListUserGroups(ctx context.Context) ([]UserGroup, error) {
 	return groups, nil
 }
 
-// LookupUserGroup reads one group and reports whether it still exists.
-//
-// There is no get-by-id route, so this filters the listing.
+// LookupUserGroup reads one group and reports whether it still exists. A
+// group the caller may not read answers 404 too, so it reads as absent.
 func (c *Client) LookupUserGroup(ctx context.Context, id int64) (*UserGroup, bool, error) {
-	groups, err := c.ListUserGroups(ctx)
+	var group UserGroup
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("%s/%d", userGroupBasePath, id), nil, &group)
+	if IsNotFound(err) {
+		return nil, false, nil
+	}
 	if err != nil {
 		return nil, false, err
 	}
-	for i := range groups {
-		if groups[i].ID == id {
-			return &groups[i], true, nil
-		}
-	}
-	return nil, false, nil
+	return &group, true, nil
 }
 
-// SetUserGroupMembers makes the group roster match userIDs.
-//
-// Onyx's update endpoint replaces connector links along with members, and
-// those links belong to onyx_cc_pair, so they have to survive a roster change.
-// Which call does that best depends on the change:
-//
-// A roster that only gains members goes through the add-users endpoint. That
-// one takes members alone, and Onyx preserves the connector links itself,
-// reading and rewriting them inside the transaction that holds the membership
-// lock. The read and the write are one step there, so a connector share made
-// at the same moment cannot be overwritten by a list this client read a
-// round-trip earlier.
-//
-// A roster that loses a member has no such endpoint and has to use the full
-// replace, which means reading the connector ids here and sending them back.
-// That read-modify-write spans two calls, so a connector share that lands in
-// between is overwritten by the older list. Onyx offers nothing narrower —
-// omitting the field is not "leave them alone", it is a validation error, and
-// sending an empty list unshares every connector outright. The window is one
-// round-trip and only opens for a removal.
+// SetUserGroupMembers makes the group roster match userIDs. cc_pair_ids is
+// sent as null, so Onyx keeps the connector links inside the same transaction.
 func (c *Client) SetUserGroupMembers(ctx context.Context, id int64, userIDs []string) (*UserGroup, error) {
-	current, found, err := c.LookupUserGroup(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, &APIError{
-			StatusCode: http.StatusNotFound,
-			Detail:     fmt.Sprintf("user group %d not found", id),
-		}
-	}
-
 	if userIDs == nil {
 		userIDs = []string{}
 	}
-
-	desired := make(map[string]bool, len(userIDs))
-	for _, userID := range userIDs {
-		desired[userID] = true
-	}
-	removes := false
-	for _, memberID := range current.MemberIDs() {
-		if !desired[memberID] {
-			removes = true
-			break
-		}
-	}
-
-	// The whole roster goes out, not just the new names: Onyx works out which
-	// of them are new and skips the rest.
-	if !removes && len(userIDs) > 0 {
-		var group UserGroup
-		req := addUsersToUserGroupRequest{UserIDs: userIDs}
-		path := fmt.Sprintf("%s/%d/add-users", userGroupBasePath, id)
-		if err := c.doJSON(ctx, http.MethodPost, path, req, &group); err != nil {
-			return nil, err
-		}
-		return &group, nil
-	}
-
-	req := userGroupUpdate{UserIDs: userIDs, CCPairIDs: current.CCPairIDs()}
+	req := userGroupUpdate{UserIDs: userIDs}
 	var group UserGroup
 	path := fmt.Sprintf("%s/%d", userGroupBasePath, id)
 	// Not replayed: a write that commits leaves the group syncing, so a replay
@@ -315,7 +253,7 @@ func (c *Client) WaitForUserGroupSettled(ctx context.Context, id int64, timeout 
 		})
 }
 
-// WaitForUserGroupDeleted waits until the group leaves the listing.
+// WaitForUserGroupDeleted waits until the group answers 404.
 //
 // The delete is asynchronous unless the deployment runs without a vector
 // database, where the route removes the row inline; both finish here.

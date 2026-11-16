@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect } from "@opal/navigation";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 export default function ExternalAppsAdminRedirect() {

@@ -2,7 +2,7 @@
 
 **Import:** `import { InputTypeIn } from "@opal/components";`
 
-A styled text input with optional search icon, prefix text, clear button, and right section slot.
+A styled text input with an optional leading icon, clear button, and right section slot.
 Visual states are driven by a `variant` prop; all border, background, and focus styles live in `styles.css`.
 
 ## Props
@@ -10,10 +10,8 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 | Prop            | Type                    | Default     | Description                                                                                  |
 | --------------- | ----------------------- | ----------- | -------------------------------------------------------------------------------------------- |
 | `variant`       | `InputVariants`         | `"primary"` | Visual state                                                                                 |
-| `prefixText`    | `string`                | —           | Non-editable prefix rendered before the input (e.g. `"https://"`)                            |
-| `leftChildren`  | `ReactNode`             | —           | Content before the text, after `prefixText` (e.g. a chosen value shown as a tag)             |
-| `searchIcon`    | `boolean`               | `false`     | Show a search icon on the left                                                               |
-| `icon`          | `IconFunctionComponent` | —           | Leading icon after the search icon (a select's chosen option icon)                           |
+| `leftChildren`  | `ReactNode`             | —           | Content before the text, after the leading icon (e.g. a chosen value shown as a tag)         |
+| `icon`          | `"search" \| IconFunctionComponent` | — | Leading icon. `"search"` shows the search icon and renders a native `type="search"` field; a component shows that icon (a select's chosen option icon) |
 | `rightChildren` | `ReactNode`             | —           | Custom content rendered to the right of the input; suppresses the built-in clear button      |
 | `clearButton`   | `boolean`               | `false`     | Show the clear (×) button when the field has a value; suppressed when `rightChildren` is set |
 | `open`          | `boolean`               | `false`     | The list the field opens is open: keeps the focused border while focus is in the list        |
@@ -39,13 +37,10 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 <InputTypeIn value={value} onChange={(e) => setValue(e.target.value)} />
 
 // Search
-<InputTypeIn searchIcon placeholder="Search..." value={q} onChange={(e) => setQ(e.target.value)} />
+<InputTypeIn icon="search" placeholder="Search..." value={q} onChange={(e) => setQ(e.target.value)} />
 
 // Error state
 <InputTypeIn variant="error" value={value} onChange={...} />
-
-// With prefix
-<InputTypeIn prefixText="https://" value={url} onChange={...} />
 
 // Custom right section (password reveal) — suppresses clear button automatically
 <InputTypeIn

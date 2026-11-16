@@ -1,0 +1,166 @@
+# syntax=docker/dockerfile:1.7
+#
+# Craft Firecracker host artifacts: the guest kernel, Firecracker and jailer.
+#
+# Targets:
+#   artifacts (default)  /craft-fc/ with vmlinux, its .config, firecracker, jailer,
+#                        SOURCE.md and licenses. A base layer for the host agent image.
+#   source               The matching kernel source and config inputs (GPL-2.0).
+#
+# Build context: deployment/craft-fc. The artifacts are x86_64 only. The builder
+# stage runs on the build platform and cross-compiles when it is not x86_64.
+
+ARG BASE_IMAGE_REGISTRY=docker.io
+
+ARG KERNEL_TAG=microvm-kernel-6.18.25-57.115.amzn2023
+ARG KERNEL_COMMIT=003a7905ac5f07e7f0e213951258d5bb80ea31e5
+ARG KERNEL_REPO=https://github.com/amazonlinux/linux.git
+
+ARG FC_VERSION=v1.17.0
+ARG FC_TARBALL_SHA256=06094a1108ae9e82aa4c23a775aa92758f53f1175d422270d9d6162cb9ade558
+ARG FC_BASE_CONFIG=resources/guest_configs/microvm-kernel-ci-x86_64-6.18.config
+ARG FC_BASE_CONFIG_SHA256=ba22401a0c7292a4c024ebcd10a562d4a1f1bfd2faed671406d3b159c0cf5215
+
+# Ubuntu 24.04 (gcc 13) is the toolchain the tested kernel was built with.
+FROM --platform=$BUILDPLATFORM ${BASE_IMAGE_REGISTRY}/library/ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS builder
+ARG BUILDARCH
+ARG DEBIAN_FRONTEND=noninteractive
+RUN set -eux; \
+    cross=""; \
+    if [ "${BUILDARCH}" != "amd64" ]; then cross="gcc-x86-64-linux-gnu binutils-x86-64-linux-gnu"; fi; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        bc bison build-essential ca-certificates cpio curl dwarves flex git \
+        libelf-dev libssl-dev python3 rsync xz-utils ${cross}; \
+    rm -rf /var/lib/apt/lists/*
+
+FROM builder AS firecracker
+ARG FC_VERSION
+ARG FC_TARBALL_SHA256
+WORKDIR /work
+# Check the tarball against the pinned hash and the release's published hash,
+# then check each extracted file against the release's SHA256SUMS.
+RUN set -eux; \
+    base="https://github.com/firecracker-microvm/firecracker/releases/download/${FC_VERSION}"; \
+    tgz="firecracker-${FC_VERSION}-x86_64.tgz"; \
+    curl -fsSLO "${base}/${tgz}"; \
+    curl -fsSLO "${base}/${tgz}.sha256.txt"; \
+    echo "${FC_TARBALL_SHA256}  ${tgz}" | sha256sum -c -; \
+    sha256sum -c "${tgz}.sha256.txt"; \
+    tar -xzf "${tgz}"; \
+    cd "release-${FC_VERSION}-x86_64"; \
+    grep -E "  \./(firecracker|jailer)-${FC_VERSION}-x86_64\$|  \./(LICENSE|NOTICE|THIRD-PARTY)\$" SHA256SUMS > /work/SHA256SUMS.used; \
+    test "$(wc -l < /work/SHA256SUMS.used)" -eq 5; \
+    sha256sum -c /work/SHA256SUMS.used; \
+    mkdir -p /out/licenses/firecracker; \
+    install -m 0755 "firecracker-${FC_VERSION}-x86_64" /out/firecracker; \
+    install -m 0755 "jailer-${FC_VERSION}-x86_64" /out/jailer; \
+    install -m 0644 LICENSE NOTICE THIRD-PARTY /out/licenses/firecracker/
+
+FROM builder AS kernel-source
+ARG KERNEL_TAG
+ARG KERNEL_COMMIT
+ARG KERNEL_REPO
+ARG FC_VERSION
+ARG FC_BASE_CONFIG
+ARG FC_BASE_CONFIG_SHA256
+WORKDIR /src
+RUN set -eux; \
+    git clone --quiet --depth 1 --branch "${KERNEL_TAG}" "${KERNEL_REPO}" linux; \
+    test "$(git -C linux rev-parse HEAD)" = "${KERNEL_COMMIT}"; \
+    curl -fsSL -o fc-base.config \
+        "https://raw.githubusercontent.com/firecracker-microvm/firecracker/${FC_VERSION}/${FC_BASE_CONFIG}"; \
+    echo "${FC_BASE_CONFIG_SHA256}  fc-base.config" | sha256sum -c -
+COPY kernel/config-fragment /src/config-fragment
+
+# olddefconfig silently drops a fragment setting whose dependencies are not met,
+# so check that every fragment line is in the final .config.
+# LOCALVERSION is set but empty, so the release is 6.18.25, not 6.18.25+ (the
+# "+" marks a git tree that is not at a release tag).
+FROM kernel-source AS kernel
+ARG BUILDARCH
+ARG KERNEL_TAG
+WORKDIR /src/linux
+RUN set -eux; \
+    if [ "${BUILDARCH}" != "amd64" ]; then export CROSS_COMPILE=x86_64-linux-gnu-; fi; \
+    export ARCH=x86_64 KBUILD_BUILD_USER=onyx KBUILD_BUILD_HOST=craft-fc-artifacts LOCALVERSION=; \
+    mkdir -p /build; \
+    scripts/kconfig/merge_config.sh -m -O /build /src/fc-base.config /src/config-fragment; \
+    make -s O=/build olddefconfig; \
+    grep -E '^(CONFIG_[A-Z0-9_]+=|# CONFIG_[A-Z0-9_]+ is not set$)' /src/config-fragment \
+      | while IFS= read -r line; do \
+          grep -qxF "${line}" /build/.config || { echo "config-fragment line not applied: ${line}" >&2; exit 1; }; \
+        done; \
+    make -s O=/build -j"$(nproc)" vmlinux; \
+    mkdir -p /out/licenses/linux; \
+    install -m 0644 /build/vmlinux /out/vmlinux; \
+    install -m 0644 /build/.config /out/vmlinux.config; \
+    install -m 0644 COPYING /out/licenses/linux/COPYING; \
+    install -m 0644 LICENSES/preferred/GPL-2.0 /out/licenses/linux/GPL-2.0; \
+    install -m 0644 LICENSES/exceptions/Linux-syscall-note /out/licenses/linux/Linux-syscall-note; \
+    make -s O=/build kernelrelease > /out/kernelrelease; \
+    want="${KERNEL_TAG#microvm-kernel-}"; \
+    test "$(cat /out/kernelrelease)" = "${want%%-*}"
+
+# The build scripts are part of the complete corresponding source.
+FROM kernel-source AS source-bundle
+ARG KERNEL_TAG
+WORKDIR /src/linux
+RUN set -eux; \
+    mkdir -p /out; \
+    git archive --format=tar --prefix="linux-${KERNEL_TAG}/" HEAD | xz -T0 -6 > "/out/linux-${KERNEL_TAG}.tar.xz"; \
+    cp /src/fc-base.config /src/config-fragment /out/
+COPY Dockerfile.artifacts check-artifacts.sh /out/build/
+COPY kernel/config-fragment /out/build/kernel/config-fragment
+
+FROM builder AS manifest
+ARG KERNEL_TAG
+ARG KERNEL_COMMIT
+ARG KERNEL_REPO
+ARG FC_VERSION
+ARG FC_BASE_CONFIG
+# The onyx commit that has these build files. CI passes github.sha.
+ARG ONYX_COMMIT=unknown
+COPY --from=kernel /out/kernelrelease /tmp/kernelrelease
+COPY kernel/config-fragment /tmp/config-fragment
+RUN set -eux; \
+    mkdir -p /out; \
+    { \
+      echo "# Craft Firecracker artifacts: sources"; \
+      echo; \
+      echo "## Guest kernel (vmlinux), GPL-2.0"; \
+      echo; \
+      echo "- Kernel release: $(cat /tmp/kernelrelease)"; \
+      echo "- Source: ${KERNEL_REPO%.git}"; \
+      echo "- Tag: ${KERNEL_TAG}"; \
+      echo "- Commit: ${KERNEL_COMMIT}"; \
+      echo "- Base config: https://github.com/firecracker-microvm/firecracker/blob/${FC_VERSION}/${FC_BASE_CONFIG}"; \
+      echo "- Full config used: vmlinux.config (also at /proc/config.gz in the guest)"; \
+      echo "- Complete corresponding source: the image with the same tag plus the suffix \"-source\"."; \
+      echo "  It holds linux-${KERNEL_TAG}.tar.xz, the base config, the fragment below and"; \
+      echo "  the build files (build/)."; \
+      echo "- Build files: https://github.com/onyx-dot-app/onyx/tree/${ONYX_COMMIT}/deployment/craft-fc"; \
+      echo "  (onyx commit ${ONYX_COMMIT})"; \
+      echo; \
+      echo "Our config fragment:"; \
+      echo; \
+      echo '```'; \
+      cat /tmp/config-fragment; \
+      echo '```'; \
+      echo; \
+      echo "## Firecracker and jailer ${FC_VERSION}, Apache-2.0"; \
+      echo; \
+      echo "- Unmodified release binaries from https://github.com/firecracker-microvm/firecracker/releases/tag/${FC_VERSION}"; \
+      echo "- License, notice and third-party notices: licenses/firecracker/"; \
+    } > /out/SOURCE.md
+
+FROM scratch AS source
+COPY --from=source-bundle /out/ /craft-fc-source/
+COPY --from=manifest /out/SOURCE.md /craft-fc-source/SOURCE.md
+
+FROM scratch AS artifacts
+COPY --from=kernel /out/vmlinux /out/vmlinux.config /craft-fc/
+COPY --from=kernel /out/licenses/ /craft-fc/licenses/
+COPY --from=firecracker /out/firecracker /out/jailer /craft-fc/
+COPY --from=firecracker /out/licenses/ /craft-fc/licenses/
+COPY --from=manifest /out/SOURCE.md /craft-fc/SOURCE.md

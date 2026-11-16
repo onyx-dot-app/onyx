@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { EmptyMessageCard } from "@opal/components";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
@@ -13,7 +13,7 @@ import { LLMGatewaySettings } from "@/views/SettingsPage";
 
 export default function LLMGatewayPage() {
   const t = useTranslations("settings.gateway");
-  const router = useRouter();
+  const navigation = useNavigation();
   const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
   const settings = useSettings();
   const { llmProviders, isLoading, error } = useLanguageModels();
@@ -25,9 +25,9 @@ export default function LLMGatewayPage() {
 
   useEffect(() => {
     if (!isLoadingAccess && !error && !gatewayDisabled && !hasAccess) {
-      router.replace("/app/settings/general");
+      navigation.go("/app/settings/general", { replace: true });
     }
-  }, [error, gatewayDisabled, hasAccess, isLoadingAccess, router]);
+  }, [error, gatewayDisabled, hasAccess, isLoadingAccess, navigation]);
 
   useEffect(() => {
     if (error) {

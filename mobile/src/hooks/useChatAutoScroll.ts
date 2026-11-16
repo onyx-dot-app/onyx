@@ -21,6 +21,7 @@ import {
 } from "react-native";
 
 import { isWithinBottomBand } from "@/chat/autoScroll";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 
 // The subset of the FlashList ref this hook drives — decoupled from the list item type.
 interface ScrollableRef {
@@ -77,6 +78,7 @@ export function useChatAutoScroll(
   const prevEnabledRef = useRef(enabled);
   const rafRef = useRef<number | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   // Land on the newest turn when a chat opens (web's session-load scroll-to-bottom); no-op for short
   // chats. Reset per session by keying the list on sessionId (see MessageList / ChatSurface).
@@ -160,18 +162,19 @@ export function useChatAutoScroll(
     isAutoScrollingRef.current = false;
   }, []);
 
-  // Explicit jump: re-pin so streaming resumes following from the bottom.
+  // Explicit jump: re-pin so streaming resumes following from the bottom. It animates unless the
+  // OS asks to reduce motion.
   const scrollToBottom = useCallback(() => {
     pinnedRef.current = true;
     setShowScrollButton(false);
     isAutoScrollingRef.current = true;
-    listRef.current?.scrollToEnd({ animated: true });
+    listRef.current?.scrollToEnd({ animated: !reduceMotion });
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
     settleTimerRef.current = setTimeout(() => {
       isAutoScrollingRef.current = false;
       settleTimerRef.current = null;
     }, AUTO_SCROLL_SETTLE_MS);
-  }, [listRef]);
+  }, [listRef, reduceMotion]);
 
   // Follow on content growth. The rAF defers one frame so the appended content is laid out before we
   // scroll to its end, and coalesces rapid flushes via the cleanup cancel. The pin is re-checked when

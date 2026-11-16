@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import {
   forwardRef,
   memo,
@@ -10,7 +11,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import BaseInputBar, {
@@ -25,7 +25,6 @@ import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
 import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
 import UserLibraryModal from "@/app/craft/components/UserLibraryModal";
 import { useEscapeInterrupt } from "@/hooks/useEscapeInterrupt";
-import useSlashPicker from "@/hooks/useSlashPicker";
 import {
   useUploadFilesContext,
   type BuildFile,
@@ -35,7 +34,11 @@ import { clearDraft, draftKey, useDraft } from "@/hooks/useDraft";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
+import type { CaretText } from "@/lib/contentEditable";
+import { useEntryPicker } from "@/lib/skills/hooks";
 import {
+  CRAFT_PICKER_TRIGGER,
+  filterPickerSections,
   pickerEntryConnectionPath,
   pickerEntryKey,
   pickerEntryPromptPrefix,
@@ -44,7 +47,7 @@ import {
 } from "@/lib/skills/picker";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { fetchLibraryTree } from "@/app/craft/services/apiServices";
-import type { QueuedMessage } from "@/app/app/interfaces";
+import type { QueuedMessage } from "@/app/app/types";
 
 export interface CraftInputBarHandle {
   reset: () => void;
@@ -133,7 +136,7 @@ const CraftInputBar = memo(
         if (typeof draft === "string") baseRef.current?.setMessage(draft);
       }, [draft, loaded, storageKey, userId]);
       const fileInputRef = useRef<HTMLInputElement>(null);
-      const router = useRouter();
+      const navigation = useNavigation();
 
       const {
         currentMessageFiles,
@@ -177,7 +180,7 @@ const CraftInputBar = memo(
         (entry: PickerEntry) => {
           const connectionPath = pickerEntryConnectionPath(entry);
           if (connectionPath) {
-            router.push(connectionPath);
+            navigation.go(connectionPath);
             return;
           }
           setActiveEntries((prev) =>
@@ -188,7 +191,7 @@ const CraftInputBar = memo(
               : [...prev, entry]
           );
         },
-        [router]
+        [navigation]
       );
 
       const removeEntry = useCallback((entryKey: string) => {
@@ -197,9 +200,18 @@ const CraftInputBar = memo(
         );
       }, []);
 
-      const slashPicker = useSlashPicker({
-        inputRef: baseRef,
-        onSelect: addEntry,
+      const pickEntry = useCallback(
+        (entry: PickerEntry, token: CaretText) => {
+          baseRef.current?.deleteToken(token);
+          addEntry(entry);
+        },
+        [addEntry]
+      );
+      const slashPicker = useEntryPicker({
+        trigger: CRAFT_PICKER_TRIGGER,
+        entries: pickerSections,
+        filter: filterPickerSections,
+        onSelect: pickEntry,
       });
 
       const interruptible = !!onInterrupt && isRunning;
@@ -291,8 +303,8 @@ const CraftInputBar = memo(
             {
               onAttachFiles: () => fileInputRef.current?.click(),
               onSelectEntry: addEntry,
-              onBrowseSkills: () => router.push("/craft/v1/skills"),
-              onBrowseApps: () => router.push("/craft/v1/apps"),
+              onBrowseSkills: () => navigation.go("/craft/v1/skills"),
+              onBrowseApps: () => navigation.go("/craft/v1/apps"),
               libraryFiles,
               // Defer the modal until the + popover finishes closing, else it paints over it.
               onManageLibrary: () =>
@@ -300,7 +312,7 @@ const CraftInputBar = memo(
             },
             entryMenuT
           ),
-        [pickerSections, addEntry, libraryFiles, router, entryMenuT]
+        [pickerSections, addEntry, libraryFiles, navigation, entryMenuT]
       );
 
       const bottomLeftSlot = (
@@ -357,15 +369,16 @@ const CraftInputBar = memo(
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
             onInputCallback={slashPicker.onInput}
-            onSelectionChange={slashPicker.onSelectionChange}
           />
           <EntryPickerPopover
             open={slashPicker.open}
             anchorRect={slashPicker.anchorRect}
             query={slashPicker.query}
-            sections={pickerSections}
+            sections={slashPicker.sections}
             onSelect={slashPicker.onSelect}
-            onClose={slashPicker.onClose}
+            onEscape={slashPicker.onEscape}
+            onDismiss={slashPicker.reset}
+            trigger={CRAFT_PICKER_TRIGGER}
           />
           {entryInfo && (
             <EntryInfoPopover

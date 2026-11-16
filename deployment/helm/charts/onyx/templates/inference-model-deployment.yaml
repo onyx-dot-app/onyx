@@ -23,6 +23,9 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
+        # Pod-only: spec.selector is immutable on existing Deployments. The
+        # release labels let the admin log export find this pod.
+        {{- include "onyx.selectorLabels" . | nindent 8 }}
         {{- range .Values.inferenceCapability.podLabels }}
         {{ .key }}: {{ .value }}
         {{- end }}

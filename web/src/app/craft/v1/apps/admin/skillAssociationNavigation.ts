@@ -51,6 +51,7 @@ export function skillEditorUrlForApp(
 export function skillEditUrlForApp(
   skillId: string,
   app: ExternalAppAdminResponse
-): `/craft/v1/skills/edit/${string}?${string}` {
-  return `/craft/v1/skills/edit/${skillId}?${externalAppParams(app).toString()}`;
+): Route {
+  // SAFETY: the `/craft/v1/skills/edit/[id]` route.
+  return `/craft/v1/skills/edit/${skillId}?${externalAppParams(app).toString()}` as Route;
 }

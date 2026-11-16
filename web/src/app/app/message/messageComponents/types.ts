@@ -1,11 +1,12 @@
 import { JSX } from "react";
+import type { NestedCall } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { MinimalAgent } from "@/lib/agents/types";
 import { Packet, StopReason } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { ProjectFile } from "@/lib/projects/types";
 import { LlmDescriptor } from "@/lib/hooks";
 import type { IconFunctionComponent } from "@opal/types";
-import { CitationMap } from "../../interfaces";
+import { CitationMap } from "@/app/app/types";
 import { TimelineSurfaceBackground } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 
 export enum RenderType {
@@ -67,7 +68,12 @@ export type MessageRenderer<
   T extends Packet,
   S extends Partial<FullChatState>,
 > = React.ComponentType<{
+  /** The step's own packets, without the packets of nested calls */
   packets: T[];
+  /** Tool calls nested under the step, ordered by sub_turn_index */
+  nestedCalls: NestedCall[];
+  /** Every packet of the step, nested calls included, in stream order */
+  streamPackets: Packet[];
   state: S;
   /** Node id for the message currently being rendered */
   messageNodeId?: number;
@@ -76,6 +82,7 @@ export type MessageRenderer<
   onComplete: () => void;
   renderType: RenderType;
   animate: boolean;
+  restoredTextLength?: number;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
   /** Whether this is the last step in the timeline (for connector line decisions) */

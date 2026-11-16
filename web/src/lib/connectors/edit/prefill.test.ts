@@ -76,6 +76,7 @@ function githubPair(
     pending_backfills: [],
     has_named_checks: false,
     indexing_hold: null,
+    queue_position: null,
     ...overrides,
   };
 }

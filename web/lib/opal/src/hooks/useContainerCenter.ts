@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname } from "@opal/navigation/next";
 import useScreenSize from "@opal/hooks/useScreenSize";
 
 const SELECTOR = "[data-main-container]";

@@ -13,7 +13,9 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationOptions,
     Message,
+    ReasoningEffort,
     TextContent,
     ToolDefinition,
     ToolResult,
@@ -169,3 +171,43 @@ def test_provider_failure_retains_completed_tool_output(script: MockLLMScript) -
     assert result is not None
     assert result.text == "accepted output"
     assert snapshot.failure is not None
+
+
+def test_reused_agent_keeps_http_history_with_a_fresh_budget(
+    script: MockLLMScript,
+) -> None:
+    script.conversation(
+        "reuse",
+        Reply(text="cedar"),
+        Reply(
+            text="cedar",
+            conditions=RequestConditions(
+                prompt_contains=[
+                    "Remember that the project code is cedar",
+                    "What project code did I give you?",
+                ]
+            ),
+        ),
+        conditions=RequestConditions(has_tools=False),
+    )
+    agent = Agent(
+        model(script),
+        options=GenerationOptions(
+            reasoning_effort=ReasoningEffort.LOW, max_tokens=1024
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.DEEP_RESEARCH),
+    )
+    runs = [
+        agent.start(max_steps=1, messages=[UserMessage(content=text)], background=False)
+        for text in (
+            "Remember that the project code is cedar. Reply only with the project code.",
+            "What project code did I give you? Reply only with that code.",
+        )
+    ]
+
+    first, following = (run.result() for run in runs)
+    assert first.steps == following.steps == 1
+    assert first.output.text == following.output.text == "cedar"
+    assert runs[1].previous_run_id == runs[0].id
+    assert len(script.requests) == 2
+    script.verify()

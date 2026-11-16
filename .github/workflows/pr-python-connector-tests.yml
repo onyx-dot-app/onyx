@@ -77,6 +77,8 @@ env:
 
 jobs:
   build-backend-image:
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     # See https://runs-on.com/runners/linux/
     runs-on:
       [
@@ -98,6 +100,7 @@ jobs:
           persist-credentials: false
 
       - name: Build backend image
+        id: build
         uses: ./.github/actions/build-backend-image
         with:
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
@@ -167,7 +170,7 @@ jobs:
 
       - name: Pull production backend image
         env:
-          PROD_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:nightly-llm-it-backend-${{ github.run_id }}
+          PROD_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-backend-image.outputs.digest }}
         run: docker pull "${PROD_IMAGE}"
 
       # Start a long-lived container from the production image and layer in the
@@ -181,7 +184,7 @@ jobs:
       # connector credentials from Secrets Manager.
       - name: Start test container
         env:
-          PROD_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:nightly-llm-it-backend-${{ github.run_id }}
+          PROD_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-backend-image.outputs.digest }}
         run: |
           docker run -d --name onyx-connector-tests --user root \
             -v "${{ github.workspace }}:/workspace" \
@@ -223,7 +226,7 @@ jobs:
 
       # The prod image has no uv or .venv; run pytest with the system
       # interpreter directly, where the deps installed above live.
-      - name: Run Tests (excluding HubSpot, Salesforce, GitHub, and Coda)
+      - name: Run Tests (excluding HubSpot, Salesforce, GitHub, Coda, and Egnyte)
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           docker exec onyx-connector-tests bash -c '
@@ -238,7 +241,8 @@ jobs:
               --ignore backend/tests/daily/connectors/hubspot \
               --ignore backend/tests/daily/connectors/salesforce \
               --ignore backend/tests/daily/connectors/github \
-              --ignore backend/tests/daily/connectors/coda
+              --ignore backend/tests/daily/connectors/coda \
+              --ignore backend/tests/daily/connectors/egnyte
           '
 
       - name: Run HubSpot Connector Tests
@@ -284,6 +288,20 @@ jobs:
               -xv \
               --ff \
               backend/tests/daily/connectors/github
+          '
+
+      # Egnyte allows 1,000 API calls per token per day, so these tests run on
+      # the daily schedule only.
+      - name: Run Egnyte Connector Tests
+        if: ${{ github.event_name == 'schedule' }}
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: |
+          docker exec onyx-connector-tests bash -c '
+            python -m pytest \
+              --durations=8 \
+              -o junit_family=xunit2 \
+              -xv \
+              backend/tests/daily/connectors/egnyte
           '
 
       - name: Stop test container

@@ -186,7 +186,9 @@ def test_failed_cleanup_retains_checkpoint_across_worker_restart_and_restores_fi
         )
         lease.release()
         try:
-            run_cleanup(core)
+            # Only the reconciler removes resources, and the failed checkpoint
+            # leaves this sandbox's resources in place.
+            run_cleanup(core, reconcile="FAILURE")
             assert (
                 core.read_namespaced_pod(owned.pod_name, SANDBOX_NAMESPACE).metadata.uid
                 == original.metadata.uid
@@ -215,7 +217,8 @@ def test_failed_cleanup_retains_checkpoint_across_worker_restart_and_restores_fi
             SANDBOX_NAMESPACE,
             {"metadata": {"finalizers": [TEST_FINALIZER]}},
         )
-        run_cleanup(core)
+        # The finalizer holds the Service past its deletion deadline.
+        run_cleanup(core, reconcile="FAILURE")
         db_session.expire_all()
         db_session.refresh(sandbox)
         assert sandbox.status == SandboxStatus.FAILED
@@ -264,6 +267,7 @@ def test_failed_cleanup_retains_checkpoint_across_worker_restart_and_restores_fi
                 break
             assert time.monotonic() < deadline, "Cleanup worker did not restart"
             time.sleep(1)
+        # The held Service is still inside its retry window, so it is skipped.
         run_cleanup(core)
         db_session.expire_all()
         db_session.refresh(sandbox)

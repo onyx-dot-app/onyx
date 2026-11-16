@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR from "swr";
-import { Button, Card, Text } from "@opal/components";
+import { Button, Card, Text, useCreateModal } from "@opal/components";
 import { SvgUnplug } from "@opal/icons";
 import {
   ConfirmationModalLayout,
@@ -24,6 +24,7 @@ export default function OAuthProviderConnections() {
   const enabled = useSettings().oauth_provider_enabled;
   const { user } = useUser();
   const [selected, setSelected] = useState<OAuthProviderGrant | null>(null);
+  const disconnectModal = useCreateModal();
   const [revoking, setRevoking] = useState(false);
   const { data, error, isLoading, mutate } = useSWR<
     OAuthProviderGrant[],
@@ -44,7 +45,7 @@ export default function OAuthProviderConnections() {
         { method: "DELETE" }
       );
       if (!response.ok) throw new Error("OAuth provider disconnect failed");
-      setSelected(null);
+      disconnectModal.toggle(false);
       await mutate();
     } catch {
       toast.error(t("connections.failed"));
@@ -58,10 +59,9 @@ export default function OAuthProviderConnections() {
   return (
     <Section gap={3} height="fit" alignItems="stretch">
       <Content
+        font="main-content-emphasis"
         title={t("connections.title")}
         description={t("connections.description")}
-        sizePreset="main-content"
-        variant="section"
         width="full"
       />
       <Card border="solid" rounding={4}>
@@ -112,7 +112,10 @@ export default function OAuthProviderConnections() {
                     clientName: grant.client_name,
                   })}
                   disabled={revoking}
-                  onClick={() => setSelected(grant)}
+                  onClick={() => {
+                    setSelected(grant);
+                    disconnectModal.toggle(true);
+                  }}
                 >
                   {t("connections.disconnect")}
                 </Button>
@@ -121,40 +124,42 @@ export default function OAuthProviderConnections() {
           )}
         </Section>
       </Card>
-      {selected && (
-        <ConfirmationModalLayout
-          icon={SvgUnplug}
-          title={t("connections.confirmTitle", {
-            clientName: selected.client_name,
-          })}
-          hideCancel
-          onClose={() => setSelected(null)}
-          submit={
-            <>
-              <Button
-                prominence="secondary"
-                disabled={revoking}
-                onClick={() => setSelected(null)}
-              >
-                {t("connections.cancel")}
-              </Button>
-              <Button
-                variant="danger"
-                disabled={revoking}
-                onClick={() => void disconnect()}
-              >
-                {revoking
-                  ? t("connections.pending")
-                  : t("connections.disconnect")}
-              </Button>
-            </>
-          }
-        >
-          <Text font="main-ui-body" color="text-04">
-            {t("connections.confirmDescription")}
-          </Text>
-        </ConfirmationModalLayout>
-      )}
+      <disconnectModal.Provider>
+        {selected && (
+          <ConfirmationModalLayout
+            icon={SvgUnplug}
+            title={t("connections.confirmTitle", {
+              clientName: selected.client_name,
+            })}
+            hideCancel
+            onClose={() => disconnectModal.toggle(false)}
+            submit={
+              <>
+                <Button
+                  prominence="secondary"
+                  disabled={revoking}
+                  onClick={() => disconnectModal.toggle(false)}
+                >
+                  {t("connections.cancel")}
+                </Button>
+                <Button
+                  variant="danger"
+                  disabled={revoking}
+                  onClick={() => void disconnect()}
+                >
+                  {revoking
+                    ? t("connections.pending")
+                    : t("connections.disconnect")}
+                </Button>
+              </>
+            }
+          >
+            <Text font="main-ui-body" color="text-04">
+              {t("connections.confirmDescription")}
+            </Text>
+          </ConfirmationModalLayout>
+        )}
+      </disconnectModal.Provider>
     </Section>
   );
 }

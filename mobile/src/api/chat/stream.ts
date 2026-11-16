@@ -2,7 +2,7 @@
 import { fetch as expoFetch } from "expo/fetch";
 
 import { getBaseUrl } from "@/api/config";
-import { getValidToken } from "@/api/auth/refreshState";
+import { buildHeaders } from "@/api/client";
 import { createNdjsonBuffer } from "@/chat/ndjson";
 import { FileDescriptor } from "@/chat/interfaces";
 import { LlmOverride } from "@/chat/models";
@@ -23,9 +23,9 @@ export interface SendMessageBody {
   file_descriptors: FileDescriptor[];
   deep_research: boolean;
   origin: string;
-  // Omitted/null = backend defaults: allow all tools, force none, no source filter.
+  // Omitted/null = backend defaults: allow all tools, prefer none, no source filter.
   allowed_tool_ids?: number[] | null;
-  forced_tool_id?: number | null;
+  preferred_tool_id?: number | null;
   internal_search_filters?: InternalSearchFilters | null;
   // Omitted or null runs the agent's own default model. Note the singular name: `llm_overrides`
   // is a separate field for multi-model comparison, which mobile does not use.
@@ -35,7 +35,7 @@ export interface SendMessageBody {
 export interface ChatToolOptions {
   deepResearch: boolean;
   allowedToolIds: number[] | null;
-  forcedToolId: number | null;
+  preferredToolId: number | null;
   internalSearchFilters: InternalSearchFilters | null;
   llmOverride: LlmOverride | null;
 }
@@ -45,14 +45,25 @@ export class StreamHttpError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    // Backend `error_code`, e.g. APPROVAL_PENDING.
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = "StreamHttpError";
   }
 }
 
+// Follows the complete packet prefix of a resumed stream. Resuming from `next_cursor` delivers no
+// packet twice. `replay_complete` marks the end of the output that existed when the resume began.
+export interface StreamCursor {
+  stream_id: number;
+  next_cursor: number;
+  replay_complete: boolean;
+}
+
 // The wire mixes wrapped packets ({placement, obj}) with root control objects; discriminate by field, not `type`.
-export type StreamEvent = Packet | MessageResponseIDInfo | StreamingError;
+export type StreamEvent =
+  Packet | MessageResponseIDInfo | StreamingError | StreamCursor;
 
 export function isPacket(event: StreamEvent): event is Packet {
   return "obj" in event && "placement" in event;
@@ -62,6 +73,10 @@ export function isMessageIdInfo(
   event: StreamEvent,
 ): event is MessageResponseIDInfo {
   return "user_message_id" in event;
+}
+
+export function isStreamCursor(event: StreamEvent): event is StreamCursor {
+  return "next_cursor" in event;
 }
 
 export function isStreamError(event: StreamEvent): event is StreamingError {
@@ -77,22 +92,20 @@ export function isHeartbeat(event: unknown): boolean {
   return (event as { type?: string }).type === "chat_heartbeat";
 }
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const token = await getValidToken();
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
-}
-
 async function raiseForStatus(response: ExpoResponse): Promise<never> {
   let detail = `Request failed with status ${response.status}`;
+  let code: string | null = null;
   try {
-    const parsed = JSON.parse(await response.text()) as { detail?: string };
+    const parsed = JSON.parse(await response.text()) as {
+      detail?: unknown;
+      error_code?: unknown;
+    };
     if (typeof parsed.detail === "string") detail = parsed.detail;
+    if (typeof parsed.error_code === "string") code = parsed.error_code;
   } catch {
     // non-JSON body — keep the status message
   }
-  throw new StreamHttpError(detail, response.status);
+  throw new StreamHttpError(detail, response.status, code);
 }
 
 // resume keeps heartbeats as quiet-phase liveness ticks (to re-check focus/abort); send drops them
@@ -132,7 +145,7 @@ export async function* streamChatMessage(
 ): AsyncGenerator<StreamEvent> {
   const response = await expoFetch(`${getBaseUrl()}/chat/send-chat-message`, {
     method: "POST",
-    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    headers: await buildHeaders({ signal }, true),
     body: JSON.stringify(body),
     signal,
   });
@@ -141,15 +154,17 @@ export async function* streamChatMessage(
   yield* readNdjson(response);
 }
 
-// Replays the in-flight run's buffer from `cursor` (0 = whole buffer, matching web), then tails live.
+// Replays stream `streamId` from `cursor` (0 = whole buffer), then tails it live. 404 when that
+// stream has no buffer.
 export async function* resumeChatMessage(
   sessionId: string,
+  streamId: number,
   cursor: number,
   signal: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const response = await expoFetch(
-    `${getBaseUrl()}/chat/chat-session/${sessionId}/resume-stream?cursor=${cursor}`,
-    { method: "GET", headers: await authHeaders(), signal },
+    `${getBaseUrl()}/chat/chat-session/${sessionId}/resume-stream?stream_id=${streamId}&cursor=${cursor}`,
+    { method: "GET", headers: await buildHeaders({ signal }, false), signal },
   );
 
   if (!response.ok) await raiseForStatus(response);

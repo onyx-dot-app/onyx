@@ -77,6 +77,12 @@ from onyx.sandbox_proxy.sandbox_identity.resolution import (
     SandboxIdentityResolver,
     source_ip,
 )
+from onyx.sandbox_proxy.sandbox_identity.signed import (
+    SESSION_HINT_HEADER,
+    SignedIdentityError,
+    SignedIdentityVerifier,
+    parse_signed_identity_header,
+)
 from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
@@ -140,7 +146,18 @@ class GateAddon:
         destination_policy: DestinationPolicyConfig,
         stream_responses: bool = True,
         mcp_resolver: MCPServerResolver | None = None,
+        signed_identity: SignedIdentityVerifier | None = None,
     ) -> None:
+        self._signed_identity = signed_identity
+        # client connection id -> identity verified from the relay's signed
+        # header on the connection's first request (CONNECT or plain HTTP).
+        self._conn_signed_sandboxes: dict[str, ResolvedSandbox] = {}
+        # Signed connection id -> id of the plain-HTTP flow that bound it. The
+        # relay forces `Connection: close`, so any other plain flow is rejected.
+        self._conn_signed_plain_flow: dict[str, str] = {}
+        # Connections whose first request carried no signed header; they keep
+        # the IP identity and can never switch to a signed one.
+        self._conn_unsigned: set[str] = set()
         self._destination_policy = destination_policy
         self._mcp_resolver = mcp_resolver
         self._identity = identity
@@ -183,6 +200,8 @@ class GateAddon:
         # inner request is re-checked in `request`, and `server_connect` is the
         # authoritative rebinding-proof enforcement (resolve-once + IP pin). The check
         # can do a blocking DNS lookup, so run it off the event loop.
+        if not await self._bind_signed_identity(flow):
+            return
         if (
             await asyncio.to_thread(
                 resolve_destination,
@@ -193,6 +212,7 @@ class GateAddon:
                 peer=flow.client_conn.peername,
                 identity=self._identity,
                 mcp_resolver=self._mcp_resolver,
+                sandbox=self._conn_signed_sandboxes.get(flow.client_conn.id),
             )
             is None
         ):
@@ -209,7 +229,7 @@ class GateAddon:
 
         conn_id = getattr(flow.client_conn, "id", None)  # ods: ignore[getattr]
         auth_header = flow.request.headers.get("Proxy-Authorization")
-        tag = _parse_proxy_auth_username(auth_header)
+        tag = self._session_hint(flow) or _parse_proxy_auth_username(auth_header)
 
         logger.debug(
             "session_tag_capture conn=%s host=%s port=%s session=%s "
@@ -233,6 +253,9 @@ class GateAddon:
             self._conn_session_tags.pop(conn_id, None)
             self._conn_connect_origins.pop(conn_id, None)
             self._upstream_addresses.pop(conn_id, None)
+            self._conn_signed_sandboxes.pop(conn_id, None)
+            self._conn_signed_plain_flow.pop(conn_id, None)
+            self._conn_unsigned.discard(conn_id)
 
     async def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
         """Validate the final addresses and pin them while preserving TLS SNI."""
@@ -255,6 +278,7 @@ class GateAddon:
             peer=data.client.peername,
             identity=self._identity,
             mcp_resolver=self._mcp_resolver,
+            sandbox=self._conn_signed_sandboxes.get(data.client.id),
         )
         if addresses is None:
             logger.info(
@@ -308,6 +332,8 @@ class GateAddon:
             self._inflight_tasks.add(task)
             task.add_done_callback(self._inflight_tasks.discard)
 
+        if not await self._bind_signed_identity(flow):
+            return
         upstream_addresses = tuple(
             address
             for server, addresses in self._upstream_addresses.get(
@@ -333,6 +359,7 @@ class GateAddon:
                 identity=self._identity,
                 mcp_resolver=self._mcp_resolver,
                 upstream_addresses=upstream_addresses,
+                sandbox=self._conn_signed_sandboxes.get(flow.client_conn.id),
             )
             is None
         ):
@@ -347,6 +374,8 @@ class GateAddon:
         gate_target = await self._resolve_and_match(flow)
         # Strip the in-band session tags so they never reach the origin
         flow.request.headers.pop("Proxy-Authorization", None)
+        if self._signed_identity is not None:
+            flow.request.headers.pop(SESSION_HINT_HEADER, None)
         flow.request.headers.pop(MCP_SESSION_TAG_HEADER, None)
         if gate_target is None:
             return
@@ -1124,8 +1153,116 @@ class GateAddon:
     # internal helpers
     # --------------------------------------------------------------------------
 
+    async def _bind_signed_identity(self, flow: http.HTTPFlow) -> bool:
+        """Verify the relay's signed header and bind it to the client connection.
+
+        Only the connection's first request (CONNECT or plain HTTP) can bind;
+        requests inside a tunnel use the CONNECT's identity. Returns False if
+        the flow was rejected; never falls back to IP identity after a bad token.
+        Without a verifier (pod runtime) this is a no-op.
+        """
+        verifier = self._signed_identity
+        if verifier is None:
+            return True
+        conn_id = flow.client_conn.id
+        if conn_id in self._conn_signed_sandboxes:
+            return True
+        if flow.request.method != "CONNECT" and conn_id in self._conn_connect_origins:
+            return True
+        token = parse_signed_identity_header(
+            flow.request.headers.get("Proxy-Authorization")
+        )
+        if token is None:
+            self._conn_unsigned.add(conn_id)
+            return True
+        if conn_id in self._conn_unsigned:
+            logger.warning(
+                "identity_signed_rejected reason=after_unsigned_request host=%s",
+                flow.request.host,
+            )
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
+            return False
+        sandbox = await asyncio.to_thread(
+            self._verify_signed_identity, verifier, flow, token
+        )
+        if sandbox is None:
+            return False
+        self._conn_signed_sandboxes[conn_id] = sandbox
+        if flow.request.method != "CONNECT":
+            self._conn_signed_plain_flow[conn_id] = flow.id
+        return True
+
+    def _verify_signed_identity(
+        self, verifier: SignedIdentityVerifier, flow: http.HTTPFlow, token: str
+    ) -> ResolvedSandbox | None:
+        src_ip = source_ip(flow.client_conn.peername) or "-"
+        try:
+            claims, owner = verifier.verify(token)
+        except SignedIdentityError as error:
+            reason = error.reason.value
+        except Exception:
+            # A DB or cache blip can't be allowed to grant egress.
+            logger.exception("identity_signed_error src_ip=%s", src_ip)
+            reason = "internal_error"
+        else:
+            logger.debug(
+                "identity_signed_verified tenant=%s sandbox=%s node=%s "
+                "generation=%s src_ip=%s",
+                claims.tenant_id,
+                claims.sandbox_id,
+                claims.node_id,
+                claims.generation,
+                src_ip,
+            )
+            return ResolvedSandbox(
+                sandbox_id=claims.sandbox_id,
+                user_id=owner,
+                tenant_id=claims.tenant_id,
+                sandbox_name=f"vm-{claims.sandbox_id}",
+                sandbox_ip=src_ip,
+            )
+        logger.warning(
+            "identity_signed_rejected reason=%s src_ip=%s host=%s",
+            reason,
+            src_ip,
+            flow.request.host,
+        )
+        flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
+        return None
+
+    def _session_hint(self, flow: http.HTTPFlow) -> str | None:
+        """The relay's session hint header; the pod runtime has no relay."""
+        if self._signed_identity is None:
+            return None
+        return flow.request.headers.get(SESSION_HINT_HEADER)
+
     def _resolve_sandbox(self, flow: http.HTTPFlow) -> ResolvedSandbox | None:
         """Identify the peer before accepting HTTP requests or CONNECT tunnels."""
+        conn_id = flow.client_conn.id
+        signed = self._conn_signed_sandboxes.get(conn_id)
+        if signed is not None:
+            plain_flow = self._conn_signed_plain_flow.get(conn_id)
+            if plain_flow is None or plain_flow == flow.id:
+                return signed
+            logger.warning(
+                "identity_signed_connection_reused tenant=%s sandbox=%s host=%s",
+                signed.tenant_id,
+                sandbox_log_label(signed),
+                flow.request.host,
+            )
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
+            return None
+        if (
+            self._signed_identity is not None
+            and parse_signed_identity_header(
+                flow.request.headers.get("Proxy-Authorization")
+            )
+            is not None
+        ):
+            # A signed header that did not bind was rejected; never use the IP.
+            flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
+            return None
+
         src_ip = source_ip(flow.client_conn.peername)
         if src_ip is None:
             # mitmproxy peername returned no usable IP -- should never happen
@@ -1226,7 +1363,11 @@ class GateAddon:
         conn_id = getattr(flow.client_conn, "id", None)  # ods: ignore[getattr]
         cached = self._conn_session_tags.get(conn_id) if conn_id else None
         direct_auth_header = flow.request.headers.get("Proxy-Authorization")
-        direct = _parse_proxy_auth_username(direct_auth_header)
+        # The relay moves the proxy-URL userinfo into the hint header; pod
+        # sandboxes still send it as basic auth.
+        direct = self._session_hint(flow) or _parse_proxy_auth_username(
+            direct_auth_header
+        )
         # opencode's in-process MCP client can't ride the proxy-userinfo tag
         # (shared process, untagged base proxy), so it carries the session id in a
         # header stamped by the per-session opencode.json, which wins for MCP

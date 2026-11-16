@@ -22,6 +22,9 @@ jest.mock("@/lib/permissions/hooks", () => ({
 }));
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ refresh: jest.fn() }),
   usePathname: () => "/admin/chat-preferences",
 }));
@@ -123,8 +126,9 @@ describe("ChatPreferencesPage", () => {
       "Default Language",
       "Chat Naming Model",
       "Multi-Model Generation",
-      "Search Selection Model",
       "Search Mode",
+      "Auto-Detect Search Filters",
+      "Search Decision Model",
       "Team Name",
     ].map((text) => screen.getByText(text));
     ordered.slice(1).forEach((node, i) => {

@@ -108,6 +108,30 @@ Run `"$ODS" stack logs --help` to select a service or follow logs. Follow logs i
 
 Successful startup requires the readiness check through the reported frontend URL. A process that exists is insufficient evidence.
 
+## Setup traps
+
+ODS sets `WEB_DOMAIN` to its HTTP web URL, for example `http://localhost:3000`.
+This value replaces `WEB_DOMAIN` in `.vscode/.env` and `.vscode/.env.web`.
+An HTTPS proxy in front of the stack does not change it.
+Before you test HTTPS behavior, such as `Secure` cookies or OAuth redirects, read the running process environment:
+
+```bash
+tr '\0' '\n' < /proc/<api-or-web-pid>/environ | grep '^WEB_DOMAIN='
+```
+
+To test an HTTPS origin, stop the managed API and web processes.
+Start them manually with the same environment and an HTTPS `WEB_DOMAIN`.
+After the test, run `"$ODS" stack restart` to return to the managed stack.
+
+A relative `PYTHONPATH`, for example `PYTHONPATH=./backend` from the shell, breaks indexing.
+The workers run in `backend/`, so the path resolves to `backend/backend`.
+The worker starts, but its spawned fetch process fails with `ModuleNotFoundError: No module named 'onyx'`.
+Before you test indexing, set `PYTHONPATH` to the absolute `backend` path, and then restart the stack from the repository root:
+
+```bash
+PYTHONPATH="$PWD/backend" "$ODS" stack restart
+```
+
 ## Validate changes
 
 For lifecycle, concurrency, browser, or real worker validation, read [the ODS integration guide](../../../tools/ods/integration/README.md).

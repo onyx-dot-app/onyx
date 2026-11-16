@@ -23,10 +23,10 @@ Interaction model:
 | `placeholder`  | `string`                             | —              | Input placeholder                                                                 |
 | `variant`      | `"primary" \| "internal" \| "error"` | `"primary"`    | Wrapper chrome. `"internal"` is the borderless Figma `Style=Subtle` look          |
 | `disabled`     | `boolean`                            | `false`        | Dims the field, disables input, hides remove and clear buttons                    |
-| `icon`         | `IconFunctionComponent`              | —              | Leading icon (24px container)                                                     |
+| `icon`         | `IconFunctionComponent`              | —              | Leading icon (20px icon container)                                                |
 | `onClear`      | `() => void`                         | —              | Renders the clear action button                                                   |
 | `minRows`      | `number`                             | `1`            | Tag rows the field is tall enough to show before it grows. Rows pack from the top |
-| `maxRows`      | `number`                             | `2`            | Tag rows the field grows to before the chips scroll inside it. A new chip scrolls the input row into view |
+| `maxRows`      | `number`                             | `2`            | Tag rows the field grows to before the tags scroll inside it. A new tag scrolls the input row into view |
 | `focusOnMount` | `boolean`                            | `false`        | Focuses the text input on mount                                                   |
 
 ### `TagItem`

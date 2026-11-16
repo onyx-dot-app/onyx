@@ -5,9 +5,8 @@ import { useTranslations } from "next-intl";
 
 import { SvgUserSync } from "@opal/icons";
 import { useScimToken } from "@/hooks/useScimToken";
-import { useCreateModal } from "@opal/components";
+import { Text, useCreateModal } from "@opal/components";
 import { SettingsLayouts, toast } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
 import { PageLoader } from "@opal/loaders";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
@@ -41,7 +40,7 @@ function ScimContent() {
 
   if (tokenError) {
     return (
-      <Text as="p" text03>
+      <Text as="p" color="text-03">
         {t("loadFailed.error")}
       </Text>
     );

@@ -51,6 +51,12 @@ class DisabledDocumentIndex(DocumentIndex):
     ) -> int:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
 
+    def delete_documents(
+        self,
+        document_ids: list[str],  # noqa: ARG002
+    ) -> int:
+        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],  # noqa: ARG002

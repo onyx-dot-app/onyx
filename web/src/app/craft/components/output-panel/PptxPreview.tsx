@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import {
   useState,
   useEffect,
@@ -15,7 +16,6 @@ import { SelectCard, Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import DocumentPreviewControls from "@/app/craft/components/output-panel/DocumentPreviewControls";
 import PreviewSidebar from "@/app/craft/components/output-panel/PreviewSidebar";
-import { Section } from "@/layouts/general-layouts";
 import {
   fetchPptxPreview,
   buildArtifactUrl,
@@ -132,7 +132,7 @@ export default function PptxPreview({
         padding={8}
       >
         <SvgFileText size={48} className="stroke-text-02" />
-        <Text font="heading-h3" color="text-03">
+        <Text font="heading-section" color="text-03">
           {t("error.title")}
         </Text>
         <div className="text-center max-w-md">

@@ -37,3 +37,6 @@ class DocumentMetadata:
 
     # Opt-in pointer to the persisted raw file for this document (file_store id).
     file_id: str | None = None
+
+    source_mime_type: str | None = None
+    source_size_bytes: int | None = None

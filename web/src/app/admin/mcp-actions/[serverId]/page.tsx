@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound, redirect } from "@opal/navigation";
 import {
   parsePluginId,
   pluginDetailHref,

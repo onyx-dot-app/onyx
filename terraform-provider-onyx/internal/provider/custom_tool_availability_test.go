@@ -56,3 +56,29 @@ func TestCustomToolMissingAvailabilityRequiresServerUpgrade(t *testing.T) {
 		t.Fatal("legacy enabled must not overwrite selection")
 	}
 }
+
+// Onyx before v5.0 omits default_chat_enabled. The default still works there.
+func TestCustomToolMissingAvailabilityAcceptsDefault(t *testing.T) {
+	for _, imported := range []bool{false, true} {
+		model := customToolResourceModel{Enabled: types.BoolValue(true), CustomHeaders: types.MapNull(types.StringType)}
+		if imported {
+			model.Enabled = types.BoolNull()
+		}
+		remote := &client.CustomTool{ID: 7, Name: "weather", Definition: map[string]any{}, Enabled: true}
+		var diags diag.Diagnostics
+		if !applyRemoteCustomTool(context.Background(), &model, remote, false, &diags) {
+			t.Fatalf("imported=%t: read failed: %v", imported, diags)
+		}
+		if !model.Enabled.ValueBool() {
+			t.Fatalf("imported=%t: enabled = %v, want true", imported, model.Enabled)
+		}
+	}
+
+	// A globally disabled action cannot be shown as available.
+	model := customToolResourceModel{Enabled: types.BoolNull(), CustomHeaders: types.MapNull(types.StringType)}
+	remote := &client.CustomTool{ID: 7, Name: "weather", Definition: map[string]any{}, Enabled: false}
+	var diags diag.Diagnostics
+	if applyRemoteCustomTool(context.Background(), &model, remote, false, &diags) {
+		t.Fatal("a disabled legacy action must not import as enabled")
+	}
+}

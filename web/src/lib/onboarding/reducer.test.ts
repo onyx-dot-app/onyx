@@ -7,9 +7,9 @@ import {
 
 describe("onboardingReducer", () => {
   describe("initial state", () => {
-    it("starts at Welcome step with default values", () => {
+    it("starts at the pre-step with default values", () => {
       expect(initialState).toEqual({
-        currentStep: OnboardingStep.Welcome,
+        currentStep: OnboardingStep.PreStep,
         stepIndex: 0,
         totalSteps: 3,
         data: {},
@@ -20,7 +20,7 @@ describe("onboardingReducer", () => {
   });
 
   describe("NEXT_STEP", () => {
-    it("advances Welcome -> Name", () => {
+    it("advances PreStep -> Name", () => {
       const result = onboardingReducer(initialState, {
         type: OnboardingActionType.NEXT_STEP,
       });
@@ -41,7 +41,7 @@ describe("onboardingReducer", () => {
       expect(result.stepIndex).toBe(2);
     });
 
-    it("advances LlmSetup -> Complete and sets isButtonActive to true", () => {
+    it("advances LlmSetup -> OptionalSetup and sets isButtonActive to true", () => {
       const state: OnboardingState = {
         ...initialState,
         currentStep: OnboardingStep.LlmSetup,
@@ -51,16 +51,30 @@ describe("onboardingReducer", () => {
       const result = onboardingReducer(state, {
         type: OnboardingActionType.NEXT_STEP,
       });
-      expect(result.currentStep).toBe(OnboardingStep.Complete);
+      expect(result.currentStep).toBe(OnboardingStep.OptionalSetup);
       expect(result.stepIndex).toBe(3);
       expect(result.isButtonActive).toBe(true);
     });
 
-    it("is a no-op when already at Complete", () => {
+    it("advances OptionalSetup -> PostStep", () => {
       const state: OnboardingState = {
         ...initialState,
-        currentStep: OnboardingStep.Complete,
+        currentStep: OnboardingStep.OptionalSetup,
         stepIndex: 3,
+      };
+      const result = onboardingReducer(state, {
+        type: OnboardingActionType.NEXT_STEP,
+      });
+      expect(result.currentStep).toBe(OnboardingStep.PostStep);
+      expect(result.stepIndex).toBe(4);
+      expect(result.isButtonActive).toBe(true);
+    });
+
+    it("is a no-op when already at the post-step", () => {
+      const state: OnboardingState = {
+        ...initialState,
+        currentStep: OnboardingStep.PostStep,
+        stepIndex: 4,
       };
       const result = onboardingReducer(state, {
         type: OnboardingActionType.NEXT_STEP,
@@ -70,17 +84,17 @@ describe("onboardingReducer", () => {
   });
 
   describe("PREV_STEP", () => {
-    it("goes Complete -> LlmSetup", () => {
+    it("goes PostStep -> OptionalSetup", () => {
       const state: OnboardingState = {
         ...initialState,
-        currentStep: OnboardingStep.Complete,
-        stepIndex: 3,
+        currentStep: OnboardingStep.PostStep,
+        stepIndex: 4,
       };
       const result = onboardingReducer(state, {
         type: OnboardingActionType.PREV_STEP,
       });
-      expect(result.currentStep).toBe(OnboardingStep.LlmSetup);
-      expect(result.stepIndex).toBe(2);
+      expect(result.currentStep).toBe(OnboardingStep.OptionalSetup);
+      expect(result.stepIndex).toBe(3);
     });
 
     it("goes LlmSetup -> Name", () => {
@@ -96,7 +110,7 @@ describe("onboardingReducer", () => {
       expect(result.stepIndex).toBe(1);
     });
 
-    it("is a no-op when already at Welcome", () => {
+    it("is a no-op when already at the pre-step", () => {
       const result = onboardingReducer(initialState, {
         type: OnboardingActionType.PREV_STEP,
       });
@@ -114,20 +128,20 @@ describe("onboardingReducer", () => {
       expect(result.stepIndex).toBe(2);
     });
 
-    it("sets isButtonActive to true when jumping to Complete", () => {
+    it("sets isButtonActive to true when jumping to the post-step", () => {
       const state: OnboardingState = {
         ...initialState,
         isButtonActive: false,
       };
       const result = onboardingReducer(state, {
         type: OnboardingActionType.GO_TO_STEP,
-        step: OnboardingStep.Complete,
+        step: OnboardingStep.PostStep,
       });
       expect(result.isButtonActive).toBe(true);
-      expect(result.stepIndex).toBe(3);
+      expect(result.stepIndex).toBe(4);
     });
 
-    it("preserves isButtonActive when jumping to non-Complete step", () => {
+    it("preserves isButtonActive when jumping to a step that asks for input", () => {
       const state: OnboardingState = {
         ...initialState,
         isButtonActive: false,
@@ -218,8 +232,8 @@ describe("onboardingReducer", () => {
   describe("RESET", () => {
     it("returns to initial state", () => {
       const state: OnboardingState = {
-        currentStep: OnboardingStep.Complete,
-        stepIndex: 3,
+        currentStep: OnboardingStep.PostStep,
+        stepIndex: 4,
         totalSteps: 3,
         data: { userName: "Alice", llmProviders: ["openai"] },
         isButtonActive: false,

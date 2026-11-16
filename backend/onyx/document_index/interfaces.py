@@ -287,6 +287,12 @@ class Deletable(abc.ABC):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def delete_documents(self, document_ids: list[str]) -> int:
+        """Hard deletes every chunk of the given documents in one request per
+        index. Missing documents are not an error. Returns the chunks deleted."""
+        raise NotImplementedError
+
 
 class Updatable(abc.ABC):
     """

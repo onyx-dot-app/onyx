@@ -51,6 +51,8 @@ jobs:
     with:
       task-name: recommended-models
       script: backend/scripts/update_recommended_models_agent.py
+      script-args: --output backend/onyx/llm/well_known_providers/recommended-models.json
+      fallback-args: --write --output backend/onyx/llm/well_known_providers/recommended-models.json
       fallback-script: backend/scripts/update_recommended_models.py
       files: backend/onyx/llm/well_known_providers/recommended-models.json
       branch: auto/update-recommended-models

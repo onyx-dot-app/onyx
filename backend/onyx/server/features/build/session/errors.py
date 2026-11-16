@@ -23,3 +23,8 @@ class SandboxProvisioningInProgressError(SandboxProvisioningError):
 class StaleProvisioningAttemptError(SandboxProvisioningError):
     """This attempt was superseded before it could finalize;
     its external work must not be recorded as the current runtime."""
+
+
+class OpencodeConfigReloadError(RuntimeError):
+    """The running opencode instance did not reload its rewritten config, so a
+    turn must not run on the old config. ``str(exc)`` is safe to show users."""

@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { cn, markdown } from "@opal/utils";
 import type { IconFunctionComponent } from "@opal/types";
-import { Button, MessageCard, ProgressBar, Tag, Text } from "@opal/components";
+import {
+  Button,
+  MessageCard,
+  ProgressBar,
+  Badge,
+  Text,
+  useCreateModal,
+} from "@opal/components";
 import {
   SvgAlertCircle,
   SvgCheckCircle,
@@ -44,7 +50,7 @@ export default function ReindexProgressBanner({
   onCancel,
 }: ReindexProgressBannerProps) {
   const t = useTranslations("admin.indexSettings");
-  const [errorsOpen, setErrorsOpen] = useState(false);
+  const errorsModal = useCreateModal();
   const { data } = useReindexProgress({ pollIntervalMs: 5000 });
   const { total, waiting, in_progress, completed, failed, paused, reembeds } =
     data ?? ZERO;
@@ -68,9 +74,9 @@ export default function ReindexProgressBanner({
 
   return (
     <>
-      {errorsOpen && (
-        <ReindexErrorsModal onClose={() => setErrorsOpen(false)} />
-      )}
+      <errorsModal.Provider>
+        <ReindexErrorsModal onClose={() => errorsModal.toggle(false)} />
+      </errorsModal.Provider>
 
       <MessageCard
         variant="pending"
@@ -88,24 +94,28 @@ export default function ReindexProgressBanner({
                   {t("progressBanner.status.label")}
                 </Text>
                 <div className="flex flex-row items-center gap-1.5">
-                  <Tag color="purple" icon={SvgClock} title={String(waiting)} />
-                  <Tag
-                    color="blue"
+                  <Badge
+                    color="queued"
+                    icon={SvgClock}
+                    title={String(waiting)}
+                  />
+                  <Badge
+                    color="info"
                     icon={in_progress > 0 ? SpinningLoader : SvgLoader}
                     title={String(in_progress)}
                   />
-                  <Tag
-                    color="green"
+                  <Badge
+                    color="success"
                     icon={SvgCheckCircle}
                     title={String(completed)}
                   />
-                  <Tag
-                    color="red"
+                  <Badge
+                    color="error"
                     icon={SvgAlertCircle}
                     title={String(failed)}
                   />
-                  <Tag
-                    color="amber"
+                  <Badge
+                    color="pending"
                     icon={SvgPauseCircle}
                     title={String(paused)}
                   />
@@ -117,7 +127,7 @@ export default function ReindexProgressBanner({
                       size="sm"
                       tooltip={t("progressBanner.attentionButton.label")}
                       aria-label={t("progressBanner.attentionButton.label")}
-                      onClick={() => setErrorsOpen(true)}
+                      onClick={() => errorsModal.toggle(true)}
                     />
                   )}
                 </div>

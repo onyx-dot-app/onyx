@@ -1,9 +1,7 @@
 import { useLocale, useTranslations } from "next-intl";
 import { SvgCheckCircle, SvgClock, SvgKey, SvgRefreshCw } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
-import { Button, Card, Divider } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { ContentAction, Section } from "@opal/layouts";
+import { Button, Card, Divider, Text } from "@opal/components";
 import { timeAgo } from "@opal/time";
 
 // ---------------------------------------------------------------------------
@@ -40,10 +38,9 @@ export default function ScimSyncCard({
     <Card border="solid" rounding={4}>
       <Section alignItems="start" height="fit" gap={3}>
         <ContentAction
+          font="main-ui-action"
           title={t("card.title")}
           description={t("card.description")}
-          sizePreset="main-ui"
-          variant="section"
           padding={0}
           rightChildren={
             hasToken ? (
@@ -86,7 +83,7 @@ export default function ScimSyncCard({
                 ) : (
                   <SvgClock size={15} className="text-theme-amber-05" />
                 )}
-                <Text as="p" mainUiBody text04>
+                <Text as="p" font="main-ui-body" color="text-04">
                   {isConnected
                     ? t("card.connected.label")
                     : t("card.waiting.label")}
@@ -97,23 +94,25 @@ export default function ScimSyncCard({
                 {isConnected ? (
                   <>
                     {idpDomain && (
-                      <Text as="p" secondaryAction text03>
+                      <Text as="p" font="secondary-action" color="text-03">
                         {idpDomain}
                       </Text>
                     )}
-                    <Text as="p" secondaryBody text03>
-                      {timeAgo(lastUsedAt, locale)}
+                    <Text as="p" font="secondary-body" color="text-03">
+                      {timeAgo(lastUsedAt, locale) ?? ""}
                     </Text>
                   </>
                 ) : (
-                  <Text
-                    as="p"
-                    secondaryBody
-                    text03
-                    className="max-w-[240px] text-end"
-                  >
-                    {t("card.waiting.description")}
-                  </Text>
+                  <div className="max-w-[240px]">
+                    <Text
+                      as="p"
+                      font="secondary-body"
+                      color="text-03"
+                      textPosition="text-end"
+                    >
+                      {t("card.waiting.description")}
+                    </Text>
+                  </div>
                 )}
               </Section>
             </Section>

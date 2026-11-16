@@ -5,13 +5,18 @@ import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import {
   Button,
-  Chip,
+  Tag,
   InputMultiComboBox,
   Table,
   type TableColumn,
   type TagItem,
 } from "@opal/components";
-import { Content, InputErrorText, Section } from "@opal/layouts";
+import {
+  Content,
+  InputErrorText,
+  ReverseContent,
+  Section,
+} from "@opal/layouts";
 import { SvgUsers, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -113,7 +118,7 @@ export default function GroupShareList({
   const options = (userGroups ?? []).map((group) => ({
     value: String(group.id),
     title: group.name,
-    description: t("memberCount", { count: group.users.length }),
+    description: t("memberCount", { count: group.member_count }),
     icon: SvgUsers,
   }));
 
@@ -137,7 +142,7 @@ export default function GroupShareList({
         id: `group-${group.id}`,
         name: group.name,
         icon: SvgUsers,
-        memberCount: group.users.length,
+        memberCount: group.member_count,
         groupId: group.id,
       })),
   ];
@@ -181,14 +186,13 @@ export default function GroupShareList({
       hideable: false,
       cell: (groupName, row) => (
         <Content
+          font="main-ui-action"
           title={groupName}
           description={
             row.memberCount === undefined
               ? undefined
               : t("memberCount", { count: row.memberCount })
           }
-          sizePreset="main-ui"
-          variant="section"
         />
       ),
     },
@@ -206,14 +210,11 @@ export default function GroupShareList({
             cell: (row) => {
               if (row.note) {
                 const note = (
-                  <Content
+                  <ReverseContent
+                    font="secondary-body"
                     icon={row.icon}
                     title={row.note}
-                    sizePreset="secondary"
-                    variant="body"
-                    orientation="reverse"
-                    color="muted"
-                    width="fit"
+                    titleColor="text-03"
                   />
                 );
                 if (row.role === undefined) return note;
@@ -287,7 +288,7 @@ export default function GroupShareList({
           {rows.map((row) => {
             const groupId = row.groupId;
             return groupId === undefined ? null : (
-              <Chip
+              <Tag
                 key={row.id}
                 title={row.name}
                 icon={row.icon}

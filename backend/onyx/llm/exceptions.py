@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
 from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.models import LLMErrorInfo
+from onyx.llm.models import LLMErrorInfo, ToolChoiceOptions
 from onyx.utils.logger import setup_logger
 from onyx.utils.redaction import scrub_sensitive_values
 
@@ -20,11 +20,15 @@ class ClassifiedLLMError(RuntimeError):
         client_error_msg: str,
         error_code: str,
         is_retryable: bool,
+        tool_choice: ToolChoiceOptions | None = None,
+        finish_reason: str | None = None,
     ) -> None:
         super().__init__(client_error_msg)
         self.client_error_msg = client_error_msg
         self.error_code = error_code
         self.is_retryable = is_retryable
+        self.tool_choice = tool_choice
+        self.finish_reason = finish_reason
 
 
 class LLMTimeoutError(TimeoutError):
@@ -46,6 +50,9 @@ def _unwrap_nested_exception(error: Exception) -> Exception:
     visited: set[int] = set()
     current = error
     for _ in range(100):
+        # An explicit classification owns the client-facing failure policy.
+        if isinstance(current, ClassifiedLLMError):
+            break
         visited.add(id(current))
         candidate: Exception | None = None
         cause = getattr(current, "__cause__", None)  # ods: ignore[getattr]
@@ -256,7 +263,9 @@ def litellm_exception_to_error_msg(  # noqa: C901 - Provider errors have distinc
         error_code = "REQUEST_TOO_LARGE"
         is_retryable = False
     elif isinstance(core_exception, APIError):
-        error_msg = f"API error: An error occurred while communicating with the API. Details: {str(core_exception)}"
+        error_msg = (
+            "The model provider could not complete this request. Please try again."
+        )
         error_code = "API_ERROR"
         is_retryable = True
     elif not fallback_to_error_msg:
@@ -284,11 +293,25 @@ def litellm_exception_to_safe_error(
         fallback_to_error_msg=fallback_to_error_msg,
         custom_error_msg_mappings=custom_error_msg_mappings,
     )
-    safe_message = scrub_sensitive_values(message, secrets)
+    secret_values = tuple(secrets)
+    safe_message = scrub_sensitive_values(message, secret_values)
+    classified = _unwrap_nested_exception(e)
+    tool_choice = None
+    finish_reason = None
+    if isinstance(classified, ClassifiedLLMError):
+        tool_choice = classified.tool_choice
+        if classified.finish_reason is not None:
+            finish_reason = scrub_sensitive_values(
+                classified.finish_reason, secret_values
+            )
     if llm is not None:
         safe_message = llm.redact_error(safe_message)
+        if finish_reason is not None:
+            finish_reason = llm.redact_error(finish_reason)
     return LLMErrorInfo(
         message=safe_message,
         error_code=error_code,
         is_retryable=is_retryable,
+        tool_choice=tool_choice,
+        finish_reason=finish_reason,
     )

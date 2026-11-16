@@ -37,7 +37,9 @@ export const ExpandedTimelineContent = memo(function ExpandedTimelineContent({
 }: ExpandedTimelineContentProps) {
   return (
     <View className="w-full">
-      {turnGroups.map((turnGroup, turnIdx) => {
+      {/* One flat list keyed by step: code mode can insert a step before others, and position keys
+          would remount the later steps. */}
+      {turnGroups.flatMap((turnGroup, turnIdx) => {
         // Coding agents always take the tab chrome, so one looks the same as several side by side.
         const renderAsParallelTabs =
           turnGroup.isParallel ||
@@ -46,7 +48,7 @@ export const ExpandedTimelineContent = memo(function ExpandedTimelineContent({
         if (renderAsParallelTabs) {
           return (
             <ParallelTimelineTabs
-              key={turnGroup.turnIndex}
+              key={turnGroup.steps[0]!.key}
               turnGroup={turnGroup}
               chatState={chatState}
               stopPacketSeen={stopPacketSeen}

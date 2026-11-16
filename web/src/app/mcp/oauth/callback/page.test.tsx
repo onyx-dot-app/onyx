@@ -4,10 +4,14 @@ import { completeMCPUserOAuth } from "@/lib/mcp/svc";
 import messages from "@/i18n/messages/en.json";
 
 let mockSearchParams = new URLSearchParams();
-const mockPush = jest.fn();
-const mockRouter = { push: mockPush };
+const mockReplace = jest.fn();
+const mockRouter = { replace: mockReplace };
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useSearchParams: () => mockSearchParams,
+  usePathname: () => "/mcp/oauth/callback",
   useRouter: () => mockRouter,
 }));
 jest.mock("@/lib/mcp/svc", () => ({ completeMCPUserOAuth: jest.fn() }));
@@ -35,9 +39,9 @@ test("provider denial consumes the staged attempt and keeps the cancelled screen
     )
   );
   expect(
-    screen.getByText(messages.actions.mcpOauthCallback.cancelled.title)
+    await screen.findByText(messages.actions.mcpOauthCallback.cancelled.title)
   ).toBeVisible();
-  expect(mockPush).not.toHaveBeenCalled();
+  expect(mockReplace).not.toHaveBeenCalled();
 });
 
 test("denial without a state does not send an uncorrelated cancellation", async () => {

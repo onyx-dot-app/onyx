@@ -52,7 +52,7 @@ it("keeps Files search input mounted and editable when inventory refreshes", () 
       placeholder="Search files"
     />
   );
-  const input = screen.getByRole("textbox", { name: "Search files" });
+  const input = screen.getByRole("searchbox", { name: "Search files" });
   input.focus();
   fireEvent.change(input, { target: { value: "reports" } });
   expect(change).toHaveBeenCalledWith("reports");
@@ -65,7 +65,7 @@ it("keeps Files search input mounted and editable when inventory refreshes", () 
       isRefreshing
     />
   );
-  expect(screen.getByRole("textbox", { name: "Search files" })).toBe(input);
+  expect(screen.getByRole("searchbox", { name: "Search files" })).toBe(input);
   expect(input).toHaveFocus();
 });
 

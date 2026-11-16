@@ -1,44 +1,58 @@
-"""Think tool token processor: streamed reasoning and the flushed tool call."""
+"""Think tool arguments stream in full and remain intact in recorded messages."""
 
 import json
-from typing import Any
 
 import pytest
 
+from onyx.chat.models import MessageRendering
+from onyx.chat.renderer import MessageRenderer, ResponseLayout
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
-from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
+    MessageAccumulator,
+    ModelResponseStream,
     ResponseFunctionCall,
+    StreamingChoice,
+)
+from onyx.llm.models import (
+    AssistantMessage,
+    TextDeltaEvent,
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
 )
 
 
-def _args_delta(arguments: str, name: str | None = None) -> Delta:
-    return Delta(
-        tool_calls=[
-            ChatCompletionDeltaToolCall(
-                id="think_1" if name else None,
-                index=0,
-                function=ResponseFunctionCall(name=name, arguments=arguments),
-            )
-        ]
+def _chunk(delta: Delta) -> ModelResponseStream:
+    return ModelResponseStream(
+        id="think", created="1", choice=StreamingChoice(index=0, delta=delta)
     )
 
 
-def _process(argument_chunks: list[str]) -> tuple[str, Delta | None]:
-    processor = create_think_tool_token_processor()
-    state: Any = None
-    reasoning = ""
-    for delta in [_args_delta("", THINK_TOOL_NAME)] + [
-        _args_delta(chunk) for chunk in argument_chunks
-    ]:
-        out, state = processor(delta, state)
-        if out is not None:
-            assert out.tool_calls == []
-            reasoning += out.reasoning_content or ""
-    flushed, _ = processor(None, state)
-    return reasoning, flushed
+def _process(argument_chunks: list[str]) -> tuple[str, AssistantMessage]:
+    accumulator = MessageAccumulator()
+    renderer = MessageRenderer(
+        MessageRendering(think_tool=THINK_TOOL_NAME), {}, ResponseLayout()
+    )
+    for index, arguments in enumerate(argument_chunks):
+        delta = Delta(
+            tool_calls=[
+                ChatCompletionDeltaToolCall(
+                    id="think_1" if index == 0 else None,
+                    index=0,
+                    function=ResponseFunctionCall(
+                        name=THINK_TOOL_NAME if index == 0 else None,
+                        arguments=arguments,
+                    ),
+                )
+            ]
+        )
+        for event in accumulator.add(_chunk(delta)):
+            if isinstance(event, (ToolCallStartEvent, ToolCallDeltaEvent)):
+                renderer.consume(event)
+    accumulator.finalize()
+    renderer.complete(accumulator.message)
+    return renderer.reasoning, accumulator.message
 
 
 @pytest.mark.parametrize(
@@ -67,9 +81,8 @@ def test_streams_full_reasoning_and_flushes_unchanged_call(
     assert flushed is not None
     [call] = flushed.tool_calls
     assert call.id == "think_1"
-    assert call.function is not None
-    assert call.function.name == THINK_TOOL_NAME
-    assert call.function.arguments == arguments
+    assert call.name == THINK_TOOL_NAME
+    assert call.arguments == {"reasoning": text}
 
 
 def test_compact_json_without_space() -> None:
@@ -79,11 +92,12 @@ def test_compact_json_without_space() -> None:
 
 
 def test_passes_through_deltas_without_think_tool() -> None:
-    processor = create_think_tool_token_processor()
-    delta = Delta(content="hello")
-
-    out, state = processor(delta, None)
-    flushed, _ = processor(None, state)
-
-    assert out is delta
-    assert flushed is None
+    accumulator = MessageAccumulator()
+    renderer = MessageRenderer(
+        MessageRendering(think_tool=THINK_TOOL_NAME), {}, ResponseLayout()
+    )
+    for event in accumulator.add(_chunk(Delta(content="hello"))):
+        if isinstance(event, (TextDeltaEvent, ToolCallStartEvent, ToolCallDeltaEvent)):
+            renderer.consume(event)
+    assert renderer.answer == "hello"
+    assert renderer.reasoning == ""

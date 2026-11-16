@@ -21,6 +21,7 @@ import json
 import warnings
 
 import pytest
+from pydantic import JsonValue
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.litellm_singleton import litellm
@@ -58,7 +59,7 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
     """
     llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
-    tools = [
+    tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
             "function": {
@@ -87,7 +88,6 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "For Paris, France: call get_weather AND get_population. "
                 "Issue both tool calls in a single response."
@@ -205,7 +205,6 @@ def test_streaming_reasoning_summary_sections_are_separated_by_blank_line(
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Plan a 3-day trip to Tokyo for someone with a peanut allergy on a $2000 budget. "
                 "First plan the itinerary, then verify each restaurant choice is safe, then check "
@@ -246,7 +245,6 @@ def test_non_streaming_reasoning_summary_sections_are_separated_by_blank_line(
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Plan a 3-day trip to Tokyo for someone with a peanut allergy on a $2000 budget. "
                 "First plan the itinerary, then verify each restaurant choice is safe, then check "
@@ -284,7 +282,7 @@ def test_streaming_emits_no_pydantic_serializer_warnings(
     llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
     prompt: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content="Reply with exactly the word: ok")
+        UserMessage(content="Reply with exactly the word: ok")
     ]
 
     with warnings.catch_warnings(record=True) as captured:

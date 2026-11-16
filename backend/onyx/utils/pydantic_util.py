@@ -18,6 +18,15 @@ def shallow_model_dump(model_instance: BaseModel) -> dict[str, Any]:
     }
 
 
+def as_base[B: BaseModel](model: B, base: type[B]) -> B:
+    """`model` as an instance of `base`, one of its classes; subclass fields are
+    dropped. Returns `model` when it already is exactly a `base`."""
+    if type(model) is base:
+        return model
+    fields = shallow_model_dump(model)
+    return base(**{name: fields[name] for name in base.model_fields})
+
+
 def parse_json_form_field(raw: str, adapter: TypeAdapter[T], field_name: str) -> T:
     """Parse a JSON-encoded multipart form field, validating against ``adapter``.
     Raises ``OnyxError(INVALID_INPUT)`` naming the field on bad JSON or wrong

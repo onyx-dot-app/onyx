@@ -18,9 +18,11 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.document import (
     PortedScope,
-    count_secondary_only_sync_pending_documents_for_cc_pairs,
+    clear_content_hash_for_cc_pair_since__no_commit,
+    clear_content_hash_for_failed_documents__no_commit,
     delete_all_documents_for_connector_credential_pair,
     filter_existing_document_ids,
+    mark_secondary_pending_documents_needs_sync__no_commit,
     sample_ported_document_ids,
 )
 from onyx.db.enums import (
@@ -46,6 +48,7 @@ from onyx.db.port_attempt import (
     get_latest_port_attempt,
     latest_port_bounds_by_user,
 )
+from onyx.db.reindex_clear import get_pair_clear_bounds
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
@@ -75,8 +78,14 @@ def _perform_index_swap(
     new_search_settings: SearchSettings,
     all_cc_pairs: list[ConnectorCredentialPair],
     cleanup_documents: bool = False,
+    clear_for_cc_pairs: list[ConnectorCredentialPair] | None = None,
 ) -> SearchSettings | None:
     """Swap the indices and expire the old one.
+
+    `clear_for_cc_pairs` (the non-INSTANT port flow) clears what FUTURE may
+    lack inside the flip's transaction and once more right after the commit;
+    see _clear_what_future_missed__no_commit. An empty list still clears the
+    documents a FUTURE attempt failed on.
 
     Returns the old search settings if the swap was successful, otherwise None.
     """
@@ -132,7 +141,22 @@ def _perform_index_swap(
         new_status=IndexModelStatus.PRESENT,
         db_session=db_session,
     )
+    if clear_for_cc_pairs is not None:
+        # After the status updates, in the same transaction: every stamp that
+        # was in flight has committed by now, and a row still locked belongs to
+        # a batch that will read PAST and stamp nothing, so skip it rather
+        # than wait (waiting here could deadlock with that batch).
+        _clear_what_future_missed__no_commit(
+            db_session, new_search_settings, clear_for_cc_pairs, skip_locked=True
+        )
     db_session.commit()
+    if clear_for_cc_pairs is not None:
+        # Once more after the commit, for the rows that were skipped: they are
+        # free now, and nothing can stamp into the old index anymore.
+        _clear_what_future_missed__no_commit(
+            db_session, new_search_settings, clear_for_cc_pairs, skip_locked=False
+        )
+        db_session.commit()
 
     # FUTURE is now live: cancel stragglers that dropped out of the required set
     # (paused/INVALID) so they stop writing into the live index. Skip for INSTANT —
@@ -355,15 +379,67 @@ def _no_writer_left_in_flight(
 
     # Waiting on this flag is safe because new files dual-write to FUTURE and the
     # reconciler supplies the content on a 404, so every pending flag eventually clears.
-    if any_user_file_reconcile_pending_for_users(db_session, required_user_ids):
-        return False
+    # Connector documents pending for FUTURE do not hold the swap: the swap turns
+    # their flag into a plain needs-sync (_clear_what_future_missed__no_commit).
+    return not any_user_file_reconcile_pending_for_users(db_session, required_user_ids)
 
-    return (
-        count_secondary_only_sync_pending_documents_for_cc_pairs(
-            db_session, cc_pair_ids
-        )
-        == 0
+
+def _clear_what_future_missed__no_commit(
+    db_session: Session,
+    new_search_settings: SearchSettings,
+    required_cc_pairs: list[ConnectorCredentialPair],
+    *,
+    skip_locked: bool,
+) -> None:
+    """Make the next poll on the new PRESENT re-index what FUTURE may lack.
+
+    Clears the content hash of documents the old PRESENT wrote after FUTURE's
+    last successful poll (the bound comes from onyx.db.reindex_clear) and of
+    documents a FUTURE attempt failed on; a NULL hash never matches. Turns the
+    deferred-sync flags into a plain needs-sync so the new index gets their
+    permissions. Runs inside the flip's transaction with `skip_locked`, and
+    once more after the commit for the rows that had to be skipped. Caller
+    commits."""
+    bounds = get_pair_clear_bounds(
+        db_session, new_search_settings, [cc_pair.id for cc_pair in required_cc_pairs]
     )
+    for cc_pair in required_cc_pairs:
+        bound = bounds.get(cc_pair.id)
+        if bound is None or bound.push_based:
+            continue
+        cleared = clear_content_hash_for_cc_pair_since__no_commit(
+            db_session,
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            bound.clear_from,
+            skip_locked=skip_locked,
+        )
+        flipped = mark_secondary_pending_documents_needs_sync__no_commit(
+            db_session,
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            skip_locked=skip_locked,
+        )
+        if cleared or flipped:
+            logger.info(
+                "Swap clear: cc_pair=%s since=%s hashes_cleared=%s needs_sync=%s "
+                "skip_locked=%s",
+                cc_pair.id,
+                bound.clear_from.isoformat(),
+                cleared,
+                flipped,
+                skip_locked,
+            )
+    failed = clear_content_hash_for_failed_documents__no_commit(
+        db_session, new_search_settings.id, skip_locked=skip_locked
+    )
+    if failed:
+        logger.info(
+            "Swap clear: hashes cleared for %s documents FUTURE attempts failed on "
+            "(skip_locked=%s)",
+            failed,
+            skip_locked,
+        )
 
 
 def _port_swap_ready(
@@ -376,10 +452,10 @@ def _port_swap_ready(
 
     Returns True once every required cc_pair and user has a SUCCESS port and no active
     one, nothing is still writing into the new settings, and a sample of ported
-    documents is present in the new index. There is no post-port connector index
-    attempt; the port copy is the whole bar. The pending-sync count is scoped to
-    required_cc_pairs because a global count never drains for INVALID/DELETING
-    documents, which never reach FUTURE.
+    documents is present in the new index. Nothing waits for FUTURE to catch up
+    with what PRESENT wrote during the port: the swap clears the content hash of
+    those documents (_clear_what_future_missed__no_commit) and the next poll on
+    the new PRESENT re-indexes them.
     """
     ss_id = new_search_settings.id
     cc_pair_scopes: list[PortedScope] = []
@@ -474,6 +550,7 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
                 db_session=db_session,
                 new_search_settings=new_search_settings,
                 all_cc_pairs=all_cc_pairs,
+                clear_for_cc_pairs=required_cc_pairs,
             )
         return None
 

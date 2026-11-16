@@ -11,7 +11,7 @@ import { IndexAttemptStageMetricsResponse } from "@/lib/types";
  *
  * The backend records both per-batch (`BATCH_LEVEL`) and per-attempt
  * (`ATTEMPT_LEVEL`) stage durations during indexing. This hook surfaces them
- * for the admin UI's stage details popover. SWR cache key comes from
+ * for the admin UI's stage details. SWR cache key comes from
  * `SWR_KEYS.indexAttemptStageMetrics`.
  *
  * Disables `revalidateOnFocus` since stage metrics are only written when an
@@ -19,7 +19,7 @@ import { IndexAttemptStageMetricsResponse } from "@/lib/types";
  * spamming the endpoint when an admin's session has expired.
  */
 export default function useIndexAttemptStageMetrics(indexAttemptId: number) {
-  const { data, error } = useSWR<IndexAttemptStageMetricsResponse>(
+  const { data, error, mutate } = useSWR<IndexAttemptStageMetricsResponse>(
     SWR_KEYS.indexAttemptStageMetrics(indexAttemptId),
     errorHandlingFetcher,
     {
@@ -28,7 +28,7 @@ export default function useIndexAttemptStageMetrics(indexAttemptId: number) {
     }
   );
 
-  // The popover shows a generic load error, so log the payload for debugging.
+  // The stage details show a generic load error, so log the payload for debugging.
   useEffect(() => {
     if (error) {
       console.error(
@@ -38,5 +38,5 @@ export default function useIndexAttemptStageMetrics(indexAttemptId: number) {
     }
   }, [error, indexAttemptId]);
 
-  return { data, error };
+  return { data, error, mutate };
 }

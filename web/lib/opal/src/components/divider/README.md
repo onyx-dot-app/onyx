@@ -45,6 +45,10 @@ A plain line with no title or description.
 | `chevronPosition` | `"start" \| "end"`                                                                                            | `"end"`        | `"end"`: right chevron after the line. `"start"`: `SvgChevronDown` in `text-02` before the title, then the title and the line, an `internal` button with a Fold / View All tooltip (`collapsibleFold`, `dividerViewAll`). Its accessible name includes the title (`collapsibleFoldSection`, `collapsibleExpandSection`) |
 | `foldedChevron`   | `"right" \| "down"`                                                                                           | `"right"`      | Where a `"start"` chevron points while folded: turned right as a fold does, or kept down for a footer that opens its content elsewhere                                                                                                                                                                                  |
 
+A foldable header is the Tab stop: Enter or Space toggles it, as a click does. Its chevron
+button stays out of the Tab order but still shows hover. An owner that runs its own keyboard
+model can override the header's `role` and `tabIndex` through `headerProps`.
+
 ## Usage Examples
 
 ```tsx

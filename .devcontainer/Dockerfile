@@ -8,7 +8,7 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS bun_source
 FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:45fbb3ca3b6c7e6646cd2889d0ac7bf314bb180036da792221fc2f48fe4d43fb AS node_source
 
-FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
 
 # Ubuntu 26.04 moved ARM64 packages from ports to the main archive.
 RUN if [ "$(dpkg --print-architecture)" = arm64 ]; then \
@@ -103,7 +103,7 @@ RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 # under bun alone hangs the runner. Daily JS tooling (Claude Code, opencode)
 # still runs under bun; Node is here only as the runtime for the test runner.
 # The test runner's chromium binary is installed at test time, not baked here,
-# so its version tracks web/package.json's floating @playwright/test (the
+# so its version tracks web/package.json's pinned @playwright/test (the
 # chromium baked further down serves only the pinned Playwright MCP server).
 #
 # Copied from the official node image (digest-pinned in the node_source stage at the
@@ -151,7 +151,7 @@ RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
   && ln -s python3.13 /usr/local/bin/python \
   && python --version
 
-# Install the Go toolchain. Every Go module in the repo pins `go 1.27.1` in its go.mod.
+# Install the Go toolchain. Every Go module in the repo pins `go 1.27.4` in its go.mod.
 # The golangci-lint pre-commit hook builds them against this version — keep it in
 # sync with the hook and with GO_VERSION in .github/workflows/pr-golang-tests.yml.
 #
@@ -164,13 +164,13 @@ RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
 #
 # Module and build caches are not baked in; they live in the dev user's home
 # (see .devcontainer/zshrc).
-ARG GO_VERSION=1.27.1
+ARG GO_VERSION=1.27.4
 RUN set -eux; \
   case "$(dpkg --print-architecture)" in \
     amd64) GO_ARCH=amd64; \
-           GO_SHA256=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445 ;; \
+           GO_SHA256=7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840 ;; \
     arm64) GO_ARCH=arm64; \
-           GO_SHA256=3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec ;; \
+           GO_SHA256=3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92 ;; \
     *) echo "unsupported arch for go: $(dpkg --print-architecture)" >&2; exit 1 ;; \
   esac; \
   curl -fsSL -o /tmp/go.tar.gz \

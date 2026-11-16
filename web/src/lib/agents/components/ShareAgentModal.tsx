@@ -778,10 +778,9 @@ export function ShareAgentModal({
         hideable: false,
         cell: (name, row) => (
           <Content
+            font="main-ui-action"
             title={name}
             description={row.description}
-            sizePreset="main-ui"
-            variant="section"
           />
         ),
       },

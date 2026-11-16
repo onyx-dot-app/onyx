@@ -109,7 +109,8 @@ def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
     Returns:
         PromptCacheProvider instance for the given provider
     """
-    if llm_config.model_provider == LlmProviderNames.OPENAI:
+    if llm_config.model_provider in (LlmProviderNames.OPENAI, LlmProviderNames.AZURE):
+        # Azure serves OpenAI models with the same explicit cache breakpoints.
         return OpenAIPromptCacheProvider()
     elif llm_config.model_provider == LlmProviderNames.ANTHROPIC:
         return AnthropicPromptCacheProvider()

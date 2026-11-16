@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/onyx-dot-app/onyx/terraform-provider-onyx/internal/client"
@@ -95,5 +96,20 @@ func testAccCheckEmbeddingProviderDestroyed(t *testing.T) resource.TestCheckFunc
 			}
 		}
 		return nil
+	}
+}
+
+func TestUpsertFromPlanStatesKeyIntent(t *testing.T) {
+	plan := embeddingProviderResourceModel{ProviderType: types.StringValue("voyage")}
+
+	withKey := upsertFromPlan(plan, types.StringValue("pa-real-key"))
+	if withKey.APIKeyChanged == nil || !*withKey.APIKeyChanged {
+		t.Errorf("a configured key must send api_key_changed = true, got %v", withKey.APIKeyChanged)
+	}
+
+	// No key keeps the old wire shape, so servers before the flag see no change.
+	withoutKey := upsertFromPlan(plan, types.StringNull())
+	if withoutKey.APIKeyChanged != nil {
+		t.Errorf("no key must omit api_key_changed, got %v", *withoutKey.APIKeyChanged)
 	}
 }

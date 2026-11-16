@@ -18,9 +18,10 @@ import {
   createInitialState,
   processPackets,
 } from "@/chat/messageProcessor";
-import { Packet, StopReason } from "@/chat/streamingModels";
+import { GeneratedImage, Packet, StopReason } from "@/chat/streamingModels";
 import {
   TurnGroup,
+  expandCodeModeSteps,
   groupStepsByTurn,
   transformPacketGroups,
 } from "@/chat/timeline/transformers";
@@ -32,6 +33,8 @@ export interface UsePacketProcessorResult {
   toolGroups: GroupedPacket[];
   displayGroups: GroupedPacket[];
   toolTurnGroups: TurnGroup[];
+  /** A code mode program works between tool calls; it has no step. */
+  codeModeWorking: boolean;
   citations: StreamingCitation[];
   citationMap: CitationMap;
   documentMap: Map<string, SearchDoc>;
@@ -39,8 +42,7 @@ export interface UsePacketProcessorResult {
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
   hasSteps: boolean;
-  isGeneratingImage: boolean;
-  generatedImageCount: number;
+  generatedImages: GeneratedImage[];
   finalAnswerComing: boolean;
   toolProcessingDuration: number | undefined;
 
@@ -93,10 +95,12 @@ export function usePacketProcessor(
     state.potentialDisplayGroups,
   ]);
 
-  const toolTurnGroups = useMemo(
-    () => groupStepsByTurn(transformPacketGroups(state.toolGroups)),
-    [state.toolGroups],
-  );
+  const { toolTurnGroups, codeModeWorking } = useMemo(() => {
+    const { steps, codeModeWorking } = expandCodeModeSteps(
+      transformPacketGroups(state.toolGroups),
+    );
+    return { toolTurnGroups: groupStepsByTurn(steps), codeModeWorking };
+  }, [state.toolGroups]);
 
   // Read the current render's finalAnswerComing, not an effect-lagged mirror — so a renderer's
   // onComplete fired in the same commit the answer begins isn't dropped.
@@ -115,6 +119,7 @@ export function usePacketProcessor(
     toolGroups: state.toolGroups,
     displayGroups,
     toolTurnGroups,
+    codeModeWorking,
     citations: state.citations,
     citationMap: state.citationMap,
     documentMap: state.documentMap,
@@ -122,12 +127,13 @@ export function usePacketProcessor(
     stopPacketSeen: state.stopPacketSeen,
     stopReason: state.stopReason,
     hasSteps: toolTurnGroups.length > 0,
-    isGeneratingImage: state.isGeneratingImage,
-    generatedImageCount: state.generatedImageCount,
+    generatedImages: state.generatedImages,
     finalAnswerComing: state.finalAnswerComing,
     toolProcessingDuration: state.toolProcessingDuration,
 
-    isComplete: state.stopPacketSeen && renderComplete,
+    // The stream stopped, and the answer finished rendering or there is no answer to render.
+    isComplete:
+      state.stopPacketSeen && (renderComplete || displayGroups.length === 0),
 
     onRenderComplete,
     markAllToolsDisplayed,

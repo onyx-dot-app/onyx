@@ -4,6 +4,13 @@
 
 import { Packet, Message, SearchDocument } from "@/types/api-types";
 import { ChatMessage } from "@/types/widget-types";
+import {
+  AWAITING_APPROVAL_STOP_REASON,
+  readOutcome,
+} from "@/services/approvals";
+
+/** The server ended the turn with an error packet. */
+export class StreamErrorPacket extends Error {}
 
 export interface ParsedMessage {
   message: ChatMessage;
@@ -54,7 +61,7 @@ export function processPacket(
 
   switch (obj.type) {
     case "message_start":
-      // Start of a new assistant response
+      // Start of a new assistant response; keeps approvals that came first
       return {
         message: {
           id: `msg-${Date.now()}`,
@@ -62,6 +69,7 @@ export function processPacket(
           content: "",
           timestamp: Date.now(),
           isStreaming: true,
+          approvals: currentMessage?.approvals,
         },
         status: "", // Clear status when response starts
       };
@@ -193,14 +201,58 @@ export function processPacket(
         status: "Generating report...",
       };
 
+    case "tool_approval_request": {
+      // A tool call can come first
+      const base: ChatMessage = currentMessage ?? {
+        id: `msg-${Date.now()}`,
+        role: "assistant",
+        content: "",
+        timestamp: Date.now(),
+        isStreaming: true,
+      };
+      const others = (base.approvals ?? []).filter(
+        (entry) => entry.request.approval_id !== obj.approval_id
+      );
+      return {
+        message: {
+          ...base,
+          approvals: [
+            ...others,
+            { request: obj, outcome: null },
+          ],
+        },
+        status: "",
+      };
+    }
+
+    case "tool_approval_resolved": {
+      const outcome = readOutcome(obj.outcome);
+      if (!currentMessage?.approvals || outcome === null) {
+        return { message: currentMessage };
+      }
+      return {
+        message: {
+          ...currentMessage,
+          approvals: currentMessage.approvals.map((entry) =>
+            entry.request.approval_id === obj.approval_id
+              ? { ...entry, outcome }
+              : entry
+          ),
+        },
+      };
+    }
+
     case "stop":
     case "overall_stop":
-      // End of stream - mark message as complete
+      // End of stream - mark message as complete, or as waiting for decisions
       if (currentMessage) {
         return {
           message: {
             ...currentMessage,
             isStreaming: false,
+            awaitingApproval:
+              obj.type === "stop" &&
+              obj.stop_reason === AWAITING_APPROVAL_STOP_REASON,
           },
         };
       }
@@ -208,7 +260,7 @@ export function processPacket(
 
     case "error":
       // Error occurred during streaming - throw to fail fast
-      throw new Error(`Stream error: ${obj.exception}`);
+      throw new StreamErrorPacket(`Stream error: ${obj.exception}`);
 
     default:
       // Unknown packet type

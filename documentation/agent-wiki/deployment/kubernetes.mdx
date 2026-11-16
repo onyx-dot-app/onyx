@@ -1,0 +1,103 @@
+---
+title: "Kubernetes"
+description: "Deploy Agent Wiki to an existing cluster with the Helm chart"
+icon: "cubes"
+---
+
+The Helm chart installs Agent Wiki — backend, workers, frontend, persistent volumes,
+and an Ingress — onto any existing Kubernetes cluster. This is the supported way to run it in production.
+
+The repository also ships a Terraform template under `deploy/terraform/` that provisions a small EKS cluster if you
+don't have one. It's a starting point to copy into your own repo and customize, not a supported product surface.
+
+## Requirements
+
+- `kubectl` and `helm` 3.13 or newer
+- A DNS zone where you can point a record at the ingress load balancer
+- **Postgres 17**, reachable over `DATABASE_URL`
+- Redis and OpenSearch, also reachable from the cluster
+
+A stock Postgres is all you need — no extensions and no `shared_preload_libraries` tuning.
+Search runs on OpenSearch and the task queues on Redis, so a managed instance works as-is.
+
+The chart deliberately does **not** provision Postgres, Redis, or object storage. Bring your own — RDS, Cloud SQL,
+self-managed, whatever you already operate.
+
+## Install
+
+<Steps>
+  <Step title="Point DNS at the ingress">
+    Get the load balancer hostname from your ingress controller:
+
+    ```bash
+    kubectl -n ingress-nginx get svc ingress-nginx-controller \
+      -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+    ```
+
+    Create a CNAME for the host you want and wait for it to resolve. With cert-manager installed,
+    a Let's Encrypt certificate is issued over HTTP-01 once DNS resolves and the chart is installed.
+  </Step>
+
+  <Step title="Install the chart">
+    ```bash
+    export DATABASE_URL='postgresql://…'   # your Postgres connection string
+
+    helm upgrade --install agent-wiki ./deploy/helm/agent-workspace \
+      --namespace agent-wiki --create-namespace \
+      --set secretKey="$(openssl rand -hex 32)" \
+      --set databaseUrl="$DATABASE_URL" \
+      --set image.backend.tag=v0.0.1 \
+      --set image.frontend.tag=v0.0.1 \
+      --set ingress.host=<your-host> \
+      --set ingress.clusterIssuer=letsencrypt-prod \
+      --set ingress.tls.enabled=true
+    ```
+
+    Image repositories default to `onyxdotapp/agent-wiki-{backend,frontend}`, so only the tag needs overriding.
+    For anything beyond a trial, keep a `values.yaml` per environment and use `-f`.
+
+    Passing the connection string through a variable keeps the database password out of your shell history and out of
+    the process list — `--set` arguments are visible to anyone who can run `ps` on that host.
+  </Step>
+
+  <Step title="Sign in and configure">
+    Open `https://<ingress.host>` and sign up — the first account becomes the admin.
+    Then set a provider under **Admin → Language Models**.
+  </Step>
+</Steps>
+
+<Note>
+  **Pin your image tags.** The chart's default is `latest`,
+  which only moves when a version tag is cut and can lag well behind the current build.
+  Set `image.backend.tag` and `image.frontend.tag` explicitly.
+</Note>
+
+`PUBLIC_BASE_URL` is derived from `ingress.host` as `https://<host>`,
+so the MCP endpoint and email links resolve correctly without extra configuration.
+
+## Single replica, by design
+
+The chart pins the backend and worker to one replica each,
+with a `Recreate` strategy and a pod-affinity rule that co-schedules them. Two constraints drive this:
+
+- The `wiki-data` volume is **ReadWriteOnce** and both pods share it — replicas would contend over the git working
+  tree.
+- The periodic-task scheduler runs **in-process**, so a second replica would double-fire scheduled jobs.
+
+Scale vertically rather than horizontally until those change.
+
+## Day-2 operations
+
+**Upgrades.** Cut a new version tag, then `helm upgrade --set image.backend.tag=<new> --set image.frontend.tag=<new>`.
+
+**Backups.** Opt in with `backup.enabled=true`.
+The CronJob uploads a `git bundle` of the wiki repository *and* a `pg_dump` of the database together to any
+S3-compatible bucket.
+
+<Warning>
+  You need both halves. The git bundle holds page content; permissions, comments,
+  and update policies live only in Postgres. A restore from either alone leaves you with a broken wiki.
+</Warning>
+
+**Teardown.** `helm uninstall agent-wiki -n agent-wiki`. Persistent volumes use the `Retain` reclaim policy,
+so disks survive uninstall and must be deleted manually if you want them gone.

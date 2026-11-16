@@ -5,6 +5,8 @@ concurrency:
 
 on:
   pull_request:
+    paths-ignore:
+      - "documentation/**"
   push:
     tags:
       - "v*.*.*"

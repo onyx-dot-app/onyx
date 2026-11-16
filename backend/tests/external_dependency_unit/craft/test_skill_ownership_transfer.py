@@ -19,10 +19,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
 
 
 def _owned_skill(db_session: Session, owner: User) -> Skill:
-    skill = make_skill(db_session)
-    skill.author_user_id = owner.id
-    db_session.flush()
-    return skill
+    return make_skill(db_session, author_user_id=owner.id)
 
 
 def _share_row(

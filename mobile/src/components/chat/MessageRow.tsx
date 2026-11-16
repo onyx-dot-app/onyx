@@ -10,7 +10,9 @@ import { MinimalAgent } from "@/chat/agents";
 import { getErrorTitle } from "@/chat/errorHelpers";
 import { fileDescriptorToDisplayFile } from "@/chat/fileDescriptors";
 import { openSource } from "@/chat/openSource";
+import { orderApprovalsByTurn } from "@/chat/toolApprovals";
 import { AgentTimeline } from "@/components/chat/AgentTimeline";
+import { AttachmentImage } from "@/components/chat/AttachmentImage";
 import {
   CitedSourcesBar,
   CitedSourcesSheet,
@@ -19,14 +21,17 @@ import { FileCard } from "@/components/chat/FileCard";
 import { RendererComponent } from "@/components/chat/renderers/RendererComponent";
 import type { FullChatState } from "@/components/chat/renderers/registry";
 import { ReasoningTextSheet } from "@/components/chat/timeline/ReasoningTextSheet";
+import { ToolApprovalCard } from "@/components/chat/ToolApprovalCard";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import SvgAlertCircle from "@/icons/alert-circle";
 import { usePacedTurnGroups } from "@/hooks/timeline/usePacedTurnGroups";
 import { usePacketProcessor } from "@/hooks/timeline/usePacketProcessor";
+import { useToolApprovals } from "@/hooks/useToolApprovals";
 
 // Non-final display groups don't complete the message.
 const NOOP = (): void => {};
+const GENERATED_IMAGE_SIZE = 160;
 
 function UserMessage({ node }: { node: Message }) {
   const files = node.files.map(fileDescriptorToDisplayFile);
@@ -85,12 +90,12 @@ function AssistantMessage({
   const {
     processed,
     toolTurnGroups,
+    codeModeWorking,
     displayGroups,
     hasSteps,
     stopPacketSeen,
     stopReason,
-    isGeneratingImage,
-    generatedImageCount,
+    generatedImages,
     finalAnswerComing,
     toolProcessingDuration,
     onRenderComplete,
@@ -105,6 +110,14 @@ function AssistantMessage({
       node.nodeId,
       finalAnswerComing,
     );
+
+  const toolApprovals = useToolApprovals(node.packets);
+  // Each card follows the answer text of its own and earlier turns.
+  const sectionEntries = useMemo(
+    () => orderApprovalsByTurn(pacedDisplayGroups, toolApprovals),
+    [pacedDisplayGroups, toolApprovals],
+  );
+  const lastDisplayGroup = pacedDisplayGroups[pacedDisplayGroups.length - 1];
 
   const [sourcesOpen, setSourcesOpen] = useState(false);
   // Which step's text the full-text reader is showing. Owned here, not in the step: the timeline
@@ -150,45 +163,78 @@ function AssistantMessage({
         hasDisplayContent={hasDisplayContent}
         finalAnswerComing={pacedFinalAnswerComing}
         processingDurationSeconds={node.processingDurationSeconds ?? undefined}
-        isGeneratingImage={isGeneratingImage}
-        generatedImageCount={generatedImageCount}
+        generatedImageCount={generatedImages.length}
         toolProcessingDuration={toolProcessingDuration}
         streamingStartTime={node.streamingStartedAt}
+        codeModeWorking={codeModeWorking}
+        awaitingApproval={toolApprovals.some(
+          (approval) => approval.status === "pending",
+        )}
       />
-      {hasDisplayContent ? (
-        // px-12 aligns the answer under the avatar rail (web's px-3).
-        <View className="gap-12 px-12">
-          {pacedDisplayGroups.map((displayGroup, groupIndex) => (
-            <RendererComponent
-              key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
-              packets={displayGroup.packets}
-              chatState={chatState}
-              messageNodeId={node.nodeId}
-              hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}
-              // Only the last group completes the message.
-              onComplete={
-                groupIndex === pacedDisplayGroups.length - 1
-                  ? onRenderComplete
-                  : NOOP
-              }
-              animate={!stopPacketSeen}
-              stopPacketSeen={stopPacketSeen}
-              stopReason={stopReason}
-            >
-              {(results) => (
-                <>
-                  {results.map((result, index) => (
-                    <Fragment key={index}>{result.content}</Fragment>
-                  ))}
-                </>
-              )}
-            </RendererComponent>
+      {/* Images from every image generation step lead the answer. */}
+      {generatedImages.length > 0 ? (
+        <View className="flex-row flex-wrap gap-8 px-12">
+          {generatedImages.map((image) => (
+            <AttachmentImage
+              key={image.file_id}
+              fileId={image.file_id}
+              size={GENERATED_IMAGE_SIZE}
+              contentFit="contain"
+            />
           ))}
         </View>
-      ) : stopReason === StopReason.USER_CANCELLED ? (
+      ) : null}
+      {sectionEntries.length > 0 ? (
+        // px-12 aligns the answer under the avatar rail (web's px-3).
+        <View className="gap-12 px-12">
+          {sectionEntries.map((entry) => {
+            if (entry.kind === "approval") {
+              return (
+                <ToolApprovalCard
+                  key={entry.approval.request.approval_id}
+                  approval={entry.approval}
+                />
+              );
+            }
+            const displayGroup = entry.group;
+            return (
+              <RendererComponent
+                key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
+                packets={displayGroup.packets}
+                chatState={chatState}
+                messageNodeId={node.nodeId}
+                hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}
+                // Only the last group completes the message.
+                onComplete={
+                  displayGroup === lastDisplayGroup ? onRenderComplete : NOOP
+                }
+                animate={!stopPacketSeen}
+                stopPacketSeen={stopPacketSeen}
+                stopReason={stopReason}
+              >
+                {(results) => (
+                  <>
+                    {results.map((result, index) => (
+                      <Fragment key={index}>{result.content}</Fragment>
+                    ))}
+                  </>
+                )}
+              </RendererComponent>
+            );
+          })}
+        </View>
+      ) : null}
+      {!hasDisplayContent && stopReason === StopReason.USER_CANCELLED ? (
         <View className="px-12">
           <Text font="secondary-body" color="text-04">
             User has stopped generation
+          </Text>
+        </View>
+      ) : null}
+      {stopPacketSeen && stopReason === StopReason.TIMED_OUT ? (
+        <View className="px-12">
+          <Text font="secondary-body" color="text-04">
+            The response stopped because it reached its time limit.
           </Text>
         </View>
       ) : null}
@@ -226,6 +272,8 @@ function MessageRowComponent({
 }) {
   if (node.type === "user") return <UserMessage node={node} />;
   if (node.type === "error") return <ErrorMessage node={node} />;
+  // The follow-up answer after it renders the agents' results.
+  if (node.type === "agent_results") return null;
   return <AssistantMessage node={node} agent={agent} />;
 }
 
@@ -240,7 +288,7 @@ export const MessageRow = memo(
     prev.node.streamingStartedAt === next.node.streamingStartedAt &&
     prev.node.processingDurationSeconds ===
       next.node.processingDurationSeconds &&
-    prev.node.packets.length === next.node.packets.length &&
+    prev.node.packets === next.node.packets &&
     prev.node.files === next.node.files &&
     prev.agent === next.agent,
 );

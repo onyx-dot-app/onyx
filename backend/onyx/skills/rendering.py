@@ -54,6 +54,10 @@ _CLOUD_DESCRIPTION_RE = re.compile(
 )
 _DESCRIPTION_RE = re.compile(r"^description:[^\n]*\n", re.MULTILINE)
 
+# Claude Code replaces this in a skill's text with the skill's folder. OpenCode
+# does not, so bash expands it to an empty string.
+CLAUDE_SKILL_DIR_PLACEHOLDER = "${CLAUDE_SKILL_DIR}"
+
 
 def build_available_sources_section(
     db_session: Session,
@@ -137,6 +141,11 @@ def build_action_availability_section(
         return ""
     header = "These actions are unavailable and should not be attempted:"
     return "\n".join([header, "", *(f"- {name}" for name in unavailable)])
+
+
+def resolve_skill_dir_placeholder(skill_md: str, skill_dir: str) -> str:
+    """Replace each ``${CLAUDE_SKILL_DIR}`` with the skill's absolute folder."""
+    return skill_md.replace(CLAUDE_SKILL_DIR_PLACEHOLDER, skill_dir)
 
 
 def substitute_app_values(template: str, values: Mapping[str, str]) -> str:

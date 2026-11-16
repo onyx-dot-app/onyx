@@ -1,10 +1,20 @@
 /* Content */
 export {
   Content,
+  ContentIndent,
   type ContentProps,
-  type SizePreset,
-  type ContentVariant,
+  type ContentIndentProps,
+  type ContentOrientation,
+  type ContentBadge,
+  type ContentBadges,
+  type ContentEditHandle,
 } from "@opal/layouts/content/components";
+
+/* ReverseContent */
+export {
+  ReverseContent,
+  type ReverseContentProps,
+} from "@opal/layouts/reverse-content/components";
 
 /* ContentAction */
 export {
@@ -66,7 +76,10 @@ export {
 
 /* SettingsLayouts */
 export * as SettingsLayouts from "@opal/layouts/settings/components";
-export type { SettingsHeaderProps } from "@opal/layouts/settings/components";
+export type {
+  SettingsHeaderProps,
+  SettingsLoadingProps,
+} from "@opal/layouts/settings/components";
 
 /* RootLayout */
 export * as RootLayout from "@opal/layouts/root/components";
@@ -96,6 +109,18 @@ export type {
 
 /* TagList */
 export { TagList, type TagListProps } from "@opal/layouts/tag-list/components";
+
+/* States: a body that failed to load */
+export {
+  ErrorState,
+  type ErrorStateProps,
+} from "@opal/layouts/states/components";
+
+/* KeyValue */
+export {
+  KeyValue,
+  type KeyValueProps,
+} from "@opal/layouts/key-value/components";
 
 /* Toast */
 export {

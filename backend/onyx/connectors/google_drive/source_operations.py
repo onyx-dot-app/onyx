@@ -83,6 +83,7 @@ _DOWNLOAD_NUM_RETRIES = 3
 # file is detected without reading all of it.
 _CHUNK_SIZE_BUFFER = 64
 _DOCS_API_DOCUMENT_URL = "https://docs.googleapis.com/v1/documents/{doc_id}"
+_FORMS_API_FORM_URL = "https://forms.googleapis.com/v1/forms/{form_id}"
 _DOCS_FETCH_TIMEOUT_SECONDS = 60
 _DOCS_FETCH_CHUNK_SIZE = 1024 * 1024
 # The Docs API's per-user read quota resets each minute; these waits add up to
@@ -91,6 +92,7 @@ _DOCS_FETCH_TRIES = 5
 _DOCS_FETCH_RETRY_DELAY_SECONDS = 2
 _DOCS_FETCH_RETRY_MAX_DELAY_SECONDS = 16
 _RATE_LIMIT_REASONS = frozenset({"userRateLimitExceeded", "rateLimitExceeded"})
+_DISABLED_API_REASONS = frozenset({"accessNotConfigured", "SERVICE_DISABLED"})
 
 # What a requested target probe needs to decide who should crawl it.
 _TARGET_PROBE_FIELDS = "id, mimeType, driveId, owners(emailAddress)"
@@ -136,6 +138,11 @@ class GoogleDriveHttpError(SourceApiError):
         return self.status_code == 429 or any(
             reason in _RATE_LIMIT_REASONS for reason in self.reasons
         )
+
+    @property
+    def api_disabled(self) -> bool:
+        """The API is turned off in the credential's Google Cloud project."""
+        return bool(_DISABLED_API_REASONS.intersection(self.reasons))
 
     @property
     def transient(self) -> bool:
@@ -280,7 +287,7 @@ def is_transient_google_error(error: BaseException) -> bool:
     return isinstance(error, _TRANSIENT_REQUEST_ERRORS)
 
 
-_retry_transient_docs_fetch = retry_builder(
+_retry_transient_fetch = retry_builder(
     tries=_DOCS_FETCH_TRIES,
     delay=_DOCS_FETCH_RETRY_DELAY_SECONDS,
     max_delay=_DOCS_FETCH_RETRY_MAX_DELAY_SECONDS,
@@ -835,21 +842,58 @@ class GoogleDriveSourceOperations(SourceOperations):
         when the response exceeds ``max_response_bytes``; it is streamed, so an
         oversized one is never held whole. A rate limit or a server error is
         retried with backoff; the last one raises."""
-        return _retry_transient_docs_fetch(self._fetch_google_doc_once)(
+        return _retry_transient_fetch(self._fetch_google_doc_once)(
             user_email=user_email,
             doc_id=doc_id,
+            max_response_bytes=max_response_bytes,
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs a Google Form to read. With the Forms API off, indexing "
+            "skips each Form and indexes the other files."
+        ),
+    )
+    @_translated
+    def fetch_google_form(
+        self, *, user_email: str, form_id: str, max_response_bytes: int
+    ) -> dict[str, Any] | None:
+        """A Google Form from the Forms API: its title, description and items.
+        Responses are not read. None when the response exceeds
+        ``max_response_bytes``. A rate limit or a server error is retried with
+        backoff; the last one raises."""
+        return _retry_transient_fetch(self._get_capped_json)(
+            user_email=user_email,
+            url=_FORMS_API_FORM_URL.format(form_id=form_id),
+            params={},
             max_response_bytes=max_response_bytes,
         )
 
     def _fetch_google_doc_once(
         self, *, user_email: str, doc_id: str, max_response_bytes: int
     ) -> dict[str, Any] | None:
+        return self._get_capped_json(
+            user_email=user_email,
+            url=_DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
+            params={"includeTabsContent": "true"},
+            max_response_bytes=max_response_bytes,
+        )
+
+    def _get_capped_json(
+        self,
+        *,
+        user_email: str,
+        url: str,
+        params: dict[str, str],
+        max_response_bytes: int,
+    ) -> dict[str, Any] | None:
+        """The JSON body of a GET, streamed so an oversized one is never held
+        whole. None when it exceeds ``max_response_bytes``."""
         with get_google_authorized_session(self._creds(), user_email) as session:
             with session.get(
-                _DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
-                params={"includeTabsContent": "true"},
-                stream=True,
-                timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
+                url, params=params, stream=True, timeout=_DOCS_FETCH_TIMEOUT_SECONDS
             ) as response:
                 response.raise_for_status()
                 buffer = bytearray()

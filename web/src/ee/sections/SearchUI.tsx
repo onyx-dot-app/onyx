@@ -3,12 +3,12 @@
 import { IconLoader } from "@opal/loaders";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { BaseFilters, MinimalOnyxDocument } from "@/lib/search/types";
 import SearchCard from "@/ee/sections/SearchCard";
-import { Divider, Pagination } from "@opal/components";
+import { Divider, Pagination, Text } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
-import { IllustrationContent, toast } from "@opal/layouts";
+import { IllustrationContent, toast, Section } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { Tag } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
@@ -19,8 +19,6 @@ import {
 import { getTimeFilterDate, TimeFilter } from "@opal/time";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { SourceIcon } from "@/components/SourceIcon";
-import Text from "@/refresh-components/texts/Text";
-import { Section } from "@/layouts/general-layouts";
 import { Dropdown, SelectButton, LineItemButton } from "@opal/components";
 import { SvgClock, SvgTag } from "@opal/icons";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -43,6 +41,7 @@ const RESULTS_PER_PAGE = 20;
 
 export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   const t = useTranslations("admin.search");
+  const format = useFormatter();
 
   const timeFilterOptions: { value: TimeFilter; label: string }[] = [
     { value: "day", label: t("timeFilter.day.label") },
@@ -282,7 +281,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         {!showEmpty && (
           <div className="flex-1 flex flex-col justify-end gap-3">
             <Section alignItems="start">
-              <Text text03 mainUiMuted>
+              <Text font="main-ui-muted" color="text-03">
                 {t("results.count.label", { count: results.length })}
               </Text>
             </Section>
@@ -335,6 +334,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             <Section gap={1} height="fit">
               {sourcesWithMeta.map(({ source, meta, count }) => (
                 <LineItemButton
+                  font="main-ui-action"
                   key={source}
                   icon={(props) => (
                     <SourceIcon sourceType={source} iconSize={16} {...props} />
@@ -345,9 +345,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                   }
                   title={meta.displayName}
                   selectVariant="select-heavy"
-                  sizePreset="main-ui"
-                  variant="section"
-                  rightChildren={<Text text03>{count}</Text>}
+                  rightChildren={
+                    <Text color="text-03">{format.number(count)}</Text>
+                  }
                 />
               ))}
             </Section>

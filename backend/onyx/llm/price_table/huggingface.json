@@ -162,6 +162,33 @@
       "temperature": true,
       "tool_call": true
     },
+    "MiniMaxAI/MiniMax-M3.1-Flash": {
+      "attachment": true,
+      "cost": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "minimax",
+      "limit": {
+        "context": 1000000,
+        "output": 512000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiniMax-M3.1-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-19",
+      "temperature": true,
+      "tool_call": true
+    },
     "Qwen/Qwen2.5-Coder-32B-Instruct": {
       "attachment": false,
       "cost": {

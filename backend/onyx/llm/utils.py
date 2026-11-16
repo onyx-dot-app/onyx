@@ -1,7 +1,8 @@
 import copy
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from pydantic import JsonValue
 from sqlalchemy import select
 
 from onyx.configs.app_configs import (
@@ -20,7 +21,6 @@ from onyx.llm.model_capabilities import (
     get_max_input_tokens,
     model_identity_names,
 )
-from onyx.llm.model_response import ModelResponse
 from onyx.llm.models import (
     GenerationOptions,
     GenerationRequest,
@@ -62,9 +62,9 @@ def truncate_litellm_user_id(user_id: str) -> str:
 
 
 def build_litellm_passthrough_kwargs(
-    model_kwargs: dict[str, Any],
+    model_kwargs: dict[str, JsonValue],
     user_identity: LLMUserIdentity | None,
-) -> dict[str, Any]:
+) -> dict[str, JsonValue]:
     """Build kwargs passed through directly to LiteLLM.
 
     Returns `model_kwargs` unchanged unless we need to add user/session metadata,
@@ -81,7 +81,7 @@ def build_litellm_passthrough_kwargs(
 
     if user_identity.session_id:
         existing_metadata = passthrough_kwargs.get("metadata")
-        metadata: dict[str, Any] | None
+        metadata: dict[str, JsonValue] | None
         if existing_metadata is None:
             metadata = {}
         elif isinstance(existing_metadata, dict):
@@ -94,13 +94,6 @@ def build_litellm_passthrough_kwargs(
             passthrough_kwargs["metadata"] = metadata
 
     return passthrough_kwargs
-
-
-def llm_response_to_string(message: ModelResponse) -> str:
-    if not isinstance(message.choice.message.content, str):
-        raise RuntimeError("LLM message not in expected format.")
-
-    return message.choice.message.content
 
 
 def check_number_of_tokens(
@@ -158,7 +151,7 @@ def collect_credential_values(
 
 
 def test_llm(llm: LLM, total_timeout_s: float = LLM_PROBE_TIMEOUT_S) -> str | None:
-    """Probe an LLM and return either `None` (success) or a sanitized error.
+    """Probe a model and return either `None` (success) or a sanitized error.
 
     The returned message is intended to be safe to surface to admin callers:
     raw upstream exception text is *not* echoed verbatim. Known LiteLLM

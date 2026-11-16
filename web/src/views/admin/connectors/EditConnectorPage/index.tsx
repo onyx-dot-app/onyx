@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { Button } from "@opal/components";
 import {
   IllustrationContent,
@@ -35,7 +35,7 @@ export default function EditConnectorPage({
   ccPairId,
 }: EditConnectorPageProps) {
   const t = useTranslations("admin.connectorEdit");
-  const router = useRouter();
+  const navigation = useNavigation();
   // No polling: the form keeps the values it was filled with.
   const { data: ccPair, error } = useSWR<CCPairFullInfo>(
     buildCCPairInfoUrl(ccPairId),
@@ -72,7 +72,7 @@ export default function EditConnectorPage({
             <Button
               key="back"
               prominence="secondary"
-              onClick={() => router.push(`/admin/connector/${ccPairId}`)}
+              onClick={() => navigation.go(`/admin/connector/${ccPairId}`)}
             >
               {t("loadError.backButton.label")}
             </Button>,
