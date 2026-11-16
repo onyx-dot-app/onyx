@@ -16,6 +16,8 @@ export interface RunStepProps {
   /** The step kind's icon; a running or failed step shows its status. */
   icon?: IconFunctionComponent;
   title?: string | RichStr;
+  /** What the step acted on (a command, a path), after the title. */
+  detail?: React.ReactNode;
   /** Rendered at the inline end of the header, before the toggle. */
   headerAccessory?: React.ReactNode;
   /** The step's body; `null` for a step with nothing to show. */
@@ -51,6 +53,7 @@ export function RunStep({
   position,
   icon,
   title,
+  detail,
   headerAccessory,
   body = null,
   defaultExpanded = false,
@@ -69,6 +72,7 @@ export function RunStep({
     <StepContainer
       stepIcon={statusIcon(status) ?? icon}
       header={title}
+      detail={detail}
       headerAccessory={headerAccessory}
       isExpanded={isExpanded}
       onToggle={() => setOwnExpanded((prev) => !prev)}

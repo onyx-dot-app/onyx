@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { markdown } from "@opal/utils";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import { Text } from "@opal/components";
+import type { IconFunctionComponent } from "@opal/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import BashBody from "@/lib/timeline/craft/components/tool-cards/BashBody";
 import DiffBody from "@/lib/timeline/craft/components/tool-cards/DiffBody";
@@ -23,56 +23,49 @@ function primaryText(toolCall: ToolCallState): string {
   return toolCall.description || toolCall.title;
 }
 
-/** Text that inline markdown shows as written. */
-function plain(text: string): string {
-  return text.replace(/[\\`*_~[\]<>#|]/g, "\\$&");
+export interface ToolCallHeader {
+  /** The short title, in the log line's title column. */
+  title: string;
+  /** What the call acted on (a command, a pattern, a path), as a code chip. */
+  detail?: ReactNode;
 }
 
-/** A code span that holds any text, backticks included. */
-function code(text: string): string {
-  const longestRun = Math.max(
-    0,
-    ...(text.match(/`+/g) ?? []).map((run) => run.length)
+/** A code-formatted chip for the detail column. */
+function codeChip(text: string): ReactNode {
+  return (
+    <span className="min-w-0 rounded-sm bg-background-tint-01 px-1">
+      <Text font="secondary-mono" color="text-03" maxLines={1}>
+        {text}
+      </Text>
+    </span>
   );
-  const fence = "`".repeat(longestRun + 1);
-  return `${fence} ${text} ${fence}`;
 }
 
 /**
- * A plain verb, a code-formatted chip (command, pattern, path, skill name…),
- * and an optional plain suffix ("Using <skill> skill").
+ * The step's title and detail. Bash/execute, search, skills and read/edit get
+ * a verb as the title and the actual command, pattern, skill or file path as a
+ * code chip; everything else is plain text.
  */
-function verbWithCode(verb: string, chip: string, suffix?: string): RichStr {
-  return markdown(`${plain(verb)}${code(chip)}${suffix ? plain(suffix) : ""}`);
-}
-
-/**
- * The step header. Bash/execute, search, and read/edit lead with a verb plus
- * the actual command / pattern / file path in a code-formatted chip;
- * everything else is plain text.
- */
-export function renderToolCallHeader(
-  toolCall: ToolCallState
-): string | RichStr {
+export function renderToolCallHeader(toolCall: ToolCallState): ToolCallHeader {
   if (toolCall.kind === "execute" && toolCall.command) {
     if (toolCall.skillName && toolCall.description) {
-      return toolCall.description;
+      return { title: toolCall.description };
     }
-    return verbWithCode("Running ", toolCall.command);
+    return { title: "Running", detail: codeChip(toolCall.command) };
   }
   if (toolCall.kind === "search" && toolCall.description) {
-    return verbWithCode("Searching for ", toolCall.description);
+    return { title: "Searching for", detail: codeChip(toolCall.description) };
   }
   if (toolCall.toolName === "skill" && toolCall.skillName) {
-    return verbWithCode("Using ", toolCall.skillName, " skill");
+    return { title: "Using skill", detail: codeChip(toolCall.skillName) };
   }
   if (
     (toolCall.kind === "read" || toolCall.kind === "edit") &&
     toolCall.description
   ) {
-    return verbWithCode(`${toolCall.title} `, toolCall.description);
+    return { title: toolCall.title, detail: codeChip(toolCall.description) };
   }
-  return primaryText(toolCall);
+  return { title: primaryText(toolCall) };
 }
 
 export function renderToolCallBody(toolCall: ToolCallState): ReactNode {

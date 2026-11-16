@@ -54,7 +54,9 @@ export function TimelineStepContent({
   // button is the trigger, and the body folds in Collapsible.Content.
   return (
     <Collapsible.Root open={isExpanded} onOpenChange={() => onToggle?.()}>
-      <div className="flex flex-col">
+      {/* Each step pads itself, inside its own background, so a tinted step
+          has room on every side. */}
+      <div className="flex flex-col p-(--spacing-inline-4)">
         {/* The 16px title line plus 6px each side is 28px, the md fold
             button's height, so a row without a button is as tall. */}
         {!hideHeader &&
