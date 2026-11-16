@@ -32,12 +32,28 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
+# Redirect plain-HTTP requests to HTTPS. The 443 server below (and a
+# TLS-terminating load balancer in front of port 80) sets
+# X-Forwarded-Proto: https, so its requests pass through. ACME challenges and
+# the container health probe must stay on plain HTTP.
+# Set NGINX_HTTPS_REDIRECT_ENABLED=false in .env.nginx to turn this off.
+map "$http_x_forwarded_proto:$uri" $onyx_redirect_to_https {
+    default                                    ${NGINX_HTTPS_REDIRECT};
+    "~*^https"                                 0;
+    "~^[^:]*:/\.well-known/acme-challenge/"    0;
+    "~^[^:]*:/nginx-health$"                   0;
+}
+
 server {
     listen 80 default_server;
 
     client_max_body_size 5G;    # Maximum upload size
 
     access_log /var/log/nginx/access.log custom_main;
+
+    if ($onyx_redirect_to_https) {
+        return 308 https://$host$request_uri;
+    }
 
     # Conditionally include MCP location configuration
     include /etc/nginx/conf.d/mcp.conf.inc;
