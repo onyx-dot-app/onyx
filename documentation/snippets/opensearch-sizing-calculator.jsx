@@ -315,20 +315,27 @@ export const OpenSearchSizingCalculator = () => {
   const effectiveCopies = Math.max(copies, searchCopies);
   const {
     provision, hotAll, recommendedRam, nodeRam, cachePerNode, recommendedType, nodeType, vcpusPerNode,
-    maxDisk, recommendedDisk, nodeDisk, nodes, limit: layoutLimit,
+    maxDisk, recommendedDisk, nodeDisk, nodes: layoutNodes, limit: layoutLimit,
   } = effectiveCopies > copies ? layout(effectiveCopies) : first;
   // Raised copies come from search, even when the node count then equals the copy count.
   const limit = layoutLimit === "copies" && effectiveCopies > copies ? "search" : layoutLimit;
+  // Shards are whole units, so the shard copies must divide evenly over the nodes. Then no node
+  // holds more than its share of the vectors and the data. Every search runs on every primary,
+  // so raise the primary count at most 2x; past that, add nodes instead. A node count that is a
+  // multiple of the copy count always balances.
+  const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+  const balance = (n) => {
+    const base = Math.max(primariesForSize, Math.ceil(n / effectiveCopies));
+    const step = n / gcd(effectiveCopies, n);
+    return { n, base, primaries: Math.ceil(base / step) * step };
+  };
+  let shardLayout = balance(layoutNodes);
+  while (shardLayout.primaries > 2 * shardLayout.base) shardLayout = balance(shardLayout.n + zones);
+  const { n: nodes, primaries } = shardLayout;
   // Share of the cluster's storage, file cache and vCPUs that the data and peak search use.
   const storageUse = (indexOneCopy * effectiveCopies) / (nodeDisk * 1e9 * nodes);
   const memoryUse = hotAll / (cachePerNode * nodes);
   const cpuUse = (vcpusForSearch * SEARCH_CPU_TARGET) / (vcpusPerNode * nodes);
-  // Shards are whole units, so pick a primary count whose copies divide evenly over the
-  // nodes. Then no node holds more than its share of the vectors and the data.
-  const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
-  const primaryStep = nodes / gcd(effectiveCopies, nodes);
-  const primaries =
-    Math.ceil(Math.max(primariesForSize, Math.ceil(nodes / effectiveCopies)) / primaryStep) * primaryStep;
 
   const card = "rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-transparent p-5";
   const label = "text-base font-medium text-gray-900 dark:text-gray-200";
@@ -749,7 +756,7 @@ export const OpenSearchSizingCalculator = () => {
             {stat({ value: pct(memoryUse), text: "of the file cache holds vectors (" + fmtBytes(hotAll) + ")" })}
             {stat({ value: pct(cpuUse), text: "of vCPUs busy at peak search (" + fmtVcpus(vcpusForSearch * SEARCH_CPU_TARGET) + " of " + vcpusPerNode * nodes + ")" })}
             {stat({ value: String(primaries), text: "primary shards" })}
-            {stat({ value: String(effectiveCopies), text: effectiveCopies === 1 ? "copy of the data" : "copies of the data" })}
+            {stat({ value: String(effectiveCopies), text: (effectiveCopies === 1 ? "copy of the data" : "copies of the data") + (effectiveCopies > copies ? " (for high QPS)" : "") })}
           </div>
           <div className="space-y-1.5">
             <div className={label}>Onyx settings</div>
