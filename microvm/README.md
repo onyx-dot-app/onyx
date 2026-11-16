@@ -250,7 +250,10 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   (Firecracker vsock does not carry a half-close). The idle timeout is `--relay-idle-timeout` (default
   15 min; a value under 180 s becomes 180 s). Every VM connection gets its own proxy connection.
 - One VM can have at most `--relay-max-conns` open relay connections (default 256). The relay closes a
-  new connection over the cap at once, so one VM cannot use up the agent's memory or file descriptors.
+  new connection over the cap at once, so one VM cannot use up the agent's file descriptors. All VMs
+  together can have at most `--relay-max-conns-node` (default 2048), the same way. One connection uses up
+  to about 100 KiB of agent memory (the 64 KiB head buffer, or two 16 KiB copy buffers plus TLS buffers),
+  so the node cap bounds relay memory.
   An accept error (for example `EMFILE`) does not stop the relay: it waits (5 ms, doubling up to 1 s)
   and accepts again.
 - The token is an EdDSA JWT: header `{"alg":"EdDSA","typ":"JWT","kid"}`, claims `sub`
@@ -601,6 +604,12 @@ workload; it does not prove every VM shape. If guest memory plus the host memory
 guest OOM killer acts. Keep the default overhead unless a test of the VM shape shows a smaller one is
 safe. A Firecracker that grows past the limit is OOM-killed; the kernel kills that VM only, and the agent
 shows it as `EXITED` and cleans it up. `io.max` is not set.
+
+At start the agent sets `MemoryMax` of the slice (`systemctl set-property --runtime <slice>`) to
+`--slice-memory-percent` of `MemTotal` (default 85; 0 sets `MemoryMax=infinity` and only logs a failure). Admission counts what
+running guests use, and idle guests give memory back, so the VMs can together ask for more memory than the
+node has. With the cap the kernel OOM killer acts inside the slice and kills a VM, not kubelet or
+containerd. kubelet does not see VM memory, so it cannot evict anything for it.
 
 **Admission.** Create needs `MemAvailable` (measured, `/proc/meminfo`) >= guest memory of the VMs that are
 starting + `mem_mib` + `--min-free-mem-mib` (default 2048). Starting VMs count at their full size because

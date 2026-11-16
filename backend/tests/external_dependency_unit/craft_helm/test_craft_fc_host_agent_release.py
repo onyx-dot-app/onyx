@@ -33,7 +33,7 @@ _BASE = [
     "--set",
     "auth.sandboxNodeRegistration.enabled=true",
     "--set-string",
-    "auth.sandboxNodeRegistration.values.sandbox_node_registration_secret=reg-test",
+    "auth.sandboxNodeRegistration.values.sandbox_node_registration_secret=reg-test-0123456789abcdef0123456789",
 ]
 _RELEASE = [*_BASE, "--set-string", "global.version=v5.2.0"]
 _EXISTING = [
