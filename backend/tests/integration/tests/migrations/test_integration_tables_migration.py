@@ -591,20 +591,28 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
         seeded.custom_disabled,
     ]
     if conn.execute(text("SELECT to_regclass('integration')")).scalar_one():
+        # An integration stands alone, so a plugin delete leaves it: delete
+        # the seeded integrations and their plugins.
+        params = {
+            "gated": list(seeded.gated.values()),
+            "tools": custom_tools,
+            "apps": [seeded.app_org_key, seeded.app_user_key],
+        }
+        seeded_integrations = (
+            "SELECT id FROM integration WHERE id = ANY(:gated) OR id IN "
+            "(SELECT integration_id FROM tool WHERE id = ANY(:tools)) OR id IN "
+            "(SELECT integration_id FROM external_app WHERE id = ANY(:apps))"
+        )
         conn.execute(
             text(
                 "DELETE FROM plugin WHERE id IN (SELECT plugin_id "
-                "FROM plugin__integration WHERE integration_id = ANY(:gated) "
-                "OR integration_id IN "
-                "(SELECT integration_id FROM tool WHERE id = ANY(:tools)) "
-                "OR integration_id IN "
-                "(SELECT integration_id FROM external_app WHERE id = ANY(:apps)))"
+                f"FROM plugin__integration WHERE integration_id IN ({seeded_integrations}))"
             ),
-            {
-                "gated": list(seeded.gated.values()),
-                "tools": custom_tools,
-                "apps": [seeded.app_org_key, seeded.app_user_key],
-            },
+            params,
+        )
+        conn.execute(
+            text(f"DELETE FROM integration WHERE id IN ({seeded_integrations})"),
+            params,
         )
     skills = [seeded.only_skill, *seeded.shared_skills]
     conn.execute(text("DELETE FROM plugin WHERE id = ANY(:ids)"), {"ids": skills})

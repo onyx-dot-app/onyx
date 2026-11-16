@@ -13,9 +13,16 @@ Create Date: 2026-11-13 14:42:45.411165
 
 """
 
+import logging
+import time
+from collections.abc import Callable
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import DBAPIError
+
+logger = logging.getLogger("alembic.runtime.migration")
 
 # revision identifiers, used by Alembic.
 revision = "730bce2814a0"
@@ -27,6 +34,13 @@ depends_on = None
 ORGANIZATION_LIBRARY_ID = "00000000-0000-4000-8000-00000000011b"
 # Records of a gated action. Each gets the integration of its gated_app_id.
 RECORD_TABLES = ("action_receipt", "action_approval", "approval_request")
+# Alembic runs all pending revisions of a schema in one transaction, so while
+# this retries, the locks of earlier revisions stay held. Keep the budget short.
+_LOCK_TIMEOUT = "5s"
+_LOCK_ATTEMPTS = 6
+_RETRY_DELAY_S = 2
+# SQLSTATE lock_not_available: the error a lock_timeout raises.
+_LOCK_NOT_AVAILABLE = "55P03"
 # The table of each kind, which points at its integration.
 KIND_TABLES = ("mcp_server", "external_app", "tool")
 # The wait for the lock of each VALIDATE CONSTRAINT.
@@ -50,6 +64,80 @@ def _timestamps() -> list[sa.Column]:
             nullable=False,
         ),
     ]
+
+
+def _is_lock_timeout(error: DBAPIError) -> bool:
+    # psycopg2 and SQLAlchemy's asyncpg adapter both set `pgcode` on the
+    # driver error, but the DBAPI error type does not declare it.
+    pgcode = getattr(error.orig, "pgcode", None)  # ods: ignore[getattr]
+    return pgcode == _LOCK_NOT_AVAILABLE
+
+
+def _with_bounded_lock_wait(change: Callable[[], None]) -> None:
+    """Runs a change with a bounded lock wait, as 7c00f53ab75f does.
+
+    An ALTER TABLE on a table that chat reads or writes waits for the open
+    transactions on it, and chat queries queue behind that wait. A short
+    lock_timeout keeps each wait short; each attempt runs in a savepoint, so a
+    timeout retries instead of failing the migration.
+    """
+    bind = op.get_bind()
+    for attempt in range(1, _LOCK_ATTEMPTS + 1):
+        try:
+            with bind.begin_nested():
+                bind.execute(sa.text(f"SET LOCAL lock_timeout = '{_LOCK_TIMEOUT}'"))
+                change()
+            break
+        except DBAPIError as e:
+            if attempt == _LOCK_ATTEMPTS or not _is_lock_timeout(e):
+                raise
+            logger.warning(
+                "An integration tables change timed out waiting for a lock "
+                "(attempt %s/%s). Retrying in %ss.",
+                attempt,
+                _LOCK_ATTEMPTS,
+                _RETRY_DELAY_S,
+            )
+            time.sleep(_RETRY_DELAY_S)
+
+
+def _alter_old_tables() -> None:
+    """Add the new columns to the old tables that chat and tools use."""
+    # mcp_server and external_app are small, and tool holds one row for each
+    # tool, so the unique and FK checks scan few rows.
+    for table in KIND_TABLES:
+        op.add_column(table, sa.Column("integration_id", sa.Integer(), nullable=True))
+        op.create_unique_constraint(
+            f"{table}_integration_id_key", table, ["integration_id"]
+        )
+        op.create_foreign_key(
+            f"fk_{table}_integration_id",
+            table,
+            "integration",
+            ["integration_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+
+    # No default: the column is added with no rewrite of chat_session.
+    op.add_column(
+        "chat_session", sa.Column("tool_options", postgresql.JSONB(), nullable=True)
+    )
+
+    for table in RECORD_TABLES:
+        op.add_column(table, sa.Column("integration_id", sa.Integer(), nullable=True))
+        # NOT VALID: no scan of the old rows under the ALTER TABLE lock. The
+        # constraint still checks each new or changed row, so the backfill of
+        # the copy is checked too. upgrade() validates it after the commit.
+        op.create_foreign_key(
+            f"fk_{table}_integration_id",
+            table,
+            "integration",
+            ["integration_id"],
+            ["id"],
+            ondelete="SET NULL",
+            postgresql_not_valid=True,
+        )
 
 
 def _create_tables() -> None:
@@ -159,21 +247,6 @@ def _create_tables() -> None:
             name="ck_integration_oauth_client_provider_mode",
         ),
     )
-
-    # Small tables: the FK and unique checks scan few rows.
-    for table in KIND_TABLES:
-        op.add_column(table, sa.Column("integration_id", sa.Integer(), nullable=True))
-        op.create_unique_constraint(
-            f"{table}_integration_id_key", table, ["integration_id"]
-        )
-        op.create_foreign_key(
-            f"fk_{table}_integration_id",
-            table,
-            "integration",
-            ["integration_id"],
-            ["id"],
-            ondelete="SET NULL",
-        )
 
     op.create_table(
         "integration_connection",
@@ -332,26 +405,6 @@ def _create_tables() -> None:
         "plugin__integration",
         ["integration_id"],
     )
-
-    # No default: the column is added with no rewrite of chat_session.
-    op.add_column(
-        "chat_session", sa.Column("tool_options", postgresql.JSONB(), nullable=True)
-    )
-
-    for table in RECORD_TABLES:
-        op.add_column(table, sa.Column("integration_id", sa.Integer(), nullable=True))
-        # NOT VALID: no scan of the old rows under the ALTER TABLE lock. The
-        # constraint still checks each new or changed row, so the backfill
-        # below is checked too. upgrade() validates it after the commit.
-        op.create_foreign_key(
-            f"fk_{table}_integration_id",
-            table,
-            "integration",
-            ["integration_id"],
-            ["id"],
-            ondelete="SET NULL",
-            postgresql_not_valid=True,
-        )
 
     op.add_column(
         "assistant__user_specific_config",
@@ -1079,6 +1132,7 @@ def upgrade() -> None:
     # them and only validates.
     if not sa.inspect(bind).has_table("integration", schema=schema):
         _create_tables()
+        _with_bounded_lock_wait(_alter_old_tables)
         _copy_integrations()
     # Validate only after the ALTER TABLE locks are released.
     bind.commit()
