@@ -13,7 +13,7 @@ from onyx.configs.app_configs import (
     MAX_EMBEDDING_RATE_LIMIT_REQUESTS,
 )
 from onyx.configs.constants import QueryHistoryType
-from onyx.db.enums import SupportedLanguage
+from onyx.db.enums import PluginPublishingPolicy, SupportedLanguage
 from onyx.server.features.notifications.models import NotificationResponse
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
@@ -40,6 +40,16 @@ class Tier(str, Enum):
     COMMUNITY = "community"
     BUSINESS = "business"
     ENTERPRISE = "enterprise"
+
+
+class BuildInfo(BaseModel):
+    """Git details of the running build, shown on the app's About page."""
+
+    commit: str | None = None
+    # ISO 8601 committer date.
+    commit_date: str | None = None
+    # The tag or branch the build came from.
+    ref: str | None = None
 
 
 class Settings(BaseModel):
@@ -128,6 +138,10 @@ class Settings(BaseModel):
     # every gateway route rejects requests. Default on.
     llm_gateway_enabled: bool = True
 
+    # Who can publish skills to the organization. Organization-wide skill
+    # managers always publish at once.
+    plugin_publishing: PluginPublishingPolicy = PluginPublishingPolicy.OPEN
+
     # Workspace-wide instructions injected into every Craft agent's AGENTS.md
     # as an "Organization instructions" section.
     craft_instructions: str | None = Field(
@@ -167,8 +181,18 @@ class UserSettings(Settings):
     hide_onyx_branding: bool = False
     # True when hooks are available: single-tenant EE deployments only.
     hooks_enabled: bool = False
+    # True on the playground deployment (IS_PLAYGROUND env var). The web app
+    # reads this instead of a build-time flag, so cloud and playground share
+    # one web image.
+    is_playground: bool = False
     # Application version, read from the ONYX_VERSION env var at startup.
     version: str | None = None
+    # Git details of the server's build (server/settings/build_info.py).
+    commit: str | None = None
+    # ISO 8601 committer date.
+    commit_date: str | None = None
+    # The tag or branch the build came from.
+    git_ref: str | None = None
     # Hard ceiling for user_file_max_upload_size_mb, derived from env var.
     max_allowed_upload_size_mb: int = MAX_ALLOWED_UPLOAD_SIZE_MB
     # Factory defaults so the frontend can show a "restore default" button.

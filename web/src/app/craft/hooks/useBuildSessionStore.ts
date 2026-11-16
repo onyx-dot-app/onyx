@@ -41,7 +41,7 @@ import {
   type SubagentTurn,
 } from "@/app/craft/types/displayTypes";
 
-import { MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
+import { MAX_QUEUED_MESSAGES } from "@/app/app/types";
 
 import {
   createSession as apiCreateSession,

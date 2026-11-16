@@ -59,10 +59,25 @@ Full stack including web server. Use for frontend-backend coordination.
 cd web && bun run playwright <TEST_NAME>
 ```
 
+FastAPI TestClient buffers streaming responses. Use a real HTTP connection to test
+output before completion. Browser packet fixtures test rendering, not backend persistence.
+
+Before removing duplicate tests, compare their inputs, failure cases, and assertions.
+Check expected results, not only equality between two implementation paths.
+
 ## Shared Fixtures
 
 Shared fixtures live in `backend/tests/conftest.py`. Test subdirectories can define
 their own `conftest.py` for directory-scoped fixtures.
+
+External dependency chat tests can use `make_test_user` and
+`default_llm_provider` from `backend/tests/external_dependency_unit/conftest.py`.
+The user fixture removes users and their owned chat,
+agent, tool, and MCP rows after each test. Shared agents remain intact. Set
+`Persona.user_id` when a test creates an agent that the fixture must remove.
+The provider fixture creates a unique provider, restores the previous chat
+default, and removes its provider. Use these fixtures instead of direct setup
+helpers when the test commits database changes.
 
 ## Running Tests Repeatedly (`pytest-repeat`)
 

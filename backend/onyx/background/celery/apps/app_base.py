@@ -49,6 +49,8 @@ from onyx.utils.logger import (
     ColoredFormatter,
     LoggerContextVars,
     PlainFormatter,
+    SkipFileLoggedFilter,
+    add_file_handlers,
     cap_third_party_log_levels,
     get_json_formatter,
     get_log_level_from_str,
@@ -203,6 +205,11 @@ def on_task_postrun(
         f"for tenant_id={tenant_id}" if tenant_id else "",
     )
 
+    _remove_from_taskset(task_id, tenant_id)
+
+
+def _remove_from_taskset(task_id: str, tenant_id: str) -> None:
+    """Drop a finished or revoked task from the taskset its id prefix names."""
     r = get_redis_client(tenant_id=tenant_id)
 
     # NOTE: we want to remove the `Redis*` classes, prefer to just have functions to
@@ -243,24 +250,19 @@ def on_task_revoked(
     request: Any | None = None,
     **kwds: Any,  # noqa: ARG001
 ) -> None:
-    """Drain the doc-sync taskset when a task is revoked/expired.
+    """Drain the taskset when a task is revoked/expired.
 
     Expired tasks are discarded before running, so task_postrun (which normally
     srem's the taskset) never fires. Without this, the stranded id keeps the
-    taskset non-empty and wedges the sync fence until its 7-day TTL.
+    taskset non-empty and wedges the fence until its 7-day TTL.
     """
     task_id = getattr(request, "id", None)  # ods: ignore[getattr]
     if not task_id:
         return
 
-    if not task_id.startswith(DOCUMENT_SYNC_PREFIX):
-        return
-
     request_kwargs = getattr(request, "kwargs", None) or {}  # ods: ignore[getattr]
     tenant_id = cast(str, request_kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA))
-
-    r = get_redis_client(tenant_id=tenant_id)
-    r.srem(DOCUMENT_SYNC_TASKSET_KEY, task_id)
+    _remove_from_taskset(task_id, tenant_id)
 
 
 def on_celeryd_init(
@@ -534,6 +536,11 @@ def on_setup_logging(
     root_handler.setFormatter(root_formatter)
     root_logger.addHandler(root_handler)
 
+    root_file_formatter: logging.Formatter = (
+        get_json_formatter()
+        if JSON_LOGGING
+        else PlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
+    )
     if logfile:
         # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
         if DEV_LOGGING_ENABLED and os.path.exists(logfile):
@@ -543,13 +550,14 @@ def on_setup_logging(
                 pass  # Ignore errors, just proceed with normal logging
 
         root_file_handler = logging.FileHandler(logfile)
-        root_file_formatter: logging.Formatter = (
-            get_json_formatter()
-            if JSON_LOGGING
-            else PlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
-        )
         root_file_handler.setFormatter(root_file_formatter)
         root_logger.addHandler(root_file_handler)
+
+    # Also write to the onyx log files, which the admin log export collects; on
+    # Kubernetes nothing keeps stdout. setup_logger records are already there.
+    add_file_handlers(
+        root_logger, root_file_formatter, log_filter=SkipFileLoggedFilter()
+    )
 
     root_logger.setLevel(effective_loglevel)
 
@@ -581,17 +589,21 @@ def on_setup_logging(
     task_handler.setFormatter(task_formatter)
     task_logger.addHandler(task_handler)
 
+    task_file_formatter: logging.Formatter = (
+        CeleryTaskJsonFormatter()
+        if JSON_LOGGING
+        else CeleryTaskPlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
+    )
     if logfile:
         # No need to truncate again, already done above for root logger
         task_file_handler = logging.FileHandler(logfile)
         task_file_handler.addFilter(TenantContextFilter())
-        task_file_formatter: logging.Formatter = (
-            CeleryTaskJsonFormatter()
-            if JSON_LOGGING
-            else CeleryTaskPlainFormatter(log_format, datefmt="%m/%d/%Y %I:%M:%S %p")
-        )
         task_file_handler.setFormatter(task_file_formatter)
         task_logger.addHandler(task_file_handler)
+
+    add_file_handlers(
+        task_logger, task_file_formatter, log_filter=TenantContextFilter()
+    )
 
     task_logger.setLevel(effective_loglevel)
     task_logger.propagate = False

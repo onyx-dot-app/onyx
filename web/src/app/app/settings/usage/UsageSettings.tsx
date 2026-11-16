@@ -3,8 +3,7 @@
 import { IconLoader } from "@opal/loaders";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
-import { Section } from "@/layouts/general-layouts";
-import { Content } from "@opal/layouts";
+import { Content, Section } from "@opal/layouts";
 import {
   Button,
   Collapsible,
@@ -82,13 +81,12 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
   return (
     <Section gap={0.75} justifyContent="start">
       <Content
+        font="main-content-emphasis"
         icon={SvgBarChart}
         title={t("usageThisPeriod.title")}
         description={t("usageThisPeriod.description", {
           amount: formatDollars(windowCostCents),
         })}
-        sizePreset="main-content"
-        variant="section"
         width="full"
       />
 
@@ -286,11 +284,10 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
   return (
     <Section gap={0.75} justifyContent="start">
       <Content
+        font="main-content-emphasis"
         icon={SvgCreditCard}
         title={t("modelPrices.title")}
         description={t("modelPrices.description")}
-        sizePreset="main-content"
-        variant="section"
         width="full"
       />
       <Card border="solid" rounding={4}>
@@ -398,10 +395,9 @@ function BudgetSection({
   return (
     <Section gap={0.75} justifyContent="start">
       <Content
+        font="main-content-emphasis"
         icon={SvgWallet}
         title={t("budget.title")}
-        sizePreset="main-content"
-        variant="section"
         width="full"
       />
       <Card border="solid" rounding={4}>
@@ -461,7 +457,7 @@ export default function UsageSettings() {
     <Section gap={2}>
       <Section gap={0.75} justifyContent="start">
         <div className="flex w-full flex-wrap items-center justify-between gap-3">
-          <Text font="heading-h3">{t("header.title")}</Text>
+          <Text font="heading-section">{t("header.title")}</Text>
           <InputDateRangePicker
             value={dateRange}
             onValueChange={setDateRange}

@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import Any, cast
 from urllib.parse import quote, urlencode
 
@@ -15,9 +16,9 @@ class PathSpec(BaseModel):
 
 
 class MethodSpec(BaseModel):
-    # Sanitized, LLM-safe name; used in tool definitions and dispatch.
+    # Sanitized operationId used in the parsed operation schema.
     name: str
-    # Original operationId, retained for user-visible display only.
+    # Original operationId used for display and stable tool identity.
     raw_name: str
     summary: str
     path: str
@@ -51,7 +52,10 @@ class MethodSpec(BaseModel):
         ]
 
     def build_url(
-        self, base_url: str, path_params: dict[str, str], query_params: dict[str, str]
+        self,
+        base_url: str,
+        path_params: Mapping[str, JsonValue],
+        query_params: Mapping[str, JsonValue],
     ) -> str:
         encoded_path_params = {
             name: quote(str(value), safe="") for name, value in path_params.items()
@@ -60,7 +64,7 @@ class MethodSpec(BaseModel):
         try:
             url = url.format(**encoded_path_params)
         except KeyError as e:
-            raise ValueError(f"Missing path parameter: {e}")
+            raise ValueError(f"Missing path parameter: {e}") from e
         if query_params:
             url += f"?{urlencode(query_params)}"
         return url

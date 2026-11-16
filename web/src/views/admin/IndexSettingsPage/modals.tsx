@@ -8,9 +8,8 @@ import * as Yup from "yup";
 import { Button } from "@opal/components";
 import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Modal } from "@opal/components";
-import { InputVertical, toast } from "@opal/layouts";
+import { InputVertical, toast, Section } from "@opal/layouts";
 import { InputSingleSelectField } from "@opal/form";
 import {
   EmbeddingModelRequest,
@@ -75,7 +74,7 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
           onClose={onClose}
         />
         <Modal.Body twoTone>
-          <GeneralLayouts.Section gap={4}>{children}</GeneralLayouts.Section>
+          <Section gap={4}>{children}</Section>
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={onClose}>

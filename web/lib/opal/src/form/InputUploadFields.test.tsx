@@ -228,6 +228,34 @@ describe("InputSingleUploadField", () => {
     expect(open).toHaveBeenCalledTimes(2);
   });
 
+  test("the Select File button is a tab stop that opens the picker", async () => {
+    const user = userEvent.setup({ delay: null });
+    let form: FormikProps<KeyForm> | null = null;
+    const { container } = render(
+      <Formik<KeyForm> initialValues={{ key: "" }} onSubmit={() => {}}>
+        {(formik) => {
+          form = formik;
+          return (
+            <InputSingleUploadField name="key" placeholder="Upload a key" />
+          );
+        }}
+      </Formik>
+    );
+    const trigger = screen.getByRole("button", { name: "Upload a key" });
+    const select = screen.getByRole("button", { name: "Select File" });
+    const open = jest.spyOn(picker(container), "click");
+
+    await user.click(trigger);
+    await user.tab();
+    expect(select).toHaveFocus();
+    // Moving between the field and its button is not leaving the field.
+    expect(form?.touched.key).toBeFalsy();
+
+    await user.click(select);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(form?.touched.key).toBeFalsy();
+  });
+
   test("file mode: a pasted file replaces the value", async () => {
     let form: FormikProps<CertificateForm> | null = null;
     render(
@@ -335,6 +363,29 @@ describe("InputMultiUploadField", () => {
     await waitFor(() => expect(form?.values.files).toEqual([one, two]));
     pasteFiles(trigger, [two]);
     await waitFor(() => expect(form?.values.files).toEqual([one, two]));
+  });
+  test("the Select Files button is a tab stop that opens a multi-file picker", async () => {
+    const user = userEvent.setup({ delay: null });
+    const { container } = render(
+      <Formik<FilesForm> initialValues={{ files: [] }} onSubmit={() => {}}>
+        {() => <InputMultiUploadField name="files" />}
+      </Formik>
+    );
+    const trigger = container.querySelector<HTMLElement>(
+      ".opal-input-type-in-tag-trigger"
+    );
+    if (!trigger) throw new Error("no trigger");
+    const select = screen.getByRole("button", { name: "Select Files" });
+    const open = jest.spyOn(picker(container), "click");
+
+    await user.click(trigger);
+    expect(open).not.toHaveBeenCalled();
+    await user.tab();
+    expect(select).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(picker(container).multiple).toBe(true);
   });
 });
 

@@ -6,6 +6,10 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { NextIntlClientProvider } from "next-intl";
 import englishMessages from "@/i18n/messages/en.json";
 export { makeProvider } from "./llmProviderTestUtils";
+export {
+  makeConnectorRow,
+  makeConnectorsPage,
+} from "./indexingConnectorTestUtils";
 
 /**
  * Custom render function that wraps components with common providers
@@ -149,4 +153,22 @@ export function setupUser(options = {}) {
       return value;
     },
   });
+}
+
+/** The English message at `path`. A missing key fails the test. */
+export function copy(path: string): string {
+  const raw = path
+    .split(".")
+    .reduce<unknown>(
+      (node, key) =>
+        node !== null && typeof node === "object"
+          ? (node as Record<string, unknown>)[key]
+          : undefined,
+      englishMessages
+    );
+  expect({ key: path, type: typeof raw }).toEqual({
+    key: path,
+    type: "string",
+  });
+  return raw as string;
 }

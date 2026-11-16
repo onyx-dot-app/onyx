@@ -8,11 +8,19 @@ import pytest
 from pydantic import ValidationError
 
 from onyx.agents.agent_coordination import AgentCoordinator
-from onyx.agents.events import AgentEvent, AgentEventType
-from onyx.agents.models import AgentState, PreparedStep, RunState, StepInput, StepResult
+from onyx.agents.events import AgentEvent, AgentEventType, ToolEndEvent
+from onyx.agents.models import (
+    AgentState,
+    PreparedStep,
+    RunState,
+    StepInput,
+    StepResult,
+    ToolCallContext,
+)
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
     AgentTool,
+    ChildRunWait,
     ToolExecutionMode,
     ToolInvocation,
     ToolProgress,
@@ -27,8 +35,10 @@ from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
     GenerationRequest,
+    NamedToolChoice,
     TextContent,
     ToolCall,
+    ToolChoiceOptions,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
@@ -76,6 +86,128 @@ def echo(
         if sequential
         else ToolExecutionMode.PARALLEL,
     )
+
+
+def test_parallel_tool_completes_before_an_earlier_blocked_call() -> None:
+    first_started = threading.Event()
+    release_first = threading.Event()
+    second_completed = threading.Event()
+    completions: list[str] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        if invocation.arguments["value"] == 0:
+            first_started.set()
+            assert release_first.wait(5)
+        else:
+            assert first_started.wait(5)
+        return ToolResult(content=str(invocation.arguments["value"]))
+
+    def observe(event: AgentEvent) -> None:
+        if isinstance(event, ToolEndEvent):
+            completions.append(event.tool_call.id)
+            if event.tool_call.id == "1":
+                second_completed.set()
+
+    agent = Agent(
+        scripted(calls(2), answer()),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[echo(execute)],
+    )
+    run = agent.start(max_steps=2, on_event=observe)
+    try:
+        assert second_completed.wait(3)
+        assert completions == ["1"]
+        state = run.snapshot()
+        assert state.progress is not None
+        assert state.progress.finalized_tool_call_ids == {"1"}
+        assert state.steps[0].tools["0"].result is None
+        release_first.set()
+        assert run.result(3).output.text == "done"
+        assert run.wait_for_idle(3)
+        assert completions == ["1", "0"]
+        assert [
+            message.tool_call_id
+            for message in run.snapshot().messages
+            if isinstance(message, ToolResultMessage)
+        ] == ["0", "1"]
+    finally:
+        release_first.set()
+        run.cancel()
+        assert run.wait_for_idle(3)
+
+
+def test_sequential_calls_wait_for_their_tool_without_blocking_other_tools() -> None:
+    first_started = threading.Event()
+    release_first = threading.Event()
+    first_finalized = threading.Event()
+    second_started = threading.Event()
+    other_completed = threading.Event()
+    completions: list[str] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        if invocation.call_id == "0":
+            first_started.set()
+            assert release_first.wait(5)
+        else:
+            second_started.set()
+            assert first_finalized.is_set()
+        return ToolResult(content=invocation.call_id)
+
+    def execute_other(_invocation: ToolInvocation) -> ToolResult:
+        assert first_started.wait(5)
+        return ToolResult(content="independent")
+
+    def finalize(context: ToolCallContext, result: ToolResult) -> ToolResult:
+        if context.call.id == "0":
+            first_finalized.set()
+            return ToolResult(content="first finalized")
+        return result
+
+    def observe(event: AgentEvent) -> None:
+        if isinstance(event, ToolEndEvent):
+            completions.append(event.tool_call.id)
+            if event.tool_call.id == "other":
+                other_completed.set()
+
+    message = calls(2)
+    message.content.append(ToolCall(id="other", name="other", arguments={}))
+    run = Agent(
+        scripted(message, answer()),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        after_tool_call=finalize,
+        tools=[
+            echo(execute, sequential=True),
+            AgentTool(
+                definition=ToolDefinition(name="other", description="", parameters={}),
+                execute=execute_other,
+            ),
+        ],
+    ).start(max_steps=2, on_event=observe)
+    try:
+        assert other_completed.wait(3)
+        assert completions == ["other"]
+        assert not second_started.is_set()
+        assert not first_finalized.is_set()
+        release_first.set()
+        assert run.result(3).output.text == "done"
+        assert run.wait_for_idle(3)
+        assert second_started.is_set()
+        assert completions == ["other", "0", "1"]
+        results = [
+            message
+            for message in run.snapshot().messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        assert [(result.tool_call_id, result.text) for result in results] == [
+            ("0", "first finalized"),
+            ("1", "1"),
+            ("other", "independent"),
+        ]
+        assert all(not result.is_error for result in results)
+    finally:
+        release_first.set()
+        run.cancel()
+        assert run.wait_for_idle(3)
 
 
 def test_cancelled_turn_retains_completed_tools_for_resume() -> None:
@@ -227,6 +359,67 @@ def test_invalid_calls_get_paired_errors(invalid: str) -> None:
     assert tool_result.is_error and tool_result.tool_call_id == "0"
 
 
+def test_named_tool_choice_blocks_other_declared_tools() -> None:
+    requests: list[GenerationRequest] = []
+    executed: list[str] = []
+    intercepted: list[str] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        executed.append(invocation.call_id)
+        return ToolResult(content="allowed result")
+
+    tools = [
+        AgentTool(
+            definition=ToolDefinition(
+                name=name, description=name, parameters={"type": "object"}
+            ),
+            execute=execute,
+        )
+        for name in ("selected", "other")
+    ]
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        if len(requests) > 1:
+            return answer()
+        return AssistantMessage(
+            content=[
+                ToolCall(id=name, name=name, arguments={})
+                for name in ("selected", "other")
+            ]
+        )
+
+    def before_tool_call(context: ToolCallContext) -> None:
+        intercepted.append(context.call.name)
+
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=tools,
+        options=GenerationOptions(tool_choice=NamedToolChoice(name="selected")),
+        before_tool_call=before_tool_call,
+    )
+    run_agent(agent, runs=[], max_steps=2)
+    assert executed == ["selected"]
+    assert intercepted == ["selected"]
+    assert all(
+        [tool.name for tool in request.tools] == ["selected", "other"]
+        for request in requests
+    )
+    results = [
+        message
+        for message in requests[1].messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert [(result.tool_call_id, result.is_error) for result in results] == [
+        ("selected", False),
+        ("other", True),
+    ]
+    assert results[1].content == "Tool other is unavailable for this step."
+
+
 def test_context_transform_does_not_rewrite_durable_history() -> None:
     runs: list[Run] = []
     agent = Agent(
@@ -271,7 +464,7 @@ def test_preparation_previous_output_shares_only_detached_callback_messages() ->
             previous.options.max_tokens = 1
             state.history.clear()
             state.input_messages.clear()
-        return PreparedStep(tools=[tool], options=GenerationOptions(max_tokens=128))
+        return PreparedStep(options=GenerationOptions(max_tokens=128))
 
     agent = Agent(
         FakeModelClient(generate),
@@ -348,7 +541,7 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
             signal.check()
         raise AssertionError("child must cancel")
 
-    def execute(invocation: ToolInvocation) -> ToolResult:
+    def execute(invocation: ToolInvocation) -> ChildRunWait:
         signals.append(invocation.cancellation)
         submission = invocation.agents.spawn_agent(
             Agent(
@@ -360,8 +553,7 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
             max_steps=1,
             messages=[UserMessage(content="Child task")],
         )
-        invocation.agents.wait_run(submission.run_id)
-        raise AssertionError("parent must cancel")
+        return ChildRunWait(run_ids=[submission.run_id])
 
     agent = Agent(
         scripted(calls()),
@@ -370,6 +562,9 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
             AgentTool(
                 definition=ToolDefinition(name="echo", description="", parameters={}),
                 execute=execute,
+                result_from_children=lambda _invocation, _children: pytest.fail(
+                    "parent must cancel"
+                ),
             )
         ],
     )
@@ -379,7 +574,7 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
         run = agent.start(max_steps=2, coordinator=coordinator)
         try:
             assert started.wait(3)
-            assert not run.wait_for_idle(timeout=0)
+            assert not run.status.is_terminal
             with pytest.raises(RuntimeError, match="already running"):
                 agent.start(max_steps=1)
             run.cancel()
@@ -746,3 +941,115 @@ def test_coordinator_view_inherits_ownership_independently_of_store(
         assert events == [f"{scope}.register", "save", f"{scope}.release"]
     finally:
         assert owner.close(3)
+
+
+@pytest.mark.parametrize("restriction", ["named", "subset", "none"])
+def test_tool_configuration_and_permissions_survive_caller_and_model_mutation(
+    restriction: str,
+) -> None:
+    executed: list[str] = []
+    approved: list[str] = []
+    requests: list[list[ToolDefinition]] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        executed.append(str(invocation.arguments["name"]))
+        return ToolResult(content="ok")
+
+    tools = [
+        AgentTool(
+            definition=ToolDefinition(name=name, description="original", parameters={}),
+            execute=execute,
+        )
+        for name in ("selected", "other")
+    ]
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append([tool.model_copy(deep=True) for tool in request.tools])
+        if len(requests) > 1:
+            return answer()
+        tools[0].definition.parameters["changed"] = "caller"
+        inspection = agent.tools
+        inspection[0].definition.parameters["changed"] = "inspection"
+        request.tools.clear()
+        request.allowed_tool_names = None
+        request.options.tool_choice = ToolChoiceOptions.AUTO
+        return AssistantMessage(
+            content=[
+                ToolCall(id=name, name=name, arguments={"name": name})
+                for name in ("selected", "other")
+            ]
+        )
+
+    def prepare(_state: StepInput) -> PreparedStep:
+        return PreparedStep(
+            allowed_tool_names=None
+            if restriction == "named"
+            else (frozenset({"selected"}) if restriction == "subset" else frozenset()),
+            options=GenerationOptions(
+                tool_choice=NamedToolChoice(name="selected")
+                if restriction == "named"
+                else ToolChoiceOptions.AUTO
+            ),
+        )
+
+    def approve(context: ToolCallContext) -> None:
+        approved.append(context.call.name)
+
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=tools,
+        prepare_step=prepare,
+        before_tool_call=approve,
+    )
+    run_agent(agent, max_steps=2)
+    assert requests[0] == requests[1]
+    assert [tool.name for tool in requests[0]] == ["selected", "other"]
+    assert all(
+        tool.description == "original" and tool.parameters == {} for tool in requests[0]
+    )
+    assert executed == approved == ([] if restriction == "none" else ["selected"])
+
+
+def test_tool_phases_preserve_configured_order_and_reject_permission_broadening() -> (
+    None
+):
+    requests: list[GenerationRequest] = []
+    tools = [
+        AgentTool(
+            definition=ToolDefinition(name=name, description="", parameters={}),
+            execute=lambda _: ToolResult(content="ok"),
+        )
+        for name in ("first", "second")
+    ]
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        return calls(name="first") if len(requests) == 1 else answer()
+
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=tools,
+        tool_phases={"both": ["second", "first"], "finish": ["second"]},
+        prepare_step=lambda state: PreparedStep(
+            tool_phase="both" if state.step.index == 0 else "finish"
+        ),
+    )
+    run_agent(agent, max_steps=2)
+    assert [[tool.name for tool in request.tools] for request in requests] == [
+        ["first", "second"],
+        ["second"],
+    ]
+    agent.prepare_step = lambda _: PreparedStep(
+        tool_phase="finish", allowed_tool_names=frozenset({"first"})
+    )
+    run = agent.start(background=False, max_steps=1)
+    with pytest.raises(RunFailed):
+        run.result()
+    assert run.wait_for_idle(3)
+    assert len(requests) == 2

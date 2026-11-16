@@ -34,9 +34,14 @@ resource "onyx_llm_provider" "for_default" {
 resource "onyx_llm_provider_default" "test" {
   provider_id = onyx_llm_provider.for_default.id
   model_name  = "gpt-6-luna"
+
+  craft_provider_id = onyx_llm_provider.for_default.id
+  craft_model_name  = "gpt-6-sol"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("onyx_llm_provider_default.test", "craft_model_name", "gpt-6-sol"),
+					testAccCheckServerCraftDefault(t, "gpt-6-sol"),
 					resource.TestCheckResourceAttr("onyx_llm_provider_default.test", "id", "default"),
 					resource.TestCheckResourceAttrPair(
 						"onyx_llm_provider_default.test", "provider_id",
@@ -66,6 +71,9 @@ resource "onyx_llm_provider_default" "test" {
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
+					// Removing the managed Craft pair clears the server value.
+					resource.TestCheckNoResourceAttr("onyx_llm_provider_default.test", "craft_model_name"),
+					testAccCheckServerCraftDefault(t, ""),
 					resource.TestCheckResourceAttr("onyx_llm_provider_default.test", "model_name", "gpt-6-sol"),
 					testAccCheckServerDefaultModel(t, "onyx_llm_provider.for_default", "gpt-6-sol"),
 				),
@@ -102,6 +110,26 @@ func testAccCheckServerDefaultModel(t *testing.T, providerResourceName, wantMode
 		if list.DefaultText.ProviderID != wantProviderID || list.DefaultText.ModelName != wantModel {
 			return fmt.Errorf("deployment default is provider %d model %q, want provider %d model %q",
 				list.DefaultText.ProviderID, list.DefaultText.ModelName, wantProviderID, wantModel)
+		}
+		return nil
+	}
+}
+
+// testAccCheckServerCraftDefault asserts the Craft default model name. An
+// empty wantModel asserts that no Craft default is set.
+func testAccCheckServerCraftDefault(t *testing.T, wantModel string) resource.TestCheckFunc {
+	return func(_ *terraform.State) error {
+		list, err := testAccClient(t).ListLLMProviders(context.Background())
+		if err != nil {
+			return err
+		}
+		switch {
+		case wantModel == "" && list.DefaultCraft != nil:
+			return fmt.Errorf("want no Craft default, got %q", list.DefaultCraft.ModelName)
+		case wantModel != "" && list.DefaultCraft == nil:
+			return fmt.Errorf("want Craft default %q, got none", wantModel)
+		case wantModel != "" && list.DefaultCraft.ModelName != wantModel:
+			return fmt.Errorf("want Craft default %q, got %q", wantModel, list.DefaultCraft.ModelName)
 		}
 		return nil
 	}

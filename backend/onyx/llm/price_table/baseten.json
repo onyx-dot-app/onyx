@@ -1,6 +1,39 @@
 {
   "aliases": {},
   "models": {
+    "decision-models/baseten-elephant-9b-latest": {
+      "cost": {
+        "input": 0.035,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 16384
+      },
+      "mode": "decisions",
+      "name": "decision-models/baseten-elephant-9b-latest"
+    },
+    "decision-models/baseten-joey-2b-latest": {
+      "cost": {
+        "input": 0.01,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 16384
+      },
+      "mode": "decisions",
+      "name": "decision-models/baseten-joey-2b-latest"
+    },
+    "decision-models/baseten-mammoth-27b-latest": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 16384
+      },
+      "mode": "decisions",
+      "name": "decision-models/baseten-mammoth-27b-latest"
+    },
     "deepseek-ai/DeepSeek-V4-Flash-0731": {
       "attachment": false,
       "cost": {
@@ -209,6 +242,36 @@
       "temperature": true,
       "tool_call": true
     },
+    "moonshotai/Kimi-K3.1-Pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "input": 2,
+        "output": 10
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1000000,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Kimi K3.1 Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": {
       "attachment": false,
       "cost": {
@@ -230,7 +293,7 @@
         ]
       },
       "mode": "chat",
-      "name": "Nemotron Ultra",
+      "name": "Nemotron 3 Ultra",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-04",

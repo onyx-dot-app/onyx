@@ -6,6 +6,7 @@ import { useSWRConfig } from "swr";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import {
+  ContentIndent,
   ConfirmationModalLayout,
   ContentAction,
   InputHorizontal,
@@ -37,7 +38,6 @@ import {
 } from "@/lib/languageModels/options";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
   createCostOverride,
   deleteCostOverride,
@@ -312,7 +312,7 @@ function OverrideRow({ override }: OverrideRowProps) {
   const locale = useLocale();
   const format = useFormatter();
   const { mutate } = useSWRConfig();
-  const [editing, setEditing] = useState(false);
+  const editModal = useCreateModal();
   const deleteModal = useCreateModal();
   const providerDisplayName = getOverrideProviderName(override, providerNames);
   const rateParts = [
@@ -361,11 +361,14 @@ function OverrideRow({ override }: OverrideRowProps) {
 
   return (
     <>
-      {editing && (
-        <OverrideModal existing={override} onClose={() => setEditing(false)} />
-      )}
+      <editModal.Provider>
+        <OverrideModal
+          existing={override}
+          onClose={() => editModal.toggle(false)}
+        />
+      </editModal.Provider>
 
-      {deleteModal.isOpen && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={markdown(
@@ -389,7 +392,7 @@ function OverrideRow({ override }: OverrideRowProps) {
             )}
           </Text>
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
 
       <Hoverable.Root
         group="OverrideRow"
@@ -400,17 +403,16 @@ function OverrideRow({ override }: OverrideRowProps) {
           padding={2}
           rounding={4}
           aria-label={override.model_display_name}
-          onClick={() => setEditing(true)}
+          onClick={() => editModal.toggle(true)}
         >
           <Section gap={0} alignItems="stretch" height="fit">
             <ContentAction
+              font="main-ui-action"
               icon={getModelIcon(override.provider, override.model_name)}
               title={override.model_display_name}
               description={description}
               titleMaxLines={1}
               descriptionMaxLines={1}
-              sizePreset="main-ui"
-              variant="section"
               padding={2}
               rightChildren={
                 <Section
@@ -437,29 +439,31 @@ function OverrideRow({ override }: OverrideRowProps) {
                     aria-label={t("row.editButton.ariaLabel", ariaNames)}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setEditing(true);
+                      editModal.toggle(true);
                     }}
                   />
                 </Section>
               }
             />
-            {/* Lines up under the description: ContentAction padding (0.5rem) plus
-                the main-ui description indent (1.375rem). */}
-            <div className="ps-[1.875rem] pb-2">
-              <Section
-                flexDirection="row"
-                justifyContent="start"
-                alignItems="center"
-                width="fit"
-                height="fit"
-                gap={3}
-              >
-                {rateParts.map((part) => (
-                  <Text key={part} font="secondary-mono" color="text-03">
-                    {part}
-                  </Text>
-                ))}
-              </Section>
+            {/* Lines up under the description: the ContentAction padding
+                (0.5rem), then the content's icon box and gap. */}
+            <div className="ps-2 pb-2">
+              <ContentIndent font="main-ui-action">
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  alignItems="center"
+                  width="fit"
+                  height="fit"
+                  gap={3}
+                >
+                  {rateParts.map((part) => (
+                    <Text key={part} font="secondary-mono" color="text-03">
+                      {part}
+                    </Text>
+                  ))}
+                </Section>
+              </ContentIndent>
             </div>
           </Section>
         </SelectCard>
@@ -473,32 +477,30 @@ function OverrideRow({ override }: OverrideRowProps) {
 export default function CostOverridesPanel() {
   const t = useTranslations("admin.costOverrides");
   const { costOverrides, isLoading, error } = useCostOverrides();
-  const [adding, setAdding] = useState(false);
+  const addModal = useCreateModal();
 
   return (
-    <GeneralLayouts.Section
-      gap={3}
-      height="fit"
-      alignItems="stretch"
-      justifyContent="start"
-    >
+    <Section gap={3} height="fit" alignItems="stretch" justifyContent="start">
       <ContentAction
+        font="main-content-emphasis"
         title={t("panel.title")}
         description={markdown(t("panel.description"))}
-        sizePreset="main-content"
-        variant="section"
+        padding={0}
+        center
         rightChildren={
           <Button
             icon={SvgPlus}
             prominence="secondary"
-            onClick={() => setAdding(true)}
+            onClick={() => addModal.toggle(true)}
           >
             {t("panel.addButton.label")}
           </Button>
         }
       />
 
-      {adding && <OverrideModal onClose={() => setAdding(false)} />}
+      <addModal.Provider>
+        <OverrideModal onClose={() => addModal.toggle(false)} />
+      </addModal.Provider>
 
       {error ? (
         <MessageCard
@@ -524,6 +526,6 @@ export default function CostOverridesPanel() {
           description={t("empty.description")}
         />
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

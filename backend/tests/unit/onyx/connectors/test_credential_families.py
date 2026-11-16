@@ -263,3 +263,87 @@ def test_keys_of_another_microsoft_source_are_rejected() -> None:
             },
             None,
         )
+
+
+def test_sharepoint_credential_maps_to_azure_data_lake() -> None:
+    stored = to_stored_credential_json(
+        DocumentSource.SHAREPOINT,
+        {
+            "authentication_method": "certificate",
+            "sp_client_id": "client",
+            "sp_directory_id": "tenant",
+            "sp_private_key": "pfx-base64",
+            "sp_certificate_password": "password",
+        },
+        None,
+    )
+
+    assert to_source_credential_json(DocumentSource.AZURE_DATALAKE, stored) == {
+        "authentication_method": "certificate",
+        "adls_client_id": "client",
+        "adls_directory_id": "tenant",
+        "adls_private_key": "pfx-base64",
+        "adls_certificate_password": "password",
+    }
+
+
+def test_azure_data_lake_account_key_keeps_its_own_shape() -> None:
+    account_key_json = {
+        "authentication_method": "account_key",
+        "adls_account_name": "onyxtest",
+        "adls_account_key": "key",
+    }
+
+    stored = to_stored_credential_json(
+        DocumentSource.AZURE_DATALAKE, account_key_json, None
+    )
+
+    assert stored == account_key_json
+    assert not is_credential_usable_for_source(
+        DocumentSource.AZURE_DATALAKE, stored, DocumentSource.SHAREPOINT
+    )
+
+
+def test_an_app_registration_account_cannot_become_an_account_key() -> None:
+    stored = to_stored_credential_json(
+        DocumentSource.AZURE_DATALAKE,
+        {
+            "authentication_method": "client_secret",
+            "adls_client_id": "client",
+            "adls_directory_id": "tenant",
+            "adls_client_secret": "secret",
+        },
+        None,
+    )
+
+    with pytest.raises(ValueError, match="Create a new account"):
+        to_stored_credential_json(
+            DocumentSource.AZURE_DATALAKE,
+            {
+                "authentication_method": "account_key",
+                "adls_account_name": "onyxtest",
+                "adls_account_key": "key",
+            },
+            stored,
+        )
+
+
+@pytest.mark.parametrize(
+    ("source", "key_prefix"),
+    [(DocumentSource.AZURE_DATALAKE, "adls"), (DocumentSource.SHAREPOINT, "sp")],
+)
+def test_an_app_registration_credential_cannot_carry_an_account_key(
+    source: DocumentSource, key_prefix: str
+) -> None:
+    with pytest.raises(ValueError, match="adls_account_key"):
+        to_stored_credential_json(
+            source,
+            {
+                "authentication_method": "client_secret",
+                f"{key_prefix}_client_id": "client",
+                f"{key_prefix}_directory_id": "tenant",
+                f"{key_prefix}_client_secret": "secret",
+                "adls_account_key": "key",
+            },
+            None,
+        )

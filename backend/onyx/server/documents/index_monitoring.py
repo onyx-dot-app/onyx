@@ -1,7 +1,9 @@
 """The indexing status page's fleet-wide reads: every pair the caller can read
 as one population, where the pair routes in cc_pair.py read one pair."""
 
+from collections import Counter
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -12,10 +14,12 @@ from onyx.auth.permissions import (
     has_permission,
     require_permission,
 )
+from onyx.auth.scoped_permissions import get_visible_user_group_ids
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource
 from onyx.db.cc_pair_runs import (
     count_matching_runs,
     count_pairs_indexing,
+    count_runs_by_pair,
     resolve_matching_runs__no_commit,
 )
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
@@ -23,11 +27,13 @@ from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_connector_credential_pair_from_id,
     get_connector_credential_pairs_for_user,
+    get_data_access_group_names_for_cc_pairs,
     get_managed_cc_pair_ids,
 )
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
+    AccessType,
     CCPairRunErrors,
     CCPairRunKind,
     CCPairRunStatusGroup,
@@ -42,9 +48,12 @@ from onyx.db.index_attempt import (
     get_error_counts_for_index_attempts,
     get_latest_index_attempts,
     get_open_error_counts_for_index_attempts,
-    get_queued_index_attempts,
+    get_queue_positions,
 )
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
+from onyx.db.permission_sync_attempt import (
+    get_cc_pair_ids_with_running_permission_sync,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.cc_pair_runs_feed import (
@@ -52,8 +61,14 @@ from onyx.server.documents.cc_pair_runs_feed import (
     fetch_run_feed,
     open_level_filters,
 )
-from onyx.server.documents.cc_pair_throughput import throughput_of
+from onyx.server.documents.cc_pair_throughput import (
+    MAX_THROUGHPUT_BINS,
+    MAX_TZ_OFFSET_MINUTES,
+    MIN_THROUGHPUT_BINS,
+    throughput_of,
+)
 from onyx.server.documents.models import (
+    CC_PAIR_RUN_BATCH_MAX,
     CCPairRef,
     CCPairRunLevel,
     CCPairRunsResolvableCountResponse,
@@ -84,15 +99,31 @@ _CONNECTORS_MAX_PAGE_SIZE = 100
 _RUNS_MAX_PAGE_SIZE = 50
 _SEARCH_MAX_LENGTH = 200
 
-# Rank per bucket, in enum order.
-_STATUS_ORDER = {status: rank for rank, status in enumerate(IndexingConnectorStatus)}
+# The list's sort rank per bucket. Running pairs share the top rank, and open
+# errors take rank 3 unless the pair runs or failed.
+_STATUS_RANK: dict[IndexingConnectorStatus, int] = {
+    IndexingConnectorStatus.INDEXING: 1,
+    IndexingConnectorStatus.SYNCING: 1,
+    IndexingConnectorStatus.FAILED: 2,
+    IndexingConnectorStatus.DELETING: 4,
+    IndexingConnectorStatus.SCHEDULED: 5,
+    IndexingConnectorStatus.INDEXED: 6,
+    IndexingConnectorStatus.PAUSED: 7,
+}
+_OPEN_ERRORS_RANK: int = 3
+# Kinds whose open runs add to a row's open errors. Index attempts add theirs as error rows.
+_OPEN_ERROR_RUN_KINDS: list[CCPairRunKind] = [
+    CCPairRunKind.PRUNING,
+    CCPairRunKind.CHECKS,
+]
 
 
 def _readable_cc_pairs(
-    db_session: Session, user: User
+    db_session: Session, user: User, cc_pair_ids: list[int] | None = None
 ) -> dict[int, ConnectorCredentialPair]:
-    """Every pair the caller can read, by id. Neither access level contains the
-    other for a scoped manager, so both are read. An admin reads all at once."""
+    """Every pair the caller can read, by id, narrowed to ``cc_pair_ids`` when
+    it lists any. Neither access level contains the other for a scoped manager,
+    so both are read. An admin reads all at once."""
     levels = (
         [CCPairAccessLevel.READ]
         if has_global_permission(user, Permission.MANAGE_CONNECTORS)
@@ -100,10 +131,12 @@ def _readable_cc_pairs(
     )
     pairs: dict[int, ConnectorCredentialPair] = {}
     for level in levels:
+        # An id the caller cannot read drops out, the same as an unknown one.
         for cc_pair in get_connector_credential_pairs_for_user(
             db_session,
             user,
             level,
+            ids=cc_pair_ids,
             eager_load_connector=True,
             eager_load_credential=True,
             eager_load_user=True,
@@ -170,6 +203,17 @@ def _docs_indexed_by_pair(
 @router.get("/overview")
 def get_indexing_overview(
     window: CCPairThroughputWindow = Query(CCPairThroughputWindow.HOURS_1),
+    bins: Annotated[
+        int | None, Query(ge=MIN_THROUGHPUT_BINS, le=MAX_THROUGHPUT_BINS)
+    ] = None,
+    tz_offset_minutes: Annotated[
+        int,
+        Query(
+            ge=-MAX_TZ_OFFSET_MINUTES,
+            le=MAX_TZ_OFFSET_MINUTES,
+            description="The caller's UTC offset in minutes, east positive.",
+        ),
+    ] = 0,
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
@@ -182,11 +226,16 @@ def get_indexing_overview(
             OnyxErrorCode.INVALID_INPUT, "The overview has no all-time window."
         )
     pairs = _readable_cc_pairs(db_session, user)
-    throughput = throughput_of(db_session, list(pairs), window)
+    throughput = throughput_of(db_session, list(pairs), window, bins, tz_offset_minutes)
     return IndexingOverviewResponse(
         indexing_connectors=count_pairs_indexing(db_session, list(pairs)),
         active_connectors=sum(
             1 for cc_pair in pairs.values() if cc_pair.status.is_active()
+        ),
+        paused_connectors=sum(
+            1
+            for cc_pair in pairs.values()
+            if cc_pair.status == ConnectorCredentialPairStatus.PAUSED
         ),
         recent_docs_indexed=sum(throughput.docs_indexed),
         total_docs_indexed=sum(_docs_indexed_by_pair(db_session, pairs).values()),
@@ -195,24 +244,26 @@ def get_indexing_overview(
 
 
 def _connector_status(
-    cc_pair: ConnectorCredentialPair, latest: IndexAttempt | None
+    cc_pair: ConnectorCredentialPair, latest: IndexAttempt | None, syncing: bool
 ) -> IndexingConnectorStatus:
     """The pair's bucket, as its status tag reads: the pair's own state first,
-    then the latest attempt's. A live attempt outranks the sticky error."""
+    then the latest attempt's. A live index run, then a live sync, outranks
+    the sticky error."""
     if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
         return IndexingConnectorStatus.PAUSED
     if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
         return IndexingConnectorStatus.DELETING
     if cc_pair.status == ConnectorCredentialPairStatus.INVALID:
         return IndexingConnectorStatus.FAILED
-    running = latest is not None and latest.status == IndexingStatus.IN_PROGRESS
-    if cc_pair.in_repeated_error_state and not running:
+    if latest is not None and latest.status == IndexingStatus.IN_PROGRESS:
+        return IndexingConnectorStatus.INDEXING
+    if syncing:
+        return IndexingConnectorStatus.SYNCING
+    if cc_pair.in_repeated_error_state:
         return IndexingConnectorStatus.FAILED
     if latest is None:
         return IndexingConnectorStatus.SCHEDULED
     match latest.status:
-        case IndexingStatus.IN_PROGRESS:
-            return IndexingConnectorStatus.INDEXING
         # A canceled or interrupted run never completed, and the pair runs again.
         case (
             IndexingStatus.NOT_STARTED
@@ -226,15 +277,43 @@ def _connector_status(
             return IndexingConnectorStatus.INDEXED
 
 
-def _queue_positions(db_session: Session) -> dict[int, int]:
-    """Each pair's first queued attempt's place in line, from 1. Every attempt
-    handed to the queue counts, other pairs' and other search settings' too,
-    since they share it. The queue also serves a pair's first run ahead of
-    repeats, so the place is where the attempt stands by age."""
-    positions: dict[int, int] = {}
-    for position, attempt in enumerate(get_queued_index_attempts(db_session), 1):
-        positions.setdefault(attempt.connector_credential_pair_id, position)
-    return positions
+def _rank(status: IndexingConnectorStatus, open_error_count: int) -> int:
+    """Open errors lift a pair to the open-errors rank, never below a running or failed one."""
+    rank = _STATUS_RANK[status]
+    return min(rank, _OPEN_ERRORS_RANK) if open_error_count > 0 else rank
+
+
+def _open_error_counts(
+    db_session: Session,
+    latest: dict[int, IndexAttempt],
+    cc_pairs: list[ConnectorCredentialPair],
+) -> dict[int, tuple[OpenErrorCounts, int]]:
+    """Per pair, its latest attempt's open errors and the row's total, which
+    adds the prune and check runs the activity panel lists as open."""
+    attempt_counts = get_open_error_counts_for_index_attempts(
+        db_session,
+        [latest[cc_pair.id].id for cc_pair in cc_pairs if cc_pair.id in latest],
+    )
+    open_runs = count_runs_by_pair(
+        db_session,
+        _OPEN_ERROR_RUN_KINDS,
+        open_level_filters(
+            CCPairRunsResolveMatchingRequest(),
+            [cc_pair.id for cc_pair in cc_pairs],
+            None,
+            set(),
+        ),
+    )
+    counts: dict[int, tuple[OpenErrorCounts, int]] = {}
+    for cc_pair in cc_pairs:
+        attempt = latest.get(cc_pair.id)
+        open_errors = (
+            OpenErrorCounts()
+            if attempt is None
+            else attempt_counts.get(attempt.id, OpenErrorCounts())
+        )
+        counts[cc_pair.id] = (open_errors, open_errors.total + open_runs[cc_pair.id])
+    return counts
 
 
 def _federated_rows(
@@ -258,19 +337,24 @@ def get_indexing_connectors(
     page_num: int = Query(0, ge=0),
     page_size: int = Query(20, ge=1, le=_CONNECTORS_MAX_PAGE_SIZE),
     q: str | None = Query(None, max_length=_SEARCH_MAX_LENGTH),
-    status: IndexingConnectorStatus | None = Query(None),
+    status: Annotated[list[IndexingConnectorStatus] | None, Query()] = None,
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
 ) -> IndexingConnectorsResponse:
-    """The readable pairs page, sorted by status, then source, then name, so a
-    status's connectors of one source sit together. ``q`` matches the name."""
+    """The readable pairs page, sorted by rank, then name. ``q`` matches the
+    name, and ``status`` keeps the pairs in any of its buckets."""
     pairs = _readable_cc_pairs(db_session, user)
     latest = _latest_index_attempts(db_session)
+    syncing_ids = get_cc_pair_ids_with_running_permission_sync(
+        db_session, _shared_group_sync_sources()
+    )
     query = (q or "").strip().lower() or None
     statuses = {
-        cc_pair_id: _connector_status(cc_pair, latest.get(cc_pair_id))
+        cc_pair_id: _connector_status(
+            cc_pair, latest.get(cc_pair_id), cc_pair_id in syncing_ids
+        )
         for cc_pair_id, cc_pair in pairs.items()
     }
     searched = [
@@ -281,19 +365,24 @@ def get_indexing_connectors(
     status_counts = dict.fromkeys(IndexingConnectorStatus, 0)
     for cc_pair in searched:
         status_counts[statuses[cc_pair.id]] += 1
+    filtered = [
+        cc_pair
+        for cc_pair in searched
+        if status is None or statuses[cc_pair.id] in status
+    ]
+    # Over every matching pair, not the page, since the open-errors rank sorts across pages.
+    open_error_counts = _open_error_counts(db_session, latest, filtered)
     matching = sorted(
-        (
-            cc_pair
-            for cc_pair in searched
-            if status is None or statuses[cc_pair.id] == status
-        ),
+        filtered,
         # The id breaks name ties, so a page boundary splits same-named pairs the same way every request.
         key=lambda cc_pair: (
-            _STATUS_ORDER[statuses[cc_pair.id]],
-            cc_pair.connector.source.value,
+            _rank(statuses[cc_pair.id], open_error_counts[cc_pair.id][1]),
             cc_pair.name.lower(),
             cc_pair.id,
         ),
+    )
+    source_counts: Counter[DocumentSource] = Counter(
+        cc_pair.connector.source for cc_pair in matching
     )
     page = matching[page_num * page_size : (page_num + 1) * page_size]
 
@@ -307,19 +396,24 @@ def get_indexing_connectors(
     )
     attempt_ids = [latest[cc_pair.id].id for cc_pair in page if cc_pair.id in latest]
     error_counts = get_error_counts_for_index_attempts(db_session, attempt_ids)
-    open_counts = get_open_error_counts_for_index_attempts(db_session, attempt_ids)
+    group_names = get_data_access_group_names_for_cc_pairs(
+        db_session,
+        [
+            cc_pair.id
+            for cc_pair in page
+            if cc_pair.access_type in AccessType.data_access_types()
+        ],
+        get_visible_user_group_ids(user, db_session),
+    )
     docs_indexed = _docs_indexed_by_pair(
         db_session, {cc_pair.id: cc_pair for cc_pair in page}
     )
-    queue_positions = _queue_positions(db_session)
+    queue_positions = get_queue_positions(db_session)
 
     def row(cc_pair: ConnectorCredentialPair) -> IndexingConnectorRow:
         attempt = latest.get(cc_pair.id)
-        open_errors = (
-            OpenErrorCounts()
-            if attempt is None
-            else open_counts.get(attempt.id, OpenErrorCounts())
-        )
+        open_errors, open_error_count = open_error_counts[cc_pair.id]
+        names = group_names.get(cc_pair.id, [])
         return IndexingConnectorRow(
             cc_pair_id=cc_pair.id,
             name=cc_pair.name,
@@ -341,7 +435,9 @@ def get_indexing_connectors(
                     open_doc_error_count=open_errors.docs,
                 )
             ),
-            open_error_count=open_errors.total,
+            open_error_count=open_error_count,
+            group_count=len(names),
+            group_names=names,
             queue_position=queue_positions.get(cc_pair.id),
             permissions=cc_pair_permissions(
                 can_operate=cc_pair.id in operate_ids,
@@ -354,6 +450,7 @@ def get_indexing_connectors(
         items=[row(cc_pair) for cc_pair in page],
         total_items=len(matching),
         status_counts=status_counts,
+        source_counts=dict(source_counts),
         # A federated connector has no group to scope by, so only admins see it.
         federated_connectors=(
             _federated_rows(db_session, query)
@@ -434,7 +531,7 @@ def _operated_open_levels(
 ) -> tuple[list[CCPairRunKind], list[CCPairRunFilter]] | None:
     """The run kinds and the per-level filters of the open runs the request
     names on the pairs the caller operates, or None when they operate none."""
-    pairs = _readable_cc_pairs(db_session, user)
+    pairs = _readable_cc_pairs(db_session, user, request.cc_pair_ids)
     operate_ids = _managed_ids(
         db_session,
         user,
@@ -466,6 +563,10 @@ def get_resolvable_indexing_runs_count(
     since: datetime | None = Query(None),
     until: datetime | None = Query(None),
     kinds: list[CCPairRunKind] | None = Query(None),
+    cc_pair_ids: Annotated[
+        list[int] | None, Query(max_length=CC_PAIR_RUN_BATCH_MAX)
+    ] = None,
+    status_groups: Annotated[list[CCPairRunStatusGroup] | None, Query()] = None,
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
@@ -473,7 +574,13 @@ def get_resolvable_indexing_runs_count(
 ) -> CCPairRunsResolvableCountResponse:
     """How many runs ``POST /runs/resolve`` would mark for the same filter."""
     request = CCPairRunsResolveMatchingRequest(
-        level=level, q=q, since=since, until=until, kinds=kinds
+        level=level,
+        q=q,
+        since=since,
+        until=until,
+        kinds=kinds,
+        status_groups=status_groups,
+        cc_pair_ids=cc_pair_ids,
     )
     scoped = _operated_open_levels(db_session, user, request)
     if scoped is None:
@@ -527,6 +634,9 @@ def get_indexing_runs(
     errors: CCPairRunErrors | None = Query(None),
     superseded: bool | None = Query(None),
     resolved: bool | None = Query(None),
+    cc_pair_ids: Annotated[
+        list[int] | None, Query(max_length=CC_PAIR_RUN_BATCH_MAX)
+    ] = None,
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
@@ -534,7 +644,7 @@ def get_indexing_runs(
 ) -> IndexingRunsResponse:
     """The readable pairs' index attempts and permission syncs as one feed,
     newest first, filtered as a pair's own feed is. Each run names its pair."""
-    pairs = _readable_cc_pairs(db_session, user)
+    pairs = _readable_cc_pairs(db_session, user, cc_pair_ids)
     wanted = [kind for kind in CCPairRunKind if kinds is None or kind in kinds]
     groups = None if status_groups is None else set(status_groups)
     # A source with one group sync for all its pairs logs it against whichever

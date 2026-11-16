@@ -1,13 +1,16 @@
 import ast
 import os
+import socket
 import subprocess
-from collections.abc import Callable, Generator
+import threading
+from collections.abc import Callable, Generator, Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+import uvicorn
 
 # Enables test-only server behavior, e.g. ToolCallDebug packets.
 os.environ["INTEGRATION_TESTS_MODE"] = "true"
@@ -327,6 +330,36 @@ def _test_client(
             yield test_client
         finally:
             http_client.set_test_client(None)
+
+
+@pytest.fixture(scope="module")
+def streaming_api(_test_client: TestClient) -> Iterator[str]:
+    """Serve the initialized application without buffering streaming responses."""
+    started = threading.Event()
+
+    class StreamingServer(uvicorn.Server):
+        async def startup(self, sockets: list[socket.socket] | None = None) -> None:
+            await super().startup(sockets)
+            started.set()
+
+    server = StreamingServer(
+        uvicorn.Config(
+            _test_client.app,
+            host="127.0.0.1",
+            port=0,
+            lifespan="off",
+            log_level="warning",
+        )
+    )
+    assert _test_client.portal is not None
+    worker = _test_client.portal.start_task_soon(server.serve)
+    try:
+        assert started.wait(15), "Streaming API did not start"
+        port = server.servers[0].sockets[0].getsockname()[1]
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        worker.result(timeout=15)
 
 
 @pytest.fixture(scope="session", autouse=True)

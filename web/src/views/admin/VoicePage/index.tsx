@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import ProviderCard from "@/sections/admin/ProviderCard";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, Section } from "@opal/layouts";
 import { useVoiceProviders } from "@/lib/voice/hooks";
 import {
   activateVoiceProvider,
@@ -11,7 +11,6 @@ import {
 } from "@/lib/voice/svc";
 import { Content } from "@opal/layouts";
 import { MessageCard, Text } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useCreateModal } from "@opal/components";
 import {
@@ -240,10 +239,9 @@ export default function VoicePage() {
         <Section gap={8}>
           <Section gap={3}>
             <Content
+              font="main-content-emphasis"
               title={t("speechToText.title")}
               description={t("speechToText.description")}
-              sizePreset="main-content"
-              variant="section"
             />
 
             {!hasActiveSTTProvider && (
@@ -287,10 +285,9 @@ export default function VoicePage() {
 
           <Section gap={3}>
             <Content
+              font="main-content-emphasis"
               title={t("textToSpeech.title")}
               description={t("textToSpeech.description")}
-              sizePreset="main-content"
-              variant="section"
             />
 
             {!hasActiveTTSProvider && (

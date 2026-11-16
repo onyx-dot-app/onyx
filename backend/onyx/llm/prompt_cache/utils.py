@@ -4,10 +4,25 @@
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from onyx.llm.model_request import ChatCompletionMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
+from onyx.llm.models import ContentPart, TextContentPart
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _user_content_with_cache_marker(message: UserMessage) -> list[ContentPart]:
+    """Keep a message marker at its original boundary when merging content."""
+    content: list[ContentPart] = (
+        [TextContentPart(text=message.content)]
+        if isinstance(message.content, str)
+        else list(message.content)
+    )
+    if content and message.cache_control is not None:
+        content[-1] = content[-1].model_copy(
+            update={"cache_control": message.cache_control}
+        )
+    return content
 
 
 def combine_messages_with_continuation(
@@ -27,6 +42,25 @@ def combine_messages_with_continuation(
     """
     if not continuation or not prefix_msgs:
         return list(prefix_msgs) + list(suffix_msgs)
+    if (
+        suffix_msgs
+        and isinstance(prefix_msgs[-1], UserMessage)
+        and isinstance(suffix_msgs[0], UserMessage)
+        and (
+            prefix_msgs[-1].cache_control is not None
+            or suffix_msgs[0].cache_control is not None
+        )
+    ):
+        # Separate blocks preserve both cache boundaries and their lifetimes.
+        merged = prefix_msgs[-1].model_copy(
+            update={
+                "content": _user_content_with_cache_marker(prefix_msgs[-1])
+                + _user_content_with_cache_marker(suffix_msgs[0]),
+                "cache_control": None,
+            }
+        )
+        return [*prefix_msgs[:-1], merged, *suffix_msgs[1:]]
+
     # Append suffix content to last message of prefix
     result = list(prefix_msgs)
     last_msg = dict(result[-1])

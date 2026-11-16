@@ -95,3 +95,10 @@ export function isScheduledRunContextInFlight(
 ): boolean {
   return context ? isScheduledRunInFlight(context.status) : false;
 }
+
+export function isRunUnviewed(run: {
+  revision: number;
+  viewed_revision: number | null;
+}): boolean {
+  return (run.viewed_revision ?? 0) < run.revision;
+}

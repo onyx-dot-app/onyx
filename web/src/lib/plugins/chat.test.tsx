@@ -1,5 +1,6 @@
 import { MCPConnectionStatus } from "@/lib/mcp/types";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { sendMessage } from "@/app/app/services/lib";
 import { ReadableStream } from "node:stream/web";
 import {
@@ -7,7 +8,7 @@ import {
   chatPluginIntentLoadState,
   chatPluginsForAgent,
   enabledChatToolIds,
-  effectiveChatForcedToolId,
+  effectiveChatPreferredToolId,
   isChatPluginEnabled,
   memberPluginChatHref,
   memberPluginsHref,
@@ -25,15 +26,22 @@ let mockChatId: string | null = "chat-a";
 let mockAgentId: number | null = null;
 let mockProjectId: number | null = null;
 
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     chat: () => mockChatId,
     agent: () => mockAgentId,
     project: () => mockProjectId,
   }),
 }));
+let mockAgentTools: ToolSnapshot[] = [];
 jest.mock("@/lib/agents/hooks", () => ({
-  useActiveAgent: () => ({ id: 5 }),
+  useActiveAgent: () => ({ id: 5, tools: mockAgentTools }),
+}));
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({
+    user: { id: "user", email: "user@example.com", is_anonymous_user: false },
+  }),
 }));
 
 function tool(id: number, overrides: Partial<ToolSnapshot> = {}): ToolSnapshot {
@@ -106,7 +114,7 @@ test("Chat excludes external apps with colliding OpenAPI IDs and rejects their i
 });
 const groups = chatPluginsForAgent(plugins, { id: 5, tools });
 
-describe("effective forced tool selection", () => {
+describe("effective preferred tool selection", () => {
   const optedOutPlugins = buildMemberPlugins(
     [{ ...server, user_enabled_in_chat: false }],
     tools.map((entry) => ({ ...entry, user_enabled_in_chat: false })),
@@ -115,7 +123,7 @@ describe("effective forced tool selection", () => {
 
   test.each([10, 20])("suppresses default Chat opt-out for tool %i", (id) => {
     expect(
-      effectiveChatForcedToolId({
+      effectiveChatPreferredToolId({
         requestedToolId: id,
         agent: { id: 0, tools },
         plugins: optedOutPlugins,
@@ -123,9 +131,9 @@ describe("effective forced tool selection", () => {
     ).toBeNull();
   });
 
-  test.each([10, 20])("preserves custom-agent forced tool %i", (id) => {
+  test.each([10, 20])("preserves custom-agent preferred tool %i", (id) => {
     expect(
-      effectiveChatForcedToolId({
+      effectiveChatPreferredToolId({
         requestedToolId: id,
         agent: { id: 5, tools },
         plugins: optedOutPlugins,
@@ -135,26 +143,27 @@ describe("effective forced tool selection", () => {
 
   test.each([10, 20])(
     "keeps persisted choice %i when suppressing a send",
-    (id) => {
+    async (id) => {
       const { result, unmount } = renderHook(() => useToolConfiguration());
-      act(() => result.current.setToolState(id, () => "forced"));
+      act(() => result.current.setToolState(id, () => "preferred"));
       unmount();
+      await savedOn("chat-a");
       const restored = renderHook(() => useToolConfiguration());
-      expect(restored.result.current.forcedToolId).toBe(id);
+      expect(restored.result.current.preferredToolId).toBe(id);
       expect(
-        effectiveChatForcedToolId({
-          requestedToolId: restored.result.current.forcedToolId,
+        effectiveChatPreferredToolId({
+          requestedToolId: restored.result.current.preferredToolId,
           agent: { id: 0, tools },
           plugins: optedOutPlugins,
         })
       ).toBeNull();
-      expect(restored.result.current.forcedToolId).toBe(id);
+      expect(restored.result.current.preferredToolId).toBe(id);
     }
   );
 
   test("preserves built-in Search even when plugins are opted out", () => {
     expect(
-      effectiveChatForcedToolId({
+      effectiveChatPreferredToolId({
         requestedToolId: 1,
         agent: { id: 0, tools },
         plugins: optedOutPlugins,
@@ -166,14 +175,14 @@ describe("effective forced tool selection", () => {
     "suppresses default Chat tool %i until its metadata loads",
     (id) => {
       expect(
-        effectiveChatForcedToolId({
+        effectiveChatPreferredToolId({
           requestedToolId: id,
           agent: { id: 0, tools },
           plugins: [],
         })
       ).toBeNull();
       expect(
-        effectiveChatForcedToolId({
+        effectiveChatPreferredToolId({
           requestedToolId: id,
           agent: { id: 0, tools },
           plugins: buildMemberPlugins([], [tool(999)], {
@@ -189,7 +198,7 @@ describe("effective forced tool selection", () => {
     "preserves custom-agent tool %i without plugin metadata",
     (id) => {
       expect(
-        effectiveChatForcedToolId({
+        effectiveChatPreferredToolId({
           requestedToolId: id,
           agent: { id: 5, tools },
           plugins: [],
@@ -198,9 +207,9 @@ describe("effective forced tool selection", () => {
     }
   );
 
-  test("preserves default Chat forced Search before plugin metadata loads", () => {
+  test("preserves default Chat preferred Search before plugin metadata loads", () => {
     expect(
-      effectiveChatForcedToolId({
+      effectiveChatPreferredToolId({
         requestedToolId: 1,
         agent: { id: 0, tools },
         plugins: [],
@@ -208,9 +217,9 @@ describe("effective forced tool selection", () => {
     ).toBe(1);
   });
 
-  test.each([null, 999])("does not force detached or unset tool %s", (id) => {
+  test.each([null, 999])("does not prefer detached or unset tool %s", (id) => {
     expect(
-      effectiveChatForcedToolId({
+      effectiveChatPreferredToolId({
         requestedToolId: id,
         agent: { id: 0, tools },
         plugins,
@@ -220,14 +229,14 @@ describe("effective forced tool selection", () => {
 
   test("preserves attached plugins without opt-out and handles no agent", () => {
     expect(
-      effectiveChatForcedToolId({
+      effectiveChatPreferredToolId({
         requestedToolId: 20,
         agent: { id: 0, tools },
         plugins,
       })
     ).toBe(20);
     expect(
-      effectiveChatForcedToolId({
+      effectiveChatPreferredToolId({
         requestedToolId: 20,
         agent: undefined,
         plugins,
@@ -247,8 +256,31 @@ beforeEach(() => {
   mockChatId = "chat-a";
   mockAgentId = null;
   mockProjectId = null;
+  mockAgentTools = tools;
+  // Existing chats whose details carry no saved selection yet.
+  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
+  for (const chatSessionId of ["chat-a", "chat-b"]) {
+    useChatSessionStore
+      .getState()
+      .createSession(chatSessionId, { incognito: false, toolSelection: null });
+  }
+  // Each PATCH answers with the selection it saved.
+  jest
+    .spyOn(global, "fetch")
+    .mockImplementation(
+      async (_url, init) => new Response(String(init?.body ?? "null"))
+    );
 });
 afterEach(() => jest.restoreAllMocks());
+
+/** Waits until a chat's saved selection holds what its composer chose. */
+async function savedOn(chatSessionId: string): Promise<void> {
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get(chatSessionId)?.toolSelection
+    ).toBeTruthy()
+  );
+}
 
 test("groups only attached tools and preserves custom-agent access outside default chat", () => {
   expect(
@@ -308,22 +340,22 @@ test("OpenAPI personal opt-out stays in the directory and affects only default C
   ).toEqual([20, 21]);
 });
 
-test("group enable preserves a forced tool and group disable releases only its own forced tool", () => {
+test("group enable preserves a preferred tool and group disable releases only its own preferred tool", () => {
   const { result } = renderHook(() => useToolConfiguration());
   act(() => {
-    result.current.setToolState(10, () => "forced");
+    result.current.setToolState(10, () => "preferred");
     result.current.setToolState(11, () => "disabled");
   });
   expect(isChatPluginEnabled(mcpGroup(), result.current)).toBe(true);
   act(() => setChatPluginEnabled(mcpGroup(), true, result.current));
-  expect(result.current.forcedToolId).toBe(10);
+  expect(result.current.preferredToolId).toBe(10);
   expect(result.current.disabledToolIds).toEqual([]);
   act(() => setChatPluginEnabled(mcpGroup(), false, result.current));
-  expect(result.current.forcedToolId).toBeNull();
+  expect(result.current.preferredToolId).toBeNull();
   expect(result.current.disabledToolIds).toEqual([10, 11]);
-  act(() => result.current.setToolState(1, () => "forced"));
+  act(() => result.current.setToolState(1, () => "preferred"));
   act(() => setChatPluginEnabled(mcpGroup(), true, result.current));
-  expect(result.current.forcedToolId).toBe(1);
+  expect(result.current.preferredToolId).toBe(1);
 });
 
 test("a new attached MCP tool starts neutral after the existing group was disabled", () => {
@@ -339,10 +371,11 @@ test("a new attached MCP tool starts neutral after the existing group was disabl
   expect(isChatPluginEnabled(expanded, result.current)).toBe(true);
 });
 
-test("chat plugin choices survive a reload and stay separate between chats", () => {
+test("chat plugin choices survive a reload and stay separate between chats", async () => {
   const first = renderHook(() => useToolConfiguration());
   act(() => setChatPluginEnabled(mcpGroup(), false, first.result.current));
   first.unmount();
+  await savedOn("chat-a");
   const second = renderHook(() => useToolConfiguration());
   expect(second.result.current.disabledToolIds).toEqual([10, 11]);
   mockChatId = "chat-b";
@@ -616,6 +649,8 @@ test("group selection serializes through the send service and neutral omits the 
   const fetchSpy = jest
     .spyOn(global, "fetch")
     .mockImplementation(async (input, init) => {
+      // A tool change in an existing chat also saves the chat's selection.
+      if (init?.method === "PATCH") return new Response(String(init.body));
       expect(input).toBe("/api/chat/send-chat-message");
       if (typeof init?.body !== "string")
         throw new Error("Expected JSON request body");
@@ -632,7 +667,7 @@ test("group selection serializes through the send service and neutral omits the 
     });
   const { result } = renderHook(() => useToolConfiguration());
   act(() => {
-    result.current.setToolState(10, () => "forced");
+    result.current.setToolState(10, () => "preferred");
     setChatPluginEnabled(mcpGroup(), false, result.current);
   });
   await sendMessage({
@@ -641,13 +676,13 @@ test("group selection serializes through the send service and neutral omits the 
     parentMessageId: null,
     filters: null,
     enabledToolIds: enabledChatToolIds(tools, result.current),
-    forcedToolId: result.current.forcedToolId,
+    preferredToolId: result.current.preferredToolId,
   }).next();
   expect(requests[0]).toMatchObject({
     message: "Read team projects",
     chat_session_id: "chat-a",
     allowed_tool_ids: [1, 2, 20],
-    forced_tool_id: null,
+    preferred_tool_id: null,
   });
   act(() => setChatPluginEnabled(mcpGroup(), true, result.current));
   await sendMessage({
@@ -662,5 +697,7 @@ test("group selection serializes through the send service and neutral omits the 
     chat_session_id: "chat-a",
   });
   expect(requests[1]).not.toHaveProperty("allowed_tool_ids");
-  expect(fetchSpy).toHaveBeenCalledTimes(2);
+  expect(
+    fetchSpy.mock.calls.filter(([, init]) => init?.method !== "PATCH")
+  ).toHaveLength(2);
 });

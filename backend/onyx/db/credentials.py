@@ -575,7 +575,7 @@ def delete_stale_draft_credentials(
         db_session.scalars(
             select(Credential.id)
             .where(
-                Credential.is_draft.is_(True),
+                Credential.is_draft,
                 Credential.time_updated < updated_before,
             )
             .with_for_update(skip_locked=True)
@@ -588,7 +588,7 @@ def delete_stale_draft_credentials(
     ).delete(synchronize_session=False)
     db_session.execute(
         delete(Credential)
-        .where(Credential.id.in_(credential_ids), Credential.is_draft.is_(True))
+        .where(Credential.id.in_(credential_ids), Credential.is_draft)
         .execution_options(synchronize_session=False)
     )
     db_session.commit()

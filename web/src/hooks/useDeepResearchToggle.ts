@@ -1,10 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import { useIncognito } from "@/providers/IncognitoProvider";
 
 interface UseDeepResearchToggleProps {
   chatSessionId: string | null;
   agentId: number | undefined;
+  toolConfiguration: Pick<
+    ToolConfigurationHandle,
+    "preferredToolId" | "clearPreferredTool"
+  >;
 }
 
 /**
@@ -23,8 +29,10 @@ interface UseDeepResearchToggleProps {
 export default function useDeepResearchToggle({
   chatSessionId,
   agentId,
+  toolConfiguration,
 }: UseDeepResearchToggleProps) {
   const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
+  const { incognitoEnabled } = useIncognito();
   const previousChatSessionId = useRef<string | null>(chatSessionId);
 
   // Reset when switching chat sessions, but preserve when going from null to a new session
@@ -43,12 +51,19 @@ export default function useDeepResearchToggle({
     setDeepResearchEnabled(false);
   }, [agentId]);
 
+  useEffect(() => {
+    if (toolConfiguration.preferredToolId !== null)
+      setDeepResearchEnabled(false);
+  }, [toolConfiguration.preferredToolId]);
+
   const toggleDeepResearch = useCallback(() => {
+    if (!deepResearchEnabled) toolConfiguration.clearPreferredTool();
     setDeepResearchEnabled(!deepResearchEnabled);
-  }, [deepResearchEnabled]);
+  }, [deepResearchEnabled, toolConfiguration]);
 
   return {
-    deepResearchEnabled,
+    // Incognito chats run no child agents, so incognito masks the selection.
+    deepResearchEnabled: deepResearchEnabled && !incognitoEnabled,
     toggleDeepResearch,
   };
 }

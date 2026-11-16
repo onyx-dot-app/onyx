@@ -3,7 +3,7 @@
 **Import:** `import { MessageCard } from "@opal/components";`
 
 A styled card for displaying messages, alerts, or status notifications. Uses `Content` internally
-for consistent title/description/icon layout. Built on `Card`, which owns the surface — each variant maps to a `CardColor`, a border color, and an icon. Supports 6 variants — `default`, `info`, `success`, `warning`, `pending`, `error` — with corresponding background
+for consistent title/description/icon layout. Built on `Card`, which owns the surface — each variant maps to a `CardColor`, a border color, and an icon. Supports 7 variants — `default`, `info`, `success`, `warning`, `pending`, `queued`, `error` — with corresponding background
 and border colors.
 
 ## Padding
@@ -14,7 +14,7 @@ Both paddings move together. A card inside a modal, popover or toast uses `outer
 
 | Prop             | Type                                                                    | Default     | Description                                                                                |
 | ---------------- | ----------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------ |
-| `variant`        | `"default" \| "info" \| "success" \| "warning" \| "pending" \| "error"` | `"default"` | Visual variant (controls background, border, and icon)                                     |
+| `variant`        | `"default" \| "info" \| "success" \| "warning" \| "pending" \| "queued" \| "error"` | `"default"` | Visual variant (controls background, border, and icon)                                     |
 | `icon`           | `IconFunctionComponent`                                                 | per variant | Override the default variant icon                                                          |
 | `title`          | `string \| RichStr`                                                     | —           | Main title text                                                                            |
 | `description`    | `string \| RichStr`                                                     | —           | Description below the title                                                                |

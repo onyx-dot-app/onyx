@@ -1174,7 +1174,12 @@ export class OnyxApiClient {
 
   async createCustomTool(
     name: string,
-    description: string = "E2E test tool"
+    description: string = "E2E test tool",
+    endpoint: { baseUrl: string; path: string; operationId: string } = {
+      baseUrl: "https://example.com",
+      path: "/test",
+      operationId: "testOp",
+    }
   ): Promise<number> {
     const response = await this.post("/admin/tool/custom", {
       name,
@@ -1183,15 +1188,15 @@ export class OnyxApiClient {
         openapi: "3.0.0",
         info: { title: name, description: description, version: "1.0.0" },
         paths: {
-          "/test": {
+          [endpoint.path]: {
             get: {
-              operationId: "testOp",
+              operationId: endpoint.operationId,
               summary: "Test endpoint",
               responses: { "200": { description: "OK" } },
             },
           },
         },
-        servers: [{ url: "https://example.com" }],
+        servers: [{ url: endpoint.baseUrl }],
       },
       passthrough_auth: false,
     });
@@ -1462,6 +1467,23 @@ export class OnyxApiClient {
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
+  }
+
+  /**
+   * Replace a server's per-tool approval policies, keyed by tool name.
+   * Unlisted tools ask for approval in chat.
+   */
+  async setMcpActionPolicies(
+    serverId: number,
+    actionPolicies: Record<string, "ALWAYS" | "ASK" | "DENY">
+  ): Promise<void> {
+    const response = await this.patch(`/admin/mcp/server/${serverId}`, {
+      action_policies: actionPolicies,
+    });
+    await this.handleResponse(
+      response,
+      `Failed to set action policies for MCP server ${serverId}`
+    );
   }
 
   /** Enable exactly the named tools on a server (all others are disabled). */

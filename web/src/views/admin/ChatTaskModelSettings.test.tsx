@@ -9,7 +9,7 @@ import {
 import { toast } from "@opal/layouts";
 import {
   ChatNamingModelSetting,
-  SearchSelectionModelSetting,
+  SearchDecisionModelSetting,
 } from "@/views/admin/ChatTaskModelSettings";
 import DecisionModelSetting from "@/views/admin/DecisionModelSetting";
 import type { DefaultModel, LLMProviderView } from "@/lib/languageModels/types";
@@ -103,7 +103,7 @@ function TaskModels() {
   return (
     <>
       <ChatNamingModelSetting />
-      <SearchSelectionModelSetting />
+      <SearchDecisionModelSetting />
     </>
   );
 }
@@ -113,7 +113,7 @@ async function renderTaskModels(): Promise<void> {
   await screen.findByText("Chat Naming Model");
 }
 
-// Rows render in order: chat naming, then search selection.
+// Rows render in order: chat naming, then search decision model.
 function taskSelector(row: 0 | 1): HTMLElement {
   const selector = screen.getAllByRole("combobox")[row];
   if (!selector) throw new Error(`Missing task model selector ${row}`);
@@ -128,6 +128,7 @@ describe("ChatTaskModelSettings", () => {
   let searchMutationResponse: () => Promise<Response>;
   let listedProviders: LLMProviderView[];
   let listingResponse: (() => Promise<Response>) | null;
+  let hasDecisionProviders: boolean;
 
   beforeEach(() => {
     defaultChatNaming = null;
@@ -135,6 +136,7 @@ describe("ChatTaskModelSettings", () => {
     decisionModel = null;
     listedProviders = providers;
     listingResponse = null;
+    hasDecisionProviders = true;
     mutationResponse = async () => new Response(null, { status: 204 });
     searchMutationResponse = async () => new Response(null, { status: 204 });
     jest.spyOn(toast, "success").mockReturnValue("success-toast");
@@ -142,29 +144,43 @@ describe("ChatTaskModelSettings", () => {
     jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
       if (input === SWR_KEYS.decisionModel) {
         if (init?.method === "POST")
-          decisionModel = { provider_id: 7, model_name: "decisions" };
+          decisionModel = JSON.parse(String(init.body)) as DefaultModel;
         if (init?.method === "DELETE") decisionModel = null;
         return new Response(
           JSON.stringify({
             model: decisionModel,
-            providers: [
-              {
-                ...providers[0],
-                model_configurations: [
+            providers: hasDecisionProviders
+              ? [
                   {
-                    id: 31,
-                    name: "decisions",
-                    display_name: "Decision Model A",
-                    is_visible: false,
-                    max_input_tokens: null,
-                    supports_image_input: false,
-                    supports_reasoning: false,
-                    supports_chat: false,
-                    supports_decisions: true,
+                    ...providers[0],
+                    model_configurations: [
+                      {
+                        id: 31,
+                        name: "decisions",
+                        display_name: "Decision Model A",
+                        is_visible: false,
+                        max_input_tokens: null,
+                        supports_image_input: false,
+                        supports_reasoning: false,
+                        supports_chat: false,
+                        supports_decisions: true,
+                      },
+                      {
+                        id: 12,
+                        name: "gpt-6-luna",
+                        display_name: "GPT-6 Luna",
+                        display_name_code: "openai_decisions",
+                        is_visible: true,
+                        max_input_tokens: null,
+                        supports_image_input: false,
+                        supports_reasoning: false,
+                        supports_chat: true,
+                        supports_decisions: true,
+                      },
+                    ],
                   },
-                ],
-              },
-            ],
+                ]
+              : [],
           })
         );
       }
@@ -184,7 +200,7 @@ describe("ChatTaskModelSettings", () => {
           defaultSearchSelection =
             init?.method === "DELETE"
               ? null
-              : { provider_id: 8, model_name: "search-mini" };
+              : (JSON.parse(String(init?.body)) as DefaultModel);
         }
         return response;
       }
@@ -239,6 +255,7 @@ describe("ChatTaskModelSettings", () => {
 
   test("offers provider setup when none are configured", async () => {
     listedProviders = [];
+    hasDecisionProviders = false;
     render(<TaskModels />);
     const links = await screen.findAllByRole("link", { name: "Add Provider" });
     expect(links).toHaveLength(2);
@@ -271,7 +288,7 @@ describe("ChatTaskModelSettings", () => {
     await renderTaskModels();
 
     expect(await screen.findByText("Chat Naming Model")).toBeInTheDocument();
-    expect(screen.getByText("Search Selection Model")).toBeInTheDocument();
+    expect(screen.getByText("Search Decision Model")).toBeInTheDocument();
     expect(taskSelector(0)).toHaveValue("Chat Default");
     expect(taskSelector(1)).toHaveValue("Chat Default");
     expect(screen.queryByText("(Optional)")).not.toBeInTheDocument();
@@ -314,7 +331,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(0));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "GPT Legacy"
     );
 
@@ -337,7 +354,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(0));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "GPT-6 Luna"
     );
     await user.click(screen.getByRole("option", { name: /GPT-6 Luna/ }));
@@ -367,7 +384,7 @@ describe("ChatTaskModelSettings", () => {
     const selector = taskSelector(0);
     await user.click(selector);
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "GPT-6 Luna"
     );
     await user.click(screen.getByRole("option", { name: /GPT-6 Luna/ }));
@@ -406,7 +423,7 @@ describe("ChatTaskModelSettings", () => {
     const selector = taskSelector(1);
     await user.click(selector);
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "Search Mini"
     );
     await user.click(screen.getByRole("option", { name: /Search Mini/ }));
@@ -422,5 +439,142 @@ describe("ChatTaskModelSettings", () => {
       }
     );
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  test("picking a decision model for search sets it and clears the search selection model", async () => {
+    defaultSearchSelection = { provider_id: 8, model_name: "search-mini" };
+    const user = setupUser();
+    await renderTaskModels();
+    await screen.findByDisplayValue("Search Mini");
+
+    await user.click(taskSelector(1));
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search" }),
+      "Decision Model A"
+    );
+    await user.click(screen.getByRole("option", { name: /Decision Model A/ }));
+
+    await waitFor(() =>
+      expect(decisionModel).toEqual({ provider_id: 7, model_name: "decisions" })
+    );
+    await waitFor(() => expect(defaultSearchSelection).toBeNull());
+    expect(
+      await screen.findByDisplayValue("Decision Model A")
+    ).toBeInTheDocument();
+  });
+
+  test("picking a language model for search clears the decision model", async () => {
+    decisionModel = { provider_id: 7, model_name: "decisions" };
+    const user = setupUser();
+    await renderTaskModels();
+    await screen.findByDisplayValue("Decision Model A");
+
+    await user.click(taskSelector(1));
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search" }),
+      "Search Mini"
+    );
+    await user.click(screen.getByRole("option", { name: /Search Mini/ }));
+
+    await waitFor(() =>
+      expect(defaultSearchSelection).toEqual({
+        provider_id: 8,
+        model_name: "search-mini",
+      })
+    );
+    await waitFor(() => expect(decisionModel).toBeNull());
+  });
+
+  test("shows the stored model when the second write of a search pick fails", async () => {
+    defaultSearchSelection = { provider_id: 8, model_name: "search-mini" };
+    searchMutationResponse = async () =>
+      new Response(JSON.stringify({ detail: "Clear failed" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    const user = setupUser();
+    await renderTaskModels();
+    await screen.findByDisplayValue("Search Mini");
+
+    await user.click(taskSelector(1));
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search" }),
+      "Decision Model A"
+    );
+    await user.click(screen.getByRole("option", { name: /Decision Model A/ }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Clear failed")
+    );
+    // The decision model was stored before the failure, so it is shown.
+    expect(
+      await screen.findByDisplayValue("Decision Model A")
+    ).toBeInTheDocument();
+    expect(taskSelector(1)).toBeEnabled();
+  });
+
+  test("lists decision models above language models, and a dual model in both", async () => {
+    const user = setupUser();
+    await renderTaskModels();
+
+    await user.click(taskSelector(1));
+    // A search opens every provider divider.
+    await user.type(screen.getByRole("searchbox", { name: "Search" }), "Luna");
+    const options = screen
+      .getAllByRole("option")
+      .map((option) => option.textContent ?? "");
+    const decisionIndex = options.findIndex((text) =>
+      text.includes("OpenAI Decisions (GPT-6 Luna)")
+    );
+    const languageIndex = options.findIndex(
+      (text) => text.includes("GPT-6 Luna") && !text.includes("Decision")
+    );
+    expect(screen.getByText("Decision Models")).toBeInTheDocument();
+    expect(decisionIndex).toBeGreaterThan(-1);
+    expect(languageIndex).toBeGreaterThan(decisionIndex);
+  });
+
+  test("the language copy of a dual model keeps LLM selection", async () => {
+    const user = setupUser();
+    await renderTaskModels();
+
+    await user.click(taskSelector(1));
+    await user.type(screen.getByRole("searchbox", { name: "Search" }), "Luna");
+    const lunaOptions = screen.getAllByRole("option", { name: /GPT-6 Luna/ });
+    const languageCopy = lunaOptions.find(
+      (option) => !option.textContent?.includes("Decision")
+    );
+    if (!languageCopy) throw new Error("Missing language copy of GPT-6 Luna");
+    await user.click(languageCopy);
+
+    await waitFor(() =>
+      expect(defaultSearchSelection).toEqual({
+        provider_id: 7,
+        model_name: "gpt-6-luna",
+      })
+    );
+    expect(decisionModel).toBeNull();
+    expect(taskSelector(1)).toHaveValue("GPT-6 Luna");
+  });
+
+  test("the decision copy of a dual model takes the decision path", async () => {
+    defaultSearchSelection = { provider_id: 8, model_name: "search-mini" };
+    const user = setupUser();
+    await renderTaskModels();
+    await screen.findByDisplayValue("Search Mini");
+
+    await user.click(taskSelector(1));
+    await user.click(screen.getByRole("option", { name: /OpenAI Decisions/ }));
+
+    await waitFor(() =>
+      expect(decisionModel).toEqual({
+        provider_id: 7,
+        model_name: "gpt-6-luna",
+      })
+    );
+    await waitFor(() => expect(defaultSearchSelection).toBeNull());
+    expect(
+      await screen.findByDisplayValue("OpenAI Decisions (GPT-6 Luna)")
+    ).toBeInTheDocument();
   });
 });

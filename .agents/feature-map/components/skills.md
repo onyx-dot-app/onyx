@@ -1,613 +1,762 @@
 # Skills
 
-> Agent Skills for Craft. A skill is an `SKILL.md` bundle, optionally with
-> supporting files, that gets rendered per user and pushed onto a session's
-> sandbox so the coding agent can read it as instructions. This is a Craft
-> feature, not a chat configuration surface: `backend/onyx/chat/` has no
-> reference to skills, and there is no admin route for skills in
-> `web/src/lib/admin-routes.ts`. Management happens through the same
-> user-facing router as browsing, gated by the `MANAGE_SKILLS` permission.
+> Agent Skills: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, and that chat agents list and read as custom skills. This component owns skill sharing, installation policy, per-user rendering, the hashed push and the chat skill tools.
 
-**Verified against:** `268e4d5a3d` (2026-10-05)
-**Domain:** craft
-**Edition:** CE (Craft ships in both editions; no EE-specific code in this path)
-**Owns:**
-`backend/onyx/skills/` (`models.py`, `metadata.py`, `content.py`, `bundle.py`,
-`rendering.py`, `validation.py`, `built_in.py`, `builtin/`, `ingest.py`,
-`ingest_from_github.py`, `push.py`), `backend/onyx/db/skill.py`,
-`backend/onyx/server/features/skill/` (`api.py`, `models.py`,
-`response_helpers.py`), `web/src/views/SkillsPage.tsx`,
-`web/src/views/SkillEditorPage.tsx`, `web/src/lib/skills/`,
-`web/src/hooks/useUserSkills.ts`, `web/src/sections/skills/`,
-`web/src/sections/cards/SkillCard.tsx`,
-`web/src/sections/modals/skills/`, `web/src/sections/modals/SkillPreviewModal.tsx`,
-`web/src/app/craft/components/SkillsStaleNotice.tsx`,
-`web/src/app/craft/v1/skills/`
-
-**Read first:** `[[craft-sandboxes]]` for the sandbox this component pushes
-files into, `[[craft-external-apps]]` for the credential and policy layer some
-skills depend on, and
-`docs/craft/features/external-apps/external-app-skill-action-availability.md`
-for the design rationale behind per-action availability rendering (already
-shipped; see §4.2).
+**Verified against:** `73e0ae3c31` (2026-10-28)
+**Edition:** CE. Group shares need the EE group tables.
 
 ---
 
-## 1. What the user experiences
+## User experience
 
-A Craft user opens the skills library at `/craft/v1/skills`
-(`web/src/app/craft/v1/skills/page.tsx` renders `SkillsPage`). It lists two
-groups: built-in skills (pptx, image generation, company search, Craft
-documentation, browser, and one per connectable app such as Slack, Linear,
-Gmail, Google Calendar, Google Drive, GitHub, HubSpot, Notion, Zendesk) and
-custom skills (their own, shared with them, or published organization-wide). Each
-card shows an enable/disable toggle, a preview of the rendered instructions,
-and, for a custom skill they can edit, Edit and Delete actions. Delete is available directly on the card, including invalid skills whose editor cannot load. It requires confirmation and uses the same edit permission as the editor.
+- **A Craft user** opens the skills library and sees built-in skills and the
+  custom skills they can see: their own, shared with them, or published to the
+  organization. The Admin Panel lists custom skills only. They preview a
+  skill's instructions, and turn custom skills on or off.
+- **Built-in skills** are always on. A built-in that depends on an unavailable
+  service, such as image generation with no provider or the browser with
+  `ENABLE_BROWSER` off, is hidden. A skill for an external app is ready only
+  after the user connects that app. Until then the user cannot turn it on, and
+  the library says why.
+- **Authoring.** A user writes a skill in the browser editor, uploads a `.zip`
+  or a single SKILL.md, or imports skills from a GitHub repository after a
+  preview of every SKILL.md found. A private repository needs the user's
+  GitHub connection in Craft; without it the import is anonymous. The owner
+  shares with users or groups as viewer or editor, publishes to the
+  organization, or transfers ownership.
+- **Admins** set the installation policy of a custom skill: available (the user
+  opts in), installed by default (on until the user opts out), or required (on,
+  and the user cannot turn it off). This needs organization-wide
+  `MANAGE_PLUGINS`, which only admins hold today; a group manager cannot. Only
+  the same permission deletes a required skill.
+- **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
+  support selection of custom skills, bulk access and installation changes,
+  personal enable/disable, and confirmed deletion. Admins see all manageable
+  custom skills. Bulk sharing adds or updates supplied individual grants;
+  omitted visibility and installation settings remain unchanged. Failed items
+  stay selected. Search changes clear selection.
+  Custom cards show Personal, Shared, or Organization access from
+  `public_permission` and the server's `is_personal`; share-detail arrays can
+  be hidden, so empty arrays do not mean a skill is personal.
+- **Skill dialog.** Owners and editors open custom cards in a single
+  Details/Sharing dialog. Share actions open its Sharing tab directly. Draft
+  sharing edits survive tab switches. Other recipients and built-in skills
+  keep a preview-only dialog. The sharing endpoint requires EDIT; do not
+  require that endpoint for a VIEW-only preview.
+- **Access at import.** GitHub import and multiple-ZIP upload accept one set
+  of sharing settings for the selection. The single-skill editor accepts
+  sharing before creation. These use the same sharing checks as later edits.
+- **In chat**, the agent sees the names and descriptions of the user's
+  enabled custom skills. In this catalog, a skill's
+  `metadata.short-description` replaces its description when it has one;
+  `skills_list` shows the full description. The agent reads a skill's
+  SKILL.md with `skills_read` when the task matches. Deep Research and its
+  research agents get the same catalog and both tools.
+  A skill the user mentions in a message adds its SKILL.md, frontmatter
+  included, right after the message, as it was read when the message was
+  accepted, at the version the user ran. A SKILL.md over 8,000 bytes is cut
+  there, with a note that tells the model to continue with `skills_read`. History keeps that text, so a later edit, a deletion or lost access
+  does not change what earlier turns see. A skill that cannot be read when
+  the message is accepted is not applied. Built-in skills
+  and skills of an external app do not reach chat, because they need the
+  Craft sandbox. Chat cannot open a skill's other files or run its scripts.
+  In the chat input, `@` at the start of a word opens a picker of these
+  skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
+  filtered by name prefix without case. A row shows the skill's short
+  description when it has one, else its description. A skill change in the
+  library, the skill editor, a plugin's Skills tab or a Craft app connection
+  fetches the list again (`lib/skills/cache.ts:refreshSkillLists`). Other
+  changes, such as one from another tab or user, show after the chat input
+  gains focus, unless a fetch of the list started in the last minute; a
+  window focus does not fetch the list. A message mentions at most 20 skills: at that
+  limit, the picker offers only the skills already picked, and each request
+  sends only the first 20 (`lib/chat/mentions.ts:requestMentions`). The query
+  is the whole word, from the `@` through the caret to the next whitespace.
+  Only typing or deleting opens the picker or changes its query. A paste, a
+  drop and any other caret move, such as a click or an arrow key, close it,
+  and a word that matches no skill closes it. Esc hides it until the user deletes the
+  `@`. A pick replaces the whole word with a mention tile that reads `@name`.
+  Craft's `/` pickers, in the input bar and in the scheduled task prompt,
+  follow the same rules and match a substring
+  (`lib/skills/hooks.ts:useEntryPicker`). The tiles are the mentions: only a pick
+  mentions a skill, so typed or pasted `@name` text does not. Removing a tile
+  by delete or cut removes its mention, and undo brings it back. A draft,
+  a failed send's restore and voice input keep each tile where it was, also
+  against other text such as `(` or a word typed after it, and leave typed
+  `@name` text as text. Voice auto-send sends only the mentions whose
+  `@name` is still in the sent text. A message with picks that the user sends while a
+  response runs carries its mentions like any pending input: a send applies
+  them in the running response when the response accepts the message, and a
+  queued or interrupting message applies them in its own turn. While the picker is open, the `/` prompt shortcuts stay closed. In the owner's chat
+  view, a sent question shows each skill it mentioned as a chip, first from
+  the picks and then from the recorded mentions. A message accepted during a
+  response shows the mentions of its `user_message` packet, live and after
+  reload. A shared view of the chat
+  gets no mentions, and Craft shows plain text.
+- **In a running Craft session**, a skill change does not reach the agent at
+  once. The session shows a stale-skills notice with a reload action. The
+  reload restarts the agent's runtime with the current skills.
 
-Member external-app plugin modals also offer instruction previews and per-user skill switches in their Skills tab. Preview replaces the plugin modal content without opening a second dialog. Back or Escape returns to Skills and preserves enable drafts. These switches remain drafts until Save; Cancel discards them.
-
-Admins can set custom skills to Available to install,
-Installed by default, or Required in the sharing dialog. The dialog groups access,
-installation, invited people, and ownership into sections. Three installation
-buttons share one row, with the selected policy description below. Organization
-sharing hides the invited-people section; ownership and transfer remain visible.
-A compact “Manage individual access” control opens explicit user and group grants,
-including editor grants on app-associated skills.
-Skill permission options read “Can use” and “Can edit”.
-Edit sharing appears beside Cancel and Save in the editor header.
-Editable skill cards show a sharing action on hover or keyboard focus.
-That action loads authorized sharing metadata without reading the skill bundle.
-Invalid or missing bundles do not block sharing changes.
-The blank and uploaded-skill creation editors also offer sharing settings.
-These choices use one local draft until creation and save with the skill in one transaction.
-The sharing modal has separate create and edit modes.
-Policies apply to everyone with access, including invited users and group members.
-Permission rows reflow on narrow screens. Default installation
-respects saved user choices. Required skills show a badge instead of a toggle.
-Users can preview required skills by clicking their card or using the keyboard.
-The skill name is a preview button. Sharing, editing, deletion, and switches are separate controls.
-The Required tag explains the admin requirement on hover.
-Users cannot disable required skills; only admins can delete them.
-
-Turning a skill on or off changes what the agent can do on its next turn: an
-enabled skill's files land in the sandbox and its `SKILL.md` becomes
-something the agent can discover and read; disabling removes it. A user can
-author a skill directly in the browser (`SkillEditorPage`, name, description,
-markdown instructions, optional files) or import one or more skills from a
-GitHub repository (`ImportSkillsFromGitHubModal`), which previews every
-`SKILL.md` found in the repo and lets the user pick which to bring in.
-
-An external-app-backed skill (Slack, Linear, Gmail, Google Calendar, Google
-Drive, GitHub, HubSpot, Notion, Zendesk) only becomes usable once the user has
-connected that app; until then it is visible but not enable-able, and the
-card explains why (see §4.3). If the admin has restricted specific actions
-of a connected app, the pushed skill file itself carries a short list of
-what not to attempt (§4.2) - the sandbox proxy is still the real enforcement
-point (`[[craft-external-apps]]`), this is just guidance to save a wasted
-turn.
-
-If a skill changes while a session is already running (edited, toggled,
-shared, an app's policy changed), the running agent keeps whatever it already
-loaded until the user reloads. The UI surfaces this as a stale-skills notice
-in the session (`SkillsStaleNotice.tsx`) with a manual reload button.
+When it fails:
+- A bundle with bad frontmatter, an unsafe path, a reserved name, or a
+  `.template` file is rejected with a message. A direct upload over a size or
+  file count limit is rejected with a 413 that names the limit. Batch uploads
+  list the Skill in `not_imported`, and a GitHub preview marks it unavailable.
+- Turning on a skill whose name another enabled skill uses returns a name
+  conflict. The client can retry with `replace_conflict` to switch skills.
+- A required skill rejects a toggle.
+- If a push to a sandbox fails, the change still saves. The sandbox keeps its
+  old skills until the next push, session start or reload.
+- A reload while a turn runs is refused with a message to wait.
 
 ---
 
-## 2. Surfaces
+## Scope
 
-### HTTP endpoints (router prefix `/skills`, mounted at the global API prefix, `backend/onyx/server/features/skill/api.py`)
+This component owns the skill row, its shares, installation policy and user
+preferences; the plugin tables ([[#plugin-tables]]); bundle parsing and validation; built-in skill definitions;
+per-user rendering of templates; GitHub import; the push of a user's skill
+files into a sandbox; and the skills library UI.
 
-| Method | Path | Handler | Notes |
-|---|---|---|---|
-| GET | `/skills` | `list_skills_for_current_user` | Built-ins + customs visible to the caller. |
-| GET | `/skills/{skill_id}` | `fetch_skill_for_current_user` | |
-| GET | `/skills/{skill_id}/preview` | `preview_skill_for_current_user` | Rendered instructions, read-only. |
-| PUT | `/skills/{skill_id}/enabled` | `set_skill_enabled_for_current_user` | Per-user toggle; pushes to the caller's own sandbox. |
-| POST | `/skills/custom` | `create_custom_skill` | Upload a `.zip` or standalone `SKILL.md`. |
-| POST | `/skills/custom/editor` | `create_custom_skill_from_editor` | Build a skill from name/description/markdown form fields; `external_app_id` (admin-only) associates it with an app. |
-| GET | `/skills/custom/{skill_id}/edit` | `fetch_custom_skill_for_edit` | Requires `EDIT` policy. |
-| POST | `/skills/custom/bundle/inspect` | `inspect_custom_skill_bundle_upload` | Stateless preview of an upload before committing to it. |
-| PUT | `/skills/custom/{skill_id}/bundle` | `replace_current_user_skill_bundle` | Full bundle replacement. |
-| POST/DELETE | `/skills/custom/{skill_id}/files` | `upload_current_user_skill_files` / `remove_current_user_skill_file` | Incremental file add/remove, re-renders `SKILL.md` (§4.1). |
-| PATCH | `/skills/custom/{skill_id}` | `patch_current_user_skill` | Description/instructions/visibility. |
-| GET | `/skills/custom/{skill_id}/share` | `fetch_custom_skill_sharing` | Requires edit access; returns sharing metadata without reading the bundle. |
-| PATCH | `/skills/custom/{skill_id}/share` | `share_current_user_skill` | User/group shares, org visibility. |
-| POST | `/skills/custom/{skill_id}/transfer-ownership` | `transfer_current_user_skill_ownership` | |
-| DELETE | `/skills/custom/{skill_id}` | `delete_current_user_skill` | Hard delete, see §5.6. |
-| POST | `/skills/github/preview` | `preview_github_skills` | Discover skills in a repo without importing. |
-| POST | `/skills/github/import` | `import_github_skills` | Import selected discovered skills. |
-
-Every mutation that can change what a sandbox should have calls
-`push_skill_to_affected_sandboxes` or `push_skills_for_users`
-(`backend/onyx/skills/push.py`) after its own commit, then commits again for
-the hash record (§4.4). There is no separate admin router: management
-authorization is `Permission.MANAGE_SKILLS`, checked inline
-(`db/skill.py:_skill_select_for_management_policy`,
-`has_global_permission`/`has_permission`), not a distinct `/admin/*` surface.
-
-### Environment / configuration
-
-| Variable | Where | Effect |
-|---|---|---|
-| `SKILL_BUNDLE_PER_FILE_MAX_BYTES` | `skills/bundle.py` (default 25 MiB) | Per-file cap inside a custom bundle. |
-| `SKILL_BUNDLE_TOTAL_MAX_BYTES` | `skills/bundle.py` (default 100 MiB) | Total uncompressed cap for a custom bundle. |
-| `GITHUB_SKILL_MAX_COUNT` | `skills/models.py` (500) | Max skills discoverable in one GitHub import. |
-| `ENABLE_BROWSER` | `server/features/build/configs.py`, read by `skills/built_in.py` | Gates the `browser` built-in's availability. |
+Neighbours own the rest:
+- [[craft-sandboxes]]: the sandbox, the managed volume and the push transport.
+- [[craft-sessions]]: `BuildSession.skills_hash`, the stale check and the
+  reload.
+- [[craft-external-apps]]: app connection, action policy, and credential
+  injection at call time. The sandbox proxy enforces policy, not the skill
+  text.
+- [[file-store-and-user-files]]: stores custom bundles as blobs.
+- [[context-assembly]]: where the chat skills catalog and mentioned skills
+  go in the prompt. [[tools-framework]]: how the chat skill tools run.
 
 ---
 
-## 3. Data model
+## Architecture
 
 ```
-Skill  (one row per built-in or custom skill)
-    built_in_skill_id  XOR  bundle_file_id     (ck_skill_definition_source)
-    name  (canonical, immutable identity + sandbox directory name)
-    is_valid  (custom only: NULL=unclassified, True, False)
-    public_permission  (NULL = not org-wide, else VIEWER|EDITOR)
-    author_user_id
-  |
-  +--< Skill__User        (skill_id, user_id, permission)
-  +--< Skill__UserGroup    (skill_id, user_group_id, permission)
-  +--< ExternalApp__Skill  (external_app_id, skill_id)  -- at most one app per skill
-  +--< UserSkillPreference (user_id, skill_id, name, enabled)  -- explicit user choice
-
-Sandbox
-    skills_hash        -- last skill fileset+guidance hash pushed to THIS sandbox
-    mcp_config_hash     -- separate craft-MCP fingerprint (not this doc)
-
-BuildSession
-    skills_hash         -- hash the live opencode instance was configured with
-    mcp_config_hash
+skill mutation (server/features/skill/api.py)   compute affected users BEFORE the change
+  -> db write, commit
+  -> push_skills_for_users       skills/push.py
+       lock_sandbox_skills_hashes        SELECT ... FOR UPDATE on Sandbox rows
+       build_user_skills_payload         per sandbox user
+         list_runtime_skills_for_user    db/skill.py: the one runtime gate; each custom
+                                         skill comes with the plugin version the user
+                                         runs (version_user_runs, outer joins)
+         _assemble_fileset               built-ins from disk, custom from the FileStore
+                                         bundle of that version, in a folder named by
+                                         its frontmatter; resolves ${CLAUDE_SKILL_DIR}
+         build_connectable_apps_list     guidance for unconnected apps
+       compute_skill_runtime_hash        once per sandbox; skip sandboxes whose hash matches
+       push_to_sandboxes(SKILLS_MOUNT_PATH)
+       set_sandbox_skills_hashes__no_commit   only for successful pushes
+  -> commit
+session start: sandbox_lifecycle.py:build_managed_content_payload
+  uses the same payload and hash, before the sandbox is RUNNING
 ```
 
-- `Skill` (`backend/onyx/db/models.py:Skill`): `built_in_skill_id` and
-  `bundle_file_id` are mutually exclusive
-  (`ck_skill_definition_source`). A built-in's real content lives on disk
-  under `BUILTIN_SKILLS_PATH` (`skills/built_in.py:BUILTIN_SKILLS_PATH`), not
-  in the row; a custom row's content is a zip in FileStore, referenced by
-  `bundle_file_id`, hashed in `bundle_sha256`. `is_valid` is populated lazily
-  the first time a custom skill's stored bundle is inspected
-  (`validation.py:validate_stored_custom_skill`) and gates whether it's ever
-  hydrated into a fileset.
-- `Skill__User` / `Skill__UserGroup` (`models.py:Skill__User`, `models.py:Skill__UserGroup`): one
-  row per explicit share, `permission` is `VIEWER` or `EDITOR`
-  (`SkillSharePermission`). `Skill.public_permission` is the org-wide grade,
-  independent of any explicit share. Share replacement expires the changed ORM
-  collections so creation and update responses include the saved grants.
-- `Skill.installation_policy` is AVAILABLE, DEFAULT, or REQUIRED. Admins set it
-  through the sharing API for custom skills. AVAILABLE requires
-  opt-in. DEFAULT enables the skill unless the user has an explicit preference.
-  REQUIRED enables it regardless of that preference and prevents user toggles.
-  Only admins can delete required skills. Policies follow the current audience;
-  changing visibility does not reset the policy. Inaccessible required skills
-  cannot override a user's same-name selection.
-- `UserSkillPreference` stores explicit enabled and disabled choices. Existing
-  selections migrate to enabled rows. Missing rows inherit the skill policy.
-  Bundle edits preserve preferences. REQUIRED overrides opt-outs without deleting
-  them; returning to DEFAULT restores them.
-- A partial unique index permits one enabled preference per user and name.
-  Another partial unique index permits one automatic skill per name across the tenant,
-  including separate audiences. Required
-  skills take precedence over optional selections without deleting them.
-  Default skills yield to accessible explicit same-name selections. Revoked access
-  preserves the selection but stops it from suppressing a default skill. Restoring
-  access restores that selection. Selecting a replacement
-  records opt-outs for all previous effective skills and saved selections.
-  Creating a skill does not silently replace a same-name default skill.
-  Creating a required skill needs no explicit preference and preserves the prior
-  same-name optional selection for when the requirement is removed.
-  Creation and toggle preference writes share a user row lock that allows sharing foreign-key reads.
-- App readiness and bundle validity still gate runtime use, including required
-  skills. Disconnecting an app preserves explicit opt-outs. Deleting the app
-  resets detached custom skills to AVAILABLE and removes their preferences.
-- Private custom skills require an owner. The migration assigns existing private
-  orphans to an active admin, assuming the organization has one.
-  Transfer or delete private skills before deleting their owner. A database check
-  also rejects direct or concurrent writes that would leave them ownerless.
-  Public skills retain the existing admin-recovery behavior after owner deletion.
-- Policies are evaluated from current access when skills are listed or rendered.
-  Existing pushes and runtime reload behavior remain unchanged. Membership edits
-  and failed pushes do not guarantee immediate refresh of every running sandbox.
-- `ExternalApp__Skill` (`models.py:ExternalApp__Skill`): non-owning link, unique on
-  `skill_id`, so a skill depends on at most one external app.
-- `Sandbox.skills_hash` / `Sandbox.mcp_config_hash`
-  (`models.py:Sandbox`): the last runtime fingerprint successfully pushed to
-  that sandbox. `BuildSession.skills_hash` /
-  `.mcp_config_hash` (`models.py:BuildSession`) record what the session's live
-  opencode instance was actually configured with, which can lag the
-  sandbox's stored hash until the user reloads (§4.4, §5.1).
+**Two data models.** Each custom skill is also a plugin with the same id
+(`db/plugin.py`). Every write goes to the legacy skill rows and the plugin
+rows in one transaction. Every read of a custom skill uses the plugin rows
+(`db/plugin_access.py`, [[#plugin-tables]]): access, names, validity, bundles
+and content. Built-in skills have no plugin. Each access
+write in `db/skill.py`, `db/external_app.py` and
+`ee/onyx/db/community_downgrade.py` calls one `db/plugin.py` helper that
+mirrors it. Lock order: the skill row, then the plugin row; many in id order.
+A skill switch locks its target skill `FOR NO KEY UPDATE`: another user's
+switch inserts a preference for that skill while it holds a plugin lock, and
+a `FOR UPDATE` blocks that foreign-key check into a deadlock.
+
+**The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
+a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement
+(`_is_enabled_for_user`), app readiness, bundle validity (`is_valid` of the
+version the user runs not false) and built-in availability (`_exclude_unavailable_built_in_skills`).
+These inputs stay independent. A required skill still needs a ready app and a
+valid bundle.
+
+**Enablement.** `_is_enabled_for_user` is the one SQL rule for API responses
+and the runtime gate. Built-ins are on. A visible required skill is on and
+hides other skills with its name. Else an explicit preference wins. Else a
+default skill is on unless another visible skill with its name is selected.
+
+**Two hashes.** `compute_skill_runtime_hash` is a SHA-256 over every rendered
+file path and its bytes, plus the connectable-apps text. `Sandbox.skills_hash`
+records what was last pushed to the sandbox. `BuildSession.skills_hash`
+records what the live runtime of a session loaded. A session is stale when the
+two differ
+(`server/features/build/db/build_session.py:session_runtime_stale`). A push
+changes only the sandbox side. The runtime reads the skills directory once per
+instance, so only a reload (`SessionManager.reload_session_skills`) or a new
+session applies the change. The craft MCP set has its own `mcp_config_hash`
+and triggers the same reload.
+
+**Templates.** A built-in with a SKILL.md.template is rendered per user in
+`skills/push.py:_render_template`. `company-search` lists the user's connected
+sources. External-app skills fill app values, cloud-only blocks, and a list of
+actions the admin denied (`skills/rendering.py:render_external_app_skill`).
+**Chat.** `db/skill.py:list_chat_skills` is the one definition of the skills
+chat gets: one query over the same predicates as
+`list_runtime_skills_for_user` (`_where_user_runs_skill`: visible, enabled,
+and a version the user runs that is not invalid), less built-in skills and
+skills of an external app, with the name, description,
+`metadata.short-description` and id of the version the user runs. Anonymous
+users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
+turn's picks and reservation, each agent reads it once when it is built (for
+its catalog), each skill tool call reads it, and so does each accepted
+mid-run message with picks. The `@` picker reads it through
+`server/features/skill/api.py:list_chat_skills_for_current_user`, which
+returns `description` and `short_description`. `skills/models.py:ChatSkill`
+makes each description one line (runs of whitespace become one space), and a
+blank short description counts as none. Only the catalog and the picker
+prefer the short description; `skills_list` shows the full one.
+`skills/chat.py:render_skills_catalog` renders the catalog with Codex's
+limits: 2% of the context window in tokens, where each line, newline
+included, costs one token per 4 UTF-8 bytes, rounded up; 1,024 characters for
+one description. If every line fits, descriptions are whole; else description
+characters go to each skill in turn. Only the 1,024-character cut adds `...`;
+a cut to fit the budget adds no ellipsis. If even the names do not fit, the
+catalog keeps each name that still fits, in order, and ends with a line that
+counts the omitted skills; if not even that line fits, there is no catalog. `tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`
+is the one builder of the catalog message for chat, Deep Research and
+research agents. A pick is structured input,
+as in Codex's mentions: a mention (`chat/mention_models.py`) is a
+discriminated union on `type`, and a skill (`SkillMention`, `{type: "skill",
+name}`) is its only kind. Later kinds, such as plugins and MCP servers, join
+the union; the request rejects a kind it does not know. The client sends the
+mentions in `SendMessageRequest.mentions`, or in
+`PendingChatMessageRequest.mentions`, which `ChatInput.mentions` keeps for
+the pending message. The server never parses message text. A message's
+picks are accepted once, by `skills/chat.py:accept_picked_skills`, against a
+skill list: it resolves each skill in that list and reads the SKILL.md of all
+picks in one batched read with the user's current access
+(`skills/content.py:read_versions_skill_md`). The read gives the whole
+SKILL.md, frontmatter included, as Codex does. Each text over 8,000 bytes is
+cut there, with a note that tells the model to continue with `skills_read`.
+A skill that is not in the list or whose SKILL.md cannot be read is not
+recorded. The result (`AcceptedPicks`) keeps two lists: the records
+(`RecordedSkillMention`: type, name and version id) and, for each record,
+the `<skill>` message it gives the model (`PickedSkillMessage`: version id,
+content and the token count taken at acceptance).
+`prepare_chat_turn` accepts a question's picks against the turn's list,
+after the checks that can reject the question (the Deep Research and
+incognito checks), and stores the records in `chat_message.mentions` and the
+messages in the deferred column `chat_message.skill_messages`;
+regeneration reuses them. Only `db/chat.py:load_message_branch`, the branch
+load for model history, loads `skill_messages`. Chat loads for display,
+shared views and exports do not. A row of a content-free session stores no
+skill messages; temporary history holds them. A send into a running response
+is accepted when the run accepts it
+(`chat/run_store.py:ChatRunStore.receive_inputs`), against the user's
+current chat skills, and its picks apply in that response. The accepted input (`ChatResponseItem.inputs`,
+`AcceptedChatInput`) stores its `mentions` and `skill_messages`. Loading a
+chat for display reads this column, so it parses the skill text of sends with
+picks and drops it; that is accepted because such sends are rare. EE query
+history returns its own type (`AcceptedInputSnapshot`) with the records only. API
+fields and packets carry only the records, so no client gets the text. The
+turn's ID packet and the message detail carry the records
+(`ChatTurnSetup.mentions`), and the `user_message` packet of an accepted
+send carries its records. A shared view empties both.
+`AgentMessage` passes them to `HumanMessageBubble`, the chip path of a sent
+question.
+The composer (`sections/input/AppInputBar.tsx`) holds the mentions as
+mention tiles in its input (`hooks/useContentEditable.ts`), so undo, cut and
+code that replaces the text change them with the text. A send reads the text
+and the tiles as one `lib/chat/types.ts:ComposedMessage`: one mention per
+tile, each with `index`, where its `@name` starts in the text
+(`lib/contentEditable.ts:readContent`). The server gets each mention once,
+without `index`, and at most 20 of them
+(`lib/chat/mentions.ts:requestMentions`). The draft, a failed
+send's restore and voice transcription keep the indexes, so
+`useContentEditable`'s `setMessage` puts each tile back at its index. Only
+server data has no index: a withdrawn queued message, an edited question and
+the chips of a sent question place each recorded mention on the first
+`@name` of its skill that no other tile holds, longer names first
+(`lib/chat/mentions.ts:placeMentions`). Older drafts, plain text or mentions
+without an index, restore by that rule too. The `@` menu uses
+the Craft picker's `PickerSections`: chat fills only `skills`, and a new kind
+adds its section and maps its picker entry to a mention. The picker opens at
+a word start (`lib/skills/picker.ts:detectPickerTrigger`), but a tile can sit
+against any text. An edit sends the recorded mentions that its text still
+has, and a resend or regeneration sends the recorded mentions. The agent preview passes its skill mentions to
+the new chat in the `skills` URL parameter. Each stored skill message
+becomes a user-role `<skill>` message right after the message that picked
+it: `chat/chat_utils.py:convert_chat_history` for a question and
+`chat/models.py:accepted_input_messages` for an accepted send
+([[context-assembly]]). Old turns are never read again, so a deleted or
+revoked skill keeps its text in old turns, as in Codex. The read
+(`db/plugin.py:get_visible_versions_skill_md`) returns text only for versions
+of skills the user can see at acceptance: the pinned version decides the
+content, and current access decides whether it is read.
+`chat/execution.py:create_chat_agent` adds `skills_list` and `skills_read`
+(`tools/tool_implementations/skills/skill_tools.py`) when the user has a chat
+skill when the turn starts (`ChatTurnSetup.has_chat_skills`), whatever the
+agent's tool selection; restored and child agents get them with the other
+configured tools. The Deep Research orchestrator binds both in its research
+phase, and its research agents bind both. The tools hold only the user: each
+call reads the user's current chat skills (`list_chat_skills`), and
+`skills_read` reads the SKILL.md, frontmatter included, of the version the
+user runs now, with the same access check, in parts of up to 32,000
+characters that a `start_char` offset continues. The catalog is a snapshot:
+each agent loads the user's chat skills once, when it is built
+(`tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`), and renders it for its own
+model's window, so the catalog stays the same across the agent's steps.
+
+The library preview of an external-app skill calls the same renderer
+(`server/features/skill/response_helpers.py:skill_preview_response`). The
+`company-search` preview shows the unrendered template.
 
 ---
 
-## 4. How it works
+## Contracts and traps
 
-### 4.1 Authoring or importing a skill
-
-```
-Editor form            SkillsPage -> CreateSkillModal -> create_custom_skill_from_editor
-  build_skill_md              skills/bundle.py            frontmatter + body -> SKILL.md text
-  build_single_file_bundle    skills/bundle.py             wrap as a one-file zip
-  ingested_skill_bundle       skills/ingest.py             normalize, parse, hash, store
-  add_new_skill__no_commit    db/skill.py                  insert Skill row
-  enable_new_skill_if_name_available__no_commit  db/skill.py  opt in UserSkillPreference
-  push_skill_to_affected_sandboxes  skills/push.py          hydrate + push if newly enabled
-
-GitHub import           ImportSkillsFromGitHubModal -> preview_github_skills / import_github_skills
-  fetch_github_skill_bundles  skills/ingest_from_github.py  download one archive, find every SKILL.md
-  parse_skill_document        skills/metadata.py            validate frontmatter per candidate
-  normalize_custom_bundle     skills/bundle.py               per-skill zip, path-safety checked
-  ingested_skill_bundle       skills/ingest.py                same store path as manual upload
-```
-
-Every entry point into a stored custom bundle funnels through
-`normalize_custom_bundle` (`skills/bundle.py`), which: rejects zip-slip and
-symlink entries (`_validated_bundle_path`), flattens one optional wrapper
-directory (`zip -r skill.zip skill/`-style archives), rejects duplicate or
-conflicting paths, strips `.DS_Store`/`Thumbs.db`/`__MACOSX`, and requires
-`SKILL.md` at the resulting root. `parse_skill_document`
-(`skills/metadata.py`) then requires: YAML frontmatter delimited by `---`
-lines with no duplicate keys (`_UniqueKeySafeLoader`), a `name` matching
-`^[a-z0-9]+(?:-[a-z0-9]+)*$` and <= 64 chars, a non-empty `description` <=
-1024 chars, and (when a `directory_name` is known, e.g. a GitHub skill's
-folder or a stored bundle's wrapper) `name` must equal that directory name.
-`ingest_skill_bundle` (`skills/ingest.py`) additionally rejects any name that
-collides with `BUILT_IN_SKILLS`. Custom skills cannot ship a `.template`
-file (`bundle.py`: "custom skills cannot ship templates") - templating is a
-built-in-only mechanism (§4.2).
-
-### 4.2 Built-in skills and templating
-
-`skills/built_in.py:_REGISTRY` is the single source of truth: one
-`SeededBuiltInProvider` (pptx, image-generation, company-search,
-craft-documentation, browser) or `ExternalAppBuiltInProvider` (slack, linear,
-google-calendar, google-drive, gmail, github, hubspot, notion, zendesk) per
-built-in,
-each pinned to a directory under `backend/onyx/skills/builtin/<skill_id>/`.
-Import-time validation (`BuiltInSkillRegistry.__init__`) parses every
-built-in's `SKILL.md`/`SKILL.md.template` and fails the process if two
-providers share a `skill_id` or an `app_type`, or a declared directory is
-missing its source file. `SeededBuiltInProvider` rows are created and
-enabled by Alembic migrations; `ExternalAppBuiltInProvider` rows come into
-existence only when an admin connects that app
-(`onyx.db.external_app.create_external_app`). Availability beyond "the row
-exists" is codified per skill: `image-generation` needs
-`is_image_generation_configured`, `browser` needs `ENABLE_BROWSER`; both are
-filtered out of user-facing listings when unavailable
-(`db/skill.py:_exclude_unavailable_built_in_skills`), with a
-human-readable `unavailable_reason`.
-
-`has_template` (`BuiltInSkillDefinition.has_template`) is derived from
-whether `SKILL.md.template` exists on disk, not stored anywhere. A templated
-built-in's `SKILL.md` is regenerated per user at push time
-(`skills/push.py:_render_template`): `company-search` calls
-`render_company_search_skill` (`skills/rendering.py`), substituting
-`{{AVAILABLE_SOURCES_SECTION}}` with the user's connected, non-internal-only
-document sources; an external-app skill goes through
-`rendering.py:render_external_app_files`, which resolves a
-`cloud-description:` frontmatter override on cloud deployments, strips or keeps
-`{{#IF_CLOUD_SCOPE}}...{{/IF_CLOUD_SCOPE}}` blocks, substitutes any
-`{{APP:<key>}}` value the provider derived from this app row's configuration
-(`skills/rendering.py:_app_template_values` — a
-Zendesk account's base URL), and fills `{{ACTION_AVAILABILITY_SECTION}}` with a "these
-actions are unavailable and should not be attempted" list built from
-`build_action_availability_section`: cloud-withheld actions plus the admin's
-stored `DENY` overrides (`external_apps/providers/registry.py:action_policy_views`).
-Other `*.template` files substitute only `{{APP:<key>}}` values and ship without
-the `.template` suffix (`rendering.py:render_external_app_files`). They do not
-process cloud or action markers, or reject unresolved markers. This gives bundled
-helpers their account configuration. Both static and template traversal use
-`content.py:iter_builtin_skill_files`, which excludes hidden paths, Python cache
-paths, and directories. The static-file loader skips raw template sources. The library preview
-calls the same renderer
-(`server/features/skill/response_helpers.py:skill_preview_response`), so what a
-user reads in the preview is what the agent gets — not the raw markers.
-The Zendesk skill documents draft Help Center articles, ticket side conversations,
-and personal macros through its existing JSON `call` command. These workflows
-use separate app policies and require their resource-specific OAuth write scopes.
-
-Only `DENY` is surfaced; `ALWAYS` and `ASK` actions are left undocumented
-here because the skill body already covers them and `ASK` is handled at call
-time by the sandbox proxy (`[[craft-external-apps]]`). An unresolved
-`{{...}}` placeholder in rendered `SKILL.md` raises rather than shipping broken
-markup to the agent (`rendering.py:render_external_app_skill`, the trailing
-`if "{{" in rendered` check). This whole mechanism matches
-`docs/craft/features/external-apps/external-app-skill-action-availability.md`
-- that plan has already shipped; it is not a stale doc.
-
-### 4.3 Pushing the active set into a sandbox
-
-```
-push_skills_for_users(user_ids, db_session)         skills/push.py
-  get_sandbox_user_map                    server/features/build/db/sandbox.py
-  lock_sandbox_skills_hashes  (SELECT ... FOR UPDATE on Sandbox rows)
-  build_user_skills_payload(user, db_session)  per user:
-    list_runtime_skills_for_user            db/skill.py
-    _assemble_fileset                       skills/push.py  -> FileSet {path: bytes}
-    build_connectable_apps_list             sandbox/util/agent_instructions.py -> connectable_apps_section
-  compute_skill_runtime_hash(files, connectable_apps_section)   skills/push.py
-  compare against current_hashes (the locked Sandbox.skills_hash) -> only changed sandboxes proceed
-  get_sandbox_manager().push_to_sandboxes(mount_path=SKILLS_MOUNT_PATH, sandbox_files=changed_files)
-  set_sandbox_skills_hashes__no_commit  for every sandbox whose push succeeded
-```
-
-`list_runtime_skills_for_user` (`db/skill.py`) is the single gate for "does
-this user's sandbox get this skill": visibility (`skill_visible_to_user`),
-per-user enablement (`_is_enabled_for_user`), external-app readiness (an
-app-backed skill is excluded unless
-`get_skill_external_app_dependencies(...).ready`), custom-bundle validity
-(excluded if `is_valid is False`), and built-in availability
-(`_exclude_unavailable_built_in_skills`). `_assemble_fileset` then hydrates
-each surviving row: built-ins copy every non-excluded file from
-`BUILTIN_SKILLS_PATH/<id>/` (skipping `__pycache__`, dotfiles, and raw
-`.template` sources) and, if templated, overwrite `SKILL.md` per §4.2;
-custom rows lazily validate an unclassified bundle
-(`validate_stored_custom_skill`), persist that classification
-(`persist_skill_validity`), and unzip a valid bundle's bytes under
-`{skill.name}/`. A name collision between two enabled skills in the same
-fileset raises rather than silently overwriting one
-(`_assemble_fileset`'s `seen_names` check).
-
-`sandbox_lifecycle.py:build_managed_content_payload` (owned by
-`[[craft-sandboxes]]`) calls `build_user_skills_payload` directly and is what
-runs at session-provisioning time, before the sandbox is reported
-`RUNNING`; `push_skills_for_users` is the same payload construction plus the
-locked hash comparison, used by every skill-mutation endpoint to push to
-already-running sandboxes. Both write through
-`SandboxManager.push_to_sandbox(es)` to the fixed mount path
-`SKILLS_MOUNT_PATH = "/workspace/managed/skills"` (`skills/push.py`), which
-lands on the sidecar-managed `managed` volume described in
-`[[craft-sandboxes]] §4.3-4.4`; sessions symlink `.opencode/skills` into it.
-
-### 4.4 The hash: what it invalidates, and how staleness surfaces
-
-`compute_skill_runtime_hash(files, connectable_apps_section)`
-(`skills/push.py`) is a SHA-256 over every rendered file's path and bytes
-(sorted by path) plus the connectable-apps guidance text, each length-prefixed
-to avoid ambiguity. It is a pure function of *rendered output*, so it changes
-whenever any input to rendering changes: a skill's files, its enabled set for
-that user, an external app's connection/policy state feeding
-`render_external_app_skill`, or the set of connectable-but-unconnected apps
-(`build_connectable_apps_list`). It intentionally does **not** cover the
-craft MCP set - that has its own `mcp_config_hash`, tracked and pushed
-independently (`sandbox_lifecycle.py`, `refresh_mcp_config_hashes_for_users`).
-
-Two hash fields exist at two levels: `Sandbox.skills_hash` is "what was last
-successfully pushed to this sandbox's managed volume"; `BuildSession.skills_hash`
-is "what the currently-running opencode instance for this session was
-configured with." `session_runtime_stale`
-(`server/features/build/db/build_session.py`) compares the two: a live,
-interactive, already-started session is stale if `sandbox.skills_hash !=
-session.skills_hash` (or the MCP equivalent). This is what
-`SkillsStaleNotice.tsx` renders and what
-`SessionManager.reload_session_skills` (`session/manager.py`) resolves: it
-regenerates the session's `opencode.json`/`AGENTS.md` and disposes the live
-opencode instance so the next turn starts fresh with current skills, then
-copies `sandbox.skills_hash`/`mcp_config_hash` onto the session row. A skill
-push that only touches `Sandbox.skills_hash` (§4.3) does **not** by itself
-change agent behavior mid-session; it only makes the *next* reload (or new
-session) current, and flips the stale flag so the user can request an
-explicit reload without waiting for a new session.
-
-`push_skills_for_users` locks every target sandbox's `skills_hash` row
-(`lock_sandbox_skills_hashes`, `SELECT ... FOR UPDATE`) before computing the
-desired hash and diffing, so a skill push can't race a concurrent push for
-the same sandbox into recording a stale hash as current. The push and the
-hash write are not atomic with each other, though: `push_to_sandboxes`
-runs while those database locks are held. Only sandboxes for which the file
-push actually succeeded get their hash updated
-(`push_skills_for_users`'s `successful_sandbox_ids`); a partial failure
-therefore self-heals on the next push attempt rather than recording a hash
-for content that never landed.
+1. `rendering-input-changes-hash` **A new rendering input must change the
+   hash.** If a value that changes the rendered files is not in the bytes that
+   `skills/push.py:compute_skill_runtime_hash` reads, an edit never re-pushes and sessions
+   never go stale. The hash covers the bytes of the version each user runs, so a
+   change to `published_version_id` re-pushes to organization-only users.
+2. `affected-users-before-change` **Compute affected users before the
+   change.** `db/skill.py:affected_user_ids_for_skill` finds users with a running sandbox
+   who can see the skill, by the plugin visibility rule in one query
+   (`db/plugin_access.py:affected_user_ids_for_plugins`, which takes a set). It ignores preferences on purpose, so that a delete
+   or a disable still pushes to the users who had the skill. The delete route
+   reads the audience before it deletes. The share, transfer and edit routes
+   push to the union of the audience before and after. A new mutation must do
+   the same, or a user who loses access keeps the files.
+3. `shared-read-predicates` **Every new read path must use the shared
+   predicates.** Reads use `db/skill.py:skill_visible_to_user`. Edits use
+   `db/skill.py:_is_editable_by_user`, through
+   `db/skill.py:_skill_select_for_management_policy`. A
+   query on `Skill` without them skips sharing. For a custom skill both read
+   the plugin tables through the one copy of the rule in
+   `db/plugin_access.py` (`plugin_visible_to_user`,
+   `plugin_editable_by_user`, `installation_rank_for_user`,
+   `version_user_runs`). There is no organization-wide edit: a legacy
+   organization `EDITOR` row gives view access only. A `plugin__user_group`
+   row with no permission holds only a group install setting and grants
+   nothing. Built-in skills have no plugin and keep their skill rows.
+4. `enablement-not-preference-row` **Never infer enablement from a preference
+   row.** Use `db/skill.py:_is_enabled_for_user`. It reads
+   `user_plugin_preference` and the install setting that applies to the user
+   (`db/plugin_access.py:installation_rank_for_user`: the plugin's setting or
+   its marketplace default, the most open non-default group setting, and at
+   least available with a share). Disable writes `enabled=False`; it does
+   not delete the row. A required policy overrides an opt-out without deleting
+   it, so the opt-out returns when the policy goes back to default.
+5. `name-uniqueness-in-db` **Name uniqueness is in the database.** The partial
+   unique index `uq_user_skill_preference_name` allows one enabled choice per
+   user and name. `uq_skill_automatic_name` allows one default or required
+   skill per name in the tenant. Every write that enables a preference first
+   takes `db/skill.py:_lock_user_skill_preferences`, a `FOR NO KEY UPDATE`
+   lock on the user row. The lock orders concurrent enables of one name, so
+   the second one gets `SKILL_NAME_CONFLICT`, not an `IntegrityError`. The
+   lock does not block the `FOR KEY SHARE` locks that foreign-key checks take,
+   so sharing writes that reference the user still run. A new preference
+   writer, such as an auto-enable, must take the same lock.
+   `skills/push.py:_assemble_fileset` raises if two skills in one fileset share a name,
+   because the name is the sandbox directory. For a custom skill that name is
+   `frontmatter->>'name'` of the version the user runs.
+6. `name-immutable` **A skill name never changes.** The frontmatter `name`,
+   `Skill.name` and the bundle's wrapper directory, when there is one, must
+   match (`skills/metadata.py:parse_skill_document`). Storage removes the
+   wrapper. A rename is a delete and a new skill. Custom names cannot match a
+   built-in.
+7. `validate-before-sandbox` **Validate before content reaches a sandbox.**
+   `_assemble_fileset` unzips the bundle of the version a user runs only when
+   that version's `is_valid` is true, or after
+   `skills/validation.py:validate_stored_custom_skill` passes for an
+   unclassified version (it checks the name in the version's frontmatter).
+   `db/skill.py:persist_skill_validity` writes the result to the plugin
+   versions that hold that bundle and are still unclassified, and copies it to
+   the legacy skill row only while that row points at the same bundle.
+   Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
+   Count all non-directory archive entries, including ignored files. Check
+   both the incoming and normalized ZIP sizes. Raw uploads use the per-file
+   read cap; ZIP uploads use the ZIP cap.
+   Stored-bundle reads follow `bundle-size-limits`.
+8. `templates-built-in-only` **Only built-ins use templates.**
+   `skills/bundle.py:normalize_custom_bundle` and
+   `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If
+   you convert a built-in's SKILL.md into a template, add its renderer branch
+   in `skills/push.py:_render_template` in the same change. The
+   static copy skips template sources, and a templated built-in with no
+   renderer only logs a warning, so the skill ships no SKILL.md.
+9. `unresolved-marker-fails` **An unresolved `{{` marker fails the render.**
+   `skills/rendering.py:render_external_app_skill` raises rather than send broken instructions.
+   Other `.template` files in an app skill get only `{{APP:...}}` values and no
+   such check.
+10. `app-skill-org-visible` **An app skill stays visible to the
+    organization.** `db/skill.py:_ensure_external_app_skill_stays_public`
+    accepts only `VIEWER` for a custom or built-in skill linked to an external
+    app. The app link
+    (`db/external_app.py:associate_custom_skill_with_external_app__no_commit`,
+    `replace_custom_skill_associations__no_commit`) publishes the skill through
+    `db/plugin.py:publish_plugin__no_commit`, and a name clash in the
+    Organization library returns `CONFLICT`. Publishing is one-way, so an
+    unlinked skill stays published. A private custom skill must have an
+    owner: `ck_private_skill_has_owner` rejects a private skill with no
+    author, so transfer or delete private skills before their owner is
+    removed.
+11. `push-holds-row-locks` **The push holds row locks during network I/O.**
+    `skills/push.py:push_skills_for_users` locks the target `Sandbox` rows, then calls the
+    sandbox push while the transaction is open. The hash write is a savepoint,
+    and the caller commits. The push catches and logs every exception, so a
+    failed push never fails the API call. The next push repairs it, because
+    the hash of a failed sandbox is not written.
+12. `sharing-single-entry` **Every share, publish and install setting change
+    goes through `db/plugin.py:apply_plugin_access_change__no_commit`.** It
+    takes a set of plugin ids, a `PluginAccessChange` (user and group grants,
+    `publish`, a three-state company install setting, and a mode: replace or
+    add-only) and the actor. A skill has no access of its own: the skills API
+    passes the plugin with the skill's id. The function locks the legacy skill
+    rows, then the plugins, in id order; checks the rules once for the set;
+    writes each plugin and its legacy rows in a savepoint, so one failure rolls
+    back that plugin only; and reads the affected users for the whole set
+    before and after. The routes then commit and push once. The skills layer
+    calls it through `db/skill.py:share_skill__no_commit` (share route, editor
+    create, patch visibility, imports with access settings) and
+    `db/skill.py:bulk_share_skills__no_commit` (bulk, add-only shares).
+    `db/skill.py:replace_skill_shares`, `set_skill_installation_policy`,
+    `set_skill_public_permission` and `transfer_skill_ownership` are thin
+    callers with no actor, so they skip the permission checks. Do not write
+    `plugin__user`, `plugin__user_group`, `skill__user` or
+    `skill__user_group` anywhere else.
+    Rules: a company install setting needs organization-wide `MANAGE_PLUGINS`
+    (`has_global_permission`; never `has_permission`, which accepts a scoped
+    grant). In `SkillShareRequest`, a missing `installation_policy` changes
+    nothing, and null or AVAILABLE means the marketplace default. A group
+    keeps its install setting when the change does not set one, also when its
+    share is removed (the row stays with no permission). A group install
+    setting needs `MANAGE_PLUGINS` for that group on a private plugin and
+    global `MANAGE_PLUGINS` on a published one; it is then refused until group
+    settings ship. EDIT on a skill is not enough to change its groups: any
+    change to the group set or levels is a `MANAGE_PLUGINS` action within scope
+    (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
+    Without it, an owner could push a skill into any group manager's scope.
+    It compares against the stored plugin group shares (rows with a
+    permission), and the privacy check uses the stored visibility and the
+    request, so a public-to-private change in the same request cannot get past
+    it. Publishing needs the author or global `MANAGE_PLUGINS`
+    (`db/skill.py:ensure_can_edit_org_visibility`; the patch route calls it
+    too). `db/skill.py:_publish_requested` checks every request for
+    organization access: it refuses organization `EDITOR` and a change from
+    published to private, for every route, bulk included. The admin
+    Publishing setting then decides what a publish does
+    ([[#publishing-review]]). A publish moves the
+    plugin to the Organization library (`db/plugin.py:publish_plugin__no_commit`);
+    a name clash there returns `CONFLICT`. Only global `MANAGE_PLUGINS` deletes
+    a published or a required skill
+    (`db/skill.py:delete_skill_for_user__no_commit`); the card, bulk menu and
+    editor hide Delete to match. A transfer moves a private plugin to the new
+    owner's "My uploads", and a name clash there returns `CONFLICT`.
+    Agents apply a looser form of the rule
+    ([[agents-personas#group-share-needs-manage-agents]]).
+    `POST /skills/bulk` sharing applies one change to every skill the user
+    can edit, reports refusals and failures per skill, and pushes the combined
+    affected audience once after commit. A refusal for the whole set, such as
+    a scope or install setting refusal, fails every skill. Bulk delete applies
+    each item in a savepoint. Bulk enable and disable change only the caller's preference.
+    `POST /skills/custom/batch` and GitHub import create each bundle through
+    `db/skill.py:create_skill_from_bundle__no_commit`, one savepoint per skill,
+    so a bad bundle or a name conflict under a DEFAULT or REQUIRED policy lands
+    in `not_imported` and the other skills still import.
+13. `pptx-scripts-serve-previews` **The `pptx` skill's preview scripts also
+    render Craft output previews.**
+    `server/features/build/sandbox/base.py:document_preview_command` runs
+    `skills/builtin/pptx/scripts/preview.py` and its LibreOffice helper,
+    mounted under a versioned path apart from the managed skills. A change to
+    those scripts changes PDF and PowerPoint thumbnails in the output panel
+    ([[craft-sandboxes]]).
+14. `built-in-removal-needs-migration` **Removing a built-in needs a
+    migration that deletes its rows.** `_assemble_fileset` skips, with a
+    warning, a `skill` row whose `built_in_skill_id` is not in
+    `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
+15. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
+    `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
+    a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
+    sent bytes change. The stored bundle, its SHA-256 and other files keep the
+    placeholder. Before substitution, the push checks the predicted instruction
+    size against both the configured file limit and the receiver file limit.
+    Expansion must also fit the receiver total, including other Skills. An
+    oversized expansion skips that whole Skill, logs a warning and continues.
+    Files without placeholders keep their previous delivery behavior.
+    The sent bytes feed the runtime hash. OpenCode adds the base
+    folder line and the relative-path rule itself, so the push adds neither.
+    `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
+    `OPENCODE_VERSION` pin changes, so the next pin bump checks that OpenCode
+    still does this.
+17. `bundle-size-limits` **Upload limits do not apply to saved bundles.**
+    `skills/bundle.py` limits are constants, not env vars: 25 MiB per file and
+    100 MiB expanded for every bundle, plus a 25 MiB ZIP and 500 files for new
+    uploads. Stored reads
+    (`skills/validation.py:read_stored_bundle_bytes`) stop at
+    `STORED_ZIP_MAX_BYTES` (the expanded-total limit), and an edit that would
+    save a larger ZIP is refused, so every saved bundle loads again. They skip
+    the ZIP-size
+    and file-count limits. `skills/validation.py:validate_stored_custom_skill`
+    returns `is_valid=None` for `PAYLOAD_TOO_LARGE`, so the push skips the Skill
+    without saving it invalid. Edits that cannot add files (a SKILL.md rewrite, a
+    file removal) and the editor's re-ingest use
+    `skills/bundle.py:normalize_stored_bundle`, so a saved bundle over the ZIP-size
+    or file-count limit stays editable. Merges that add files keep the upload
+    limits, so repeated merges cannot pass them. A full-replacement upload in the
+    editor does not read the current bundle. One limit applies to every new
+    version, edits included: `skills/bundle.py:check_skill_md_size` refuses a
+    SKILL.md over `SKILL_MD_MAX_BYTES` (256 KiB) or with a NUL character
+    (400), because each version stores the text in a Postgres text column.
+    `skills/ingest.py:ingest_skill_bundle` and the GitHub preview call
+    it. Only direct uploads return 413. Batch uploads report
+    `not_imported` and GitHub previews mark the Skill unavailable.
+18. `bundle-file-list-memory` **ZIP metadata memory has a fixed bound.**
+    Every Skill ZIP opens through `skills/bundle.py:open_bundle_zip`, which uses
+    `file_processing/zip_limits.py:open_zip_within_directory_limit`. `zipfile`
+    keeps one `ZipInfo` (about 550 bytes) for each file-list record, so a small
+    ZIP with many empty entries can use hundreds of MiB. The opener limits the
+    bytes `zipfile` reads while it opens: 1 MiB of file list for uploads
+    (`ZIP_DIRECTORY_MAX_BYTES`) and 4 MiB for saved bundles
+    (`STORED_ZIP_DIRECTORY_MAX_BYTES`). Over the limit is a 413
+    `zip_metadata_bytes`. `normalize_custom_bundle` finds duplicate and
+    file-versus-folder paths by sorting the paths, not by building every parent
+    path. `skills/push.py:_add_bundle_bytes` skips a Skill whose declared file
+    sizes would take the push over the receiver's `MAX_BUNDLE_BYTES`, before it
+    reads the files. It also checks the resolved SKILL.md size then, so a
+    Skill that `skill-dir-placeholder` would drop never counts against later
+    Skills.
+19. `plugin-tables` **Access reads come from the plugin tables;
+    the skill rows are still written.** Migration `cdec9dd9ca3d` adds `plugin_marketplace`,
+    `plugin`, `plugin_version`, `plugin_skill`, `plugin__user`,
+    `plugin__user_group` and `user_plugin_preference` (`db/models.py:Plugin`
+    and its neighbours), and fills them from each custom skill. Built-in
+    skills get no plugin. A plugin and the legacy skill row share one id.
+    No foreign key checks the version pointers (`current_version_id`,
+    `published_version_id`, `pending_version_id`); write them only through
+    `db/plugin.py`, which sets them to a version of the same plugin.
+    Public and author-less skills go to the Organization library, published.
+    Other skills go to the author's "My uploads". A duplicate name in one
+    marketplace gets the first free `-N` suffix on `plugin.name` only
+    (`db/plugin.py:free_plugin_name` in app code). The skill name lives only
+    in `plugin_skill.frontmatter` (NOT NULL, a check requires a string
+    `name`); the backfill seeds it with the name and description of the
+    legacy row. No column stores the kind (skill or plugin):
+    `db/plugin.py:is_skill_version` reads it from the layout of each
+    version. Creates, bundle changes, deletes, shares, publishing, install
+    settings, choices and transfers write the plugin rows and the skill rows
+    ([[#bundle-change-adds-version]]). Visibility, edit, enablement, the
+    runtime list, affected users, the scoped-manager checks, the skill
+    responses (`db/plugin_access.py:load_plugin_access`), the community
+    downgrade and the user-delete guard read the plugin rows. The list and
+    runtime names and descriptions come from the frontmatter of the version
+    the user runs. A custom skill with no plugin is hidden from everyone but
+    an admin; an admin write makes its plugin from the legacy rows first
+    (`db/plugin.py:lock_skill_plugin__no_commit`). A user delete is refused
+    while the user's "My uploads" holds a plugin
+    (`db/users.py:delete_user_from_db__no_commit`); published plugins stay
+    with no author. Migration `55bf66dd54dd` re-syncs every plugin from the
+    skill rows once, before these reads, to fix rows that older code left
+    stale; it copies `backfill_plugins_from_skills` instead of importing it.
+    Reads of bundles,
+    validity and content also come from the version: the runtime list, the
+    push, session start and the hash take the version each user runs
+    (`db/plugin_access.py:version_user_runs`). The editor and the edits read
+    the current version. The preview and `is_valid` in responses read the
+    version the user runs. External-app association checks the current
+    version, and the app admin list shows the version the organization runs.
+    Content of a version comes from one function,
+    `skills/content.py:read_version_contents`: `plugin_version.file_manifest`
+    and `plugin_skill.skill_md` from the database, and the bundle only when
+    they are NULL (a version copied from a legacy row).
+    The legacy `bundle_file_id`, `bundle_sha256` and `is_valid` columns are
+    only written, by the dual writes; `db/plugin.py:legacy_skill_version_content`
+    reads them once to make a plugin for a skill that has none.
+20. `bundle-change-adds-version` **A file change adds a plugin version and
+    keeps the old bundle.** Each create and each change to a custom skill's
+    files goes through `db/skill.py:create_custom_skill__no_commit` or
+    `db/skill.py:replace_skill_bundle`, which call `db/plugin.py`. In one
+    transaction they lock the skill row, then the plugin row, add the next
+    `plugin_version` with its file list (`skills/bundle.py:compute_bundle_manifest`)
+    and `plugin_skill` row, move `current_version_id`, and copy the bundle,
+    name and description to the legacy skill row. A save never moves
+    `published_version_id`: on a published skill the organization keeps the
+    published version until a publish update ([[#publishing-review]]). An editor save
+    whose file list equals the current version's adds no version, and the
+    route deletes the new blob. A version copied from a legacy row has no
+    file list, so editor routes pass `previous_manifest`, the list of the
+    stored bundle; the bytes of a rewritten ZIP differ even when its files
+    do not. A bundle upload always adds one. An edit
+    request may carry `base_version_id`; if it is not the current version,
+    the edit gets 409 `PLUGIN_VERSION_STALE`. Skill responses return the plugin's
+    `current_version_id`, read with the name and description; the editor
+    returns the id of the version whose content it read, so the editor's base
+    always matches its fields. Routes no longer delete the
+    previous bundle, because older versions still point at it
+    ([[#bundle-retention]]). Each new version stores `plugin_skill.skill_md`
+    ([[#bundle-size-limits]]). `skills/metadata.py:frontmatter_for_jsonb`
+    drops a frontmatter value that JSONB cannot hold and keeps every other
+    key; name and description are always the validated strings.
+21. `bundle-retention` **Every version keeps its bundle while the skill exists.**
+    Routes never delete a bundle on save, because the version still points at
+    it. A skill delete, single or bulk, returns every version bundle and the
+    route deletes them after the commit
+    (`file_store/staging.py:delete_files_best_effort`).
+22. `version-history-api` **Version history uses the EDIT policy.** The
+    owner, editors and global `MANAGE_PLUGINS` list every version
+    (`GET /skills/custom/{id}/versions`), preview one
+    (`GET .../versions/{version_id}`) and restore one
+    (`POST .../versions/{version_id}/restore`); a viewer or a version of
+    another skill gets 404. `review_status` is derived from the plugin
+    pointers: `published`, `pending` or `draft`. Restore needs
+    `base_version_id` (409 `PLUGIN_VERSION_STALE`) and saves through the
+    editor save path, so equal files add no version. UI:
+    `web/src/sections/modals/skills/SkillVersionsTab.tsx`.
+23. `publishing-review` **The Publishing setting governs every publish by
+    authors.** Only the author or global `MANAGE_PLUGINS` publishes
+    (`db/skill.py:ensure_can_edit_org_visibility`); an editor saves versions
+    only. `db/plugin.py:publish_or_request_review__no_commit` is the one place
+    `Settings.plugin_publishing` (`OPEN`, `REQUIRES_REVIEW`, `OFF`) applies; a
+    failed settings read stops the publish. Global `MANAGE_PLUGINS` and a
+    system write (`actor` None: external app link, community downgrade,
+    approve) always publish. Every publish path calls it: the access-change
+    write path for a private plugin, `POST /skills/custom/{id}/publish` and
+    approve. A save never moves `published_version_id`. Review state is two
+    pointers on `plugin`: a request sets `pending_version_id` (a newer request
+    replaces it), and a publish or a deny clears it. There is no denied state.
+    A new skill created published takes the next free name on a clash
+    (`on_name_clash="rename"`); other publishes return CONFLICT. Requests
+    (`GET /skills/review-requests`, approve, deny) need global
+    `MANAGE_PLUGINS`; the list shows the plugin author and the version's
+    `created_at`, and the admin approves or denies from a view of the version
+    preview. The web hook `usePublishAction` mirrors the setting for the
+    share dialog and the Versions tab.
+24. `chat-skills-one-definition` **Chat's skills have one definition and
+    mentions are records.** Change which skills chat gets only in
+    `db/skill.py:list_chat_skills`; the turn, the tools and the `@` picker all
+    read it, and the web client does not decide which skills chat gets (the
+    composer only limits a message to 20 picks). A skill
+    mention is accepted only once, when its message is accepted
+    (`skills/chat.py:accept_picked_skills`), and stored as a record (type,
+    name, version id) and a `<skill>` message with the cut SKILL.md and its
+    token count (`chat_message.mentions` and the deferred
+    `chat_message.skill_messages`, or the accepted input). Never parse message text for mentions, and do not resolve or read
+    stored mentions again against the user's current skills, or old turns
+    change their prompt and chips. API fields carry the record without the
+    text. Load `skill_messages` only for model history
+    (`db/chat.py:load_message_branch`). A content-free incognito row keeps the
+    record and no skill message
+    ([[chat-persistence#incognito-decision-per-field]]).
 
 ---
 
-## 5. Contracts and invariants
+## Decisions
 
-1. **A skill's `name` is immutable identity and the sandbox directory name.**
-   Frontmatter `name`, `Skill.name`, and (for a stored bundle) the wrapper
-   directory it was flattened from must all agree
-   (`parse_skill_document`'s `directory_name` check,
-   `validate_stored_custom_skill`'s post-load re-check). Renaming a skill in
-   place is not supported by this code path; a rename is a delete-and-recreate.
-2. **`built_in_skill_id` XOR `bundle_file_id`** (`ck_skill_definition_source`).
-   A change that leaves both or neither set is a DB-level rejection, not a
-   soft validation failure.
-3. **The runtime hash must change whenever rendered content changes, or a
-   sandbox keeps stale skills.** `compute_skill_runtime_hash` must cover
-   every input to `_assemble_fileset`/`build_connectable_apps_list`. Adding a
-   new rendering input (a new template placeholder, a new gating signal)
-   without folding it into the hash means an edited skill silently fails to
-   re-push.
-4. **A skill whose external app is not connected does not half-work: it is
-   excluded from the fileset entirely** (`list_runtime_skills_for_user`'s
-   `ready_external_app_skill_ids` filter). It never reaches the sandbox in a
-   broken state; it simply isn't there until the app is connected.
-5. **User choices survive edits and policy changes.** Disable upserts a preference
-   with `enabled=False`; it does not delete the skill. Required skills reject
-   toggle requests on the server. Policy writes require full admin access.
-   Enablement resolves centrally in `db/skill.py:_is_enabled_for_user`, shared by
-   API responses and runtime selection. Never infer enablement from row existence.
-6. **Custom skill validation must run before content reaches a sandbox.**
-   `_assemble_fileset` never unzips an unvalidated or invalid custom bundle;
-   `validate_stored_custom_skill` is the sole gate, and its classification is
-   persisted (`persist_skill_validity`) only when the row was previously
-   unclassified, never overwriting an already-decided `is_valid`.
-7. **Sharing must not let a user read a skill they were not granted.**
-   `skill_visible_to_user` (`db/skill.py`) is the single predicate every
-   listing/fetch/runtime query uses; a new read path that queries `Skill`
-   directly without this predicate (or without `_is_editable_by_user` for
-   mutation) bypasses sharing.
-8. **An app-associated skill cannot go fully private.**
-   `set_skill_public_permission` rejects any value other than `VIEWER` for a
-   skill with an `ExternalApp__Skill` row - it must stay organization-visible
-   at read level even if only the connected app's users can use it.
-9. **A skill name can be "enabled" by only one row per user.**
-   `UserSkillPreference`'s partial unique index is on `(user_id, name)` for enabled rows; two
-   different skills sharing a name can never both be the user's active
-   choice under that name, by construction, not by an application check.
+- **Rendered files, not a manifest, go into the hash.** Any change in rendered
+  output, such as a new app connection or a denied action, marks sessions
+  stale with no list of inputs to maintain.
+- **A stale notice, not an automatic reload.** Reload disposes the live
+  runtime, so the user chooses when. It refuses while a turn runs.
+- **App lifecycle keeps user intent.** Disconnecting an app deletes the user's
+  enabled selections for its skills and keeps opt-outs
+  (`db/external_app.py`). Deleting an app resets its custom skills to
+  available and deletes their preferences. Its built-in skill row is deleted.
 
 ---
 
-## 6. Relationships
+## Known issues
 
-**Depends on**
-- `[[craft-sandboxes]]`: the pushed fileset lands on the sandbox's `managed`
-  volume; provisioning calls `build_managed_content_payload`/`push_managed_content`
-  directly.
-- `[[craft-external-apps]]`: connection state and per-action policy gate
-  which external-app skills are runtime-visible and what their rendered
-  `SKILL.md` warns against; credential injection at call time is that
-  component's job, not this one's.
-- `[[craft-sessions]]`: `BuildSession.skills_hash`/`mcp_config_hash` and
-  `session_runtime_stale`/`reload_session_skills` live in the session
-  manager; this component only produces the hash it compares against.
-- `[[access-control]]`: `Permission.MANAGE_SKILLS`, `Skill__User`/`Skill__UserGroup`
-  visibility, and scoped-manager group checks (`within_managed_scope_clause`)
-  reuse the platform's permission and group-scoping primitives.
-- `[[file-store-and-user-files]]`: custom skill bundles are stored blobs
-  (`FileOrigin.SKILL_BUNDLE`) read/written through the shared `FileStore`
-  abstraction.
-- `[[auth-and-identity]]`: GitHub import authenticates as the user's
-  connected GitHub app credentials when available
-  (`_github_authorization_header`).
-
-**Depended on by**
-- `[[craft-admin]]`: an admin connecting/disconnecting an external app, or
-  changing its action policy, changes what a dependent skill renders and
-  whether it's runtime-visible; that surface calls into this one indirectly
-  via `push_skill_to_affected_sandboxes`/re-render on next push.
-- Craft session provisioning and reload (`[[craft-sessions]]`,
-  `[[craft-sandboxes]]`) consume `build_user_skills_payload` as one half of
-  "managed content," alongside the user library.
+- **GitHub import checks a skill's shape, not its content.** Import enforces
+  archive size and member limits, path safety and frontmatter rules. Nothing
+  inspects the instructions or bundled scripts. A harmful skill is contained
+  only by the sandbox and its egress proxy ([[craft-sandboxes]],
+  [[craft-external-apps]]).
+- **App skills reflect only workspace DENY.** `skills/rendering.py` lists an
+  action as unavailable when its workspace policy (stored override or catalog
+  default) is DENY, or when cloud withholds it. Personal and task DENY choices
+  are not listed, so the agent can try an action that the proxy then blocks
+  ([[craft-external-apps]]).
+- **External-app admin writes push in different orders.**
+  `server/features/build/external_apps/api.py:update_external_app_admin`
+  commits and then pushes. `create_built_in_external_app` and
+  `delete_external_app_admin` push before the commit. Their comments say a
+  push failure rolls back the change, but `push_skills_for_users` logs and
+  drops every failure ([[#push-holds-row-locks]]), so the change commits
+  anyway. If that commit fails, the sandboxes hold files that the database
+  does not.
+- **Membership changes do not push.** A user added to a group that a skill is
+  shared with gets it at the next push, session start or reload.
 
 ---
 
-## 7. Blast radius
+## Dependencies
 
-| If your change… | Also check |
-|---|---|
-| adds a built-in skill | `built_in.py:_REGISTRY` entry, its `builtin/<id>/` directory and `SKILL.md`, whether it needs `is_available`, and whether a new template needs a renderer branch in `push.py:_render_template` (and, with it, the preview path in `response_helpers.py:skill_preview_response`) |
-| changes the bundle format (zip layout, `SKILL.md` frontmatter shape) | `bundle.py` (`normalize_custom_bundle`, `_validated_bundle_path`), `metadata.py` (`SkillMetadata`), `validation.py`, and every existing stored custom skill's bundle (a schema tightening can retroactively invalidate real rows) |
-| changes the hash inputs (`compute_skill_runtime_hash`, `_assemble_fileset`, `build_connectable_apps_list`) | confirm the new input is actually folded into the hash bytes, or a real content change won't mark sandboxes/sessions stale; also check `[[craft-sessions]]`'s `session_runtime_stale` still reads the right fields |
-| changes app coupling (`ExternalApp__Skill`, `EXTERNAL_APP_SKILL_ID_TO_APP_TYPE`, `get_skill_external_app_dependencies`) | `[[craft-external-apps]]`'s action-policy views, `db/skill.py:list_runtime_skills_for_user`'s readiness filter, and `response_helpers.py`'s dependency response shown in the UI |
-| changes sharing (`Skill__User`, `Skill__UserGroup`, `public_permission`) | `skill_visible_to_user`/`_is_editable_by_user` (both must move together), the scoped-manager GATE 2 check in `api.py:_assert_group_share_within_scope`, and `set_skill_public_permission`'s app-association guard |
-| changes enable/disable semantics | §5.5 above; verify explicit opt-outs survive updates and required policies override them |
-| changes GitHub ingestion (`ingest_from_github.py`) | path-traversal/symlink checks, `GITHUB_SKILL_MAX_COUNT`, and that `parse_skill_document`'s validation still runs before any bundle is stored |
-| changes what gets pushed or where (`SKILLS_MOUNT_PATH`, `push_to_sandbox(es)`) | `[[craft-sandboxes]]`'s sidecar `/push` contract and the `managed` volume mount |
-
----
-
-## 8. How to verify a change
-
-### Tests
-
-```bash
-# External dependency unit tests (need Postgres for Skill/ExternalApp rows)
-uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit -k skill
-# e.g. backend/tests/external_dependency_unit/craft/test_external_app_fileset.py
-
-# Frontend unit/component tests already covering this surface
-cd web && bun run test -- src/views/SkillsPage.test.tsx
-cd web && bun run test -- src/views/SkillEditorPage.test.tsx
-cd web && bun run test -- src/sections/cards/SkillCard.test.tsx
-cd web && bun run test -- src/sections/modals/SkillPreviewModal.test.tsx
-cd web && bun run test -- src/sections/modals/skills/CreateSkillModal.test.tsx
-cd web && bun run test -- src/sections/modals/skills/ImportSkillsFromGitHubModal.test.tsx
-cd web && bun run test -- src/sections/skills/SkillBundlePicker.test.tsx
-cd web && bun run test -- src/sections/skills/SkillFileTree.test.tsx
-cd web && bun run test -- src/app/craft/components/SkillsStaleNotice.test.tsx
-```
-
-See `backend/AGENTS.md` for authoritative test commands and required env.
-
-### Manual reproduction
-
-1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
-2. Open `http://localhost:3000/craft/v1/skills`, sign in as
-   `admin_user@example.com` / `TestPassword123!`.
-3. Create a custom skill with a short instruction body, leave it enabled.
-4. Start (or resume) a Craft session and ask the agent to list its available
-   skills or read `AGENTS.md`/the skills directory; confirm the new skill's
-   instructions are visible to it.
-5. Edit the skill's instructions, save. Return to the running session:
-   confirm the stale-skills notice appears, then click reload; confirm the
-   agent's next turn reflects the edit.
-6. Disable the skill, confirm the next push removes its files from the
-   sandbox (or the reload clears it from what the agent sees); re-enable it
-   and confirm it comes back with no data loss.
-7. For an external-app skill: as a user with the app disconnected, confirm
-   it's visible but not toggleable; connect the app; confirm it becomes
-   enable-able and, once enabled, its `SKILL.md` renders without an
-   unavailable-actions warning until an admin denies a specific action.
-
-### What "working" looks like
-
-- A skill push only rewrites sandboxes whose desired hash actually differs
-  from `Sandbox.skills_hash`.
-- Disabling and re-enabling a personal skill round-trips with no visible
-  side effect.
-- An external-app skill never appears half-configured in a sandbox; it is
-  either fully present (app connected) or fully absent (not connected).
+- [[craft-sandboxes]]: `push_to_sandboxes` and the managed volume.
+- [[craft-sessions]]: the stale check and the reload that apply a push to a
+  live runtime.
+- [[craft-external-apps]]: app readiness and action policy views. GitHub
+  import and preview authenticate with the user's GitHub app credential
+  (`server/features/skill/api.py:_github_authorization_header`).
+- [[authorization]]: `MANAGE_PLUGINS` and the scoped-manager group check
+  (`assert_within_scope`).
+- [[file-store-and-user-files]]: bundle blobs.
+- [[image-generation]]: the image skill is available only when image
+  generation is configured.
 
 ---
 
-## 9. Footguns
+## Recipes
 
-- **The runtime hash is computed twice per push and is not atomic with the
-  push itself.** `push_skills_for_users` locks and compares hashes, pushes
-  files while holding database locks, then records the hash only for sandboxes
-  whose push succeeded. A crash between file-push success and hash-record
-  leaves the sandbox correct but the DB stale; the next push recomputes the
-  same desired hash, sees a mismatch, and re-pushes harmlessly. The database
-  transaction cannot roll back an external file write.
-- **Two different staleness signals exist and are easy to conflate.**
-  `Sandbox.skills_hash` (has this sandbox received the current push) and
-  `BuildSession.skills_hash` (has this session's live opencode instance been
-  told to reload) are compared against each other by
-  `session_runtime_stale`, not against some third "current" value. A skill
-  push updates only the sandbox side; nothing proactively updates every open
-  session's row, which is why the stale notice exists as a discoverable
-  affordance instead of a silent auto-heal.
-- **Custom skills cannot ship `.template` files** - only built-ins are
-  templated, and `normalize_custom_bundle`/`update_custom_bundle_files`
-  actively reject an uploaded `.template` path. A custom skill that wants
-  per-user rendering has no supported way to do it in this code.
-- **GitHub ingestion trusts the repository's file *shape* (path safety, size
-  limits, one `SKILL.md` per directory) but not its *content*.** Beyond
-  `parse_skill_document`'s frontmatter/name/description checks, nothing
-  inspects what the instructions or any bundled script actually say or do.
-  A skill's Markdown body and any bundled files (Python, JS, arbitrary
-  binaries) are pushed into the sandbox and read as agent instructions
-  verbatim; the only asymmetric protections that exist here are archive
-  bounds (`_ARCHIVE_MAX_BYTES`, `_ARCHIVE_MAX_MEMBERS`, per-file/total byte
-  caps) and path-traversal/symlink rejection. **A malicious skill's
-  instructions themselves are not sandboxed against by this code beyond
-  that** - whatever containment a malformed-content or prompt-injection-style
-  skill gets comes entirely from the sandbox's own execution boundaries
-  (`[[craft-sandboxes]]`, `[[craft-external-apps]]`'s egress proxy), not from
-  anything in `onyx/skills/`.
-- **A skill row can reference a built-in id that no longer exists in
-  `BUILT_IN_SKILLS`** (a removed or renamed entry, or cross-deployment drift).
-  Every read path logs a warning and silently excludes/hides the row
-  (`list_skills`, `list_runtime_skills_for_user`,
-  `skills_list_response_for_user`) rather than erroring - a missing built-in
-  degrades silently, not loudly.
-- **`is_valid=None` (unclassified) is a distinct third state from `True`/`False`,**
-  not just "not yet checked." `list_runtime_skills_for_user` treats `None`
-  the same as `True` (include and attempt to hydrate); only an explicit
-  `False` excludes. A skill can therefore ride along as "probably fine"
-  until its bundle is actually read and classified.
+- `add-built-in-skill` **Add a built-in skill.** Copy `pptx` for a static skill, or
+  `image-generation` for one that depends on a service through
+  `is_available`. List the current set with `ls backend/onyx/skills/builtin/`
+  and the providers in `skills/built_in.py:_REGISTRY`. Import-time checks fail
+  on a duplicate id, a duplicate app type, a missing source file, or
+  frontmatter whose `name` does not match the directory. A seeded
+  built-in needs a migration that creates its row. An app built-in gets its
+  row when an admin connects the app ([[craft-external-apps]]).
+- `add-templated-built-in` **Add a templated built-in.** Copy `company-search`: a SKILL.md.template
+  plus a renderer branch in `_render_template`
+  ([[#templates-built-in-only]]). Put every value the renderer reads into the
+  rendered bytes ([[#rendering-input-changes-hash]]).
+- `add-skill-mutation-route` **Add a skill mutation route.** Copy `share_current_user_skill` in
+  `server/features/skill/api.py`: compute `affected_user_ids_for_skill`
+  before the change, apply it, compute it again, commit, call
+  `push_skills_for_users` with the union, then commit again
+  ([[#affected-users-before-change]]).
+- `investigate-skill-missing` **Investigate "my skill is not in the sandbox".** Check the inputs of
+  `list_runtime_skills_for_user` one at a time for that user: visibility,
+  `_is_enabled_for_user`, app readiness, `plugin_version.is_valid` of the
+  version the user runs (`version_user_runs`), and built-in availability. Then compare `Sandbox.skills_hash` with
+  `BuildSession.skills_hash`: equal means the runtime loaded the last push;
+  different means the session waits for a reload. Search the API server log
+  for `Skill push failed` for a failed push.
+- `test-skill-setup` **Set up skills for a test.** Use the integration manager
+  `backend/tests/integration/common_utils/managers/skill.py`. A real push
+  needs the Kubernetes harness in `backend/tests/integration/tests/craft/k8s/`.
 
-### Shared document preview script
+---
 
-The built-in PowerPoint preview script also renders first-page PDF and PowerPoint
-thumbnails for Outputs. Both sandbox providers deploy this script and its LibreOffice
-helper in a versioned bundle. Preview requests do not update managed skills or the
-running agent's context. PDF rendering uses Poppler directly.
+## Verification
 
-Thumbnail conversion has a 30-second deadline; full-slide conversion has a
-120-second deadline. Both include lock waiting. Finished JPEGs replace cached files
-atomically, and failed conversion retains the last complete image. The converter
-checks source revisions before publication and cache reuse.
-
-See [[craft-sandboxes]] for advisory size checks, bundle deployment, and snapshot exclusions.
+- `backend/tests/unit/onyx/skills/` covers bundles, validation, rendering and
+  GitHub import.
+- `backend/tests/external_dependency_unit/craft/` (the `test_skill*` files)
+  covers visibility, the fileset, affected users, ownership and push faults.
+  `backend/tests/external_dependency_unit/craft/test_skill_version_reads.py` covers the version each user runs (an
+  organization-only user runs the published version, a share recipient the
+  current one, also in the push), and that the editor, the preview and the
+  list make no file store read for content stored in the database.
+- `backend/tests/external_dependency_unit/db/test_plugin_tables_migration.py`
+  covers the plugin backfill,
+  `backend/tests/external_dependency_unit/db/test_plugin_resync_migration.py`
+  the re-sync, and
+  `backend/tests/external_dependency_unit/db/test_plugin_constraints.py` the
+  database rules of the plugin tables.
+- `backend/tests/integration/tests/skills/` covers the API, bulk actions,
+  import sharing and plugin version writes
+  (`backend/tests/integration/tests/skills/test_skill_plugin_versions.py`),
+  deleting a skill deletes every version bundle
+  (`backend/tests/integration/tests/skills/test_skill_bundle_delete.py`),
+  the version list, preview and restore
+  (`backend/tests/integration/tests/skills/test_skill_version_api.py`), and
+  publish, review and the Publishing setting
+  (`backend/tests/integration/tests/skills/test_skill_publish_review.py`).
+  `backend/tests/integration/tests/craft/k8s/` covers a real
+  push.
+- By hand: edit a skill while a Craft session runs. The stale notice must
+  appear, and after reload the agent must read the new text.

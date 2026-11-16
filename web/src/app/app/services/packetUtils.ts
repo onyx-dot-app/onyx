@@ -42,6 +42,10 @@ export function isToolPacket(
     PacketType.CODING_AGENT_FINAL,
     PacketType.BASH_TOOL_START,
     PacketType.BASH_TOOL_DELTA,
+    PacketType.CODE_MODE_START,
+    PacketType.CODE_MODE_DELTA,
+    PacketType.IMAGE_GENERATION_TOOL_START,
+    PacketType.IMAGE_GENERATION_TOOL_DELTA,
   ];
   if (includeSectionEnd) {
     toolPacketTypes.push(PacketType.SECTION_END);
@@ -66,7 +70,7 @@ export function isActualToolCallPacket(packet: Packet): boolean {
 export function isDisplayPacket(packet: Packet) {
   return (
     packet.obj.type === PacketType.MESSAGE_START ||
-    packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
+    packet.obj.type === PacketType.USER_MESSAGE
   );
 }
 
@@ -79,24 +83,10 @@ export function isSearchToolPacket(packet: Packet): boolean {
   );
 }
 
-export function isStreamingComplete(packets: Packet[]) {
-  return packets.some((packet) => packet.obj.type === PacketType.STOP);
-}
-
-export function isFinalAnswerComing(packets: Packet[]) {
-  return packets.some(
-    (packet) =>
-      packet.obj.type === PacketType.MESSAGE_START ||
-      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
-  );
-}
-
 export function isFinalAnswerComplete(packets: Packet[]) {
   // Find the first MESSAGE_START packet and get its index
   const messageStartPacket = packets.find(
-    (packet) =>
-      packet.obj.type === PacketType.MESSAGE_START ||
-      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
+    (packet) => packet.obj.type === PacketType.MESSAGE_START
   );
 
   if (!messageStartPacket) {

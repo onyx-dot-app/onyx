@@ -29,6 +29,7 @@ type settingsDataSourceModel struct {
 	CompanyDescription                types.String  `tfsdk:"company_description"`
 	QueryHistoryType                  types.String  `tfsdk:"query_history_type"`
 	CraftInstructions                 types.String  `tfsdk:"craft_instructions"`
+	DefaultLanguage                   types.String  `tfsdk:"default_language"`
 	ApplicationStatus                 types.String  `tfsdk:"application_status"`
 	Tier                              types.String  `tfsdk:"tier"`
 	MaximumChatRetentionDays          types.Float64 `tfsdk:"maximum_chat_retention_days"`
@@ -37,6 +38,8 @@ type settingsDataSourceModel struct {
 	FileTokenCountThresholdK          types.Int64   `tfsdk:"file_token_count_threshold_k"`
 	SeatCount                         types.Int64   `tfsdk:"seat_count"`
 	UsedSeats                         types.Int64   `tfsdk:"used_seats"`
+	EmbeddingRateLimitRequests        types.Int64   `tfsdk:"embedding_rate_limit_requests"`
+	EmbeddingRateLimitPeriodSeconds   types.Int64   `tfsdk:"embedding_rate_limit_period_seconds"`
 	AnonymousUserEnabled              types.Bool    `tfsdk:"anonymous_user_enabled"`
 	InviteOnlyEnabled                 types.Bool    `tfsdk:"invite_only_enabled"`
 	DeepResearchEnabled               types.Bool    `tfsdk:"deep_research_enabled"`
@@ -44,6 +47,9 @@ type settingsDataSourceModel struct {
 	SearchUIEnabled                   types.Bool    `tfsdk:"search_ui_enabled"`
 	AutoDetectSearchFilters           types.Bool    `tfsdk:"auto_detect_search_filters"`
 	TemperatureOverrideEnabled        types.Bool    `tfsdk:"temperature_override_enabled"`
+	ReasoningOverrideEnabled          types.Bool    `tfsdk:"reasoning_override_enabled"`
+	HideProviderGrouping              types.Bool    `tfsdk:"hide_provider_grouping"`
+	LLMGatewayEnabled                 types.Bool    `tfsdk:"llm_gateway_enabled"`
 	AutoScroll                        types.Bool    `tfsdk:"auto_scroll"`
 	HideQueryHistoryFromAdminPanel    types.Bool    `tfsdk:"hide_query_history_from_admin_panel"`
 	ImageExtractionAndAnalysisEnabled types.Bool    `tfsdk:"image_extraction_and_analysis_enabled"`
@@ -62,17 +68,35 @@ func (d *settingsDataSource) Metadata(_ context.Context, req datasource.Metadata
 
 func (d *settingsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	attrs := map[string]schema.Attribute{
-		"maximum_chat_retention_days":           schema.Float64Attribute{Computed: true},
-		"company_name":                          schema.StringAttribute{Computed: true},
-		"company_description":                   schema.StringAttribute{Computed: true},
-		"anonymous_user_enabled":                schema.BoolAttribute{Computed: true},
-		"invite_only_enabled":                   schema.BoolAttribute{Computed: true},
-		"deep_research_enabled":                 schema.BoolAttribute{Computed: true},
-		"multi_model_chat_enabled":              schema.BoolAttribute{Computed: true},
-		"search_ui_enabled":                     schema.BoolAttribute{Computed: true},
-		"auto_detect_search_filters":            schema.BoolAttribute{Computed: true},
-		"temperature_override_enabled":          schema.BoolAttribute{Computed: true},
-		"auto_scroll":                           schema.BoolAttribute{Computed: true},
+		"maximum_chat_retention_days":  schema.Float64Attribute{Computed: true},
+		"company_name":                 schema.StringAttribute{Computed: true},
+		"company_description":          schema.StringAttribute{Computed: true},
+		"anonymous_user_enabled":       schema.BoolAttribute{Computed: true},
+		"invite_only_enabled":          schema.BoolAttribute{Computed: true},
+		"deep_research_enabled":        schema.BoolAttribute{Computed: true},
+		"multi_model_chat_enabled":     schema.BoolAttribute{Computed: true},
+		"search_ui_enabled":            schema.BoolAttribute{Computed: true},
+		"auto_detect_search_filters":   schema.BoolAttribute{Computed: true},
+		"temperature_override_enabled": schema.BoolAttribute{Computed: true},
+		"auto_scroll":                  schema.BoolAttribute{Computed: true},
+		"reasoning_override_enabled":   schema.BoolAttribute{Computed: true},
+		"hide_provider_grouping":       schema.BoolAttribute{Computed: true},
+		"default_language": schema.StringAttribute{
+			Computed:            true,
+			MarkdownDescription: "Workspace UI language. Null before Onyx v5.0.0.",
+		},
+		"llm_gateway_enabled": schema.BoolAttribute{
+			Computed:            true,
+			MarkdownDescription: "Whether the LLM gateway is on. Null before Onyx v5.0.0.",
+		},
+		"embedding_rate_limit_requests": schema.Int64Attribute{
+			Computed:            true,
+			MarkdownDescription: "Indexing embedding request limit for each window. Null means no limit, or Onyx before v5.0.0.",
+		},
+		"embedding_rate_limit_period_seconds": schema.Int64Attribute{
+			Computed:            true,
+			MarkdownDescription: "Embedding rate limit window, in seconds. Null before Onyx v5.0.0.",
+		},
 		"query_history_type":                    schema.StringAttribute{Computed: true},
 		"hide_query_history_from_admin_panel":   schema.BoolAttribute{Computed: true},
 		"image_extraction_and_analysis_enabled": schema.BoolAttribute{Computed: true},
@@ -126,6 +150,12 @@ func (d *settingsDataSource) Read(ctx context.Context, _ datasource.ReadRequest,
 		AutoDetectSearchFilters:           types.BoolPointerValue(server.AutoDetectSearchFilters),
 		TemperatureOverrideEnabled:        types.BoolPointerValue(server.TemperatureOverrideEnabled),
 		AutoScroll:                        types.BoolPointerValue(server.AutoScroll),
+		ReasoningOverrideEnabled:          types.BoolPointerValue(server.ReasoningOverrideEnabled),
+		HideProviderGrouping:              types.BoolPointerValue(server.HideProviderGrouping),
+		DefaultLanguage:                   types.StringPointerValue(server.DefaultLanguage),
+		LLMGatewayEnabled:                 types.BoolPointerValue(server.LLMGatewayEnabled),
+		EmbeddingRateLimitRequests:        types.Int64PointerValue(server.EmbeddingRateLimitRequests),
+		EmbeddingRateLimitPeriodSeconds:   types.Int64PointerValue(server.EmbeddingRateLimitPeriodSeconds),
 		QueryHistoryType:                  types.StringPointerValue(server.QueryHistoryType),
 		HideQueryHistoryFromAdminPanel:    types.BoolValue(server.HideQueryHistoryFromAdminPanel),
 		ImageExtractionAndAnalysisEnabled: types.BoolPointerValue(server.ImageExtractionAndAnalysisEnabled),

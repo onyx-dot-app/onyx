@@ -1,0 +1,166 @@
+# Runs the Craft Firecracker host agent KVM tests (microvm/internal/kvmtest)
+# with microvm/check-kvm.sh on a nested-virtualization runner.
+#
+# Pull requests: the smoke lane (core, Dial, agent restart).
+# Nightly, release tags and manual runs: the full lane (also egress,
+# pass-through, template build, managed drive, memory, root drive delivery).
+# TestSavesKVM skips: it needs a test S3 bucket and AWS credentials.
+name: Craft Firecracker Host Agent KVM
+concurrency:
+  group: Craft-FC-Host-Agent-KVM-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  pull_request:
+    paths:
+      - "microvm/**"
+      - "deployment/craft-fc/**"
+      - ".github/workflows/craft-fc-host-agent-kvm.yml"
+  schedule:
+    # 09:00 UTC daily.
+    - cron: "0 9 * * *"
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: "smoke or full"
+        type: choice
+        options:
+          - full
+          - smoke
+        default: full
+
+permissions:
+  contents: read
+
+env:
+  ARTIFACTS_IMAGE: onyxdotapp/craft-fc-artifacts
+  # The source of the test root drives.
+  SOURCE_IMAGE: onyxdotapp/sandbox:v5.1.1
+
+jobs:
+  kvm:
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - family=m8i.2xlarge
+      - ram=32
+      - nested-virt=true
+      - spot=false
+      - volume=100gb
+      - run-id=${{ github.run_id }}-craft-fc-host-agent-kvm
+      - extras=ecr-cache
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      LANE: ${{ github.event_name == 'pull_request' && 'smoke' || inputs.lane || 'full' }}
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: microvm/go.mod
+          cache: false
+
+      - name: Setup Python and Install Dependencies
+        if: env.LANE == 'full'
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+
+      - name: Install host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends e2fsprogs file openssl python3 xfsprogs
+
+      - name: Read the artifacts tag
+        id: versions
+        run: |
+          set -euo pipefail
+          tag="$(sed -n 's/^ARG ARTIFACTS_TAG=//p' microvm/Dockerfile)"
+          if [ -z "${tag}" ]; then
+            echo "::error::No ARTIFACTS_TAG in microvm/Dockerfile."
+            exit 1
+          fi
+          echo "artifacts-tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      # Only a clear "not found" counts as absent; any other error stops the job.
+      - name: Check whether the artifacts image is published
+        id: artifacts
+        env:
+          ARTIFACTS_TAG: ${{ steps.versions.outputs.artifacts-tag }}
+        run: |
+          set -euo pipefail
+          ref="docker.io/${ARTIFACTS_IMAGE}:${ARTIFACTS_TAG}"
+          if out="$(docker buildx imagetools inspect "${ref}" 2>&1)"; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          elif grep -qiE 'not found|manifest unknown|repository does not exist' <<<"${out}"; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "${ref} is not published. Building it from deployment/craft-fc."
+          else
+            echo "::error::Could not check whether ${ref} exists: ${out}"
+            exit 1
+          fi
+
+      - name: Copy the published artifacts
+        if: steps.artifacts.outputs.published == 'true'
+        env:
+          ARTIFACTS_TAG: ${{ steps.versions.outputs.artifacts-tag }}
+        run: |
+          set -euo pipefail
+          ref="${BASE_IMAGE_REGISTRY}/${ARTIFACTS_IMAGE}:${ARTIFACTS_TAG}"
+          docker pull -q "${ref}"
+          cid="$(docker create "${ref}" /none)"
+          mkdir -p "${RUNNER_TEMP}/artifacts"
+          docker cp "${cid}:/craft-fc" "${RUNNER_TEMP}/artifacts/"
+          docker rm "${cid}"
+
+      - name: Set up Docker Buildx
+        if: steps.artifacts.outputs.published != 'true'
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+
+      - name: Build artifacts (not published yet)
+        if: steps.artifacts.outputs.published != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: deployment/craft-fc
+          file: deployment/craft-fc/Dockerfile.artifacts
+          target: artifacts
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          outputs: type=local,dest=${{ runner.temp }}/artifacts
+          cache-from: type=gha,scope=craft-fc-artifacts
+
+      - name: Run the host agent KVM tests
+        run: |
+          sudo modprobe kvm_intel
+          kvm_python=""
+          if [ "${LANE}" = full ]; then kvm_python="$(command -v python)"; fi
+          sudo env "PATH=$PATH" "BASE_IMAGE_REGISTRY=${BASE_IMAGE_REGISTRY}" \
+            "DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}" "KVM_PYTHON=${kvm_python}" \
+            "GOCACHE=$(go env GOCACHE)" "GOMODCACHE=$(go env GOMODCACHE)" \
+            bash microvm/check-kvm.sh "${LANE}" "${RUNNER_TEMP}/artifacts/craft-fc" "${SOURCE_IMAGE}"
+
+      # The tests run as root and leave root-owned files in the Docker config
+      # and the Go caches. Post steps run as the runner user.
+      - name: Give the caches back to the runner user
+        if: always()
+        run: |
+          for dir in "${DOCKER_CONFIG:-$HOME/.docker}" "$(go env GOCACHE)" "$(go env GOMODCACHE)"; do
+            if [ -e "${dir}" ]; then sudo chown -R "$(id -u):$(id -g)" "${dir}"; fi
+          done

@@ -68,9 +68,8 @@ def _release_migration_snapshot() -> tuple[sa.engine.Connection, str]:
     """Commit the migration txn and return (bind, current tenant schema)."""
     bind = op.get_bind()
     schema = bind.execute(sa.text("SELECT current_schema()")).scalar_one()
-    # env.py's plain SET search_path is session-level and survives this
-    # commit; alembic's version-table update autobegins a new transaction
-    # afterwards, which env.py commits at the end of the schema's run.
+    # The next statement autobegins a transaction, which env.py starts with
+    # the tenant search_path; env.py commits it at the end of the schema's run.
     bind.commit()
     return bind, schema
 

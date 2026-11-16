@@ -533,6 +533,12 @@ class _ServeMixin:
                 session_id,
             )
 
+    def close_session_event_bus(self, sandbox_id: UUID, session_id: UUID) -> None:
+        """Release the session's bus but keep its workspace. For callers that
+        are done with a session but do not delete it, such as a finished
+        scheduled run."""
+        self._close_session_buses(sandbox_id, session_id)
+
     def _close_all_sandbox_buses(self, sandbox_id: UUID) -> None:
         """Tombstone + pop + close every bus for ``sandbox_id``. Call from
         ``terminate`` before destroying the container/pod so late subscribes

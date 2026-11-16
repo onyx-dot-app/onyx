@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
-import { getWebVersion, getBackendVersion } from "@/lib/version";
+import { getBackendVersion } from "@/lib/app/svcSS";
+import { getWebVersion } from "@/lib/app/utils";
 import { SvgBook } from "@opal/icons";
 
 const Page = async () => {

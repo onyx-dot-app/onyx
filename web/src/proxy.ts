@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SERVER_SIDE_ONLY__AUTH_COOKIE_NAME } from "@/lib/constants";
 import { loginPath, ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
+import {
+  DESKTOP_HANDOFF_PATH,
+  isDesktopOAuthCallback,
+} from "@/lib/oauth/desktopCallback";
 
 // Route prefixes that never allow anonymous access, so we fast-fail at the edge
 // when no auth cookie is present. "/app" is intentionally excluded: it allows
@@ -104,6 +108,7 @@ export const config = {
 const EE_ROUTES = [
   "/admin/groups",
   "/admin/performance/usage",
+  "/admin/spending-limits",
   "/admin/performance/analytics",
   "/admin/performance/query-history",
   "/admin/theme",
@@ -127,6 +132,17 @@ export async function proxy(request: NextRequest) {
   // Set, not merged, so a client cannot supply its own.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(ORIGINAL_PATH_HEADER, pathWithQuery);
+
+  // A desktop-started OAuth callback goes back to the app, which holds the
+  // session. Serve the handoff page ahead of any auth gate; the URL stays the
+  // same, so the page builds the onyx:// link from it.
+  if (
+    isDesktopOAuthCallback(pathname, request.nextUrl.searchParams.get("state"))
+  ) {
+    return withSecurityHeaders(
+      NextResponse.rewrite(new URL(DESKTOP_HANDOFF_PATH, request.url))
+    );
+  }
 
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)

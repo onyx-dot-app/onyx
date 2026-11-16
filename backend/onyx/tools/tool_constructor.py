@@ -1,4 +1,3 @@
-from collections import Counter
 from collections.abc import Callable, Sequence
 from typing import cast
 from uuid import UUID
@@ -7,12 +6,17 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
-from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
+from onyx.db.action_policy import (
+    mcp_tool_default_policy,
+    resolve_user_action_policies,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
+from onyx.db.enums import ActionPolicy, GatedAppKind
+from onyx.db.image_generation import get_default_image_generation_config
 from onyx.db.mcp import (
     get_mcp_server_by_id,
     get_mcp_server_user_preferences,
@@ -37,6 +41,7 @@ from onyx.tools.models import (
     DynamicSchemaInfo,
     PersonaToolConfiguration,
     SearchToolUsage,
+    ToolApprovalScope,
     ToolConfiguration,
 )
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
@@ -59,13 +64,6 @@ from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-def _disambiguate_mcp_tool_names(tools: list[Tool]) -> None:
-    tool_name_counts = Counter(tool.name for tool in tools)
-    for tool in tools:
-        if isinstance(tool, MCPTool) and tool_name_counts[tool.name] > 1:
-            tool.use_disambiguated_name()
 
 
 class SearchToolConfig(BaseModel):
@@ -97,9 +95,7 @@ class CustomToolConfig(BaseModel):
 
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
-    """Get image generation LLM config from the default image generation configuration."""
-    from onyx.db.image_generation import get_default_image_generation_config
-
+    """Load the default image generation provider and credentials."""
     default_config = get_default_image_generation_config(db_session)
     if (
         not default_config
@@ -121,7 +117,10 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         ),
         api_base=llm_provider.api_base,
         api_version=llm_provider.api_version,
-        deployment_name=llm_provider.deployment_name,
+        # A linked provider's deployment serves its chat model, not this one.
+        deployment_name=(
+            llm_provider.deployment_name if default_config.llm_provider_owned else None
+        ),
         max_input_tokens=llm.config.max_input_tokens,
         custom_config=llm_provider.custom_config,
     )
@@ -161,7 +160,6 @@ def should_disable_open_url_web_fetch(
 
 def construct_tools(
     configuration: PersonaToolConfiguration,
-    emitter: Emitter,
     user: User,
     llm: LLM,
     db_session: Session | None = None,
@@ -171,13 +169,17 @@ def construct_tools(
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
     selection_llm_factory: Callable[[], LLM] | None = None,
+    ask_for_approval: bool = True,
 ) -> dict[int, list[Tool]]:
-    """Build tools from captured settings; resolve current service credentials."""
+    """Build tools from captured settings; resolve current service credentials.
+
+    Without `ask_for_approval`, MCP tools whose action policy asks for the
+    user's approval run without asking. Disabled tools are never built.
+    """
     with get_session_with_current_tenant_if_none(db_session) as db_session:
         return _construct_tools_impl(
             configuration=configuration,
             db_session=db_session,
-            emitter=emitter,
             user=user,
             llm=llm,
             selection_llm_factory=selection_llm_factory,
@@ -186,13 +188,13 @@ def construct_tools(
             file_reader_tool_config=file_reader_tool_config,
             allowed_tool_ids=allowed_tool_ids,
             search_usage_forcing_setting=search_usage_forcing_setting,
+            ask_for_approval=ask_for_approval,
         )
 
 
 def _construct_tools_impl(
     configuration: PersonaToolConfiguration,
     db_session: Session,
-    emitter: Emitter,
     user: User,
     llm: LLM,
     search_tool_config: SearchToolConfig | None = None,
@@ -201,7 +203,9 @@ def _construct_tools_impl(
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
     selection_llm_factory: Callable[[], LLM] | None = None,
+    ask_for_approval: bool = True,
 ) -> dict[int, list[Tool]]:
+    """Construct available tools, resolving each MCP server once per model response."""
     tool_dict: dict[int, list[Tool]] = {}
 
     persona_tool_names = [t.name for t in configuration.tools]
@@ -212,7 +216,24 @@ def _construct_tools_impl(
         persona_tool_names,
     )
 
-    mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
+    mcp_tool_cache: dict[int, dict[int, MCPTool] | None] = {}
+    mcp_default_policies: dict[int, dict[str, ActionPolicy]] = {}
+    for tool in configuration.tools:
+        if tool.mcp_server_id is not None:
+            mcp_default_policies.setdefault(tool.mcp_server_id, {})[tool.name] = (
+                mcp_tool_default_policy(tool.mcp_read_only)
+            )
+    # Disabled tools are not offered; tools that ask carry their scope.
+    mcp_policies = (
+        resolve_user_action_policies(
+            db_session,
+            user_id=user.id,
+            app_kind=GatedAppKind.MCP_SERVER,
+            default_policies_by_target=mcp_default_policies,
+        )
+        if mcp_default_policies
+        else {}
+    )
     mcp_preferences = (
         get_mcp_server_user_preferences(
             list(
@@ -249,7 +270,6 @@ def _construct_tools_impl(
     def _build_search_tool(tool_id: int, config: SearchToolConfig) -> SearchTool:
         return SearchTool(
             tool_id=tool_id,
-            emitter=emitter,
             user=user,
             persona_search_info=configuration.search,
             llm=llm,
@@ -329,7 +349,6 @@ def _construct_tools_impl(
                         provider=img_generation_llm_config.model_provider,
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
-                        emitter=emitter,
                         chat_session_id=_require_chat_session_id(
                             custom_tool_config, ImageGenerationTool.__name__
                         ),
@@ -340,13 +359,13 @@ def _construct_tools_impl(
             elif tool_cls.__name__ == WebSearchTool.__name__:
                 try:
                     tool_dict[db_tool_model.id] = [
-                        WebSearchTool(tool_id=db_tool_model.id, emitter=emitter)
+                        WebSearchTool(tool_id=db_tool_model.id)
                     ]
                 except ValueError as e:
                     logger.error("Failed to initialize Internet Search Tool: %s", e)
                     raise ValueError(
                         "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
-                    )
+                    ) from e
 
             # Handle Open URL Tool
             elif tool_cls.__name__ == OpenURLTool.__name__:
@@ -362,7 +381,6 @@ def _construct_tools_impl(
                     tool_dict[db_tool_model.id] = [
                         OpenURLTool(
                             tool_id=db_tool_model.id,
-                            emitter=emitter,
                             document_index=document_index,
                             user=user,
                             web_fetch_disabled=open_url_web_fetch_disabled,
@@ -372,14 +390,13 @@ def _construct_tools_impl(
                     logger.error("Failed to initialize Open URL Tool: %s", e)
                     raise ValueError(
                         "Open URL tool requires a web content provider, please contact your Onyx admin to get it configured!"
-                    )
+                    ) from e
 
             # Handle Python/Code Interpreter Tool
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
                     PythonTool(
                         tool_id=db_tool_model.id,
-                        emitter=emitter,
                         chat_session_id=_require_chat_session_id(
                             custom_tool_config, PythonTool.__name__
                         ),
@@ -391,7 +408,6 @@ def _construct_tools_impl(
                 tool_dict[db_tool_model.id] = [
                     CodingAgentTool(
                         tool_id=db_tool_model.id,
-                        emitter=emitter,
                         llm=llm,
                     )
                 ]
@@ -402,30 +418,10 @@ def _construct_tools_impl(
                 tool_dict[db_tool_model.id] = [
                     FileReaderTool(
                         tool_id=db_tool_model.id,
-                        emitter=emitter,
                         user_file_ids=cfg.user_file_ids,
                         chat_file_ids=cfg.chat_file_ids,
                     )
                 ]
-
-            # Handle KG Tool
-            # TODO: disabling for now because it's broken in the refactor
-            # elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
-
-            #     # skip the knowledge graph tool if KG is not enabled/exposed
-            #     kg_config = get_kg_config_settings()
-            #     if not kg_config.KG_ENABLED or not kg_config.KG_EXPOSED:
-            #         logger.debug("Knowledge Graph Tool is not enabled/exposed")
-            #         continue
-
-            #     if persona.name != TMP_DRALPHA_PERSONA_NAME:
-            #         # TODO: remove this after the beta period
-            #         raise ValueError(
-            #             f"The Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
-            #         )
-            #     tool_dict[db_tool_model.id] = [
-            #         KnowledgeGraphTool(tool_id=db_tool_model.id)
-            #     ]
 
         # Handle custom tools
         elif db_tool_model.openapi_schema:
@@ -473,7 +469,6 @@ def _construct_tools_impl(
                 build_custom_tools_from_openapi_schema_and_headers(
                     tool_id=db_tool_model.id,
                     openapi_schema=db_tool_model.openapi_schema,
-                    emitter=emitter,
                     dynamic_schema_info=DynamicSchemaInfo(
                         chat_session_id=custom_tool_config.chat_session_id,
                         message_id=custom_tool_config.message_id,
@@ -496,11 +491,14 @@ def _construct_tools_impl(
             if preference is not None and not preference.enabled_in_chat:
                 continue
             if db_tool_model.mcp_server_id in mcp_tool_cache:
-                tool_dict[db_tool_model.id] = [
-                    mcp_tool_cache[db_tool_model.mcp_server_id][db_tool_model.id]
-                ]
+                cached_tools = mcp_tool_cache[db_tool_model.mcp_server_id]
+                # Disabled tools have no instance.
+                if cached_tools is not None and db_tool_model.id in cached_tools:
+                    tool_dict[db_tool_model.id] = [cached_tools[db_tool_model.id]]
                 continue
 
+            # Cache unavailable servers too, including access and resolution failures.
+            mcp_tool_cache[db_tool_model.mcp_server_id] = None
             mcp_server = get_mcp_server_by_id(db_tool_model.mcp_server_id, db_session)
 
             if (
@@ -530,28 +528,51 @@ def _construct_tools_impl(
             if custom_tool_config and custom_tool_config.mcp_headers:
                 additional_mcp_headers = custom_tool_config.mcp_headers
 
-            mcp_tool_cache[db_tool_model.mcp_server_id] = {}
+            if not mcp_credentials.can_authenticate_with_headers(
+                additional_mcp_headers
+            ):
+                logger.debug(
+                    "Skipping MCP server %s: credentials required", mcp_server.id
+                )
+                continue
+
+            server_tools: dict[int, MCPTool] = {}
+            mcp_tool_cache[db_tool_model.mcp_server_id] = server_tools
+            policies = mcp_policies[mcp_server.id]
             # Find the matching tool definition
             for saved_tool in saved_tools:
+                policy = policies[saved_tool.name]
+                if policy == ActionPolicy.DENY:
+                    continue
                 # Create MCPTool instance for this specific tool
                 mcp_tool = MCPTool(
                     tool_id=saved_tool.id,
-                    emitter=emitter,
                     mcp_server=mcp_server,
                     tool_name=saved_tool.name,
                     tool_description=saved_tool.description or "",
                     tool_definition=saved_tool.mcp_input_schema or {},
+                    output_schema=saved_tool.mcp_output_schema,
                     user_email=user.email,
                     user_id=str(user.id),
                     user_oauth_token=mcp_credentials.user_oauth_token,
                     additional_headers=additional_mcp_headers,
                     resolved_credentials=mcp_credentials,
+                    approval=ToolApprovalScope(
+                        app_kind=GatedAppKind.MCP_SERVER,
+                        target_id=mcp_server.id,
+                        action_id=saved_tool.name,
+                    )
+                    if policy == ActionPolicy.ASK and ask_for_approval
+                    else None,
                 )
-                mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
+                server_tools[saved_tool.id] = mcp_tool
 
                 if saved_tool.id == db_tool_model.id:
                     tool_dict[saved_tool.id] = [mcp_tool]
-            if db_tool_model.id not in tool_dict:
+            if (
+                db_tool_model.id not in tool_dict
+                and policies.get(db_tool_model.name) != ActionPolicy.DENY
+            ):
                 logger.warning(
                     "Tool '%s' not found in MCP server '%s'",
                     expected_tool_name,
@@ -580,7 +601,6 @@ def _construct_tools_impl(
             memory_tool_db_model = get_builtin_tool(db_session, MemoryTool)
             memory_tool = MemoryTool(
                 tool_id=memory_tool_db_model.id,
-                emitter=emitter,
                 llm=llm,
             )
             tool_dict[memory_tool_db_model.id] = [memory_tool]
@@ -588,10 +608,5 @@ def _construct_tools_impl(
             logger.warning(
                 "MemoryTool not found in the database. Run the latest alembic migration to seed it."
             )
-
-    tools: list[Tool] = []
-    for tool_list in tool_dict.values():
-        tools.extend(tool_list)
-    _disambiguate_mcp_tool_names(tools)
 
     return tool_dict

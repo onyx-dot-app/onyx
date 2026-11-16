@@ -57,6 +57,10 @@
       "types": "./dist/logos/index.d.ts",
       "import": "./dist/logos/index.js"
     },
+    "./navigation": {
+      "types": "./dist/navigation/index.d.ts",
+      "import": "./dist/navigation/index.js"
+    },
     "./hooks": {
       "types": "./dist/hooks/index.d.ts",
       "import": "./dist/hooks/index.js"

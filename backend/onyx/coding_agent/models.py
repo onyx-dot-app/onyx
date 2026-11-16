@@ -1,8 +1,20 @@
-from pydantic import BaseModel
+from typing import Literal
 
-from onyx.tools.models import ToolCallKickoff
+from pydantic import BaseModel, Field
 
 
-class CodingAgentSpecialToolCalls(BaseModel):
-    think_tool_call: ToolCallKickoff | None = None
-    generate_answer_tool_call: ToolCallKickoff | None = None
+class CodingAgentCallResult(BaseModel):
+    type: Literal["coding_result"] = "coding_result"
+    answer: str
+
+
+class CodingAgentArguments(BaseModel):
+    query: str = Field(
+        description="The user's question or task to perform against the repository."
+    )
+    github_repo: str = Field(
+        description=(
+            "GitHub repository URL or 'owner/repo' identifier (e.g. "
+            "'https://github.com/onyx-dot-app/onyx' or 'onyx-dot-app/onyx')."
+        )
+    )

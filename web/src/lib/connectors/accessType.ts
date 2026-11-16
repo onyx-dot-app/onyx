@@ -50,7 +50,7 @@ export interface WireAccess {
 }
 
 // The form keeps "sync" plus a restriction flag, so the dropdown never sees the
-// fourth value. A switched-on restriction with no groups restricts nobody.
+// fourth value. Validation refuses Restrict with no groups, so it never saves.
 export function toWireAccess(
   accessType: AccessType,
   restriction: ConnectorGroupRestrictionFormValues

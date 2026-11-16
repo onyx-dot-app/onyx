@@ -10,7 +10,7 @@ import {
 } from "@/app/craft/services/outputThumbnailCache";
 import { useTranslations } from "next-intl";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Button, Dropdown, Chip, Text } from "@opal/components";
+import { Button, Dropdown, Tag, Text } from "@opal/components";
 import { toast } from "@opal/layouts";
 import { SvgLoader, SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
@@ -322,7 +322,7 @@ function OutputsBrowser({
       </div>
       {turnIndex !== null && (
         <div className="flex items-center ps-0.5 pb-3">
-          <Chip
+          <Tag
             title={t("scope.turn", { turn: turnIndex + 1 })}
             onRemove={onTurnChange ? () => onTurnChange(null) : undefined}
           />

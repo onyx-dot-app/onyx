@@ -16,6 +16,7 @@ import {
   SvgEditBig,
   SvgOrganization,
   SvgUserManage,
+  SvgUser,
   SvgUsers,
   SvgUserSync,
 } from "@opal/icons";
@@ -124,7 +125,7 @@ export default function SharingSettingsSection({
     const group = userGroups?.find((candidate) => candidate.id === groupId);
     return group === undefined
       ? undefined
-      : tGroups("memberCount", { count: group.users.length });
+      : tGroups("memberCount", { count: group.member_count });
   };
   const isDefaultGroup = (groupId: number): boolean =>
     userGroups?.find((candidate) => candidate.id === groupId)?.is_default ??
@@ -159,11 +160,17 @@ export default function SharingSettingsSection({
                   ? t("summary.groupsPending")
                   : t("summary.groups", { count: groupCount }),
             }
-          : {
-              icon: SvgOrganization,
-              label: tSettings("documentAccess.everyone.title"),
-              summary: t("summary.everyone"),
-            };
+          : ccPair.access_type === "personal"
+            ? {
+                icon: SvgUser,
+                label: tSettings("documentAccess.onlyMe.title"),
+                summary: t("summary.onlyMe"),
+              }
+            : {
+                icon: SvgOrganization,
+                label: tSettings("documentAccess.everyone.title"),
+                summary: t("summary.everyone"),
+              };
   const managedSummary = !manageKnown
     ? null
     : storedRows.length === 0
@@ -218,10 +225,9 @@ export default function SharingSettingsSection({
       hideable: false,
       cell: (name, row) => (
         <Content
+          font="main-ui-action"
           title={name}
           description={row.description}
-          sizePreset="main-ui"
-          variant="section"
         />
       ),
     },
@@ -299,10 +305,9 @@ export default function SharingSettingsSection({
         <Section alignItems="stretch" gap={1} height="fit">
           <SharingPanel>
             <ContentAction
+              font="main-ui-action"
               title={tSettings("documentAccess.title")}
               description={tSettings("documentAccess.description")}
-              sizePreset="main-ui"
-              variant="section"
               padding={0}
               rightChildren={
                 <Section
@@ -348,11 +353,10 @@ export default function SharingSettingsSection({
                   >
                     <Card color="background-tint-01" rounding={2} padding={2}>
                       <Content
+                        font="main-ui-action"
                         icon={SvgUsers}
                         title={group.name}
                         description={memberCountOf(group.id)}
-                        sizePreset="main-ui"
-                        variant="section"
                       />
                     </Card>
                   </div>
@@ -362,10 +366,9 @@ export default function SharingSettingsSection({
           </SharingPanel>
           <SharingPanel>
             <ContentAction
+              font="main-ui-action"
               title={t("manageAccess.title")}
               description={tSettings("manageAccess.description")}
-              sizePreset="main-ui"
-              variant="section"
               padding={0}
             />
             {!manageKnown && manageError !== undefined && (

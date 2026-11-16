@@ -1,10 +1,12 @@
 """Provider request messages in the OpenAI Chat Completions shape."""
 
+from __future__ import annotations
+
 import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, Field, JsonValue
 
 from onyx.llm import models as app
 from onyx.llm.constants import LlmProviderNames
@@ -21,6 +23,8 @@ CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
 
 # Tool call structures
 class RequestFunctionCall(BaseModel):
+    """Complete function call sent in conversation history."""
+
     name: str
     arguments: str
 
@@ -37,7 +41,11 @@ class ToolCall(BaseModel):
 # Base class for all cacheable messages
 class CacheableMessage(BaseModel):
     # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
-    cache_control: dict | None = None
+    cache_control: dict[str, JsonValue] | None = None
+    # Where a provider that places its own markers (OpenAI's
+    # prompt_cache_breakpoint) ends a cached prefix. Excluded from model_dump;
+    # the LiteLLM wrapper carries it on the serialized message.
+    cache_breakpoint: bool = Field(default=False, exclude=True)
 
 
 class SystemMessage(CacheableMessage):
@@ -68,7 +76,7 @@ ChatCompletionMessage = SystemMessage | UserMessage | AssistantMessage | ToolMes
 
 
 def serialize_request(
-    request: app.GenerationRequest, config: "LLMConfig"
+    request: app.GenerationRequest, config: LLMConfig
 ) -> tuple[list[ChatCompletionMessage], int]:
     """Serialize provider messages and return the cacheable prefix length."""
     history = (
@@ -77,6 +85,11 @@ def serialize_request(
         else []
     ) + request.messages
     messages: list[ChatCompletionMessage] = []
+    # The last message for which cacheable is true
+    # AND is true for all previous messages
+    # (counting from the start of the history)
+    # represents the end of the cacheable prefix
+    # used for prompt caching
     cacheable_prefix = 0
     ollama = config.model_provider == LlmProviderNames.OLLAMA_CHAT
     for index, message in enumerate(history):
@@ -123,6 +136,23 @@ def serialize_request(
     return messages, cacheable_prefix
 
 
+def merge_leading_system_messages(
+    messages: list[ChatCompletionMessage], cacheable_prefix: int
+) -> tuple[list[ChatCompletionMessage], int]:
+    """Join the leading system messages into one and return the new cacheable
+    prefix length. The prefix is empty when it ended inside the merged block."""
+    contents: list[str] = []
+    for message in messages:
+        if not isinstance(message, SystemMessage):
+            break
+        contents.append(message.content)
+    leading = len(contents)
+    if leading < 2:
+        return messages, cacheable_prefix
+    prefix = cacheable_prefix - (leading - 1) if cacheable_prefix >= leading else 0
+    return [SystemMessage(content="\n\n".join(contents)), *messages[leading:]], prefix
+
+
 def format_provider_message(message: app.Message) -> ChatCompletionMessage:
     """Serialize message content, replaying thinking only when provider signatures exist."""
     if isinstance(message, app.SystemMessage):
@@ -145,6 +175,8 @@ def format_provider_message(message: app.Message) -> ChatCompletionMessage:
             or None,
         )
     if isinstance(message, app.ToolResultMessage):
+        if not message.tool_call_id:
+            raise ValueError("Provider tool messages require tool_call_id")
         return ToolMessage(content=message.content, tool_call_id=message.tool_call_id)
     raise TypeError(f"Unsupported message type: {type(message).__name__}")
 
@@ -157,7 +189,41 @@ def serialize_tools(tools: Sequence[app.ToolDefinition]) -> list[dict[str, JsonV
                 "name": tool.name,
                 "description": tool.description,
                 "parameters": tool.parameters,
+                "strict": tool.strict,
             },
         }
         for tool in tools
     ]
+
+
+def cache_split_stats(
+    request: app.GenerationRequest, prefix_length: int
+) -> dict[str, str]:
+    """Describe the serialized prefix using already resolved image/token estimates."""
+    stats = {
+        "cacheable_prefix_msgs": str(prefix_length),
+        # Counts prepared messages, including notices added during image selection.
+        "history_msgs": str(len(request.messages) + bool(request.system_prompt)),
+    }
+    prefix_tokens = 0
+    remaining = prefix_length
+    if request.system_prompt and remaining:
+        prefix_tokens += (len(request.system_prompt) + 3) // 4
+        remaining -= 1
+    for message in request.messages[:remaining]:
+        if message.estimated_tokens is None and (
+            isinstance(message, app.UserMessage)
+            and not isinstance(message.content, str)
+            and any(isinstance(part, app.ImageContentPart) for part in message.content)
+            or isinstance(message, app.AssistantMessage)
+            and any(not isinstance(part, app.TextContent) for part in message.content)
+        ):
+            # A text-only estimate would hide image, reasoning, or tool-call costs.
+            return stats
+        prefix_tokens += (
+            message.estimated_tokens
+            if message.estimated_tokens is not None
+            else (len(message.text) + 3) // 4
+        )
+    stats["cacheable_prefix_tokens"] = str(prefix_tokens)
+    return stats

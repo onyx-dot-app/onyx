@@ -40,6 +40,7 @@ from onyx.server.features.build.utils import (
 )
 from onyx.server.features.notifications.models import NotificationResponse
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
+from onyx.server.settings.build_info import get_build_info
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
@@ -65,7 +66,7 @@ from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
     global_version,
 )
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import IS_PLAYGROUND, MULTI_TENANT
 
 logger = setup_logger()
 
@@ -243,6 +244,7 @@ def fetch_settings(
     # immediately closes the surface, not just the UI.
     from onyx.server.features.build.configs import ENABLE_OPENCODE_DEBUGGING
 
+    build_info = get_build_info()
     return UserSettings(
         **general_settings.model_dump(),
         oauth_provider_enabled=OAUTH_PROVIDER_SETTINGS is not None,
@@ -256,7 +258,11 @@ def fetch_settings(
         hide_onyx_branding=HIDE_ONYX_BRANDING
         and tier_at_least(resolved_tier, Tier.ENTERPRISE),
         hooks_enabled=not MULTI_TENANT,
+        is_playground=IS_PLAYGROUND,
         version=onyx_version,
+        commit=build_info.commit,
+        commit_date=build_info.commit_date,
+        git_ref=build_info.ref,
         max_allowed_upload_size_mb=MAX_ALLOWED_UPLOAD_SIZE_MB,
         default_user_file_max_upload_size_mb=min(
             DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,

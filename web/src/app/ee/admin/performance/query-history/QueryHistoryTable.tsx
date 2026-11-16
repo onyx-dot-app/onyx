@@ -1,5 +1,7 @@
 "use client";
 
+import { NavLink } from "@opal/navigation";
+import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -10,16 +12,13 @@ import {
   TableCell,
   TableHeader,
 } from "@/components/ui/table";
-import Text from "@/refresh-components/texts/Text";
 import { InputSingleSelect } from "@opal/components";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
-import { Section } from "@/layouts/general-layouts";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 import { Dispatch, SetStateAction, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";
 import { DateRange } from "@opal/components";
 import { PageSelector } from "@/components/PageSelector";
-import Link from "next/link";
 import { FeedbackBadge } from "@/app/ee/admin/performance/query-history/FeedbackBadge";
 import KickoffCSVExport from "@/app/ee/admin/performance/query-history/KickoffCSVExport";
 import CardSection from "@/components/admin/CardSection";
@@ -40,8 +39,8 @@ import {
   humanReadableFormatShort,
   humanReadableFormatWithTime,
 } from "@opal/time";
-import { Modal } from "@opal/components";
-import { Button, Divider } from "@opal/components";
+import { Modal, useCreateModal } from "@opal/components";
+import { Button, Divider, Text } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import {
   SvgDownloadCloud,
@@ -64,14 +63,14 @@ function QueryHistoryTableRow({
       className="hover:bg-accent-background cursor-pointer relative select-none"
     >
       <TableCell className="max-w-xs">
-        <Text className="whitespace-normal line-clamp-5">
+        <Text color="text-05" maxLines={5}>
           {chatSessionMinimal.first_user_message ||
             chatSessionMinimal.name ||
             "-"}
         </Text>
       </TableCell>
       <TableCell>
-        <Text className="whitespace-normal line-clamp-5">
+        <Text color="text-05" maxLines={5}>
           {chatSessionMinimal.first_ai_message || "-"}
         </Text>
       </TableCell>
@@ -87,10 +86,10 @@ function QueryHistoryTableRow({
       </TableCell>
       {/* Wrapping in <td> to avoid console warnings */}
       <td className="w-0 p-0">
-        <Link
+        <NavLink
           href={`/ee/admin/performance/query-history/${chatSessionMinimal.id}`}
           className="absolute w-full h-full start-0 top-0"
-        ></Link>
+        ></NavLink>
       </td>
     </TableRow>
   );
@@ -107,7 +106,7 @@ function SelectFeedbackType({
   const tInputSelect = useTranslations("common.inputSelect");
   return (
     <Section alignItems="start" gap={1}>
-      <Text as="p" className="font-medium">
+      <Text as="p" color="text-05">
         {t("filters.feedbackType.label")}
       </Text>
       <InputSingleSelect
@@ -146,9 +145,9 @@ function ExportBadge({ status }: { status: TaskStatus }) {
 }
 
 function PreviousQueryHistoryExportsModal({
-  setShowModal,
+  onClose,
 }: {
-  setShowModal: Dispatch<SetStateAction<boolean>>;
+  onClose: () => void;
 }) {
   const t = useTranslations("admin.queryHistory");
   const locale = useLocale();
@@ -183,12 +182,12 @@ function PreviousQueryHistoryExportsModal({
   );
 
   return (
-    <Modal open onOpenChange={() => setShowModal(false)}>
+    <Modal open onOpenChange={onClose}>
       <Modal.Content width="full" height="full">
         <Modal.Header
           icon={SvgFileText}
           title={t("exportsModal.header.title")}
-          onClose={() => setShowModal(false)}
+          onClose={onClose}
         />
         <Modal.Body>
           <Table>
@@ -277,7 +276,7 @@ export function QueryHistoryTable({
   setFilters,
 }: QueryHistoryTableProps) {
   const t = useTranslations("admin.queryHistory");
-  const [showModal, setShowModal] = useState(false);
+  const exportsModal = useCreateModal();
 
   const {
     currentPageData: chatSessionData,
@@ -324,7 +323,10 @@ export function QueryHistoryTable({
           </div>
           <div className="flex flex-row w-full items-center gap-x-2">
             <KickoffCSVExport dateRange={dateRange} />
-            <Button prominence="secondary" onClick={() => setShowModal(true)}>
+            <Button
+              prominence="secondary"
+              onClick={() => exportsModal.toggle(true)}
+            >
               {t("previousExports.label")}
             </Button>
           </div>
@@ -376,9 +378,11 @@ export function QueryHistoryTable({
         </Section>
       </CardSection>
 
-      {showModal && (
-        <PreviousQueryHistoryExportsModal setShowModal={setShowModal} />
-      )}
+      <exportsModal.Provider>
+        <PreviousQueryHistoryExportsModal
+          onClose={() => exportsModal.toggle(false)}
+        />
+      </exportsModal.Provider>
     </>
   );
 }

@@ -3,6 +3,9 @@ default_install_hook_types:
   - post-checkout
   - post-merge
   - post-rewrite
+# Vendored upstream skills (.agents/skills/sync-vendored-skills.sh) are copied
+# verbatim, so our linters do not apply to them.
+exclude: ^\.agents/skills/greptile/
 repos:
   - repo: https://github.com/astral-sh/uv-pre-commit
     # From: https://github.com/astral-sh/uv-pre-commit/pull/53/commits/d30b4298e4fb63ce8609e29acdbcf4c9018a483c
@@ -142,7 +145,7 @@ repos:
         # (lxml, PIL, office.*). Both are excluded from the full ty run via
         # [tool.ty.src] in pyproject; repeat here because the explicit filenames
         # bypass that discovery-time exclude too.
-        exclude: ^backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)
+        exclude: ^backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/|microvm/generated/)
       - id: uv-run
         alias: ruff
         name: ruff
@@ -151,12 +154,16 @@ repos:
         args: ["--frozen", "--only-group", "ruff", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
+        # protoc output (backend/onyx/microvm/generated/regenerate.sh).
+        exclude: ^backend/onyx/microvm/generated/
       - id: uv-run
         alias: ruff-format
         name: ruff format
         args: ["--frozen", "--only-group", "ruff", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
+        # protoc output (backend/onyx/microvm/generated/regenerate.sh).
+        exclude: ^backend/onyx/microvm/generated/
       - id: uv-run
         alias: terraform-fmt
         name: terraform fmt
@@ -237,10 +244,10 @@ repos:
           )$
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: 27774aaf853a4fd21f1dd5e69439459dc1b26e68 # frozen: v2.13.2
+    rev: 114493f9b3e7257d29e4130f2b4a4aadefbb6845 # frozen: v2.14.0
     hooks:
       - id: golangci-lint
-        language_version: "1.27.1"
+        language_version: "1.27.4"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
   - repo: https://github.com/sirwart/ripsecrets
@@ -271,6 +278,18 @@ repos:
         args:
           - --tf-init-args=-backend=false
 
+  # Prettier runs through bun, like the other JS tooling here: the mirror
+  # installs it with npm, which bun-only machines do not have. The exact
+  # version keeps bunx from fetching a newer release.
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier (documentation json/css)
+        language: system
+        entry: bunx prettier@3.1.0 --write
+        types_or: [json, css]
+        files: ^documentation/
+
   - repo: local
     hooks:
       - id: helm-release
@@ -282,6 +301,14 @@ repos:
         # Deleted chart files must also trigger the check.
         always_run: true
         stages: [pre-commit]
+      - id: microvm-python-stubs
+        name: Firecracker Python gRPC stubs match the protos
+        language: python
+        entry: bash backend/onyx/microvm/generated/regenerate.sh --check
+        additional_dependencies: [grpcio-tools==1.80.0]
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(microvm/proto/(hostagent|sandboxd)/v1/[^/]+\.proto|backend/onyx/microvm/generated/.*)$
       - id: i18n-copy-changes
         name: translation updates for English copy changes
         language: system
@@ -422,10 +449,10 @@ repos:
       # tsgo from @typescript/native-preview in the root workspace.
       - id: widget-typescript-check
         name: widget TypeScript type check
-        entry: bash -c 'cd widget && bun run tsgo --noEmit'
+        entry: bash -c 'cd widget && bun run tsgo --noEmit && bun run tsgo --noEmit -p tsconfig.test.json'
         language: system
         pass_filenames: false
-        files: ^(bun\.lock|widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$
+        files: ^(bun\.lock|widget/(.*\.(ts|tsx)|package\.json|tsconfig(\.test)?\.json))$
 
       - id: examples-widget-typescript-check
         name: examples/widget TypeScript type check
@@ -511,3 +538,18 @@ repos:
         language: system
         pass_filenames: false
         files: ^mobile/.*\.(ts|tsx|js|jsx|json|css)$
+
+      - id: format-docs
+        name: format_docs.py --check
+        entry: python3 documentation/scripts/format_docs.py --check --paths
+        language: system
+        types_or: [markdown, mdx]
+        files: ^documentation/
+        require_serial: true
+
+      - id: docs-connector-grid
+        name: documentation connector grid is current
+        entry: python3 documentation/scripts/build_connector_grid.py --check
+        language: system
+        pass_filenames: false
+        files: ^documentation/(docs\.json|scripts/(build_connector_grid\.py|generated_assets\.json)|admins/connectors/.*\.mdx)$

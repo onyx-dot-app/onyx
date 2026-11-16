@@ -21,7 +21,8 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -34,6 +35,7 @@ from onyx.db.enums import (
     ConnectorManageRole,
     ExternalAppType,
     GatedAppKind,
+    PluginInstallationPolicy,
     SandboxStatus,
     SkillSharePermission,
 )
@@ -45,6 +47,10 @@ from onyx.db.models import (
     Credential,
     ExternalApp,
     ExternalAppUserCredential,
+    Plugin,
+    Plugin__User,
+    Plugin__UserGroup,
+    PluginVersion,
     Sandbox,
     Skill,
     Skill__User,
@@ -56,6 +62,10 @@ from onyx.db.models import (
     WorkspaceActionPolicy,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.plugin import (
+    create_skill_plugin__no_commit,
+    legacy_skill_version_content,
+)
 from onyx.db.users import assign_user_to_default_groups__no_commit
 
 
@@ -181,8 +191,10 @@ def make_skill(
     is_public: bool = False,
     public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
     author_user_id: UUID | None = None,
+    with_plugin: bool = True,
 ) -> Skill:
-    """Create a single custom ``Skill`` row.
+    """Create a single custom ``Skill`` row and its plugin. Without
+    ``with_plugin``, the skill has no plugin, as if an older server made it.
 
     Bundle metadata (``bundle_file_id``, ``bundle_sha256``) is filled with
     placeholder values; tests that need a real bundle should use the
@@ -201,7 +213,29 @@ def make_skill(
     )
     db_session.add(skill)
     db_session.flush()
+    if with_plugin:
+        create_skill_plugin__no_commit(
+            skill, legacy_skill_version_content(skill), None, db_session
+        )
     return skill
+
+
+def set_current_version_validity(
+    db_session: Session, skill_id: UUID, is_valid: bool | None
+) -> None:
+    """Set the lazy validity of the skill plugin's current version, which the
+    readers use."""
+    db_session.execute(
+        update(PluginVersion)
+        .where(
+            PluginVersion.id
+            == select(Plugin.current_version_id)
+            .where(Plugin.id == skill_id)
+            .scalar_subquery()
+        )
+        .values(is_valid=is_valid)
+    )
+    db_session.flush()
 
 
 def make_built_in_skill_row(
@@ -321,7 +355,8 @@ def share_skill_with_user(
     user: User,
     permission: SkillSharePermission = SkillSharePermission.VIEWER,
 ) -> Skill__User:
-    """Insert a ``Skill__User`` share row."""
+    """Insert a ``Skill__User`` share row, and the plugin share of a custom
+    skill."""
     share = Skill__User(
         skill_id=skill.id,
         user_id=user.id,
@@ -329,6 +364,8 @@ def share_skill_with_user(
     )
     db_session.add(share)
     db_session.flush()
+    if skill.is_custom:
+        share_plugin_with_user(db_session, skill.id, user.id, permission)
     return share
 
 
@@ -338,7 +375,8 @@ def share_skill_with_group(
     group: UserGroup,
     permission: SkillSharePermission = SkillSharePermission.VIEWER,
 ) -> Skill__UserGroup:
-    """Insert a ``Skill__UserGroup`` share row."""
+    """Insert a ``Skill__UserGroup`` share row, and the plugin share of a
+    custom skill."""
     share = Skill__UserGroup(
         skill_id=skill.id,
         user_group_id=group.id,
@@ -346,7 +384,58 @@ def share_skill_with_group(
     )
     db_session.add(share)
     db_session.flush()
+    if skill.is_custom:
+        share_plugin_with_group(db_session, skill.id, group.id, permission)
     return share
+
+
+def share_plugin_with_user(
+    db_session: Session,
+    plugin_id: UUID,
+    user_id: UUID,
+    permission: SkillSharePermission,
+) -> None:
+    """Upsert a ``Plugin__User`` row."""
+    stmt = pg_insert(Plugin__User).values(
+        plugin_id=plugin_id, user_id=user_id, permission=permission
+    )
+    db_session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[Plugin__User.plugin_id, Plugin__User.user_id],
+            set_={"permission": stmt.excluded.permission},
+        )
+    )
+    db_session.flush()
+
+
+def share_plugin_with_group(
+    db_session: Session,
+    plugin_id: UUID,
+    group_id: int,
+    permission: SkillSharePermission | None,
+    installation_policy: PluginInstallationPolicy | None = None,
+) -> None:
+    """Upsert a ``Plugin__UserGroup`` row. A row with no permission holds only
+    a group install setting."""
+    stmt = pg_insert(Plugin__UserGroup).values(
+        plugin_id=plugin_id,
+        user_group_id=group_id,
+        permission=permission,
+        installation_policy=installation_policy,
+    )
+    db_session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[
+                Plugin__UserGroup.plugin_id,
+                Plugin__UserGroup.user_group_id,
+            ],
+            set_={
+                "permission": stmt.excluded.permission,
+                "installation_policy": stmt.excluded.installation_policy,
+            },
+        )
+    )
+    db_session.flush()
 
 
 def make_cc_pair(

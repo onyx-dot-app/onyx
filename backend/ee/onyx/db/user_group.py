@@ -1,5 +1,5 @@
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from operator import and_
 from typing import NamedTuple
 from uuid import UUID
@@ -19,6 +19,7 @@ from ee.onyx.db.cc_pair_data_access import (
 )
 from ee.onyx.server.user_group.models import (
     UserGroupCreate,
+    UserGroupMemberCounts,
     UserGroupUpdate,
 )
 from onyx.auth.permissions import (
@@ -62,7 +63,7 @@ from onyx.db.models import (
     Persona,
     Persona__User,
     Persona__UserGroup,
-    TokenRateLimit__UserGroup,
+    TokenRateLimit,
     User,
     User__UserGroup,
     UserGroup,
@@ -178,19 +179,14 @@ def _handle_owned_personas_for_group_deletion__no_commit(
         persona.owner_group_id = None
 
 
-def _cleanup_token_rate_limit__user_group_relationships__no_commit(
+def _delete_token_rate_limits_for_group__no_commit(
     db_session: Session, user_group_id: int
 ) -> None:
-    """NOTE: does not commit the transaction."""
-    token_rate_limit__user_group_relationships = db_session.scalars(
-        select(TokenRateLimit__UserGroup).where(
-            TokenRateLimit__UserGroup.user_group_id == user_group_id
-        )
-    ).all()
-    for (
-        token_rate_limit__user_group_relationship
-    ) in token_rate_limit__user_group_relationships:
-        db_session.delete(token_rate_limit__user_group_relationship)
+    """A group marked for deletion stops limiting its members at once; the FK
+    cascade would only remove its limits when the row itself goes."""
+    db_session.execute(
+        delete(TokenRateLimit).where(TokenRateLimit.user_group_id == user_group_id)
+    )
 
 
 def _cleanup_user_group__cc_pair_relationships__no_commit(
@@ -243,10 +239,12 @@ def fetch_user_group(db_session: Session, user_group_id: int) -> UserGroup | Non
 
 def _add_user_group_snapshot_eager_loads(
     stmt: Select,
+    include_users: bool = True,
 ) -> Select:
     """Add eager loading options needed by UserGroup.from_model snapshot creation."""
+    if include_users:
+        stmt = stmt.options(selectinload(UserGroup.users))
     return stmt.options(
-        selectinload(UserGroup.users),
         selectinload(UserGroup.user_group_relationships),
         selectinload(UserGroup.cc_pair_relationships)
         .selectinload(UserGroup__ConnectorCredentialPair.cc_pair)
@@ -313,6 +311,7 @@ def fetch_user_groups(
     eager_load_for_snapshot: bool = False,
     include_default: bool = True,
     restrict_to_group_ids: set[int] | None = None,
+    include_users: bool = True,
 ) -> Sequence[UserGroup]:
     """
     Fetches user groups from the database.
@@ -331,6 +330,7 @@ def fetch_user_groups(
         restrict_to_group_ids: If provided, limits the result to these group ids — the
             scoped-manager variant passes the groups they manage. An empty set returns
             nothing (fail-closed); ``None`` returns all groups (admin/global).
+        include_users: If False, the snapshot eager loads skip the member rows.
 
     Returns:
         Sequence[UserGroup]: A sequence of `UserGroup` objects matching the query criteria.
@@ -343,8 +343,33 @@ def fetch_user_groups(
     if restrict_to_group_ids is not None:
         stmt = stmt.where(UserGroup.id.in_(restrict_to_group_ids))
     if eager_load_for_snapshot:
-        stmt = _add_user_group_snapshot_eager_loads(stmt)
+        stmt = _add_user_group_snapshot_eager_loads(stmt, include_users=include_users)
     return db_session.scalars(stmt).unique().all()
+
+
+def fetch_user_group_member_counts(
+    db_session: Session, user_group_ids: Collection[int]
+) -> dict[int, UserGroupMemberCounts]:
+    """Member counts per group, without loading the member rows. Groups with
+    no members are absent from the result."""
+    if not user_group_ids:
+        return {}
+    stmt = (
+        select(
+            User__UserGroup.user_group_id,
+            func.count(),
+            func.count().filter(
+                User.is_active == True  # noqa: E712  # ty: ignore[invalid-argument-type]
+            ),
+        )
+        .join(User, User.id == User__UserGroup.user_id)
+        .where(User__UserGroup.user_group_id.in_(user_group_ids))
+        .group_by(User__UserGroup.user_group_id)
+    )
+    return {
+        group_id: UserGroupMemberCounts(total=total, active=active)
+        for group_id, total, active in db_session.execute(stmt).tuples()
+    }
 
 
 def fetch_user_groups_for_user(
@@ -1191,7 +1216,7 @@ def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> 
     _cleanup_user__user_group_relationships__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
-    _cleanup_token_rate_limit__user_group_relationships__no_commit(
+    _delete_token_rate_limits_for_group__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
     _cleanup_document_set__user_group_relationships__no_commit(

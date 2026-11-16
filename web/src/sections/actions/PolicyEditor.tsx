@@ -76,7 +76,7 @@ export default function PolicyEditor({
     <div className="flex flex-col gap-4">
       {showTitle && <Text font="main-ui-action">{t("permissions.title")}</Text>}
       <InputTypeIn
-        searchIcon
+        icon="search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder={toolCopy("search")}
@@ -199,10 +199,9 @@ export function UserManagementSwitch({
   const t = useTranslations("craft.actionPolicies");
   return (
     <ContentAction
+      font="main-ui-action"
       title={t("userManagement")}
       description={t("userManagementDescription")}
-      sizePreset="main-ui"
-      variant="section"
       padding={0}
       rightChildren={
         <InputSwitch

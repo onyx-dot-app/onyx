@@ -94,6 +94,7 @@ function parseProbeResult(value: unknown): MCPSetupProbeResult {
                 .boolean()
                 .nullable()
                 .defined(),
+              supports_client_metadata: yup.boolean().nullable().defined(),
               authorization_endpoint: yup.string().nullable().defined(),
               token_endpoint: yup.string().nullable().defined(),
             })

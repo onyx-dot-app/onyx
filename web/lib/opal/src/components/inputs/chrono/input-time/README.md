@@ -18,6 +18,6 @@ Segmented 24-hour time field on the shared `.opal-input` chrome, the Figma `Inpu
 | `disabled`    | `boolean`                           | `false` | Disabled chrome, segments inert, clear action hidden               |
 | `clearable`   | `boolean`                           | `false` | Shows a clear action while a value is set and the field is enabled |
 | `showSeconds` | `boolean`                           | `true`  | Shows the seconds segment. Hidden seconds commit as zero.          |
-| `id`          | `string`                            | —       | Applied to the hours segment for `<label htmlFor>`                 |
+| `id`          | `string`                            | —       | Applied to the hours segment for `<label htmlFor>`; the label then names it in place of "Hours" |
 
 `TimeValue` is `{ hours: number; minutes: number; seconds: number }`, always 24-hour. The segment chrome is shared with `InputDatePicker` (`.opal-input-segment` in `inputs/shared.css`).

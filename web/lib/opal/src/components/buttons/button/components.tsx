@@ -5,7 +5,8 @@ import type {
   ExtremaSizeVariants,
   RichStr,
 } from "@opal/types";
-import { Text, type TooltipSide, Tooltip } from "@opal/components";
+import { type TooltipSide, Tooltip } from "@opal/components";
+import { ButtonLabel } from "@opal/components/buttons/button/label";
 import type { IconFunctionComponent } from "@opal/types";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { resolveTriggerInteraction } from "@opal/components/buttons/trigger-interaction";
@@ -80,24 +81,12 @@ function Button({
       : interaction;
 
   const labelEl = children ? (
-    responsiveHideText ? (
-      <span className="hidden md:inline whitespace-nowrap">
-        <Text
-          font={isLarge ? "main-ui-body" : "secondary-body"}
-          color="inherit"
-        >
-          {children}
-        </Text>
-      </span>
-    ) : (
-      <Text
-        font={isLarge ? "main-ui-body" : "secondary-body"}
-        color="inherit"
-        wordWrap="whitespace-nowrap"
-      >
-        {children}
-      </Text>
-    )
+    <ButtonLabel
+      font={isLarge ? "main-ui-body" : "secondary-body"}
+      responsiveHide={responsiveHideText}
+    >
+      {children}
+    </ButtonLabel>
   ) : null;
 
   const button = (

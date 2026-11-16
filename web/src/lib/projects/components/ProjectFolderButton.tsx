@@ -13,6 +13,7 @@ import {
   Button,
   Dropdown,
   SidebarTab,
+  useCreateModal,
   type DropdownMenuItem,
 } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -27,7 +28,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import ChatButton from "@/sections/sidebar/ChatButton";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "@/lib/sidebar/constants";
 import { useActiveProject } from "@/lib/projects/hooks";
@@ -144,12 +145,14 @@ export interface ProjectFolderButtonProps {
 export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
   const t = useTranslations("chat");
   const appPosition = useAppPosition();
-  const activeSidebar = useAppPosition();
   const activeProject = useActiveProject();
   const isActiveProject = activeProject?.id === project.id;
+  // The project the URL names, else the open chat's.
+  const urlProjectId = appPosition.project();
+  const isOpenProject =
+    urlProjectId !== null ? urlProjectId === project.id : isActiveProject;
   const [open, setOpen] = useState(isActiveProject);
-  const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
-    useState(false);
+  const deleteConfirmationModal = useCreateModal();
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -196,7 +199,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
           icon: SvgTrash,
           danger: true,
           title: t("projects.folder.delete.label"),
-          onSelect: () => setDeleteConfirmationModalOpen(true),
+          onSelect: () => deleteConfirmationModal.toggle(true),
         },
       ],
     },
@@ -211,16 +214,16 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
       )}
     >
       {/* Confirmation Modal (only for deletion) */}
-      {deleteConfirmationModalOpen && (
+      <deleteConfirmationModal.Provider>
         <ConfirmationModalLayout
           title={t("projects.folder.deleteModal.title")}
           icon={SvgTrash}
-          onClose={() => setDeleteConfirmationModalOpen(false)}
+          onClose={() => deleteConfirmationModal.toggle(false)}
           submit={
             <Button
               variant="danger"
               onClick={() => {
-                setDeleteConfirmationModalOpen(false);
+                deleteConfirmationModal.toggle(false);
                 deleteProject(project.id);
               }}
             >
@@ -230,7 +233,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
         >
           {t("projects.folder.deleteModal.message")}
         </ConfirmationModalLayout>
-      )}
+      </deleteConfirmationModal.Provider>
 
       {/* Project Folder */}
       <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>
@@ -251,9 +254,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
                 // Folded, the project's chats are hidden — and a project chat
                 // appears nowhere else in the sidebar (Recents excludes them), so
                 // the folder itself has to carry the "you are here" mark.
-                selected={
-                  isActiveProject && (activeSidebar.isProject() || !open)
-                }
+                selected={isOpenProject && (appPosition.isProject() || !open)}
                 /* While renaming, drop the click target so the input stays usable. */
                 onClick={isEditing ? undefined : noProp(handleTextClick)}
                 rightChildren={

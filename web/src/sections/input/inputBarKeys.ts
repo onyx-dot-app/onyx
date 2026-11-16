@@ -9,11 +9,13 @@ import type { QueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation
  * keys like Backspace and Enter, and the rich-tile handler's leading-tile
  * Backspace guard would otherwise swallow the queue's delete key. Each handler
  * is a no-op outside its active state, so neither interferes with the other.
+ * Keys that edit an IME composition belong to the composition.
  */
 export function handleInputNavKeys(
   event: KeyboardEvent<HTMLDivElement>,
   queueNav: Pick<QueuedMessageNavigation, "handleKeyDown">,
   handleTileKeyDown: (event: KeyboardEvent<HTMLDivElement>) => boolean
 ): boolean {
+  if (event.nativeEvent.isComposing) return false;
   return queueNav.handleKeyDown(event) || handleTileKeyDown(event);
 }

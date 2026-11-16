@@ -71,9 +71,12 @@ def is_check_violation(exc: IntegrityError, constraint: str) -> bool:
     )
 
 
-def is_fk_violation(exc: IntegrityError) -> bool:
-    """True iff the IntegrityError is a foreign-key violation."""
-    return isinstance(exc.orig, ForeignKeyViolation)
+def is_fk_violation(exc: IntegrityError, constraint: str | None = None) -> bool:
+    """True iff the IntegrityError is a foreign-key violation, of the named
+    constraint when one is given."""
+    if not isinstance(exc.orig, ForeignKeyViolation):
+        return False
+    return constraint is None or exc.orig.diag.constraint_name == constraint
 
 
 def model_to_dict(model: Base) -> dict[str, Any]:

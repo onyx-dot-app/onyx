@@ -1,4 +1,5 @@
 import { OnyxDocument } from "@/lib/search/types";
+import type { RecordedMention } from "@/lib/chat/types";
 
 // Base interface for all streaming objects
 interface BaseObj {
@@ -6,6 +7,7 @@ interface BaseObj {
 }
 
 export enum PacketType {
+  USER_MESSAGE = "user_message",
   MESSAGE_START = "message_start",
   MESSAGE_DELTA = "message_delta",
   MESSAGE_END = "message_end",
@@ -29,6 +31,7 @@ export enum PacketType {
 
   // Tool call argument delta (streams tool args before tool executes)
   TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta",
+  TOOL_CALL_DEBUG = "tool_call_debug",
 
   // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
@@ -70,6 +73,15 @@ export enum PacketType {
   // Bash Tool packets
   BASH_TOOL_START = "bash_tool_start",
   BASH_TOOL_DELTA = "bash_tool_delta",
+
+  // Code mode packets: one program that calls other tools. The nested calls
+  // stream their own tool packets at the same placement with sub_turn_index.
+  CODE_MODE_START = "code_mode_start",
+  CODE_MODE_DELTA = "code_mode_delta",
+
+  // Tool call approvals: the run waits for the user's decision on a request
+  TOOL_APPROVAL_REQUEST = "tool_approval_request",
+  TOOL_APPROVAL_RESOLVED = "tool_approval_resolved",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
@@ -82,7 +94,17 @@ export const CODE_INTERPRETER_TOOL_TYPES = {
 export const isCodeInterpreterToolType = (toolType: string): boolean =>
   (Object.values(CODE_INTERPRETER_TOOL_TYPES) as string[]).includes(toolType);
 
+// tool_type of the argument deltas that stream a code mode program
+export const CODE_MODE_TOOL_TYPE = "execute_code";
+
 // Basic Message Packets
+export interface UserMessage extends BaseObj {
+  type: "user_message";
+  id: string;
+  message: string;
+  mentions: RecordedMention[];
+}
+
 export interface MessageStart extends BaseObj {
   id: string;
   type: "message_start";
@@ -105,6 +127,11 @@ export interface MessageEnd extends BaseObj {
 export enum StopReason {
   FINISHED = "finished",
   USER_CANCELLED = "user_cancelled",
+  /** The turn reached its execution deadline. */
+  TIMED_OUT = "timed_out",
+  /** The stream ended while tool calls wait for the user's approval. The
+   * response continues in a new stream after the decisions. */
+  AWAITING_APPROVAL = "awaiting_approval",
 }
 
 export interface Stop extends BaseObj {
@@ -148,7 +175,7 @@ export interface SearchToolDocumentsDelta extends BaseObj {
 
 export type ImageShape = "square" | "landscape" | "portrait";
 
-interface GeneratedImage {
+export interface GeneratedImage {
   file_id: string;
   url: string;
   revised_prompt: string;
@@ -207,7 +234,10 @@ export interface CustomToolErrorInfo {
 
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
+  // The name the model calls; custom and MCP tools use a qualified name.
   tool_name: string;
+  // The name users see.
+  display_name: string;
   tool_id?: number | null;
 }
 
@@ -350,6 +380,46 @@ export interface BashToolDelta extends BaseObj {
   timed_out: boolean;
 }
 
+// Code Mode Packets
+export type CodeModeStatus =
+  | "running"
+  | "completed"
+  | "failed"
+  | "timed_out"
+  | "terminated"
+  | "cancelled";
+
+export interface CodeModeStart extends BaseObj {
+  type: "code_mode_start";
+  // Empty on later observations of a cell
+  code: string;
+  // From the call arguments: null for execute_code, whose cell gets its id when it runs
+  cell_id?: number | null;
+  // 0 starts a cell (execute_code); 1 continues one (wait_code)
+  observation?: number;
+}
+
+export interface CodeModeDelta extends BaseObj {
+  type: "code_mode_delta";
+  // Appended to the stdout of earlier deltas, or replaces it when replace_stdout is set
+  stdout: string;
+  // Set on a final delta whose saved stdout differs from the streamed stdout
+  replace_stdout?: boolean;
+  result?: string | null;
+  error?: string | null;
+  // Set only on the final delta
+  status?: CodeModeStatus | null;
+  duration_seconds?: number | null;
+  tool_call_count?: number | null;
+  // Keys the program saved with store(); set only on the final delta
+  stored_keys?: string[] | null;
+  // Exact cell and observation; set only on the final delta
+  cell_id?: number | null;
+  observation?: number | null;
+  // Set on the closing record of a cell that ran past its last observation
+  response_ended?: boolean;
+}
+
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type StopObj = Stop;
@@ -360,6 +430,11 @@ export interface ChatHeartbeat extends BaseObj {
 }
 
 export type ChatHeartbeatObj = ChatHeartbeat;
+
+// Ends the replayed prefix of a continuation stream; carries no run state
+export interface ReplayEnd extends BaseObj {
+  type: "replay_end";
+}
 
 export type SectionEndObj = SectionEnd;
 
@@ -450,18 +525,67 @@ export type CodingAgentObj =
   | SectionEnd
   | PacketError;
 
+// Nested tool packets of a code mode group are in NewToolObj
+export type CodeModeObj =
+  | CodeModeStart
+  | CodeModeDelta
+  | ToolCallArgumentDelta
+  | SectionEnd
+  | PacketError;
+
+export interface ToolCallDebug extends BaseObj {
+  type: "tool_call_debug";
+  tool_call_id: string;
+  tool_name: string;
+  tool_args: Record<string, unknown>;
+}
+
+// Tool Approval Packets
+export interface ToolApprovalRequest extends BaseObj {
+  type: "tool_approval_request";
+  approval_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  display_name: string;
+  arguments: Record<string, unknown>;
+  /** The background subagent that made the request; null for the reply's own
+   * calls. Such a request waits on its own: no stop of the reply closes it. */
+  agent_name: string | null;
+}
+
+export interface ToolApprovalResolved extends BaseObj {
+  type: "tool_approval_resolved";
+  approval_id: string;
+  // "approved_for_chat": approved by a grant for the chat's later calls of the
+  // tool. "disabled": an approval found the tool disabled, so the call did not
+  // run. "cancelled": the call stopped waiting because its run or cell stopped.
+  outcome:
+    | "approved"
+    | "approved_for_chat"
+    | "rejected"
+    | "disabled"
+    | "cancelled";
+}
+
+export type ToolApprovalObj = ToolApprovalRequest | ToolApprovalResolved;
+
 // Union type for all possible streaming objects
 export type ObjTypes =
+  | UserMessage
+  | ToolCallDebug
   | ChatObj
   | NewToolObj
   | ReasoningObj
   | StopObj
   | ChatHeartbeatObj
+  | ReplayEnd
   | SectionEndObj
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj
   | CodingAgentObj
+  | CodeModeObj
+  | ToolApprovalObj
   | PacketErrorObj
   | CitationObj;
 
@@ -552,4 +676,11 @@ export interface ResearchAgentPacket {
 export interface CodingAgentPacket {
   placement: Placement;
   obj: CodingAgentObj;
+}
+
+/** Transport cursor for the complete packet prefix preceding this record. */
+export interface StreamCursor {
+  stream_id: number;
+  next_cursor: number;
+  replay_complete: boolean;
 }

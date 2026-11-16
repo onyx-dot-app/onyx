@@ -13,36 +13,6 @@ BASH_TOOL_CMD_KEY = "cmd"
 GENERATE_ANSWER_TOOL_NAME = "generate_answer"
 
 
-CODING_AGENT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
-    name=CODING_AGENT_TOOL_NAME,
-    description=(
-        "Investigate and answer a coding question against a specific GitHub "
-        "repository. The agent clones the repo into an isolated sandbox and "
-        "explores it via shell commands before returning a text answer."
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            CODING_AGENT_QUERY_KEY: {
-                "type": "string",
-                "description": (
-                    "The user's question or task to perform against the repository."
-                ),
-            },
-            CODING_AGENT_REPO_KEY: {
-                "type": "string",
-                "description": (
-                    "GitHub repository URL or 'owner/repo' identifier "
-                    "(e.g. 'https://github.com/onyx-dot-app/onyx' or "
-                    "'onyx-dot-app/onyx')."
-                ),
-            },
-        },
-        "required": [CODING_AGENT_QUERY_KEY, CODING_AGENT_REPO_KEY],
-    },
-)
-
-
 BASH_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
     name=BASH_TOOL_NAME,
     description=(
@@ -52,8 +22,10 @@ BASH_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
         "etc. to inspect the code. Filesystem state persists across "
         "calls within the same session."
     ),
+    strict=True,
     parameters={
         "type": "object",
+        "additionalProperties": False,
         "properties": {
             BASH_TOOL_CMD_KEY: {
                 "type": "string",
@@ -73,8 +45,10 @@ GENERATE_ANSWER_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
         "to answer comprehensively. After this call no further tool "
         "calls are made."
     ),
+    strict=True,
     parameters={
         "type": "object",
+        "additionalProperties": False,
         "properties": {},
         "required": [],
     },
@@ -88,8 +62,10 @@ CODING_AGENT_THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
         "have learned about the codebase, identify knowledge gaps, and "
         "plan the next set of bash commands."
     ),
+    strict=True,
     parameters={
         "type": "object",
+        "additionalProperties": False,
         "properties": {
             "reasoning": {
                 "type": "string",
@@ -99,13 +75,3 @@ CODING_AGENT_THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
         "required": ["reasoning"],
     },
 )
-
-
-def get_coding_agent_tool_definitions(include_think_tool: bool) -> list[ToolDefinition]:
-    tools = [
-        BASH_TOOL_DESCRIPTION,
-        GENERATE_ANSWER_TOOL_DESCRIPTION,
-    ]
-    if include_think_tool:
-        tools.append(CODING_AGENT_THINK_TOOL_DESCRIPTION)
-    return tools

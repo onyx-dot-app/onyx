@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { PageLoader } from "@opal/loaders";
@@ -63,7 +64,7 @@ function ClaimsTable({
   const entries = Object.entries(claims);
   return (
     <div className="flex flex-col gap-2">
-      <Text font="heading-h3">{title}</Text>
+      <Text font="heading-section">{title}</Text>
       <Text font="main-ui-body" color="text-03">
         {subtitle}
       </Text>
@@ -101,6 +102,7 @@ function ClaimsTable({
 
 function Main() {
   const t = useTranslations("admin.oauthTest");
+  const navigation = useNavigation();
   const {
     data: snapshot,
     error,
@@ -130,7 +132,7 @@ function Main() {
           {t("intro.description")}
         </Text>
         <div>
-          <Button onClick={() => (window.location.href = RERUN_URL)}>
+          <Button onClick={() => navigation.load(RERUN_URL)}>
             {t("rerun.label")}
           </Button>
         </div>

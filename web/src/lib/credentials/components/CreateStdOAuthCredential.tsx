@@ -1,3 +1,4 @@
+import { useNavigation } from "@opal/navigation";
 import * as Yup from "yup";
 import { InputTypeIn, MessageCard } from "@opal/components";
 import { getSourceDisplayName } from "@/lib/connectors/utils";
@@ -24,6 +25,7 @@ export function CreateStdOAuthCredential({
 }: CreateStdOAuthCredentialProps) {
   const t = useTranslations("admin");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const navigation = useNavigation();
 
   async function handleSubmit(
     values: OAuthFormValues,
@@ -42,7 +44,7 @@ export function CreateStdOAuthCredential({
         sourceType,
         values
       );
-      window.location.href = redirectUrl;
+      navigation.load(redirectUrl);
     } catch (error) {
       setErrorMessage(
         error instanceof Error

@@ -20,7 +20,10 @@ from onyx.prompts.search_prompts import (
     TRY_TO_FILL_TO_MAX_INSTRUCTIONS,
 )
 from onyx.secondary_llm_flows.search_prompt_budget import SearchPromptBudget
-from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
+from onyx.tools.tool_implementations.search.constants import (
+    MAX_CHUNKS_FOR_RELEVANCE,
+    MAX_SELECTED_SECTIONS,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
@@ -242,7 +245,7 @@ def select_sections_for_expansion(
     sections: list[InferenceSection],
     user_query: str,
     llm: LLM,
-    max_sections: int = 10,
+    max_sections: int = MAX_SELECTED_SECTIONS,
     max_chunks_per_section: int | None = MAX_CHUNKS_FOR_RELEVANCE,
     try_to_fill_to_max: bool = False,
     enforce_llm_input_budget: bool = False,

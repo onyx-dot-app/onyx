@@ -1,12 +1,15 @@
-"""A checkpointed doc sync stopped mid-crawl must hand its progress to the next
-attempt: the next attempt continues after the last saved element instead of
-restarting the crawl, keeps the stopped attempt's window, and on success marks
-the cc_pair synced as of that window and drops the checkpoints. A failed
-element write, a requested full refresh, or a connector config change keeps
-the crawl from skipping elements."""
+"""A checkpointed doc sync that failed or was canceled mid-crawl must hand its
+progress to the next attempt, also past attempts canceled while queued: the
+next attempt continues after the last saved element instead of restarting the
+crawl, keeps the stopped attempt's window, and on success marks the cc_pair
+synced as of that window and drops the checkpoints. A failed element write, a
+requested full refresh, or a connector config change keeps the crawl from
+skipping elements."""
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timezone
+from enum import Enum
+from functools import partial
 from typing import cast
 from unittest.mock import patch
 from uuid import uuid4
@@ -31,6 +34,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, PermissionSyncStatus
 from onyx.db.models import ConnectorCredentialPair, DocPermissionSyncAttempt
 from onyx.db.permission_sync_attempt import (
+    cancel_open_doc_permission_sync_attempt,
     get_open_doc_permission_sync_attempt,
     try_create_doc_permission_sync_attempt,
 )
@@ -45,6 +49,7 @@ from tests.external_dependency_unit.permission_sync.conftest import (
 _NUM_ELEMENTS = 10
 _STOP_AFTER = 4
 _FIRST_WINDOW_END = datetime(2026, 1, 2, tzinfo=timezone.utc)
+_CANCEL_REASON = "Canceled: the connector was paused"
 
 
 class _FakeCrawlCheckpoint(ConnectorCheckpoint):
@@ -53,10 +58,12 @@ class _FakeCrawlCheckpoint(ConnectorCheckpoint):
 
 class _FakeCheckpointedCrawl:
     """Crawls elements 0.._NUM_ELEMENTS-1, saving after each one. The first run
-    stops after _STOP_AFTER elements, as a stop signal or stall would."""
+    stops after _STOP_AFTER elements, as a stop signal or stall would, after
+    calling ``before_stop``."""
 
-    def __init__(self) -> None:
+    def __init__(self, before_stop: Callable[[], None] | None = None) -> None:
         self.crawled_by_run: list[list[int]] = []
+        self._before_stop = before_stop
 
     def __call__(
         self,
@@ -78,6 +85,8 @@ class _FakeCheckpointedCrawl:
 
         for index in range(checkpoint.next_index, _NUM_ELEMENTS):
             if not resume and len(crawled) == _STOP_AFTER:
+                if self._before_stop is not None:
+                    self._before_stop()
                 raise RuntimeError("gdrive_doc_sync: Stop signal detected")
             crawled.append(index)
             yield DocExternalAccess(
@@ -141,38 +150,72 @@ def _dispatch(cc_pair_id: int, db_session: Session) -> int:
     return attempt_id
 
 
+def _cancel_open_attempt(cc_pair_id: int) -> None:
+    with get_session_with_current_tenant() as db_session:
+        cancel_open_doc_permission_sync_attempt(
+            cc_pair_id, db_session, reason=_CANCEL_REASON
+        )
+
+
+class _ChainStop(str, Enum):
+    """How the attempts before the resuming one ended."""
+
+    FAILED = "failed"
+    # A pause cancels the running attempt before its crawl sees the stop signal
+    CANCELED_MID_CRAWL = "canceled_mid_crawl"
+    FAILED_THEN_CANCELED_WHILE_QUEUED = "failed_then_canceled_while_queued"
+
+
+@pytest.mark.parametrize("chain_stop", list(_ChainStop))
 def test_stopped_sync_resumes_from_checkpoint(
     tenant_context: None,  # noqa: ARG001
     db_session: Session,
+    chain_stop: _ChainStop,
 ) -> None:
     cc_pair = create_test_connector_credential_pair(
         db_session, source=DocumentSource.GOOGLE_DRIVE, access_type=AccessType.SYNC
     )
-    crawl = _FakeCheckpointedCrawl()
+    canceled_mid_crawl = chain_stop == _ChainStop.CANCELED_MID_CRAWL
+    crawl = _FakeCheckpointedCrawl(
+        before_stop=(
+            partial(_cancel_open_attempt, cc_pair.id) if canceled_mid_crawl else None
+        )
+    )
 
-    first_attempt_id = _dispatch(cc_pair.id, db_session)
+    stopped_attempt_id = _dispatch(cc_pair.id, db_session)
     with pytest.raises(RuntimeError, match="Stop signal detected"):
         _run(cc_pair.id, crawl)
 
     db_session.expire_all()
-    first = db_session.get(DocPermissionSyncAttempt, first_attempt_id)
-    assert first is not None
-    assert first.status == PermissionSyncStatus.FAILED
+    stopped = db_session.get(DocPermissionSyncAttempt, stopped_attempt_id)
+    assert stopped is not None
+    # The task keeps a cancel that came before its own failure
+    assert stopped.status == (
+        PermissionSyncStatus.CANCELED
+        if canceled_mid_crawl
+        else PermissionSyncStatus.FAILED
+    )
     assert checkpointer_module.has_doc_sync_checkpoint(cc_pair.id)
 
-    second_attempt_id = _dispatch(cc_pair.id, db_session)
+    if chain_stop == _ChainStop.FAILED_THEN_CANCELED_WHILE_QUEUED:
+        _dispatch(cc_pair.id, db_session)
+        cancel_open_doc_permission_sync_attempt(
+            cc_pair.id, db_session, reason=_CANCEL_REASON
+        )
+
+    resumed_attempt_id = _dispatch(cc_pair.id, db_session)
     _run(cc_pair.id, crawl)
 
-    # The second run picks up after the last saved element, not at element 0
+    # The next run picks up after the last saved element, not at element 0
     assert crawl.crawled_by_run == [
         list(range(_STOP_AFTER)),
         list(range(_STOP_AFTER, _NUM_ELEMENTS)),
     ]
 
     db_session.expire_all()
-    second = db_session.get(DocPermissionSyncAttempt, second_attempt_id)
-    assert second is not None
-    assert second.status == PermissionSyncStatus.SUCCESS
+    resumed = db_session.get(DocPermissionSyncAttempt, resumed_attempt_id)
+    assert resumed is not None
+    assert resumed.status == PermissionSyncStatus.SUCCESS
     # Changes after the chain's window are left for the next incremental sync
     db_session.refresh(cc_pair)
     assert cc_pair.last_time_perm_sync == _FIRST_WINDOW_END

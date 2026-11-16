@@ -35,6 +35,10 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
     public_permission: null,
     user_permission: "VIEWER",
     external_app: null,
+    current_version_id: null,
+    current_version_number: null,
+    published_version_number: null,
+    pending_version_number: null,
     ...over,
   };
 }
@@ -63,6 +67,10 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
     public_permission: "VIEWER",
     user_permission: "VIEWER",
     external_app: null,
+    current_version_id: null,
+    current_version_number: null,
+    published_version_number: null,
+    pending_version_number: null,
     ...over,
   };
 }

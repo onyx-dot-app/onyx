@@ -211,10 +211,13 @@ class UserGroupManager:
     def get_all(
         user_performing_action: DATestUser,
         include_default: bool = False,
+        include_users: bool = True,
     ) -> list[UserGroup]:
         params: dict[str, str] = {}
         if include_default:
             params["include_default"] = "true"
+        if not include_users:
+            params["include_users"] = "false"
         response = client.get(
             f"{API_SERVER_URL}/manage/admin/user-group",
             headers=user_performing_action.headers,

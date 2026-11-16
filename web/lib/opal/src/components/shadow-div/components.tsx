@@ -122,13 +122,27 @@ function ShadowDiv({
     checkScroll();
 
     container.addEventListener("scroll", checkScroll);
-    // Also check on resize in case content changes
+    // A capped container keeps its size while its content grows, so watch
+    // the children too, and the children added later.
     const resizeObserver = new ResizeObserver(checkScroll);
     resizeObserver.observe(container);
+    Array.from(container.children).forEach((child) =>
+      resizeObserver.observe(child)
+    );
+    const mutationObserver = new MutationObserver((records) => {
+      records.forEach((record) =>
+        record.addedNodes.forEach((node) => {
+          if (node instanceof Element) resizeObserver.observe(node);
+        })
+      );
+      checkScroll();
+    });
+    mutationObserver.observe(container, { childList: true });
 
     return () => {
       container.removeEventListener("scroll", checkScroll);
       resizeObserver.disconnect();
+      mutationObserver.disconnect();
     };
   }, [containerRef, checkScroll]);
 

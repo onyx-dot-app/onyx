@@ -13,7 +13,6 @@ import {
   SidebarStateProvider,
   useSidebarState,
 } from "@opal/layouts";
-import { renderSidebarLogo } from "@/lib/sidebar/utils";
 
 jest.mock("@opal/hooks/useScreenSize", () => ({
   __esModule: true,
@@ -24,7 +23,7 @@ function FoldedSidebar({ foldable }: { foldable?: boolean }) {
   return (
     <SidebarStateProvider defaultFolded>
       <SidebarLayouts.Root foldable={foldable}>
-        <SidebarLayouts.Header renderAppLogo={renderSidebarLogo}>
+        <SidebarLayouts.Header logo={null} wordmark={null}>
           <SidebarTab href="/settings">Settings</SidebarTab>
         </SidebarLayouts.Header>
       </SidebarLayouts.Root>
@@ -77,7 +76,7 @@ it("does not show the folded tooltip for a tab the pointer already left", async 
     const { setFolded } = useSidebarState();
     return (
       <SidebarLayouts.Root foldable>
-        <SidebarLayouts.Header renderAppLogo={renderSidebarLogo}>
+        <SidebarLayouts.Header logo={null} wordmark={null}>
           <SidebarTab href="/settings">Settings</SidebarTab>
         </SidebarLayouts.Header>
         <button onClick={() => setFolded(true)}>Fold</button>

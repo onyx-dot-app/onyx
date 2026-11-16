@@ -19,6 +19,7 @@ from sqlalchemy.pool import StaticPool
 
 import onyx.server.features.usage.api as usage_api
 from onyx.auth.users import current_user
+from onyx.configs.constants import TokenRateLimitPeriod
 from onyx.db.cost_override import create_cost_override
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import (
@@ -26,12 +27,11 @@ from onyx.db.models import (
     ModelConfiguration,
     ModelCostOverride,
     TokenRateLimit,
-    TokenRateLimit__UserGroup,
     TokenRateLimitScope,
     User__UserGroup,
     UserUsage,
 )
-from onyx.db.user_usage import get_cost_window_reset, get_cost_window_start
+from onyx.db.user_usage import get_period_window_reset
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.llm import cost_overrides
 from onyx.llm.cost import ModelPrice, get_model_price_per_million
@@ -53,26 +53,6 @@ class _StubUser:
         self.id = user_id
 
 
-@pytest.mark.parametrize(
-    ("period_hours", "start", "reset"),
-    [
-        (24, datetime.datetime(2026, 8, 12), datetime.datetime(2026, 8, 13)),
-        (168, datetime.datetime(2026, 8, 10), datetime.datetime(2026, 8, 17)),
-        (720, datetime.datetime(2026, 8, 1), datetime.datetime(2026, 9, 1)),
-    ],
-)
-def test_cost_budgets_use_fixed_utc_calendar_periods(
-    period_hours: int, start: datetime.datetime, reset: datetime.datetime
-) -> None:
-    now = datetime.datetime(2026, 8, 12, 15, tzinfo=datetime.timezone.utc)
-    assert get_cost_window_start(now, period_hours) == start.replace(
-        tzinfo=datetime.timezone.utc
-    )
-    assert get_cost_window_reset(now, period_hours) == reset.replace(
-        tzinfo=datetime.timezone.utc
-    )
-
-
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
     engine: Engine = create_engine(
@@ -92,7 +72,6 @@ def db_session() -> Generator[Session, None, None]:
         ModelCostOverride,
         TokenRateLimit,
         User__UserGroup,
-        TokenRateLimit__UserGroup,
     ):
         cast(Table, model.__table__).create(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
@@ -540,7 +519,7 @@ def test_budget_reflects_user_cost_limit(
             enabled=True,
             token_budget=None,
             cost_budget_cents=100.0,
-            period_hours=168,
+            period=TokenRateLimitPeriod.WEEKLY,
             scope=TokenRateLimitScope.USER,
         )
     )
@@ -554,8 +533,9 @@ def test_budget_reflects_user_cost_limit(
     )
     assert body["budget_cents"] == pytest.approx(100.0)
     assert body["budget_remaining_cents"] == pytest.approx(98.75)  # 100 - 1.25
-    assert body["budget_reset_at"] == get_cost_window_reset(
-        datetime.datetime.now(datetime.timezone.utc), 168
+    assert body["budget_period"] == TokenRateLimitPeriod.WEEKLY.value
+    assert body["budget_reset_at"] == get_period_window_reset(
+        datetime.datetime.now(datetime.timezone.utc), TokenRateLimitPeriod.WEEKLY
     ).isoformat().replace("+00:00", "Z")
 
 
@@ -576,7 +556,7 @@ def test_budget_reflects_global_cost_limit(
             enabled=True,
             token_budget=None,
             cost_budget_cents=100.0,
-            period_hours=168,
+            period=TokenRateLimitPeriod.WEEKLY,
             scope=TokenRateLimitScope.GLOBAL,
         )
     )
@@ -676,13 +656,12 @@ def test_budget_reflects_group_cost_limit(
         enabled=True,
         token_budget=None,
         cost_budget_cents=100.0,
-        period_hours=168,
+        period=TokenRateLimitPeriod.WEEKLY,
         scope=TokenRateLimitScope.USER_GROUP,
+        user_group_id=1,
     )
     db_session.add(limit)
-    db_session.flush()
     db_session.add(User__UserGroup(user_id=caller, user_group_id=1))
-    db_session.add(TokenRateLimit__UserGroup(rate_limit_id=limit.id, user_group_id=1))
     db_session.commit()
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
@@ -693,29 +672,3 @@ def test_budget_reflects_group_cost_limit(
     )
     assert body["budget_cents"] == pytest.approx(100.0)
     assert body["budget_remaining_cents"] == pytest.approx(98.75)  # 100 - 1.25
-
-
-def test_budget_ignores_legacy_cost_period(
-    db_session: Session, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The usage endpoint excludes an unsupported stored cost period."""
-
-    caller = str(uuid4())
-    _seed_current_window(db_session, caller)
-    db_session.add(
-        TokenRateLimit(
-            enabled=True,
-            token_budget=None,
-            cost_budget_cents=100.0,
-            period_hours=2136,
-            scope=TokenRateLimitScope.USER,
-        )
-    )
-    db_session.commit()
-    monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
-    )
-
-    resp = TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage")
-    assert resp.status_code == 200
-    assert resp.json()["budget_cents"] is None

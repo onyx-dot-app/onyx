@@ -1,11 +1,11 @@
-import React from "react";
-import { cn } from "@opal/utils";
+import { NavLink } from "@opal/navigation";
+import { Section } from "@opal/layouts";
+import React, { useState } from "react";
+import { cn, richNodes } from "@opal/utils";
 import type { IconProps } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
-import Link from "next/link";
+import { Text, Tooltip, type TextFont } from "@opal/components";
+import { useOverflow } from "@opal/hooks";
 import type { Route } from "next";
-import { Section } from "@/layouts/general-layouts";
 import type { WithoutStyles } from "@opal/types";
 
 const rowClassNames = {
@@ -48,6 +48,17 @@ const textClassNames = {
   muted: "line-item-text-muted",
   skeleton: "line-item-text-skeleton",
 } as const;
+
+// Label fonts per variant. The variant classes above only set the color.
+const textFonts: Record<keyof typeof textClassNames, TextFont> = {
+  main: "main-ui-muted",
+  strikethrough: "main-ui-muted",
+  disabled: "main-ui-muted",
+  danger: "main-ui-muted",
+  action: "main-ui-action",
+  muted: "main-ui-body",
+  skeleton: "secondary-body",
+};
 
 const iconClassNames = {
   main: "line-item-icon-main",
@@ -122,7 +133,7 @@ export interface LineItemProps extends Omit<
  * </LineItem>
  *
  * // With right content
- * <LineItem icon={SvgKey} rightChildren={<Text as="p" text03>⌘K</Text>}>
+ * <LineItem icon={SvgKey} rightChildren={<Text as="p" color="text-03">⌘K</Text>}>
  *   Keyboard Shortcuts
  * </LineItem>
  *
@@ -184,6 +195,10 @@ export default function LineItem({
               : "main";
 
   const emphasisKey = emphasized ? "emphasized" : "normal";
+
+  // `overflowTooltip` takes only strings, so rich labels measure their own clamp.
+  const [richLabel, setRichLabel] = useState<HTMLElement | null>(null);
+  const richLabelOverflowing = useOverflow(richLabel);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (disabled) {
@@ -262,12 +277,38 @@ export default function LineItem({
         {children ? (
           <>
             <Section flexDirection="row" gap={2}>
-              <Truncated
-                mainUiMuted
-                className={cn("text-start w-full", textClassNames[variant])}
-              >
-                {children}
-              </Truncated>
+              {/* The variant class sets the color (and hover/selected states),
+                  so it sits on a wrapper and the text inherits it. */}
+              <div className={cn("w-full min-w-0", textClassNames[variant])}>
+                {typeof children === "string" ? (
+                  <Text
+                    maxLines={1}
+                    overflowTooltip
+                    as="p"
+                    font={textFonts[variant]}
+                    color="inherit"
+                  >
+                    {children}
+                  </Text>
+                ) : (
+                  <Tooltip
+                    tooltip={children}
+                    suppressed={!richLabelOverflowing}
+                    side="top"
+                    align="start"
+                  >
+                    <Text
+                      as="p"
+                      font={textFonts[variant]}
+                      color="inherit"
+                      maxLines={1}
+                      ref={setRichLabel}
+                    >
+                      {richNodes(children)}
+                    </Text>
+                  </Tooltip>
+                )}
+              </div>
               {rightChildren && (
                 <Section alignItems="end" width="fit">
                   {rightChildren}
@@ -276,25 +317,55 @@ export default function LineItem({
             </Section>
             {description &&
               (wrapDescription ? (
-                <Text as="p" secondaryBody text03 className="text-start w-full">
-                  {description}
-                </Text>
+                <div className="w-full">
+                  <Text
+                    as="p"
+                    font="secondary-body"
+                    color="text-03"
+                    textPosition="text-start"
+                  >
+                    {description}
+                  </Text>
+                </div>
               ) : (
-                <Truncated secondaryBody text03 className="text-start w-full">
-                  {description}
-                </Truncated>
+                <div className="w-full min-w-0">
+                  <Text
+                    maxLines={1}
+                    overflowTooltip
+                    as="p"
+                    font="secondary-body"
+                    color="text-03"
+                  >
+                    {description}
+                  </Text>
+                </div>
               ))}
           </>
         ) : description ? (
           <Section flexDirection="row" gap={2}>
             {wrapDescription ? (
-              <Text as="p" secondaryBody text03 className="text-start w-full">
-                {description}
-              </Text>
+              <div className="w-full">
+                <Text
+                  as="p"
+                  font="secondary-body"
+                  color="text-03"
+                  textPosition="text-start"
+                >
+                  {description}
+                </Text>
+              </div>
             ) : (
-              <Truncated secondaryBody text03 className="text-start w-full">
-                {description}
-              </Truncated>
+              <div className="w-full min-w-0">
+                <Text
+                  maxLines={1}
+                  overflowTooltip
+                  as="p"
+                  font="secondary-body"
+                  color="text-03"
+                >
+                  {description}
+                </Text>
+              </div>
             )}
             {rightChildren && (
               <Section alignItems="end" width="fit">
@@ -321,8 +392,8 @@ export default function LineItem({
 
   if (!href) return content;
   return (
-    <Link href={href as Route} rel={rel} target={target}>
+    <NavLink href={href as Route} rel={rel} target={target}>
       {content}
-    </Link>
+    </NavLink>
   );
 }

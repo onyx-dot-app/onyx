@@ -9,7 +9,7 @@ import {
   SearchFullResponse,
 } from "@/lib/search/types";
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
@@ -19,6 +19,7 @@ import {
   QueryControllerValue,
   QueryState,
   AppMode,
+  SubmitQueryOptions,
 } from "@/providers/QueryControllerProvider";
 
 interface QueryControllerProviderProps {
@@ -87,6 +88,13 @@ export function QueryControllerProvider({
   // Abort controllers for in-flight requests
   const classifyAbortRef = useRef<AbortController | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
+
+  const abortPendingRequests = useCallback(() => {
+    classifyAbortRef.current?.abort();
+    classifyAbortRef.current = null;
+    searchAbortRef.current?.abort();
+    searchAbortRef.current = null;
+  }, []);
 
   /**
    * Perform document search (pure data-fetching, no phase side effects)
@@ -173,28 +181,37 @@ export function QueryControllerProvider({
     async (
       submitQuery: string,
       onChat: (query: string) => void,
-      filters?: BaseFilters
+      { filters, chatOnly = false }: SubmitQueryOptions = {}
     ): Promise<void> => {
+      // A search or classification from an earlier submit must not write
+      // its results or phase after this query.
+      abortPendingRequests();
       setQuery(submitQuery);
       setError(null);
 
       const currentAppMode = appModeRef.current;
+
+      const routeToChat = () => {
+        setState({ phase: "chat" });
+        setSearchResults([]);
+        setLlmSelectedDocIds(null);
+        onChat(submitQuery);
+      };
 
       // Always route through chat if:
       // 1. Not Enterprise Enabled
       // 2. Admin has disabled the Search UI
       // 3. Not in the "New Session" tab
       // 4. In "New Session" tab but app-mode is "Chat"
+      // 5. The caller needs chat
       if (
+        chatOnly ||
         !businessTier ||
         !searchUiEnabled ||
         !appPosition.isNewSession() ||
         currentAppMode === "chat"
       ) {
-        setState({ phase: "chat" });
-        setSearchResults([]);
-        setLlmSelectedDocIds(null);
-        onChat(submitQuery);
+        routeToChat();
         return;
       }
 
@@ -222,23 +239,18 @@ export function QueryControllerProvider({
           setState({ phase: "search-results" });
           appModeRef.current = "search";
         } else {
-          setState({ phase: "chat" });
-          setSearchResults([]);
-          setLlmSelectedDocIds(null);
-          onChat(submitQuery);
+          routeToChat();
         }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
           return;
         }
 
-        setState({ phase: "chat" });
-        setSearchResults([]);
-        setLlmSelectedDocIds(null);
-        onChat(submitQuery);
+        routeToChat();
       }
     },
     [
+      abortPendingRequests,
       appPosition,
       performClassification,
       performSearch,
@@ -269,21 +281,13 @@ export function QueryControllerProvider({
    * Reset all state to initial values
    */
   const reset = useCallback(() => {
-    if (classifyAbortRef.current) {
-      classifyAbortRef.current.abort();
-      classifyAbortRef.current = null;
-    }
-    if (searchAbortRef.current) {
-      searchAbortRef.current.abort();
-      searchAbortRef.current = null;
-    }
-
+    abortPendingRequests();
     setQuery(null);
     setState({ phase: "idle", appMode: appModeRef.current });
     setSearchResults([]);
     setLlmSelectedDocIds(null);
     setError(null);
-  }, []);
+  }, [abortPendingRequests]);
 
   const value: QueryControllerValue = useMemo(
     () => ({

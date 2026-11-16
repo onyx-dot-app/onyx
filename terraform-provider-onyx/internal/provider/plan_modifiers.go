@@ -43,3 +43,29 @@ func (m serverDefaultedInt64) PlanModifyInt64(_ context.Context, req planmodifie
 	}
 	resp.PlanValue = req.StateValue
 }
+
+// storedWhenUnconfiguredInt64 plans the stored value for an optional number
+// that Onyx keeps when the request omits it. Removing the attribute from
+// configuration then stops managing the value and plans no change.
+type storedWhenUnconfiguredInt64 struct{}
+
+// StoredWhenUnconfiguredInt64 returns the plan modifier described above.
+func StoredWhenUnconfiguredInt64() planmodifier.Int64 {
+	return storedWhenUnconfiguredInt64{}
+}
+
+func (m storedWhenUnconfiguredInt64) Description(_ context.Context) string {
+	return "Onyx keeps the stored value when this is not configured."
+}
+
+func (m storedWhenUnconfiguredInt64) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m storedWhenUnconfiguredInt64) PlanModifyInt64(_ context.Context, req planmodifier.Int64Request, resp *planmodifier.Int64Response) {
+	// Create resolves the value from the read-back; destroy plans nothing.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() || !req.ConfigValue.IsNull() {
+		return
+	}
+	resp.PlanValue = req.StateValue
+}

@@ -1,4 +1,4 @@
-"""EE cost-budget paths skip unsupported periods and fetch every valid window."""
+"""EE cost-budget paths fetch usage far enough back to cover every period window."""
 
 from datetime import datetime, timezone, tzinfo
 from uuid import uuid4
@@ -6,8 +6,9 @@ from uuid import uuid4
 import pytest
 
 import ee.onyx.server.query_and_chat.token_limit as ee_token_limit
-from onyx.configs.constants import TokenRateLimitScope
+from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
 from onyx.db.models import TokenRateLimit
+from onyx.server.query_and_chat.token_limit import budget_windows
 
 
 class _SessionCtx:
@@ -33,56 +34,27 @@ class _FixedDatetime(datetime):
         return cls(2026, 8, 1, 12, tzinfo=tz or timezone.utc)
 
 
-def _cost_limit(period_hours: int, cost_budget_cents: float = 100.0) -> TokenRateLimit:
+def _cost_limit(
+    period: TokenRateLimitPeriod, cost_budget_cents: float = 100.0
+) -> TokenRateLimit:
     return TokenRateLimit(
         enabled=True,
         token_budget=None,
         cost_budget_cents=cost_budget_cents,
-        period_hours=period_hours,
+        period=period,
         scope=TokenRateLimitScope.USER,
     )
-
-
-def _over_budget_buckets(*_a: object) -> list[tuple[datetime, float]]:
-    return [(datetime.now(timezone.utc), 10.0**9)]
-
-
-def test_user_path_skips_legacy_period(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        ee_token_limit,
-        "fetch_all_user_token_rate_limits",
-        lambda **_: [_cost_limit(period_hours=2136)],
-    )
-    monkeypatch.setattr(
-        ee_token_limit, "get_user_cost_cents_buckets_since", _over_budget_buckets
-    )
-
-    ee_token_limit._user_is_rate_limited(uuid4())  # skipped, no raise
-
-
-def test_group_path_skips_legacy_period(monkeypatch: pytest.MonkeyPatch) -> None:
-    limit = _cost_limit(period_hours=2136)
-    limit.scope = TokenRateLimitScope.USER_GROUP
-    monkeypatch.setattr(
-        ee_token_limit, "fetch_user_group_token_rate_limits", lambda *_: {1: [limit]}
-    )
-    monkeypatch.setattr(
-        ee_token_limit,
-        "get_group_cost_cents_buckets_since",
-        lambda *_: {1: _over_budget_buckets()},
-    )
-
-    ee_token_limit._user_is_rate_limited_by_group(uuid4())  # skipped, no raise
 
 
 def test_user_path_fetch_cutoff_covers_every_window(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    weekly, monthly = _cost_limit(period_hours=168), _cost_limit(period_hours=720)
+    weekly = _cost_limit(TokenRateLimitPeriod.WEEKLY)
+    monthly = _cost_limit(TokenRateLimitPeriod.MONTHLY)
     captured: list[datetime] = []
 
     def _capture_cutoff(
-        _db: object, _user: object, cutoff: datetime
+        _db: object, _user: object, cutoff: datetime, _model: int | None
     ) -> list[tuple[datetime, float]]:
         captured.append(cutoff)
         return []
@@ -90,14 +62,14 @@ def test_user_path_fetch_cutoff_covers_every_window(
     monkeypatch.setattr(ee_token_limit, "datetime", _FixedDatetime)
     monkeypatch.setattr(
         ee_token_limit,
-        "fetch_all_user_token_rate_limits",
-        lambda **_: [weekly, monthly],
+        "fetch_member_allowance",
+        lambda *_: budget_windows([weekly, monthly]),
     )
     monkeypatch.setattr(
         ee_token_limit, "get_user_cost_cents_buckets_since", _capture_cutoff
     )
 
-    ee_token_limit._user_is_rate_limited(uuid4())
+    ee_token_limit._user_is_rate_limited(uuid4(), None)
 
     assert captured == [datetime(2026, 7, 27, tzinfo=timezone.utc)]
 
@@ -105,13 +77,14 @@ def test_user_path_fetch_cutoff_covers_every_window(
 def test_group_path_fetch_cutoff_covers_every_window(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    weekly, monthly = _cost_limit(period_hours=168), _cost_limit(period_hours=720)
+    weekly = _cost_limit(TokenRateLimitPeriod.WEEKLY)
+    monthly = _cost_limit(TokenRateLimitPeriod.MONTHLY)
     weekly.scope = TokenRateLimitScope.USER_GROUP
     monthly.scope = TokenRateLimitScope.USER_GROUP
     captured: list[datetime] = []
 
     def _capture_cutoff(
-        _db: object, _group_ids: object, cutoff: datetime
+        _db: object, _group_ids: object, cutoff: datetime, _model: int | None
     ) -> dict[int, list[tuple[datetime, float]]]:
         captured.append(cutoff)
         return {}
@@ -119,13 +92,13 @@ def test_group_path_fetch_cutoff_covers_every_window(
     monkeypatch.setattr(ee_token_limit, "datetime", _FixedDatetime)
     monkeypatch.setattr(
         ee_token_limit,
-        "fetch_user_group_token_rate_limits",
+        "fetch_user_group_enforced_token_rate_limits",
         lambda *_: {1: [weekly, monthly]},
     )
     monkeypatch.setattr(
         ee_token_limit, "get_group_cost_cents_buckets_since", _capture_cutoff
     )
 
-    ee_token_limit._user_is_rate_limited_by_group(uuid4())
+    ee_token_limit._user_is_rate_limited_by_group(uuid4(), None)
 
     assert captured == [datetime(2026, 7, 27, tzinfo=timezone.utc)]

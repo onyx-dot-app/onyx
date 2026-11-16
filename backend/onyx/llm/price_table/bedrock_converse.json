@@ -19,7 +19,8 @@
         "context": 2600
       },
       "mode": "image_generation",
-      "name": "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0"
+      "name": "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0",
+      "status": "deprecated"
     },
     "1024-x-1024/50-steps/stability.stable-diffusion-xl-v1": {
       "cost": {
@@ -137,7 +138,8 @@
         "context": 2600
       },
       "mode": "image_generation",
-      "name": "amazon.nova-canvas-v1:0"
+      "name": "amazon.nova-canvas-v1:0",
+      "status": "deprecated"
     },
     "amazon.nova-lite-v1:0": {
       "attachment": true,
@@ -300,7 +302,8 @@
         "image_input": 0.0
       },
       "mode": "image_generation",
-      "name": "amazon.titan-image-generator-v2"
+      "name": "amazon.titan-image-generator-v2",
+      "status": "deprecated"
     },
     "amazon.titan-image-generator-v2:0": {
       "cost": {
@@ -308,7 +311,8 @@
         "image_input": 0.0
       },
       "mode": "image_generation",
-      "name": "amazon.titan-image-generator-v2:0"
+      "name": "amazon.titan-image-generator-v2:0",
+      "status": "deprecated"
     },
     "anthropic.claude-fable-5": {
       "attachment": true,
@@ -2941,6 +2945,55 @@
       "temperature": false,
       "tool_call": true
     },
+    "global.openai.gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.05,
+        "cache_write": 1.25,
+        "context_over_200k": {
+          "cache_read": 0.1,
+          "cache_write": 2.5,
+          "input": 2,
+          "output": 7.5
+        },
+        "input": 1,
+        "output": 5,
+        "tiers": [
+          {
+            "cache_read": 0.1,
+            "cache_write": 2.5,
+            "input": 2,
+            "output": 7.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "global.xai.grok-4.6": {
       "attachment": true,
       "cost": {
@@ -4804,6 +4857,56 @@
       "temperature": false,
       "tool_call": true
     },
+    "openai.gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.055,
+        "cache_write": 1.375,
+        "context_over_200k": {
+          "cache_read": 0.11,
+          "cache_write": 2.75,
+          "input": 2.2,
+          "output": 8.25
+        },
+        "input": 1.1,
+        "output": 5.5,
+        "tiers": [
+          {
+            "cache_read": 0.11,
+            "cache_write": 2.75,
+            "input": 2.2,
+            "output": 8.25,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "openai.gpt-oss-120b": {
       "attachment": false,
       "cost": {
@@ -5383,7 +5486,7 @@
     },
     "us-gov-east-1/amazon.titan-embed-text-v2:0": {
       "cost": {
-        "input": 0.19999999999999998,
+        "input": 0.03,
         "output": 0.0
       },
       "limit": {
@@ -5520,7 +5623,8 @@
         "context": 2600
       },
       "mode": "image_generation",
-      "name": "us.amazon.nova-canvas-v1:0"
+      "name": "us.amazon.nova-canvas-v1:0",
+      "status": "deprecated"
     },
     "us.amazon.nova-lite-v1:0": {
       "attachment": true,
@@ -6737,6 +6841,55 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-29",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "us.openai.gpt-6.1-terra": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.055,
+        "cache_write": 1.375,
+        "context_over_200k": {
+          "cache_read": 0.11,
+          "cache_write": 2.75,
+          "input": 2.2,
+          "output": 8.25
+        },
+        "input": 1.1,
+        "output": 5.5,
+        "tiers": [
+          {
+            "cache_read": 0.11,
+            "cache_write": 2.75,
+            "input": 2.2,
+            "output": 8.25,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-terra",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6.1 Terra (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-26",
       "structured_output": true,
       "temperature": false,
       "tool_call": true

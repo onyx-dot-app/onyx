@@ -200,3 +200,39 @@ CRITICAL: ONLY output the NUMBER of the situation most applicable to the query a
 
 Situation Number:
 """.strip()
+
+
+# Decision-model rerank and expansion (secondary_llm_flows/decision_rerank_expansion.py)
+DECISION_RERANK_QUESTION = (
+    "Compared with the other sections, is section [{index}] one of the sections "
+    "that best help answer the query?"
+)
+
+DECISION_EXPANSION_QUESTION = (
+    "How much of the document should the reader see to answer the query? If only "
+    "a small piece is useful, or the document is on topic and useful together with "
+    "other documents, do not choose not relevant."
+)
+
+# (label, description) for each expansion level, from least to most context.
+DECISION_EXPANSION_LEVELS = [
+    (
+        "not relevant",
+        "Neither the main section nor the sections around it help answer the "
+        "query, or they are about a different subject than the query.",
+    ),
+    (
+        "main section only",
+        "The main section helps; the sections above and below add nothing relevant.",
+    ),
+    (
+        "include adjacent sections",
+        "The sections above or below add relevant information, and unseen parts of "
+        "the document are unlikely to add more.",
+    ),
+    (
+        "include full document",
+        "Unseen parts of the document are likely to hold more information relevant "
+        "to the query.",
+    ),
+]

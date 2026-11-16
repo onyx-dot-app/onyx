@@ -1,9 +1,14 @@
 import re
-from typing import Final
+from typing import Annotated, Any, Final
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 SKILL_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+SKILL_NAME_MAX_LENGTH: Final = 64
+SkillName = Annotated[
+    str, Field(pattern=SKILL_NAME_PATTERN, max_length=SKILL_NAME_MAX_LENGTH)
+]
 GITHUB_SKILL_MAX_COUNT: Final[int] = 500
 
 
@@ -27,8 +32,8 @@ class SkillMetadata(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_name(cls, value: str) -> str:
-        if len(value) > 64:
-            raise ValueError("must be at most 64 characters")
+        if len(value) > SKILL_NAME_MAX_LENGTH:
+            raise ValueError(f"must be at most {SKILL_NAME_MAX_LENGTH} characters")
         if not SKILL_NAME_PATTERN.fullmatch(value):
             raise ValueError(
                 "must contain only lowercase letters, numbers, and single hyphens"
@@ -61,6 +66,8 @@ class SkillDocument(BaseModel):
 
     metadata: SkillMetadata
     instructions_markdown: str
+    # The parsed YAML mapping that metadata was validated from.
+    frontmatter: dict[str, Any]
 
 
 class SkillBundleFile(BaseModel):
@@ -68,6 +75,71 @@ class SkillBundleFile(BaseModel):
 
     path: str
     size: int
+
+
+class PluginFileEntry(BaseModel):
+    """One file of a plugin version's bundle, as stored in file_manifest."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    size: int
+    sha256: str
+
+
+def _frontmatter_string(frontmatter: dict[str, JsonValue], key: str) -> str:
+    value = frontmatter.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"frontmatter must hold a string '{key}'")
+    return value
+
+
+class PluginSkillContent(BaseModel):
+    """One skill in a plugin version, as written to a plugin_skill row."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # Folder in the bundle; empty for a SKILL.md at the root.
+    path: str
+    # None only for a version copied from a legacy skill row.
+    skill_md: str | None
+    frontmatter: dict[str, JsonValue]
+
+    @field_validator("frontmatter")
+    @classmethod
+    def _holds_name_and_description(
+        cls, frontmatter: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        _frontmatter_string(frontmatter, "name")
+        _frontmatter_string(frontmatter, "description")
+        return frontmatter
+
+    @property
+    def name(self) -> str:
+        return _frontmatter_string(self.frontmatter, "name")
+
+    @property
+    def description(self) -> str:
+        return _frontmatter_string(self.frontmatter, "description")
+
+
+class PluginVersionContent(BaseModel):
+    """Everything one new plugin version stores, built from the normalized
+    bundle bytes that the file store holds."""
+
+    model_config = ConfigDict(frozen=True)
+
+    bundle_file_id: str
+    # None only for a legacy row that never had a hash or a classification.
+    bundle_sha256: str | None
+    is_valid: bool | None
+    # Sorted by path. Covers every file in the bundle, SKILL.md included.
+    # None for a version copied from a legacy skill row, whose bundle was not
+    # read.
+    file_manifest: list[PluginFileEntry] | None
+    unpacked_size_bytes: int | None
+    file_count: int | None
+    skills: list[PluginSkillContent]
 
 
 class CustomSkillBundleContents(BaseModel):
@@ -94,3 +166,27 @@ class GitHubSkillBundle(BaseModel):
     description: str | None
     bundle_bytes: bytes | None
     unavailable_reason: str | None = None
+
+
+class ChatSkill(BaseModel):
+    """A custom skill the user runs, at the version the user runs. Each
+    description is one line: runs of whitespace become one space."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    description: str
+    # `metadata.short-description` in the frontmatter, which the catalog
+    # prefers. None when it is missing or blank.
+    short_description: str | None = None
+    version_id: UUID
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str) -> str:
+        return " ".join(value.split())
+
+    @field_validator("short_description")
+    @classmethod
+    def normalize_short_description(cls, value: str | None) -> str | None:
+        return (" ".join(value.split()) or None) if value is not None else None

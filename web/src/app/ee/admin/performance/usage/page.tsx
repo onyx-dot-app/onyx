@@ -9,7 +9,6 @@ import SystemUsagePanel from "@/views/admin/SystemUsagePanel";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Divider } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
-import TokenRateLimitsPanel from "@/app/admin/token-rate-limits/TokenRateLimitsPanel";
 
 const route = ADMIN_ROUTES.USAGE;
 
@@ -44,8 +43,6 @@ export default function UsagePage() {
         <PerUserUsagePanel timeRange={timeRange} />
         <Divider />
         <SystemUsagePanel timeRange={timeRange} />
-        <Divider />
-        <TokenRateLimitsPanel embedded />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

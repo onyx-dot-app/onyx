@@ -27,7 +27,8 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import CACHE_BACKEND
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
+from onyx.configs.constants import NotificationType, OnyxCeleryPriority, OnyxCeleryTask
+from onyx.db.notification import dismiss_notifications_with_other_value
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.models import ApplicationStatus
 from onyx.utils.logger import setup_logger
@@ -352,6 +353,14 @@ def verify_and_store_license(
         publish_license_cache(db_session)
         return payload
     upsert_license(db_session, license_data, commit=False)
+    # Expiry banners are keyed by the license they warned about, so a renewal
+    # must clear the old license's banners or admins keep seeing "expired".
+    dismiss_notifications_with_other_value(
+        NotificationType.LICENSE_EXPIRY_WARNING,
+        "expires_at",
+        payload.expires_at.isoformat(),
+        db_session,
+    )
     # Commit inside the lock, publish outside it: the Redis cache backend has
     # no socket timeout, so a stalled publish would hold the advisory lock and
     # wedge every other store, refresh, and delete behind it.

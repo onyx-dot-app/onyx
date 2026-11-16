@@ -1,4 +1,4 @@
-import { Section } from "@/layouts/general-layouts";
+import { Section } from "@opal/layouts";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 

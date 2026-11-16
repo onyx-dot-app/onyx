@@ -130,6 +130,14 @@ var (
 		DestRel:   "data/nginx/mcp_upstream.conf.inc.template",
 		Mode:      0644,
 	}
+	// Not a template: the routes name their upstream in a variable, so both
+	// app.conf templates include this file unconditionally.
+	NginxWebhookConf = File{
+		EmbedPath: "embedded/data/nginx/webhook.conf.inc",
+		RepoPath:  "deployment/data/nginx/webhook.conf.inc",
+		DestRel:   "data/nginx/webhook.conf.inc",
+		Mode:      0644,
+	}
 )
 
 // OverrideNames lists the user-owned compose override, in the precedence
@@ -162,4 +170,5 @@ var All = []File{
 	NginxRunScript,
 	NginxMcpConf,
 	NginxMcpUpstreamConf,
+	NginxWebhookConf,
 }

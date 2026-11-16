@@ -29,6 +29,32 @@ if _env_sandbox_backend:
             f"image versions."
         )
 
+
+class SandboxRuntime(str, Enum):
+    """How sandboxes run on a Kubernetes backend. Mirrors Terraform `craft_sandbox_runtime`."""
+
+    POD = "pod"
+    # Opt-in. Adds relay-signed VM identity in the egress proxy and host-node
+    # key registration; pod sandboxes keep working beside it.
+    FIRECRACKER = "firecracker"
+
+
+SANDBOX_RUNTIME = SandboxRuntime.POD
+_env_sandbox_runtime = os.environ.get("SANDBOX_RUNTIME", "").strip()
+if _env_sandbox_runtime:
+    try:
+        SANDBOX_RUNTIME = SandboxRuntime(_env_sandbox_runtime.lower())
+    except ValueError:
+        raise ValueError(
+            f"Invalid SANDBOX_RUNTIME={_env_sandbox_runtime!r}. Valid values: "
+            f"{', '.join(r.value for r in SandboxRuntime)}."
+        )
+if (
+    SANDBOX_RUNTIME is SandboxRuntime.FIRECRACKER
+    and SANDBOX_BACKEND is not SandboxBackend.KUBERNETES
+):
+    raise ValueError("SANDBOX_RUNTIME=firecracker requires SANDBOX_BACKEND=kubernetes.")
+
 _disabled_tools_str = os.environ.get("OPENCODE_DISABLED_TOOLS", "question")
 OPENCODE_DISABLED_TOOLS: list[str] = [
     t.strip() for t in _disabled_tools_str.split(",") if t.strip()
@@ -131,8 +157,11 @@ SANDBOX_PROXY_HEALTHZ_PORT = int(os.environ.get("SANDBOX_PROXY_HEALTHZ_PORT", "8
 # Optional additive CA bundle used by mitmproxy when it verifies HTTPS origins.
 # The Helm chart writes it into the proxy's writable confdir because the proxy
 # container intentionally runs non-root with a read-only root filesystem.
+# Other deployments can share the SSL_CERT_FILE bundle used by HTTPX OAuth calls.
 SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA = (
-    os.environ.get("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "").strip() or None
+    os.environ.get("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "").strip()
+    or os.environ.get("SSL_CERT_FILE", "").strip()
+    or None
 )
 
 # The CA Secret lives here; the CA ConfigMap is projected into SANDBOX_NAMESPACE
@@ -165,6 +194,14 @@ SANDBOX_PROXY_INJECTED_PLACEHOLDER = "replaced_by_egress_proxy"
 # The egress proxy reads it to attribute the tool call to a session for approval,
 # then strips it so it never reaches the MCP origin.
 MCP_SESSION_TAG_HEADER = "X-Onyx-Mcp-Session"
+
+# Shared cluster credential the Firecracker host agent presents to register its
+# node signing key. Unset = registration is locked.
+SANDBOX_NODE_REGISTRATION_SECRET = (
+    os.environ.get("SANDBOX_NODE_REGISTRATION_SECRET", "").strip() or None
+)
+# How long a node's previous signing key keeps verifying after rotation.
+SANDBOX_NODE_SIGNING_KEY_ROTATION_OVERLAP_SECONDS = 300
 
 
 # ==============================================================================

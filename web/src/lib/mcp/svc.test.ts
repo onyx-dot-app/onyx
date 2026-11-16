@@ -223,6 +223,7 @@ describe("MCP OAuth capability discovery", () => {
     const result = {
       status: "metadata_found",
       supports_automatic_registration: false,
+      supports_client_metadata: null,
       authorization_endpoint: "https://identity.example.com/authorize",
       token_endpoint: "https://identity.example.com/token",
     };

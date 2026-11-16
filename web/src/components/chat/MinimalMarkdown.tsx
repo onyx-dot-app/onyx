@@ -54,7 +54,9 @@ export default function MinimalMarkdown({
   const markdownComponents = useMemo(() => {
     const defaults: Components = {
       a: MemoizedLink,
-      p: MemoizedParagraph,
+      p: ({ dir, children }) => (
+        <MemoizedParagraph dir={dir}>{children}</MemoizedParagraph>
+      ),
       pre: ({ node, className, children }: any) => {
         // Don't render the pre wrapper - CodeBlock handles its own wrapper
         return <>{children}</>;

@@ -9,6 +9,9 @@ import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 
 let mockIsAdmin = true;
+let mockPublishing = "OPEN";
+const mockToast = { success: jest.fn(), info: jest.fn(), error: jest.fn() };
+let mockIsManager = false;
 const mockUpdateSkillShares = jest.fn();
 const mockLoadSkill = jest.fn();
 jest.mock("@/lib/fetcher", () => ({
@@ -17,6 +20,23 @@ jest.mock("@/lib/fetcher", () => ({
 
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ isAdmin: mockIsAdmin, user: null }),
+}));
+jest.mock("@/lib/settings/hooks", () => ({
+  useSettings: () => ({ plugin_publishing: mockPublishing }),
+}));
+jest.mock("@opal/layouts", () => ({
+  ...jest.requireActual("@opal/layouts"),
+  toast: {
+    success: (...args: unknown[]) => mockToast.success(...args),
+    info: (...args: unknown[]) => mockToast.info(...args),
+    error: (...args: unknown[]) => mockToast.error(...args),
+  },
+}));
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({
+    isGlobalHolder: mockIsAdmin || mockIsManager,
+    isScopedManager: false,
+  }),
 }));
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
@@ -34,10 +54,57 @@ jest.mock("@/lib/skills/api", () => ({
 describe("ShareSkillModal", () => {
   beforeEach(() => {
     mockIsAdmin = true;
+    mockPublishing = "OPEN";
+    Object.values(mockToast).forEach((fn) => fn.mockReset());
+    mockIsManager = false;
     mockLoadSkill
       .mockReset()
       .mockResolvedValue(customFixture({ user_permission: "OWNER" }));
     mockUpdateSkillShares.mockReset().mockResolvedValue({});
+  });
+
+  it("keeps sharing edits while switching between the details and sharing tabs", async () => {
+    mockLoadSkill.mockImplementation(async (url: string) => ({
+      ...customFixture({ user_permission: "OWNER" }),
+      ...(url.endsWith("/preview")
+        ? { instructions_markdown: "Use the team workflow." }
+        : {}),
+    }));
+    const user = setupUser();
+    const onClose = jest.fn();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        initialTab="details"
+        open
+        onClose={onClose}
+        onSaved={jest.fn()}
+      />
+    );
+    await screen.findByText("Use the team workflow.");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await user.click(screen.getByRole("tab", { name: "Sharing" }));
+    await user.click(screen.getByRole("button", { name: "Required" }));
+    await user.click(screen.getByRole("tab", { name: "Details" }));
+    expect(screen.getByText("Use the team workflow.")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "Sharing" }));
+    expect(screen.getByRole("button", { name: "Required" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+        "custom-1",
+        expect.objectContaining({ installation_policy: "REQUIRED" })
+      )
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("saves an admin's installation policy without changing sharing", async () => {
@@ -213,6 +280,246 @@ describe("ShareSkillModal", () => {
       );
     }
   );
+
+  it("lets a non-admin editor with organization-wide manage:plugins publish", async () => {
+    mockIsAdmin = false;
+    mockIsManager = true;
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "EDITOR", public_permission: null })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(
+      await screen.findByRole("button", { name: "Change sharing scope" })
+    ).toBeEnabled();
+  });
+
+  it("shows a published skill as Organization with no way to make it private", async () => {
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "OWNER", public_permission: "VIEWER" })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(await screen.findByText("Organization")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Published. Everyone in the organization can use this skill."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Change sharing scope" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Publishing cannot be undone")
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the version history to an owner in the Versions tab", async () => {
+    mockLoadSkill.mockImplementation(async (url: string) =>
+      url.endsWith("/versions")
+        ? [
+            {
+              id: "version-2",
+              version_number: 2,
+              created_at: "2026-11-01T10:00:00Z",
+              created_by_email: "owner@example.com",
+              is_current: true,
+              review_status: "draft",
+            },
+          ]
+        : customFixture({ user_permission: "OWNER" })
+    );
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(await screen.findByRole("tab", { name: "Versions" }));
+    expect(await screen.findByText("Version 2")).toBeVisible();
+    expect(mockLoadSkill).toHaveBeenCalledWith(
+      "/api/skills/custom/custom-1/versions"
+    );
+  });
+
+  it("hides the Versions tab from a viewer", async () => {
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "VIEWER" })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(await screen.findByRole("tab", { name: "Sharing" })).toBeVisible();
+    expect(
+      screen.queryByRole("tab", { name: "Versions" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("warns that publishing cannot be undone before a private skill is published", async () => {
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "OWNER", public_permission: null })
+    );
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Change sharing scope" })
+    );
+    expect(
+      screen.queryByText("Publishing cannot be undone")
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("option", { name: "Anyone in your organization" })
+    );
+    expect(
+      await screen.findByText("Publishing cannot be undone")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Change organization permission" })
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+        "custom-1",
+        expect.objectContaining({ public_permission: "VIEWER" })
+      )
+    );
+  });
+
+  it("tells a non-admin author that a publish under Requires review goes to an admin", async () => {
+    mockIsAdmin = false;
+    mockPublishing = "REQUIRES_REVIEW";
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "OWNER", public_permission: null })
+    );
+    mockUpdateSkillShares.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: null,
+        pending_version_number: 1,
+      })
+    );
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Change sharing scope" })
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: "Anyone in your organization" })
+    );
+    expect(
+      await screen.findByText(/stays private until an admin approves/)
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockToast.info).toHaveBeenCalledWith(
+        "Your publish request went to an admin for review."
+      )
+    );
+    expect(mockToast.success).not.toHaveBeenCalled();
+  });
+
+  it("shows no review notice to a non-admin with organization-wide manage:plugins", async () => {
+    mockIsAdmin = false;
+    mockIsManager = true;
+    mockPublishing = "REQUIRES_REVIEW";
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "OWNER", public_permission: null })
+    );
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Change sharing scope" })
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: "Anyone in your organization" })
+    );
+    expect(
+      await screen.findByText("Publishing cannot be undone")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/stays private until an admin approves/)
+    ).not.toBeInTheDocument();
+  });
+
+  it("blocks a publish when the Publishing setting is Off for the user", async () => {
+    mockIsAdmin = false;
+    mockPublishing = "OFF";
+    mockLoadSkill.mockResolvedValue(
+      customFixture({ user_permission: "OWNER", public_permission: null })
+    );
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Change sharing scope" })
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: "Anyone in your organization" })
+    );
+    expect(
+      await screen.findByText("Publishing is turned off")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Publishing cannot be undone")
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(mockUpdateSkillShares).not.toHaveBeenCalled();
+  });
 
   it("keeps creation settings local until the skill is created", async () => {
     const user = setupUser();

@@ -9,7 +9,8 @@ import {
   removeChatSessionFromProject as removeChatSessionFromProjectService,
 } from "@/lib/projects/svc";
 import { useProjectsContext } from "@/lib/projects/providers";
-import { ChatSession } from "@/app/app/interfaces";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import { ChatSession } from "@/app/app/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useAgents } from "@/lib/agents/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -19,6 +20,7 @@ import {
   Dropdown,
   LineItemButton,
   Text,
+  useCreateModal,
   type DropdownMenuItem,
   type DropdownView,
 } from "@opal/components";
@@ -54,15 +56,15 @@ function ProjectChatItem({
   afterRefresh,
 }: ProjectChatItemProps) {
   const t = useTranslations("chat");
+  const appPosition = useAppPosition();
   const tSidebar = useTranslations("sidebar");
   const locale = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const deleteModal = useCreateModal();
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
+  const moveCustomAgentModal = useCreateModal();
 
   const lastUpdateTime = useMemo(
     () => timeAgo(chat.time_updated, locale),
@@ -81,11 +83,18 @@ function ProjectChatItem({
       removeSession(chat.id);
       await refreshChatSessions();
       await fetchProjects();
-      setIsDeleteModalOpen(false);
+      deleteModal.toggle(false);
       setMenuOpen(false);
       afterRefresh();
     },
-    [chat, refreshChatSessions, removeSession, fetchProjects, afterRefresh]
+    [
+      chat,
+      refreshChatSessions,
+      removeSession,
+      fetchProjects,
+      afterRefresh,
+      deleteModal,
+    ]
   );
 
   const performMove = useCallback(
@@ -108,13 +117,13 @@ function ProjectChatItem({
 
       if (!isChatUsingDefaultAgent && !hideModal) {
         setPendingMoveProjectId(item.id);
-        setShowMoveCustomAgentModal(true);
+        moveCustomAgentModal.toggle(true);
         return;
       }
 
       await performMove(item.id);
     },
-    [isChatUsingDefaultAgent, performMove]
+    [isChatUsingDefaultAgent, performMove, moveCustomAgentModal]
   );
 
   const handleRemoveFromProject = useCallback(async () => {
@@ -182,7 +191,7 @@ function ProjectChatItem({
           icon: SvgTrash,
           danger: true,
           title: tSidebar("chatButton.delete.label"),
-          onSelect: () => setIsDeleteModalOpen(true),
+          onSelect: () => deleteModal.toggle(true),
         },
       ],
     },
@@ -190,11 +199,11 @@ function ProjectChatItem({
 
   return (
     <>
-      {isDeleteModalOpen && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
           title={tSidebar("chatButton.deleteConfirmation.title")}
           icon={SvgTrash}
-          onClose={() => setIsDeleteModalOpen(false)}
+          onClose={() => deleteModal.toggle(false)}
           submit={
             <Button variant="danger" onClick={handleConfirmDelete}>
               {tSidebar("chatButton.deleteConfirmation.confirmButton.label")}
@@ -203,12 +212,12 @@ function ProjectChatItem({
         >
           {tSidebar("chatButton.deleteConfirmation.description")}
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
 
-      {showMoveCustomAgentModal && (
+      <moveCustomAgentModal.Provider>
         <MoveCustomAgentChatModal
           onCancel={() => {
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveProjectId(null);
           }}
           onConfirm={async (doNotShowAgain) => {
@@ -219,16 +228,17 @@ function ProjectChatItem({
               );
             }
             const target = pendingMoveProjectId;
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveProjectId(null);
             if (target != null) await performMove(target);
           }}
         />
-      )}
+      </moveCustomAgentModal.Provider>
 
       <Hoverable.Root group={chat.id} width="full">
         <LineItemButton
-          href={`/app?chatId=${chat.id}`}
+          font="main-ui-action"
+          {...appPosition.linkToChat(chat.id)}
           group={chat.id}
           icon={icon}
           title={chat.name || UNNAMED_CHAT}
@@ -239,7 +249,6 @@ function ProjectChatItem({
                 })
               : undefined
           }
-          sizePreset="main-ui"
           interaction={menuOpen ? "active" : undefined}
           rightChildren={
             <Hoverable.Item group={chat.id} variant="appear-on-hover">

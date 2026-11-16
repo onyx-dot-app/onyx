@@ -108,6 +108,9 @@ func TestStackProvider_infraPortsAndEnv(t *testing.T) {
 }
 
 func TestStackProvider_composeUpWritesPortsAndExcludesLocalModel(t *testing.T) {
+	// The shell's image overrides would skip the model server pin and pull.
+	t.Setenv("IMAGE_TAG", "")
+	t.Setenv("ONYX_MODEL_SERVER_IMAGE", "")
 	root, calls := stackTestRepo(t)
 	stack, provider := openStack(nil)
 
@@ -121,14 +124,22 @@ func TestStackProvider_composeUpWritesPortsAndExcludesLocalModel(t *testing.T) {
 			t.Errorf("compose .env lacks %q:\n%s", want, composeEnv)
 		}
 	}
-	var up []string
+	var up, pull []string
 	for _, c := range devtoolCalls(t, calls["docker"]) {
 		if len(c.Args) > 1 && c.Args[0] == "compose" && slices.Contains(c.Args, "up") {
 			up = c.Args
 		}
+		if len(c.Args) > 1 && c.Args[0] == "compose" && slices.Contains(c.Args, "pull") && up == nil {
+			pull = c.Args
+		}
 	}
 	if up == nil {
 		t.Fatal("docker compose up was not run")
+	}
+	for _, want := range []string{"--ignore-pull-failures", "inference_model_server", "indexing_model_server"} {
+		if !slices.Contains(pull, want) {
+			t.Errorf("model server pull before up lacks %q: %v", want, pull)
+		}
 	}
 	for _, want := range []string{"-p", stack.Project, "--wait", "relational_db", "cache"} {
 		if !slices.Contains(up, want) {
@@ -342,4 +353,21 @@ func TestStackCommands_lifecycleWithFakeService(t *testing.T) {
 		t.Errorf("state after stop: %+v %v", st, err)
 	}
 	runStackCommand(t, "down")
+}
+
+func TestModelServerImageEnv(t *testing.T) {
+	env := func(vars map[string]string) func(string) string {
+		return func(key string) string { return vars[key] }
+	}
+	if got := modelServerImageEnv(env(nil)); !reflect.DeepEqual(got, []string{"ONYX_MODEL_SERVER_IMAGE=" + devModelServerImage}) {
+		t.Errorf("default env = %v", got)
+	}
+	for _, chosen := range []map[string]string{
+		{"ONYX_MODEL_SERVER_IMAGE": "onyxdotapp/onyx-model-server:v5.0.3"},
+		{"IMAGE_TAG": "v5.0.3"},
+	} {
+		if got := modelServerImageEnv(env(chosen)); got != nil {
+			t.Errorf("env with %v = %v, want nil", chosen, got)
+		}
+	}
 }
