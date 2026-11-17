@@ -1,4 +1,4 @@
-{{- if and .Values.vectorDB.enabled .Values.celery_worker_docconversion.enabled (or .Values.celery_worker_docconversion.autoscaling.enabled (gt (int .Values.celery_worker_docconversion.replicaCount) 0)) }}
+{{- if eq (include "onyx.docconversion.deployed" .) "true" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
