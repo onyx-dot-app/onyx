@@ -279,8 +279,15 @@ def test_job_failed_during_upload_removes_the_zip(
         if kwargs.get("file_type") == USAGE_REPORT_MEDIA_TYPE:
             # Cleanup fails the job while the ZIP uploads. It must not wait.
             with get_session_with_current_tenant() as cleanup_session:
-                cleanup_session.execute(text("SET LOCAL lock_timeout = '5s'"))
-                fail_task_with_id(cleanup_session, report_id, TaskStatus.STARTED)
+                # A session setting, because the helper rolls back first.
+                cleanup_session.execute(text("SET lock_timeout = '5s'"))
+                cleanup_session.commit()
+                try:
+                    fail_task_with_id(cleanup_session, report_id, TaskStatus.STARTED)
+                finally:
+                    cleanup_session.rollback()
+                    cleanup_session.execute(text("RESET lock_timeout"))
+                    cleanup_session.commit()
             uploaded.append(str(kwargs["file_id"]))
         return real_store.save_file(**kwargs)  # ty: ignore[invalid-argument-type]
 

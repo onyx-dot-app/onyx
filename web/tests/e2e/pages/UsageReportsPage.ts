@@ -11,6 +11,19 @@ export class UsageReportsPage {
     await this.page.reload();
   }
 
+  // Client-side navigation keeps the SWR cache, unlike a reload.
+  async leave(): Promise<void> {
+    await this.page.locator("a[href='/admin/agents']").first().click();
+    await this.page.waitForURL("**/admin/agents");
+    await expect(
+      this.page.getByRole("button", { name: "Generate report", exact: true })
+    ).toBeHidden();
+  }
+
+  async goBack(): Promise<void> {
+    await this.page.goBack();
+  }
+
   async expectPendingRow(): Promise<void> {
     await expect(this.page.getByTestId("pending-report-row")).toBeVisible();
   }

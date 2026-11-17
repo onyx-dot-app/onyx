@@ -311,22 +311,38 @@ export default function UsageReports() {
     isLoading: jobsLoading,
     mutate: mutateJobs,
   } = useSWR<UsageReportJob[]>(SWR_KEYS.usageReportJobs, errorHandlingFetcher, {
+    // The mount effect below fetches jobs, so cached jobs cannot start reports.
+    revalidateOnMount: false,
     refreshInterval: (latest) => (latest?.some(isOpen) ? POLL_INTERVAL_MS : 0),
   });
+  const [jobsFetched, setJobsFetched] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void mutateJobs().finally(() => {
+      if (active) setJobsFetched(true);
+    });
+    return () => {
+      active = false;
+      // A back navigation can show this page again with its state kept.
+      setJobsFetched(false);
+    };
+  }, [mutateJobs]);
   // Only the admin's own request blocks Generate. Jobs of other admins, or
   // from before a reload, show as rows but do not block a new request.
   const pending = (jobs ?? []).some(
     (job) => job.report_id === requestedReportId && isOpen(job)
   );
   // A worker records the report in the transaction that deletes its job, so
-  // reports read after a jobs response include every job that response lacks.
+  // reports read after a fresh jobs response include every job it lacks.
   const {
     data: reports,
     error: listError,
     mutate,
   } = useSWR<UsageReport[]>(
-    jobs ? SWR_KEYS.usageReport : null,
-    errorHandlingFetcher
+    jobsFetched && jobs ? SWR_KEYS.usageReport : null,
+    errorHandlingFetcher,
+    // A deduplicated read could predate the fresh jobs read.
+    { dedupingInterval: 0 }
   );
   const listLoading = !reports && !listError;
 
