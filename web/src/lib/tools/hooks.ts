@@ -20,7 +20,7 @@ import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { toast } from "@opal/layouts";
 import {
-  useAgentChatPlugins,
+  useAgentPluginIds,
   useAgentPluginPreferences,
 } from "@/lib/plugins/hooks";
 import { useUser } from "@/providers/UserProvider";
@@ -846,7 +846,7 @@ export function useToolConfiguration(
   const agentTools = activeAgent?.tools;
   // Every plugin of the agent, null until it loads. Saved options name
   // plugins in an allow-list, so a plugin unknown here would be left out.
-  const agentPluginIds = useAgentChatPlugins(configAgentId).pluginIds;
+  const agentPluginIds = useAgentPluginIds(configAgentId).pluginIds;
   const pluginIdsKey =
     agentPluginIds === null ? null : agentPluginIds.join(",");
   const pluginIds = useMemo(
