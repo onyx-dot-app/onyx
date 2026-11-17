@@ -55,7 +55,8 @@ LIMITER_CUT_USERS = Gauge(
 
 LIMITER_CUTS = Counter(
     "onyx_source_api_limiter_cuts_total",
-    "Times the shared limiter halved a budget after a rate-limit answer",
+    "Times the shared limiter cut a budget after the source refused a share of "
+    "the recent requests for its rate",
     ["source", "api", "scope"],
 )
 
@@ -134,10 +135,12 @@ class _UserBudgets:
             self._budgets[key] = recent
             lowest = min(budget[0] for budget in recent.values())
             cut_users = sum(1 for budget in recent.values() if budget[0] < budget[1])
-        LIMITER_BUDGET.labels(
-            source=source, api=api, scope=LimiterScope.USER.value
-        ).set(lowest)
-        LIMITER_CUT_USERS.labels(source=source, api=api).set(cut_users)
+            # Publish under the lock, so an older observation cannot overwrite
+            # a newer one.
+            LIMITER_BUDGET.labels(
+                source=source, api=api, scope=LimiterScope.USER.value
+            ).set(lowest)
+            LIMITER_CUT_USERS.labels(source=source, api=api).set(cut_users)
 
 
 _user_budgets = _UserBudgets()

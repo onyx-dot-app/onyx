@@ -257,6 +257,10 @@ def _get_connector_runner(
         )
         _record_outcome(e, perm_sync_validated=False)
         raise e
+    except ConnectorStopSignal:
+        # The attempt stopped while it waited for the source's API budget. The
+        # connector is fine, so the pair stays active.
+        raise
     except Exception as e:
         logger.exception("Unable to instantiate connector. Pausing until fixed.")
         _record_outcome(e, perm_sync_validated=False)

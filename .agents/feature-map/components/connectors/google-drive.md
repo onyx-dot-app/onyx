@@ -164,11 +164,17 @@ reports a rate-limit answer with its scope
 (`connectors/google_drive/source_operations.py:_is_user_rate_limit`): 403
 `userRateLimitExceeded`, or a 429 whose `quota_limit` names a per-user quota
 (for example `ReadRequestsPerMinutePerUser`), cuts that user's budget; any
-other 429 cuts the project's. A batch of N files spends N requests under the
-requests quota model, and a refusal of one file in a batch also cuts. The
-budgets live in Redis
+other 429 is the project's. A batch of N files spends N requests under the
+requests quota model, and reports each refused file. The budgets live in Redis
 (`redis/redis_rate_window.py`), so every worker that uses the credential shares
-them. Connector code does not import Redis.
+them. Connector code does not import Redis. Each per-minute budget is enforced
+in a 10 s window at the same rate, so a full minute cannot go in one burst. A
+window cuts only when the refused share of its requests in the last 30 s is at
+least 2 % with at least 10 refusals: by 0.8, or in a storm (10 % or more) by
+the accepted share, at most 0.5. A cut holds for 60 s, but a storm can cut again
+after 10 s. Then the share grows by 0.05 each 10 s, and by 0.005 near the share
+of the last cut. EE group sync and doc permission sync
+(`ee/onyx/external_permissions/google_drive/`) spend from the same budgets.
 
 **Request and back-off metrics.** The gateway counts each request it sends,
 each try of a retry included, in `onyx_source_api_requests_total{source, api,

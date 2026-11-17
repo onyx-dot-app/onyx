@@ -166,15 +166,17 @@ def test_the_limiter_keeps_the_listing_under_the_quota(
 class _RecordingLimiter(SourceApiLimiter):
     def __init__(self) -> None:
         self.acquired: list[tuple[str, int, str | None, int]] = []
-        self.reports: list[tuple[str, str | None, bool]] = []
+        self.reports: list[tuple[str, str | None, bool, int]] = []
 
     def acquire(
         self, api: str, cost: int, user: str | None = None, request_count: int = 1
     ) -> None:
         self.acquired.append((api, cost, user, request_count))
 
-    def report_rate_limit(self, api: str, user: str | None, user_scope: bool) -> None:
-        self.reports.append((api, user, user_scope))
+    def report_rate_limit(
+        self, api: str, user: str | None, user_scope: bool, count: int = 1
+    ) -> None:
+        self.reports.append((api, user, user_scope, count))
 
 
 def test_a_batch_spends_each_request_and_reports_refused_files(
@@ -182,7 +184,7 @@ def test_a_batch_spends_each_request_and_reports_refused_files(
 ) -> None:
     """A batch read spends one request for each file in it. Google refuses
     some files of the batch for the project's rate, and the gateway reports
-    that once, so later calls slow down."""
+    them in one report with their count."""
     own_mock_drive.patch_config(
         {
             "quota": {
@@ -211,4 +213,4 @@ def test_a_batch_spends_each_request_and_reports_refused_files(
         if isinstance(error, GoogleDriveHttpError) and error.rate_limited
     ]
     assert refused
-    assert limiter.reports == [(DriveQuotaApi.DRIVE.value, admin, False)]
+    assert limiter.reports == [(DriveQuotaApi.DRIVE.value, admin, False, len(refused))]
