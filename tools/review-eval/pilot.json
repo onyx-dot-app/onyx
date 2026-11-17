@@ -1,0 +1,70 @@
+{
+  "cases": [
+    {
+      "introduced": 13943,
+      "fixed": 14203,
+      "answer": "On small screens, long custom header text makes the open-sidebar button unclickable.",
+      "reviewed": ["greptile", "cubic", "human"],
+      "matches": {}
+    },
+    {
+      "introduced": 14848,
+      "fixed": 17650,
+      "answer": "The OneDrive ownership subquery in the SharePoint upsert loses tenant schema translation and document correlation, which can fail upserts or suppress unrelated permission updates.",
+      "reviewed": ["greptile", "cubic", "human"],
+      "matches": {}
+    },
+    {
+      "introduced": 15917,
+      "fixed": 16962,
+      "answer": "Craft Markdown output previews retain light-theme text colors in dark mode because the renderer omits the prose-onyx class.",
+      "reviewed": ["greptile", "human"],
+      "matches": {}
+    },
+    {
+      "introduced": 17025,
+      "fixed": 17036,
+      "answer": "A failed earlier-page request recreates a chat that left the store while the request was pending.",
+      "reviewed": ["greptile", "human"],
+      "matches": {},
+      "other_match": {"reviewer": "CodeRabbit", "comment": 4431190334, "status": "unfixed"}
+    },
+    {
+      "introduced": 17043,
+      "fixed": 17064,
+      "answer": "The ComposeUp test fails if the process inherits either image override because the test expects a pull that the override disables.",
+      "reviewed": ["greptile", "cubic", "human"],
+      "matches": {
+        "greptile": {"comment": 4445655704, "status": "unfixed"},
+        "cubic": {"comment": 4445654827, "status": "unfixed"}
+      }
+    }
+  ],
+  "excluded": {
+    "17744": "The revert gives no specific failure.",
+    "14938": "The author cites experiment results and a product decision.",
+    "17044": "The referenced PR does not introduce the affected CLI calls.",
+    "16875": "The linked context does not establish the first faulty write.",
+    "17179": "The stack reference does not establish which PR introduced the race.",
+    "12231": "The revert gives no specific failure.",
+    "12111": "The revert gives no specific failure.",
+    "11668": "The revert identifies the branch change, but the failure claim comes from an automated summary."
+  },
+  "controls": [
+    {"pr": 14300, "findings": {"cubic": [{"comment": 3866535733, "status": "unchanged"}]}},
+    {"pr": 15321, "findings": {"greptile": [{"comment": 4149663444, "status": "changed"}]}},
+    {"pr": 15942, "findings": {"greptile": [
+      {"comment": 4254360380, "status": "changed"},
+      {"comment": 4254360384, "status": "changed"}
+    ]}},
+    {"pr": 15600, "findings": {"greptile": [
+      {"comment": 4196883053, "status": "unchanged"},
+      {"comment": 4196883075, "status": "unchanged"}
+    ]}},
+    {"pr": 16380, "findings": {"greptile": [
+      {"comment": 4339919027, "status": "changed"},
+      {"comment": 4339919062, "status": "changed"},
+      {"comment": 4340378572, "status": "unchanged"}
+    ]}}
+  ]
+}
