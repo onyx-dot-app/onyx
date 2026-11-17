@@ -1488,7 +1488,7 @@ UV_BUILD_CONSTRAINT="$(git rev-parse --show-toplevel)/tools/requirements/build-c
 ```
 
 `tools/requirements/build-constraints.txt` is compiled from its `.in` by the
-`pip-compile` pre-commit hook, so a plain `prek run pip-compile` refreshes
+`pip-compile` pre-commit hook, so `prek run pip-compile --all-files` refreshes
 it. To upgrade a pinned build dependency, edit `build-constraints.in` and the
 matching `[build-system] requires` in all three `pyproject.toml` files; the
 `build-constraints-drift` hook fails if they disagree.
