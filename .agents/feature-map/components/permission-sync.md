@@ -196,14 +196,13 @@ runs.
    prefix, so "Engineering" in Confluence and in Jira stay apart, and it
    lowercases. An ID built by hand differs only in case or prefix. The match
    then fails closed: the user loses access, and the sync looks healthy. The
-   doc sync and group sync writes apply it for you. The indexing write
-   (`onyx/db/document.py:upsert_documents`) stores group IDs as the connector
-   gives them, so a connector that sets `external_access` during indexing must
-   namespace its group IDs itself (see `add_prefix` in
-   `ee/onyx/external_permissions/google_drive/doc_sync.py`). Hierarchy node
-   access is stored as given on every path, the doc sync included, so nodes
-   always carry namespaced IDs (`onyx/connectors/egnyte/connector.py:_prefixed`).
-   A change to the
+   doc sync and group sync writes apply it for you. For the sources in
+   `onyx/access/utils.py:SOURCES_YIELDING_BARE_GROUP_IDS`, the connector yields
+   bare IDs on every path, and the indexing write
+   (`onyx/db/document.py:upsert_documents`) and the hierarchy node writes apply
+   it too (`onyx/access/utils.py:build_ext_group_names_for_storage`). For the
+   other sources, those writes store IDs as given, so the connector namespaces
+   them itself on the indexing path and on every hierarchy node. A change to the
    namespacing needs a full doc sync and group sync, not a reindex, because the
    Postgres rows hold the old IDs.
 3. `never-widen-first` **Never clear or widen access before the new value is
