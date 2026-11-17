@@ -38,7 +38,7 @@ const integration: AgentCatalogIntegration = {
   actions: [action],
 };
 
-test("loads stored settings and drops inherit entries", () => {
+test("loads stored settings and keeps inherit entries", () => {
   expect(
     draftFromLink({
       plugin_id: "p1",
@@ -48,7 +48,9 @@ test("loads stored settings and drops inherit entries", () => {
         actions: { a: "inherit", b: "allow" },
       },
     })
-  ).toEqual(draft({ default: "blocked", actions: { b: "allow" } }));
+  ).toEqual(
+    draft({ default: "blocked", actions: { a: "inherit", b: "allow" } })
+  );
   expect(
     draftFromLink({
       plugin_id: "p1",
@@ -58,7 +60,22 @@ test("loads stored settings and drops inherit entries", () => {
   ).toEqual(draft());
 });
 
-test("leaves inherit keys out of the request", () => {
+test("a migrated link saves back unchanged", () => {
+  const migrated = {
+    plugin_id: "p1",
+    plugin_name: "Linear",
+    action_settings: {
+      default: "blocked" as const,
+      actions: { hello: "inherit" as const },
+    },
+  };
+  expect(toPluginInput(draftFromLink(migrated))).toEqual({
+    plugin_id: "p1",
+    action_settings: { default: "blocked", actions: { hello: "inherit" } },
+  });
+});
+
+test("leaves an inherit default out of the request", () => {
   expect(toPluginInput(draft())).toEqual({
     plugin_id: "p1",
     action_settings: {},

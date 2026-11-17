@@ -97,13 +97,17 @@ Each plugin of an Agent lists the actions of its integrations. Each action has o
 
 | Setting | Effect |
 | --- | --- |
-| **Use the integration setting** | The action follows the policy that an admin set on the integration. This is the default. |
+| **Use the agent default** | The action uses the **Default for Other Actions** row of the plugin. This is the default. |
+| **Use the integration setting** | The action follows the policy that an admin set on the integration. |
 | **Allow** | The action runs without a prompt in this Agent. |
 | **Ask** | Onyx asks the user before the action runs. |
 | **Blocked** | The Agent cannot use the action. |
 
-The first row of each plugin, **Default for Other Actions**, applies to each action with no setting of its own.
-It also applies to actions that the integration adds later.
+The first row of each plugin, **Default for Other Actions**, applies to each action set to **Use the agent default**.
+It also applies to actions that the integration adds later. Its own default is **Use the integration setting**.
+
+When two plugins of an Agent hold the same integration, the strictest setting of the two applies.
+The editor tells you when another plugin sets a stricter setting for an action.
 
 **Allow** is not available when:
 

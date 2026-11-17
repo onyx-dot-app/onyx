@@ -10800,7 +10800,8 @@
         "askHint": "確認なしで実行するには、管理者が統合でこれを許可に設定するか、各ユーザーが常に許可を選びます。",
         "askHintAdminOnly": "確認なしで実行するには、管理者が統合でこれを許可に設定します。",
         "choice": {
-          "inherit": "統合の設定を使う"
+          "inherit": "統合の設定を使う",
+          "agentDefault": "エージェントのデフォルトを使用"
         },
         "default": {
           "description": "独自の設定がない各アクションに適用されます。統合が後で追加するアクションにも適用されます。",
@@ -10835,7 +10836,8 @@
         },
         "openIntegration": {
           "label": "{integration} のアクションを開く"
-        }
+        },
+        "stricterPlugin": "このエージェントの {plugin} プラグインが、このアクションにより厳しい設定を適用しています。"
       },
       "prompts": {
         "instructions": {

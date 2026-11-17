@@ -10800,7 +10800,8 @@
         "askHint": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben, oder jeder Benutzer wählt Immer erlauben.",
         "askHintAdminOnly": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben.",
         "choice": {
-          "inherit": "Integrationseinstellung verwenden"
+          "inherit": "Integrationseinstellung verwenden",
+          "agentDefault": "Agentenstandard verwenden"
         },
         "default": {
           "description": "Gilt für jede Aktion ohne eigene Einstellung, auch für Aktionen, die die Integration später hinzufügt.",
@@ -10835,7 +10836,8 @@
         },
         "openIntegration": {
           "label": "Aktionen von {integration} öffnen"
-        }
+        },
+        "stricterPlugin": "Das Plugin {plugin} dieses Agenten legt für diese Aktion eine strengere Einstellung fest."
       },
       "prompts": {
         "instructions": {

@@ -106,7 +106,7 @@ test.describe("Agent plugin action settings", () => {
     );
     await editor.expectActionSetting(
       LIST_ACTION,
-      "Use the integration setting",
+      "Use the agent default",
       "Allows (integration setting)"
     );
   });

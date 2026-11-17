@@ -6,8 +6,10 @@ import type {
   PolicyValue,
 } from "@/lib/integrations/types";
 
-/** One plugin of the agent editor form. `actions` holds only the actions
- * with a setting of their own. */
+/** One plugin of the agent editor form. `actions` holds the actions with a
+ * setting of their own; an action with no entry uses `default`. An entry of
+ * `inherit` is not the same as no entry: a migrated agent has a `blocked`
+ * default with `inherit` for the tools it used. */
 export interface AgentPluginDraft {
   plugin_id: string;
   plugin_name: string;
@@ -20,11 +22,7 @@ export function draftFromLink(link: AgentPluginLink): AgentPluginDraft {
     plugin_id: link.plugin_id,
     plugin_name: link.plugin_name,
     default: link.action_settings.default ?? "inherit",
-    actions: Object.fromEntries(
-      Object.entries(link.action_settings.actions ?? {}).filter(
-        ([, value]) => value !== "inherit"
-      )
-    ),
+    actions: { ...link.action_settings.actions },
   };
 }
 
@@ -52,10 +50,16 @@ export function lockReason(
 
 type SettingSource = "integration" | "agentDefault" | "agent";
 
-interface EffectiveSetting {
+export interface EffectiveSetting {
   policy: PolicyValue;
   source: SettingSource;
 }
+
+const STRICTNESS: Record<PolicyValue, number> = {
+  allow: 0,
+  ask: 1,
+  blocked: 2,
+};
 
 /** The value that applies to the action for this agent, before the saved
  * choice of a user. Follows the backend policy order. */
@@ -84,4 +88,26 @@ export function effectiveSetting(
         ? fromIntegration
         : { policy: "allow", source };
   }
+}
+
+/** The plugin of the agent whose setting is stricter for the action than
+ * the setting of `draft`, if any. The backend applies the strictest link of
+ * the plugins that hold the integration. */
+export function stricterPlugin(
+  integration: AgentCatalogIntegration,
+  action: IntegrationAction,
+  draft: AgentPluginDraft,
+  others: readonly AgentPluginDraft[]
+): { draft: AgentPluginDraft; setting: EffectiveSetting } | null {
+  let strictest: { draft: AgentPluginDraft; setting: EffectiveSetting } | null =
+    null;
+  let floor = STRICTNESS[effectiveSetting(integration, action, draft).policy];
+  for (const other of others) {
+    const setting = effectiveSetting(integration, action, other);
+    if (STRICTNESS[setting.policy] > floor) {
+      strictest = { draft: other, setting };
+      floor = STRICTNESS[setting.policy];
+    }
+  }
+  return strictest;
 }

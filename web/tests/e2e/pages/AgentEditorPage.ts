@@ -3,6 +3,7 @@
 import { type Page, type Locator, expect } from "@playwright/test";
 
 export type ActionSettingLabel =
+  | "Use the agent default"
   | "Use the integration setting"
   | "Allow"
   | "Ask"

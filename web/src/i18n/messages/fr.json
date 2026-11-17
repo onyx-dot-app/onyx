@@ -10800,7 +10800,8 @@
         "askHint": "Pour l'exécuter sans demande, un administrateur la règle sur Autoriser dans l'intégration, ou chaque utilisateur choisit Toujours autoriser.",
         "askHintAdminOnly": "Pour l'exécuter sans demande, un administrateur la règle sur Autoriser dans l'intégration.",
         "choice": {
-          "inherit": "Utiliser le réglage de l'intégration"
+          "inherit": "Utiliser le réglage de l'intégration",
+          "agentDefault": "Utiliser la valeur par défaut de l'agent"
         },
         "default": {
           "description": "S'applique à chaque action sans réglage propre, y compris aux actions que l'intégration ajoutera plus tard.",
@@ -10835,7 +10836,8 @@
         },
         "openIntegration": {
           "label": "Ouvrir les actions de {integration}"
-        }
+        },
+        "stricterPlugin": "Le plugin {plugin} de cet agent définit un paramètre plus strict pour cette action."
       },
       "prompts": {
         "instructions": {
