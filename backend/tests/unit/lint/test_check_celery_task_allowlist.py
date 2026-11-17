@@ -179,6 +179,10 @@ def test_add_periodic_task_is_flagged() -> None:
             "task CHECK_FOR_INDEX_ATTEMPT_CLEANUP:  # one-off: remove later\n",
             "The reason cannot be empty",
         ),
+        (
+            "task CHECK_FOR_INDEX_ATTEMPT_CLEANUP: # one-off: remove later\n",
+            "The reason cannot be empty",
+        ),
         ("CHECK_FOR_INDEX_ATTEMPT_CLEANUP: A reason.\n", "The reason cannot be empty"),
         (
             "task CHECK_FOR_INDEX_ATTEMPT_CLEANUP: A reason.\n"

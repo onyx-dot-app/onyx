@@ -37,7 +37,7 @@ _TASK_DIRS = ("onyx/background/celery/tasks/", "ee/onyx/background/celery/tasks/
 # Only files with one of these strings can define a task or a beat entry.
 _HINTS = ("shared_task", ".task", "schedule", "add_periodic_task")
 _LINE = re.compile(r"^(task|beat) (\S.*?): (.*)$")
-_ONE_OFF = " # one-off:"
+_ONE_OFF = re.compile(r"(?:^|\s)# one-off:")
 
 _WHAT_IS_A_TASK = (
     "A Celery task is for work that runs again: a periodic check, a step of a "
@@ -187,7 +187,7 @@ def parse_allowlist(text: str, label: str) -> Allowlist:
             continue
         location = f"{label}:{number}"
         match = _LINE.match(line)
-        reason = match.group(3).split(_ONE_OFF)[0].strip() if match else ""
+        reason = _ONE_OFF.split(match.group(3))[0].strip() if match else ""
         if match is None or not reason:
             problems.append(
                 Problem(
