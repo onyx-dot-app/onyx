@@ -8,65 +8,25 @@ integration with no sign-in or shared sign-in.
 """
 
 from collections.abc import Sequence
-from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.enums import IntegrationAuthMode
 from onyx.db.integration import list_integration_actions
 from onyx.db.integration_policy import list_plugin_integrations
 from onyx.db.models import Integration, User
-from onyx.db.plugin_access import load_user_plugin_states
 from onyx.integrations.call_credentials import resolve_call_credentials
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.kinds.models import ChatToolContext
-from onyx.integrations.models import ActionSettings, ApprovalMode, EffectivePolicy
-from onyx.integrations.policy import resolve_action_policies
+from onyx.integrations.models import ActionSettings, EffectivePolicy
+from onyx.integrations.policy import agent_plugin_settings, resolve_action_policies
 from onyx.integrations.registry import get_kind_handler
+from onyx.integrations.sync import sync_api_actions_if_missing
 from onyx.tools.interface import Tool
-from onyx.tools.models import PluginLinkConfiguration, ToolApprovalScope
+from onyx.tools.models import IntegrationChatRequest, ToolApprovalScope
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-class IntegrationChatRequest(BaseModel):
-    """The turn values that the tools of an integration need."""
-
-    model_config = ConfigDict(frozen=True)
-
-    persona_id: int
-    plugin_links: list[PluginLinkConfiguration]
-    approval_mode: ApprovalMode
-    chat_session_id: UUID | None = None
-    message_id: int | None = None
-    additional_headers: dict[str, str] = {}
-    mcp_headers: dict[str, str] | None = None
-
-
-def _plugin_settings(
-    db_session: Session, user: User, request: IntegrationChatRequest
-) -> dict[UUID, ActionSettings | None]:
-    """The plugins whose integrations the turn uses, with the settings of
-    the agent for each."""
-    states = load_user_plugin_states([user.id], db_session)
-    if user.is_anonymous:
-        states = [state for state in states if state.published]
-    links = {link.plugin_id: link.action_settings for link in request.plugin_links}
-    if request.persona_id == DEFAULT_PERSONA_ID:
-        return {
-            state.plugin_id: links.get(state.plugin_id)
-            for state in states
-            if state.enabled
-        }
-    visible = {state.plugin_id for state in states}
-    return {
-        link.plugin_id: link.action_settings
-        for link in request.plugin_links
-        if link.plugin_id in visible
-    }
 
 
 def _integration_tools(
@@ -84,6 +44,8 @@ def _integration_tools(
         )
         return []
     actions = list_integration_actions(integration.id, db_session)
+    if not actions and sync_api_actions_if_missing(integration.id):
+        actions = list_integration_actions(integration.id, db_session)
     keys = [action.key for action in actions]
     policies = resolve_action_policies(
         db_session,
@@ -129,7 +91,13 @@ def build_integration_chat_tools(
     """The tools of each enabled integration that the turn can use. An
     integration whose credential does not resolve gives no tool. A Blocked
     action gives no tool; an Ask action carries its approval scope."""
-    settings_by_plugin = _plugin_settings(db_session, user, request)
+    settings_by_plugin = agent_plugin_settings(
+        db_session,
+        user.id,
+        request.persona_id,
+        {link.plugin_id: link.action_settings for link in request.plugin_links},
+        published_only=user.is_anonymous,
+    )
     integrations: dict[int, Integration] = {}
     settings_by_integration: dict[int, list[ActionSettings | None]] = {}
     for plugin_id, integration in list_plugin_integrations(

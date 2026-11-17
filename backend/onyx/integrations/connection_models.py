@@ -4,6 +4,7 @@ shapes for the new format and for each old format. Each write saves the new
 format and clears ``legacy_format``."""
 
 import datetime
+import hashlib
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -258,6 +259,12 @@ def read_connection(connection: IntegrationConnection) -> ConnectionRecord:
 
 def read_connection_secret(connection: IntegrationConnection) -> ConnectionSecret:
     return read_connection(connection).secret
+
+
+def connection_secret_fingerprint(connection: IntegrationConnection) -> str:
+    return hashlib.sha256(
+        read_connection_secret(connection).model_dump_json().encode()
+    ).hexdigest()
 
 
 def legacy_organization_defaults(

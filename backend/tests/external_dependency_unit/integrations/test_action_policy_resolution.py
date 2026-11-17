@@ -10,7 +10,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import delete_messages_and_files_from_chat_session
 from onyx.db.enums import (
@@ -18,6 +18,7 @@ from onyx.db.enums import (
     ApprovalDecision,
     IntegrationActionPolicyValue,
     IntegrationActionSource,
+    PluginInstallationPolicy,
 )
 from onyx.db.models import (
     ApprovalRequest,
@@ -25,7 +26,9 @@ from onyx.db.models import (
     ChatSession,
     Integration,
     IntegrationAction,
+    Persona,
     User,
+    UserPluginPreference,
 )
 from onyx.integrations.models import (
     ActionSettings,
@@ -36,10 +39,16 @@ from onyx.integrations.models import (
 from onyx.integrations.policy import (
     parse_action_settings,
     resolve_action_policies,
+    resolve_chat_action_policy,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.db.agent_sharing_helpers import (
+    create_test_persona,
+)
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
+    hold_in_plugin,
+    link_persona,
     make_mcp_integration,
     set_policy,
 )
@@ -377,3 +386,79 @@ def test_stored_settings_parse_and_a_bad_row_blocks() -> None:
     assert parse_action_settings({"default": "sometimes"}) == ActionSettings(
         default=LinkValue.BLOCKED
     )
+
+
+def _recheck(
+    db_session: Session, integration: Integration, user: User, persona_id: int
+) -> EffectivePolicy:
+    chat_session = ChatSession(
+        id=uuid4(), user_id=user.id, persona_id=persona_id, description="recheck"
+    )
+    db_session.add(chat_session)
+    db_session.commit()
+    try:
+        return resolve_chat_action_policy(
+            db_session,
+            integration=integration,
+            action_key="update",
+            user_id=user.id,
+            chat_session_id=chat_session.id,
+        )
+    finally:
+        db_session.delete(chat_session)
+        db_session.commit()
+
+
+def test_the_approval_recheck_ignores_plugins_the_user_cannot_use(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    integrations: list[int],
+    make_test_user: MakeTestUser,
+) -> None:
+    """Chat tool construction offers an action through the plugins the user
+    can use, so a hidden or turned-off plugin must not block its approval."""
+    user = make_test_user("policy_recheck")
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.test/mcp",
+        name=f"recheck-{uuid4().hex[:8]}",
+        tools=("update",),
+    )
+    integrations.append(integration.id)
+    blocked = {"actions": {"update": "blocked"}}
+    visible = hold_in_plugin(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    hidden = hold_in_plugin(
+        db_session,
+        [integration],
+        installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
+    )
+    turned_off = hold_in_plugin(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    db_session.add(
+        UserPluginPreference(user_id=user.id, plugin_id=turned_off.id, enabled=False)
+    )
+    db_session.commit()
+    persona = create_test_persona(db_session, user)
+    try:
+        link_persona(db_session, persona.id, visible.id)
+        link_persona(db_session, persona.id, hidden.id, blocked)
+        link_persona(db_session, DEFAULT_PERSONA_ID, turned_off.id, blocked)
+
+        assert _recheck(db_session, integration, user, persona.id) is (
+            EffectivePolicy.ASK
+        )
+        assert _recheck(db_session, integration, user, DEFAULT_PERSONA_ID) is (
+            EffectivePolicy.ASK
+        )
+
+        link_persona(db_session, persona.id, turned_off.id, blocked)
+        assert _recheck(db_session, integration, user, persona.id) is (
+            EffectivePolicy.BLOCKED
+        )
+    finally:
+        db_session.rollback()
+        db_session.query(Persona).filter(Persona.id == persona.id).delete()
+        db_session.commit()

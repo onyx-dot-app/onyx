@@ -241,12 +241,18 @@ then picks the integrations:
   integration, the strictest link setting of each action wins.
 
 For each integration, `integrations/call_credentials.py:resolve_call_credentials`
-calls `resolve_connection` and renders the `header_template` (an OAuth2 or Onyx
-login token with no template goes in `Authorization: Bearer`). A problem means
-no action of the integration is offered. `MCPTool._run` calls the same check
-again through `resolve_mcp_call_auth`, and for OAuth2 on a non-SSE transport
-passes `make_integration_oauth_provider` with `IntegrationTokenStorage`. A 401
-on an API key connection sets it to Needs reconnect (`mark_api_key_rejected`).
+calls `resolve_connection` and renders the `header_template`. An OAuth2 or Onyx
+login token goes in `Authorization: Bearer` unless the template fills
+Authorization from a placeholder; a literal Authorization value (the static
+header of a migrated OpenAPI tool) loses to the token. A problem means
+no action of the integration is offered. An API integration with no stored
+actions (the migration writes none for an OpenAPI tool or a preset) gets them
+from `integrations/sync.py:sync_api_actions_if_missing` on its first chat.
+`MCPTool._run` calls the same check again through `resolve_mcp_call_auth`,
+which sends nothing when the server URL changed since construction, and for
+OAuth2 on a non-SSE transport passes `make_integration_oauth_provider` with
+`IntegrationTokenStorage`. A 401 on an API key connection sets it to Needs
+reconnect (`mark_api_key_rejected`).
 Request MCP headers do not stand in for a missing connection. The kind handler (`build_chat_tools`) builds the tools:
 `MCPTool` for an MCP server, one `CustomTool` per operation for an OpenAPI spec,
 and none for a preset or custom app. Tool names use the integration id
@@ -365,7 +371,9 @@ user's Always allow turns Ask into Allow unless locked. (5) A chat grant turns
 Ask into Allow. (6) `ApprovalMode.NO_APPROVER` turns Ask into Blocked;
 `RUN_WITHOUT_ASKING` turns Ask into Allow. The approval re-check
 (`chat/tool_approvals.py:action_now_blocked`, also in the decision route) uses
-the chat's agent links and no chat grant.
+no chat grant. It reads the agent links that construction reads
+(`integrations/policy.py:agent_plugin_settings`), so a plugin the user cannot
+see, or a default agent plugin the user turned off, does not change it.
 
 ---
 
@@ -453,9 +461,11 @@ the chat's agent links and no chat grant.
     user no error detail ([[tools-framework#run-errors-become-results]]).
 12. `reauth-mark-if-current` **Only a rejected API key is marked.**
     For a 401, `MCPTool._run` calls
-    `integrations/call_credentials.py:mark_api_key_rejected`, which sets the
-    API key connection that the call used to Needs reconnect. An OAuth2
-    connection is left to the refresh.
+    `integrations/call_credentials.py:mark_api_key_rejected`, which locks the
+    API key connection that the call used and sets it to Needs reconnect only
+    when it still holds the key the call sent (`CallCredentials.secret_fingerprint`).
+    A key saved during the call stays connected. An OAuth2 connection is left
+    to the refresh.
 13. `craft-sessions-bake-mcp-config` **Craft sessions bake MCP config.** A change
     to a server's URL, access or `available_in_craft` must call
     `server/features/mcp/api.py:_hot_reload_craft_sessions`. Take

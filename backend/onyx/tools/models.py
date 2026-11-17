@@ -13,7 +13,7 @@ from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
 )
-from onyx.integrations.models import ActionSettings
+from onyx.integrations.models import ActionSettings, ApprovalMode
 from onyx.tools.constants import FILE_READER_MAX_CHARS
 from onyx.tools.tool_implementations.search.models import SearchContext
 
@@ -107,6 +107,20 @@ class PluginLinkConfiguration(BaseModel):
 
     plugin_id: UUID
     action_settings: ActionSettings
+
+
+class IntegrationChatRequest(BaseModel):
+    """The turn values that the tools of an integration need."""
+
+    model_config = ConfigDict(frozen=True)
+
+    persona_id: int
+    plugin_links: list[PluginLinkConfiguration]
+    approval_mode: ApprovalMode
+    chat_session_id: UUID | None = None
+    message_id: int | None = None
+    additional_headers: dict[str, str] = {}
+    mcp_headers: dict[str, str] | None = None
 
 
 class PersonaToolConfiguration(BaseModel):

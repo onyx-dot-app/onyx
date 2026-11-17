@@ -15,16 +15,14 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.integrations.chat_tools import (
-    IntegrationChatRequest,
-    build_integration_chat_tools,
-)
+from onyx.integrations.chat_tools import build_integration_chat_tools
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
+    IntegrationChatRequest,
     PersonaToolConfiguration,
     SearchToolUsage,
     ToolConfiguration,

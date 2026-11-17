@@ -67,8 +67,8 @@ Neighbours:
 - [[mcp-and-custom-tools]]: MCP server records, access lists and credential
   storage. This component only matches and injects for Craft-enabled servers.
   Chat applies the same MCP tool policies through its own gate and approval
-  rows ([[mcp-and-custom-tools]]). OpenAPI calls in chat have no policy check
-  ([[plugins]]).
+  rows ([[mcp-and-custom-tools]]). Chat applies the same integration action
+  policies to MCP and OpenAPI actions ([[plugins]]).
 - [[craft-streaming]]: how an approval or connect card reaches the live
   stream.
 - [[craft-scheduled-tasks]]: task enablement and task choices, which this
