@@ -144,7 +144,6 @@ from onyx.file_store.document_batch_storage import (
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import (
-    BatchStage,
     RedisDocprocessing,
     incr_conversion_recovery_misses,
     reset_conversion_recovery_misses,
@@ -309,8 +308,12 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
-            if chain_state == ConversionChainState.HEALTHY:
-                # The task that sends the next stub batches still exists.
+            if chain_state in (
+                ConversionChainState.HEALTHY,
+                ConversionChainState.BUSY,
+            ):
+                # The task that sends the next stub batches still exists, or
+                # a conversion task of the attempt runs or waits in a queue.
                 continue
             if chain_state == ConversionChainState.STUCK:
                 # Stub batches wait and a restart sent nothing. Fail only
@@ -334,17 +337,24 @@ def validate_active_indexing_attempts(
             #
             # If total_batches is not set yet, docfetching is still running;
             # fall through to immediate invalidation (base timeout elapsed).
-            if fresh_attempt.total_batches is not None:
+            #
+            # The conversion chain check above judges the conversion stage
+            # by its live entries and queued tasks. Its counters can be left
+            # by killed workers or expired tasks, so they do not count here.
+            if chain_state == ConversionChainState.STUCK:
+                # The restarts sent nothing in each try. A pending count that
+                # an expired task left must not keep the attempt waiting.
+                failure_reason = (
+                    f"Heartbeat stale for {heartbeat_timeout_seconds}s and the "
+                    f"conversion chain could not be restarted"
+                )
+            elif fresh_attempt.total_batches is not None:
                 in_flight = 0
                 pending = 0
                 try:
-                    r = get_redis_client()
-                    # Conversion and docprocessing batches both count: a
-                    # batch in either stage is work the attempt still has.
-                    for stage in BatchStage:
-                        rd = RedisDocprocessing(fresh_attempt.id, r, stage)
-                        in_flight += rd.in_flight()
-                        pending += rd.pending()
+                    rd = RedisDocprocessing(fresh_attempt.id, get_redis_client())
+                    in_flight = rd.in_flight()
+                    pending = rd.pending()
                 except Exception:
                     task_logger.exception(
                         f"Failed to read batch counters for attempt {fresh_attempt.id}, "
