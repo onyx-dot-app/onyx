@@ -205,6 +205,7 @@ def run(
         RedisDocprocessing(run.attempt_id, get_redis_client()).cleanup()
         reset_conversion_recovery_misses(get_redis_client(), run.attempt_id)
         run.docs.cleanup_all_batches()
+        run.stubs.cleanup_all_batches()
         db_session.query(IndexAttempt).filter(
             IndexAttempt.connector_credential_pair_id == pair.id
         ).delete(synchronize_session="fetch")
@@ -427,6 +428,56 @@ def test_an_unacked_task_of_the_attempt_keeps_the_watchdog_away(
     assert run.app.send_task.call_count == 0
 
 
+def test_a_queued_conversion_task_keeps_the_attempt_after_a_worker_was_killed(
+    run: _Run,
+) -> None:
+    """A killed conversion worker left its in-flight count. A conversion task
+    of the attempt still waits in the queue, so the attempt has live work."""
+    run.store_stub_batch(0)
+    run.store_stub_batch(1)
+    assert run.claim("a conversion task") == [0, 1]
+    counters = RedisDocprocessing(
+        run.attempt_id, get_redis_client(), BatchStage.DOCCONVERSION
+    )
+    counters.incr_pending()
+    counters.incr_pending()
+    counters.decr_pending_incr_in_flight()
+    run.broker.lpush(
+        f"{OnyxCeleryQueues.DOCCONVERSION}{CELERY_SEPARATOR}2",
+        json.dumps(run.conversion_message(run.attempt_id)),
+    )
+    attempt = run.attempt()
+    attempt.total_batches = 2
+    run.db_session.commit()
+
+    run.watchdog()
+
+    assert run.attempt().status == IndexingStatus.IN_PROGRESS
+    assert run.app.send_task.call_count == 0
+
+
+def test_a_stuck_chain_fails_the_attempt_despite_a_left_pending_count(
+    run: _Run,
+) -> None:
+    """An expired conversion task left its pending count. When the restarts
+    send nothing, the count must not keep the attempt waiting."""
+    run.store_stub_batch(0)
+    attempt = run.attempt()
+    attempt.last_dispatch_at = _LONG_AGO
+    attempt.total_batches = 1
+    run.db_session.commit()
+    RedisDocprocessing(
+        run.attempt_id, get_redis_client(), BatchStage.DOCCONVERSION
+    ).incr_pending()
+
+    with patch.object(conversion_recovery, "restart_conversion_chain", return_value=0):
+        run.watchdog()
+        assert run.attempt().status == IndexingStatus.IN_PROGRESS
+        run.watchdog()
+
+    assert run.attempt().status == IndexingStatus.FAILED
+
+
 def test_a_recent_dispatch_is_healthy(run: _Run) -> None:
     run.store_stub_batch(0)
     assert run.claim("a task", dispatched_at=datetime.now(timezone.utc)) == [0]
@@ -496,7 +547,7 @@ def test_a_docprocessing_task_keeps_the_watchdog_away_from_converted_batches(
     counters.incr_pending()
     counters.decr_pending_incr_in_flight()
 
-    assert run.chain_state() == ConversionChainState.BUSY
+    assert run.chain_state() == ConversionChainState.PROCESSING
 
     assert run.app.send_task.call_count == 0
 

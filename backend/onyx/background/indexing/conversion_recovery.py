@@ -52,6 +52,10 @@ class ConversionChainState(str, Enum):
     HEALTHY = "healthy"
     # Conversion tasks of the attempt exist. Each one dispatches when it ends.
     BUSY = "busy"
+    # No stub batch waits, and docprocessing tasks of the attempt can exist.
+    # A killed docprocessing worker also leaves this state, so it is no proof
+    # of live work.
+    PROCESSING = "processing"
     # The chain was broken, and this check sent batches.
     RECOVERED = "recovered"
     # Stub batches wait, no task exists, and nothing could be sent.
@@ -258,7 +262,7 @@ def check_conversion_chain(
         if _stage_has_tasks(
             BatchStage.DOCPROCESSING, index_attempt_id, tenant_id, broker
         ):
-            return ConversionChainState.BUSY
+            return ConversionChainState.PROCESSING
         sends = _send_stored_document_batches(
             app,
             index_attempt_id=index_attempt_id,
