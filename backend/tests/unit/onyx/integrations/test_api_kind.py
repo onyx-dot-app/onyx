@@ -133,6 +133,22 @@ def test_openapi_config(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.base_url == "https://api.orders.example.com/v1"
 
 
+def test_openapi_action_display_name_is_the_summary_else_the_operation_id() -> None:
+    names = {
+        spec.key: spec.display_name
+        for spec in (
+            api_kind.openapi_action_spec(method_spec)
+            for method_spec in openapi_to_method_specs(OPENAPI_SPEC)
+        )
+    }
+    assert names == {
+        "listOrders": "List orders",
+        "createOrder": "Create an order",
+        "getOrder": "Get one order for USER_EMAIL",
+        "deleteOrder": "deleteOrder",
+    }
+
+
 @pytest.mark.parametrize(
     "method,url,expected",
     [

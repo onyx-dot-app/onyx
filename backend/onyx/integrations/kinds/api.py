@@ -62,7 +62,7 @@ def openapi_action_spec(method_spec: MethodSpec) -> IntegrationActionSpec:
     return IntegrationActionSpec(
         key=method_spec.raw_name,
         source=IntegrationActionSource.OPENAPI,
-        display_name=method_spec.raw_name,
+        display_name=method_spec.spec.get("summary") or method_spec.raw_name,
         description=method_spec.summary,
         read_only=is_get,
         default_policy=(
