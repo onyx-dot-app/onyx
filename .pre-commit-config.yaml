@@ -1,5 +1,8 @@
+default_stages: [pre-commit]
 default_install_hook_types:
   - pre-commit
+  - commit-msg
+  - post-commit
   - post-checkout
   - post-merge
   - post-rewrite
@@ -654,3 +657,18 @@ repos:
         language: system
         pass_filenames: false
         files: ^documentation/(docs\.json|scripts/(build_connector_grid\.py|generated_assets\.json)|admins/connectors/.*\.mdx)$
+
+  - repo: local
+    hooks:
+      - id: require-verification-trailer
+        name: require verification trailer
+        entry: python3 .agents/hooks/verification_trailer.py
+        language: system
+        stages: [commit-msg]
+      - id: record-verification-trailer
+        name: record verification trailer
+        entry: python3 .agents/hooks/verification_trailer.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [post-commit]

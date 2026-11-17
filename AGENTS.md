@@ -165,6 +165,19 @@ Do not add sleeps, skips, or retries to make a flaky test pass. Find and fix
 the root cause. If you delete the test, write down why and tell the user.
 After three failed fix rounds, stop and ask a human for help.
 
+## Verify before committing
+
+Run the [verify skill](.agents/skills/verify/SKILL.md) before you commit backend changes.
+Add a `Verified-by:` trailer to each commit. Use `e2e`, `integration`, `unit`, or
+`none (short reason)`.
+
+Install the Git hooks with `pre-commit install` to enable the gate in Claude Code and Codex.
+The default mode is `observe`. Set `onyx.verificationMode` with `git config --local`
+to `off`, `observe`, or `enforce`. Observe mode logs missing or invalid trailers in
+`$(git rev-parse --git-path onyx-verification.log)`. Enforce mode permits a reason in
+`Verified-by: none (short reason)`. After two consecutive blocks in the worktree,
+it allows the next attempt. A commit resets the count.
+
 ## Logs
 
 When (1) writing integration tests or (2) doing live tests (e.g. curl / playwright) you can get access
