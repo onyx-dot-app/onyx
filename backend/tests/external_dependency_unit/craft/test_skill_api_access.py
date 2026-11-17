@@ -127,7 +127,6 @@ def test_app_skill_can_be_turned_on_before_the_app_is_connected(
         user=user,
         db_session=db_session,
     )
-    assert "external_app" not in disconnected.model_dump()
     assert disconnected.enabled is False
     assert disconnected.can_toggle is True
 

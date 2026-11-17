@@ -366,9 +366,9 @@ def delete_external_app(
     db_session: Session,
     external_app_id: int,
 ) -> None:
-    """Delete an app. Skills of the app's plugins stay as they are. The
-    provider's built-in skill row goes when no other app of the same type
-    remains. Flush only; the caller owns the transaction.
+    """Delete an app and the built-in skill row of its preset. Skills of the
+    app's plugins stay as they are. Flush only; the caller owns the
+    transaction.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -379,18 +379,11 @@ def delete_external_app(
 
     built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app.app_type)
     db_session.delete(app)
-    db_session.flush()
-    if built_in_skill_id is None:
-        return
-    other_app_id = db_session.scalar(
-        select(ExternalApp.id).where(ExternalApp.app_type == app.app_type).limit(1)
-    )
-    if other_app_id is not None:
-        return
-    for skill in db_session.scalars(
-        select(Skill).where(Skill.built_in_skill_id == built_in_skill_id)
-    ):
-        db_session.delete(skill)
+    if built_in_skill_id is not None:
+        for skill in db_session.scalars(
+            select(Skill).where(Skill.built_in_skill_id == built_in_skill_id)
+        ):
+            db_session.delete(skill)
     db_session.flush()
 
 

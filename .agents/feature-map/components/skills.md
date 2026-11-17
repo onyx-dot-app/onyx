@@ -470,18 +470,18 @@ the app from the same rule
    Other `.template` files in a built-in app skill get only `{{APP:...}}` values and no
    such check.
 10. `built-in-app-skill-rule` **One rule decides who gets a built-in app
-    skill.** `db/app_skill.py:built_in_app_skills_by_user` gives a user the
+    skill.** `db/app_skill.py:built_in_app_skills` gives a user the
     built-in skill of a preset when the user runs (visible and enabled in
     `load_user_plugin_states`) a plugin that holds (`plugin__integration`) an
     integration whose `external_app` row has an `app_type` in
     `skills/built_in.py:EXTERNAL_APP_BUILT_IN_SKILL_IDS`. The integration must
     be on (`integration.enabled`); `external_app.enabled` is an old copy and is
-    not read. When the user runs
-    several integrations of one preset, the lowest integration id picks the
-    app that renders the skill (`db/skill.py:RuntimeSkill`, `external_app_id`).
-    The runtime list, the reserved chat names, the Skills list (VIEW),
-    `db/skill.py:skill_user_states` (on only for a user who gets it, never
-    toggled) and the preview read it. Do not add a second check, and do not
+    not read. The app of that integration renders the skill
+    (`db/skill.py:RuntimeSkill`, `external_app_id`). The runtime list, the
+    reserved chat names, `db/skill.py:skill_user_states` (on only for a user
+    who gets it, never toggled), `db/skill.py:fetch_skill` (VIEW), the Skills
+    list (`skills_list_response_for_user` drops a built-in that is not on) and
+    the preview read it. Do not add a second check, and do not
     check the app connection. Nothing links a skill to an app: no code reads
     or writes `external_app__skill` or `ExternalApp.associated_skills`, which
     stay only for rollback.
@@ -823,8 +823,8 @@ the app from the same rule
 - **App lifecycle keeps skill settings.** Disconnecting an app deletes only
   the user's credentials (`db/external_app.py:disconnect_external_app_for_user`).
   Deleting an app keeps the skills of its plugins with their settings and
-  choices (`db/external_app.py:delete_external_app`). The built-in skill row
-  goes only when no other app of the same `app_type` remains.
+  choices (`db/external_app.py:delete_external_app`). It deletes the built-in
+  skill row of the app's preset.
 
 ---
 
@@ -896,7 +896,7 @@ the app from the same rule
   `load_user_plugin_states` (setting and choice), the name order
   (`order_skill_names`: another skill may hold the name), `plugin_version.is_valid` of the
   version the user runs (`version_user_runs`), and built-in availability.
-  For a built-in app skill, check `db/app_skill.py:built_in_app_skills_for_user`. Then compare `Sandbox.skills_hash` with
+  For a built-in app skill, check `db/app_skill.py:built_in_app_skills`. Then compare `Sandbox.skills_hash` with
   `BuildSession.skills_hash`: equal means the runtime loaded the last push;
   different means the session waits for a reload. Search the API server log
   for `Skill push failed` for a failed push.

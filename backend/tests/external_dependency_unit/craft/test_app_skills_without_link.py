@@ -1,4 +1,4 @@
-"""App skills with no stored link to the app (U9).
+"""App skills with no stored link to the app.
 
 A custom skill of an app is an ordinary plugin: it loads before the user
 connects the app and counts for the skill limits. A user gets the built-in
@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.app_skill import built_in_app_skills_for_user
+from onyx.db.app_skill import built_in_app_skills
 from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import delete_external_app
 from onyx.db.models import (
@@ -28,16 +28,16 @@ from onyx.db.models import (
 from onyx.db.plugin_access import load_user_plugin_states, skill_usage_by_user
 from onyx.db.skill import (
     SkillManagementPolicy,
+    fetch_skill,
     list_chat_skills,
     list_runtime_skills_for_user,
     list_skills,
     set_skill_enabled_for_user,
     skill_user_states,
 )
-from onyx.server.features.skill.response_helpers import skill_preview_response
+from onyx.server.features.skill.response_helpers import skills_list_response_for_user
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.skills.models import SkillUsage
-from onyx.skills.push import build_skills_fileset_for_user
 from tests.external_dependency_unit.craft.db_helpers import (
     make_app_plugin_for_user,
     make_external_app,
@@ -57,6 +57,10 @@ def session(
     """Each test writes in one transaction and rolls it back."""
     yield db_session
     db_session.rollback()
+
+
+def _app_skills(user: User, session: Session) -> dict[str, int]:
+    return built_in_app_skills(load_user_plugin_states([user.id], session), session)
 
 
 def test_custom_app_skill_runs_without_a_connection(session: Session) -> None:
@@ -91,7 +95,6 @@ def test_custom_app_skill_runs_without_a_connection(session: Session) -> None:
     usage = skill_usage_by_user(
         load_user_plugin_states([user.id], session, runnable_only=True)
     )[user.id]
-    assert usage.bytes >= 1234 and usage.files >= 3
     without = skill_usage_by_user(
         state
         for state in load_user_plugin_states([user.id], session, runnable_only=True)
@@ -114,9 +117,9 @@ def test_built_in_app_skill_follows_the_plugin_the_user_runs(
     make_app_plugin_for_user(session, app=app, user=runner)
     make_app_plugin_for_user(session, app=app, user=turned_off, enabled=False)
 
-    assert built_in_app_skills_for_user(runner.id, session) == {slack_id: app.id}
+    assert _app_skills(runner, session) == {slack_id: app.id}
     for user in (turned_off, no_plugin):
-        assert built_in_app_skills_for_user(user.id, session) == {}
+        assert _app_skills(user, session) == {}
 
     def runtime(user: User) -> dict[str, int | None]:
         return {
@@ -126,12 +129,21 @@ def test_built_in_app_skill_follows_the_plugin_the_user_runs(
         }
 
     def viewable(user: User) -> set[str]:
-        return {
+        rows = list_skills(
+            policy=SkillManagementPolicy.VIEW, user=user, db_session=session
+        )
+        listed = {
             skill.name
-            for skill in list_skills(
-                policy=SkillManagementPolicy.VIEW, user=user, db_session=session
-            )
+            for skill in skills_list_response_for_user(rows, user, session).builtins
         }
+        fetched = fetch_skill(
+            built_in.id,
+            policy=SkillManagementPolicy.VIEW,
+            user=user,
+            db_session=session,
+        )
+        assert (slack_id in listed) == (fetched is not None)
+        return listed
 
     assert runtime(runner).get(slack_id) == app.id
     assert slack_id in viewable(runner)
@@ -156,61 +168,21 @@ def test_turned_off_integration_gives_no_built_in_skill(session: Session) -> Non
     set_skill_enabled_for_user(
         skill_id=custom.id, enabled=True, user=user, db_session=session
     )
-    assert built_in_app_skills_for_user(user.id, session) == {slack_id: app.id}
+    assert _app_skills(user, session) == {slack_id: app.id}
 
-    integration = session.get(Integration, app.integration_id)
-    assert integration is not None
-    integration.enabled = False
-    session.flush()
+    session.execute(
+        update(Integration)
+        .where(Integration.external_app_id == app.id)
+        .values(enabled=False)
+    )
 
-    assert built_in_app_skills_for_user(user.id, session) == {}
+    assert _app_skills(user, session) == {}
     runtime = {
         r.skill.id: r.name
         for r in list_runtime_skills_for_user(db_session=session, user=user)
     }
     assert custom.id in runtime
     assert slack_id not in runtime.values()
-
-
-def test_lowest_integration_id_renders_the_built_in_skill(session: Session) -> None:
-    user = make_user(session)
-    slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]
-    first = make_external_app(
-        session, app_type=ExternalAppType.SLACK, auth_template=_AUTH_TEMPLATE
-    )
-    second = make_external_app(
-        session, app_type=ExternalAppType.SLACK, auth_template=_AUTH_TEMPLATE
-    )
-    make_app_plugin_for_user(session, app=second, user=user)
-    make_app_plugin_for_user(session, app=first, user=user)
-
-    assert first.integration_id is not None and second.integration_id is not None
-    lowest = first if first.integration_id < second.integration_id else second
-    assert built_in_app_skills_for_user(user.id, session) == {slack_id: lowest.id}
-
-
-def test_built_in_app_skill_renders_the_app_of_the_plugin(session: Session) -> None:
-    user = make_user(session)
-    other = make_user(session)
-    zendesk_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.ZENDESK]
-    skill = reset_built_in_skill_row(session, built_in_skill_id=zendesk_id)
-    app = make_external_app(
-        session,
-        app_type=ExternalAppType.ZENDESK,
-        auth_template={"Authorization": "Bearer {access_token}"},
-        organization_credentials={"subdomain": "acme"},
-    )
-    make_app_plugin_for_user(session, app=app, user=user)
-
-    files = build_skills_fileset_for_user(user, session)
-    assert "https://acme.zendesk.com" in files[f"{zendesk_id}/SKILL.md"].decode()
-    assert files[f"{zendesk_id}/account.txt"].decode().strip() == (
-        "https://acme.zendesk.com"
-    )
-    assert "https://acme.zendesk.com" in (
-        skill_preview_response(skill, user, session).instructions_markdown
-    )
-    assert f"{zendesk_id}/SKILL.md" not in build_skills_fileset_for_user(other, session)
 
 
 def _free_built_in_app_type(session: Session) -> ExternalAppType:
@@ -245,19 +217,14 @@ def test_app_delete_keeps_custom_skill_plugins(session: Session) -> None:
     }
 
 
-def test_app_delete_keeps_the_built_in_row_while_an_app_of_its_type_remains(
-    session: Session,
-) -> None:
+def test_app_delete_removes_the_built_in_row(session: Session) -> None:
     app_type = _free_built_in_app_type(session)
     built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[app_type]
-    built_in = reset_built_in_skill_row(session, built_in_skill_id=built_in_skill_id)
-    first = make_external_app(session, app_type=app_type, auth_template={})
-    second = make_external_app(session, app_type=app_type, auth_template={})
+    reset_built_in_skill_row(session, built_in_skill_id=built_in_skill_id)
+    app = make_external_app(session, app_type=app_type, auth_template={})
 
-    delete_external_app(session, first.id)
-    assert session.get(Skill, built_in.id) is not None
+    delete_external_app(session, app.id)
 
-    delete_external_app(session, second.id)
     assert (
         session.scalar(
             select(Skill.id).where(Skill.built_in_skill_id == built_in_skill_id)

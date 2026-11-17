@@ -324,17 +324,9 @@ def make_external_app(
 ) -> ExternalApp:
     """Insert an ``ExternalApp`` row and its integration, plus any per-action
     policy overrides in ``action_policies`` (``{action_id: policy}``). The
-    plugin of a custom ``skill`` holds the integration, as the U1 migration
-    writes it. ``skill`` also gives the default name."""
+    plugin of a custom ``skill`` holds the integration. ``skill`` also gives
+    the default name."""
     app_name = name or (skill.name if skill is not None else f"app-{uuid4().hex[:8]}")
-    integration = Integration(
-        kind=IntegrationKind.API,
-        name=app_name,
-        auth_mode=IntegrationAuthMode.INDIVIDUAL,
-        enabled=enabled,
-    )
-    db_session.add(integration)
-    db_session.flush()
     app = ExternalApp(
         name=app_name,
         app_type=app_type,
@@ -342,9 +334,18 @@ def make_external_app(
         upstream_url_patterns=upstream_url_patterns or [],
         auth_template=auth_template,
         organization_credentials=organization_credentials or {},
-        integration_id=integration.id,
     )
     db_session.add(app)
+    db_session.flush()
+    db_session.add(
+        Integration(
+            kind=IntegrationKind.API,
+            name=app_name,
+            auth_mode=IntegrationAuthMode.INDIVIDUAL,
+            enabled=enabled,
+            external_app_id=app.id,
+        )
+    )
     db_session.flush()
     if (
         skill is not None
@@ -372,8 +373,11 @@ def hold_external_app(
     db_session: Session, *, app: ExternalApp, plugin_id: UUID
 ) -> None:
     """Make the plugin hold the integration of ``app``."""
+    integration_id = db_session.scalar(
+        select(Integration.id).where(Integration.external_app_id == app.id)
+    )
     db_session.add(
-        Plugin__Integration(plugin_id=plugin_id, integration_id=app.integration_id)
+        Plugin__Integration(plugin_id=plugin_id, integration_id=integration_id)
     )
     db_session.flush()
 
