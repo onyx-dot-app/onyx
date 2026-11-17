@@ -119,7 +119,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-test("parallel search tabs complete independently", async () => {
+test("parallel searches render as separate steps in order", async () => {
   seedSessionAwaitingAnswer();
   const packets: Packet[] = [
     {
@@ -151,54 +151,26 @@ test("parallel search tabs complete independently", async () => {
     />
   );
   try {
-    const internalTab = await screen.findByRole("tab", {
-      name: /Internal Search/,
+    const expand = await screen.findByRole("button", {
+      name: "Expand timeline",
     });
-    const webTab = await screen.findByRole("tab", { name: /Web Search/ });
+    act(() => expand.click());
+    const internal = await screen.findByText("Searching internal documents");
+    const web = screen.getAllByText("Searching the web").at(-1);
+    expect(web).toBeDefined();
     expect(
-      within(internalTab).getByRole("status", { name: "Loading" })
-    ).toBeInTheDocument();
-    expect(
-      within(webTab).getByRole("status", { name: "Loading" })
-    ).toBeInTheDocument();
-    const completedWeb: Packet[] = [
-      ...packets,
-      {
-        placement: { turn_index: 0, tab_index: 1 },
-        obj: { type: "section_end" },
-      },
-    ];
-    view.rerender(
-      <AgentMessage
-        rawPackets={completedWeb}
-        packetCount={completedWeb.length}
-        chatState={chatState}
-        nodeId={NEW_ANSWER_NODE_ID}
-        llmManager={null}
-        hideFooter
-        disableTTS
-      />
-    );
-    await waitFor(() => {
-      expect(
-        within(screen.getByRole("tab", { name: /Web Search/ })).queryByRole(
-          "status"
-        )
-      ).not.toBeInTheDocument();
-      expect(
-        within(screen.getByRole("tab", { name: /Internal Search/ })).getByRole(
-          "status",
-          { name: "Loading" }
-        )
-      ).toBeInTheDocument();
-    });
+      internal.compareDocumentPosition(web!) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(screen.getByText("company policy")).toBeInTheDocument();
+    expect(screen.getByText("public policy")).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   } finally {
     view.unmount();
   }
 });
 
 test.each([undefined, 0])(
-  "restored output appears immediately and only unfinished tools remain loading (tab: %s)",
+  "restored steps and output appear immediately (tab: %s)",
   (tabIndex) => {
     seedSessionAwaitingAnswer();
     const placement = { turn_index: 0, tab_index: tabIndex };
@@ -237,17 +209,14 @@ test.each([undefined, 0])(
       />
     );
     try {
+      act(() =>
+        screen.getByRole("button", { name: "Expand timeline" }).click()
+      );
       expect(
-        within(screen.getByRole("tab", { name: /Internal Search/ })).getByRole(
-          "status",
-          { name: "Loading" }
-        )
+        screen.getByText("Searching internal documents")
       ).toBeInTheDocument();
-      expect(
-        within(screen.getByRole("tab", { name: /Web Search/ })).queryByRole(
-          "status"
-        )
-      ).not.toBeInTheDocument();
+      expect(screen.getByText("internal")).toBeInTheDocument();
+      expect(screen.getByText("web")).toBeInTheDocument();
       const withAnswer: Packet[] = [
         ...packets,
         {
