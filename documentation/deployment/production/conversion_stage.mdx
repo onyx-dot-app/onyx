@@ -75,18 +75,31 @@ The `background` container starts the `docconversion` worker only when the varia
 
 A conversion parses one file on one CPU core. Add replicas, not threads.
 
-To scale on queue depth with KEDA, add a Prometheus trigger. With a queue trigger, you can set `minReplicas` to `0`.
-The worker then stops when no conversion waits.
+To scale on queue depth with KEDA, add a Prometheus trigger.
+The trigger reads `onyx_queue_depth` from the Onyx monitoring worker, so Prometheus must scrape it.
+If you use the Prometheus Operator, set `monitoring.serviceMonitors.enabled: true`,
+and set `monitoring.serviceMonitors.labels` to match the `serviceMonitorSelector` of your Prometheus resource.
+Before you deploy the trigger,
+make sure that the query `onyx_queue_depth{queue="docconversion"}` returns a value in Prometheus.
+
+Keep `minReplicas` at `1` or higher. The queue depth counts only the batches that wait, not the batches that convert.
+When KEDA scales down a worker, the batches that the worker converts stop.
+Onyx sends a stopped batch again after `DOCCONVERSION_STALL_SECONDS`, so the run continues,
+but the work on that batch is lost.
 
 ```yaml values.yaml
 autoscaling:
   engine: keda
 
+monitoring:
+  serviceMonitors:
+    enabled: true
+
 celery_worker_docconversion:
   enabled: true
   autoscaling:
     enabled: true
-    minReplicas: 0
+    minReplicas: 1
     maxReplicas: 10
     targetCPUUtilizationPercentage: null
     targetMemoryUtilizationPercentage: null

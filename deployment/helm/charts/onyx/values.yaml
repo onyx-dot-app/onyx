@@ -947,8 +947,8 @@ celery_worker_docconversion:
   logLevel: ""
   autoscaling:
     enabled: false
-    # With the keda engine and a queue trigger, 0 stops the worker when no
-    # conversion waits. The hpa engine needs 1 or more. Example trigger:
+    # Keep 1 or more. The queue depth counts only the batches that wait, so a
+    # scale down can stop a batch that converts. Example trigger:
     #   customTriggers:
     #     - type: prometheus
     #       metadata:
