@@ -31,8 +31,8 @@ from onyx.db.integration import (
 )
 from onyx.db.integration_connection import (
     delete_connection__no_commit,
-    get_connection,
     get_connection_by_id,
+    get_connection_with_organization,
     get_oauth_client,
     mark_connection_needs_reconnect__no_commit,
     mark_integration_connections_needs_reconnect__no_commit,
@@ -185,12 +185,21 @@ def resolve_connection(
     The caller always gives the acting user: the chat user, the sandbox
     owner, the owner of a scheduled task, or the user a bot resolves. With
     ``refresh=False`` it only reads and never calls the service."""
-    return _with_legacy_defaults(
-        integration,
-        acting_user,
-        _resolve_by_mode(integration, acting_user, db_session, refresh),
-        db_session,
+    user = _signed_in(acting_user)
+    legacy = _may_have_legacy_defaults(integration)
+    if integration.auth_mode is IntegrationAuthMode.NONE and not legacy:
+        return ResolvedConnection(
+            integration_id=integration.id, connection_id=None, secret=None
+        )
+    organization, user_row = get_connection_with_organization(
+        db_session, integration.id, user.id if user is not None else None
     )
+    resolved = _resolve_by_mode(
+        integration, user, organization, user_row, db_session, refresh
+    )
+    if not legacy:
+        return resolved
+    return _with_legacy_defaults(integration, user, resolved, organization, user_row)
 
 
 def _may_have_legacy_defaults(integration: Integration) -> bool:
@@ -222,21 +231,21 @@ def _fills_template(
 
 def _with_legacy_defaults(
     integration: Integration,
-    acting_user: User | None,
+    signed_in_user: User | None,
     resolved: ResolvedConnection | ConnectionProblem,
-    db_session: Session,
+    organization: IntegrationConnection | None,
+    user_row: IntegrationConnection | None,
 ) -> ResolvedConnection | ConnectionProblem:
     """Add what an old organization row gave every user: the template of
     an MCP admin config, or the field values of a custom app. As the old
     code did, a custom app user with no row calls with the organization
     values when they fill the template, and an MCP server with no sign-in
     needs the values a user saved for its template."""
-    if not _may_have_legacy_defaults(integration) or (
+    if (
         isinstance(resolved, ConnectionProblem)
         and resolved.code is not ConnectionState.NOT_CONNECTED
     ):
         return resolved
-    organization = get_connection(db_session, integration.id, None)
     defaults = (
         legacy_organization_defaults(
             organization,
@@ -248,7 +257,6 @@ def _with_legacy_defaults(
     )
     if organization is None or defaults is None:
         return resolved
-    signed_in_user = _signed_in(acting_user)
     if isinstance(resolved, ConnectionProblem):
         if (
             signed_in_user is not None
@@ -267,11 +275,6 @@ def _with_legacy_defaults(
     if resolved.connection_id is None:
         # No sign-in or the Onyx login: the old MCP server filled its
         # template with the values the user saved.
-        user_row = (
-            get_connection(db_session, integration.id, signed_in_user.id)
-            if signed_in_user is not None
-            else None
-        )
         saved_record = read_connection(user_row) if user_row else None
         if (
             saved_record is not None
@@ -308,7 +311,9 @@ def _with_legacy_defaults(
 
 def _resolve_by_mode(
     integration: Integration,
-    acting_user: User | None,
+    user: User | None,
+    organization: IntegrationConnection | None,
+    user_row: IntegrationConnection | None,
     db_session: Session,
     refresh: bool,
 ) -> ResolvedConnection | ConnectionProblem:
@@ -320,7 +325,7 @@ def _resolve_by_mode(
     if integration.auth_mode is IntegrationAuthMode.SHARED:
         return _connection_or_problem(
             integration,
-            get_connection(db_session, integration.id, None),
+            organization,
             ConnectionProblem(
                 code=ConnectionState.NOT_SET_UP,
                 reason=not_set_up_reason(integration),
@@ -333,7 +338,6 @@ def _resolve_by_mode(
         code=ConnectionState.NOT_CONNECTED,
         reason=_not_connected_reason(integration),
     )
-    user = _signed_in(acting_user)
     if user is None:
         return not_connected
 
@@ -342,7 +346,7 @@ def _resolve_by_mode(
 
     return _connection_or_problem(
         integration,
-        get_connection(db_session, integration.id, user.id),
+        user_row,
         not_connected,
         db_session,
         refresh,
