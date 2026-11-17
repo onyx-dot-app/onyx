@@ -18,6 +18,12 @@ tests. Additive to the root `AGENTS.md`.
 
   A deliberate exception goes on the line as `# noqa: S101 - <reason>`. Do not add a file to
   `[tool.ruff.lint.per-file-ignores]` in `pyproject.toml` for `S101`.
+- Set a finite HTTP timeout. Ruff `S113` checks requests in application code.
+  Use an existing timeout that fits the call. Celery thread pools cannot enforce task time limits.
+- Use timezone-aware datetimes for timestamps. Ruff `DTZ` checks datetime construction and parsing.
+  Use `datetime.now(UTC)` for the current time in UTC.
+- Use Pydantic `BaseModel` for application models. Ruff `TID251` bans `dataclasses.dataclass`.
+  For a deliberate exception, use an inline `# noqa` with the rule code and reason.
 - Declare owned protocol implementations through explicit inheritance.
 
 - Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run
