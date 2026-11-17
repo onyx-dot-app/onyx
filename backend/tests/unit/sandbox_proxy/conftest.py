@@ -33,6 +33,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
+from onyx.integrations.craft import UsableIntegrationIds
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.models import InjectionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
@@ -322,3 +323,9 @@ def make_tls_context(tmp_path: Path, hostname: str) -> tuple[ssl.SSLContext, Pat
     context: ssl.SSLContext = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(cert_path, key_path)
     return context, cert_path
+
+
+def usable_ids(*integration_ids: int) -> UsableIntegrationIds:
+    """Integrations that the user turned on and can see."""
+    ids = frozenset(integration_ids)
+    return UsableIntegrationIds(turned_on=ids, by_visible_plugin={uuid4(): ids})

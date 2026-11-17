@@ -29,6 +29,7 @@ from tests.unit.sandbox_proxy.conftest import (
     make_resolved_sandbox,
     make_tls_context,
     unused_cache,
+    usable_ids,
     wait_for_proxy_listener,
 )
 
@@ -217,7 +218,7 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
             ),
         )
         monkeypatch.setattr(
-            mcp_resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
+            mcp_resolver._usable, "_load", lambda _tenant, _user: usable_ids(1)
         )
         master.addons.add(
             GateAddon(

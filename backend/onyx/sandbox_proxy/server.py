@@ -46,6 +46,7 @@ from onyx.sandbox_proxy.sandbox_identity.signed_lookups import (
     CacheReplayGuard,
     CacheSandboxPlacementLookup,
 )
+from onyx.sandbox_proxy.usable_integrations import UsableIntegrations
 from onyx.server.features.build.configs import (
     ONYX_SERVER_URL,
     SANDBOX_NAMESPACE,
@@ -363,7 +364,8 @@ def main() -> int:
 
         identity = IdentityResolver(ip_lookup=lookup)
         proxy_instance_id = os.environ.get("HOSTNAME") or str(uuid.uuid4())
-        integration_resolver = IntegrationResolver()
+        usable = UsableIntegrations()
+        integration_resolver = IntegrationResolver(usable)
         resolvers = build_resolvers(integration_resolver)
         logger.info(
             "Credential resolvers registered: %s",
@@ -385,7 +387,7 @@ def main() -> int:
             destination_policy=destination_policy,
             identity=identity,
             signed_identity=signed_identity,
-            request_evaluator=IntegrationRequestEvaluator(),
+            request_evaluator=IntegrationRequestEvaluator(usable),
             cache_factory=cache_factory,
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),

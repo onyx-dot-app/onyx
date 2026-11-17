@@ -26,17 +26,15 @@ const LINEAR_MCP: TaskIntegrationView = {
       key: "search",
       display_name: "Search issues",
       description: "Find issues",
-      value: "inherit",
-      effective_policy: "allow",
       integration_policy: "allow",
+      locked: false,
     },
     {
       key: "create",
       display_name: "Create issue",
       description: null,
-      value: "inherit",
-      effective_policy: "ask",
       integration_policy: "ask",
+      locked: false,
     },
   ],
 };
@@ -137,6 +135,26 @@ it("keeps the stored settings of an existing task", async () => {
       action_settings: { default: "ask", actions: { search: "allow" } },
     },
   ]);
+});
+
+it("counts a locked task Allow with the integration policy", () => {
+  mockData = [
+    pluginView({
+      enabled: true,
+      action_settings: { default: "allow", actions: {} },
+      integrations: [
+        {
+          ...LINEAR_MCP,
+          actions: LINEAR_MCP.actions.map((action) => ({
+            ...action,
+            locked: action.key === "create",
+          })),
+        },
+      ],
+    }),
+  ];
+  render(<Form taskId="task-1" />);
+  expect(screen.getByText("1 allow · 1 ask · 0 blocked")).toBeInTheDocument();
 });
 
 it("sets an action to Allow, Ask, Blocked or the integration setting", async () => {

@@ -112,12 +112,6 @@ class ApprovalListResponse(BaseModel):
     items: list[ApprovalView]
 
 
-def _row_target(row: ActionApproval) -> int | None:
-    """The integration a row is attributed to, or ``None`` when it was
-    deleted (SET NULL)."""
-    return row.integration_id
-
-
 def _existing_decision_response(
     row: ActionApproval, requested: ApprovalDecision, *, for_session: bool
 ) -> ApprovalView:
@@ -229,7 +223,7 @@ def submit_decision(
     if current.created_at < cutoff:
         raise OnyxError(OnyxErrorCode.CONFLICT, "approval request is no longer live")
 
-    target = _row_target(current) if for_session else None
+    target = current.integration_id if for_session else None
     if for_session and not ApprovalView.model_validate(current).can_approve_for_session:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, "approval request has no grantable actions"
@@ -269,7 +263,7 @@ def submit_decision(
         for row in pending_rows:
             required = set(actions_requiring_approval(row.actions))
             if (
-                _row_target(row) != target
+                row.integration_id != target
                 or not required
                 or not required.issubset(granted_actions)
             ):

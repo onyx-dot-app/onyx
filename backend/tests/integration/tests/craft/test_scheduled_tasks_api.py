@@ -212,9 +212,8 @@ def test_create_and_patch_task_plugins(
     assert view["enabled"] is True
     action = view["integrations"][0]["actions"][0]
     assert action["key"] == "send_report"
-    assert action["value"] == "allow"
-    assert action["effective_policy"] == "allow"
     assert action["integration_policy"] == "ask"
+    assert action["locked"] is False
 
     response = _patch_task(admin_user, task_id, {"name": "Renamed"})
     response.raise_for_status()

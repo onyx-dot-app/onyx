@@ -139,7 +139,6 @@ def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         gate, "get_active_scheduled_task_context", lambda _db, _session: None
     )
-    monkeypatch.setattr(gate, "user_has_running_scheduled_run", lambda *_: False)
     monkeypatch.setattr(
         gate,
         "resolve_gate_policies",

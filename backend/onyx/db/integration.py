@@ -23,6 +23,20 @@ def get_integration_by_id(
     return db_session.get(Integration, integration_id)
 
 
+def list_enabled_integrations_by_id(
+    db_session: Session, integration_ids: Collection[int]
+) -> list[Integration]:
+    if not integration_ids:
+        return []
+    return list(
+        db_session.scalars(
+            select(Integration)
+            .where(Integration.id.in_(integration_ids), Integration.enabled.is_(True))
+            .order_by(Integration.id)
+        ).all()
+    )
+
+
 def list_integrations(db_session: Session) -> list[Integration]:
     return list(db_session.scalars(select(Integration).order_by(Integration.id)).all())
 

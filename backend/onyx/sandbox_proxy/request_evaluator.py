@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ActionPolicy, IntegrationActionPolicyValue, IntegrationKind
+from onyx.db.integration import list_enabled_integrations_by_id
+from onyx.db.integration_policy import list_task_plugin_links
 from onyx.db.models import Integration
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
@@ -21,19 +23,15 @@ from onyx.external_apps.matching.engine import (
     MatchedAction,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
-from onyx.integrations.craft import (
-    list_runnable_integrations,
-    list_scheduled_run_integrations,
-)
 from onyx.integrations.models import RequestMatch
 from onyx.integrations.registry import get_kind_handler
 from onyx.sandbox_proxy.models import McpProtocolRequest
+from onyx.sandbox_proxy.usable_integrations import UsableIntegrations
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# A stored policy value as the policy that an approval row shows.
-ACTION_POLICY_FOR_VALUE: dict[IntegrationActionPolicyValue, ActionPolicy] = {
+_ACTION_POLICY_FOR_VALUE: dict[IntegrationActionPolicyValue, ActionPolicy] = {
     IntegrationActionPolicyValue.ALLOW: ActionPolicy.ALWAYS,
     IntegrationActionPolicyValue.AUTO: ActionPolicy.ASK,
     IntegrationActionPolicyValue.ASK: ActionPolicy.ASK,
@@ -106,11 +104,8 @@ def _pick(
 
 class IntegrationRequestEvaluator(RequestEvaluator):
     """Matches a request against the integrations that the sandbox owner can
-    use, with ``match_request`` of each kind: in an interactive session those
-    of the plugins the owner turned on (``list_runnable_integrations``), in a
-    scheduled run also those of the task plugins the owner can see
-    (``list_scheduled_run_integrations``). The result carries the default policy of each action; the gate
-    applies the stored policies.
+    use. A scheduled run also matches the task plugins that the owner turned
+    off. The gate applies the stored policies.
 
     * an MCP protocol message gives ``McpProtocolRequest``;
     * an MCP body that does not parse gives one blocked action;
@@ -119,6 +114,9 @@ class IntegrationRequestEvaluator(RequestEvaluator):
       credential resolver.
     """
 
+    def __init__(self, usable: UsableIntegrations | None = None) -> None:
+        self._usable = usable or UsableIntegrations()
+
     def evaluate(
         self,
         request: http.Request,
@@ -126,15 +124,15 @@ class IntegrationRequestEvaluator(RequestEvaluator):
         user_id: UUID,
         scheduled_task_id: UUID | None,
     ) -> AllMatchedActions | McpProtocolRequest | None:
+        usable = self._usable.get(tenant_id, user_id)
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            integrations = (
-                list_runnable_integrations(db, user_id)
-                if scheduled_task_id is None
-                else list_scheduled_run_integrations(db, scheduled_task_id, user_id)
-            )
+            ids = set(usable.turned_on)
+            if scheduled_task_id is not None:
+                for link in list_task_plugin_links(db, scheduled_task_id):
+                    ids |= usable.by_visible_plugin.get(link.plugin_id, frozenset())
             picked = _pick(
                 _matches(
-                    integrations,
+                    list_enabled_integrations_by_id(db, ids),
                     _proxied_request(request),
                     db,
                 )
@@ -155,7 +153,7 @@ class IntegrationRequestEvaluator(RequestEvaluator):
                     action_type=action.action_key,
                     display_name=action.display_name,
                     description=action.description,
-                    policy=ACTION_POLICY_FOR_VALUE[action.default_policy],
+                    policy=_ACTION_POLICY_FOR_VALUE[action.default_policy],
                 )
                 for action in match.actions
             ),

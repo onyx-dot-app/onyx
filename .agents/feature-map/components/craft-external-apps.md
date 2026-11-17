@@ -105,13 +105,14 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
 ```
 
 **Recognition.** `sandbox_proxy/request_evaluator.py:IntegrationRequestEvaluator`
-loads the integrations the sandbox owner can use
-(`integrations/craft.py:list_runnable_integrations`: each enabled integration
-of a plugin that the user can see and has turned on; in a scheduled run also
-`list_scheduled_run_integrations`, the integrations of the task plugins that
-the owner can see, on or off. The gate finds the task from the session tag
-only while the owner has a running run, `GateAddon._running_task_id`) and calls
-`match_request` of each kind (`integrations/kinds/`). An API integration wins
+loads the integrations the sandbox owner can use. These are the enabled
+integrations of the plugins that the user can see and has turned on. A
+scheduled run also uses the integrations of the task plugins that the owner
+can see, on or off. `GateAddon._running_task_id` finds the task from the
+session tag in one query. `sandbox_proxy/usable_integrations.py:UsableIntegrations`
+caches the integration ids of each user for 30 seconds, and the evaluator and
+the resolver share it. The evaluator then calls `match_request` of each kind
+(`integrations/kinds/`). An API integration wins
 over an MCP server on a shared host, and the lowest id wins between API
 integrations. For an external app, `external_apps/matching/engine.py:resolve_app_for_url`
 full-matches the URL against the app's patterns and `recognize_actions` maps
@@ -185,8 +186,10 @@ injects the credential of the matched integration through
 `integrations/call_credentials.py:resolve_call_credentials`: `resolve_connection`
 (which refreshes a token that expires soon) and `render_headers`; an OAuth
 integration sends its access token as a bearer token. It checks again that
-the integration is enabled and that the user runs it, and refuses with
-`CredentialUnavailableError` and the reason of the connection problem.
+the integration is enabled, and refuses with `CredentialUnavailableError` and
+the reason of the connection problem. An internal MCP host is reachable only
+when the server belongs to a plugin that the user can see
+(`IntegrationResolver.allows_destination`).
 
 **OAuth connect.** `server/features/build/external_apps/oauth.py` binds each
 attempt to the user, app and a fingerprint of the resolved OAuth
@@ -326,8 +329,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 - The MCP tool default comes from the server's unverified `readOnlyHint`
   (`integrations/kinds/mcp_server.py:mcp_action_default_policy`). The proxy and
   chat tool construction read it from the `integration_action` row.
-- The evaluator loads the plugin states and the kind rows of each integration
-  the user runs on each request; there is no cache yet.
+- The evaluator loads the kind rows of each integration the user can use on
+  each request. A change to the plugins of a user reaches the proxy after up
+  to 30 seconds.
 - An external app or MCP server that the old admin routes create has no
   integration row until the integration routes replace them, so the proxy does
   not match it.

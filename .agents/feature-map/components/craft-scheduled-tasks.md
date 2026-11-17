@@ -117,8 +117,8 @@ integrations of these plugins; the proxy blocks each other integration. Each
 action value is Allow, Ask, Blocked or Inherit (the integration setting).
 `GET /scheduled-tasks/{id}/action-policies` and the new-task catalog
 `GET /build/action-policies` return `TaskPluginView` rows
-(`integrations/craft.py:list_task_plugin_views`) with the setting and the
-effective policy of each action. Edits apply to the next request, including
+(`integrations/craft.py:list_task_plugin_views`). Each action has the policy
+that Inherit gives, and `locked` when a task Allow keeps that policy. Edits apply to the next request, including
 requests of a run in progress.
 
 ---

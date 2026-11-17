@@ -35,6 +35,7 @@ from tests.unit.sandbox_proxy.conftest import (
     make_resolved_sandbox,
     make_tls_context,
     unused_cache,
+    usable_ids,
     wait_for_proxy_listener,
 )
 
@@ -335,7 +336,7 @@ def test_private_http_mcp_uses_pinned_addresses(
                 ),
             )
             monkeypatch.setattr(
-                resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
+                resolver._usable, "_load", lambda _tenant, _user: usable_ids(1)
             )
             unpinned = _dns(monkeypatch, lambda _port: (address,), lambda _port: ())
             async with _proxy(
@@ -384,7 +385,7 @@ def test_private_connect_never_forwards_raw_tcp(
                 ),
             )
             monkeypatch.setattr(
-                resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
+                resolver._usable, "_load", lambda _tenant, _user: usable_ids(1)
             )
             _dns(monkeypatch, lambda _port: (address,), lambda _port: ())
             async with _proxy(
@@ -436,6 +437,7 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
     from onyx.integrations.call_credentials import CallCredentials
     from onyx.integrations.kinds import mcp_server as mcp_kind
     from onyx.sandbox_proxy import request_evaluator
+    from onyx.sandbox_proxy import usable_integrations as usable
     from onyx.sandbox_proxy.resolvers import integration as integration_resolver
 
     async def exercise() -> None:
@@ -446,12 +448,16 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
                 id=1, kind=IntegrationKind.MCP, name="Private MCP", enabled=True
             )
             user = User(id=make_resolved_sandbox().user_id)
-            for module, loader in (
-                (request_evaluator, "list_runnable_integrations"),
-                (integration_resolver, "list_visible_integrations"),
-            ):
+            for module in (request_evaluator, integration_resolver, usable):
                 monkeypatch.setattr(module, "get_session_with_tenant", MagicMock())
-                monkeypatch.setattr(module, loader, lambda *_args: [integration])
+            monkeypatch.setattr(
+                usable, "load_usable_integration_ids", lambda *_args: usable_ids(1)
+            )
+            monkeypatch.setattr(
+                request_evaluator,
+                "list_enabled_integrations_by_id",
+                lambda *_args: [integration],
+            )
             monkeypatch.setattr(
                 mcp_kind, "get_mcp_server_for_integration", lambda *_args: stored
             )
@@ -601,7 +607,7 @@ def test_private_mcp_keepalive_rechecks_actual_peer(
             ),
         )
         monkeypatch.setattr(
-            resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
+            resolver._usable, "_load", lambda _tenant, _user: usable_ids(1)
         )
         dns_answers = (address,)
         unpinned = _dns(monkeypatch, lambda _port: dns_answers, lambda _port: ())
