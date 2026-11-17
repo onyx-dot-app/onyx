@@ -2,6 +2,8 @@
 own registry here, as the two processes have in production."""
 
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 from prometheus_client import CollectorRegistry, Counter, Gauge
@@ -88,21 +90,76 @@ def test_gauges_merge_over_the_running_processes(tmp_path: Path) -> None:
     assert worker.value("relay_test_budget", {"scope": "project"}) == 400
 
 
+def _ended_pid() -> int:
+    process = subprocess.Popen([sys.executable, "-c", "pass"])
+    process.wait()
+    return process.pid
+
+
+def _make_stale(path: Path) -> None:
+    old = path.stat().st_mtime - STALE_SECONDS - 1
+    os.utime(path, (old, old))
+
+
 def test_a_process_that_stopped_writing_is_dropped(tmp_path: Path) -> None:
     worker = _Side()
     reader = RelayReader(tmp_path, [worker.requests], worker.gauges())
     child = _Side()
     child.requests.labels(outcome="ok").inc(7)
     child.in_flight.labels(pool="listing").set(4)
-    _write_as(tmp_path, 1, child)
+    pid = _ended_pid()
+    _write_as(tmp_path, pid, child)
     reader.merge_once()
     assert worker.value("relay_test_in_flight", {"pool": "listing"}) == 4
 
     # Killed with no last snapshot.
-    old = (tmp_path / "1.json").stat().st_mtime - STALE_SECONDS - 1
-    os.utime(tmp_path / "1.json", (old, old))
+    _make_stale(tmp_path / f"{pid}.json")
     reader.merge_once()
 
     assert worker.value("relay_test_requests_total", {"outcome": "ok"}) == 7
     assert worker.value("relay_test_in_flight", {"pool": "listing"}) is None
-    assert not (tmp_path / "1.json").exists()
+    assert not (tmp_path / f"{pid}.json").exists()
+
+
+def test_a_new_process_with_a_reused_pid_counts_from_zero(tmp_path: Path) -> None:
+    """Two processes with one PID: the reader must not read the second
+    snapshot as the first process's."""
+    worker = _Side()
+    reader = RelayReader(tmp_path, [worker.requests], worker.gauges())
+    first, second = _Side(), _Side()
+
+    first.requests.labels(outcome="ok").inc(100)
+    RelayWriter(tmp_path, [first.requests], first.gauges()).write(final=False)
+    reader.merge_once()
+    second.requests.labels(outcome="ok").inc(10)
+    RelayWriter(tmp_path, [second.requests], second.gauges()).write(final=False)
+    reader.merge_once()
+
+    assert worker.value("relay_test_requests_total", {"outcome": "ok"}) == 110
+
+
+def test_a_running_process_keeps_its_watermark_when_its_writes_stall(
+    tmp_path: Path,
+) -> None:
+    """A process that runs but could not write for a while loses its gauges.
+    Its next snapshot adds only what it counted since the last one."""
+    worker = _Side()
+    reader = RelayReader(tmp_path, [worker.requests], worker.gauges())
+    child = _Side()
+    writer = RelayWriter(tmp_path, [child.requests], child.gauges())
+    child.requests.labels(outcome="ok").inc(100)
+    child.in_flight.labels(pool="listing").set(4)
+    writer.write(final=False)
+    reader.merge_once()
+
+    (snapshot,) = tmp_path.glob("*.json")
+    _make_stale(snapshot)
+    reader.merge_once()
+    assert worker.value("relay_test_in_flight", {"pool": "listing"}) is None
+
+    child.requests.labels(outcome="ok").inc(10)
+    writer.write(final=False)
+    reader.merge_once()
+
+    assert worker.value("relay_test_requests_total", {"outcome": "ok"}) == 110
+    assert worker.value("relay_test_in_flight", {"pool": "listing"}) == 4
