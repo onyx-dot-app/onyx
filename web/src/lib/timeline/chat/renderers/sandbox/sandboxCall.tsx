@@ -14,7 +14,7 @@ export function SandboxCallContent({
   children,
 }: SandboxCallContentProps) {
   const content = (
-    <Section gap={2} alignItems="stretch" height="fit">
+    <Section gap={1} alignItems="stretch" height="fit">
       {children}
     </Section>
   );

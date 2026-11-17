@@ -66,9 +66,9 @@ export function RetrievalBody({
   const hiddenResults = Math.max(0, resultList.length - visibleResults);
 
   return (
-    // 0.5rem between the queries, "Read" and the results; 0.25rem between
-    // the labels in each row.
-    <Section alignItems="stretch" gap={2} height="auto">
+    // 0.25rem between the queries, "Read" and the results, and between the
+    // labels in each row.
+    <Section alignItems="stretch" gap={1} height="auto">
       {!compact &&
         (queries.length > 0 ? (
           <Section

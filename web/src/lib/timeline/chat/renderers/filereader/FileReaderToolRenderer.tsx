@@ -112,7 +112,7 @@ export const FileReaderToolRenderer: MessageRenderer<
       supportsCollapsible: true,
       timelineLayout: "timeline",
       content: (
-        <Section gap={2} alignItems="start" height="fit">
+        <Section gap={1} alignItems="start" height="fit">
           {state.fileName ? (
             <>
               {/* The panel's title row names the file; the step's title
