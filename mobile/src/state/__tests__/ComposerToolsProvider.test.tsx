@@ -425,6 +425,30 @@ describe("useComposerToolsState", () => {
     ]);
   });
 
+  it("turns on an OpenAPI tool that an old tool id still lists as off", async () => {
+    const api = mockApi({
+      preferences: {
+        "0": { disabled_tool_ids: [2], disabled_plugin_ids: ["plugin-image"] },
+      },
+      availableTools: [
+        searchTool,
+        { ...imageTool, plugin_ids: ["plugin-image"] },
+      ],
+    });
+    const { result } = renderTools({
+      agent: agent([searchTool, imageTool]),
+    });
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current.disabledToolIds).toEqual([2]);
+
+    await act(async () => {
+      result.current.toggleToolEnabled(2);
+    });
+
+    await waitFor(() => expect(result.current.disabledToolIds).toEqual([]));
+    expect(api.stored["0"]?.disabled_plugin_ids).toEqual([]);
+  });
+
   it("clears the preference when the preferred tool is disabled", async () => {
     const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
     act(() => result.current.togglePreferredTool(2));

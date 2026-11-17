@@ -203,10 +203,15 @@ export function useComposerToolsState({
     [effectiveAgentId, disabledPluginIdsFor],
   );
 
-  // Built-in tools switched off, and each OpenAPI or MCP tool whose plugins are all off.
+  /*
+   * Built-in tools switched off, and each OpenAPI or MCP tool whose plugins are all off. A saved
+   * id of a tool with plugins is from before plugins, so its plugins decide.
+   */
   const disabledToolIds = useMemo(() => {
     if (effectiveAgentId == null || !effectiveAgent) return NO_IDS;
-    const builtIn = disabledToolIdsFor(effectiveAgentId);
+    const builtIn = disabledToolIdsFor(effectiveAgentId).filter(
+      (toolId) => !pluginIdsByTool.get(toolId)?.length,
+    );
     const offThroughPlugins = effectiveAgent.tools
       .filter((tool) => {
         const pluginIds = pluginIdsByTool.get(tool.id) ?? [];
@@ -216,9 +221,7 @@ export function useComposerToolsState({
         );
       })
       .map((tool) => tool.id);
-    return offThroughPlugins.length === 0
-      ? builtIn
-      : [...new Set([...builtIn, ...offThroughPlugins])];
+    return [...builtIn, ...offThroughPlugins];
   }, [
     effectiveAgent,
     effectiveAgentId,
