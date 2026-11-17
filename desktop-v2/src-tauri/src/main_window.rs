@@ -249,7 +249,11 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
     // A window that did not get the session must not stay open: the next
     // open() would reuse it without a session and show the web login page.
     let result = async {
-        let cookie_name = app.state::<AppState>().cookie_name(server).await;
+        let cookie_name = app
+            .state::<AppState>()
+            .cookie_name(server)
+            .await
+            .map_err(|e| format!("Could not read the server's sign-in settings: {e}"))?;
         if app.state::<AppState>().epoch() != epoch {
             return Err("The session ended while Onyx was opening.".to_string());
         }

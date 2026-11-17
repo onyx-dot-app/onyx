@@ -38,8 +38,10 @@ impl AppState {
     }
 
     /// The cookie the server's web UI reads its session from. Servers can
-    /// rename it (`AUTH_COOKIE_NAME`); older servers do not report it.
-    pub async fn cookie_name(&self, server: &str) -> String {
+    /// rename it (`AUTH_COOKIE_NAME`); older servers do not report it. An
+    /// error means the server could not say: the caller must not guess, or
+    /// the web UI would show a valid session as signed out.
+    pub async fn cookie_name(&self, server: &str) -> Result<String, String> {
         if let Some((cached_server, name)) = self
             .cookie_name
             .lock()
@@ -47,12 +49,10 @@ impl AppState {
             .as_ref()
         {
             if cached_server == server {
-                return name.clone();
+                return Ok(name.clone());
             }
         }
-        // A brief metadata failure would otherwise give the web UI the wrong
-        // cookie and show a valid session as signed out: retry, and cache
-        // only a name the server reported.
+        // Retried, and only a name the server reported is cached.
         let mut last_error = String::new();
         for attempt in 0..3 {
             if attempt > 0 {
@@ -62,13 +62,12 @@ impl AppState {
                 Ok(name) => {
                     *self.cookie_name.lock().unwrap_or_else(|p| p.into_inner()) =
                         Some((server.to_string(), name.clone()));
-                    return name;
+                    return Ok(name);
                 }
                 Err(e) => last_error = e,
             }
         }
-        log::warn!("could not read the session cookie name: {last_error}");
-        crate::api::DEFAULT_SESSION_COOKIE.to_string()
+        Err(last_error)
     }
 
     /// The cookie name already looked up for `server`, or the default.

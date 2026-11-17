@@ -104,6 +104,29 @@ pub fn close(app: &AppHandle, label: &str) {
 }
 
 /// Opens whichever window the current state needs: onboarding, login or the main window.
+/// The session is valid but Onyx could not open (for example the server's
+/// sign-in settings did not load): keep the session, explain, and let the
+/// user try again or sign in.
+fn open_failed(app: &AppHandle, error: &str) {
+    let handle = app.clone();
+    let error = error.to_string();
+    let _ = app.run_on_main_thread(move || {
+        let choice = rfd::MessageDialog::new()
+            .set_title("Could not open Onyx")
+            .set_description(&error)
+            .set_buttons(rfd::MessageButtons::OkCancelCustom(
+                "Try Again".into(),
+                "Sign In".into(),
+            ))
+            .show();
+        if choice == rfd::MessageDialogResult::Custom("Try Again".into()) {
+            route(&handle);
+        } else {
+            let _ = open_login(&handle);
+        }
+    });
+}
+
 pub fn route(app: &AppHandle) {
     let state = app.state::<AppState>();
     let Ok(server) = state.server() else {
@@ -121,6 +144,7 @@ pub fn route(app: &AppHandle) {
             Ok(true) => {
                 if let Err(e) = main_window::open(&app, &server, &token, "/app").await {
                     log::warn!("could not open main window: {e}");
+                    open_failed(&app, &e);
                 }
             }
             Ok(false) => {
