@@ -1,16 +1,12 @@
 "use client";
 
-import { Text } from "@opal/components";
+import { CodePanel, type CodePanelLine } from "@opal/components";
 import { useCodeHighlighter } from "@/app/craft/hooks/useCodeHighlighter";
-import ToolCardSurface, {
-  ToolCardSection,
-  MONO_STYLE,
-} from "@/lib/timeline/components/bodies/ToolCardSurface";
 
 interface CommandBodyProps {
   /** The command or code that ran. */
   command: string;
-  /** Highlighting language for the command. */
+  /** Highlighting language for the command; also the panel's title. */
   language: "bash" | "python";
   /** Shown before a shell command, such as "$ ". */
   prompt?: string;
@@ -22,9 +18,9 @@ interface CommandBodyProps {
 }
 
 /**
- * The body of an execute step: the command in its own highlighted band, the
- * output in a divided, tinted band below, and error output last. Shared by
- * chat and Craft.
+ * The body of an execute step, as an Opal `CodePanel`: a title row with the
+ * language and a copy button, the command (numbered, unless it has a shell
+ * prompt), then its output and error output. Shared by chat and Craft.
  */
 export function CommandBody({
   command,
@@ -35,56 +31,39 @@ export function CommandBody({
   emptyLabel,
 }: CommandBodyProps) {
   const highlight = useCodeHighlighter(!!command);
-  const commandHtml =
-    command && highlight ? highlight(command, language) : null;
+
+  const lines: CodePanelLine[] = command.split("\n").map((line, index) => {
+    const html = highlight ? highlight(line, language) : null;
+    return {
+      number: index + 1,
+      content: (
+        <>
+          {prompt && index === 0 && (
+            <span className="select-none text-text-02">{prompt}</span>
+          )}
+          {html !== null ? (
+            <span dangerouslySetInnerHTML={{ __html: html }} />
+          ) : (
+            line
+          )}
+        </>
+      ),
+    };
+  });
 
   return (
-    <ToolCardSurface>
+    <CodePanel>
       {command && (
-        <ToolCardSection>
-          <p
-            style={MONO_STYLE}
-            className="text-text-04 whitespace-pre-wrap wrap-break-word hljs"
-          >
-            {prompt && (
-              <span className="select-none text-text-02">{prompt}</span>
-            )}
-            {commandHtml ? (
-              <span dangerouslySetInnerHTML={{ __html: commandHtml }} />
-            ) : (
-              command
-            )}
-          </p>
-        </ToolCardSection>
+        <>
+          <CodePanel.Header title={language} copyText={command} />
+          <CodePanel.Lines lines={lines} lineNumbers={!prompt} />
+        </>
       )}
-      {output && (
-        <ToolCardSection
-          divider={!!command}
-          tinted={!!command}
-          className="whitespace-pre-wrap wrap-break-word"
-        >
-          <Text as="p" font="secondary-mono" color="text-03">
-            {output}
-          </Text>
-        </ToolCardSection>
-      )}
-      {error && (
-        <ToolCardSection
-          divider={!!command || !!output}
-          className="whitespace-pre-wrap wrap-break-word bg-status-error-01"
-        >
-          <Text as="p" font="secondary-mono" color="status-error-05">
-            {error}
-          </Text>
-        </ToolCardSection>
-      )}
+      {output && <CodePanel.Output>{output}</CodePanel.Output>}
+      {error && <CodePanel.Output error>{error}</CodePanel.Output>}
       {!command && !output && !error && (
-        <ToolCardSection>
-          <Text font="secondary-mono" color="text-03">
-            {emptyLabel}
-          </Text>
-        </ToolCardSection>
+        <CodePanel.Output>{emptyLabel}</CodePanel.Output>
       )}
-    </ToolCardSurface>
+    </CodePanel>
   );
 }

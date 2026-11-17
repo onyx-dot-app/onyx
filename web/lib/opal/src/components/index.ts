@@ -425,6 +425,19 @@ export {
 /* Code */
 export { Code } from "@opal/components/code/components";
 
+/* CodePanel */
+export {
+  CodePanel,
+  type CodePanelProps,
+  type CodePanelHeaderProps,
+  type CodePanelLinesProps,
+  type CodePanelColumnsProps,
+  type CodePanelOutputProps,
+  type CodePanelFooterProps,
+  type CodePanelLine,
+  type CodePanelLineKind,
+} from "@opal/components/code-panel/components";
+
 /* Tabs */
 export {
   Tabs,

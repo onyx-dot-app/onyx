@@ -2,10 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { cn } from "@opal/utils";
-import { Text, Button } from "@opal/components";
-import { SvgColumn, SvgMenu } from "@opal/icons";
-import ToolCardSurface from "@/lib/timeline/components/bodies/ToolCardSurface";
+import { Badge, Button, CodePanel, type CodePanelLine } from "@opal/components";
+import { SvgColumn, SvgMenu, SvgMinus, SvgPlus } from "@opal/icons";
 import type { ToolCardBodyProps } from "@/lib/timeline/craft/components/tool-cards/interfaces";
 
 type DiffLineType = "added" | "removed" | "unchanged" | "header";
@@ -162,113 +160,31 @@ function collapseUnchanged(
   return result;
 }
 
-type DiffTextColor = "text-02" | "text-03" | "text-04";
-
-function lineRowClass(type: DiffLineType): string {
-  switch (type) {
-    case "added":
-      return "bg-status-success-01";
-    case "removed":
-      return "bg-status-error-01";
-    case "header":
-      return "bg-background-tint-02 italic text-center";
-    default:
-      return "";
-  }
+/** A diff line as a `CodePanel` line, numbered on the side it belongs to. */
+function toPanelLine(line: DiffLine): CodePanelLine {
+  if (line.type === "header") return { kind: "note", content: line.content };
+  return {
+    kind:
+      line.type === "added"
+        ? "added"
+        : line.type === "removed"
+          ? "removed"
+          : "context",
+    number: line.newLineNum ?? line.oldLineNum,
+    content: line.content,
+  };
 }
 
-function linePrefix(type: DiffLineType): { glyph: string; color: string } {
-  if (type === "added") return { glyph: "+", color: "text-status-success-05" };
-  if (type === "removed") return { glyph: "-", color: "text-status-error-05" };
-  return { glyph: BLANK, color: "text-text-03" };
-}
-
-function lineTextColor(type: DiffLineType): DiffTextColor {
-  if (type === "header") return "text-02";
-  if (type === "unchanged") return "text-03";
-  return "text-04";
-}
-
-function UnifiedDiff({ lines }: { lines: DiffLine[] }) {
-  return (
-    <div className="overflow-auto max-h-[24rem]">
-      {lines.map((line, idx) => {
-        const prefix = linePrefix(line.type);
-        return (
-          <div
-            key={idx}
-            className={cn(
-              "px-2 py-0.5 flex gap-2 items-baseline",
-              lineRowClass(line.type)
-            )}
-          >
-            {line.type !== "header" && (
-              <span className={cn("select-none shrink-0", prefix.color)}>
-                <Text font="secondary-mono" color="inherit">
-                  {prefix.glyph}
-                </Text>
-              </span>
-            )}
-            <span className="min-w-0 flex-1 whitespace-pre-wrap wrap-break-word block">
-              <Text font="secondary-mono" color={lineTextColor(line.type)}>
-                {line.content || (line.type === "header" ? "" : BLANK)}
-              </Text>
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function SideBySideDiff({ lines }: { lines: DiffLine[] }) {
-  return (
-    <div className="overflow-auto max-h-[24rem] grid grid-cols-2 divide-x divide-border-01">
-      <div>
-        {lines.map((line, idx) => {
-          const isHeader = line.type === "header";
-          const showRemoved = line.type === "removed";
-          const content = line.type === "added" ? BLANK : line.content || BLANK;
-          return (
-            <div
-              key={`l-${idx}`}
-              className={cn(
-                "px-2 py-0.5 whitespace-pre-wrap wrap-break-word",
-                showRemoved && "bg-status-error-01",
-                isHeader && "bg-background-tint-02 italic text-center"
-              )}
-            >
-              <Text font="secondary-mono" color={lineTextColor(line.type)}>
-                {content}
-              </Text>
-            </div>
-          );
-        })}
-      </div>
-      <div>
-        {lines.map((line, idx) => {
-          const isHeader = line.type === "header";
-          const showAdded = line.type === "added";
-          const content =
-            line.type === "removed" ? BLANK : line.content || BLANK;
-          return (
-            <div
-              key={`r-${idx}`}
-              className={cn(
-                "px-2 py-0.5 whitespace-pre-wrap wrap-break-word",
-                showAdded && "bg-status-success-01",
-                isHeader && "bg-background-tint-02 italic text-center"
-              )}
-            >
-              <Text font="secondary-mono" color={lineTextColor(line.type)}>
-                {content}
-              </Text>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+/** One side of a split diff: the other side's lines stay as blank rows. */
+function toSideLine(line: DiffLine, side: "old" | "new"): CodePanelLine {
+  if (line.type === "header") return { kind: "note", content: line.content };
+  const otherSide = side === "old" ? "added" : "removed";
+  if (line.type === otherSide) return { content: BLANK };
+  return {
+    kind: line.type === "unchanged" ? "context" : line.type,
+    number: side === "old" ? line.oldLineNum : line.newLineNum,
+    content: line.content,
+  };
 }
 
 /**
@@ -307,61 +223,61 @@ export default function DiffBody({ toolCall }: ToolCardBodyProps) {
   }
 
   return (
-    <ToolCardSurface scroll={false}>
-      <div
-        className={cn(
-          "px-2 py-0.5 border-b-[0.5px] border-border-01",
-          "bg-background-tint-01 flex items-center gap-2"
-        )}
-      >
-        {toolCall.description && (
-          <span className="truncate flex-1 min-w-0">
-            <Text
-              font="secondary-mono"
-              color="text-03"
-              wordWrap="whitespace-nowrap"
-            >
-              {toolCall.description}
-            </Text>
-          </span>
-        )}
-        <div className="flex items-center gap-2 shrink-0">
-          {stats.added > 0 && (
-            <span className="text-status-success-05">
-              <Text font="figure-small-value" color="inherit">
-                {`+${stats.added}`}
-              </Text>
-            </span>
-          )}
-          {stats.removed > 0 && (
-            <span className="text-status-error-05">
-              <Text font="figure-small-value" color="inherit">
-                {`-${stats.removed}`}
-              </Text>
-            </span>
-          )}
-          <Button
-            variant="default"
-            prominence="tertiary"
-            size="2xs"
-            icon={mode === "unified" ? SvgColumn : SvgMenu}
-            onClick={() =>
-              setMode(mode === "unified" ? "side-by-side" : "unified")
-            }
-            tooltip={
-              mode === "unified"
-                ? t("viewToggle.sideBySideTooltip")
-                : t("viewToggle.unifiedTooltip")
-            }
-          />
-        </div>
-      </div>
-
+    <CodePanel>
+      <CodePanel.Header
+        title={toolCall.description || ""}
+        copyText={newContent}
+        rightChildren={
+          <>
+            {stats.added > 0 && (
+              <Badge
+                icon={SvgPlus}
+                title={String(stats.added)}
+                color="success"
+              />
+            )}
+            {stats.removed > 0 && (
+              <Badge
+                icon={SvgMinus}
+                title={String(stats.removed)}
+                color="error"
+              />
+            )}
+            <Button
+              variant="default"
+              prominence="tertiary"
+              size="2xs"
+              icon={mode === "unified" ? SvgColumn : SvgMenu}
+              onClick={() =>
+                setMode(mode === "unified" ? "side-by-side" : "unified")
+              }
+              tooltip={
+                mode === "unified"
+                  ? t("viewToggle.sideBySideTooltip")
+                  : t("viewToggle.unifiedTooltip")
+              }
+            />
+          </>
+        }
+      />
       {mode === "unified" ? (
-        <UnifiedDiff lines={diffLines} />
+        <CodePanel.Lines
+          lineNumbers
+          markers
+          lines={diffLines.map(toPanelLine)}
+        />
       ) : (
-        <SideBySideDiff lines={diffLines} />
+        <CodePanel.Columns>
+          <CodePanel.Lines
+            lineNumbers
+            lines={diffLines.map((line) => toSideLine(line, "old"))}
+          />
+          <CodePanel.Lines
+            lineNumbers
+            lines={diffLines.map((line) => toSideLine(line, "new"))}
+          />
+        </CodePanel.Columns>
       )}
-    </ToolCardSurface>
+    </CodePanel>
   );
 }
