@@ -56,7 +56,9 @@ export function RetrievalBody({
   compact = false,
 }: RetrievalBodyProps) {
   const t = useTranslations("chat.messages.timeline");
+  const [visibleQueries, setVisibleQueries] = useState(INITIAL_QUERIES_TO_SHOW);
   const [visibleResults, setVisibleResults] = useState(INITIAL_RESULTS_TO_SHOW);
+  const hiddenQueries = Math.max(0, queries.length - visibleQueries);
 
   const showResults =
     results !== null && (compact || results.length > 0 || queries.length > 0);
@@ -64,9 +66,9 @@ export function RetrievalBody({
   const hiddenResults = Math.max(0, resultList.length - visibleResults);
 
   return (
-    // 0.25rem between the queries, "Read" and the results, and between
+    // 0.5rem between the queries, "Read" and the results; 0.25rem between
     // the labels in each row.
-    <Section alignItems="stretch" gap={1} height="auto">
+    <Section alignItems="stretch" gap={2} height="auto">
       {!compact &&
         (queries.length > 0 ? (
           <Section
@@ -76,16 +78,26 @@ export function RetrievalBody({
             gap={1}
             wrap
           >
-            {queries.map((query, index) => (
+            {queries.slice(0, visibleQueries).map((query, index) => (
               <Badge key={index} icon={SvgSearch} title={query} size={6} />
             ))}
+            {hiddenQueries > 0 && (
+              <Tag
+                title={t("searchChips.showMore.label", {
+                  count: hiddenQueries,
+                })}
+                onClick={() =>
+                  setVisibleQueries((count) => count + QUERIES_PER_EXPANSION)
+                }
+              />
+            )}
           </Section>
         ) : (
           !isComplete && <BlinkingBar />
         ))}
 
       {showResults && !compact && (
-        <Text as="p" font="secondary-action" color="text-03">
+        <Text as="p" font="secondary-body" color="text-03">
           {t("internalSearch.read.label")}
         </Text>
       )}
