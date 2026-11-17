@@ -1,8 +1,23 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from onyx.auth import oauth_refresher
 from onyx.db.models import OAuthAccount, User
+
+
+@asynccontextmanager
+async def _no_lock(*_args: Any, **_kwargs: Any) -> AsyncGenerator[None, None]:
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _no_cache_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit tests have no cache backend for the login refresh lock."""
+    monkeypatch.setattr(oauth_refresher, "async_cache_shared_lock", _no_lock)
 
 
 @pytest.fixture

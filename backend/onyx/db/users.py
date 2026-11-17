@@ -701,6 +701,13 @@ def fetch_users_by_ids(db_session: Session, user_ids: list[UUID]) -> list[User]:
     )
 
 
+def reload_oauth_account(
+    db_session: Session, oauth_account_id: UUID
+) -> OAuthAccount | None:
+    """The login account row as the database has it now."""
+    return db_session.get(OAuthAccount, oauth_account_id, populate_existing=True)
+
+
 def fetch_user_by_id(
     db_session: Session, user_id: UUID, for_update: bool = False
 ) -> User | None:

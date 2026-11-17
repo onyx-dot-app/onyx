@@ -2,25 +2,17 @@
 app callback and the integration sign-in flow."""
 
 from datetime import datetime, timezone
-from typing import Any
 
 import requests
-from pydantic import BaseModel
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.models import PresetGrant
 from onyx.external_apps.providers.base import OAuthExternalAppProvider, OAuthFlowSpec
 from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-class PresetGrant(BaseModel):
-    # Provider credentials with an absolute ``expires_at`` (ISO string).
-    credentials: dict[str, Any]
-    # None when the provider gives no signal.
-    granted_scopes: list[str] | None
 
 
 def exchange_preset_code(

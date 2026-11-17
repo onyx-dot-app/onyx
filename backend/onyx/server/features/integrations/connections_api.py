@@ -1,7 +1,6 @@
 """The one sign-in flow for integrations."""
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
@@ -17,22 +16,13 @@ from onyx.integrations.oauth import (
     complete_integration_oauth,
     start_integration_oauth,
 )
-from onyx.oauth.models import SafeOAuthReturnPath
+from onyx.server.features.integrations.models import (
+    IntegrationOAuthCallbackRequest,
+    IntegrationOAuthStartRequest,
+    IntegrationOAuthStartResponse,
+)
 
 router = APIRouter(prefix="/integrations")
-
-
-class IntegrationOAuthStartRequest(BaseModel):
-    return_path: SafeOAuthReturnPath | None = None
-
-
-class IntegrationOAuthStartResponse(BaseModel):
-    authorization_url: str
-
-
-class IntegrationOAuthCallbackRequest(BaseModel):
-    code: str
-    state: str
 
 
 @router.post("/{integration_id}/oauth/start")

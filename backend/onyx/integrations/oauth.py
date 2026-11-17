@@ -8,8 +8,7 @@ from uuid import UUID
 import requests
 from mcp.client.auth import PKCEParameters
 from mcp.client.auth.oauth2 import OAuthContext
-from mcp.shared.auth import OAuthMetadata, ProtectedResourceMetadata
-from pydantic import AnyUrl, BaseModel, ConfigDict
+from pydantic import AnyUrl
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
@@ -37,6 +36,9 @@ from onyx.external_apps.oauth_exchange import exchange_preset_code
 from onyx.external_apps.providers.base import OAuthExternalAppProvider, OAuthFlowSpec
 from onyx.integrations.connection_models import (
     ConnectionSecret,
+    IntegrationMCPAttempt,
+    IntegrationOAuthAttemptPayload,
+    IntegrationOAuthCallbackResult,
     preset_credentials_to_secret,
     read_oauth_client,
 )
@@ -50,11 +52,6 @@ from onyx.oauth.authorization_attempt import (
     AuthorizationAttemptStore,
     canonical_json_fingerprint,
     generate_authorization_state,
-)
-from onyx.oauth.models import (
-    OAuthConfigurationFingerprint,
-    PKCECodeVerifier,
-    SafeOAuthReturnPath,
 )
 from onyx.oauth.protocol import OAuthFlowParams, build_authorization_url
 from onyx.server.features.mcp.client_metadata import mcp_oauth_redirect_uri
@@ -86,40 +83,11 @@ _PRESET_REDIRECT_URI = f"{WEB_DOMAIN}/craft/v1/apps/oauth/callback"
 _MANUAL_REDIRECT_URI = f"{WEB_DOMAIN}/oauth-config/callback"
 
 
-class IntegrationMCPAttempt(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    redirect_uri: AnyUrl
-    client_information_fingerprint: OAuthConfigurationFingerprint
-    protected_resource_metadata: ProtectedResourceMetadata | None = None
-    oauth_metadata: OAuthMetadata | None = None
-    authorization_server_url: str | None = None
-    protocol_version: str | None = None
-    scope: str | None = None
-    resource: AnyUrl | None = None
-
-
-class IntegrationOAuthAttemptPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    integration_id: int
-    for_organization: bool
-    configuration_fingerprint: OAuthConfigurationFingerprint
-    code_verifier: PKCECodeVerifier | None = None
-    return_path: SafeOAuthReturnPath | None = None
-    mcp: IntegrationMCPAttempt | None = None
-
-
 INTEGRATION_OAUTH_ATTEMPTS = AuthorizationAttemptStore(
     cache_backend_provider=get_cache_backend,
     namespace="integration",
     payload_type=IntegrationOAuthAttemptPayload,
 )
-
-
-class IntegrationOAuthCallbackResult(BaseModel):
-    integration_id: int
-    return_path: str | None
 
 
 def integration_oauth_redirect_uri(
@@ -149,6 +117,10 @@ def _configuration_fingerprint(
     settings = sign_in_settings_for(
         integration, oauth_client, _sign_in_host(integration, db_session)
     )
+    if oauth_client.provider_mode is IntegrationOAuthProviderMode.DISCOVERY:
+        # Registration writes the client id during the sign-in. The client
+        # information fingerprint of the MCP attempt checks the client.
+        settings = settings.model_copy(update={"client_id": None})
     return canonical_json_fingerprint(
         {
             "integration_id": integration.id,

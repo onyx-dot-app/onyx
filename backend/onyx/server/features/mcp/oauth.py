@@ -1426,7 +1426,11 @@ class IntegrationTokenStorage(PersistentTokenStorage):
             and credentials.registration.get(OAUTH_METADATA_KEY) == metadata
         ):
             return
-        db_session.refresh(oauth_client, with_for_update=True)
+        oauth_client = get_oauth_client(
+            db_session, self.integration_id, for_update=True
+        )
+        if oauth_client is None:
+            return
         credentials = read_oauth_client(oauth_client)
         set_oauth_client_credentials__no_commit(
             db_session,
