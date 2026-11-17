@@ -31,6 +31,7 @@ def _modules_referencing_status_mutation() -> set[str]:
     scan_roots = (
         backend_dir / "onyx" / "server" / "features" / "build",
         backend_dir / "onyx" / "background",
+        backend_dir / "onyx" / "db",
     )
     found: set[str] = set()
     for root in scan_roots:
