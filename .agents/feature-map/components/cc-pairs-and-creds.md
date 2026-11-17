@@ -309,6 +309,9 @@ on the admin routes.
 - **Connector and credential are separate rows.** One admin can index several
   spaces with one credential, and several admins can run one config with their
   own credentials (`ConnectorCredentialPair` docstring).
+- **Manual prune requests survive dispatch loss.** The route stores the request
+  before it sends the task. A blocked dispatch returns success with a queued
+  message. The beat retries, with three attempts per explicit request.
 - **The pause route returns at once.** It sets signals and lets running tasks
   stop themselves, so the admin does not wait on a worker.
 - **Resolve without retry keeps `is_resolved` false.** Resolving a run adds a

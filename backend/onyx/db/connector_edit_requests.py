@@ -26,12 +26,13 @@ from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     IndexingMode,
     IndexingStatus,
+    SyncType,
 )
 from onyx.db.index_attempt import (
     cancel_waiting_index_attempt__no_commit,
     create_index_attempt__no_commit,
 )
-from onyx.db.models import ConnectorCredentialPair, IndexAttempt
+from onyx.db.models import ConnectorCredentialPair, IndexAttempt, SyncRecord
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -451,7 +452,7 @@ def has_scoped_backfill_outstanding(db_session: Session, cc_pair_id: int) -> boo
 def request_prune__no_commit(db_session: Session, cc_pair_id: int) -> None:
     """Asks the pruning beat to prune the pair once, even without prune_freq.
     The request waits while the pair is not ACTIVE or a prune runs, and is
-    cleared when a prune dispatched after it succeeds."""
+    cleared when a prune dispatched after it succeeds or three attempts end."""
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
     cc_pair.prune_requested_at = func.now()
 
@@ -600,3 +601,23 @@ def apply_access_change__no_commit(
     if access_type != previous_access_type:
         # Rewrites the chunks' public field and group: entries.
         mark_cc_pair_documents_for_sync__no_commit(db_session, [cc_pair_id])
+
+
+def clear_exhausted_prune_request__no_commit(
+    db_session: Session, cc_pair_id: int
+) -> bool:
+    """Limit an explicit prune request to three durable dispatch attempts."""
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    if cc_pair.prune_requested_at is None:
+        return False
+    attempts = db_session.scalar(
+        select(func.count(SyncRecord.id)).where(
+            SyncRecord.entity_id == cc_pair_id,
+            SyncRecord.sync_type == SyncType.PRUNING,
+            SyncRecord.sync_start_time >= cc_pair.prune_requested_at,
+        )
+    )
+    if attempts is None or attempts < 3:
+        return False
+    cc_pair.prune_requested_at = None
+    return True

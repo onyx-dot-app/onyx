@@ -33,6 +33,7 @@ from onyx.configs.constants import (
     CELERY_PRUNING_LOCK_TIMEOUT,
     CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
     DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
+    PRUNING_GENERATOR_TASK_EXPIRES,
     DocumentSource,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
@@ -50,6 +51,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs,
     lock_connector_credential_pair_row,
 )
+from onyx.db.connector_edit_requests import clear_exhausted_prune_request__no_commit
 from onyx.db.document import (
     backfill_docs_created_at__no_commit,
     get_documents_for_connector_credential_pair,
@@ -488,6 +490,13 @@ def try_creating_prune_generator_task(
             )
             return None
 
+        if clear_exhausted_prune_request__no_commit(db_session, cc_pair.id):
+            db_session.commit()
+            logger.warning(
+                "Prune request exhausted three attempts: cc_pair=%s", cc_pair.id
+            )
+            return None
+
         # add a long running generator task to the queue
         redis_connector.prune.generator_clear()
         redis_connector.prune.taskset_clear()
@@ -496,14 +505,11 @@ def try_creating_prune_generator_task(
 
         # create before setting fence to avoid race condition where the monitoring
         # task updates the sync record before it is created
-        try:
-            insert_sync_record(
-                db_session=db_session,
-                entity_id=cc_pair.id,
-                sync_type=SyncType.PRUNING,
-            )
-        except Exception:
-            task_logger.exception("insert_sync_record exceptioned.")
+        insert_sync_record(
+            db_session=db_session,
+            entity_id=cc_pair.id,
+            sync_type=SyncType.PRUNING,
+        )
 
         # signal active before the fence is set
         redis_connector.prune.set_active()
@@ -524,6 +530,7 @@ def try_creating_prune_generator_task(
         # nothing sends it again. The fence allows one task per pair.
         result = celery_app.send_task(  # celery-expires: allow (a manual prune is not sent again)
             OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
+            expires=PRUNING_GENERATOR_TASK_EXPIRES,
             kwargs={
                 "cc_pair_id": cc_pair.id,
                 "connector_id": cc_pair.connector_id,

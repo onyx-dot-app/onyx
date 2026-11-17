@@ -120,6 +120,15 @@ between the two steps. Without the lock, a prune that an API call starts during
 the reset is failed before its fence exists, or runs with no fence. Do not split
 the function or drop the lock.
 
+**Explicit prune requests.** The manual route commits `prune_requested_at`
+before dispatch. A deferred send returns success with a queued message.
+The beat retries the request after a lost task or failure, even without
+`prune_freq`. The dispatcher counts durable prune records since the request
+under the pair lock. After three attempts it clears the request and keeps
+the failed records in the run history. A new request starts a new budget.
+Connector edits use the same request field and limit. Scheduled pruning
+without a request keeps its existing retry behavior.
+
 **Pruning without a slim listing.** A connector with no slim listing is
 pruned by a full load or poll
 (`background/celery/celery_utils.py:extract_ids_from_runnable_connector`). It
