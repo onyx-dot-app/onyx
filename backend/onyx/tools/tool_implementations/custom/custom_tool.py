@@ -1,6 +1,5 @@
 import copy
 import csv
-import itertools
 import json
 import uuid
 from collections.abc import Callable
@@ -363,15 +362,15 @@ def build_custom_tools_from_openapi_schema_and_headers(
     ``custom_headers`` are not templated. ``approval_for`` gets the
     operationId from before the substitution.
     """
-    action_keys = [spec.raw_name for spec in openapi_to_method_specs(openapi_schema)]
+    action_keys: list[str] = []
     if dynamic_schema_info:
         # Mark each operation with its position, so that it keeps its own
         # action key when two paths render to the same path.
         marked_schema = copy.deepcopy(openapi_schema)
-        positions = itertools.count()
         for methods in marked_schema.get("paths", {}).values():
             for operation in methods.values():
-                operation[_OPERATION_POSITION_KEY] = next(positions)
+                operation[_OPERATION_POSITION_KEY] = len(action_keys)
+                action_keys.append(operation.get("operationId"))
         schema_str = json.dumps(marked_schema)
         placeholders = {
             CHAT_SESSION_ID_PLACEHOLDER: dynamic_schema_info.chat_session_id,
@@ -390,10 +389,11 @@ def build_custom_tools_from_openapi_schema_and_headers(
     method_specs = openapi_to_method_specs(openapi_schema)
 
     tools = []
-    for position, method_spec in enumerate(method_specs):
-        action_key = action_keys[
-            method_spec.spec.pop(_OPERATION_POSITION_KEY, position)
-        ]
+    for method_spec in method_specs:
+        position = method_spec.spec.pop(_OPERATION_POSITION_KEY, None)
+        action_key = (
+            action_keys[position] if position is not None else method_spec.raw_name
+        )
         tools.append(
             CustomTool(
                 integration_id=integration_id,
