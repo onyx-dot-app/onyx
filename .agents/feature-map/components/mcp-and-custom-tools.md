@@ -77,8 +77,8 @@ The plugin screens, Default Chat selection and personal preferences are in
 ## Scope
 
 This component owns:
-- the MCP client: the admin and member API, staged setup, OAuth, the setup
-  probe, the SSRF guard, credential resolution, tool sync, and the `MCPTool`
+- the MCP client: the admin and member API, create and refresh, OAuth, the
+  setup probe, the SSRF guard, credential resolution, tool sync, and the `MCPTool`
   that runs a call;
 - OpenAPI custom tools: the admin API, schema parsing, and the `CustomTool`
   that runs a call;
@@ -313,8 +313,9 @@ admin value is not Ask.
 - MCP actions:
   `backend/onyx/integrations/kinds/mcp_server.py:fetch_mcp_actions` asks the server with
   the acting user's credential; the refresh writes the result as
-  `integration_action` rows. `discover_actions` returns the stored rows, so the
-  sync never reads MCP `tool` rows.
+  `integration_action` rows. Only the create of a public server and a refresh
+  write MCP actions; the create and the update do not sync an MCP integration,
+  and no code reads MCP `tool` rows.
 - Agents: `PersonaUpsertRequest.plugins` replaces the `persona__plugin` links
   (null keeps them). An old custom or MCP id in `tool_ids` adds the plugin of
   its integration (`db/integration_policy.py:legacy_tool_plugin_links`; MCP
@@ -356,11 +357,11 @@ self-hosted allows private targets at every level and loopback only at
 `DISABLED`, cloud blocks all internal targets, and `ssrf_safe_request` does not
 follow redirects.
 
-**Action policies.** `update_mcp_server_simple` and `_publish_mcp_setup`
-call `replace_workspace_action_policies` under `MANAGE_ACTIONS` with
-`allow_scope=True`, so a scoped action manager can write them.
-`update_mcp_server_with_tools` only sets `Tool.enabled` for the selected tools.
-Policy precedence is in [[craft-external-apps]]. The Craft proxy and the chat
+**Action policies.** `PUT /admin/integrations/{id}/actions` writes the admin
+rows through `backend/onyx/db/integration.py:set_policy_rows__no_commit` under
+`MANAGE_ACTIONS` with `allow_scope=True`, so a scoped manager of the
+integration can write them. `backend/onyx/integrations/policy.py` resolves
+them. Policy precedence is in [[craft-external-apps]]. The Craft proxy and the chat
 gate below read the same policies.
 
 **Chat approvals.**
@@ -854,11 +855,12 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   given Craft policies on its own. An OpenAPI schema is the admin's own
   document: its operations attach as a group, and an edit takes effect on the
   next turn with no sync.
-- **Validate before publish.** The staged flow keeps the saved server untouched
-  until authentication and discovery succeed. A failed edit leaves the working
-  configuration in place, and an abandoned OAuth attempt expires with no
-  partial server. The public alias `POST /admin/mcp/servers/create` saves
-  without the staged flow. The web UI uses `/admin/integrations`.
+- **Discover before save.** The create of an MCP server with no sign-in asks
+  the server for its tools before the first insert, so a server that cannot be
+  reached saves nothing (502). A server with a sign-in saves first, because the
+  sign-in needs the integration; its actions come from a refresh after the
+  sign-in. The public alias `POST /admin/mcp/servers/create` uses the same
+  create.
 
 ---
 
