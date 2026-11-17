@@ -37,7 +37,6 @@ from onyx.db.enums import (
     ExternalAppType,
     GatedAppKind,
     IntegrationAuthMode,
-    IntegrationKind,
     PluginInstallationPolicy,
     SandboxStatus,
     SkillSharePermission,
@@ -326,26 +325,21 @@ def make_external_app(
     policy overrides in ``action_policies`` (``{action_id: policy}``). The
     plugin of a custom ``skill`` holds the integration. ``skill`` also gives
     the default name."""
-    app_name = name or (skill.name if skill is not None else f"app-{uuid4().hex[:8]}")
-    app = ExternalApp(
-        name=app_name,
+    from tests.external_dependency_unit.integration_helpers import (
+        make_app_integration,
+    )
+
+    integration, app = make_app_integration(
+        db_session,
+        name=name or (skill.name if skill is not None else None),
         app_type=app_type,
-        enabled=enabled,
-        upstream_url_patterns=upstream_url_patterns or [],
+        upstream_url_patterns=upstream_url_patterns,
         auth_template=auth_template,
-        organization_credentials=organization_credentials or {},
+        organization_credentials=organization_credentials,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
     )
-    db_session.add(app)
-    db_session.flush()
-    db_session.add(
-        Integration(
-            kind=IntegrationKind.API,
-            name=app_name,
-            auth_mode=IntegrationAuthMode.INDIVIDUAL,
-            enabled=enabled,
-            external_app_id=app.id,
-        )
-    )
+    app.enabled = enabled
+    integration.enabled = enabled
     db_session.flush()
     if (
         skill is not None

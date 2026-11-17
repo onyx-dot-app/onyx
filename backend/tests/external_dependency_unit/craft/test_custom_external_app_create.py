@@ -16,7 +16,7 @@ from onyx.db.models import ExternalApp, Skill, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.credentials import resolve_injection_headers
-from onyx.external_apps.matching.engine import resolve_app_for_url
+from onyx.external_apps.matching.engine import url_matches_patterns
 from onyx.server.features.build.external_apps.api import (
     create_built_in_external_app,
     create_custom_external_app,
@@ -118,11 +118,9 @@ def test_zero_skill_app_can_match_and_inject_user_credentials(
     app = db_session.get(ExternalApp, response.id)
     assert app is not None
 
-    matched = resolve_app_for_url(
-        "https://api.example.com/v10/users/@me",
-        [app],
+    assert url_matches_patterns(
+        "https://api.example.com/v10/users/@me", app.upstream_url_regexes
     )
-    assert matched is app
     assert resolve_injection_headers(db_session, app.id, test_user.id) == {}
 
     upsert_external_app_user_credential(
