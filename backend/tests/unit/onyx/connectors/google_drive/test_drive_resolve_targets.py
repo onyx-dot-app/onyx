@@ -11,6 +11,7 @@ from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.doc_conversion import MAX_RETRIEVER_EMAILS
 from onyx.connectors.google_drive.models import DriveBatchResult, DriveListingPayload
 from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveHttpError,
     GoogleDriveSourceOperations,
 )
 from onyx.connectors.models import (
@@ -244,3 +245,141 @@ def test_the_link_only_filter_applies_at_conversion() -> None:
     assert len(results) == 1
     assert convert.call_count == 1
     assert convert.call_args.args[5]["id"] == "file-b"
+
+
+def _denied() -> GoogleDriveHttpError:
+    return GoogleDriveHttpError(
+        status_code=403,
+        reasons=("insufficientFilePermissions",),
+        access_denied=True,
+        message="denied",
+    )
+
+
+def _shared_drive_target(file_id: str, readers: list[str]) -> ResolveTarget:
+    target = _target(file_id, readers)
+    payload = cast(DriveListingPayload, target.listing_payload)
+    payload.drive_file = {"id": file_id, "name": file_id, "driveId": "drive-1"}
+    return target
+
+
+_PERMISSIONS: list[dict[str, object]] = [
+    {"id": "p1", "type": "user", "emailAddress": "a@example.com"},
+    {
+        "id": "p2",
+        "type": "group",
+        "emailAddress": "team@example.com",
+        "permissionDetails": [{"inherited": True, "inheritedFrom": "drive-1"}],
+    },
+]
+
+
+def test_permissions_given_only_by_id_are_read_as_a_user_who_can() -> None:
+    """The batch read gives the permission ids but not the permissions. The
+    listing user cannot read them; a drive member can. Conversion gets every
+    permission, so the document keeps the drive's members and groups."""
+    connector = _make_connector()
+    ops = cast(MagicMock, connector.ops)
+    ops.batch_get_files.return_value = _permission_batch(
+        {"file-a": {"id": "file-a", "permissionIds": ["p1", "p2"]}}
+    )
+
+    def list_file_permissions(
+        *, user_email: str, file_id: str, **_kwargs: object
+    ) -> list[dict[str, object]]:
+        assert file_id == "file-a"
+        if user_email != "member@example.com":
+            raise _denied()
+        return _PERMISSIONS
+
+    ops.list_file_permissions.side_effect = list_file_permissions
+    converted: list[dict[str, object]] = []
+
+    def convert(*args: object, **_kwargs: object) -> Document:
+        drive_file = cast(dict[str, object], args[5])
+        converted.append(drive_file)
+        return _doc(str(drive_file["id"]))
+
+    with patch(f"{_CONN_MODULE}.convert_drive_item_to_document", side_effect=convert):
+        results = list(
+            connector.resolve_targets(
+                [_shared_drive_target("file-a", ["member@example.com"])],
+                include_permissions=True,
+            )
+        )
+
+    assert [type(r) for r in results] == [Document]
+    assert converted[0]["permissions"] == _PERMISSIONS
+    # The listing user is asked first.
+    assert (
+        ops.list_file_permissions.call_args_list[0].kwargs["user_email"]
+        == "lister@example.com"
+    )
+
+
+def test_a_shared_drive_file_with_unreadable_permissions_fails_closed() -> None:
+    """No reader can read the permissions of a shared drive file. Converting
+    it would give access to one user and drop the drive's members, so it
+    becomes a failure and is not converted."""
+    connector = _make_connector()
+    ops = cast(MagicMock, connector.ops)
+    ops.batch_get_files.return_value = _permission_batch(
+        {"file-a": {"id": "file-a", "permissionIds": ["p1", "p2"]}}
+    )
+    ops.list_file_permissions.side_effect = _denied()
+
+    with patch(f"{_CONN_MODULE}.convert_drive_item_to_document") as convert:
+        results = list(
+            connector.resolve_targets(
+                [_shared_drive_target("file-a", ["member@example.com"])],
+                include_permissions=True,
+            )
+        )
+
+    convert.assert_not_called()
+    assert len(results) == 1
+    failure = results[0]
+    assert isinstance(failure, ConnectorFailure)
+    assert failure.failed_document is not None
+    assert failure.failed_document.document_id == (
+        "https://docs.google.com/document/d/file-a"
+    )
+
+
+def test_a_partial_permission_read_fails_closed() -> None:
+    connector = _make_connector()
+    ops = cast(MagicMock, connector.ops)
+    ops.batch_get_files.return_value = _permission_batch(
+        {"file-a": {"id": "file-a", "permissionIds": ["p1", "p2"]}}
+    )
+    ops.list_file_permissions.return_value = _PERMISSIONS[:1]
+
+    with patch(f"{_CONN_MODULE}.convert_drive_item_to_document") as convert:
+        results = list(
+            connector.resolve_targets(
+                [_target("file-a", ["member@example.com"])],
+                include_permissions=True,
+            )
+        )
+
+    convert.assert_not_called()
+    assert [type(r) for r in results] == [ConnectorFailure]
+
+
+def test_a_failed_permission_read_fails_closed() -> None:
+    connector = _make_connector()
+    ops = cast(MagicMock, connector.ops)
+    ops.batch_get_files.return_value = _permission_batch(
+        {"file-a": {"id": "file-a", "permissionIds": ["p1"]}}
+    )
+    ops.list_file_permissions.side_effect = GoogleDriveHttpError(
+        status_code=500, reasons=(), access_denied=False, message="backend error"
+    )
+
+    with patch(f"{_CONN_MODULE}.convert_drive_item_to_document") as convert:
+        results = list(
+            connector.resolve_targets([_target("file-a", [])], include_permissions=True)
+        )
+
+    convert.assert_not_called()
+    assert [type(r) for r in results] == [ConnectorFailure]
