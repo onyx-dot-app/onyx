@@ -29,6 +29,7 @@ import type {
 import { integrationDetailHref } from "@/lib/integrations/utils";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
+import { usePolicyOptions } from "@/sections/actions/PolicyToggle";
 
 /** An action with no setting of its own uses the agent default. */
 const AGENT_DEFAULT = "agent_default" as const;
@@ -51,17 +52,17 @@ function SettingSelect({
   onChange,
 }: SettingSelectProps) {
   const t = useTranslations("agents.editor.plugins");
-  const policy = useTranslations("actions.policyToggle");
+  const policyOptions = usePolicyOptions();
   const options: { value: SettingChoice; title: string }[] = [
     ...(offerAgentDefault
       ? [{ value: AGENT_DEFAULT, title: t("choice.agentDefault") }]
       : []),
     { value: "inherit", title: t("choice.inherit") },
-    ...(offerAllow || value === "allow"
-      ? [{ value: "allow" as const, title: policy("always.label") }]
-      : []),
-    { value: "ask", title: policy("ask.label") },
-    { value: "blocked", title: policy("deny.label") },
+    ...policyOptions
+      .filter(
+        (option) => option.value !== "allow" || offerAllow || value === "allow"
+      )
+      .map((option) => ({ value: option.value, title: option.label })),
   ];
   return (
     <InputSingleSelect
