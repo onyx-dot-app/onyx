@@ -1,8 +1,8 @@
 """The action sync of each integration kind against a real Postgres.
 
-For each kind, ``discover_actions`` must give what the old code exposes, and
-``sync_integration_actions__no_commit`` must write ``integration_action`` rows
-that a second run leaves alone."""
+For each API shape, ``discover_actions`` must give what the old code exposes,
+and ``sync_integration_actions__no_commit`` must write ``integration_action``
+rows that a second run leaves alone."""
 
 import datetime
 from collections.abc import Generator
@@ -11,8 +11,6 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from mcp.types import Tool as MCPLibTool
-from mcp.types import ToolAnnotations
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
@@ -24,28 +22,22 @@ from onyx.db.enums import (
     IntegrationActionSource,
     IntegrationAuthMode,
     IntegrationKind,
-    MCPAuthenticationPerformer,
-    MCPAuthenticationType,
-    MCPTransport,
 )
 from onyx.db.integration import (
     list_integration_actions,
     replace_integration_actions__no_commit,
 )
-from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import (
     ExternalApp,
     Integration,
     IntegrationAction,
-    MCPServer,
     Tool,
 )
-from onyx.db.tools import create_tool__no_commit, get_tools_by_mcp_server_id
+from onyx.db.tools import create_tool__no_commit
 from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.integrations.kinds.api import ApiKindHandler
 from onyx.integrations.models import IntegrationActionSpec
-from onyx.integrations.registry import get_kind_handler
 from onyx.integrations.sync import sync_integration_actions__no_commit
-from onyx.server.features.mcp import api as mcp_api
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
 )
@@ -87,7 +79,6 @@ class Created:
     def __init__(self) -> None:
         self.integration_ids: list[int] = []
         self.tool_ids: list[int] = []
-        self.mcp_server_ids: list[int] = []
         self.external_app_ids: list[int] = []
 
 
@@ -101,13 +92,6 @@ def created(
     db_session.rollback()
     if rows.tool_ids:
         db_session.execute(delete(Tool).where(Tool.id.in_(rows.tool_ids)))
-    if rows.mcp_server_ids:
-        db_session.execute(
-            delete(Tool).where(Tool.mcp_server_id.in_(rows.mcp_server_ids))
-        )
-        db_session.execute(
-            delete(MCPServer).where(MCPServer.id.in_(rows.mcp_server_ids))
-        )
     if rows.external_app_ids:
         db_session.execute(
             delete(ExternalApp).where(ExternalApp.id.in_(rows.external_app_ids))
@@ -124,7 +108,6 @@ def _integration(
     created: Created,
     kind: IntegrationKind,
     *,
-    mcp_server_id: int | None = None,
     external_app_id: int | None = None,
     tool_id: int | None = None,
 ) -> Integration:
@@ -132,7 +115,6 @@ def _integration(
         kind=kind,
         name=f"sync-{uuid4().hex[:8]}",
         auth_mode=IntegrationAuthMode.NONE,
-        mcp_server_id=mcp_server_id,
         external_app_id=external_app_id,
         tool_id=tool_id,
     )
@@ -140,25 +122,6 @@ def _integration(
     db_session.flush()
     created.integration_ids.append(integration.id)
     return integration
-
-
-def _mcp_server(db_session: Session, created: Created) -> tuple[Integration, MCPServer]:
-    server = create_mcp_server__no_commit(
-        owner_email="admin@example.com",
-        name=f"sync-{uuid4().hex[:8]}",
-        description=None,
-        server_url=f"https://sync-{uuid4().hex[:8]}.example.com/mcp",
-        auth_type=MCPAuthenticationType.API_TOKEN,
-        transport=MCPTransport.STREAMABLE_HTTP,
-        auth_performer=MCPAuthenticationPerformer.ADMIN,
-        db_session=db_session,
-    )
-    created.mcp_server_ids.append(server.id)
-    integration = _integration(
-        db_session, created, IntegrationKind.MCP, mcp_server_id=server.id
-    )
-    db_session.commit()
-    return integration, server
 
 
 def _openapi_tool(db_session: Session, created: Created) -> tuple[Integration, Tool]:
@@ -221,100 +184,6 @@ def _assert_idempotent(db_session: Session, integration: Integration) -> Snapsho
     return first
 
 
-def _discovered(tools: list[tuple[str, str, bool | None]]) -> list[MCPLibTool]:
-    return [
-        MCPLibTool(
-            name=name,
-            description=description,
-            inputSchema={"type": "object", "properties": {"q": {"type": "string"}}},
-            annotations=None
-            if read_only is None
-            else ToolAnnotations(readOnlyHint=read_only),
-        )
-        for name, description, read_only in tools
-    ]
-
-
-# MCP server
-
-
-def test_mcp_discover_actions_equal_the_tool_rows(
-    db_session: Session, created: Created
-) -> None:
-    integration, server = _mcp_server(db_session, created)
-    mcp_api._sync_mcp_server_tools(
-        server.id,
-        _discovered([("search", "Find", True), ("create", "Make", False)]),
-        db_session,
-    )
-
-    specs = get_kind_handler(IntegrationKind.MCP).discover_actions(
-        integration, db_session
-    )
-
-    rows = get_tools_by_mcp_server_id(server.id, db_session, order_by_id=True)
-    assert [
-        (s.key, s.display_name, s.description, s.read_only, s.input_schema)
-        for s in specs
-    ] == [
-        (t.name, t.display_name, t.description, t.mcp_read_only, t.mcp_input_schema)
-        for t in rows
-    ]
-    assert [s.default_policy for s in specs] == [
-        IntegrationActionPolicyValue.ALLOW,
-        IntegrationActionPolicyValue.ASK,
-    ]
-
-
-def _sync_mcp_tools(
-    db_session: Session,
-    integration: Integration,
-    server: MCPServer,
-    tools: list[tuple[str, str, bool | None]],
-) -> None:
-    mcp_api._sync_mcp_server_tools(server.id, _discovered(tools), db_session)
-    _sync(db_session, integration)
-
-
-def test_mcp_sync_writes_updates_and_deletes(
-    db_session: Session, created: Created
-) -> None:
-    integration, server = _mcp_server(db_session, created)
-
-    _sync_mcp_tools(
-        db_session,
-        integration,
-        server,
-        [("search", "Find", True), ("create", "Make", False)],
-    )
-    first = _snapshot(db_session, integration.id)
-    actions = {a.key: a for a in list_integration_actions(integration.id, db_session)}
-    assert set(actions) == {"search", "create"}
-    assert actions["search"].source is IntegrationActionSource.MCP
-    assert actions["search"].default_policy is IntegrationActionPolicyValue.ALLOW
-    assert actions["create"].default_policy is IntegrationActionPolicyValue.ASK
-    assert actions["search"].input_schema == {
-        "type": "object",
-        "properties": {"q": {"type": "string"}},
-    }
-
-    # Same tools: no write. A changed description updates in place. A gone
-    # tool loses its action.
-    _sync_mcp_tools(
-        db_session,
-        integration,
-        server,
-        [("search", "Find", True), ("create", "Make", False)],
-    )
-    assert _snapshot(db_session, integration.id) == first
-    _sync_mcp_tools(db_session, integration, server, [("search", "Find things", True)])
-    after = _snapshot(db_session, integration.id)
-    assert set(after) == {"search"}
-    assert after["search"][0] == first["search"][0]
-    assert after["search"][2] == "Find things"
-    assert after["search"][1] > first["search"][1]
-
-
 # OpenAPI tool
 
 
@@ -325,9 +194,7 @@ def test_openapi_discover_actions_equal_the_method_specs(
     if tool.openapi_schema is None:
         raise AssertionError("tool has no schema")
 
-    specs = get_kind_handler(IntegrationKind.API).discover_actions(
-        integration, db_session
-    )
+    specs = ApiKindHandler().discover_actions(integration, db_session)
 
     method_specs = openapi_to_method_specs(tool.openapi_schema)
     assert [(s.key, s.description, s.http_method, s.path_template) for s in specs] == [
@@ -404,9 +271,7 @@ def test_preset_discover_actions_equal_the_catalog(
         db_session, created, ExternalAppType.LINEAR, [r"https://api\.linear\.app/.*"]
     )
 
-    specs = get_kind_handler(IntegrationKind.API).discover_actions(
-        integration, db_session
-    )
+    specs = ApiKindHandler().discover_actions(integration, db_session)
 
     catalog = get_endpoint_catalog(ExternalAppType.LINEAR)
     assert [(s.key, s.display_name, s.description) for s in specs] == [

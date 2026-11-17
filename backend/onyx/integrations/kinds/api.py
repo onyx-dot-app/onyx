@@ -188,6 +188,7 @@ class ApiKindHandler(IntegrationKindHandler):
     def discover_actions(
         self, integration: Integration, db_session: Session
     ) -> list[IntegrationActionSpec]:
+        """Makes no network call."""
         config = self.load_config(integration, db_session)
         if config.shape is ApiShape.OPENAPI:
             return [openapi_action_spec(spec) for spec in self._method_specs(config)]
