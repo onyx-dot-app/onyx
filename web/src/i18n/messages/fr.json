@@ -748,7 +748,7 @@
         "noAuthentication": "Aucune authentification requise",
         "connection": "Connexion",
         "tools": "Outils",
-        "toolCount": "{count, plural, one {# outil} other {# outils}}",
+        "toolCount": "{count, plural, one {# action} other {# actions}}",
         "noTools": "Aucun outil visible n'est enregistré pour cette extension.",
         "connect": "Connecter un compte",
         "useInChat": "Utiliser dans Chat",
@@ -11055,7 +11055,6 @@
         "needsSetup": "Configuration requise",
         "off": "Désactivée",
         "needsReconnect": "Reconnexion requise",
-        "movingCredentials": "Déplacement des identifiants",
         "ready": "Prête"
       },
       "signIn": {

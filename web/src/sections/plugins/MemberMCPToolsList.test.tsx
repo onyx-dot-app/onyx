@@ -42,7 +42,7 @@ test("search matches tool names and descriptions", async () => {
   expect(screen.getByText("List teams")).toBeVisible();
   expect(screen.queryByText("Search issues")).not.toBeInTheDocument();
   expect(screen.getByText("Browse workspace team membership.")).toBeVisible();
-  expect(screen.getByText("1 tool")).toBeVisible();
+  expect(screen.getByText("1 action")).toBeVisible();
 });
 
 test("clearing an unmatched search restores the tool list", async () => {

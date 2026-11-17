@@ -273,7 +273,6 @@ test("connects the organization account with an API key", async () => {
     organization_status: {
       state: "not_set_up",
       reason: null,
-      moving_credentials: false,
     },
     needs_setup: true,
   });
@@ -282,7 +281,6 @@ test("connects the organization account with an API key", async () => {
     [`PUT ${URL_DETAIL}/organization-connection`]: {
       state: "connected",
       reason: null,
-      moving_credentials: false,
     },
     "/api/admin/integrations": [],
   });

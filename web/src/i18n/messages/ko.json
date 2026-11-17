@@ -748,7 +748,7 @@
         "noAuthentication": "인증이 필요하지 않음",
         "connection": "연결",
         "tools": "도구",
-        "toolCount": "{count, plural, other {도구 #개}}",
+        "toolCount": "{count, plural, other {작업 #개}}",
         "noTools": "이 플러그인에 표시할 수 있는 도구가 저장되어 있지 않습니다.",
         "connect": "계정 연결",
         "useInChat": "채팅에서 사용",
@@ -11055,7 +11055,6 @@
         "needsSetup": "설정 필요",
         "off": "꺼짐",
         "needsReconnect": "재연결 필요",
-        "movingCredentials": "자격 증명 이동 중",
         "ready": "준비됨"
       },
       "signIn": {

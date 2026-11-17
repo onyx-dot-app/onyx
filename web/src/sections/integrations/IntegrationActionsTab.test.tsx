@@ -62,6 +62,8 @@ test("shows the default row, then read-only and write actions with counts", asyn
   expect(screen.getByText(copy.default.unset)).toBeInTheDocument();
   expect(screen.getByText("Read-Only Actions (2)")).toBeInTheDocument();
   expect(screen.getByText("Write Actions (1)")).toBeInTheDocument();
+  expect(screen.getByText("2 actions")).toBeInTheDocument();
+  expect(screen.getByText("1 action")).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Auto-approve" })
   ).not.toBeInTheDocument();
@@ -186,7 +188,6 @@ test("asks to connect an MCP server before its actions load", async () => {
         organization_status: {
           state: "not_set_up",
           reason: null,
-          moving_credentials: false,
         },
       })}
       onOpenConfiguration={onOpenConfiguration}

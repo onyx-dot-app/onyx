@@ -748,7 +748,7 @@
         "noAuthentication": "認証は不要です",
         "connection": "接続",
         "tools": "ツール",
-        "toolCount": "{count, plural, other {#個のツール}}",
+        "toolCount": "{count, plural, other {#個のアクション}}",
         "noTools": "このプラグインには表示できるツールが保存されていません。",
         "connect": "アカウントを接続",
         "useInChat": "チャットで使用",
@@ -11055,7 +11055,6 @@
         "needsSetup": "要セットアップ",
         "off": "オフ",
         "needsReconnect": "要再接続",
-        "movingCredentials": "認証情報を移動中",
         "ready": "準備完了"
       },
       "signIn": {

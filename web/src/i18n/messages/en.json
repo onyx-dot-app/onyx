@@ -748,7 +748,7 @@
         "noAuthentication": "No authentication required",
         "connection": "Connection",
         "tools": "Tools",
-        "toolCount": "{count, plural, one {# tool} other {# tools}}",
+        "toolCount": "{count, plural, one {# action} other {# actions}}",
         "noTools": "No visible tools are stored for this plugin.",
         "connect": "Connect account",
         "useInChat": "Use in Chat",
@@ -11055,7 +11055,6 @@
         "needsSetup": "Needs setup",
         "off": "Off",
         "needsReconnect": "Needs reconnect",
-        "movingCredentials": "Moving credentials",
         "ready": "Ready"
       },
       "signIn": {
