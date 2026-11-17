@@ -158,12 +158,31 @@ def find_violations(tree: ast.Module, source: str) -> list[tuple[int, str]]:
                 if isinstance(node, ast.Call)
             ]
             for call in calls:
-                if _op_name(call) in {"drop_table", "rename_table"}:
-                    table = _table(call, "table_name", 0)
-                    if table is not None:
-                        created.discard(table)
-                    else:
+                name = _op_name(call)
+                if name == "drop_table":
+                    table_arguments = ("table_name",)
+                elif name == "rename_table":
+                    table_arguments = ("old_table_name", "new_table_name")
+                else:
+                    continue
+                for position, argument in enumerate(table_arguments):
+                    table = _table(call, argument, position)
+                    if table is None:
                         created.clear()
+                        break
+                    table_name, schema = table
+                    created.difference_update(
+                        {
+                            (created_name, created_schema)
+                            for created_name, created_schema in created
+                            if created_name == table_name
+                            and (
+                                schema is None
+                                or created_schema is None
+                                or schema == created_schema
+                            )
+                        }
+                    )
             for call in calls:
                 for rule in _operation_rules(call, created):
                     if not any(

@@ -191,3 +191,32 @@ def test_added_column_foreign_key_on_existing_table(tmp_path: Path) -> None:
     )
     _revision(tmp_path, "new", "marker", clean)
     assert list(check_migration_design.check_chain(tmp_path, "marker")) == []
+
+
+@pytest.mark.parametrize(
+    ("create_schema", "replace_schema", "blocked"),
+    [
+        ("", ', schema="public"', True),
+        (', schema="public"', "", True),
+        (', schema="public"', ', schema="public"', True),
+        (', schema="public"', ', schema="other"', False),
+    ],
+)
+def test_table_replacement_respects_schema(
+    tmp_path: Path, create_schema: str, replace_schema: str, blocked: bool
+) -> None:
+    _revision(tmp_path, "marker", None, "pass")
+    _revision(
+        tmp_path,
+        "new",
+        "marker",
+        f'op.create_table("events"{create_schema})\n'
+        f'op.drop_table("events"{replace_schema})\n'
+        f'op.rename_table("existing_events", "events"{replace_schema})\n'
+        f'op.create_index("ix", "events", ["id"]{create_schema})',
+    )
+    failures = list(check_migration_design.check_chain(tmp_path, "marker"))
+    assert bool(failures) is blocked
+    if blocked:
+        assert len(failures) == 1
+        assert "blocking-index:" in failures[0]
