@@ -38,27 +38,17 @@ def get_started_task_for_update(
     )
 
 
-def fail_started_task(db_session: Session, task_id: str) -> None:
+def fail_task_with_id(
+    db_session: Session, task_id: str, current_status: TaskStatus
+) -> None:
+    """Fails the job only if it is still in `current_status`, so a job that
+    another process moved on keeps its state."""
     db_session.rollback()
     db_session.execute(
         update(TaskQueueState)
         .where(
             TaskQueueState.task_id == task_id,
-            TaskQueueState.status == TaskStatus.STARTED,
-        )
-        .values(status=TaskStatus.FAILURE, start_time=func.now())
-    )
-    db_session.commit()
-
-
-def fail_pending_task(db_session: Session, task_id: str) -> None:
-    """For a job whose task was never sent. A worker that claimed it keeps it."""
-    db_session.rollback()
-    db_session.execute(
-        update(TaskQueueState)
-        .where(
-            TaskQueueState.task_id == task_id,
-            TaskQueueState.status == TaskStatus.PENDING,
+            TaskQueueState.status == current_status,
         )
         .values(status=TaskStatus.FAILURE, start_time=func.now())
     )
@@ -214,31 +204,6 @@ def get_all_tasks_with_prefix(
             )
         )
     )
-
-
-def mark_task_as_started_with_id(
-    db_session: Session,
-    task_id: str,
-) -> None:
-    task = get_task_with_id(db_session=db_session, task_id=task_id)
-    if not task:
-        raise RuntimeError(f"A task with the task-id {task_id=} does not exist")
-
-    task.status = TaskStatus.STARTED
-    db_session.commit()
-
-
-def mark_task_as_finished_with_id(
-    db_session: Session,
-    task_id: str,
-    success: bool = True,
-) -> None:
-    task = get_task_with_id(db_session=db_session, task_id=task_id)
-    if not task:
-        raise RuntimeError(f"A task with the task-id {task_id=} does not exist")
-
-    task.status = TaskStatus.SUCCESS if success else TaskStatus.FAILURE
-    db_session.commit()
 
 
 def mark_task_start(

@@ -14,10 +14,11 @@ from onyx.configs.constants import (
     QueryHistoryType,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import TaskStatus
 from onyx.db.tasks import (
     claim_task_with_id,
     delete_task_with_id,
-    fail_started_task,
+    fail_task_with_id,
     get_started_task_for_update,
     is_task_started,
 )
@@ -87,7 +88,7 @@ def export_query_history_task(
 
         except Exception:
             logger.exception("Failed to export query history with task_id=%r", task_id)
-            fail_started_task(db_session, task_id)
+            fail_task_with_id(db_session, task_id, TaskStatus.STARTED)
             raise
 
     report_name = construct_query_history_report_name(task_id)
@@ -124,5 +125,5 @@ def export_query_history_task(
             logger.exception(
                 "Failed to save query history export file; report_name=%r", report_name
             )
-            fail_started_task(db_session, task_id)
+            fail_task_with_id(db_session, task_id, TaskStatus.STARTED)
             raise

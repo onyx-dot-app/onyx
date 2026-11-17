@@ -20,9 +20,9 @@ from onyx.db.enums import TaskStatus
 from onyx.db.models import TaskQueueState
 from onyx.db.tasks import (
     claim_task_with_id,
+    fail_task_with_id,
     get_started_task_for_update,
     get_task_with_id,
-    mark_task_as_finished_with_id,
     register_task,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -64,16 +64,18 @@ def test_cleanup_fails_lost_exports(
     for row in export_rows:
         db_session.refresh(row)
 
-    assert [row.status for row in export_rows] == [
+    expected = [
         TaskStatus.FAILURE,
         TaskStatus.FAILURE,
         TaskStatus.PENDING,
         TaskStatus.STARTED,
     ]
+    assert [row.status for row in export_rows] == expected
     # A second cleanup must keep the new failures visible for 24 hours.
     export_query_history_cleanup_task.run(tenant_id="public")
     for row in export_rows:
         db_session.refresh(row)
+    assert [row.status for row in export_rows] == expected
 
 
 def test_cleanup_does_not_fail_a_worker_that_just_claimed_an_old_row(
@@ -85,29 +87,6 @@ def test_cleanup_does_not_fail_a_worker_that_just_claimed_an_old_row(
     db_session.refresh(row)
     assert row.status == TaskStatus.STARTED
     assert not claim_task_with_id(db_session, row.task_id)
-
-
-def test_late_worker_drops_failed_export(
-    db_session: Session, export_rows: list[TaskQueueState]
-) -> None:
-    from ee.onyx.background.celery.tasks.query_history.tasks import (
-        export_query_history_task,
-    )
-
-    row = export_rows[0]
-    export_query_history_cleanup_task.run(tenant_id="public")
-    with patch(
-        "ee.onyx.server.query_history.api.fetch_and_process_chat_session_history"
-    ) as fetch:
-        now = datetime.now(timezone.utc)
-        export_query_history_task.apply(
-            kwargs={"start": now, "end": now, "start_time": now, "tenant_id": "public"},
-            task_id=row.task_id,
-            throw=True,
-        )
-        fetch.assert_not_called()
-    db_session.refresh(row)
-    assert row.status == TaskStatus.FAILURE
 
 
 def _run_export(task_id: str) -> None:
@@ -123,9 +102,23 @@ def _run_export(task_id: str) -> None:
     )
 
 
+def test_late_worker_drops_failed_export(
+    db_session: Session, export_rows: list[TaskQueueState]
+) -> None:
+    row = export_rows[0]
+    export_query_history_cleanup_task.run(tenant_id="public")
+    with patch(
+        "ee.onyx.server.query_history.api.fetch_and_process_chat_session_history"
+    ) as fetch:
+        _run_export(row.task_id)
+        fetch.assert_not_called()
+    db_session.refresh(row)
+    assert row.status == TaskStatus.FAILURE
+
+
 def _fail_export(task_id: str) -> None:
     with get_session_with_current_tenant() as other_session:
-        mark_task_as_finished_with_id(other_session, task_id, success=False)
+        fail_task_with_id(other_session, task_id, TaskStatus.STARTED)
 
 
 def test_cleanup_skips_a_row_a_worker_holds(
@@ -194,14 +187,14 @@ def test_worker_removes_an_upload_for_an_export_failed_during_upload(
     assert row.status == TaskStatus.FAILURE
 
 
-def _started_exports(db_session: Session) -> set[str]:
+def _export_task_ids(db_session: Session) -> set[str]:
     return {task.task_id for task in get_all_query_history_export_tasks(db_session)}
 
 
 def test_failed_send_fails_the_new_export(db_session: Session) -> None:
     from ee.onyx.server.query_history.api import start_query_history_export
 
-    before = _started_exports(db_session)
+    before = _export_task_ids(db_session)
     with (
         patch("ee.onyx.server.query_history.api.ensure_query_history_is_enabled"),
         patch(
@@ -214,7 +207,7 @@ def test_failed_send_fails_the_new_export(db_session: Session) -> None:
             MagicMock(), db_session=db_session, start=None, end=None
         )
     assert error.value.error_code == OnyxErrorCode.SERVICE_UNAVAILABLE
-    new_ids = _started_exports(db_session) - before
+    new_ids = _export_task_ids(db_session) - before
     assert len(new_ids) == 1
     task = get_task_with_id(db_session, new_ids.pop())
     assert task is not None and task.status == TaskStatus.FAILURE
@@ -223,8 +216,6 @@ def test_failed_send_fails_the_new_export(db_session: Session) -> None:
 
 
 def test_file_of_a_failed_export_is_not_published(db_session: Session) -> None:
-    from fastapi import HTTPException
-
     from ee.onyx.background.task_name_builders import query_history_task_name
     from ee.onyx.server.query_history.api import (
         download_query_history_csv,
@@ -237,7 +228,8 @@ def test_file_of_a_failed_export_is_not_published(db_session: Session) -> None:
         db_session=db_session,
         task_id=str(uuid4()),
         status=TaskStatus.FAILURE,
-        start_time=when,
+        # Failure moves start_time. The list must still show the request time.
+        start_time=when + timedelta(hours=1),
     )
     report_name = construct_query_history_report_name(row.task_id)
     now = when.isoformat()
@@ -254,12 +246,13 @@ def test_file_of_a_failed_export_is_not_published(db_session: Session) -> None:
     try:
         with patch("ee.onyx.server.query_history.api.ensure_query_history_is_enabled"):
             exports = list_all_query_history_exports(MagicMock(), db_session=db_session)
-            with pytest.raises(HTTPException):
+            with pytest.raises(OnyxError):
                 download_query_history_csv(
                     row.task_id, MagicMock(), db_session=db_session
                 )
-        statuses = [e.status for e in exports if e.task_id == row.task_id]
-        assert statuses == [TaskStatus.FAILURE]
+        listed = [e for e in exports if e.task_id == row.task_id]
+        assert [e.status for e in listed] == [TaskStatus.FAILURE]
+        assert listed[0].start_time == row.register_time
     finally:
         file_store.delete_file(report_name, error_on_missing=False)
         db_session.rollback()

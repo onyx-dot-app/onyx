@@ -43,7 +43,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, TaskStatus
 from onyx.db.file_record import get_query_history_export_files
 from onyx.db.models import ChatSession, User
-from onyx.db.tasks import fail_pending_task, get_task_with_id, register_task
+from onyx.db.tasks import fail_task_with_id, get_task_with_id, register_task
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -362,7 +362,7 @@ def start_query_history_export(
         )
     except Exception:
         logger.exception("Failed to send query history export task_id=%r", task_id)
-        fail_pending_task(db_session, task_id)
+        fail_task_with_id(db_session, task_id, TaskStatus.PENDING)
         raise OnyxError(
             OnyxErrorCode.SERVICE_UNAVAILABLE,
             "Failed to start the query history export.",
