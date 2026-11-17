@@ -1282,6 +1282,7 @@ class IntegrationTokenStorage(PersistentTokenStorage):
         load_stored_tokens: bool = True,
         cimd_enabled: bool = True,
         expected_client_information_fingerprint: str | None = None,
+        check_settings_unchanged: Callable[[Session], None] | None = None,
     ) -> None:
         self.integration_id = integration_id
         self.user_id = user_id
@@ -1290,6 +1291,7 @@ class IntegrationTokenStorage(PersistentTokenStorage):
         self.expected_client_information_fingerprint = (
             expected_client_information_fingerprint
         )
+        self.check_settings_unchanged = check_settings_unchanged
         self.refresh_attempt_id = None
         self._oauth_context: OAuthContext | None = None
 
@@ -1353,6 +1355,8 @@ class IntegrationTokenStorage(PersistentTokenStorage):
             or mcp_oauth_client_information_fingerprint(client_information)
         )
         with get_session_with_current_tenant() as db_session:
+            if self.check_settings_unchanged is not None:
+                self.check_settings_unchanged(db_session)
             # The lock keeps the client from changing between the check and
             # the write of the grant.
             get_oauth_client(db_session, self.integration_id, for_update=True)
@@ -1394,6 +1398,9 @@ class IntegrationTokenStorage(PersistentTokenStorage):
         keep_refresh: bool,
         expected_refresh_token: str | None = None,
     ) -> bool:
+        # Lock the OAuth client before the connection, in the same order as
+        # set_authorization_result, so the two paths cannot deadlock.
+        metadata_client = self._lock_client_for_new_metadata(db_session)
         existing = get_connection(
             db_session, self.integration_id, self.user_id, for_update=True
         )
@@ -1418,42 +1425,41 @@ class IntegrationTokenStorage(PersistentTokenStorage):
                 else (record.granted_scopes if record is not None else None)
             ),
         )
-        if (
-            self._oauth_context is not None
-            and self._oauth_context.oauth_metadata is not None
-        ):
-            self._save_oauth_metadata(
+        if metadata_client is not None:
+            oauth_client, metadata = metadata_client
+            credentials = read_oauth_client(oauth_client)
+            set_oauth_client_credentials__no_commit(
                 db_session,
-                self._oauth_context.oauth_metadata.model_dump(mode="json"),
+                oauth_client,
+                client_id=credentials.client_id,
+                client_secret=credentials.client_secret,
+                registration={
+                    **credentials.registration,
+                    OAUTH_METADATA_KEY: metadata,
+                },
             )
         db_session.commit()
         return True
 
-    def _save_oauth_metadata(
-        self, db_session: Session, metadata: dict[str, Any]
-    ) -> None:
+    def _lock_client_for_new_metadata(
+        self, db_session: Session
+    ) -> tuple[IntegrationOAuthClient, dict[str, Any]] | None:
+        """Returns the locked OAuth client and the discovered metadata when
+        the client needs a write of that metadata."""
+        if self._oauth_context is None or self._oauth_context.oauth_metadata is None:
+            return None
+        metadata = self._oauth_context.oauth_metadata.model_dump(mode="json")
         oauth_client = get_oauth_client(db_session, self.integration_id)
-        if oauth_client is None:
-            return
-        credentials = read_oauth_client(oauth_client)
-        if (
+        if oauth_client is None or (
             oauth_client.legacy_format is None
-            and credentials.registration.get(OAUTH_METADATA_KEY) == metadata
+            and read_oauth_client(oauth_client).registration.get(OAUTH_METADATA_KEY)
+            == metadata
         ):
-            return
+            return None
         oauth_client = get_oauth_client(
             db_session, self.integration_id, for_update=True
         )
-        if oauth_client is None:
-            return
-        credentials = read_oauth_client(oauth_client)
-        set_oauth_client_credentials__no_commit(
-            db_session,
-            oauth_client,
-            client_id=credentials.client_id,
-            client_secret=credentials.client_secret,
-            registration={**credentials.registration, OAUTH_METADATA_KEY: metadata},
-        )
+        return None if oauth_client is None else (oauth_client, metadata)
 
     async def discard_persisted_tokens(
         self, redeemed_refresh_token: str | None

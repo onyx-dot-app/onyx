@@ -26,7 +26,10 @@ from onyx.db.enums import (
     IntegrationOAuthProviderMode,
     Permission,
 )
-from onyx.db.integration import get_external_app_for_integration
+from onyx.db.integration import (
+    get_external_app_for_integration,
+    get_mcp_server_for_integration,
+)
 from onyx.db.integration_connection import get_connection, get_oauth_client
 from onyx.db.models import Integration
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -348,6 +351,50 @@ def test_mcp_known_provider_sign_in_uses_sdk_exchange(
         "mcp-access",
         "mcp-refresh",
     )
+
+
+def test_mcp_server_change_during_the_token_exchange_is_refused(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = make_integration(
+        kind=IntegrationKind.MCP,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        provider_mode=IntegrationOAuthProviderMode.MANUAL,
+        client_id="mcp-client",
+    )
+    user = make_test_user("oauth_mcp_changed_during_exchange")
+
+    def token_handler(_: httpx.Request) -> httpx.Response:
+        with get_session_with_current_tenant() as other_session:
+            server = get_mcp_server_for_integration(integration.id, other_session)
+            assert server is not None
+            server.server_url = "https://other.example.test/mcp"
+            other_session.commit()
+        return httpx.Response(
+            200,
+            content=json.dumps({"access_token": "old-grant", "token_type": "Bearer"}),
+            headers={"content-type": "application/json"},
+        )
+
+    def client_factory(**kwargs: Any) -> httpx.AsyncClient:  # noqa: ARG001
+        return httpx.AsyncClient(transport=httpx.MockTransport(token_handler))
+
+    state = _query(start_integration_oauth(integration, user, db_session))["state"]
+    with (
+        patch(
+            "onyx.server.features.mcp.oauth.mcp_ssrf_httpx_client_factory",
+            client_factory,
+        ),
+        pytest.raises(OnyxError) as error,
+    ):
+        complete_integration_oauth("mcp-code", state, user, db_session)
+
+    assert "sign-in settings changed" in error.value.detail
+    db_session.rollback()
+    assert get_connection(db_session, integration.id, user.id) is None
 
 
 def test_first_mcp_discovery_sign_in_registers_a_client_and_completes(
