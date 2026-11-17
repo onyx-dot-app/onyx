@@ -231,6 +231,17 @@ def fetch_credential_by_id(
     return credential
 
 
+def fetch_credential_or_raise(
+    db_session: Session, credential_id: int, for_update: bool = False
+) -> Credential:
+    """Raises ``NoResultFound`` when the credential does not exist.
+    ``for_update`` row-locks it until the transaction ends."""
+    stmt = select(Credential).where(Credential.id == credential_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    return db_session.execute(stmt).scalar_one()
+
+
 def fetch_credentials_by_source_for_user(
     db_session: Session,
     user: User,

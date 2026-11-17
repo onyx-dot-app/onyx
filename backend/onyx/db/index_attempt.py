@@ -1837,6 +1837,22 @@ def get_oldest_index_attempt_time_created(db_session: Session) -> datetime | Non
     return db_session.query(func.min(IndexAttempt.time_created)).scalar()
 
 
+def get_index_attempts_with_checkpoint_created_before(
+    db_session: Session, cutoff_date: datetime
+) -> list[IndexAttempt]:
+    """Attempts that hold a checkpoint and were created before `cutoff_date`."""
+    return (
+        db_session.query(IndexAttempt)
+        .filter(
+            and_(
+                IndexAttempt.checkpoint_pointer.isnot(None),
+                IndexAttempt.time_created < cutoff_date,
+            )
+        )
+        .all()
+    )
+
+
 def get_index_attempt_ids_past_retention(
     db_session: Session, cutoff_date: datetime, num_recent_to_keep: int
 ) -> list[int]:

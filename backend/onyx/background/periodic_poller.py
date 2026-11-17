@@ -228,11 +228,12 @@ def _try_claim_task(task_def: _PeriodicTaskDef) -> bool:
     from sqlalchemy import text
 
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
-    from onyx.db.models import KVStore
+    from onyx.db.kv_store import add_kv_store_row__no_commit, fetch_kv_store_row
 
     kv_key = PERIODIC_TASK_KV_PREFIX + task_def.name
 
     with get_session_with_current_tenant() as db_session:
+        # db-ops-outside-db: allow advisory lock, not a table query
         acquired = db_session.execute(
             text("SELECT pg_try_advisory_xact_lock(:id)"),
             {"id": task_def.lock_id},
@@ -240,7 +241,7 @@ def _try_claim_task(task_def: _PeriodicTaskDef) -> bool:
         if not acquired:
             return False
 
-        row = db_session.query(KVStore).filter_by(key=kv_key).first()
+        row = fetch_kv_store_row(db_session, kv_key)
         if row and row.value is not None:
             last_claimed = datetime.fromisoformat(str(row.value))
             elapsed = (datetime.now(timezone.utc) - last_claimed).total_seconds()
@@ -251,7 +252,7 @@ def _try_claim_task(task_def: _PeriodicTaskDef) -> bool:
         if row:
             row.value = now_ts
         else:
-            db_session.add(KVStore(key=kv_key, value=now_ts))
+            add_kv_store_row__no_commit(db_session, kv_key, now_ts)
         db_session.commit()
 
     return True

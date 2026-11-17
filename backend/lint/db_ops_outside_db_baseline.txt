@@ -2,24 +2,8 @@
 # Each line is `<path> <count>`. The count for a file can only go down.
 # Move a query into the db directories, then regenerate:
 #   python3 backend/lint/check_db_ops_outside_db.py --write-baseline
-backend/ee/onyx/server/reporting/usage_export_generation.py 1
-backend/ee/onyx/server/seeding.py 1
-backend/ee/onyx/server/tenants/schema_management.py 5
-backend/onyx/auth/users.py 4
-backend/onyx/background/celery/apps/app_base.py 1
-backend/onyx/background/celery/tasks/connector_deletion/tasks.py 1
-backend/onyx/background/celery/tasks/monitoring/tasks.py 2
 backend/onyx/background/celery/tasks/user_file_processing/tasks.py 5
-backend/onyx/background/celery/tasks/vespa/document_sync.py 1
-backend/onyx/background/indexing/checkpointing_utils.py 3
-backend/onyx/background/periodic_poller.py 4
-backend/onyx/connectors/credentials_provider.py 4
-backend/onyx/indexing/adapters/user_file_indexing_adapter.py 3
-backend/onyx/key_value_store/store.py 5
-backend/onyx/llm/utils.py 2
-backend/onyx/redis/redis_connector_delete.py 1
-backend/onyx/redis/redis_document_set.py 1
-backend/onyx/redis/redis_usergroup.py 1
+backend/onyx/background/indexing/checkpointing_utils.py 2
 backend/onyx/sandbox_proxy/sandbox_identity/resolution.py 4
 backend/onyx/server/features/build/db/action_approval.py 13
 backend/onyx/server/features/build/db/artifact.py 17
@@ -29,5 +13,4 @@ backend/onyx/server/features/build/db/sandbox.py 59
 backend/onyx/server/features/build/db/user_library.py 2
 backend/onyx/server/features/build/session/api.py 1
 backend/onyx/server/features/build/session/streaming.py 2
-backend/onyx/server/manage/image_generation/api.py 3
 backend/onyx/server/query_and_chat/chat_backend.py 3

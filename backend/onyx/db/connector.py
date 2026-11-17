@@ -231,6 +231,12 @@ def set_connector_check_frequency(
     db_session.commit()
 
 
+def delete_connector_row__no_commit(db_session: Session, connector: Connector) -> None:
+    """Marks the connector for deletion and nothing else. The caller has
+    already removed what depends on it."""
+    db_session.delete(connector)
+
+
 def delete_connector(
     db_session: Session,
     connector_id: int,

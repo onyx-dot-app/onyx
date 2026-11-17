@@ -9,6 +9,7 @@ from fastapi_users.password import PasswordHelper
 from sqlalchemy import Select, case, delete, func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, lazyload, selectinload
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
@@ -716,6 +717,14 @@ def fetch_user_by_id(
         # nullable side of an outer join, so defer it when locking.
         query = query.options(lazyload(User.oauth_accounts)).with_for_update()
     return query.first()
+
+
+async def get_user_from_async_session(
+    db_session: AsyncSession, user_id: UUID
+) -> User | None:
+    """Primary-key lookup: returns the instance the session already holds, if
+    any, without a query."""
+    return await db_session.get(User, user_id)
 
 
 def _generate_password_hash() -> str:

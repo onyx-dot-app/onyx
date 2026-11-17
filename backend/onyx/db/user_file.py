@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import and_, column, exists, func, or_, select, true, update, values
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.engine import Row
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.configs.constants import USER_FILE_PROCESSING_MAX_ATTEMPTS
@@ -124,6 +125,32 @@ def get_user_file_by_pk(db_session: Session, user_file_id: UUID) -> UserFile | N
     """Primary-key lookup. Unlike `get_user_file_by_id`, this returns the row the
     session already holds without a query."""
     return db_session.get(UserFile, user_file_id)
+
+
+def lock_user_file_statuses_nowait(
+    db_session: Session, user_file_ids: Sequence[UUID]
+) -> Sequence[Row[tuple[UUID, UserFileStatus]]]:
+    """Lock the given rows and return their (id, status). Raises OperationalError
+    when another transaction holds a lock on any of them."""
+    stmt = (
+        select(UserFile.id, UserFile.status)
+        .where(UserFile.id.in_(user_file_ids))
+        .with_for_update(nowait=True)
+    )
+    return db_session.execute(stmt).all()
+
+
+def fetch_user_files_with_assistant_files(
+    db_session: Session, user_file_ids: Sequence[UUID | str]
+) -> list[UserFile]:
+    """Fetch user files with their assistants, and the files of each assistant,
+    eagerly loaded."""
+    return (
+        db_session.query(UserFile)
+        .options(selectinload(UserFile.assistants).selectinload(Persona.user_files))
+        .filter(UserFile.id.in_(user_file_ids))
+        .all()
+    )
 
 
 def fetch_user_file_ids_by_status(
