@@ -1042,6 +1042,8 @@ def connector_document_extraction(
                         batch_num=batch_num,
                         priority=docprocessing_priority,
                         is_backfill=is_backfill,
+                        # See send_docprocessing_batch: no resend path.
+                        expires=None,
                     )
 
                 batch_num += 1
@@ -1233,10 +1235,11 @@ def send_docprocessing_batch(
     batch_num: int,
     priority: OnyxCeleryPriority,
     is_backfill: bool,
-    expires: int | None = None,
+    expires: int | None,
 ) -> None:
     """Counts a stored document batch as pending and sends its docprocessing
-    task. ``enqueue_time_ms`` is taken right before the send, so QUEUE_WAIT
+    task. Each caller chooses ``expires``: None only when nothing sends an
+    expired batch again. ``enqueue_time_ms`` is taken right before the send, so QUEUE_WAIT
     measures the broker and the wait for a docprocessing slot."""
     processing_batch_data: dict[str, Any] = {
         "index_attempt_id": index_attempt_id,
