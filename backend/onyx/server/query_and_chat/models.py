@@ -226,6 +226,8 @@ class SendMessageRequest(BaseModel):
         if filters is None:
             return data
         options = data.get("tool_options") or {}
+        if isinstance(options, ToolOptions):
+            options = options.model_dump()
         if not isinstance(options, dict):
             raise ValueError("tool_options must be an object")
         if options.get("internal_search_filters") is not None:
