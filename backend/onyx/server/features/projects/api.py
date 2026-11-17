@@ -19,6 +19,7 @@ from onyx.chat.incognito import incognito_allowed_for_user
 from onyx.chat.incognito_context import incognito_session_torn_down
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
+    CELERY_USER_FILE_DELETE_TASK_EXPIRES,
     PUBLIC_API_TAGS,
     USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
     OnyxCeleryPriority,
@@ -564,6 +565,7 @@ def delete_user_file(
             kwargs={"user_file_id": str(user_file.id), "tenant_id": tenant_id},
             queue=OnyxCeleryQueues.USER_FILE_DELETE,
             priority=OnyxCeleryPriority.HIGH,
+            expires=CELERY_USER_FILE_DELETE_TASK_EXPIRES,
         )
         logger.info(
             "Triggered delete for user_file_id=%s with task_id=%s",

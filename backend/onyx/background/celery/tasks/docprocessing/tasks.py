@@ -55,7 +55,9 @@ from onyx.configs.app_configs import (
     SKIP_SPREADSHEET_CONTENT,
 )
 from onyx.configs.constants import (
+    CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES,
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES,
     DocumentSource,
     MilestoneRecordType,
     NotificationType,
@@ -1522,6 +1524,7 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
                     },
                     queue=OnyxCeleryQueues.CHECKPOINT_CLEANUP,
                     priority=OnyxCeleryPriority.MEDIUM,
+                    expires=CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES,
                 )
     except Exception:
         task_logger.exception("Unexpected exception during checkpoint cleanup")
@@ -1611,6 +1614,7 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
                     },
                     queue=OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
                     priority=OnyxCeleryPriority.MEDIUM,
+                    expires=CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES,
                 )
     except Exception:
         task_logger.exception("Unexpected exception during index attempt cleanup check")

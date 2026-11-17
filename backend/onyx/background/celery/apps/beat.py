@@ -97,7 +97,7 @@ class DynamicTenantScheduler(PersistentScheduler):
             )
             for task in cloud_tasks_to_schedule:
                 task_name = task["name"]
-                cloud_task = {
+                cloud_task = {  # celery-expires: allow (copies an entry, options follow below)
                     "task": task["task"],
                     "schedule": task["schedule"],
                     "kwargs": task.get("kwargs", {}),
@@ -134,7 +134,7 @@ class DynamicTenantScheduler(PersistentScheduler):
                 task_logger.debug(
                     "Creating task configuration for %s", tenant_task_name
                 )
-                tenant_task = {
+                tenant_task = {  # celery-expires: allow (copies an entry, options follow below)
                     "task": task["task"],
                     "schedule": task["schedule"],
                     "kwargs": {"tenant_id": tenant_id},

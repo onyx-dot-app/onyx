@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 
 from ee.onyx.auth.users import current_cloud_superuser
 from onyx.background.celery.apps.client import celery_app as client_app
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import CELERY_USER_REQUESTED_TASK_EXPIRES, OnyxCeleryTask
 from onyx.db.models import User
 from onyx.evals.models import EvalConfigurationOptions
 from onyx.server.evals.models import EvalRunAck
@@ -27,5 +27,6 @@ def eval_run(
         kwargs={
             "configuration_dict": request.model_dump(),
         },
+        expires=CELERY_USER_REQUESTED_TASK_EXPIRES,
     )
     return EvalRunAck(success=True)

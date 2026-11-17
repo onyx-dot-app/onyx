@@ -87,7 +87,10 @@ class RedisDocumentSet(RedisObjectHelper):
             redis_client.sadd(self.taskset_key, custom_task_id)
             redis_client.expire(self.taskset_key, self.TASKSET_TTL)
 
-            celery_app.send_task(
+            # No expires=: on_task_revoked removes an expired task from the
+            # taskset, so the set would be marked synced with this document
+            # not synced. The fence allows one task per document at a time.
+            celery_app.send_task(  # celery-expires: allow (an expired task would count as synced)
                 OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
                 kwargs={"document_id": doc_id, "tenant_id": tenant_id},
                 queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,

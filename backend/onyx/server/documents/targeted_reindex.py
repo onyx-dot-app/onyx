@@ -20,7 +20,12 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import Permission, has_permission, require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
+from onyx.configs.constants import (
+    CELERY_USER_REQUESTED_TASK_EXPIRES,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     verify_user_can_manage_all_cc_pairs,
@@ -156,6 +161,7 @@ def submit_targeted_reindex(
             queue=OnyxCeleryQueues.PRIMARY,
             priority=OnyxCeleryPriority.HIGHEST,
             task_id=result.celery_task_id,
+            expires=CELERY_USER_REQUESTED_TASK_EXPIRES,
         )
     except Exception:
         logger.exception(

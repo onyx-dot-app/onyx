@@ -958,6 +958,7 @@ def update_cc_pair_status(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
         kwargs={"tenant_id": tenant_id},
         priority=OnyxCeleryPriority.HIGH,
+        expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
     )
 
     return JSONResponse(
@@ -1462,6 +1463,7 @@ def associate_credential_to_connector(
             OnyxCeleryTask.CHECK_FOR_INDEXING,
             priority=OnyxCeleryPriority.HIGH,
             kwargs={"tenant_id": tenant_id},
+            expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
         )
 
         logger.info(

@@ -27,6 +27,7 @@ from onyx.auth.users import get_display_email
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.constants import (
+    CELERY_USER_REQUESTED_TASK_EXPIRES,
     PUBLIC_API_TAGS,
     FileOrigin,
     FileType,
@@ -348,6 +349,7 @@ def start_query_history_export(
             "start_time": start_time,
             "tenant_id": get_current_tenant_id(),
         },
+        expires=CELERY_USER_REQUESTED_TASK_EXPIRES,
     )
 
     return {"request_id": task_id}

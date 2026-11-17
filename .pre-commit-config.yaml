@@ -339,6 +339,14 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
         files: ^backend/alembic/versions/.*\.py$
+      - id: celery-task-expires
+        name: celery tasks are enqueued with an expiration
+        description: "Fail a task send or beat schedule entry that has no expires"
+        language: system
+        entry: python3 backend/scripts/check_celery_task_expires.py
+        pass_filenames: true
+        stages: [pre-commit]
+        files: ^backend/(onyx|ee|scripts)/.*\.py$
       # Runs on every commit so a rename or deletion of a file the map cites
       # fails in the same PR.
       - id: feature-map-integrity
