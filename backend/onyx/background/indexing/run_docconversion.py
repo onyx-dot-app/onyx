@@ -23,6 +23,7 @@ from onyx.access.access import source_should_fetch_permissions_during_indexing
 from onyx.background.indexing.run_docfetching import (
     _get_run_config,
     cache_and_upsert_hierarchy_nodes,
+    select_docprocessing_priority,
     send_docprocessing_batch,
     set_document_parent_node_ids,
     strip_null_characters,
@@ -54,6 +55,8 @@ from onyx.db.index_attempt_metrics import safe_record_single_event, time_stage
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import Connector, Credential
+from onyx.db.port_attempt import reindex_finalizing
+from onyx.db.search_settings import get_search_settings_by_id
 from onyx.file_store.document_batch_storage import (
     get_document_batch_storage,
     get_stub_batch_storage,
@@ -95,6 +98,10 @@ class ConversionContext(BaseModel):
     is_connector_public: bool
     include_permissions: bool
     docprocessing_priority: OnyxCeleryPriority
+    # A FUTURE attempt below HIGH checks again for each batch: the priority
+    # rises when its port-flow reindex starts to finalize.
+    recheck_finalizing: bool
+    search_settings_id: int | None
     is_backfill: bool
     built_at: float
 
@@ -150,6 +157,13 @@ def _build_context(
                 )
             )
         )
+        # The same rule as docfetching.
+        docprocessing_priority = select_docprocessing_priority(
+            db_session,
+            is_primary=is_primary,
+            has_successful_attempt=has_successful_attempt,
+            search_settings=attempt.search_settings,
+        )
         context = ConversionContext(
             connector=connector,
             db_connector=db_connector,
@@ -157,17 +171,39 @@ def _build_context(
             source=db_connector.source,
             is_connector_public=cc_pair.access_type == AccessType.PUBLIC,
             include_permissions=include_permissions,
-            docprocessing_priority=(
-                OnyxCeleryPriority.MEDIUM
-                if has_successful_attempt
-                else OnyxCeleryPriority.HIGH
+            docprocessing_priority=docprocessing_priority,
+            recheck_finalizing=(
+                not is_primary and docprocessing_priority != OnyxCeleryPriority.HIGH
             ),
+            search_settings_id=attempt.search_settings_id,
             is_backfill=attempt.is_backfill,
             built_at=time.monotonic(),
         )
         # The rows are read after the session closes.
         db_session.expunge_all()
     return context
+
+
+def _docprocessing_priority(
+    context: ConversionContext, index_attempt_id: int
+) -> OnyxCeleryPriority:
+    """The priority of the batch's docprocessing task. A cached context keeps
+    a FUTURE attempt's priority for minutes, so it checks again here."""
+    if not context.recheck_finalizing:
+        return context.docprocessing_priority
+    with get_session_with_current_tenant() as db_session:
+        search_settings = (
+            get_search_settings_by_id(db_session, context.search_settings_id)
+            if context.search_settings_id is not None
+            else None
+        )
+        if reindex_finalizing(db_session, search_settings):
+            logger.info(
+                "Reindex finalizing: attempt=%s sends its batches at HIGH",
+                index_attempt_id,
+            )
+            return OnyxCeleryPriority.HIGH
+    return context.docprocessing_priority
 
 
 def get_conversion_context(
@@ -452,38 +488,31 @@ def convert_stub_batch(
             connector_id=context.db_connector.id,
             credential_id=context.db_credential.id,
         )
-        doc_storage = get_document_batch_storage(
-            cc_pair_id, index_attempt_id, is_backfill=is_backfill
-        )
-        with time_stage(IndexAttemptStage.CONVERSION_DOC_BATCH_STORE, index_attempt_id):
-            # Left by a run that stopped before it deleted the stub batch.
-            doc_storage.delete_batch_by_num(batch_num)
-            doc_storage.store_batch(batch_num, documents)
+    doc_storage = get_document_batch_storage(
+        cc_pair_id, index_attempt_id, is_backfill=is_backfill
+    )
+    with time_stage(IndexAttemptStage.CONVERSION_DOC_BATCH_STORE, index_attempt_id):
+        # Left by a run that stopped before it deleted the stub batch. It goes
+        # also when this run gives no document, so it is not sent twice.
+        doc_storage.delete_batch_by_num(batch_num)
+        # A batch with no document is stored empty. It is the durable record
+        # of the batch until docprocessing counts it complete, so a worker
+        # that stops after the stub delete loses no completion.
+        doc_storage.store_batch(batch_num, documents)
 
     stub_storage.delete_batch_by_num(batch_num)
     with get_session_with_current_tenant() as db_session:
         IndexingCoordination.record_stub_batch_converted(db_session, index_attempt_id)
-        if not documents:
-            # No document is left, so no docprocessing task will count the
-            # batch. Count it as complete here.
-            IndexingCoordination.update_batch_completion_and_docs(
-                db_session=db_session,
-                index_attempt_id=index_attempt_id,
-                total_docs_indexed=0,
-                new_docs_indexed=0,
-                total_chunks=0,
-            )
-    if documents:
-        send_docprocessing_batch(
-            app,
-            index_attempt_id=index_attempt_id,
-            cc_pair_id=cc_pair_id,
-            tenant_id=tenant_id,
-            batch_num=batch_num,
-            priority=context.docprocessing_priority,
-            is_backfill=is_backfill,
-            expires=DOCCONVERSION_TASK_EXPIRES_SECONDS,
-        )
+    send_docprocessing_batch(
+        app,
+        index_attempt_id=index_attempt_id,
+        cc_pair_id=cc_pair_id,
+        tenant_id=tenant_id,
+        batch_num=batch_num,
+        priority=_docprocessing_priority(context, index_attempt_id),
+        is_backfill=is_backfill,
+        expires=DOCCONVERSION_TASK_EXPIRES_SECONDS,
+    )
     logger.info(
         "Converted stub batch: attempt=%s batch_num=%s stubs=%s docs=%s failures=%s",
         index_attempt_id,

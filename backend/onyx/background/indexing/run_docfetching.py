@@ -126,6 +126,23 @@ _FINALIZING_RECHECK_INTERVAL_S = 60
 INDEXING_TRACER_NUM_PRINT_ENTRIES = 5
 
 
+def select_docprocessing_priority(
+    db_session: Session,
+    *,
+    is_primary: bool,
+    has_successful_attempt: bool,
+    search_settings: SearchSettings | None,
+) -> OnyxCeleryPriority:
+    """First-time indexing goes before refreshes of indexed connectors. While a
+    port-flow reindex finalizes, FUTURE batches go first: the swap waits on
+    them."""
+    if not has_successful_attempt or (
+        not is_primary and reindex_finalizing(db_session, search_settings)
+    ):
+        return OnyxCeleryPriority.HIGH
+    return OnyxCeleryPriority.MEDIUM
+
+
 def _get_run_config(attempt: IndexAttempt) -> dict[str, Any]:
     """The connector config the attempt runs with: its override, else the
     connector's saved config."""
@@ -655,15 +672,12 @@ def connector_document_extraction(
             index_attempt.connector_credential_pair.last_successful_index_time
             is not None
         )
-        # First-time indexing goes before refreshes of indexed connectors. While a
-        # port-flow reindex finalizes, FUTURE batches go first: the swap waits on them.
-        if not has_successful_attempt or (
-            not is_primary
-            and reindex_finalizing(db_session, index_attempt.search_settings)
-        ):
-            docprocessing_priority = OnyxCeleryPriority.HIGH
-        else:
-            docprocessing_priority = OnyxCeleryPriority.MEDIUM
+        docprocessing_priority = select_docprocessing_priority(
+            db_session,
+            is_primary=is_primary,
+            has_successful_attempt=has_successful_attempt,
+            search_settings=index_attempt.search_settings,
+        )
         # A FUTURE attempt that started before the last port finished re-checks
         # while it runs, so its later batches get the finalizing boost too.
         recheck_finalizing = (
