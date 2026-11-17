@@ -1,0 +1,115 @@
+{
+  "pr": {
+    "base": {
+      "ref": "roshan/ci-reuse-prebuilt-images",
+      "repo": {
+        "id": 633262635
+      },
+      "sha": "c1feacc4118cb8423bfd7659bc1209350037bd5c"
+    },
+    "head": {
+      "ref": "roshan/ci-split-slow-integration-shards",
+      "repo": {
+        "id": 633262635
+      },
+      "sha": "7866e9f6fb8704449421b09cfc800e605cefa987"
+    },
+    "number": 17989,
+    "state": "open"
+  },
+  "runs": [
+    {
+      "conclusion": "success",
+      "event": "pull_request",
+      "head_branch": "roshan/ci-split-slow-integration-shards",
+      "head_sha": "7866e9f6fb8704449421b09cfc800e605cefa987",
+      "id": 44157156351,
+      "path": ".github/workflows/pr-python-checks.yml",
+      "pull_requests": [
+        {
+          "base": {
+            "ref": "roshan/ci-reuse-prebuilt-images",
+            "repo": {
+              "id": 633262635
+            },
+            "sha": "c1feacc4118cb8423bfd7659bc1209350037bd5c"
+          },
+          "head": {
+            "ref": "roshan/ci-split-slow-integration-shards",
+            "repo": {
+              "id": 633262635
+            },
+            "sha": "7866e9f6fb8704449421b09cfc800e605cefa987"
+          },
+          "number": 17989
+        }
+      ],
+      "run_attempt": 1,
+      "run_number": 64658,
+      "status": "completed",
+      "created_at": "2026-11-17T19:18:27Z"
+    },
+    {
+      "conclusion": "cancelled",
+      "event": "pull_request",
+      "head_branch": "roshan/ci-split-slow-integration-shards",
+      "head_sha": "7866e9f6fb8704449421b09cfc800e605cefa987",
+      "id": 44157156583,
+      "path": ".github/workflows/pr-python-checks.yml",
+      "pull_requests": [
+        {
+          "base": {
+            "ref": "roshan/ci-reuse-prebuilt-images",
+            "repo": {
+              "id": 633262635
+            },
+            "sha": "c1feacc4118cb8423bfd7659bc1209350037bd5c"
+          },
+          "head": {
+            "ref": "roshan/ci-split-slow-integration-shards",
+            "repo": {
+              "id": 633262635
+            },
+            "sha": "7866e9f6fb8704449421b09cfc800e605cefa987"
+          },
+          "number": 17989
+        }
+      ],
+      "run_attempt": 1,
+      "run_number": 64659,
+      "status": "completed",
+      "created_at": "2026-11-17T19:18:27Z"
+    }
+  ],
+  "jobs": [
+    {
+      "jobs": [
+        {
+          "conclusion": "success",
+          "name": "changes",
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "mypy-check",
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "mypy-check-gate / Detect Spot interruption",
+          "status": "completed"
+        },
+        {
+          "conclusion": "success",
+          "name": "mypy-check-gate / pass",
+          "status": "completed"
+        }
+      ],
+      "total_count": 4
+    },
+    {
+      "jobs": [],
+      "total_count": 0
+    }
+  ]
+}
