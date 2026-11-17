@@ -40,8 +40,10 @@ if python3 -c "import importlib.metadata as m, sys; sys.exit(m.version('grpcio-t
   py="python3"
 else
   uv venv -q -p 3.13 "$tmp/venv"
-  uv pip install -q -p "$tmp/venv/bin/python" "grpcio-tools==$grpc_tools_version"
   py="$tmp/venv/bin/python"
+  # Windows venvs keep the interpreter in Scripts/.
+  [[ -e "$py" ]] || py="$tmp/venv/Scripts/python.exe"
+  uv pip install -q -p "$py" "grpcio-tools==$grpc_tools_version"
 fi
 
 for svc in "${services[@]}"; do

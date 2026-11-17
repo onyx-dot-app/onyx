@@ -6,7 +6,7 @@ On `Stop` it compares against that record, so it only looks at the files this tu
 changed (edited, created or committed), never scratch files or older edits. For
 those files it:
 
-- runs pre-commit;
+- runs the pre-commit hooks with prek;
 - when the feature map has `stale_docs.py`, builds an editing brief: the parts of
   the feature-map documents that cite the changed code, and the questions that
   decide whether they need an edit. `stale_docs.py` prints nothing when no part
@@ -16,10 +16,10 @@ those files it:
   at the turn's start, stored as a git blob, so edits made before the turn do not
   count.
 
-A pre-commit failure exits with code 2 and prints to stderr, with the brief after
+A hook failure exits with code 2 and prints to stderr, with the brief after
 it. A brief alone blocks the stop once with `{"decision": "block", "reason": ...}`,
 so the model reads it; Claude Code and Codex both accept that output. The next stop
-(`stop_hook_active`) runs pre-commit once more, so the edits the brief led to are
+(`stop_hook_active`) runs the hooks once more, so the edits the brief led to are
 checked too. Any later stop in the turn is let through, so nothing loops, and
 `stale_docs.py --session` names each section or key of a document once per
 session. Without a record for the session, the stop does nothing.
@@ -211,7 +211,7 @@ def _read_turn_start(repo: Path, session: str) -> dict[str, Any] | None:
 
 
 def _set_recheck(repo: Path, session: str, recheck: bool) -> None:
-    """Mark whether the next stop of the turn runs pre-commit again."""
+    """Mark whether the next stop of the turn runs the hooks again."""
     start = _read_turn_start(repo, session)
     if start is not None and start.get("recheck", False) != recheck:
         start["recheck"] = recheck
@@ -239,27 +239,27 @@ def _turn_changes(repo: Path, session: str) -> set[str] | None:
     return changed
 
 
-def _pre_commit(repo: Path) -> str | None:
-    on_path = shutil.which("pre-commit")
+def _prek(repo: Path) -> str | None:
+    on_path = shutil.which("prek")
     if on_path:
         return on_path
-    in_venv = repo / ".venv" / "bin" / "pre-commit"
+    in_venv = repo / ".venv" / "bin" / "prek"
     return str(in_venv) if in_venv.exists() else None
 
 
 def _pre_commit_failures(repo: Path, files: list[str]) -> str | None:
-    pre_commit = _pre_commit(repo)
-    if not files or pre_commit is None:
+    prek = _prek(repo)
+    if not files or prek is None:
         return None
 
-    # pre-commit spots formatter rewrites through `git diff`, which cannot see
+    # prek spots formatter rewrites through `git diff`, which cannot see
     # untracked files, so compare contents to catch rewrites of new files too.
     before = _digests(repo, files)
-    # A new session lets a timeout stop the hooks pre-commit started, not only
-    # pre-commit itself.
+    # A new session lets a timeout stop the hooks prek started, not only prek
+    # itself.
     try:
         proc = subprocess.Popen(
-            [pre_commit, "run", "--files", *files],
+            [prek, "run", "--files", *files],
             cwd=repo,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -267,13 +267,13 @@ def _pre_commit_failures(repo: Path, files: list[str]) -> str | None:
             start_new_session=True,
         )
     except OSError as e:
-        return f"Could not run pre-commit ({e}); run it yourself before finishing."
+        return f"Could not run prek ({e}); run it yourself before finishing."
     try:
         stdout, stderr = proc.communicate(timeout=_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         os.killpg(proc.pid, signal.SIGKILL)
         proc.communicate()
-        return "pre-commit timed out; run it yourself before finishing."
+        return "prek timed out; run it yourself before finishing."
     rewritten = sorted(
         path
         for path, digest in _digests(repo, files).items()
@@ -288,7 +288,7 @@ def _pre_commit_failures(repo: Path, files: list[str]) -> str | None:
         if not line.rstrip().endswith(("Passed", "Skipped"))
     ]
     return (
-        "pre-commit failed on the files you changed this turn. Fix these before you "
+        "prek failed on the files you changed this turn. Fix these before you "
         "finish. "
         "Formatters may already have rewritten some files.\n"
         + "\n".join(lines[-_MAX_OUTPUT_LINES:])

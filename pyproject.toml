@@ -152,7 +152,6 @@ dev = [
     "matplotlib==3.10.8",
     "ty==0.0.63",
     "openapi-generator-cli==7.17.0",
-    "pre-commit==4.6.2",
     "pytest-alembic==0.12.1",
     "pytest-asyncio==1.4.0",
     "pytest-dotenv==0.5.2",
@@ -177,6 +176,7 @@ dev = [
     "types-requests==2.32.0.20250328",
     "pytest-split==0.11.0",
     { include-group = "ods" },
+    { include-group = "prek" },
     { include-group = "ruff" },
     { include-group = "zizmor" },
 ]
@@ -187,6 +187,10 @@ dev = [
 ods = ["onyx-devtools[audit]==0.13.16"]
 ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
+
+# The hook runner for .pre-commit-config.yaml. Keep the same version in
+# prek-version of the j178/prek-action steps and in .devcontainer/Dockerfile.
+prek = ["prek==0.5.10"]
 
 # Enterprise Edition features
 ee = ["posthog==3.7.4"]

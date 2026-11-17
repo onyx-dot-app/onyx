@@ -103,16 +103,19 @@ Shared agent skills live in `.agents/skills/`. `.claude/skills`, `.cursor/skills
 
 ## Code Quality
 
+The hooks in `.pre-commit-config.yaml` run with [prek](https://github.com/j178/prek).
+`uv sync` installs the pinned version into `.venv`.
+
 ```bash
-# Install and run pre-commit hooks
-pre-commit install
-pre-commit run --all-files
+# Install the git hooks and run every hook
+prek install
+prek run --all-files
 
 # Faster: run only on the files you touched
-pre-commit run --files <path> [<path> ...]
+prek run --files <path> [<path> ...]
 ```
 
-Claude Code and Codex also run pre-commit on the files you changed in a turn when
+Claude Code and Codex also run prek on the files you changed in a turn when
 you end it (`.agents/hooks/pre_commit_on_stop.py`, wired as `UserPromptSubmit` and
 `Stop` hooks in `.claude/settings.json` and `.codex/hooks.json`). Files that were
 already dirty when the turn started are skipped unless you change them. Codex runs
@@ -123,7 +126,7 @@ merge result are checked. For a rebase, the check includes every file in each co
 resolved with `git rebase --continue`, and skips clean picks. The `--apply` rebase
 backend logs resolved conflicts as picks, so the hook skips them. Checkout, pull, clean
 merge, and clean rebase updates do not add files to the check.
-If pre-commit fails, fix the reported problems before you finish. When the repo has the feature map
+If a hook fails, fix the reported problems before you finish. When the repo has the feature map
 (`.agents/feature-map/stale_docs.py`), the same hook blocks the stop once with an
 editing brief: the sections and keys of the feature-map documents that cite code
 the turn changed, and changed files that `PATHS.md` does not cover. Ownership
