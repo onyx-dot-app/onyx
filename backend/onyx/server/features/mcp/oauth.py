@@ -923,46 +923,6 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             return None
         return await self._refresh_token()
 
-    async def refresh_access_token_if_expired(self) -> OAuthToken | None:
-        """Drive the SDK refresh step used outside its HTTPX auth generator."""
-        await self._initialize()
-        context = self.context
-        if not context.can_refresh_token():
-            return None
-        if context.is_token_valid():
-            # A racing call may already have persisted a fresh token.
-            current_tokens = context.current_tokens
-            if current_tokens is None:
-                raise RuntimeError(
-                    "MCP OAuth SDK reported a valid token without token data."
-                )
-            return current_tokens
-
-        refresh_request = await self._refresh_token()
-        async with mcp_ssrf_httpx_client_factory(
-            timeout=httpx.Timeout(_REFRESH_POST_TIMEOUT_S)
-        ) as client:
-            response = await client.send(refresh_request)
-        if not await self._handle_refresh_response(response):
-            raise RuntimeError(
-                "MCP OAuth refresh failed for server "
-                f"'{self.refresh_log_context['mcp_server_name']}' "
-                f"(config {self.refresh_log_context['connection_config_id']}): "
-                f"{response.status_code}"
-            )
-
-        logger.info(
-            "Refreshed SSE MCP OAuth token for server '%s' (config %s)",
-            self.refresh_log_context["mcp_server_name"],
-            self.refresh_log_context["connection_config_id"],
-        )
-        refreshed_tokens = context.current_tokens
-        if refreshed_tokens is None:
-            raise RuntimeError(
-                "MCP OAuth SDK reported a successful refresh without token data."
-            )
-        return refreshed_tokens
-
     def _refresh_log_fields(self, **fields: Any) -> dict[str, Any]:
         log_fields: dict[str, Any] = {
             **self.refresh_log_context,
