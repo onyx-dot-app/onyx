@@ -89,10 +89,14 @@ def test_execute_of_a_built_statement_is_one_line_per_call() -> None:
         ),
         (
             "def f() -> None:",
-            "with get_sqlalchemy_engine().connect() as conn:\n    pass\n"
             "engine = get_sqlalchemy_engine()\n"
             "with engine.connect() as conn:\n"
             "    conn.execute(stmt)",
+        ),
+        (
+            "def f() -> None:",
+            "with get_sqlalchemy_engine().connect() as conn:\n"
+            "    conn.exec_driver_sql('SELECT 1')",
         ),
         (
             "def f() -> None:",

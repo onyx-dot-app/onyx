@@ -183,7 +183,7 @@ def _session_names(tree: ast.AST, imports: _Imports) -> set[str]:
         return (
             isinstance(func, ast.Attribute)
             and func.attr in _SESSION_DERIVING_METHODS
-            and _terminal_name(func.value) in names
+            and gives_session(func.value)
         )
 
     def bind(target: ast.expr | None) -> bool:
@@ -309,7 +309,9 @@ def check(
 
     Returns the files that have more operations than the baseline allows, each
     with the lines of all its operations, and the baseline entries that are now
-    too high. `existing` holds the baseline paths that are still files."""
+    too high. `existing` holds the baseline paths that are still files. A full
+    scan passes them all; a scan of some files passes the whole baseline, so a
+    deleted file does not fail a commit that did not touch it."""
     risen: list[str] = []
     stale: list[str] = []
     for path, lines in sorted(operations.items()):
@@ -341,7 +343,8 @@ def main(argv: list[str] | None = None) -> int:
     given = {_relative(path) for path in args.paths}
     # An edit to the baseline is checked against every file it records.
     baseline_given = BASELINE_PATH.relative_to(_REPO_ROOT).as_posix() in given
-    if args.write_baseline or not given or baseline_given:
+    full_scan = args.write_baseline or not given or baseline_given
+    if full_scan:
         paths = _all_checked_files()
     else:
         paths = sorted(path for path in given if path and is_checked(path))
@@ -369,7 +372,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     baseline = read_baseline(BASELINE_PATH)
-    existing = [path for path in baseline if (_REPO_ROOT / path).is_file()]
+    # pre-commit does not pass deleted files, so only a full scan reports them.
+    existing = (
+        [path for path in baseline if (_REPO_ROOT / path).is_file()]
+        if full_scan
+        else list(baseline)
+    )
     risen, stale = check(operations, baseline, existing)
     if risen:
         print(
