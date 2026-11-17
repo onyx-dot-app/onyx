@@ -10,10 +10,11 @@ from uuid import uuid4
 
 import pytest
 from httpx import ConnectError, HTTPStatusError, Request, Response
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 from starlette.requests import Request as StarletteRequest
 
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     IntegrationActionPolicyValue,
     IntegrationActionSource,
@@ -752,6 +753,53 @@ def test_refresh_of_an_mcp_server_stores_discovered_tools(
             integration.id, admin, db_session
         )
     assert [action.key for action in refreshed.actions] == ["new"]
+
+
+def test_refresh_refuses_actions_of_a_server_url_that_changed_meanwhile(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    integration, server = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.com/mcp",
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=("old",),
+    )
+    created.add(integration.id)
+    hold_in_plugin(db_session, [integration])
+    server_id = server.id
+    spec = IntegrationActionSpec(
+        key="new",
+        source=IntegrationActionSource.MCP,
+        display_name="New",
+        description=None,
+        read_only=None,
+        default_policy=IntegrationActionPolicyValue.ALLOW,
+    )
+
+    def discover_while_the_url_changes(*_: object) -> list[IntegrationActionSpec]:
+        with get_session_with_current_tenant() as other_session:
+            other_session.execute(
+                update(MCPServer)
+                .where(MCPServer.id == server_id)
+                .values(server_url="https://other.example.com/mcp")
+            )
+            other_session.commit()
+        return [spec]
+
+    with (
+        patch(
+            "onyx.integrations.service.fetch_mcp_actions",
+            side_effect=discover_while_the_url_changes,
+        ),
+        pytest.raises(OnyxError) as raised,
+    ):
+        admin_api.refresh_integration_actions(integration.id, admin, db_session)
+
+    assert raised.value.error_code is OnyxErrorCode.CONFLICT
+    db_session.rollback()
+    assert [
+        action.key for action in list_integration_actions(integration.id, db_session)
+    ] == ["old"]
 
 
 def _unauthorized(status: int) -> HTTPStatusError:

@@ -96,6 +96,10 @@ _REFRESH_LOCK_WAIT_S = _REFRESH_POST_TIMEOUT_S + 5.0
 # rotating refresh token. Redis-enforced only (see cache_shared_lock).
 _REFRESH_LOCK_LEASE_S = 60.0
 
+# Refresh slightly before the real expiry to absorb network latency and clock
+# skew between us and the provider, avoiding edge-of-expiry 401s.
+TOKEN_EXPIRY_BUFFER_SECONDS = 30.0
+
 
 REQUESTED_SCOPE: str | None = None
 

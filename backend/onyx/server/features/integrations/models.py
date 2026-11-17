@@ -17,6 +17,7 @@ from onyx.db.enums import (
 from onyx.integrations.connection_models import IntegrationStatus
 from onyx.integrations.models import EffectivePolicy
 from onyx.oauth.models import SafeOAuthReturnPath
+from onyx.server.features.mcp.models import HeaderTemplate
 
 
 class IntegrationKindName(str, Enum):
@@ -188,7 +189,7 @@ class IntegrationCreate(BaseModel):
     auth_mode: IntegrationAuthMode
     auth_method: IntegrationAuthMethod | None = None
     credential_fields: list[CredentialField] | None = None
-    header_template: dict[str, str] | None = None
+    header_template: HeaderTemplate | None = None
     oauth_client: OAuthClientInput | None = None
     config: IntegrationConfigInput
 
@@ -202,7 +203,7 @@ class IntegrationUpdate(BaseModel):
     auth_mode: IntegrationAuthMode | None = None
     auth_method: IntegrationAuthMethod | None = None
     credential_fields: list[CredentialField] | None = None
-    header_template: dict[str, str] | None = None
+    header_template: HeaderTemplate | None = None
     users_can_save_always_allow: bool | None = None
     oauth_client: OAuthClientInput | None = None
     config: IntegrationConfigInput | None = None

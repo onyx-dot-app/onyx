@@ -79,7 +79,10 @@ from onyx.integrations.connection_models import (
     secret_fingerprint,
 )
 from onyx.oauth.authorization_attempt import canonical_json_fingerprint
-from onyx.server.features.mcp.models import merge_mcp_headers
+from onyx.server.features.mcp.models import (
+    DENYLISTED_MCP_HEADERS,
+    merge_mcp_headers,
+)
 from onyx.server.features.mcp.oauth import (
     IntegrationTokenStorage,
     integration_mcp_server_connection,
@@ -492,7 +495,13 @@ def render_headers(
     """``{{``/``}}`` are literal; a missing placeholder raises
     ``MissingHeaderValueError``."""
     secret = secret or ConnectionSecret()
-    templates = merge_mcp_headers(secret.headers, dict(header_template or {}))
+    templates = {
+        name: template
+        for name, template in merge_mcp_headers(
+            secret.headers, dict(header_template or {})
+        ).items()
+        if name.lower() not in DENYLISTED_MCP_HEADERS
+    }
     values = _placeholder_values(secret, extra_values)
     missing = sorted(
         {
