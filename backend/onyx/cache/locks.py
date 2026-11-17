@@ -88,38 +88,29 @@ async def async_cache_shared_lock(
         return lock, lock.acquire(blocking=True, blocking_timeout=wait_for_lock_s)
 
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="cache-lock")
-    loop = asyncio.get_running_loop()
-    acquire_fut = loop.run_in_executor(executor, acquire_in_worker)
+    acquire_fut = executor.submit(acquire_in_worker)
     start_time = time.monotonic()
-    cancelled = False
     try:
         try:
-            lock, acquired = await asyncio.shield(acquire_fut)
+            lock, acquired = await asyncio.shield(asyncio.wrap_future(acquire_fut))
         except asyncio.CancelledError:
-            cancelled = True
-
-            # Release any late-acquired lock on the worker thread — a
-            # Postgres advisory lock has no lease to free it otherwise.
-            def release_late_acquire(
-                fut: asyncio.Future[tuple[CacheLock, bool]],
-            ) -> None:
+            # Queue cleanup on the acquiring thread. The event loop may close
+            # before acquisition completes, so a loop callback cannot own cleanup.
+            def release_late_acquire() -> None:
                 try:
-                    late_lock, late_acquired = fut.result()
+                    late_lock, late_acquired = acquire_fut.result()
                 except Exception:
-                    executor.shutdown(wait=False)
                     return
                 if late_acquired:
-                    executor.submit(
-                        _release_cache_lock,
+                    _release_cache_lock(
                         late_lock,
                         lock_name,
                         time.monotonic() - start_time,
                         max_time_lock_held_s,
                         logger,
                     )
-                executor.shutdown(wait=False)
 
-            acquire_fut.add_done_callback(release_late_acquire)
+            executor.submit(release_late_acquire)
             raise
         if not acquired:
             raise CacheLockAcquisitionError(
@@ -130,8 +121,7 @@ async def async_cache_shared_lock(
             yield
         finally:
             held_s = time.monotonic() - start_time
-            await loop.run_in_executor(
-                executor,
+            release_fut = executor.submit(
                 _release_cache_lock,
                 lock,
                 lock_name,
@@ -139,6 +129,6 @@ async def async_cache_shared_lock(
                 max_time_lock_held_s,
                 logger,
             )
+            await asyncio.shield(asyncio.wrap_future(release_fut))
     finally:
-        if not cancelled:
-            executor.shutdown(wait=False)
+        executor.shutdown(wait=False)

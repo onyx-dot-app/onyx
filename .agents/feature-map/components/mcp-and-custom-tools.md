@@ -384,9 +384,11 @@ calls run with no row unless the policy is now DENY.
     and cleanup. The MCP client supplies signal callbacks and `AgentCancelled`.
     A result that already completed wins a concurrent cancellation. Per-user
     discovery includes OAuth preparation, lock waits, and token requests in its
-    deadline and cancellation scope. Discovery calls that have no signal keep
-    the existing synchronous behavior. Stopping the local request cannot undo
-    work already performed by the remote server.
+    deadline and cancellation scope.
+    `cache/locks.py:async_cache_shared_lock` releases late acquisitions on the
+    acquiring thread, even after the request event loop closes.
+    Discovery calls that have no signal keep the existing synchronous behavior.
+    Stopping the local request cannot undo work already performed by the remote server.
 15. `chat-approval-needs-waiting-client` **Every client handles approvals;
     any run of a signed-in owner's chat can wait.**
     `chat/run_store.py:ChatRunStore.request_approval` opens the request for
