@@ -612,6 +612,51 @@ def test_mcp_config_no_sign_in_keeps_admin_template(
     ) == {"X-Team": "blue", "X-User": user.email}
 
 
+def test_mcp_config_no_sign_in_with_rejected_user_values_needs_reconnect(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = make_integration(
+        kind=IntegrationKind.MCP, auth_mode=IntegrationAuthMode.NONE, auth_method=None
+    )
+    _seed(
+        db_session,
+        integration,
+        None,
+        IntegrationLegacyFormat.MCP_CONFIG,
+        {"headers": {}, "header_template": {"X-Team": "{team}"}},
+    )
+    tagged = make_test_user("legacy_mcp_none_tagged")
+    _seed(
+        db_session,
+        integration,
+        tagged.id,
+        IntegrationLegacyFormat.MCP_CONFIG,
+        {
+            "headers": {"X-Team": "blue"},
+            "header_substitutions": {"team": "blue"},
+            "reauth_required": True,
+        },
+    )
+    marked = make_test_user("legacy_mcp_none_marked")
+    row = _seed(
+        db_session,
+        integration,
+        marked.id,
+        IntegrationLegacyFormat.MCP_CONFIG,
+        {"headers": {"X-Team": "red"}, "header_substitutions": {"team": "red"}},
+    )
+    mark_connection_needs_reconnect__no_commit(db_session, row, "Key expired")
+    db_session.commit()
+
+    for user in (tagged, marked):
+        problem = expect_problem(resolve_connection(integration, user, db_session))
+        assert problem.code is ConnectionState.NEEDS_RECONNECT
+        status = integration_status(integration, user, db_session)
+        assert (status.state, status.reason) == (problem.code, problem.reason)
+
+
 def test_individual_custom_app_user_without_row_uses_full_organization_values(
     db_session: Session,
     make_integration: MakeIntegration,

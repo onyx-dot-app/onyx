@@ -4,6 +4,7 @@ from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
 import httpx
@@ -214,6 +215,8 @@ class FakeTokenEndpoint:
             "expires_in": 3600,
         }
         self.delay_s = 0.0
+        # Send the body form-encoded, as some MCP servers do.
+        self.form_encoded = False
         self.requests: list[httpx.Request] = []
         self._lock = threading.Lock()
 
@@ -222,6 +225,13 @@ class FakeTokenEndpoint:
             self.requests.append(request)
         if self.delay_s:
             time.sleep(self.delay_s)
+        if self.form_encoded:
+            return httpx.Response(
+                self.status_code,
+                content=urlencode(self.body).encode(),
+                headers={"content-type": "application/x-www-form-urlencoded"},
+                request=request,
+            )
         return httpx.Response(self.status_code, json=self.body, request=request)
 
 

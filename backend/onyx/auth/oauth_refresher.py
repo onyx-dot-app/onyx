@@ -446,7 +446,6 @@ def refresh_oauth_account_sync(
             user.oidc_expiry = datetime.fromtimestamp(
                 refreshed.expires_at, tz=timezone.utc
             )
-    db_session.flush()
     return True
 
 

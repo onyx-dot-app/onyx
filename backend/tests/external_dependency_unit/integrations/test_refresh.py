@@ -348,14 +348,11 @@ def test_preset_refresh_with_a_bad_expires_in_has_no_expiry(
     assert connection.expires_at is None
 
 
-def test_mcp_refresh_uses_sdk_request(
-    db_session: Session,
-    make_integration: MakeIntegration,
-    make_test_user: MakeTestUser,
-    token_endpoint: FakeTokenEndpoint,
-) -> None:
-    sdk_token_url = "https://mcp-auth.example.test/oauth/token"
-    integration = make_integration(
+_SDK_TOKEN_URL = "https://mcp-auth.example.test/oauth/token"
+
+
+def _discovery_mcp_integration(make_integration: MakeIntegration) -> Integration:
+    return make_integration(
         kind=IntegrationKind.MCP,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
@@ -370,10 +367,19 @@ def test_mcp_refresh_uses_sdk_request(
             OAUTH_METADATA_KEY: {
                 "issuer": "https://mcp-auth.example.test",
                 "authorization_endpoint": "https://mcp-auth.example.test/authorize",
-                "token_endpoint": sdk_token_url,
+                "token_endpoint": _SDK_TOKEN_URL,
             },
         },
     )
+
+
+def test_mcp_refresh_uses_sdk_request(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+    token_endpoint: FakeTokenEndpoint,
+) -> None:
+    integration = _discovery_mcp_integration(make_integration)
     user: User = make_test_user("mcp_refresh")
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
@@ -382,11 +388,46 @@ def test_mcp_refresh_uses_sdk_request(
 
     assert len(token_endpoint.requests) == 1
     request = token_endpoint.requests[0]
-    assert str(request.url) == sdk_token_url
+    assert str(request.url) == _SDK_TOKEN_URL
     body = parse_qs(request.content.decode())
     assert body["refresh_token"] == ["old-refresh"]
     assert body["client_id"] == ["dcr-client"]
     assert read_connection_secret(connection).access_token == "new-access"
+
+
+def test_mcp_refresh_reads_form_encoded_responses(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+    token_endpoint: FakeTokenEndpoint,
+) -> None:
+    integration = _discovery_mcp_integration(make_integration)
+    token_endpoint.form_encoded = True
+    rotated = make_test_user("mcp_refresh_form")
+    rotated_connection = add_connection(
+        db_session, integration, rotated.id, _stale_secret(), expires_at=expired()
+    )
+
+    ensure_fresh_connection(rotated_connection, integration, db_session)
+
+    secret = read_connection_secret(rotated_connection)
+    assert (secret.access_token, secret.refresh_token) == ("new-access", "new-refresh")
+    assert rotated_connection.expires_at is not None
+
+    rejected = make_test_user("mcp_refresh_form_rejected")
+    rejected_connection = add_connection(
+        db_session, integration, rejected.id, _stale_secret(), expires_at=expired()
+    )
+    token_endpoint.status_code = 400
+    token_endpoint.body = {"error": "invalid_grant"}
+
+    problem = resolve_connection(integration, rejected, db_session)
+
+    assert isinstance(problem, ConnectionProblem)
+    assert problem.code is ConnectionState.NEEDS_RECONNECT
+    assert "invalid_grant" in problem.reason
+    db_session.refresh(rejected_connection)
+    assert rejected_connection.status is IntegrationConnectionStatus.NEEDS_RECONNECT
 
 
 def test_web_login_refresh_waits_for_the_shared_login_lock(
