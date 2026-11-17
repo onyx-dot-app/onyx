@@ -162,7 +162,10 @@ OpenAPI tool, external app). Queries are in `db/integration_connection.py`.
 - `resolve_connection(integration, acting_user)` reads `auth_mode`: `none` needs
   no credential, `shared` reads the organization row (`user_id IS NULL`, else
   Not set up), `individual` reads the acting user's row (else Not connected).
-  It never falls back from one mode to the other. `onyx_login` stores no row: it
+  It never falls back from one mode to the other, with one exception: an old
+  custom app in `individual` mode uses the organization values until the user
+  saves their own (see Old secret formats). One query reads the user's row and
+  the organization row together. `onyx_login` stores no row: it
   sends the user's Onyx login token and refreshes it with no web request
   (`auth/oauth_refresher.py:refresh_oauth_account_sync`).
 - `render_headers(header_template, secret)` fills `{placeholder}` from the token
@@ -203,14 +206,14 @@ registration of an old client. MCP servers use the SDK with
 encrypted bytes and names the old shape in `legacy_format` on
 `integration_connection` and `integration_oauth_client` (`db/enums.py:IntegrationLegacyFormat`:
 `mcp_config`, `external_app_org`, `external_app_user`, `oauth_user_token`,
-`tool_headers`). `integrations/connection_models.py:read_connection` and
-`read_oauth_client` are the only readers: they give the same `ConnectionSecret`,
-expiry, scopes and status for both formats (`reauth_required` reads as Needs
-reconnect). `resolve_connection` also applies what an old organization row gave
-each user: the header template of an MCP admin config, or the field values of a
-custom app that the user's values override
-(`legacy_organization_defaults`). A custom app user with no row calls with the
-organization values when they fill the template; an MCP server with no sign-in
+`tool_headers`). `integrations/connection_models.py:read_connection`,
+`read_oauth_client` and `legacy_organization_defaults` are the only readers.
+The first two give the same `ConnectionSecret`, expiry, scopes and status for
+both formats (`reauth_required` reads as Needs reconnect). `resolve_connection`
+also applies what an old organization row gave each user: the header template
+of an MCP admin config, or the field values of a custom app that the user's
+values override (`legacy_organization_defaults`). A custom app user with no row
+calls with the organization values when they fill the template; an MCP server with no sign-in
 whose template needs values that the user did not save is Not connected. Every secret write
 (`upsert_connection__no_commit`, `update_connection_secret__no_commit`,
 `set_oauth_client_credentials__no_commit`) saves the new format and clears the

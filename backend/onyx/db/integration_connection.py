@@ -6,7 +6,7 @@ import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -56,6 +56,29 @@ def get_connection(
         # The locked read replaces what the session holds for the row.
         stmt = stmt.with_for_update().execution_options(populate_existing=True)
     return db_session.scalars(stmt).one_or_none()
+
+
+def get_connection_with_organization(
+    db_session: Session, integration_id: int, user_id: UUID | None
+) -> tuple[IntegrationConnection | None, IntegrationConnection | None]:
+    """The organization connection and the user's connection, in one query.
+    With no user, the second item is None."""
+    rows = db_session.scalars(
+        select(IntegrationConnection).where(
+            IntegrationConnection.integration_id == integration_id,
+            (
+                IntegrationConnection.user_id.is_(None)
+                if user_id is None
+                else or_(
+                    IntegrationConnection.user_id.is_(None),
+                    IntegrationConnection.user_id == user_id,
+                )
+            ),
+        )
+    ).all()
+    organization = next((row for row in rows if row.user_id is None), None)
+    user = next((row for row in rows if row.user_id is not None), None)
+    return organization, user
 
 
 def get_connection_by_id(
