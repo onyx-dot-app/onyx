@@ -12,6 +12,7 @@ import type { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import type {
   AdminIntegrationDetail,
   IntegrationCreate,
+  PolicyValue,
 } from "@/lib/integrations/types";
 
 // type-only import: loading the enum at runtime would pull app modules into the test runner
@@ -1304,6 +1305,33 @@ export class OnyxApiClient {
     );
     this.log(`Created integration ${body.name} (ID: ${data.id})`);
     return data;
+  }
+
+  /** Discovers the actions of an MCP server again. */
+  async refreshIntegrationActions(integrationId: number): Promise<void> {
+    const response = await this.post(
+      `/admin/integrations/${integrationId}/actions/refresh`
+    );
+    await this.handleResponse(
+      response,
+      `Failed to refresh actions of integration ${integrationId}`
+    );
+  }
+
+  /** Sets the admin policy of each named action. */
+  async setIntegrationActionPolicies(
+    integrationId: number,
+    actions: Record<string, PolicyValue | null>,
+    defaultPolicy: PolicyValue | null = null
+  ): Promise<void> {
+    const response = await this.put(
+      `/admin/integrations/${integrationId}/actions`,
+      { default_policy: defaultPolicy, actions }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to set action policies of integration ${integrationId}`
+    );
   }
 
   /** Creates an agent that attaches the given plugins. */
