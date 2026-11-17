@@ -60,15 +60,9 @@ let mockDisabledPluginIds: string[] | null = [];
 let mockReadAgentIds: (number | undefined)[] = [];
 const mockSetPluginsDisabled = jest.fn(() => Promise.resolve());
 jest.mock("@/lib/plugins/hooks", () => ({
-  useAgentChatPlugins: (agentId: number | undefined) => {
+  useAgentPluginIds: (agentId: number | undefined) => {
     mockReadAgentIds.push(agentId);
-    return {
-      pluginIds: mockPluginIds,
-      plugins: [],
-      isLoading: false,
-      error: undefined,
-      refresh: jest.fn(),
-    };
+    return { pluginIds: mockPluginIds, isLoading: false, error: undefined };
   },
   useAgentPluginPreferences: () => ({
     loaded: mockDisabledPluginIds !== null,

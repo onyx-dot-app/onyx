@@ -127,6 +127,11 @@ jest.mock("@/lib/plugins/hooks", () => ({
   ...jest.requireActual<typeof import("@/lib/plugins/hooks")>(
     "@/lib/plugins/hooks"
   ),
+  useAgentPluginIds: () => ({
+    pluginIds: [],
+    isLoading: false,
+    error: undefined,
+  }),
   useAgentChatPlugins: () => ({
     pluginIds: [],
     plugins: [],

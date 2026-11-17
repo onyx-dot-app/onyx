@@ -137,7 +137,7 @@ function mockApi({
   availableTools = [searchTool, imageTool, fileReaderTool],
   holdTools = false,
   toolError = false,
-  integrations = [],
+  agentPluginIds = [],
 }: {
   preferences?: Record<
     string,
@@ -154,8 +154,8 @@ function mockApi({
   availableTools?: (ToolSnapshot & { plugin_ids?: string[] })[];
   holdTools?: boolean;
   toolError?: boolean;
-  // The member integrations; their enabled plugin refs are the default agent's plugins.
-  integrations?: { plugins: { plugin_id: string; enabled: boolean }[] }[];
+  // The plugins the server says the agent runs.
+  agentPluginIds?: string[];
 } = {}) {
   const stored: Record<
     string,
@@ -183,7 +183,8 @@ function mockApi({
         ? new Promise(() => {})
         : Promise.resolve(availableTools);
     }
-    if (path === "/integrations") return Promise.resolve(integrations);
+    if (path.startsWith("/plugins/agents/"))
+      return Promise.resolve(agentPluginIds);
     if (path === "/manage/connector-status") {
       const rows = () =>
         connectors.map((source) => ({
@@ -407,14 +408,7 @@ describe("useComposerToolsState", () => {
         { ...imageTool, plugin_ids: ["plugin-image"] },
         { ...imageTool, id: 9, plugin_ids: ["plugin-other"] },
       ],
-      integrations: [
-        {
-          plugins: [
-            { plugin_id: "plugin-image", enabled: true },
-            { plugin_id: "plugin-other", enabled: true },
-          ],
-        },
-      ],
+      agentPluginIds: ["plugin-image", "plugin-other"],
     });
     const { result } = renderTools({
       agent: agent([searchTool, imageTool]),
@@ -491,14 +485,7 @@ describe("useComposerToolsState", () => {
 
   it("keeps an MCP plugin that no tool lists in the allow-list", async () => {
     mockApi({
-      integrations: [
-        {
-          plugins: [
-            { plugin_id: "plugin-mcp", enabled: true },
-            { plugin_id: "plugin-off", enabled: false },
-          ],
-        },
-      ],
+      agentPluginIds: ["plugin-mcp"],
     });
     const { result } = renderTools({
       agent: agent([searchTool, imageTool]),

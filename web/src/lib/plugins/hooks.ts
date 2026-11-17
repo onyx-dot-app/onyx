@@ -3,8 +3,6 @@
 import { useCallback, useMemo } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
-import { useAgent } from "@/lib/agents/hooks";
-import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useMemberIntegrations } from "@/lib/integrations/hooks";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -23,28 +21,42 @@ export interface AgentChatPlugins {
   plugins: ChatPluginEntry[];
   isLoading: boolean;
   error: Error | undefined;
+  /** Reads the integration statuses again. */
   refresh: () => Promise<void>;
 }
 
 /**
- * The plugins of an agent (persona detail `plugins`). The default agent has
- * none of its own: it uses each plugin of the user that holds integrations
- * and that the user turned on.
+ * The plugins a chat of the agent runs for the user, as the server decides
+ * them. Null until it loads and on a failed read: an empty list would read
+ * as a complete catalog, and the composer would leave every plugin out of a
+ * send.
  */
+export function useAgentPluginIds(agentId: number | undefined) {
+  const { data, error, isLoading } = useSWR<string[], Error>(
+    agentId === undefined ? null : SWR_KEYS.agentPluginIds(agentId),
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError, revalidateOnFocus: false }
+  );
+  const pluginIds = useMemo(
+    () => (data === undefined ? null : [...new Set(data)].sort()),
+    [data]
+  );
+  return { pluginIds, error, isLoading };
+}
+
+/** The plugins of an agent with the integrations they hold. */
 export function useAgentChatPlugins(
   agentId: number | undefined
 ): AgentChatPlugins {
   const integrations = useMemberIntegrations();
-  const isDefault = agentId === DEFAULT_AGENT_ID;
-  const agent = useAgent(agentId === undefined || isDefault ? null : agentId);
+  const ids = useAgentPluginIds(agentId);
   const data = integrations.data;
+  const { pluginIds } = ids;
 
-  const { pluginIds, plugins } = useMemo(() => {
+  const plugins = useMemo(() => {
     const byPlugin = new Map<string, ChatPluginEntry>();
     for (const integration of data ?? []) {
       for (const ref of integration.plugins) {
-        // The default agent runs only the plugins the user turned on.
-        if (isDefault && !ref.enabled) continue;
         const entry = byPlugin.get(ref.plugin_id);
         if (entry) entry.integrations.push(integration);
         else
@@ -55,36 +67,24 @@ export function useAgentChatPlugins(
           });
       }
     }
-    // Null also on a failed read: an empty list would read as a complete
-    // catalog, and the composer would leave every plugin out of a send.
-    function agentPluginIds(): string[] | null {
-      if (agentId === undefined) return null;
-      if (isDefault) return data === undefined ? null : [...byPlugin.keys()];
-      if (agent.agent === null) return null;
-      return (agent.agent.plugins ?? []).map((link) => link.plugin_id);
-    }
-    const ids = agentPluginIds();
-    const entries = (ids ?? []).flatMap((id) => {
-      const entry = byPlugin.get(id);
-      return entry ? [entry] : [];
-    });
-    return {
-      pluginIds: ids === null ? null : [...new Set(ids)].sort(),
-      plugins: entries.sort((a, b) => a.name.localeCompare(b.name)),
-    };
-  }, [agentId, isDefault, data, agent.agent]);
+    return (pluginIds ?? [])
+      .flatMap((id) => {
+        const entry = byPlugin.get(id);
+        return entry ? [entry] : [];
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [data, pluginIds]);
 
   const { mutate: refreshIntegrations } = integrations;
-  const { refresh: refreshAgent } = agent;
   const refresh = useCallback(async () => {
-    await Promise.all([refreshIntegrations(), refreshAgent()]);
-  }, [refreshIntegrations, refreshAgent]);
+    await refreshIntegrations();
+  }, [refreshIntegrations]);
 
   return {
     pluginIds,
     plugins,
-    isLoading: integrations.isLoading || agent.isLoading,
-    error: integrations.error ?? agent.error,
+    isLoading: integrations.isLoading || ids.isLoading,
+    error: integrations.error ?? ids.error,
     refresh,
   };
 }

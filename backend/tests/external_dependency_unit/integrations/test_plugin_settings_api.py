@@ -1,6 +1,6 @@
 """The settings of a plugin that holds only integrations, called through its
-route functions against the database: the user's on/off switch, the install
-setting, the shares and publishing."""
+route functions against the database: the plugins an agent runs, the user's
+on/off switch, the install setting, the shares and publishing."""
 
 from collections.abc import Generator
 from typing import Any
@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
@@ -18,7 +19,7 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import Marketplace, Plugin, PluginSkill, User
+from onyx.db.models import Marketplace, Persona, Plugin, PluginSkill, User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.integrations import admin_api, api, plugins_api
 from onyx.server.features.integrations.models import (
@@ -30,7 +31,10 @@ from onyx.server.features.integrations.models import (
     PluginUserShare,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.external_dependency_unit.integration_helpers import delete_integrations
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    link_persona,
+)
 
 OPENAPI_SPEC: dict[str, Any] = {
     "openapi": "3.0.0",
@@ -132,6 +136,98 @@ def _set_policy(
         PluginInstallationPolicyUpdate(installation_policy=policy),
         admin,
         db_session,
+    )
+
+
+@pytest.fixture
+def personas(db_session: Session) -> Generator[list[Persona], None, None]:
+    made: list[Persona] = []
+    try:
+        yield made
+    finally:
+        db_session.rollback()
+        for persona in made:
+            persona.deleted = True
+        db_session.commit()
+
+
+def _persona(
+    owner: User, db_session: Session, personas: list[Persona], *, is_public: bool
+) -> Persona:
+    persona = Persona(
+        name=f"Plugin agent {uuid4().hex[:8]}",
+        description="Agent with plugins",
+        system_prompt="You are a helpful assistant",
+        task_prompt="",
+        tools=[],
+        document_sets=[],
+        user_id=owner.id,
+        groups=[],
+        is_listed=True,
+        is_public=is_public,
+        display_priority=None,
+        starter_messages=None,
+        deleted=False,
+    )
+    db_session.add(persona)
+    db_session.commit()
+    personas.append(persona)
+    return persona
+
+
+# Plugins an agent runs
+
+
+def test_default_agent_runs_the_plugins_the_user_turned_on(
+    db_session: Session, admin: User, member: User, created: list[int]
+) -> None:
+    plugin_id = _create(admin, db_session, created, for_organization=True)
+    assert plugin_id not in plugins_api.get_agent_plugin_ids(
+        DEFAULT_PERSONA_ID, member, db_session
+    )
+
+    plugins_api.set_plugin_enabled(
+        plugin_id, PluginEnableRequest(enabled=True), member, db_session
+    )
+    assert plugin_id in plugins_api.get_agent_plugin_ids(
+        DEFAULT_PERSONA_ID, member, db_session
+    )
+
+
+def test_agent_runs_the_linked_plugins_the_user_can_see(
+    db_session: Session,
+    admin: User,
+    scoped: User,
+    member: User,
+    created: list[int],
+    personas: list[Persona],
+) -> None:
+    visible_id = _create(admin, db_session, created, for_organization=True)
+    private_id = _create(scoped, db_session, created, for_organization=False)
+    _create(admin, db_session, created, for_organization=True)
+    agent = _persona(admin, db_session, personas, is_public=True)
+    link_persona(db_session, agent.id, visible_id)
+    link_persona(db_session, agent.id, private_id)
+
+    assert plugins_api.get_agent_plugin_ids(agent.id, member, db_session) == [
+        visible_id
+    ]
+    assert plugins_api.get_agent_plugin_ids(agent.id, scoped, db_session) == sorted(
+        [visible_id, private_id], key=str
+    )
+
+
+def test_agent_plugins_of_a_hidden_agent_are_not_found(
+    db_session: Session,
+    admin: User,
+    member: User,
+    created: list[int],  # noqa: ARG001
+    personas: list[Persona],
+) -> None:
+    agent = _persona(admin, db_session, personas, is_public=False)
+    assert (
+        _status(lambda: plugins_api.get_agent_plugin_ids(agent.id, member, db_session))
+        == 404
     )
 
 

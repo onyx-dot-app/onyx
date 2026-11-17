@@ -138,8 +138,9 @@ keeps one that another client saved, and pinning a built-in tool releases it.
 `lib/tools/hooks.ts:useToolConfiguration` reads them from the chat-session detail
 (`tool_options`, held in the chat session store). The composer keeps built-in
 tool states by tool id and plugin states by plugin id. The plugins are the
-agent's (`lib/plugins/hooks.ts:useAgentChatPlugins`): persona detail `plugins`,
-or for the default agent each plugin of `GET /integrations`. A failed read
+agent's (`lib/plugins/hooks.ts:useAgentPluginIds`): `GET /plugins/agents/{id}`
+(`integrations/plugin_settings.py:agent_plugin_ids`) returns the plugins that
+chat tool construction reads (`integrations/policy.py:agent_plugin_settings`). A failed read
 leaves the list null, not empty, so the composer never sends an allow-list
 that leaves out every plugin. The agent viewer passes its own agent id, and
 the composer reads and saves that agent's plugins. A switch in
