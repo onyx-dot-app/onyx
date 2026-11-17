@@ -504,7 +504,6 @@ def fail_stale_targeted_reindex_jobs(db_session: Session) -> None:
                     "Targeted reindex did not start or finish before its deadline."
                 )
                 attempt.time_finished = func.now()
-                attempt.time_updated = func.now()
         job.status = IndexingStatus.FAILED
         job.completed_at = func.now()
     db_session.commit()

@@ -41,8 +41,6 @@ from shared_configs.contextvars import get_current_tenant_id
 if TYPE_CHECKING:
     from onyx.background.indexing.run_targeted_reindex import CCPairReindexResult
 
-_TARGETED_REINDEX_SOFT_TIME_LIMIT = TARGETED_REINDEX_TIMEOUT
-_TARGETED_REINDEX_TIME_LIMIT = _TARGETED_REINDEX_SOFT_TIME_LIMIT + 60
 _CANCELED_MSG = "Canceled by a user."
 
 
@@ -171,16 +169,15 @@ def run_targeted_reindex(
             attempt.time_started = datetime.datetime.now(datetime.timezone.utc)
         job.status = IndexingStatus.IN_PROGRESS
         db_session.commit()
+        tenant_id = get_current_tenant_id()
         # Keeps check_for_indexing, which runs the stale-job validator,
         # scheduled for this tenant while the job is open.
-        maybe_mark_tenant_active(get_current_tenant_id(), caller="targeted_reindex")
+        maybe_mark_tenant_active(tenant_id, caller="targeted_reindex")
 
         resolved_count = 0
         still_failing_count = 0
         runtime_skipped = 0
         try:
-            tenant_id = get_current_tenant_id()
-
             # 2. group targets by cc_pair (the unit of connector invocation).
             target_rows = get_targets_for_job(db_session, targeted_reindex_job_id)
             by_cc_pair = group_targets_by_cc_pair(target_rows)
@@ -241,7 +238,7 @@ def run_targeted_reindex(
                         cc_pair_id,
                     )
 
-            # The reaper can fail the job while a connector call is blocked.
+            # Do not overwrite a job that the stale-job validator failed.
             job = get_targeted_reindex_job(
                 db_session, targeted_reindex_job_id, for_update=True
             )
@@ -346,8 +343,8 @@ def run_targeted_reindex(
 
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.TARGETED_REINDEX_TASK,
-    soft_time_limit=_TARGETED_REINDEX_SOFT_TIME_LIMIT,
-    time_limit=_TARGETED_REINDEX_TIME_LIMIT,
+    soft_time_limit=TARGETED_REINDEX_TIMEOUT,
+    time_limit=TARGETED_REINDEX_TIMEOUT + 60,
     bind=True,
 )
 def targeted_reindex_task(

@@ -278,13 +278,11 @@ the error type on purpose in auth code.
    `backend/onyx/db/document.py:prepare_to_modify_documents` keeps their writes
    apart. The heartbeat check skips these attempts too; the targeted-reindex
    job owns their lifecycle. The indexing validator fails a job and its open
-   attempts if it waits over 10 minutes or runs over 30 minutes, plus a
-   five-minute grace period. It uses the attempts' actual start time. The task
-   locks the job at claim and completion, so duplicate or late workers cannot
-   revive a failed job. It also reads the job status before each pair and
-   stops when the job failed. Celery time limits do not stop thread workers.
-   Submit and claim mark the tenant active, so the work gate keeps
-   `check_for_indexing`, which runs the validator, scheduled for the tenant.
+   attempts if the job waits over 10 minutes or runs over 30 minutes, plus a
+   five-minute grace period. The task locks the job at claim and completion,
+   so a late worker cannot revive a failed job, and it stops before the next
+   pair when the job failed. Submit and claim mark the tenant active, so the
+   work gate keeps `check_for_indexing`, which runs the validator, scheduled.
    Each pair's attempt ends FAILED when every target
    of the pair failed again and SUCCESS otherwise. Each document that failed
    again gets a new error row on the attempt, and its first error stays open.
