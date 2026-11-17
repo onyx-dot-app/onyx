@@ -111,7 +111,6 @@ from onyx.server.features.integrations.models import (
     IntegrationConfigInput,
     IntegrationConfigView,
     IntegrationCreate,
-    IntegrationKindName,
     IntegrationPluginRef,
     IntegrationShape,
     IntegrationUpdate,
@@ -232,12 +231,6 @@ def _check_onyx_login(user: User, method: IntegrationAuthMethod | None) -> None:
             "Only an organization-wide action manager can send users' Onyx login "
             "to an integration.",
         )
-
-
-def _kind_name(shape: IntegrationShape) -> IntegrationKindName:
-    if shape is IntegrationShape.MCP_SERVER:
-        return IntegrationKindName.MCP_SERVER
-    return IntegrationKindName.API
 
 
 def _shape_and_preset(
@@ -1032,7 +1025,7 @@ def _admin_view(
     shape, preset_id = _shape_and_preset(integration, db_session)
     return AdminIntegration(
         id=integration.id,
-        kind=_kind_name(shape),
+        kind=integration.kind,
         shape=shape,
         name=integration.name,
         description=integration.description,
@@ -1293,7 +1286,7 @@ def _member_view(
     shape, preset_id = _shape_and_preset(integration, db_session)
     return MemberIntegration(
         id=integration.id,
-        kind=_kind_name(shape),
+        kind=integration.kind,
         shape=shape,
         name=integration.name,
         description=integration.description,
@@ -1423,7 +1416,7 @@ def agent_catalog(user: User, db_session: Session) -> list[AgentPluginOption]:
         integration_options[integration.id] = AgentIntegrationOption(
             id=integration.id,
             name=integration.name,
-            kind=_kind_name(shape),
+            kind=integration.kind,
             shape=shape,
             users_can_save_always_allow=integration.users_can_save_always_allow,
             actions=action_views(integration, db_session),

@@ -115,7 +115,7 @@ def test_create_each_shape(admin_user: DATestUser, created: list[int]) -> None:
         admin_user,
     )
     created.append(mcp.id)
-    assert mcp.kind.value == "mcp_server"
+    assert mcp.kind.value == "mcp"
 
 
 def test_basic_user_cannot_use_admin_routes(
