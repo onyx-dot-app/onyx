@@ -332,6 +332,35 @@ test("an action that asks offers Always allow", async () => {
   await waitFor(() => expect(toggle).toBeChecked());
 });
 
+test("an action that always asks shows a locked Always allow with the reason", async () => {
+  open(
+    [
+      makeMemberIntegration({
+        status: status("connected"),
+        users_can_save_always_allow: true,
+      }),
+    ],
+    {
+      "/api/action-policies/integration/1": {
+        users_can_save_always_allow: true,
+        actions: [
+          makeMemberAction({
+            key: "unspecified",
+            display_name: "Any request",
+            always_asks: true,
+          }),
+        ],
+      },
+    }
+  );
+  expect(
+    await screen.findByRole("switch", { name: "Always allow Any request" })
+  ).toHaveAttribute("aria-disabled", "true");
+  expect(
+    screen.getByText("Craft asks for approval for each of these requests.")
+  ).toBeVisible();
+});
+
 function withPlugin(
   plugin: Partial<MemberIntegration["plugins"][number]>
 ): MemberIntegration {

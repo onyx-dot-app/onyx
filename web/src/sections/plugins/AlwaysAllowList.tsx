@@ -75,14 +75,18 @@ export default function AlwaysAllowList({
             key={action.key}
             font="secondary-body"
             title={action.display_name}
-            description={action.description ?? undefined}
+            description={
+              action.always_asks
+                ? t("alwaysAsks")
+                : (action.description ?? undefined)
+            }
             padding={1}
             rightChildren={
               asks ? (
                 <InputSwitch
                   aria-label={t("switch.label", { name: action.display_name })}
                   checked={action.user_policy === "allow"}
-                  disabled={savingKey !== null}
+                  disabled={savingKey !== null || action.always_asks}
                   onCheckedChange={(checked) => void change(action, checked)}
                 />
               ) : (
