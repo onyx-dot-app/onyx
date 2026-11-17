@@ -12538,7 +12538,8 @@
         },
         "stopSubagentsButton": {
           "label": "サブエージェントを停止"
-        }
+        },
+        "questionAttachmentsHint": "エージェントの質問への回答にはファイルを含められません。回答するにはファイルを削除してください。"
       },
       "baseInputBar": {
         "input": {
@@ -12686,6 +12687,12 @@
       },
       "pendingToolApproval": {
         "toast": "先に保留中のツール呼び出しを承認または拒否してください。"
+      },
+      "pendingToolQuestion": {
+        "toast": "先にエージェントの質問に回答してください。"
+      },
+      "pendingUserInput": {
+        "toast": "先に保留中の承認リクエストまたは質問に対応してください。"
       }
     },
     "mcpApiKey": {
@@ -13137,6 +13144,9 @@
           "waitingForApproval": {
             "label": "承認を待っています"
           },
+          "waitingForAnswer": {
+            "label": "回答を待っています"
+          },
           "runningCommand": {
             "label": "コマンドを実行中"
           },
@@ -13326,6 +13336,28 @@
       },
       "toolApproval": {
         "agentRequest": "{agent} が {tool} を実行しようとしています"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {エージェントから質問があります} other {エージェントから # 件の質問があります}}",
+        "other": {
+          "placeholder": "その他: 独自の回答を入力",
+          "ariaLabel": "{header} へのその他の回答"
+        },
+        "submit": "送信",
+        "page": {
+          "progress": "質問 {current} / {total}",
+          "next": "次へ",
+          "unanswered": "{count, plural, one {送信するには質問 {numbers} に回答してください。} other {送信するには質問 {numbers} に回答してください。}}"
+        },
+        "submitError": "回答を送信できませんでした。もう一度お試しください。",
+        "record": {
+          "answered": "回答済み",
+          "answeredInChat": "チャットで回答済み",
+          "cancelled": "未回答",
+          "closed": "待機は終了しました",
+          "answer": "{header}: {answer}",
+          "optionAndNote": "{option}（{note}）"
+        }
       },
       "toolbar": {
         "dislikeButton": {

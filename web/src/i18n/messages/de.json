@@ -12538,7 +12538,8 @@
         },
         "stopSubagentsButton": {
           "label": "Unteragenten stoppen"
-        }
+        },
+        "questionAttachmentsHint": "Antworten auf die Fragen des Agenten können keine Dateien enthalten. Entfernen Sie die Dateien, um zu antworten."
       },
       "baseInputBar": {
         "input": {
@@ -12686,6 +12687,12 @@
       },
       "pendingToolApproval": {
         "toast": "Geben Sie zuerst die ausstehenden Tool-Aufrufe frei oder lehnen Sie sie ab."
+      },
+      "pendingToolQuestion": {
+        "toast": "Beantworten Sie zuerst die Fragen des Agenten."
+      },
+      "pendingUserInput": {
+        "toast": "Bearbeiten Sie zuerst die ausstehenden Genehmigungsanfragen oder Fragen."
       }
     },
     "mcpApiKey": {
@@ -13137,6 +13144,9 @@
           "waitingForApproval": {
             "label": "Wartet auf Ihre Freigabe"
           },
+          "waitingForAnswer": {
+            "label": "Wartet auf Ihre Antwort"
+          },
           "runningCommand": {
             "label": "Befehl wird ausgeführt"
           },
@@ -13326,6 +13336,28 @@
       },
       "toolApproval": {
         "agentRequest": "{agent} möchte {tool} ausführen"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {Der Agent hat eine Frage} other {Der Agent hat # Fragen}}",
+        "other": {
+          "placeholder": "Sonstiges: eigene Antwort eingeben",
+          "ariaLabel": "Andere Antwort auf {header}"
+        },
+        "submit": "Senden",
+        "page": {
+          "progress": "Frage {current} von {total}",
+          "next": "Weiter",
+          "unanswered": "{count, plural, one {Beantworte Frage {numbers}, um zu senden.} other {Beantworte die Fragen {numbers}, um zu senden.}}"
+        },
+        "submitError": "Ihre Antworten konnten nicht gesendet werden. Versuchen Sie es erneut.",
+        "record": {
+          "answered": "Beantwortet",
+          "answeredInChat": "Im Chat beantwortet",
+          "cancelled": "Nicht beantwortet",
+          "closed": "Wartet nicht mehr",
+          "answer": "{header}: {answer}",
+          "optionAndNote": "{option} ({note})"
+        }
       },
       "toolbar": {
         "dislikeButton": {

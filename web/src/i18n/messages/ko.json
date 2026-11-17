@@ -12538,7 +12538,8 @@
         },
         "stopSubagentsButton": {
           "label": "하위 에이전트 중지"
-        }
+        },
+        "questionAttachmentsHint": "에이전트의 질문에 대한 답변에는 파일을 포함할 수 없습니다. 답변하려면 파일을 제거하세요."
       },
       "baseInputBar": {
         "input": {
@@ -12686,6 +12687,12 @@
       },
       "pendingToolApproval": {
         "toast": "먼저 대기 중인 도구 호출을 승인하거나 거부하세요."
+      },
+      "pendingToolQuestion": {
+        "toast": "먼저 에이전트의 질문에 답하세요."
+      },
+      "pendingUserInput": {
+        "toast": "먼저 대기 중인 승인 요청이나 질문을 처리하세요."
       }
     },
     "mcpApiKey": {
@@ -13137,6 +13144,9 @@
           "waitingForApproval": {
             "label": "승인을 기다리는 중"
           },
+          "waitingForAnswer": {
+            "label": "답변을 기다리는 중"
+          },
           "runningCommand": {
             "label": "명령 실행 중"
           },
@@ -13326,6 +13336,28 @@
       },
       "toolApproval": {
         "agentRequest": "{agent}이(가) {tool}을(를) 실행하려고 합니다"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {에이전트의 질문이 있습니다} other {에이전트의 질문이 #개 있습니다}}",
+        "other": {
+          "placeholder": "기타: 직접 답변 입력",
+          "ariaLabel": "{header}에 대한 기타 답변"
+        },
+        "submit": "보내기",
+        "page": {
+          "progress": "질문 {current}/{total}",
+          "next": "다음",
+          "unanswered": "{count, plural, one {보내려면 질문 {numbers}에 답하세요.} other {보내려면 질문 {numbers}에 답하세요.}}"
+        },
+        "submitError": "답변을 보내지 못했습니다. 다시 시도하세요.",
+        "record": {
+          "answered": "답변함",
+          "answeredInChat": "채팅에서 답변함",
+          "cancelled": "답변하지 않음",
+          "closed": "더 이상 대기하지 않음",
+          "answer": "{header}: {answer}",
+          "optionAndNote": "{option} ({note})"
+        }
       },
       "toolbar": {
         "dislikeButton": {

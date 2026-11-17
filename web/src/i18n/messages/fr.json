@@ -12538,7 +12538,8 @@
         },
         "stopSubagentsButton": {
           "label": "Arrêter les sous-agents"
-        }
+        },
+        "questionAttachmentsHint": "Les réponses aux questions de l'agent ne peuvent pas inclure de fichiers. Retirez les fichiers pour répondre."
       },
       "baseInputBar": {
         "input": {
@@ -12686,6 +12687,12 @@
       },
       "pendingToolApproval": {
         "toast": "Approuvez ou refusez d'abord les appels d'outils en attente."
+      },
+      "pendingToolQuestion": {
+        "toast": "Répondez d'abord aux questions de l'agent."
+      },
+      "pendingUserInput": {
+        "toast": "Traitez d'abord les demandes d'approbation ou les questions en attente."
       }
     },
     "mcpApiKey": {
@@ -13137,6 +13144,9 @@
           "waitingForApproval": {
             "label": "En attente de votre approbation"
           },
+          "waitingForAnswer": {
+            "label": "En attente de votre réponse"
+          },
           "runningCommand": {
             "label": "Exécution de la commande"
           },
@@ -13326,6 +13336,28 @@
       },
       "toolApproval": {
         "agentRequest": "{agent} veut exécuter {tool}"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {L'agent a une question} other {L'agent a # questions}}",
+        "other": {
+          "placeholder": "Autre : saisissez votre propre réponse",
+          "ariaLabel": "Autre réponse pour {header}"
+        },
+        "submit": "Envoyer",
+        "page": {
+          "progress": "Question {current} sur {total}",
+          "next": "Suivant",
+          "unanswered": "{count, plural, one {Répondez à la question {numbers} pour envoyer.} other {Répondez aux questions {numbers} pour envoyer.}}"
+        },
+        "submitError": "Impossible d'envoyer vos réponses. Réessayez.",
+        "record": {
+          "answered": "Répondu",
+          "answeredInChat": "Répondu dans le chat",
+          "cancelled": "Sans réponse",
+          "closed": "N'attend plus",
+          "answer": "{header} : {answer}",
+          "optionAndNote": "{option} ({note})"
+        }
       },
       "toolbar": {
         "dislikeButton": {

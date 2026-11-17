@@ -5,13 +5,19 @@ import {
   ToolApprovalResolved,
 } from "@/app/app/services/streamingModels";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
+import type { Message } from "@/app/app/types";
 import {
+  asksUser,
   decidedStatus,
-  orderApprovalsByTurn,
+  orderRecordsByTurn,
   readToolApprovals,
+  readToolQuestions,
+  readWaitingToolRequests,
   type ToolApproval,
   toolApprovalStatus,
-  useToolApprovalUi,
+  toolQuestionStatus,
+  type ToolRequestRecord,
+  useToolRequestUi,
 } from "@/lib/chat/toolApprovals";
 import type { ApprovalStatus } from "@/lib/approvals/types";
 import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
@@ -45,6 +51,44 @@ function resolved(
   };
 }
 
+function question(questionRequestId: string, turnIndex = 1): Packet {
+  return {
+    placement: { turn_index: turnIndex, tab_index: 0 },
+    obj: {
+      type: PacketType.TOOL_QUESTION_REQUEST,
+      question_request_id: questionRequestId,
+      tool_call_id: `call-${questionRequestId}`,
+      questions: [
+        {
+          id: "scope",
+          header: "Scope",
+          question: "Which files?",
+          options: [
+            { label: "All (Recommended)", description: "Every file." },
+            { label: "Docs", description: "Only the docs." },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function answered(questionRequestId: string): Packet {
+  return {
+    placement: { turn_index: 1, tab_index: 0 },
+    obj: {
+      type: PacketType.TOOL_QUESTION_RESOLVED,
+      question_request_id: questionRequestId,
+      outcome: "answered",
+      answered_via: "card",
+      answers: [
+        { question_id: "scope", option_label: "Docs", user_note: "and tests" },
+      ],
+      message: null,
+    },
+  };
+}
+
 function stopPacket(stopReason?: StopReason): Packet {
   return {
     placement: { turn_index: 9, tab_index: 0 },
@@ -63,8 +107,9 @@ function statuses(
 }
 
 beforeEach(() =>
-  useToolApprovalUi.setState({
+  useToolRequestUi.setState({
     localStatuses: new Map(),
+    localAnswers: new Map(),
     nudge: null,
   })
 );
@@ -91,6 +136,128 @@ describe("readToolApprovals", () => {
     packets.push(resolved("a", "approved"));
     expect(readToolApprovals(packets).entries).toEqual(replayed);
     expect(replayed).toHaveLength(1);
+  });
+});
+
+describe("readToolQuestions", () => {
+  it("keeps the same read until a question packet arrives", () => {
+    const packets = [question("q")];
+    const first = readToolQuestions(packets);
+
+    packets.push(request("a"), stopPacket(StopReason.AWAITING_USER));
+    expect(readToolQuestions(packets)).toBe(first);
+    expect(first.entries[0]?.resolution).toBeNull();
+
+    packets.push(answered("q"));
+    expect(readToolQuestions(packets).entries[0]?.resolution).toMatchObject({
+      outcome: "answered",
+    });
+  });
+});
+
+describe("toolQuestionStatus", () => {
+  it("uses a local answer until the resolution arrives, then the resolution", () => {
+    const local = { kind: "closed" } as const;
+    const [waiting] = readToolQuestions([question("q")]).entries;
+    expect(toolQuestionStatus(waiting!, undefined)).toEqual({
+      kind: "pending",
+    });
+    expect(toolQuestionStatus(waiting!, local)).toBe(local);
+
+    const [ended] = readToolQuestions([question("q"), answered("q")]).entries;
+    expect(toolQuestionStatus(ended!, local)).toEqual({
+      kind: "answered",
+      answers: [
+        { question_id: "scope", option_label: "Docs", user_note: "and tests" },
+      ],
+      message: null,
+    });
+  });
+
+  it("shows a question that its run stopped as cancelled", () => {
+    const [ended] = readToolQuestions([
+      question("q"),
+      {
+        placement: { turn_index: 1, tab_index: 0 },
+        obj: {
+          type: PacketType.TOOL_QUESTION_RESOLVED,
+          question_request_id: "q",
+          outcome: "cancelled",
+        },
+      },
+    ]).entries;
+    expect(toolQuestionStatus(ended!, undefined)).toEqual({
+      kind: "cancelled",
+    });
+  });
+});
+
+describe("asksUser", () => {
+  it("finds approval requests and questions", () => {
+    expect(asksUser([stopPacket()])).toBe(false);
+    expect(asksUser([request("a")])).toBe(true);
+    expect(asksUser([question("q")])).toBe(true);
+  });
+});
+
+describe("readWaitingToolRequests", () => {
+  function message(
+    nodeId: number,
+    type: Message["type"],
+    packets: Packet[],
+    parentNodeId: number | null
+  ): Message {
+    return {
+      nodeId,
+      messageId: nodeId,
+      type,
+      message: "",
+      files: [],
+      packets,
+      toolCall: null,
+      parentNodeId,
+      latestChildNodeId: nodeId + 1,
+      childrenNodeIds: [nodeId + 1],
+    };
+  }
+
+  it("lists both kinds, oldest response first and by turn", () => {
+    const tree = new Map(
+      [
+        message(1, "user", [], null),
+        message(2, "assistant", [question("old", 3), answered("old")], 1),
+        message(3, "user", [], 2),
+        message(
+          4,
+          "assistant",
+          [question("later", 4), request("first"), answered("other")],
+          3
+        ),
+      ].map((item) => [item.nodeId, item])
+    );
+
+    expect(
+      readWaitingToolRequests(tree).map((item) =>
+        item.kind === "approval"
+          ? item.request.approval_id
+          : item.request.question_request_id
+      )
+    ).toEqual(["first", "later"]);
+  });
+});
+
+describe("forgetStatuses", () => {
+  it("drops local approval statuses and question answers by request ID", () => {
+    const ui = useToolRequestUi.getState();
+    ui.recordStatus("a", "approved");
+    ui.recordAnswer("q", { kind: "closed" });
+    ui.recordAnswer("other", { kind: "closed" });
+
+    useToolRequestUi.getState().forgetStatuses(["a", "q"]);
+
+    const state = useToolRequestUi.getState();
+    expect([...state.localStatuses.keys()]).toEqual([]);
+    expect([...state.localAnswers.keys()]).toEqual(["other"]);
   });
 });
 
@@ -169,21 +336,21 @@ describe("decidedStatus", () => {
   });
 });
 
-describe("nudgeApproval", () => {
+describe("nudgeRequest", () => {
   afterEach(() => jest.useRealTimers());
 
   it("drops a nudge that no card handled", () => {
     jest.useFakeTimers();
-    useToolApprovalUi.getState().nudgeApproval("a");
-    expect(useToolApprovalUi.getState().nudge?.approvalId).toBe("a");
+    useToolRequestUi.getState().nudgeRequest("a");
+    expect(useToolRequestUi.getState().nudge?.requestId).toBe("a");
 
     jest.advanceTimersByTime(2000);
 
-    expect(useToolApprovalUi.getState().nudge).toBeNull();
+    expect(useToolRequestUi.getState().nudge).toBeNull();
   });
 });
 
-describe("orderApprovalsByTurn", () => {
+describe("orderRecordsByTurn", () => {
   function displayGroup(turnIndex: number): GroupedPacket {
     return {
       turn_index: turnIndex,
@@ -202,7 +369,7 @@ describe("orderApprovalsByTurn", () => {
   }
 
   it("places each card after the text of its own and earlier turns", () => {
-    const entries = orderApprovalsByTurn(
+    const entries = orderRecordsByTurn(
       [displayGroup(0), displayGroup(2), displayGroup(5)],
       [approval("first", 2), approval("second", 2), approval("third", 3)]
     );
@@ -211,14 +378,37 @@ describe("orderApprovalsByTurn", () => {
       entries.map((entry) =>
         entry.kind === "display"
           ? `text-${entry.turnIndex}`
-          : entry.approval.request.approval_id
+          : entry.record.request.approval_id
       )
     ).toEqual(["text-0", "text-2", "first", "second", "third", "text-5"]);
   });
 
   it("places cards before any text when the model wrote none yet", () => {
-    const entries = orderApprovalsByTurn([displayGroup(4)], [approval("a", 1)]);
+    const entries = orderRecordsByTurn([displayGroup(4)], [approval("a", 1)]);
 
-    expect(entries.map((entry) => entry.kind)).toEqual(["approval", "display"]);
+    expect(entries.map((entry) => entry.kind)).toEqual(["record", "display"]);
+  });
+
+  it("orders approval and question records together", () => {
+    const { obj } = question("q");
+    if (obj.type !== PacketType.TOOL_QUESTION_REQUEST)
+      throw new Error("not a question");
+    const records: ToolRequestRecord[] = [
+      { kind: "approval", ...approval("a", 3) },
+      {
+        kind: "question",
+        turnIndex: 1,
+        request: obj,
+        status: { kind: "cancelled" },
+      },
+    ];
+
+    const entries = orderRecordsByTurn([displayGroup(2)], records);
+
+    expect(
+      entries.map((entry) =>
+        entry.kind === "display" ? `text-${entry.turnIndex}` : entry.record.kind
+      )
+    ).toEqual(["question", "text-2", "approval"]);
   });
 });

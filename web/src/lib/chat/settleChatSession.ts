@@ -10,10 +10,7 @@ import { mergeLatestChatPage } from "@/lib/chat/pagedSession";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 import type { Packet } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import {
-  readToolApprovals,
-  readWaitingToolApprovals,
-} from "@/lib/chat/toolApprovals";
+import { asksUser, readWaitingToolRequests } from "@/lib/chat/toolApprovals";
 import {
   CHAT_STATUS_POLL_MS,
   fetchSettledChatSession,
@@ -182,7 +179,7 @@ function mergeSavedHistory(
  * The saved copies of `answers` in `page`, by node ID, linked where the
  * answers sit in the local tree. Incognito reads saved answers only where a
  * chat that saves content must have them, such as an answer that asked for
- * approval.
+ * approval or asked questions.
  */
 function savedAnswers(
   page: BackendChatSession,
@@ -221,8 +218,8 @@ const refreshingSessions = new Map<
 /**
  * Load and follow a turn the server started while this session had no
  * reader. Incognito keeps its content locally: only its answers that hold
- * approval requests take their saved copies, which only a chat that saves
- * content has.
+ * approval requests or questions take their saved copies, which only a chat
+ * that saves content has.
  */
 export function refreshChatSession(
   sessionId: string,
@@ -260,7 +257,7 @@ export function refreshChatSession(
         // older reply outside it that still shows one was resolved
         // elsewhere: it is read again from the page that ends at it.
         const stale = new Set(
-          readWaitingToolApprovals(current.messageTree)
+          readWaitingToolRequests(current.messageTree)
             .map(({ response }) => response)
             .filter((response) => !copies.has(response.nodeId))
         );
@@ -278,8 +275,7 @@ export function refreshChatSession(
         if (!latest || !ownsRefresh()) return;
         const messageTree = new Map(latest.messageTree);
         for (const [nodeId, copy] of copies)
-          if (readToolApprovals(copy.packets).entries.length > 0)
-            messageTree.set(nodeId, copy);
+          if (asksUser(copy.packets)) messageTree.set(nodeId, copy);
         store.updateSessionData(sessionId, {
           messageTree,
           approvalsVersion: saved.approvals_version,
@@ -473,8 +469,8 @@ export async function settleChatSession({
         });
       } else {
         // Content-free history cannot close a lost stream. Confirmed idle can.
-        // Only a chat that saves content parks an answer or asks for
-        // approval, so a parked answer, and an answer that asked, take their
+        // Only a chat that saves content parks an answer or asks the user,
+        // so a parked answer, and an answer that asked, take their
         // saved copies: the answers of a lost stream, or of a named stream
         // that ended before this browser could read it.
         const lost = getLatestTurn(current.messageTree).filter(
@@ -505,8 +501,7 @@ export async function settleChatSession({
           const copy = saved.get(response.nodeId);
           if (
             copy &&
-            (copy.responseStatus === "suspended" ||
-              readToolApprovals(copy.packets).entries.length > 0)
+            (copy.responseStatus === "suspended" || asksUser(copy.packets))
           ) {
             messageTree.set(response.nodeId, copy);
             closed = true;
@@ -596,9 +591,9 @@ export function writesAnswer(
 
 /**
  * Follows a stream that the server named, such as the continuation of a
- * response after its approval decisions, from its start into its rows. A
- * stream that this browser already reads keeps its reader, and a stream
- * without rows here is not followed.
+ * response after the user's decisions or answers, from its start into its
+ * rows. A stream that this browser already reads keeps its reader, and a
+ * stream without rows here is not followed.
  */
 export function followChatStream(
   sessionId: string,
