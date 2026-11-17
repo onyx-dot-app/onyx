@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, has_permission
-from onyx.db.app_skill import built_in_app_skills_for_user
+from onyx.db.app_skill import built_in_app_skills
 from onyx.db.enums import (
     Permission,
     PermissionAuthority,
@@ -18,6 +18,7 @@ from onyx.db.persona_sharing import (
 from onyx.db.plugin_access import (
     PluginAccess,
     load_plugin_access,
+    load_user_plugin_states,
     plugin_ids_in_managed_scope,
 )
 from onyx.db.scoped_permissions import fetch_managed_group_ids
@@ -219,6 +220,9 @@ def skills_list_response_for_user(
                 skill.built_in_skill_id,
             )
             continue
+        # An app built-in the user does not get.
+        if skill.built_in_skill_id is not None and not states[skill.id].enabled:
+            continue
 
         response = skill_response_for_user(
             skill,
@@ -246,10 +250,9 @@ def skill_preview_response(
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
         app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
         if app_type is not None and definition.has_template:
-            # The app of the plugin the user runs gives the template values.
-            external_app_id = built_in_app_skills_for_user(user.id, db_session).get(
-                definition.built_in_skill_id
-            )
+            external_app_id = built_in_app_skills(
+                load_user_plugin_states([user.id], db_session), db_session
+            ).get(definition.built_in_skill_id)
             rendered = render_external_app_files(
                 db_session, external_app_id, app_type, definition.source_dir
             )

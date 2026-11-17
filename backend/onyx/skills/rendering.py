@@ -234,9 +234,7 @@ def render_external_app_files(
     how a bundled helper gets the connected account baked in rather than taking
     it as an argument it could only ever be given one value for.
 
-    ``external_app_id``: the app whose settings and policies fill the
-    templates, from the plugin the user runs (``onyx.db.app_skill``). None
-    renders unconfigured placeholders."""
+    ``external_app_id`` None renders unconfigured placeholders."""
     external_app = (
         get_external_app_by_id(db_session, external_app_id)
         if external_app_id is not None

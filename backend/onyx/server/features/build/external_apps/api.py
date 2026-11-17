@@ -299,9 +299,8 @@ def update_external_app_admin(
             None,
             users_can_manage=request.users_can_manage_policies,
         )
-    # The app renders the built-in skill of the users who run its plugins.
     affected = affected_user_ids_for_plugins(
-        plugin_ids_holding_external_app(db_session, app), db_session
+        plugin_ids_holding_external_app(db_session, app.id), db_session
     )
 
     # The database is the source of truth; sandbox files are a derived,
@@ -404,9 +403,8 @@ def delete_external_app_admin(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx and cannot be deleted.",
         )
-    # Users who run its plugins lose the built-in skill of the app.
     affected = affected_user_ids_for_plugins(
-        plugin_ids_holding_external_app(db_session, app), db_session
+        plugin_ids_holding_external_app(db_session, app.id), db_session
     )
 
     delete_external_app(db_session=db_session, external_app_id=external_app_id)

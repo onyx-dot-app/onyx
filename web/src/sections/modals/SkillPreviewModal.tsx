@@ -24,28 +24,6 @@ interface SkillPreviewModalProps {
   onClose: () => void;
 }
 
-// Message keys under `skills.modals`, not copy — the literal union keeps `t()`
-// statically checked while this stays a plain helper.
-type MetadataLabelKey = "preview.metadata.createdBy.label";
-
-interface MetadataRow {
-  labelKey: MetadataLabelKey;
-  value: string;
-}
-
-function metadataRows(preview: SkillPreview): MetadataRow[] {
-  const rows: MetadataRow[] = [];
-  if (preview.source === "builtin") {
-    rows.push({ labelKey: "preview.metadata.createdBy.label", value: "Onyx" });
-  } else if (preview.author_email) {
-    rows.push({
-      labelKey: "preview.metadata.createdBy.label",
-      value: preview.author_email,
-    });
-  }
-  return rows;
-}
-
 interface SkillPreviewContentProps extends Omit<
   SkillPreviewModalProps,
   "open"
@@ -116,6 +94,8 @@ export function SkillPreviewDetails({
   } = useSWR<SkillPreview>(swrKey, errorHandlingFetcher);
   const instructionsMarkdown =
     preview?.instructions_markdown || t("preview.noInstructions.message");
+  const createdBy =
+    preview?.source === "builtin" ? "Onyx" : preview?.author_email;
 
   return (
     <>
@@ -148,21 +128,16 @@ export function SkillPreviewDetails({
           )}
 
           <CardGrid>
-            {metadataRows(preview).map((row) => (
-              <Section
-                key={row.labelKey}
-                height="auto"
-                gap={1}
-                alignItems="stretch"
-              >
+            {createdBy && (
+              <Section height="auto" gap={1} alignItems="stretch">
                 <Text font="main-ui-action" color="text-05">
-                  {t(row.labelKey)}
+                  {t("preview.metadata.createdBy.label")}
                 </Text>
                 <Text font="main-ui-body" color="text-04">
-                  {row.value}
+                  {createdBy}
                 </Text>
               </Section>
-            ))}
+            )}
           </CardGrid>
 
           <SkillInstructionsPanel

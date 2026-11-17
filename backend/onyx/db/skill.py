@@ -56,7 +56,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 from sqlalchemy.sql.elements import KeyedColumnElement
 
 from onyx.auth.permissions import has_global_permission, has_permission
-from onyx.db.app_skill import built_in_app_skills_for_user
+from onyx.db.app_skill import built_in_app_skills
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     Permission,
@@ -258,12 +258,12 @@ class _UserSkillSelection(BaseModel):
     (``onyx.db.plugin_access``). Only skills that can run take part in the
     name order, with the names of the user's built-in skills reserved."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     states: dict[UUID, UserPluginState]
     # Plugins that lose a skill name (``order_skill_names``).
     hidden: frozenset[UUID]
-    # The built-in app skills the user gets (``onyx.db.app_skill``).
+    built_ins: list[RuntimeSkill]
     built_in_app_skills: dict[str, int]
 
     def enabled(self, skill_id: UUID) -> bool:
@@ -303,8 +303,8 @@ def _user_skill_selection(
     """``left_out``: plugins that cannot run, such as versions the push just
     found invalid."""
     loaded = load_user_plugin_states([user.id], db_session)
-    built_in_app_skills = built_in_app_skills_for_user(user.id, db_session, loaded)
-    built_in_skills = _runtime_built_in_skills(user, built_in_app_skills, db_session)
+    app_skills = built_in_app_skills(loaded, db_session)
+    built_ins = _runtime_built_in_skills(user, app_skills, db_session)
     states = {
         state.plugin_id: (
             state.model_copy(update={"can_run": False})
@@ -317,9 +317,10 @@ def _user_skill_selection(
         states=states,
         hidden=order_skill_names(
             states.values(),
-            reserved_names={skill.name for skill in built_in_skills},
+            reserved_names={skill.name for skill in built_ins},
         ),
-        built_in_app_skills=built_in_app_skills,
+        built_ins=built_ins,
+        built_in_app_skills=app_skills,
     )
 
 
@@ -363,16 +364,6 @@ def _skill_select_for_management_policy(
 ) -> Select[tuple[Skill]]:
     stmt = _skill_select_with_eager_load(order_by_name=order_by_name)
     if policy == SkillManagementPolicy.VIEW:
-        # An app built-in shows only to a user who gets it.
-        stmt = stmt.where(
-            or_(
-                Skill.built_in_skill_id.is_(None),
-                Skill.built_in_skill_id.notin_(list(EXTERNAL_APP_SKILL_ID_TO_APP_TYPE)),
-                Skill.built_in_skill_id.in_(
-                    list(built_in_app_skills_for_user(user.id, db_session))
-                ),
-            )
-        )
         if has_global_permission(user, Permission.MANAGE_PLUGINS):
             return stmt
         stmt = stmt.where(skill_visible_to_user(user))
@@ -451,10 +442,10 @@ def list_skills(
 
 
 def _runtime_built_in_skills(
-    user: User, built_in_app_skills: Mapping[str, int], db_session: Session
+    user: User, app_skills: Mapping[str, int], db_session: Session
 ) -> list[RuntimeSkill]:
     """The built-in skills the user gets: visible and available. An app
-    built-in only when it is in ``built_in_app_skills``."""
+    built-in only when it is in ``app_skills``."""
     runtime: list[RuntimeSkill] = []
     for skill in db_session.scalars(
         _exclude_unavailable_built_in_skills(
@@ -467,14 +458,14 @@ def _runtime_built_in_skills(
         built_in_skill_id = skill.built_in_skill_id or ""
         if (
             built_in_skill_id in EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
-            and built_in_skill_id not in built_in_app_skills
+            and built_in_skill_id not in app_skills
         ):
             continue
         runtime.append(
             RuntimeSkill(
                 skill=skill,
                 name=skill.name,
-                external_app_id=built_in_app_skills.get(built_in_skill_id),
+                external_app_id=app_skills.get(built_in_skill_id),
             )
         )
     return runtime
@@ -490,9 +481,6 @@ def list_runtime_skills_for_user(
     the custom skills the name order keeps, by ``UserPluginState.keep_key``.
     Each custom skill has the plugin version the user runs."""
     selection = _user_skill_selection(user, db_session, left_out)
-    built_ins = _runtime_built_in_skills(
-        user, selection.built_in_app_skills, db_session
-    )
     kept = sorted(selection.loaded(), key=lambda state: state.keep_key)
     skill_rows = {
         skill.id: skill
@@ -500,7 +488,7 @@ def list_runtime_skills_for_user(
             select(Skill).where(Skill.id.in_([state.plugin_id for state in kept]))
         )
     }
-    return built_ins + [
+    return selection.built_ins + [
         RuntimeSkill(
             skill=skill_rows[state.plugin_id],
             name=state.skill_names[0],
@@ -576,7 +564,18 @@ def fetch_skill(
     ).where(Skill.id == skill_id)
     if lock_for_update:
         stmt = stmt.with_for_update(of=Skill, key_share=allow_key_share)
-    return db_session.scalars(stmt).one_or_none()
+    skill = db_session.scalars(stmt).one_or_none()
+    # An app built-in shows only to a user who gets it.
+    if (
+        skill is not None
+        and skill.built_in_skill_id in EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
+        and skill.built_in_skill_id
+        not in built_in_app_skills(
+            load_user_plugin_states([user.id], db_session), db_session
+        )
+    ):
+        return None
+    return skill
 
 
 def add_new_skill__no_commit(

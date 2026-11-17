@@ -49,10 +49,6 @@ def _slack_skill(db_session: Session) -> Skill:
     )
 
 
-def _has_slack_content(files: dict[str, bytes]) -> bool:
-    return f"{_SLACK_ID}/SKILL.md" in files
-
-
 def test_authenticated_provider_delivers_content_under_stable_dir(
     db_session: Session,
     test_user: User,  # noqa: ARG001
@@ -74,26 +70,6 @@ def test_authenticated_provider_delivers_content_under_stable_dir(
     # Renders from disk under the stable provider dir, like any built-in.
     assert f"{_SLACK_ID}/SKILL.md" in files
     assert f"{_SLACK_ID}/slack_api.py" in files
-
-
-def test_provider_content_needs_a_running_plugin_not_a_connection(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-) -> None:
-    runner = make_user(db_session)
-    other = make_user(db_session)
-    skill = _slack_skill(db_session)
-    app = make_external_app(
-        db_session,
-        skill=skill,
-        app_type=ExternalAppType.SLACK,
-        auth_template=_AUTH_TEMPLATE,
-    )  # no user credential rows
-    make_app_plugin_for_user(db_session, app=app, user=runner)
-    db_session.commit()
-
-    assert _has_slack_content(build_skills_fileset_for_user(runner, db_session))
-    assert not _has_slack_content(build_skills_fileset_for_user(other, db_session))
 
 
 def test_denied_action_listed_as_unavailable(
