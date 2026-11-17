@@ -3,7 +3,7 @@
 import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { format, startOfDay, subDays } from "date-fns";
+import { startOfDay, subDays } from "date-fns";
 import useSWR from "swr";
 import {
   Button,
@@ -38,9 +38,9 @@ import {
   usageReportDownloadUrl,
 } from "@/views/admin/WorkspaceAnalyticsPage/svc";
 
-function presetPeriod(label: string, days: number): ReportPeriod {
+function presetPeriod(days: number): ReportPeriod {
   const to = startOfDay(new Date());
-  return { label, range: { from: subDays(to, days - 1), to } };
+  return { range: { from: subDays(to, days - 1), to } };
 }
 
 const PAGE_SIZE = 8;
@@ -221,10 +221,7 @@ function GenerateReportMenu({
                   }
                   const from = day < pendingStart ? day : pendingStart;
                   const to = day < pendingStart ? pendingStart : day;
-                  onGenerate({
-                    label: `${format(from, "MMM d, y")} – ${format(to, "MMM d, y")}`,
-                    range: { from, to },
-                  });
+                  onGenerate({ range: { from, to } });
                   setOpen(false);
                   reset();
                 }}
@@ -243,14 +240,14 @@ function GenerateReportMenu({
         kind: "action",
         id: `preset-${preset.days}`,
         title: preset.label,
-        onSelect: () => onGenerate(presetPeriod(preset.label, preset.days)),
+        onSelect: () => onGenerate(presetPeriod(preset.days)),
       })
     ),
     {
       kind: "action",
       id: "all-time",
       title: allTimeLabel,
-      onSelect: () => onGenerate({ label: allTimeLabel }),
+      onSelect: () => onGenerate({}),
     },
     {
       kind: "group",
