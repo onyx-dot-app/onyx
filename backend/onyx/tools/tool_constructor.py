@@ -1,4 +1,5 @@
 from collections.abc import Callable, Sequence
+from functools import partial
 from typing import cast
 from uuid import UUID
 
@@ -177,22 +178,26 @@ def _discover_user_mcp_tool_names(
 ) -> set[str]:
     try:
         headers = credentials.build_request_headers(additional_headers)
-        auth = prepare_mcp_request_auth(
-            server, credentials.connection_config_id, headers
-        )
         return {
             tool.name
             for tool in mcp_client.discover_mcp_tools(
                 server.server_url,
                 connection_headers=headers,
                 transport=server.transport or MCPTransport.STREAMABLE_HTTP,
-                auth=auth,
+                auth_factory=partial(
+                    prepare_mcp_request_auth,
+                    server,
+                    credentials.connection_config_id,
+                    headers,
+                ),
                 all_pages=True,
                 cancellation=current_cancellation(),
                 timeout_seconds=_MCP_CHAT_DISCOVERY_TIMEOUT_SECONDS,
             )
         }
     except Exception as error:
+        if mcp_client.has_unauthorized_response(error):
+            credentials.record_rejected_credentials(server.auth_performer)
         # The saved list belongs to a different credential. Do not fall back to it.
         logger.warning(
             "Skipping MCP server %s after per-user discovery failed (%s)",

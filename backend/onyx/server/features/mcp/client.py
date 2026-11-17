@@ -7,7 +7,7 @@ and handles connection initialization, session management, and protocol communic
 
 import asyncio
 import json
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from enum import Enum
 from typing import Any, Dict, TypeVar
 
@@ -191,14 +191,20 @@ def _call_mcp_client_function_sync(
     auth: OAuthClientProvider | None = None,
     cancellation: CancellationSignal | None = None,
     timeout_seconds: float | None = None,
+    auth_factory: Callable[[], Awaitable[OAuthClientProvider | None]] | None = None,
     **kwargs: Any,
 ) -> T:
-    run_client_function = _create_mcp_client_function_runner(
-        function, server_url, connection_headers, transport, auth, **kwargs
-    )
-
     async def run_with_timeout() -> T:
         async with asyncio.timeout(timeout_seconds):
+            request_auth = await auth_factory() if auth_factory is not None else auth
+            run_client_function = _create_mcp_client_function_runner(
+                function,
+                server_url,
+                connection_headers,
+                transport,
+                request_auth,
+                **kwargs,
+            )
             return await run_client_function()
 
     try:
@@ -294,6 +300,8 @@ def call_mcp_tool(
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
     cancellation: CancellationSignal | None = None,
+    *,
+    auth_factory: Callable[[], Awaitable[OAuthClientProvider | None]] | None = None,
 ) -> CallToolResult:
     """Call a tool until it completes or the caller cancels the request."""
     return _call_mcp_client_function_sync(
@@ -303,6 +311,7 @@ def call_mcp_tool(
         transport,
         auth,
         cancellation=cancellation,
+        auth_factory=auth_factory,
     )
 
 
@@ -357,6 +366,7 @@ def discover_mcp_tools(
     all_pages: bool = False,
     cancellation: CancellationSignal | None = None,
     timeout_seconds: float | None = None,
+    auth_factory: Callable[[], Awaitable[OAuthClientProvider | None]] | None = None,
 ) -> list[MCPLibTool]:
     """
     Synchronous wrapper for discovering MCP tools.
@@ -371,6 +381,7 @@ def discover_mcp_tools(
             all_pages=all_pages,
             cancellation=cancellation,
             timeout_seconds=timeout_seconds,
+            auth_factory=auth_factory,
         )
     except Exception as error:
         if has_unauthorized_response(error):

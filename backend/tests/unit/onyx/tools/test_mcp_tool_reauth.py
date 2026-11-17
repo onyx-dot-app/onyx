@@ -107,8 +107,12 @@ def test_only_rejected_user_headers_mark_reauth(
     )
     with (
         patch(f"{MODULE}.call_mcp_tool", side_effect=error),
-        patch(f"{MODULE}.get_session_with_current_tenant") as session,
-        patch(f"{MODULE}.mark_connection_config_reauth_required") as mark,
+        patch(
+            "onyx.server.features.mcp.credentials.get_session_with_current_tenant"
+        ) as session,
+        patch(
+            "onyx.server.features.mcp.credentials.mark_connection_config_reauth_required"
+        ) as mark,
         patch(f"{MODULE}.record_mcp_client_tool_outcome") as record_outcome,
     ):
         response = tool.run(

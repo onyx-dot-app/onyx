@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
 from mcp.types import Tool as MCPToolDefinition
 from sqlalchemy.orm import Session
@@ -14,11 +15,17 @@ from onyx.db.enums import (
     MCPTransport,
 )
 from onyx.db.models import MCPServer, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.interfaces import LLM
 from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.features.mcp.models import MCPAuthTemplate, MCPConnectionData
 from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
-from onyx.tools.tool_constructor import CustomToolConfig, construct_tools
+from onyx.tools.tool_constructor import (
+    CustomToolConfig,
+    _discover_user_mcp_tool_names,
+    construct_tools,
+)
 from onyx.tools.tool_implementations.search.search_tool import PersonaSearchInfo
 
 MODULE = "onyx.tools.tool_constructor"
@@ -352,3 +359,57 @@ def test_per_user_mcp_catalogs_are_isolated() -> None:
 
     assert [set(result) for result in results] == [{1}, {2}, set()]
     assert discover.call_count == len(users)
+
+
+@pytest.mark.parametrize("status", [401, 403, 500, None])
+@pytest.mark.parametrize("replaced", [False, True])
+def test_discovery_rejection_marks_only_the_failed_saved_token(
+    status: int | None, replaced: bool
+) -> None:
+    server = MCPServer(
+        id=1,
+        name="Example",
+        server_url="https://mcp.example.com/mcp",
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.PER_USER,
+        transport=MCPTransport.STREAMABLE_HTTP,
+    )
+    failed_data: MCPConnectionData = {"headers": {"Authorization": "Bearer OLD"}}
+    credentials = ResolvedMCPCredentials(
+        connection_config_id=7,
+        connection_data=failed_data,
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_template=None,
+    )
+    error: Exception = TimeoutError()
+    if status is not None:
+        error = httpx.HTTPStatusError(
+            "request failed",
+            request=httpx.Request("POST", server.server_url),
+            response=httpx.Response(status),
+        )
+    if status == 401:
+        wrapped = OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Authentication failed")
+        wrapped.__cause__ = error
+        error = wrapped
+    config = MagicMock()
+    config.config.get_value.return_value = (
+        {"headers": {"Authorization": "Bearer NEW"}} if replaced else failed_data
+    )
+    with (
+        patch("onyx.server.features.mcp.client.discover_mcp_tools", side_effect=error),
+        patch(
+            "onyx.server.features.mcp.credentials.get_session_with_current_tenant",
+            create=True,
+        ),
+        patch("onyx.db.mcp.get_connection_config_by_id", return_value=config),
+        patch("onyx.db.mcp.update_connection_config") as update,
+    ):
+        assert _discover_user_mcp_tool_names(server, credentials, None) == set()
+    if status == 401 and not replaced:
+        assert update.call_count == 1
+        assert update.call_args.args[0] == credentials.connection_config_id
+        assert update.call_args.args[2] == {**failed_data, "reauth_required": True}
+    else:
+        update.assert_not_called()
