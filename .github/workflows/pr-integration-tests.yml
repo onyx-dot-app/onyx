@@ -221,7 +221,7 @@ jobs:
           # so pytest-split runs each one across this many jobs. It balances
           # the jobs with backend/tests/integration/.test_durations; refresh
           # that file with `pytest --store-durations` after a suite changes.
-          declare -A splits=([usergroup]=2 [connector]=2 [indexing]=2 [permissions_membership]=2 [reindex_port]=3 [skills]=3)
+          declare -A splits=([usergroup]=2 [connector]=2 [indexing]=2 [permissions_membership]=2 [reindex_port]=3 [skills]=3 [llm_provider]=2 [query_history]=2)
 
           # Create JSON array with directory info
           all_dirs=""
@@ -528,6 +528,7 @@ jobs:
               --name test-runner \
               -v "$RUNNER_TEMP/pytest-retry-cache:/pytest-retry-cache" \
               --env-file deployment/docker_compose/.env \
+              -e CELERY_BEAT_SCHEDULER="${{ startsWith(matrix.test-dir.path, 'connector_job_tests/') && 'tests.integration.common_utils.beat_scheduler:ConnectorTestScheduler' || '' }}" \
               -v ${{ github.workspace }}:/workspace \
               -w /workspace/backend \
               $CLI_VOLUME \
