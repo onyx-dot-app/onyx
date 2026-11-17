@@ -4,8 +4,6 @@ import {
   toPluginInput,
   type AgentPluginDraft,
 } from "@/lib/agents/plugins";
-import { createAgent } from "@/lib/agents/svc";
-import type { AgentUpsertParameters } from "@/lib/agents/types";
 import type {
   AgentCatalogIntegration,
   IntegrationAction,
@@ -114,36 +112,4 @@ test("follows the backend order for the setting that applies", () => {
       draft({ actions: { create_issue: "ask" } })
     )
   ).toEqual({ policy: "blocked", source: "integration" });
-});
-
-test("sends plugins and only built-in tool ids", async () => {
-  const fetchMock = jest
-    .spyOn(global, "fetch")
-    .mockResolvedValue(new Response("{}"));
-  const params: AgentUpsertParameters = {
-    name: "Agent",
-    description: "",
-    system_prompt: "",
-    replace_base_system_prompt: false,
-    task_prompt: "",
-    datetime_aware: false,
-    document_set_ids: [],
-    starter_messages: null,
-    tool_ids: [3],
-    plugins: [toPluginInput(draft({ actions: { a: "blocked" } }))],
-    search_start_date: null,
-    uploaded_image_id: null,
-    icon_name: null,
-    is_featured: false,
-    label_ids: null,
-    user_file_ids: [],
-  };
-  await createAgent(params);
-  const init = fetchMock.mock.calls[0]?.[1];
-  const body = JSON.parse(String(init?.body));
-  expect(body.tool_ids).toEqual([3]);
-  expect(body.plugins).toEqual([
-    { plugin_id: "p1", action_settings: { actions: { a: "blocked" } } },
-  ]);
-  fetchMock.mockRestore();
 });

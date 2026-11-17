@@ -7,14 +7,14 @@ import { Button, InputSingleSelect, Modal, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import type {
   TaskActionSettings,
-  TaskLinkValue,
   TaskPluginView,
 } from "@/app/craft/v1/tasks/types";
+import type { LinkValue } from "@/lib/integrations/types";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 
-function isLinkValue(value: string): value is TaskLinkValue {
+function isLinkValue(value: string): value is LinkValue {
   return (
     value === "inherit" ||
     value === "allow" ||

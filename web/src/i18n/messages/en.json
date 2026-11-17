@@ -10795,8 +10795,6 @@
         "ariaLabel": "Agents Editor Page"
       },
       "plugins": {
-        "actionSetting": "Setting for {action}",
-        "add": "Add a plugin",
         "askHint": "To run this with no prompt, an admin sets it to Allow on the integration, or each user picks Always allow.",
         "askHintAdminOnly": "To run this with no prompt, an admin sets it to Allow on the integration.",
         "choice": {
@@ -10806,7 +10804,6 @@
           "description": "Applies to each action with no setting of its own, also to actions that the integration adds later.",
           "title": "Default for Other Actions"
         },
-        "defaultSetting": "Default setting for {plugin}",
         "description": "Give the agent plugins. Each action uses the integration setting unless you pick another one.",
         "effective": "{policy, select, allow {Allows} ask {Asks} other {Blocked}} ({source, select, integration {integration setting} agentDefault {agent default} other {agent setting}})",
         "empty": "No plugins with integrations are available to you.",
@@ -10818,10 +10815,25 @@
         },
         "noActions": "This integration has no actions yet.",
         "notVisible": "You cannot see the actions of this plugin. Its settings stay as they are.",
-        "openIntegration": "Open {integration} actions",
-        "remove": "Remove {plugin}",
-        "retry": "Try again",
-        "title": "Plugins"
+        "title": "Plugins",
+        "add": {
+          "placeholder": "Add a plugin"
+        },
+        "remove": {
+          "ariaLabel": "Remove {plugin}"
+        },
+        "retry": {
+          "label": "Try again"
+        },
+        "actionSetting": {
+          "label": "Setting for {action}"
+        },
+        "defaultSetting": {
+          "label": "Default setting for {plugin}"
+        },
+        "openIntegration": {
+          "label": "Open {integration} actions"
+        }
       },
       "prompts": {
         "instructions": {

@@ -147,14 +147,14 @@ afterEach(() => {
 
 test("adds a plugin from the catalog with every action inherited", async () => {
   const onChange = setup([]);
-  await screen.findByRole("combobox", { name: copy.add });
-  await pick(copy.add, "Linear plugin");
+  await screen.findByRole("combobox", { name: copy.add.placeholder });
+  await pick(copy.add.placeholder, "Linear plugin");
 
   expect(onChange).toHaveBeenLastCalledWith([draft()]);
   expect(await screen.findByText("Issues and projects")).toBeInTheDocument();
   expect(screen.getByText("List issues")).toBeInTheDocument();
   expect(screen.getByText("Create issue")).toBeInTheDocument();
-  expect(await optionsOf(copy.add)).toEqual(["Jira plugin"]);
+  expect(await optionsOf(copy.add.placeholder)).toEqual(["Jira plugin"]);
 });
 
 test("removes a plugin", async () => {

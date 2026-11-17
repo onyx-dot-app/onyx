@@ -1,6 +1,3 @@
-/**
- * The integrations API replaced these routes. No web code may call them.
- */
 import fs from "fs";
 import path from "path";
 
@@ -20,8 +17,7 @@ const REMOVED_ROUTES: readonly RegExp[] = [
   /\/api\/user-oauth-token/,
   /\/api\/action-policies\/(?!integration\/)/,
   /\/api\/admin\/tool\/status/,
-  /\/api\/admin\/mcp\/servers?\//,
-  /\/api\/admin\/mcp\/servers\b/,
+  /\/api\/admin\/mcp\/servers?\b/,
 ];
 
 function sourceFiles(dir: string): string[] {

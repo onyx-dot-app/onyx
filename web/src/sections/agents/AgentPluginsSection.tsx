@@ -12,7 +12,7 @@ import { ContentAction, Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { SvgArrowUpRight, SvgTrash } from "@opal/icons";
 import { useNavigation } from "@opal/navigation";
-import type { LinkValue } from "@/lib/agents/types";
+import type { LinkValue } from "@/lib/integrations/types";
 import {
   effectiveSetting,
   lockReason,
@@ -96,7 +96,7 @@ function ActionRow({
         fillRight
         rightChildren={
           <SettingSelect
-            label={t("actionSetting", { action: action.display_name })}
+            label={t("actionSetting.label", { action: action.display_name })}
             value={value}
             offerAllow={lock === null}
             onChange={onChange}
@@ -136,7 +136,7 @@ function ActionRow({
                 integrationDetailHref(integration.id, "actions")
               )}
             >
-              {t("openIntegration", { integration: integration.name })}
+              {t("openIntegration.label", { integration: integration.name })}
             </Button>
           )}
         </Section>
@@ -187,7 +187,7 @@ function PluginCard({
               size="sm"
               prominence="tertiary"
               icon={SvgTrash}
-              aria-label={t("remove", { plugin: draft.plugin_name })}
+              aria-label={t("remove.ariaLabel", { plugin: draft.plugin_name })}
               onClick={onRemove}
             />
           }
@@ -207,7 +207,9 @@ function PluginCard({
                 fillRight
                 rightChildren={
                   <SettingSelect
-                    label={t("defaultSetting", { plugin: draft.plugin_name })}
+                    label={t("defaultSetting.label", {
+                      plugin: draft.plugin_name,
+                    })}
                     value={draft.default}
                     offerAllow={offerDefaultAllow}
                     onChange={(value) => onChange({ ...draft, default: value })}
@@ -305,7 +307,7 @@ export default function AgentPluginsSection({
           !isLoading && !error && addable.length > 0 ? (
             <InputSingleSelect
               search
-              placeholder={t("add")}
+              placeholder={t("add.placeholder")}
               value=""
               options={addable.map((option) => ({
                 value: option.plugin_id,
@@ -324,7 +326,7 @@ export default function AgentPluginsSection({
           title={t("loadFailed")}
           rightChildren={
             <Button prominence="secondary" onClick={() => void mutate()}>
-              {t("retry")}
+              {t("retry.label")}
             </Button>
           }
         />

@@ -10795,8 +10795,6 @@
         "ariaLabel": "智能体编辑器页面"
       },
       "plugins": {
-        "actionSetting": "{action} 的设置",
-        "add": "添加插件",
         "askHint": "要在不询问的情况下运行，管理员需在集成中将其设为允许，或每位用户选择始终允许。",
         "askHintAdminOnly": "要在不询问的情况下运行，管理员需在集成中将其设为允许。",
         "choice": {
@@ -10806,7 +10804,6 @@
           "description": "适用于没有自身设置的每个操作，也适用于集成以后添加的操作。",
           "title": "其他操作的默认设置"
         },
-        "defaultSetting": "{plugin} 的默认设置",
         "description": "为智能体添加插件。除非您另选设置，否则每个操作都使用集成设置。",
         "effective": "{policy, select, allow {允许} ask {询问} other {已阻止}}（{source, select, integration {集成设置} agentDefault {智能体默认设置} other {智能体设置}}）",
         "empty": "没有可供您使用的带集成的插件。",
@@ -10818,10 +10815,25 @@
         },
         "noActions": "此集成还没有操作。",
         "notVisible": "您无法查看此插件的操作。其设置保持不变。",
-        "openIntegration": "打开 {integration} 的操作",
-        "remove": "移除 {plugin}",
-        "retry": "重试",
-        "title": "插件"
+        "title": "插件",
+        "add": {
+          "placeholder": "添加插件"
+        },
+        "remove": {
+          "ariaLabel": "移除 {plugin}"
+        },
+        "retry": {
+          "label": "重试"
+        },
+        "actionSetting": {
+          "label": "{action} 的设置"
+        },
+        "defaultSetting": {
+          "label": "{plugin} 的默认设置"
+        },
+        "openIntegration": {
+          "label": "打开 {integration} 的操作"
+        }
       },
       "prompts": {
         "instructions": {
