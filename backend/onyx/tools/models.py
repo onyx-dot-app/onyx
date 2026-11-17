@@ -217,35 +217,6 @@ class ToolOptions(BaseModel):
         return plugins
 
 
-class LegacyToolSelection(BaseModel):
-    """The old shape of ``chat_session.tool_selection`` and of the tool
-    selection of a run checkpoint. Read only; ``ToolOptions`` replaces it."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    allowed_tool_ids: list[int] | None = None
-    preferred_tool_id: int | None = None
-    internal_search_filters: BaseFilters | None = None
-
-    def to_tool_options(self, built_in_tool_ids: set[int]) -> ToolOptions:
-        """Built-in tool ids carry over; an old MCP or custom tool id is
-        ignored."""
-        return ToolOptions(
-            allowed=None
-            if self.allowed_tool_ids is None
-            else [
-                CapabilityEntry(tool_id=tool_id)
-                for tool_id in self.allowed_tool_ids
-                if tool_id in built_in_tool_ids
-            ],
-            preferred=CapabilityEntry(tool_id=self.preferred_tool_id)
-            if self.preferred_tool_id is not None
-            and self.preferred_tool_id in built_in_tool_ids
-            else None,
-            internal_search_filters=self.internal_search_filters,
-        )
-
-
 class PluginAction(BaseModel):
     """The integration action that a chat tool calls, with the plugins of
     the turn that hold its integration."""

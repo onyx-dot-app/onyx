@@ -1,6 +1,5 @@
 """The tool options saved on a chat, checked against Postgres."""
 
-from collections.abc import Generator
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -23,7 +22,6 @@ from onyx.db.models import (
     ChatMessage,
     ChatResponseCheckpoint,
     ChatSession,
-    Tool,
     User,
 )
 from onyx.db.tools import get_builtin_tool
@@ -38,7 +36,6 @@ from onyx.server.query_and_chat.chat_backend import (
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.models import (
     CapabilityEntry,
-    LegacyToolSelection,
     PluginEntry,
     ToolOptions,
 )
@@ -314,55 +311,8 @@ def test_a_deep_research_send_leaves_the_saved_options_alone(
     assert _stored(db_session, chat_session) == SAVED
 
 
-@pytest.fixture
-def custom_tool_id(db_session: Session) -> Generator[int, None, None]:
-    """A tool row that is not built in, as an old MCP or custom tool was."""
-    tool = Tool(name=f"old-custom-{uuid4().hex[:8]}", description="Old tool")
-    db_session.add(tool)
-    db_session.commit()
-    tool_id = tool.id
-    yield tool_id
-    db_session.rollback()
-    db_session.delete(db_session.get(Tool, tool_id))
-    db_session.commit()
-
-
-def test_an_old_tool_selection_keeps_its_built_in_tools(
-    db_session: Session, owner: User, custom_tool_id: int
-) -> None:
-    """A chat saved before tool options keeps the built-in tools of its old
-    selection; an old MCP or custom tool id is ignored."""
-    search_id = get_builtin_tool(db_session, SearchTool).id
-    chat_session = _chat(db_session, owner)
-    filters = BaseFilters(source_type=None, tags=[])
-    chat_session.tool_selection = LegacyToolSelection(
-        allowed_tool_ids=[search_id, custom_tool_id],
-        preferred_tool_id=custom_tool_id,
-        internal_search_filters=filters,
-    )
-    db_session.commit()
-    expected = ToolOptions(
-        allowed=[CapabilityEntry(tool_id=search_id)],
-        internal_search_filters=filters,
-    )
-
-    detail = get_chat_session(chat_session.id, user=owner, db_session=db_session)
-    assert detail.tool_options == expected
-
-    chat_session.tool_selection = LegacyToolSelection(preferred_tool_id=search_id)
-    db_session.commit()
-    detail = get_chat_session(chat_session.id, user=owner, db_session=db_session)
-    assert detail.tool_options == ToolOptions(
-        preferred=CapabilityEntry(tool_id=search_id)
-    )
-
-
-@pytest.mark.parametrize("saved_before_tool_options", [False, True])
 def test_a_parked_response_continues_with_the_tool_options_of_its_checkpoint(
-    db_session: Session,
-    owner: User,
-    custom_tool_id: int,
-    saved_before_tool_options: bool,
+    db_session: Session, owner: User
 ) -> None:
     search_id = get_builtin_tool(db_session, SearchTool).id
     chat_session = _chat(db_session, owner)
@@ -375,38 +325,10 @@ def test_a_parked_response_continues_with_the_tool_options_of_its_checkpoint(
     db_session.add(response)
     db_session.flush()
     options = ToolOptions(allowed=[CapabilityEntry(tool_id=search_id)])
-    state: dict[str, JsonValue] = (
-        {"tool_selection": {"allowed_tool_ids": [search_id, custom_tool_id]}}
-        if saved_before_tool_options
-        else {"tool_options": options.model_dump(mode="json")}
-    )
+    state: dict[str, JsonValue] = {"tool_options": options.model_dump(mode="json")}
     db_session.add(ChatResponseCheckpoint(chat_message_id=response.id, state=state))
     db_session.commit()
 
     _model, parked_options = parked_response_settings(db_session, response.id)
 
     assert parked_options == options
-
-
-def test_a_save_moves_an_old_selection_to_the_options(
-    db_session: Session, owner: User
-) -> None:
-    """A partial save on a chat with only an old selection keeps the old
-    built-in tools, writes tool_options and leaves the old column alone."""
-    search_id = get_builtin_tool(db_session, SearchTool).id
-    chat_session = _chat(db_session, owner)
-    legacy = LegacyToolSelection(allowed_tool_ids=[search_id])
-    chat_session.tool_selection = legacy
-    db_session.commit()
-
-    filters = BaseFilters(source_type=None, tags=[])
-    update_chat_tool_options(
-        chat_session.id, ToolOptions(internal_search_filters=filters), owner, db_session
-    )
-
-    assert _stored(db_session, chat_session) == ToolOptions(
-        allowed=[CapabilityEntry(tool_id=search_id)], internal_search_filters=filters
-    )
-    stored = db_session.get(ChatSession, chat_session.id)
-    assert stored is not None
-    assert stored.tool_selection == legacy

@@ -156,10 +156,9 @@ means the agent's tools) has one writer, the
 (`db/chat.py:set_chat_session_tool_options__no_commit`). It checks
 document-set access, saves only the fields the body sets, and stores nothing
 for a chat whose record mode keeps no content. The chat-session detail returns
-the options to their owner. A chat with no `tool_options` reads the old
-`chat_session.tool_selection` column (`db/chat.py:resolve_tool_options`):
-built-in tool ids carry over and other ids are ignored. Nothing writes the old
-column. The chat's model is `current_alternate_model`,
+the options to their owner. The integration tables migration (`730bce2814a0`)
+filled `tool_options` from the old `chat_session.tool_selection` column and
+dropped that column. The chat's model is `current_alternate_model`,
 which the web writes through `PUT /chat/update-chat-session-model` on each
 send. A turn that resumes a suspended response, and an agent host that
 resumes parked agent runs, use the model, tools and search filters that the

@@ -59,7 +59,6 @@ from onyx.db.models import (
     ChatSessionSharedStatus,
     FileRecord,
     Persona,
-    Tool,
     ToolCall,
     User,
 )
@@ -77,7 +76,7 @@ from onyx.server.query_and_chat.models import (
     ChatMessageDetail,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
-from onyx.tools.models import LegacyToolSelection, PluginEntry, ToolOptions
+from onyx.tools.models import PluginEntry, ToolOptions
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -1035,21 +1034,6 @@ MAX_TOOL_OPTIONS_ITEMS = 1000
 MAX_TOOL_OPTIONS_BYTES = 64 * 1024
 
 
-def resolve_tool_options(
-    db_session: Session,
-    options: ToolOptions | None,
-    legacy: LegacyToolSelection | None,
-) -> ToolOptions | None:
-    """Saved tool options; a chat or run saved before tool options existed
-    gives its old tool selection instead."""
-    if options is not None or legacy is None:
-        return options
-    built_in_tool_ids = set(
-        db_session.scalars(select(Tool.id).where(Tool.in_code_tool_id.is_not(None)))
-    )
-    return legacy.to_tool_options(built_in_tool_ids)
-
-
 def _raise_tool_options_too_large() -> NoReturn:
     raise OnyxError(
         OnyxErrorCode.PAYLOAD_TOO_LARGE,
@@ -1100,12 +1084,7 @@ def set_chat_session_tool_options__no_commit(
         return saved
     # Merge under the row lock, so a concurrent save keeps the fields it set.
     db_session.refresh(chat_session, with_for_update=True)
-    current = (
-        resolve_tool_options(
-            db_session, chat_session.tool_options, chat_session.tool_selection
-        )
-        or ToolOptions()
-    )
+    current = chat_session.tool_options or ToolOptions()
     merged = ToolOptions.model_validate(current.model_dump() | changes)
     if len(merged.model_dump_json().encode()) > MAX_TOOL_OPTIONS_BYTES:
         _raise_tool_options_too_large()

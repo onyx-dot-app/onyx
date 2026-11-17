@@ -604,9 +604,10 @@ it.
     resume publishes its stream. A resume turn runs on the model, tools and
     search filters that the response ran with: its checkpoint saves the model
     configuration and the request's tool options
-    (`ResponseCheckpoint.model_configuration_id`, `.tool_options`; a
-    checkpoint saved before tool options has `.tool_selection`, read with the
-    same carry-over as the chat column), and `prepare_chat_turn` uses them
+    (`ResponseCheckpoint.model_configuration_id`, `.tool_options`; the
+    integration tables migration removes `tool_selection` from older
+    checkpoints, so they resume with the tools of their agent), and
+    `prepare_chat_turn` uses them
     instead of the chat's current model and saved options. It checks
     document-set access again. An agent host uses those of the first parked
     agent that it resumes. A restored run whose saved preferred tool matches

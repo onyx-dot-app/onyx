@@ -174,7 +174,6 @@ from onyx.skills.models import SkillOmission
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
-    LegacyToolSelection,
     LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
@@ -3584,10 +3583,6 @@ class ChatSession(Base):
 
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
-    )
-    # The old tool selection: read only, for a chat with no tool_options.
-    tool_selection: Mapped[LegacyToolSelection | None] = mapped_column(
-        PydanticType(LegacyToolSelection), nullable=True
     )
     # The tools, plugins and search filters the user last picked. Turns the
     # server starts use them; NULL means the agent's tools.

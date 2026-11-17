@@ -14,7 +14,6 @@ from pydantic import (
     TypeAdapter,
     field_serializer,
     field_validator,
-    model_validator,
 )
 
 from onyx.agents.models import (
@@ -79,7 +78,6 @@ from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoad
 from onyx.tools.models import (
     ChatFile,
     GeneratedImage,
-    LegacyToolSelection,
     PersonaToolConfiguration,
     SearchToolUsage,
     ToolCallInfo,
@@ -882,20 +880,6 @@ class ChatFeatureState(BaseModel):
     # Cells whose observations wait for the user's input.
     code_cells: list[SavedCodeCell] = Field(default_factory=list)
 
-    @model_validator(mode="before")
-    @classmethod
-    def read_preferred_tool_id(cls, data: Any) -> Any:
-        # A run saved before tool options names its preferred tool by id.
-        if isinstance(data, dict) and data.get("preferred_tool_id") is not None:
-            return {
-                **data,
-                "preferred_tool": {
-                    "type": "capability",
-                    "tool_id": data["preferred_tool_id"],
-                },
-            }
-        return data
-
 
 class ReservedChatResponse(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -1023,8 +1007,6 @@ class ResponseCheckpoint(BaseModel):
     model_configuration_id: int | None = None
     temperature: float | None = None
     tool_options: ToolOptions | None = None
-    # Set only on a checkpoint saved before tool_options existed.
-    tool_selection: LegacyToolSelection | None = None
 
 
 class SavedCheckpoint(BaseModel):

@@ -102,7 +102,6 @@ from onyx.db.chat import (
     get_incognito_session_ids_for_user,
     get_owned_chat_session,
     get_selected_branch,
-    resolve_tool_options,
     set_as_latest_chat_message,
     set_chat_session_tool_options__no_commit,
     set_preferred_response,
@@ -643,9 +642,7 @@ def get_chat_session(
         incognito=chat_session.incognito_record_mode is not None,
         has_older_messages=has_older_messages,
         # Only the owner's composer reads the options; a shared view shows none.
-        tool_options=resolve_tool_options(
-            db_session, chat_session.tool_options, chat_session.tool_selection
-        )
+        tool_options=chat_session.tool_options
         if user_id is not None and chat_session.user_id == user_id
         else None,
     )

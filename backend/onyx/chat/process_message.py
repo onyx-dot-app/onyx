@@ -83,7 +83,6 @@ from onyx.db.chat import (
     load_message_branch,
     reserve_chat_response_ids,
     reserve_stream_id,
-    resolve_tool_options,
     set_response_model_names__no_commit,
 )
 from onyx.db.chat_checkpoint import parked_response_settings
@@ -362,9 +361,7 @@ def prepare_chat_turn(
             )
             # Other turns that the server starts use the chat's saved tool
             # options.
-            saved_options = parked_options or resolve_tool_options(
-                db_session, chat_session.tool_options, chat_session.tool_selection
-            )
+            saved_options = parked_options or chat_session.tool_options
             if server_started and saved_options is not None:
                 new_msg_req = new_msg_req.model_copy(
                     update={"tool_options": saved_options}
