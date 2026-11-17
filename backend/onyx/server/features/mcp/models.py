@@ -4,11 +4,6 @@ from enum import Enum
 from typing import Annotated, Any, List, Literal, NotRequired, Optional, TypedDict
 from uuid import UUID
 
-from mcp.shared.auth import (
-    OAuthMetadata,
-    ProtectedResourceMetadata,
-)
-from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
 from onyx.db.enums import (
@@ -20,9 +15,7 @@ from onyx.db.enums import (
     MCPTransport,
 )
 from onyx.oauth.models import (
-    OAuthConfigurationFingerprint,
     PKCECodeVerifier,
-    SafeOAuthReturnPath,
 )
 from onyx.oauth.protocol import validate_authorization_params
 
@@ -60,10 +53,6 @@ def apply_auto_substitutions(value: str, *, user_email: str) -> str:
     for key, replacement in subst.items():
         value = value.replace(f"{{{key}}}", replacement)
     return value
-
-
-def contains_mcp_placeholder(value: str) -> bool:
-    return _PLACEHOLDER_RE.search(value) is not None
 
 
 # Headers that must never be sourced from stored MCP credentials or request
@@ -420,93 +409,6 @@ class MCPToolCreateRequest(BaseModel):
         return self
 
 
-class MCPSetupRequest(MCPToolCreateRequest):
-    """Connection settings validated before a new or edited server is saved."""
-
-    available_in_craft: bool | None = None
-    enable_chat: bool | None = None
-    users_can_manage_policies: bool | None = None
-    action_policies: dict[str, ActionPolicy] | None = None
-
-
-class MCPToolUpdateRequest(BaseModel):
-    server_id: int = Field(..., description="ID of the MCP server")
-    name: Optional[str] = Field(None, description="Updated name of the MCP server")
-    description: Optional[str] = Field(
-        None, description="Updated description of the MCP server"
-    )
-    selected_tools: Optional[List[str]] = Field(
-        None, description="List of selected tool names to create"
-    )
-
-
-class MCPServerSimpleCreateRequest(BaseModel):
-    available_in_craft: bool = Field(
-        default=False, description="Whether the Craft agent may use this server"
-    )
-    name: str = Field(..., description="Name of the MCP server")
-    description: Optional[str] = Field(
-        None, description="Description of the MCP server"
-    )
-    server_url: str = Field(..., description="URL of the MCP server")
-    is_public: bool = Field(
-        default=True,
-        description=(
-            "If True, any user may add this server's tools to their agents. "
-            "If False, access is limited to `users` / `groups`."
-        ),
-    )
-    groups: list[int] = Field(
-        default_factory=list,
-        description="User group IDs allowed to use this server when not public",
-    )
-    users: list[UUID] = Field(
-        default_factory=list,
-        description="User IDs allowed to use this server when not public",
-    )
-
-
-class MCPServerSimpleUpdateRequest(BaseModel):
-    users_can_manage_policies: bool | None = Field(
-        default=None,
-        description="Whether users may manage action policies. None leaves this unchanged.",
-    )
-    name: Optional[str] = Field(None, description="Name of the MCP server")
-    description: Optional[str] = Field(
-        None, description="Description of the MCP server"
-    )
-    server_url: Optional[str] = Field(None, description="URL of the MCP server")
-    action_policies: Optional[dict[str, ActionPolicy]] = Field(
-        default=None,
-        description=(
-            "Sparse per-tool approval overrides for chat and Craft keyed by tool name; "
-            "replaces the stored set. Unlisted tools use their default: ALWAYS "
-            "when the server marks them read-only, else ASK. "
-            "None leaves existing overrides unchanged."
-        ),
-    )
-    # None leaves the server's existing access unchanged.
-    is_public: Optional[bool] = Field(
-        default=None,
-        description=(
-            "If True, any user may add this server's tools to their agents. "
-            "If False, access is limited to `users` / `groups`. None leaves "
-            "existing access unchanged."
-        ),
-    )
-    groups: Optional[list[int]] = Field(
-        default=None,
-        description="User group IDs allowed to use this server when not public",
-    )
-    users: Optional[list[UUID]] = Field(
-        default=None,
-        description="User IDs allowed to use this server when not public",
-    )
-    available_in_craft: Optional[bool] = Field(
-        None, description="Whether the Craft agent may use this server"
-    )
-
-
 class MCPToolResponse(BaseModel):
     id: int
     name: str
@@ -589,39 +491,6 @@ MCPSetupProbeResult = Annotated[
 ]
 
 
-class MCPUserOAuthConnectRequest(BaseModel):
-    server_id: int = Field(..., description="ID of the MCP server")
-    return_path: SafeOAuthReturnPath = Field(
-        ..., description="Path to redirect to after callback"
-    )
-    include_resource_param: bool = Field(..., description="Include resource parameter")
-    force_reauthentication: bool = Field(
-        default=False,
-        description="Ignore stored OAuth tokens and start a fresh authorization flow",
-    )
-    oauth_client_id: str | None = Field(
-        None, description="OAuth client ID (optional for CIMD or DCR)"
-    )
-    oauth_client_secret: str | None = Field(
-        None, description="OAuth client secret (optional for CIMD or DCR)"
-    )
-    oauth_client_id_changed: bool = Field(
-        default=False,
-        description=(
-            "True if `oauth_client_id` was edited by the user. When False, "
-            "the stored value is reused and the request value is ignored. "
-            "Defaults to False for backward compatibility."
-        ),
-    )
-    oauth_client_secret_changed: bool = Field(
-        default=False,
-        description=(
-            "True if `oauth_client_secret` was edited by the user. When False, "
-            "the stored value is reused and the request value is ignored."
-        ),
-    )
-
-
 class MCPUserOAuthConnectResponse(BaseModel):
     server_id: int
     status: Literal["authorization_required", "already_authenticated"]
@@ -664,37 +533,6 @@ class MCPServerConnection(BaseModel):
     oauth_token_endpoint: str | None
 
 
-class MCPOAuthServerSnapshot(BaseModel):
-    server_url: str
-    auth_type: MCPAuthenticationType
-    auth_performer: MCPAuthenticationPerformer
-    provider_mode: MCPOAuthProviderMode
-    # Defaulted so attempts persisted before this field existed still complete.
-    cimd_enabled: bool = True
-    transport: MCPTransport | None
-    authorization_endpoint: str | None
-    token_endpoint: str | None
-    scopes: list[str] | None
-    additional_authorization_parameters: dict[str, Any] | None
-
-
-class MCPOAuthFlowState(BaseModel):
-    server_id: int
-    connection_config_id: int
-    return_path: SafeOAuthReturnPath
-    code_verifier: PKCECodeVerifier
-    redirect_uri: AnyUrl
-    server_snapshot: MCPOAuthServerSnapshot
-    connection_headers_fingerprint: OAuthConfigurationFingerprint
-    client_information_fingerprint: OAuthConfigurationFingerprint
-    protected_resource_metadata: ProtectedResourceMetadata | None = None
-    oauth_metadata: OAuthMetadata | None = None
-    authorization_server_url: str | None = None
-    protocol_version: str | None = None
-    scope: str | None = None
-    resource: AnyUrl | None = None
-
-
 class MCPOAuthCallbackRequest(BaseModel):
     """Request payload for completing OAuth flow (authorization code exchange)."""
 
@@ -702,14 +540,6 @@ class MCPOAuthCallbackRequest(BaseModel):
     state: Optional[str] = Field(
         None, description="State parameter for CSRF protection"
     )
-
-
-class MCPOAuthCallbackResponse(BaseModel):
-    success: bool
-    message: str
-    server_id: int
-    server_name: str
-    redirect_url: str
 
 
 class MCPOAuthClientMetadataDocument(BaseModel):
@@ -752,27 +582,6 @@ class MCPApiKeyRequest(BaseModel):
     transport: str = Field(..., description="Transport type")
 
 
-class MCPUserCredentialsRequest(BaseModel):
-    """Enhanced request for template-based user credentials"""
-
-    server_id: int = Field(..., description="ID of the MCP server")
-    credentials: dict[str, str] = Field(
-        ..., description="User-provided credentials (api_key, custom_token, etc.)"
-    )
-    transport: str = Field(..., description="Transport type")
-
-
-class MCPApiKeyResponse(BaseModel):
-    success: bool
-    message: str
-    server_id: int
-    server_name: str
-    authenticated: bool
-    validation_tested: bool = Field(
-        default=False, description="Whether credentials were tested against MCP server"
-    )
-
-
 class MCPUserPreferencesUpdateRequest(BaseModel):
     enabled_in_chat: bool | None = None
     enabled_in_craft: bool | None = None
@@ -784,11 +593,6 @@ class MCPUserPreferencesUpdateRequest(BaseModel):
         if any(value is None for value in self.model_dump(exclude_unset=True).values()):
             raise ValueError("Preferences must be booleans")
         return self
-
-
-class MCPUserPreferencesResponse(BaseModel):
-    enabled_in_chat: bool
-    enabled_in_craft: bool
 
 
 class MCPServer(BaseModel):
@@ -861,49 +665,4 @@ class MCPServer(BaseModel):
 
 
 class MCPServersResponse(BaseModel):
-    assistant_id: str | None = None
-    mcp_servers: List[MCPServer]
-
-
-class MCPServerCreateResponse(BaseModel):
-    """Response for creating multiple MCP tools"""
-
-    server_id: int
-    server_name: str
-    server_url: str
-    auth_type: str
-    auth_performer: Optional[str]
-    oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
-    oauth_cimd_enabled: bool = True
-    oauth_authorization_endpoint: Optional[str] = None
-    oauth_token_endpoint: Optional[str] = None
-    oauth_scopes_override: Optional[list[str]] = None
-    oauth_additional_auth_params: Optional[dict[str, str]] = None
-    # True when the server needs no per-user auth (auth_type NONE or an admin
-    # supplies shared credentials), so it is usable right after creation.
-    no_user_authentication_required: bool
-
-
-class MCPServerUpdateResponse(BaseModel):
-    """Response for updating multiple MCP tools"""
-
-    server_id: int
-    server_name: str
-    updated_tools: int
-
-
-class MCPToolListResponse(BaseModel):
-    server_id: int
-    server_name: str
-    server_url: str
-    tools: list[MCPLibTool]
-
-
-class MCPSetupConnectedResponse(BaseModel):
-    status: Literal["connected"] = "connected"
-    server: MCPServer
-
-
-class MCPSetupAuthorizationResponse(BaseModel):
-    status: Literal["authorization_required"] = "authorization_required"
-    authorization_url: str
+    mcp_servers: list[MCPServer]

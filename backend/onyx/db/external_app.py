@@ -1,66 +1,29 @@
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from onyx.db.action_policy import (
-    get_or_create_gated_app_id,
-    replace_workspace_action_policies,
-)
 from onyx.db.enums import (
-    ActionPolicy,
     ExternalAppType,
-    GatedAppKind,
     SkillSharePermission,
 )
 from onyx.db.models import (
     ExternalApp,
     ExternalAppUserCredential,
-    Integration,
     Skill,
 )
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.registry import PROVIDERS, get_provider_for_app
+from onyx.external_apps.providers.registry import PROVIDERS
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.utils.encryption import is_masked_credential
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 
 logger = setup_logger()
-
-
-def validate_auth_template(
-    auth_template: dict[str, Any],
-    organization_credentials: dict[str, Any],
-) -> None:
-    """Validate an app's header credential template before persisting.
-
-    An empty template is allowed (e.g. an allowlist-only app that injects no
-    headers). When headers are present, each name and value must be a non-empty
-    string, as must every organization-credential key. Raises
-    ``OnyxError(INVALID_INPUT)`` on violation.
-    """
-    for key, value in auth_template.items():
-        if not isinstance(key, str) or not key.strip():
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "auth_template header names must be non-empty strings.",
-            )
-        if not isinstance(value, str) or not value.strip():
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"auth_template value for header '{key}' must be a non-empty string.",
-            )
-    for key in organization_credentials:
-        if not isinstance(key, str) or not key.strip():
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "organization_credentials keys must be non-empty strings.",
-            )
 
 
 def resolve_masked_credentials(
@@ -160,10 +123,9 @@ def create_external_app(
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, str],
-    action_policies: dict[str, ActionPolicy] | None = None,
     enabled: bool = True,
 ) -> ExternalApp:
-    """Create an external-app gateway row and its policy state.
+    """Create an external-app gateway row.
 
     Flush only; callers own the transaction. Built-in provisioning separately
     makes its system skill row with ``associate_built_in_skill__no_commit``.
@@ -186,9 +148,7 @@ def create_external_app(
         organization_credentials=organization_credentials,
     )
     db_session.add(app)
-    # Policies key off the gated_app identity row, which needs app.id.
     db_session.flush()
-    _write_policies__no_commit(db_session, app, action_policies or {})
     return app
 
 
@@ -244,110 +204,6 @@ def associate_built_in_skill__no_commit(
     skill.public_permission = SkillSharePermission.VIEWER
     db_session.flush()
     return skill
-
-
-def update_external_app(
-    db_session: Session,
-    external_app_id: int,
-    app_type: ExternalAppType,
-    enabled: bool | UnsetType = UNSET,
-    name: str | UnsetType = UNSET,
-    upstream_url_patterns: list[str] | UnsetType = UNSET,
-    auth_template: dict[str, Any] | UnsetType = UNSET,
-    organization_credentials: dict[str, str] | UnsetType = UNSET,
-    action_policies: dict[str, ActionPolicy] | UnsetType = UNSET,
-) -> ExternalApp:
-    """Partial-update external-app gateway state (flush only).
-
-    Patch fields default to ``UNSET`` (left untouched); pass a value to set one.
-    ``app_type`` is required and immutable — a mismatch raises, blocking
-    cross-editing built-in vs custom.
-
-    Raises ``OnyxError(NOT_FOUND)`` if absent, or ``INVALID_INPUT`` on app_type
-    mismatch.
-    """
-    app = get_external_app_by_id(db_session, external_app_id)
-    if app is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"External app with id {external_app_id} not found.",
-        )
-
-    # app_type is immutable. Changing it would silently rebind the skill's
-    # definition source
-    if app.app_type != app_type:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"app_type is immutable; cannot change from "
-            f"'{app.app_type.value}' to '{app_type.value}'.",
-        )
-
-    if is_set(enabled):
-        app.enabled = enabled
-        # The runtime reads the switch from the integration of the app.
-        db_session.execute(
-            update(Integration)
-            .where(Integration.external_app_id == app.id)
-            .values(enabled=enabled)
-        )
-    if is_set(name):
-        app.name = name
-
-    if is_set(upstream_url_patterns):
-        app.upstream_url_patterns = upstream_url_patterns
-    if is_set(auth_template):
-        app.auth_template = auth_template
-    if is_set(upstream_url_patterns) or is_set(organization_credentials):
-        resolved_credentials = (
-            resolve_masked_credentials(
-                organization_credentials, app.organization_credentials
-            )
-            if is_set(organization_credentials)
-            else app.organization_credentials.get_value(apply_mask=False)
-        )
-        provider = get_provider_for_app(app)
-        if provider is not None:
-            app.upstream_url_patterns = provider.resolve_upstream_url_patterns(
-                resolved_credentials, list(app.upstream_url_patterns)
-            )
-        if is_set(organization_credentials):
-            app.organization_credentials = resolved_credentials  # ty: ignore[invalid-assignment]
-
-    if is_set(action_policies):
-        _write_policies__no_commit(db_session, app, action_policies)
-
-    db_session.flush()
-    return app
-
-
-def set_external_app_organization_credentials(
-    db_session: Session,
-    app: ExternalApp,
-    organization_credentials: dict[str, str],
-) -> None:
-    """Replace an app's organization credentials (flush only — the caller
-    commits). Used by the Onyx-managed provisioning/rotation path — deliberately
-    touches nothing else (skill preferences, policies, gateway config are left
-    untouched)."""
-    # EncryptedJson column accepts a plain dict and encrypts on write (same
-    # assignment shape as update_external_app's masked-credential restore).
-    app.organization_credentials = organization_credentials  # ty: ignore[invalid-assignment]
-    db_session.flush()
-
-
-def _write_policies__no_commit(
-    db_session: Session,
-    app: ExternalApp,
-    policies: dict[str, ActionPolicy],
-) -> None:
-    """Replace ``app``'s action policy rows with exactly ``policies``. No
-    commit — runs inside the caller's transaction. ``action_id`` validation is
-    the caller's responsibility.
-    """
-    gated_app_id = get_or_create_gated_app_id(
-        db_session, GatedAppKind.EXTERNAL_APP, app.id
-    )
-    replace_workspace_action_policies(db_session, gated_app_id, policies)
 
 
 def delete_external_app(

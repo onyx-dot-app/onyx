@@ -72,16 +72,6 @@ def uses_cloud_scope(app_type: ExternalAppType) -> bool:
     return MULTI_TENANT and get_onyx_managed_provider(app_type) is not None
 
 
-def get_provider_or_raise(app: ExternalApp) -> ExternalAppProvider:
-    provider = get_provider_for_app(app)
-    if provider is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"No provider configured for app '{app.name}' (app_type={app.app_type}).",
-        )
-    return provider
-
-
 def _descriptor_for(
     provider_cls: type[ExternalAppProvider],
 ) -> BuiltInExternalAppDescriptor:
@@ -170,12 +160,6 @@ def action_policy_views(
         )
         for endpoint in get_endpoint_catalog(app_type)
     ]
-
-
-def fetch_available_built_in_apps() -> list[BuiltInExternalAppDescriptor]:
-    """All registered built-in providers as Pydantic descriptors. The
-    admin UI fetches this list to render the Manage Apps page."""
-    return [_descriptor_for(cls) for cls in _PROVIDER_CLASSES]
 
 
 def fetch_onyx_managed_built_in_apps() -> list[BuiltInExternalAppDescriptor]:

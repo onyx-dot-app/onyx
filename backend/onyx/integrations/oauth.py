@@ -105,7 +105,7 @@ def integration_oauth_redirect_uri(
     return _MANUAL_REDIRECT_URI
 
 
-def _sign_in_host(integration: Integration, db_session: Session) -> str | None:
+def sign_in_host(integration: Integration, db_session: Session) -> str | None:
     if integration.kind is IntegrationKind.MCP:
         mcp_server = get_mcp_server_for_integration(integration.id, db_session)
         return mcp_server.server_url if mcp_server is not None else None
@@ -120,7 +120,7 @@ def _configuration_fingerprint(
     db_session: Session,
 ) -> str:
     settings = sign_in_settings_for(
-        integration, oauth_client, _sign_in_host(integration, db_session)
+        integration, oauth_client, sign_in_host(integration, db_session)
     )
     if oauth_client.provider_mode is IntegrationOAuthProviderMode.DISCOVERY:
         # Registration writes the client id during the sign-in. The client

@@ -592,6 +592,61 @@ def create_skill_plugin__no_commit(
     return plugin
 
 
+def create_integration_plugin__no_commit(
+    *,
+    integration_id: int,
+    name: str,
+    description: str,
+    author: User,
+    for_organization: bool,
+    db_session: Session,
+) -> Plugin:
+    """Add a plugin that holds one integration: version 1 with no files, in
+    the Organization library (published) or in the author's "My uploads". A
+    used name takes the next free name."""
+    marketplace_id = (
+        get_or_create_organization_library__no_commit(db_session)
+        if for_organization
+        else get_or_create_user_uploads__no_commit(author.id, db_session)
+    )
+    plugin_id = uuid4()
+    version_id = uuid4()
+    try:
+        with db_session.begin_nested():
+            plugin = Plugin(
+                id=plugin_id,
+                name=free_plugin_name(marketplace_id, name[:64], db_session),
+                description=description,
+                marketplace_id=marketplace_id,
+                author_user_id=author.id,
+                current_version_id=version_id,
+                published_version_id=version_id if for_organization else None,
+            )
+            db_session.add(plugin)
+            db_session.flush()
+            db_session.add(
+                PluginVersion(
+                    id=version_id,
+                    plugin_id=plugin_id,
+                    version_number=1,
+                    created_by_user_id=author.id,
+                    created_by_email=author.email,
+                )
+            )
+            db_session.add(
+                Plugin__Integration(plugin_id=plugin_id, integration_id=integration_id)
+            )
+            db_session.flush()
+    except IntegrityError as exc:
+        if not is_unique_violation(exc, _PLUGIN_NAME_INDEX):
+            raise
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"Another plugin named '{name}' was saved at the same time. Try again.",
+        ) from exc
+    return plugin
+
+
 def lock_skill_plugin__no_commit(skill: Skill, db_session: Session) -> Plugin:
     """Lock and return the plugin of a custom skill. The caller holds the skill
     row lock, or the skill is new in this transaction.
@@ -838,12 +893,17 @@ def publish_or_request_review__no_commit(
     actor: User | None,
     on_name_clash: NameClashAction,
     db_session: Session,
+    approver: User | None = None,
 ) -> None:
     """Publish a version of a locked plugin, or make it the pending request
     (replacing any older one) when the Publishing setting requires review for
     ``actor``; OFF raises. The one place the setting applies. ``actor`` None
     is a system or approved publish and always publishes. An organization-wide
-    plugin manager always publishes. A publish clears the pending request."""
+    plugin manager always publishes. A publish clears the pending request.
+
+    A plugin that holds an integration publishes only for an organization-wide
+    action manager: ``actor``, or ``approver`` when an admin approves a
+    request."""
     if actor is not None and not has_global_permission(
         actor, Permission.MANAGE_PLUGINS
     ):
@@ -859,6 +919,22 @@ def publish_or_request_review__no_commit(
             plugin.pending_version_id = version_id
             db_session.flush()
             return
+    publisher = actor or approver
+    if (
+        publisher is not None
+        and not has_global_permission(publisher, Permission.MANAGE_ACTIONS)
+        and db_session.scalar(
+            select(Plugin__Integration.integration_id)
+            .where(Plugin__Integration.plugin_id == plugin.id)
+            .limit(1)
+        )
+        is not None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only an organization-wide action manager can publish a plugin "
+            "that holds an integration.",
+        )
     if skill is not None and skill.public_permission is None:
         skill.public_permission = SkillSharePermission.VIEWER
         db_session.flush()
