@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
-    ActionPolicy,
     ExternalAppType,
     IntegrationActionPolicyValue,
     IntegrationAuthMethod,
@@ -231,8 +230,8 @@ def _hold_in_default_plugin(db: Session, integration_id: int) -> None:
 @pytest.fixture(scope="module")
 def slack_external_app() -> None:
     """
-    Seeds Slack directly with an ``ASK`` policy on
-    ``slack.messages.write`` so the gate matcher claims ``chat.postMessage``.
+    Seeds Slack directly so the gate matcher claims ``chat.postMessage``
+    (``slack.messages.write``, which asks by the catalog default).
 
     Unlike the cloud migration that seeds built-in apps per tenant (when
     ``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS=true``), this skips real credentials
@@ -249,7 +248,6 @@ def slack_external_app() -> None:
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
                 organization_credentials={"access_token": "fake-test-token"},
-                action_policies={"slack.messages.write": ActionPolicy.ASK},
             )
             integration = Integration(
                 kind=IntegrationKind.API,

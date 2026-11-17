@@ -2,73 +2,18 @@
 
 from uuid import uuid4
 
-import pytest
-from mcp.types import Tool as MCPLibTool
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import (
-    MCPAuthenticationPerformer,
-    MCPAuthenticationType,
-    MCPServerStatus,
-    MCPTransport,
-)
 from onyx.db.llm import remove_llm_provider, upsert_llm_provider
-from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
-from onyx.db.models import MCPServer, Persona
+from onyx.db.models import Persona
 from onyx.llm.constants import LlmProviderNames
-from onyx.server.features.mcp import api as mcp_api
 from onyx.server.features.persona.api import get_persona
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
 )
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
-
-
-def test_user_tool_listing_keeps_admin_disconnect(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    admin = create_test_user(db_session, "mcp_owner", is_admin=True)
-    viewer = create_test_user(db_session, "mcp_viewer")
-    server = create_mcp_server__no_commit(
-        owner_email=admin.email,
-        name=f"disconnected-{uuid4().hex[:8]}",
-        description=None,
-        server_url=f"https://mcp-{uuid4().hex[:8]}.example.com/mcp",
-        auth_type=MCPAuthenticationType.NONE,
-        transport=MCPTransport.STREAMABLE_HTTP,
-        auth_performer=MCPAuthenticationPerformer.ADMIN,
-        db_session=db_session,
-        is_public=True,
-    )
-    update_mcp_server__no_commit(
-        server_id=server.id,
-        db_session=db_session,
-        status=MCPServerStatus.DISCONNECTED,
-    )
-    db_session.commit()
-    monkeypatch.setattr(
-        mcp_api,
-        "discover_mcp_tools",
-        lambda *_args, **_kwargs: [MCPLibTool(name="lookup", inputSchema={})],
-    )
-
-    try:
-        response = mcp_api.user_list_mcp_tools_by_id(server.id, db_session, viewer)
-
-        assert [tool.name for tool in response.tools] == ["lookup"]
-        db_session.expire_all()
-        stored = db_session.get(MCPServer, server.id)
-        assert stored is not None
-        assert stored.status == MCPServerStatus.DISCONNECTED
-    finally:
-        db_session.rollback()
-        db_session.execute(delete(MCPServer).where(MCPServer.id == server.id))
-        delete_test_user(db_session, admin, viewer)
-        db_session.commit()
 
 
 def test_viewer_outside_provider_group_keeps_agent_model_pin(

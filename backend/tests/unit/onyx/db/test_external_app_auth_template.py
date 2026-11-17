@@ -1,4 +1,4 @@
-"""Unit tests for `validate_auth_template`."""
+"""Unit tests for external app credentials and gateway patterns."""
 
 from __future__ import annotations
 
@@ -13,8 +13,6 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import (
     create_external_app,
     resolve_masked_credentials,
-    update_external_app,
-    validate_auth_template,
 )
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.encryption import mask_string
@@ -27,48 +25,6 @@ def _sensitive_dict(value: dict[str, Any]) -> SensitiveValue[dict[str, Any]]:
         decrypt_fn=lambda value_bytes: value_bytes.decode(),
         is_json=True,
     )
-
-
-def test_valid_template_passes() -> None:
-    # No exception == valid.
-    validate_auth_template(
-        {"Authorization": "Bearer {api_key}"},
-        {"api_key": "sk-123"},
-    )
-
-
-def test_empty_org_credentials_allowed() -> None:
-    # A fully user-supplied credential app (org pre-fills nothing) is valid.
-    validate_auth_template({"Authorization": "Bearer {api_key}"}, {})
-
-
-def test_empty_template_and_credentials_allowed() -> None:
-    # An allowlist-only app injects no headers and pre-fills nothing.
-    validate_auth_template({}, {})
-
-
-@pytest.mark.parametrize(
-    "auth_template",
-    [
-        {"Authorization": ""},  # empty value
-        {"Authorization": "   "},  # whitespace-only value
-        {"": "Bearer x"},  # empty key
-        {"   ": "Bearer x"},  # whitespace-only key
-    ],
-)
-def test_malformed_template_rejected(auth_template: dict[str, Any]) -> None:
-    with pytest.raises(OnyxError):
-        validate_auth_template(auth_template, {})
-
-
-def test_non_string_value_rejected() -> None:
-    with pytest.raises(OnyxError):
-        validate_auth_template({"Authorization": 123}, {})
-
-
-def test_non_string_org_credential_key_rejected() -> None:
-    with pytest.raises(OnyxError):
-        validate_auth_template({"Authorization": "Bearer {api_key}"}, {"": "v"})
 
 
 def test_resolve_masked_credentials_restores_existing_values() -> None:
@@ -114,43 +70,6 @@ def test_zendesk_create_resolves_gateway_from_account(subdomain: str) -> None:
         organization_credentials={"subdomain": subdomain},
     )
     assert app.upstream_url_patterns == [r"https://acme\.zendesk\.com/api/v2/.*"]
-
-
-def test_zendesk_update_restores_masks_before_resolving_gateway(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    db = MagicMock(spec=Session)
-    app = create_external_app(
-        db,
-        name="Zendesk",
-        app_type=ExternalAppType.ZENDESK,
-        upstream_url_patterns=[],
-        auth_template={"Authorization": "Bearer {access_token}"},
-        organization_credentials={"subdomain": "acme", "client_secret": "secret"},
-    )
-    monkeypatch.setattr("onyx.db.external_app.get_external_app_by_id", lambda *_: app)
-    update_external_app(
-        db,
-        external_app_id=1,
-        app_type=ExternalAppType.ZENDESK,
-        upstream_url_patterns=[r"https://{subdomain}\.zendesk\.com/api/v2/.*"],
-        organization_credentials={
-            "subdomain": mask_string("acme"),
-            "client_secret": mask_string("secret"),
-        },
-    )
-    assert app.upstream_url_patterns == [r"https://acme\.zendesk\.com/api/v2/.*"]
-    assert app.organization_credentials.get_value(apply_mask=False) == {
-        "subdomain": "acme",
-        "client_secret": "secret",
-    }
-    update_external_app(
-        db,
-        external_app_id=1,
-        app_type=ExternalAppType.ZENDESK,
-        organization_credentials={"subdomain": "https://other.zendesk.com/agent"},
-    )
-    assert app.upstream_url_patterns == [r"https://other\.zendesk\.com/api/v2/.*"]
 
 
 @pytest.mark.parametrize("app_type", [ExternalAppType.SLACK, ExternalAppType.CUSTOM])

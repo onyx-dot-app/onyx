@@ -24,12 +24,9 @@ from onyx.tools.models import ToolOptions
 from onyx.tools.tool_name import normalize_external_tool_name
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.integration_rows import (
-    add_openapi_integration,
-    delete_integration,
-    link_persona,
-)
+from tests.integration.common_utils.integration_rows import link_persona
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.integration import IntegrationManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.mock_llm import (
     MockLLMManager,
@@ -499,33 +496,38 @@ def test_turns_the_server_starts_use_the_saved_tool_options(
     actions saved when it starts, not the tools of the last sent message."""
     nonce = uuid4().hex
     enabled, blocked = "Queued with the tool", "Queued without the tool"
-    created = client.post(
-        f"{API_SERVER_URL}/admin/tool/custom",
-        json={
+    created = IntegrationManager.create(
+        {
+            "for_organization": True,
             "name": f"options-{nonce}",
             "description": "Ping a service",
-            "definition": {
-                "openapi": "3.0.0",
-                "info": {"title": "Ping", "description": "Ping", "version": "1.0.0"},
-                "servers": [{"url": "https://example.com"}],
-                "paths": {
-                    "/ping": {
-                        "get": {
-                            "summary": "Ping the service",
-                            "operationId": "ping",
-                            "responses": {"200": {"description": "ok"}},
+            "auth_mode": "none",
+            "auth_method": None,
+            "config": {
+                "shape": "openapi",
+                "openapi_spec": {
+                    "openapi": "3.0.0",
+                    "info": {
+                        "title": "Ping",
+                        "description": "Ping",
+                        "version": "1.0.0",
+                    },
+                    "servers": [{"url": "https://example.com"}],
+                    "paths": {
+                        "/ping": {
+                            "get": {
+                                "summary": "Ping the service",
+                                "operationId": "ping",
+                                "responses": {"200": {"description": "ok"}},
+                            }
                         }
-                    }
+                    },
                 },
             },
-            "custom_headers": [],
-            "passthrough_auth": False,
         },
-        headers=admin_user.headers,
+        admin_user,
     )
-    created.raise_for_status()
-    tool_id = int(created.json()["id"])
-    integration_id, plugin_id = add_openapi_integration(tool_id, f"options-{nonce}")
+    integration_id, plugin_id = created.id, created.plugins[0].plugin_id
     tool_name = normalize_external_tool_name(f"custom__{integration_id}__ping")
     persona = PersonaManager.create(tool_ids=[], user_performing_action=admin_user)
     link_persona(persona.id, plugin_id, {})
@@ -579,10 +581,7 @@ def test_turns_the_server_starts_use_the_saved_tool_options(
             _wait_until(answered, f"the queued turn answers: {answer}")
     finally:
         assert PersonaManager.delete(persona, user_performing_action=admin_user)
-        client.delete(
-            f"{API_SERVER_URL}/admin/tool/custom/{tool_id}", headers=admin_user.headers
-        ).raise_for_status()
-        delete_integration(integration_id, plugin_id)
+        IntegrationManager.delete(integration_id, admin_user).raise_for_status()
     # Code mode defers the tool: a program finds it with `tool_search`.
     assert [
         tool_name in request.tools

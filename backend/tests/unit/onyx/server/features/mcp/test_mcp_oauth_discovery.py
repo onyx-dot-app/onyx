@@ -162,12 +162,12 @@ def test_discovery_checks_server_management_before_network(
     from onyx.error_handling.exceptions import OnyxError
     from onyx.server.features.mcp import api
 
-    server = MagicMock()
+    server = MagicMock(integration_id=7)
     monkeypatch.setattr(api, "get_session_with_current_tenant", MagicMock())
     monkeypatch.setattr(api, "get_mcp_server_by_id", lambda *_: server)
     denied = MagicMock(side_effect=OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS))
     discover = AsyncMock()
-    monkeypatch.setattr(api, "_ensure_mcp_server_owner_or_admin", denied)
+    monkeypatch.setattr(api, "get_manageable_integration", denied)
     monkeypatch.setattr(api, "discover_oauth_capabilities", discover)
     with pytest.raises(OnyxError):
         asyncio.run(
@@ -312,7 +312,11 @@ def test_discovery_route_authorizes_in_worker_and_closes_session_before_http(
     from sqlalchemy.orm import Session
 
     from onyx.db.models import MCPServer, User
-    from onyx.error_handling.exceptions import register_onyx_exception_handlers
+    from onyx.error_handling.error_codes import OnyxErrorCode
+    from onyx.error_handling.exceptions import (
+        OnyxError,
+        register_onyx_exception_handlers,
+    )
     from onyx.server.features.mcp import api
     from onyx.server.features.mcp.models import MCPOAuthDiscoveryResponse
 
@@ -348,13 +352,14 @@ def test_discovery_route_authorizes_in_worker_and_closes_session_before_http(
         return cast(
             MCPServer,
             SimpleNamespace(
-                server_url="https://example.com/mcp", name="MCP", owner=user.email
+                server_url="https://example.com/mcp", name="MCP", integration_id=7
             ),
         )
 
-    def can_manage(_user: User, _server: MCPServer) -> bool:
+    def can_manage(_user: User, _integration_id: int, _db: Session) -> None:
         worker_threads.append(threading.get_ident())
-        return outcome != "forbidden"
+        if outcome == "forbidden":
+            raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS, "no")
 
     async def discover(url: str) -> MCPOAuthDiscoveryResponse:
         assert url == "https://example.com/mcp"
@@ -364,7 +369,7 @@ def test_discovery_route_authorizes_in_worker_and_closes_session_before_http(
 
     monkeypatch.setattr(api, "get_session_with_current_tenant", session)
     monkeypatch.setattr(api, "get_mcp_server_by_id", lookup)
-    monkeypatch.setattr(api, "can_manage_mcp_server", can_manage)
+    monkeypatch.setattr(api, "get_manageable_integration", can_manage)
     monkeypatch.setattr(api, "discover_oauth_capabilities", discover)
     with TestClient(app) as client:
         response = client.post("/admin/mcp/oauth/discover", json={"server_id": 42})
