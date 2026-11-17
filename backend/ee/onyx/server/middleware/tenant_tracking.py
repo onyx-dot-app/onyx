@@ -3,7 +3,7 @@ import logging
 import sys
 from contextvars import Token
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -182,7 +182,7 @@ async def _get_tenant_id_from_request(
             )
 
             if tenant_id and not is_valid_schema_name(tenant_id):
-                raise HTTPException(status_code=400, detail="Invalid tenant ID format")
+                raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid tenant ID format")
 
         # Check for anonymous user cookie
         anonymous_user_cookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME)
@@ -196,8 +196,8 @@ async def _get_tenant_id_from_request(
                 )
 
                 if not tenant_id or not is_valid_schema_name(tenant_id):
-                    raise HTTPException(
-                        status_code=400, detail="Invalid tenant ID format"
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_REQUEST, "Invalid tenant ID format"
                     )
 
                 return tenant_id
@@ -217,7 +217,7 @@ async def _get_tenant_id_from_request(
 
     except Exception as e:
         logger.error("Unexpected error in _get_tenant_id_from_request: %s", str(e))
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Internal server error")
 
     finally:
         # Don't `return` while an exception is propagating — it would swallow it

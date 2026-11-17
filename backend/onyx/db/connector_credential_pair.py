@@ -4,7 +4,6 @@ from enum import Enum
 from typing import TypeVarTuple
 from uuid import UUID
 
-from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy import Select, and_, delete, desc, false, func, or_, select, update
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
@@ -1203,17 +1202,14 @@ def add_credential_to_connector(
         )
 
     if connector is None:
-        raise HTTPException(status_code=404, detail="Connector does not exist")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Connector does not exist")
 
     if credential is None:
         error_msg = (
             f"Credential {credential_id} does not exist or does not belong to user"
         )
         logger.error(error_msg)
-        raise HTTPException(
-            status_code=401,
-            detail=error_msg,
-        )
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, error_msg)
     # The creating user becomes the pair's creator.
     ensure_personal_has_reader(access_type, credential.user_id, user.id)
 
@@ -1303,12 +1299,12 @@ def remove_credential_from_connector(
     )
 
     if connector is None:
-        raise HTTPException(status_code=404, detail="Connector does not exist")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Connector does not exist")
 
     if credential is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Credential does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Credential does not exist or does not belong to user",
         )
 
     association = get_connector_credential_pair_for_user(

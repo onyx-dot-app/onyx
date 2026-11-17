@@ -168,11 +168,11 @@ def create_session(
     except ValueError as e:
         logger.exception("Session creation failed")
         db_session.rollback()
-        raise HTTPException(status_code=429, detail=str(e))
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, str(e))
     except Exception as e:
         db_session.rollback()
         logger.error("Session creation failed: %s", e)
-        raise HTTPException(status_code=500, detail=f"Session creation failed: {e}")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Session creation failed: {e}")
 
 
 @router.get("/{session_id}", response_model=DetailedSessionResponse)
@@ -193,7 +193,7 @@ def get_session_details(
     session = session_manager.get_session(session_id, user.id)
 
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     # Get the user's sandbox to include in response
     sandbox = get_sandbox_by_user_id(db_session, user.id)
@@ -294,7 +294,7 @@ def generate_session_name(
     generated_name = session_manager.generate_session_name(session_id, user.id)
 
     if generated_name is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     return SessionNameGenerateResponse(name=generated_name)
 
@@ -312,7 +312,7 @@ def update_session_name(
     session = session_manager.update_session_name(session_id, user.id, request.name)
 
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     # Get the user's sandbox to include in response
     sandbox = get_sandbox_by_user_id(db_session, user.id)
@@ -331,7 +331,7 @@ def set_session_public(
         session_id, user.id, request.sharing_scope, db_session
     )
     if not updated:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
     return SetSessionSharingResponse(
         session_id=str(session_id),
         sharing_scope=updated.sharing_scope,
@@ -356,7 +356,7 @@ def delete_session(
     try:
         success = session_manager.delete_session(session_id, user.id)
         if not success:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
         db_session.commit()
         # Only after the commit: a rolled-back delete keeps the session's save.
         if sandbox_id is not None:
@@ -371,10 +371,7 @@ def delete_session(
         # Sandbox termination failed - rollback to preserve session
         db_session.rollback()
         logger.error("Failed to delete session %s: %s", session_id, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete session: {e}",
-        )
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Failed to delete session: {e}")
 
     return Response(status_code=204)
 
@@ -390,11 +387,11 @@ def restore_session(
     session-flow lock; returns 409 if another flow holds it."""
     session = get_build_session(session_id, user.id, db_session)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     sandbox = get_sandbox_by_user_id(db_session, user.id)
     if not sandbox:
-        raise HTTPException(status_code=404, detail="Sandbox not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Sandbox not found")
 
     sandbox_manager = get_sandbox_manager()
     tenant_id = get_current_tenant_id()
@@ -405,10 +402,7 @@ def restore_session(
     # 409 instead of blocking — the frontend retries.
     acquired = lock.acquire(blocking=False)
     if not acquired:
-        raise HTTPException(
-            status_code=409,
-            detail="Restore already in progress",
-        )
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Restore already in progress")
 
     try:
         sandbox = ensure_session_ready(db_session, sandbox_manager, session, user)
@@ -423,10 +417,7 @@ def restore_session(
         raise
     except Exception as e:
         logger.error("Failed to restore session %s: %s", session_id, e, exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to restore session: {e}",
-        )
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Failed to restore session: {e}")
     finally:
         if lock.owned():
             lock.release()
@@ -538,7 +529,7 @@ def list_artifacts(
 
     artifacts = session_manager.list_artifacts(session_id, user_id)
     if artifacts is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     return artifacts
 
@@ -642,15 +633,15 @@ def list_directory(
     except ValueError as e:
         error_message = str(e)
         if "path traversal" in error_message.lower():
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
         elif "not found" in error_message.lower():
-            raise HTTPException(status_code=404, detail="Directory not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Directory not found")
         elif "not a directory" in error_message.lower():
-            raise HTTPException(status_code=400, detail="Path is not a directory")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Path is not a directory")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if listing is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     return listing
 
@@ -674,13 +665,13 @@ def download_artifact(
             "path traversal" in error_message.lower()
             or "access denied" in error_message.lower()
         ):
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
         elif "directory" in error_message.lower():
-            raise HTTPException(status_code=400, detail="Cannot download directory")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Cannot download directory")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if result is None:
-        raise HTTPException(status_code=404, detail="Artifact not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Artifact not found")
 
     content, mime_type, filename = result
 
@@ -711,11 +702,11 @@ def export_docx(
             "path traversal" in error_message.lower()
             or "access denied" in error_message.lower()
         ):
-            raise HTTPException(status_code=403, detail="Access denied")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if result is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
     docx_bytes, filename = result
 
@@ -746,11 +737,11 @@ def get_pptx_preview(
             "path traversal" in error_message.lower()
             or "access denied" in error_message.lower()
         ):
-            raise HTTPException(status_code=403, detail="Access denied")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if result is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     return PptxPreviewResponse(**result)
 
@@ -803,7 +794,7 @@ def get_webapp_info(
     webapp_info = session_manager.get_webapp_info(session_id, user_id)
 
     if webapp_info is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     return WebappInfo(**webapp_info)
 
@@ -825,7 +816,7 @@ def download_webapp(
     result = session_manager.download_webapp_zip(session_id, user_id)
 
     if result is None:
-        raise HTTPException(status_code=404, detail="Webapp not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Webapp not found")
 
     zip_bytes, filename = result
 
@@ -858,11 +849,11 @@ def download_directory(
     except ValueError as e:
         error_message = str(e)
         if "path traversal" in error_message.lower():
-            raise HTTPException(status_code=403, detail="Access denied")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if result is None:
-        raise HTTPException(status_code=404, detail="Directory not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Directory not found")
 
     zip_bytes, filename = result
 
@@ -890,7 +881,7 @@ def upload_file_endpoint(
     session_manager = SessionManager(db_session)
 
     if not file.filename:
-        raise HTTPException(status_code=400, detail="File has no filename")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "File has no filename")
 
     # Read file content (use sync file interface)
     content = file.file.read()
@@ -898,7 +889,7 @@ def upload_file_endpoint(
     # Validate file size (extension/type are intentionally unrestricted)
     is_valid, error = validate_file(len(content))
     if not is_valid:
-        raise HTTPException(status_code=400, detail=error)
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error)
 
     # Sanitize filename
     safe_filename = sanitize_filename(file.filename)
@@ -913,12 +904,12 @@ def upload_file_endpoint(
             )
     except UploadLimitExceededError as e:
         # Return 429 for limit exceeded errors
-        raise HTTPException(status_code=429, detail=str(e))
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, str(e))
     except ValueError as e:
         error_message = str(e)
         if "not found" in error_message.lower():
-            raise HTTPException(status_code=404, detail=error_message)
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, error_message)
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     return UploadResponse(
         filename=safe_filename,
@@ -949,15 +940,15 @@ def delete_file_endpoint(
     except ValueError as e:
         error_message = str(e)
         if "path traversal" in error_message.lower():
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
         elif "not found" in error_message.lower():
-            raise HTTPException(status_code=404, detail=error_message)
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, error_message)
         elif "directory" in error_message.lower():
-            raise HTTPException(status_code=400, detail="Cannot delete directory")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Cannot delete directory")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if not deleted:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
     return Response(status_code=204)
 

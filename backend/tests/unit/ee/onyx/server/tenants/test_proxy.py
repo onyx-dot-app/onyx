@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from fastapi import HTTPException
 
 from ee.onyx.server.license.models import LicensePayload, PlanType
 from ee.onyx.server.tenants.proxy import (
@@ -18,6 +17,7 @@ from ee.onyx.server.tenants.proxy import (
     proxy_license_fetch,
     verify_license_auth,
 )
+from onyx.error_handling.exceptions import OnyxError
 
 
 def make_license_payload(
@@ -57,7 +57,7 @@ class TestExtractLicenseFromHeader:
 
     def test_missing_header_required(self) -> None:
         """Test that missing header raises 401 when required."""
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             _extract_license_from_header(None, required=True)
         assert exc_info.value.status_code == 401
 
@@ -68,7 +68,7 @@ class TestExtractLicenseFromHeader:
 
     def test_non_bearer_required(self) -> None:
         """Test that non-Bearer auth raises 401 when required."""
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             _extract_license_from_header("Basic sometoken", required=True)
         assert exc_info.value.status_code == 401
 
@@ -79,7 +79,7 @@ class TestExtractLicenseFromHeader:
 
     def test_empty_string_required(self) -> None:
         """Test that empty string raises 401 when required."""
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             _extract_license_from_header("", required=True)
         assert exc_info.value.status_code == 401
 
@@ -108,7 +108,7 @@ class TestVerifyLicenseAuth:
         ) as mock_verify:
             mock_verify.side_effect = ValueError("Invalid signature")
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 verify_license_auth("bad_license", allow_expired=False)
 
             assert exc_info.value.status_code == 401
@@ -127,7 +127,7 @@ class TestVerifyLicenseAuth:
             mock_verify.return_value = payload
             mock_valid.return_value = False
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 verify_license_auth("expired_license", allow_expired=False)
 
             assert exc_info.value.status_code == 401
@@ -175,7 +175,7 @@ class TestGetLicensePayload:
     @pytest.mark.asyncio
     async def test_missing_auth_header(self) -> None:
         """Test that missing Authorization header raises 401."""
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await get_license_payload(None)
 
         assert exc_info.value.status_code == 401
@@ -184,7 +184,7 @@ class TestGetLicensePayload:
     @pytest.mark.asyncio
     async def test_invalid_auth_format(self) -> None:
         """Test that non-Bearer auth raises 401."""
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await get_license_payload("Basic sometoken")
 
         assert exc_info.value.status_code == 401
@@ -210,7 +210,7 @@ class TestGetLicensePayloadAllowExpired:
     @pytest.mark.asyncio
     async def test_missing_auth_header(self) -> None:
         """Test that missing Authorization header raises 401."""
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await get_license_payload_allow_expired(None)
 
         assert exc_info.value.status_code == 401
@@ -332,7 +332,7 @@ class TestForwardToControlPlane:
                 return_value=mock_response
             )
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 await forward_to_control_plane("GET", "/billing-information")
 
             assert exc_info.value.status_code == 404
@@ -356,7 +356,7 @@ class TestForwardToControlPlane:
                 side_effect=httpx.RequestError("Connection refused")
             )
 
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(OnyxError) as exc_info:
                 await forward_to_control_plane("GET", "/test")
 
             assert exc_info.value.status_code == 502
@@ -559,7 +559,7 @@ class TestProxyLicenseFetch:
     async def test_rejects_mismatched_tenant_id(self) -> None:
         payload = make_license_payload(tenant_id="tenant_a")
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             await proxy_license_fetch(
                 tenant_id="tenant_b",
                 license_payload=payload,

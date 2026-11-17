@@ -38,6 +38,7 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import get_default_llm, get_search_selection_llm
 from onyx.llm.interfaces import LLM
@@ -231,22 +232,13 @@ def get_search_history(
     """
     # Validate limit
     if limit <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail="limit must be greater than 0",
-        )
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "limit must be greater than 0")
     if limit > 1000:
-        raise HTTPException(
-            status_code=400,
-            detail="limit must be at most 1000",
-        )
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "limit must be at most 1000")
 
     # Validate filter_days
     if filter_days is not None and filter_days <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail="filter_days must be greater than 0",
-        )
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "filter_days must be greater than 0")
 
     search_queries = fetch_search_queries_for_user(
         db_session=db_session,

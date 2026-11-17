@@ -1520,7 +1520,7 @@ def get_mcp_servers_for_assistant(
 
     except Exception as e:
         logger.error("Failed to fetch MCP servers: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to fetch MCP servers")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to fetch MCP servers")
 
 
 @router.get("/servers", response_model=MCPServersResponse)
@@ -1621,7 +1621,7 @@ def get_mcp_server_tools_snapshots(
         # Verify the server exists
         mcp_server = get_mcp_server_by_id(server_id, db)
     except ValueError:
-        raise HTTPException(status_code=404, detail="MCP server not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
 
     if source == ToolSnapshotSource.MCP:
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
@@ -1650,7 +1650,7 @@ def get_mcp_server_tools_snapshots(
                 raise
 
             logger.error("Failed to discover tools for MCP server: %s", e)
-            raise HTTPException(status_code=500, detail="Failed to discover tools")
+            raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to discover tools")
     else:
         _ensure_mcp_server_viewable(mcp_server, user, db)
 
@@ -1797,7 +1797,7 @@ def _discover_mcp_server_tools(
         # Get the MCP server
         mcp_server = get_mcp_server_by_id(server_id, db)
     except ValueError:
-        raise HTTPException(status_code=404, detail="MCP server not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
 
     if is_admin:
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
@@ -1833,9 +1833,8 @@ def _discover_mcp_server_tools(
     server_url = mcp_server.server_url
 
     if mcp_server.transport is None:
-        raise HTTPException(
-            status_code=400,
-            detail="MCP server transport is not configured",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "MCP server transport is not configured"
         )
 
     try:
@@ -1964,9 +1963,9 @@ def _upsert_mcp_server(
         try:
             mcp_server = get_mcp_server_by_id(request.existing_server_id, db_session)
         except ValueError:
-            raise HTTPException(
-                status_code=404,
-                detail=f"MCP server with ID {request.existing_server_id} not found",
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                f"MCP server with ID {request.existing_server_id} not found",
             )
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
         if mcp_server.admin_connection_config:
@@ -2228,12 +2227,12 @@ def _upsert_mcp_server(
         # Prevent duplicate server creation with same URL
         normalized_url = (request.server_url or "").strip()
         if not normalized_url:
-            raise HTTPException(status_code=400, detail="server_url is required")
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, "server_url is required")
 
         if not user.email:
-            raise HTTPException(
-                status_code=400,
-                detail="Authenticated user email required to create MCP servers",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                "Authenticated user email required to create MCP servers",
             )
 
         mcp_server = create_mcp_server__no_commit(
@@ -2426,7 +2425,7 @@ def get_mcp_server_detail(
     try:
         server = get_mcp_server_by_id(server_id, db_session)
     except ValueError:
-        raise HTTPException(status_code=404, detail="MCP server not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
 
     # Read gate: owner, admin, or a manager of a group the server is connected to.
     _ensure_mcp_server_viewable(server, user, db_session)
@@ -2496,7 +2495,7 @@ def update_mcp_server_status(
     try:
         mcp_server = get_mcp_server_by_id(server_id, db)
     except ValueError:
-        raise HTTPException(status_code=404, detail="MCP server not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
@@ -2564,7 +2563,7 @@ def get_mcp_servers_for_admin(
 
     except Exception as e:
         logger.error("Failed to fetch MCP servers for admin: %s:%s", type(e), e)
-        raise HTTPException(status_code=500, detail="Failed to fetch MCP servers")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to fetch MCP servers")
 
 
 @admin_router.get("/server/{server_id}/db-tools")
@@ -2582,7 +2581,7 @@ def get_mcp_server_db_tools(
         # Verify the server exists
         mcp_server = get_mcp_server_by_id(server_id, db)
     except ValueError:
-        raise HTTPException(status_code=404, detail="MCP server not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
@@ -2626,8 +2625,9 @@ def upsert_mcp_server(
 
     # Validate auth_performer for non-none auth types
     if request.auth_type != MCPAuthenticationType.NONE and not request.auth_performer:
-        raise HTTPException(
-            status_code=400, detail="auth_performer is required for non-none auth types"
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "auth_performer is required for non-none auth types",
         )
 
     # Pass-through OAuth sends each chatting user's login token to server_url.
@@ -2649,8 +2649,8 @@ def upsert_mcp_server(
             not in (MCPAuthenticationType.NONE, MCPAuthenticationType.PT_OAUTH)
             and mcp_server.admin_connection_config_id is None
         ):
-            raise HTTPException(
-                status_code=500, detail="Failed to set admin connection config"
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR, "Failed to set admin connection config"
             )
         db_session.commit()
 
@@ -2660,8 +2660,8 @@ def upsert_mcp_server(
         )
 
         if mcp_server.auth_type is None:
-            raise HTTPException(
-                status_code=500, detail="MCP server auth_type not configured"
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR, "MCP server auth_type not configured"
             )
         auth_type_str = mcp_server.auth_type.value
 
@@ -2696,8 +2696,8 @@ def upsert_mcp_server(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
     except Exception as e:
         logger.exception("Failed to create/update MCP tool")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to create/update MCP tool: {str(e)}"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, f"Failed to create/update MCP tool: {str(e)}"
         )
 
 
@@ -2714,7 +2714,7 @@ def update_mcp_server_with_tools(
     try:
         mcp_server = get_mcp_server_by_id(request.server_id, db_session)
     except ValueError:
-        raise HTTPException(status_code=404, detail="MCP server not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
@@ -2722,8 +2722,8 @@ def update_mcp_server_with_tools(
         MCPAuthenticationType.NONE,
         MCPAuthenticationType.PT_OAUTH,
     ):
-        raise HTTPException(
-            status_code=400, detail="MCP server has no admin connection config"
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "MCP server has no admin connection config"
         )
 
     name_changed = request.name is not None and request.name != mcp_server.name
@@ -3446,7 +3446,7 @@ def update_mcp_server_simple(
     try:
         mcp_server = get_mcp_server_by_id(server_id, db_session)
     except ValueError:
-        raise HTTPException(status_code=404, detail="MCP server not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
@@ -3547,7 +3547,7 @@ def delete_mcp_server_admin(
     try:
         server = get_mcp_server_by_id(server_id, db_session)
     except ValueError:
-        raise HTTPException(status_code=404, detail="MCP server not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
     _ensure_mcp_server_owner_or_admin(server, user)
 
     try:
@@ -3592,7 +3592,7 @@ def delete_mcp_server_admin(
 
         return {"success": True}
     except ValueError:
-        raise HTTPException(status_code=404, detail="MCP server not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
     except Exception as e:
         logger.error("Failed to delete MCP server %s: %s", server_id, e)
-        raise HTTPException(status_code=500, detail="Failed to delete MCP server")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to delete MCP server")

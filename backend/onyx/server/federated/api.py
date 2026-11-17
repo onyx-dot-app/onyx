@@ -64,7 +64,7 @@ def _get_federated_connector_instance(
     try:
         return get_federated_connector(source, credentials)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @router.post("")
@@ -105,11 +105,11 @@ def create_federated_connector(
     except ValueError as e:
         logger.warning("Validation error creating federated connector: %s", e)
         db_session.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
     except Exception as e:
         logger.error("Error creating federated connector: %s", e)
         db_session.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(e))
 
 
 @router.get("/{id}/entities")
@@ -122,10 +122,10 @@ def get_entities(
     try:
         federated_connector = fetch_federated_connector_by_id(id, db_session)
         if not federated_connector:
-            raise HTTPException(status_code=404, detail="Federated connector not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Federated connector not found")
         if federated_connector.credentials is None:
-            raise HTTPException(
-                status_code=400, detail="Federated connector has no credentials"
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST, "Federated connector has no credentials"
             )
 
         connector_instance = _get_federated_connector_instance(
@@ -147,11 +147,11 @@ def get_entities(
 
         return EntitySpecResponse(entities=entities_dict)
 
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except Exception as e:
         logger.error("Error fetching entities for federated connector %s: %s", id, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(e))
 
 
 @router.get("/{id}/credentials/schema")
@@ -164,10 +164,10 @@ def get_credentials_schema(
     try:
         federated_connector = fetch_federated_connector_by_id(id, db_session)
         if not federated_connector:
-            raise HTTPException(status_code=404, detail="Federated connector not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Federated connector not found")
         if federated_connector.credentials is None:
-            raise HTTPException(
-                status_code=400, detail="Federated connector has no credentials"
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST, "Federated connector has no credentials"
             )
 
         connector_instance = _get_federated_connector_instance(
@@ -190,13 +190,13 @@ def get_credentials_schema(
 
         return CredentialSchemaResponse(credentials=credentials_dict)
 
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except Exception as e:
         logger.error(
             "Error fetching credentials schema for federated connector %s: %s", id, e
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(e))
 
 
 @router.get("/sources/{source}/configuration/schema")
@@ -224,7 +224,7 @@ def get_configuration_schema_by_source(
 
     except Exception as e:
         logger.error("Error fetching configuration schema for source %s: %s", source, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(e))
 
 
 @router.get("/sources/{source}/credentials/schema")
@@ -251,11 +251,11 @@ def get_credentials_schema_by_source(
 
         return CredentialSchemaResponse(credentials=credentials_dict)
 
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except Exception as e:
         logger.error("Error fetching credentials schema for source %s: %s", source, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(e))
 
 
 @router.post("/sources/{source}/credentials/validate")
@@ -271,15 +271,15 @@ def validate_credentials(
         )
 
         if not is_valid:
-            raise HTTPException(status_code=400, detail="Credentials are invalid")
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Credentials are invalid")
 
         return is_valid
 
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except Exception as e:
         logger.error("Error validating credentials for source %s: %s", source, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(e))
 
 
 @router.head("/{id}/entities/validate")
@@ -293,7 +293,7 @@ def validate_entities(
     try:
         federated_connector = fetch_federated_connector_by_id(id, db_session)
         if not federated_connector:
-            raise HTTPException(status_code=404, detail="Federated connector not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Federated connector not found")
         if federated_connector.credentials is None:
             return Response(status_code=400)
 
@@ -319,7 +319,7 @@ def validate_entities(
         else:
             return Response(status_code=400)
 
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except Exception as e:
         logger.error("Error validating entities for federated connector %s: %s", id, e)
@@ -335,14 +335,14 @@ def get_authorize_url(
     """Get URL to send the user for OAuth"""
     # Validate that the ID is not None or invalid
     if id is None or id <= 0:
-        raise HTTPException(status_code=400, detail="Invalid federated connector ID")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid federated connector ID")
 
     federated_connector = fetch_federated_connector_by_id(id, db_session)
     if not federated_connector:
-        raise HTTPException(status_code=404, detail="Federated connector not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Federated connector not found")
     if federated_connector.credentials is None:
-        raise HTTPException(
-            status_code=400, detail="Federated connector has no credentials"
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "Federated connector has no credentials"
         )
 
     # Update credentials to include the correct redirect URI with the connector ID
@@ -388,20 +388,16 @@ def handle_oauth_callback_generic(
     # Verify state parameter and get session info
     state = callback_data.get("state")
     if not state:
-        raise HTTPException(status_code=400, detail="Missing state parameter")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Missing state parameter")
 
     try:
         oauth_session = verify_oauth_state(state)
     except ValueError:
         logger.exception("Error verifying OAuth state")
-        raise HTTPException(
-            status_code=400, detail="Invalid or expired state parameter"
-        )
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid or expired state parameter")
 
     if not oauth_session:
-        raise HTTPException(
-            status_code=400, detail="Invalid or expired state parameter"
-        )
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid or expired state parameter")
 
     if str(user.id) != oauth_session.user_id:
         raise OnyxError(
@@ -414,19 +410,19 @@ def handle_oauth_callback_generic(
     # Validate federated_connector_id is not None
     if federated_connector_id is None:
         logger.error("OAuth session has null federated_connector_id")
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid OAuth session: missing federated connector ID",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Invalid OAuth session: missing federated connector ID",
         )
 
     federated_connector = fetch_federated_connector_by_id(
         federated_connector_id, db_session
     )
     if not federated_connector:
-        raise HTTPException(status_code=404, detail="Federated connector not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Federated connector not found")
     if federated_connector.credentials is None:
-        raise HTTPException(
-            status_code=400, detail="Federated connector has no credentials"
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "Federated connector has no credentials"
         )
 
     connector_instance = _get_federated_connector_instance(
@@ -534,10 +530,10 @@ def get_federated_connector_detail(
     """Get detailed information about a specific federated connector"""
     federated_connector = fetch_federated_connector_by_id(id, db_session)
     if not federated_connector:
-        raise HTTPException(status_code=404, detail="Federated connector not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Federated connector not found")
     if federated_connector.credentials is None:
-        raise HTTPException(
-            status_code=400, detail="Federated connector has no credentials"
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "Federated connector has no credentials"
         )
 
     # Get OAuth token information for the current user
@@ -593,14 +589,14 @@ def update_federated_connector_endpoint(
         )
 
         if not updated_connector:
-            raise HTTPException(status_code=404, detail="Federated connector not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Federated connector not found")
 
         # Return updated connector details
         return get_federated_connector_detail(id, user, db_session)
 
     except ValueError as e:
         logger.warning("Validation error updating federated connector %s: %s", id, e)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @router.delete("/{id}")
@@ -616,7 +612,7 @@ def delete_federated_connector_endpoint(
     )
 
     if not success:
-        raise HTTPException(status_code=404, detail="Federated connector not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Federated connector not found")
 
     return True
 
@@ -631,7 +627,7 @@ def disconnect_oauth_token(
     # Check if the federated connector exists
     federated_connector = fetch_federated_connector_by_id(id, db_session)
     if not federated_connector:
-        raise HTTPException(status_code=404, detail="Federated connector not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Federated connector not found")
 
     # Find and delete the user's OAuth token
     oauth_token = None
@@ -645,6 +641,4 @@ def disconnect_oauth_token(
         db_session.commit()
         return True
     else:
-        raise HTTPException(
-            status_code=404, detail="No OAuth token found for this user"
-        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No OAuth token found for this user")

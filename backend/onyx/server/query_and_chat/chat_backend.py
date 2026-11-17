@@ -10,7 +10,6 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -298,7 +297,11 @@ def get_user_chat_sessions(
             datetime.datetime.fromisoformat(before) if before is not None else None
         )
     except ValueError:
-        raise HTTPException(status_code=422, detail="Invalid 'before' timestamp format")
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Invalid 'before' timestamp format",
+            status_code_override=422,
+        )
 
     try:
         # Fetch one extra to determine if there are more results
@@ -358,8 +361,8 @@ def update_chat_session_temperature(
             update_thread_req.temperature_override < 0
             or update_thread_req.temperature_override > 2
         ):
-            raise HTTPException(
-                status_code=400, detail="Temperature must be between 0 and 2"
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST, "Temperature must be between 0 and 2"
             )
 
         # Additional check for Anthropic models
@@ -369,9 +372,9 @@ def update_chat_session_temperature(
             in chat_session.current_alternate_model.lower()
         ):
             if update_thread_req.temperature_override > 1:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Temperature for Anthropic models must be between 0 and 1",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Temperature for Anthropic models must be between 0 and 1",
                 )
 
     chat_session.temperature_override = update_thread_req.temperature_override
@@ -487,23 +490,23 @@ def get_chat_session(
                 include_deleted=True,
             )
         except ValueError:
-            raise HTTPException(status_code=404, detail="Chat session not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat session not found")
 
         if not include_deleted and existing_chat_session.deleted:
-            raise HTTPException(status_code=404, detail="Chat session has been deleted")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat session has been deleted")
 
         if is_shared:
             if existing_chat_session.shared_status != ChatSessionSharedStatus.PUBLIC:
-                raise HTTPException(
-                    status_code=403, detail="Chat session is not shared"
+                raise OnyxError(
+                    OnyxErrorCode.UNAUTHORIZED, "Chat session is not shared"
                 )
         elif user_id is not None and existing_chat_session.user_id not in (
             user_id,
             None,
         ):
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
 
-        raise HTTPException(status_code=404, detail="Chat session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat session not found")
 
     # for chat-seeding: if the session is unassigned, assign it now. This is done here
     # to avoid another back and forth between FE -> BE before starting the first
@@ -649,10 +652,10 @@ def create_new_chat_session(
         raise
     except ValueError as e:
         # Project or persona access denied
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
     except Exception as e:
         logger.exception(e)
-        raise HTTPException(status_code=400, detail="Invalid Persona provided.")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid Persona provided.")
 
     return CreateChatSessionID(
         chat_session_id=new_chat_session.id,
@@ -837,7 +840,7 @@ def delete_all_chat_sessions(
             user=user, db_session=db_session
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
     purge_deleted_chat_sessions(user.id, deleted_ids)
     # Read after the delete commits: a park either commits first or refuses.
     if not HARD_DELETE_CHATS:
@@ -889,7 +892,7 @@ def delete_chat_session_by_id(
             user_id, session_id, db_session, hard_delete=actual_hard_delete
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
     purge_deleted_chat_sessions(user_id, [session_id])
     # Read after the delete commits: a park either commits first or refuses.
     if not actual_hard_delete:
@@ -1285,7 +1288,7 @@ def get_max_document_tokens(
             is_for_edit=False,
         )
     except ValueError:
-        raise HTTPException(status_code=404, detail="Persona not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Persona not found")
 
     return MaxSelectedDocumentTokens(
         max_tokens=_get_available_tokens_for_persona(
@@ -1323,10 +1326,10 @@ def get_available_context_tokens_for_session(
             include_deleted=False,
         )
     except ValueError:
-        raise HTTPException(status_code=404, detail="Chat session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat session not found")
 
     if not chat_session.persona:
-        raise HTTPException(status_code=400, detail="Chat session has no persona")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Chat session has no persona")
 
     llm_override = (
         LLMOverride(model_configuration_id=model_configuration_id)
@@ -1399,7 +1402,7 @@ def fetch_chat_file(
     file_store = get_default_file_store()
     file_record = file_store.read_file_record(file_id)
     if not file_record:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
     # `parsed` only changes behavior for spreadsheet files (xlsx is a binary zip
     # the frontend cannot render); everything else is served raw as usual.

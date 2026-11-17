@@ -10,10 +10,10 @@ served against the wrong tenant. (Contrast license enforcement, which fails
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
 from starlette.requests import Request
 
 from ee.onyx.server.middleware import tenant_tracking
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.middleware import api_prefix
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
@@ -54,7 +54,7 @@ async def test_bearer_redis_error_propagates_not_default(
     mock_bearer.side_effect = ValueError("redis down")
 
     req = _request({"Authorization": "Bearer opaque_session_token"})
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(OnyxError) as exc:
         await tenant_tracking._get_tenant_id_from_request(req, MagicMock())
     assert exc.value.status_code == 500
 
@@ -70,7 +70,7 @@ async def test_cookie_redis_error_propagates_not_default(
     mock_cookie.side_effect = ValueError("redis down")
 
     req = _request()
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(OnyxError) as exc:
         await tenant_tracking._get_tenant_id_from_request(req, MagicMock())
     assert exc.value.status_code == 500
     mock_bearer.assert_not_called()

@@ -1,7 +1,7 @@
 import base64
 import uuid
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from fastapi.responses import JSONResponse
 
 from ee.onyx.server.oauth.api_router import router
@@ -90,15 +90,15 @@ def prepare_authorization_request(
         oauth_url = None
 
     if not oauth_url:
-        raise HTTPException(
-            status_code=404,
-            detail=f"The document source type {connector} does not have OAuth implemented",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"The document source type {connector} does not have OAuth implemented",
         )
 
     if not session:
-        raise HTTPException(
-            status_code=500,
-            detail=f"The document source type {connector} failed to generate an OAuth session.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            f"The document source type {connector} failed to generate an OAuth session.",
         )
 
     r = get_redis_client(tenant_id=tenant_id)

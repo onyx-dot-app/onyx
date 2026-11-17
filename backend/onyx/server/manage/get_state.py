@@ -6,7 +6,7 @@ import time
 import requests
 from anyio import to_thread
 from cachetools import TTLCache
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
@@ -322,14 +322,14 @@ def _fetch_versions() -> AllVersions:
     stable_tags = [tag for tag in common_tags if STABLE_VERSION_PATTERN.match(tag)]
 
     if not dev_tags:
-        raise HTTPException(
-            status_code=500,
-            detail="No valid dev versions found matching pattern v(number).(number).(number)-beta.(number)",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "No valid dev versions found matching pattern v(number).(number).(number)-beta.(number)",
         )
     if not stable_tags:
-        raise HTTPException(
-            status_code=500,
-            detail="No valid stable versions found matching pattern v(number).(number).(number)",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "No valid stable versions found matching pattern v(number).(number).(number)",
         )
 
     latest_dev_version = max(dev_tags, key=_version_key)

@@ -3,7 +3,7 @@ import uuid
 from typing import cast
 
 import requests
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -114,9 +114,9 @@ def handle_slack_oauth_callback(
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     if not SlackOAuth.CLIENT_ID or not SlackOAuth.CLIENT_SECRET:
-        raise HTTPException(
-            status_code=500,
-            detail="Slack client ID or client secret is not configured.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Slack client ID or client secret is not configured.",
         )
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -137,9 +137,9 @@ def handle_slack_oauth_callback(
 
     session_json_bytes = cast(bytes, r.get(r_key))
     if not session_json_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Slack OAuth failed - OAuth state key not found: key={r_key}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Slack OAuth failed - OAuth state key not found: key={r_key}",
         )
 
     session_json = session_json_bytes.decode("utf-8")
@@ -172,9 +172,9 @@ def handle_slack_oauth_callback(
         response_data = response.json()
 
         if not response_data.get("ok"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Slack OAuth failed: {response_data.get('error')}",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"Slack OAuth failed: {response_data.get('error')}",
             )
 
         # Extract token and team information

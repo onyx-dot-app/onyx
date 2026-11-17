@@ -4,7 +4,7 @@ import uuid
 import aiohttp  # Async HTTP client
 import httpx
 import requests
-from fastapi import HTTPException, Request
+from fastapi import Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -178,9 +178,9 @@ async def get_or_provision_tenant(
         # If we've encountered an error, log and raise an exception
         error_msg = "Failed to provision tenant"
         logger.error(error_msg, exc_info=e)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to provision tenant. Please try again later.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Failed to provision tenant. Please try again later.",
         )
 
 
@@ -257,18 +257,18 @@ async def create_tenant(
             await rollback_tenant_provisioning(tenant_id)
         except Exception:
             logger.exception("Failed to rollback tenant provisioning for %s", tenant_id)
-        raise HTTPException(status_code=500, detail="Failed to provision tenant.")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to provision tenant.")
 
     return tenant_id
 
 
 async def provision_tenant(tenant_id: str, email: str) -> None:
     if not MULTI_TENANT:
-        raise HTTPException(status_code=403, detail="Multi-tenancy is not enabled")
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Multi-tenancy is not enabled")
 
     if user_owns_a_tenant(email):
-        raise HTTPException(
-            status_code=409, detail="User already belongs to an organization"
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "User already belongs to an organization"
         )
 
     shard_name = get_shard_for_new_tenant()
@@ -294,8 +294,8 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
 
     except Exception as e:
         logger.exception("Failed to create tenant %s", tenant_id)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to create tenant: {str(e)}"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, f"Failed to create tenant: {str(e)}"
         )
 
 

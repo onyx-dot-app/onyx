@@ -4,7 +4,7 @@ from collections.abc import Generator
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -73,7 +73,7 @@ def list_messages(
     messages = session_manager.list_messages(session_id, user.id)
 
     if messages is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     return MessageListResponse(
         messages=[MessageResponse.from_model(msg) for msg in messages]

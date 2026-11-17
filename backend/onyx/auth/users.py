@@ -17,7 +17,6 @@ from email_validator import EmailNotValidError, EmailUndeliverableError, validat
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -1095,7 +1094,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
         if not tenant_id:
-            raise HTTPException(status_code=401, detail="User not found")
+            raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "User not found")
 
         async with self._tenant_session_with_bound_user_db(tenant_id) as db_session:
             verify_email_in_whitelist(account_email, tenant_id, oauth_name, account_id)
@@ -2171,6 +2170,7 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
         )
 
         refresh_responses: OpenAPIResponseType = {
+            # http-exception: allow OpenAPI response key, not a raised error
             status.HTTP_401_UNAUTHORIZED: {
                 "description": "Missing token or inactive user."
             },
@@ -2231,9 +2231,8 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
                 raise
             except Exception as e:
                 logger.error("Unexpected error in refresh endpoint: %s", str(e))
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Token refresh failed: {str(e)}",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST, f"Token refresh failed: {str(e)}"
                 )
 
         return router
@@ -3259,6 +3258,7 @@ def get_oauth_router(
         name=callback_route_name,
         description="The response varies based on the authentication backend used.",
         responses={
+            # http-exception: allow OpenAPI response key, not a raised error
             status.HTTP_400_BAD_REQUEST: {
                 "model": ErrorModel,
                 "content": {

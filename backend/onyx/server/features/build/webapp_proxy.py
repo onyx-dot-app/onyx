@@ -27,6 +27,8 @@ from onyx.cache.factory import get_cache_backend
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.enums import SharingScope
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.db.build_session import (
     get_webapp_access_async,
     get_webapp_target_async,
@@ -141,12 +143,12 @@ async def _get_sandbox_url(session_id: UUID) -> str:
         target = await get_webapp_target_async(db_session, session_id)
 
     if target is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
     sandbox_id, nextjs_port = target
     if nextjs_port is None:
-        raise HTTPException(status_code=503, detail="Session port not allocated")
+        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, "Session port not allocated")
     if sandbox_id is None:
-        raise HTTPException(status_code=404, detail="Sandbox not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Sandbox not found")
 
     url = get_sandbox_manager().get_webapp_url(sandbox_id, nextjs_port)
     cache.set(key, url, ex=_SANDBOX_URL_TTL)
@@ -197,10 +199,10 @@ async def _proxy_request(
         response = await client.send(req, stream=True)
     except httpx.TimeoutException:
         logger.error("Timeout while proxying request to %s", target_url)
-        raise HTTPException(status_code=504, detail="Gateway timeout")
+        raise OnyxError(OnyxErrorCode.GATEWAY_TIMEOUT, "Gateway timeout")
     except httpx.RequestError as e:
         logger.error("Error proxying request to %s: %s", target_url, e)
-        raise HTTPException(status_code=502, detail="Bad gateway")
+        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, "Bad gateway")
 
     # aclose() is idempotent: one guarded finally covers every exit except a
     # successful StreamingResponse handoff, which passes ownership to _aiter_and_close.
@@ -339,12 +341,12 @@ async def _check_webapp_access(session_id: UUID, user: User | None) -> None:
         access = await get_webapp_access_async(db_session, session_id)
 
     if access is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
     if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Authentication required")
     sharing_scope, owner_id = access
     if sharing_scope == SharingScope.PRIVATE and owner_id != user.id:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     cache.set(
         _webapp_access_cache_key(session_id, user.id), b"1", ex=_WEBAPP_ACCESS_TTL
@@ -378,7 +380,7 @@ async def get_webapp(
 ) -> StreamingResponse | Response:
     try:
         await _check_webapp_access(session_id, user)
-    except HTTPException as e:
+    except (HTTPException, OnyxError) as e:
         if e.status_code == 401:
             return RedirectResponse(url="/auth/login", status_code=302)
         raise
@@ -392,7 +394,7 @@ async def get_webapp(
         )
     try:
         return await _proxy_request(path, request, session_id)
-    except HTTPException as e:
+    except (HTTPException, OnyxError) as e:
         if e.status_code in (502, 503, 504):
             # Cached URL may point at a dead/recreated pod; drop it to force re-resolve.
             get_cache_backend().delete(_sandbox_url_cache_key(session_id))
@@ -409,7 +411,7 @@ async def websocket_webapp_hmr(
 ) -> None:
     try:
         await _check_webapp_access(session_id, user)
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise WebSocketException(code=1008)
 
     await _proxy_webapp_hmr_websocket(session_id, websocket, hmr_endpoint)

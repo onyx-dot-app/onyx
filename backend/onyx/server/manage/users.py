@@ -6,7 +6,7 @@ from uuid import UUID
 
 import jwt
 from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select
@@ -606,9 +606,9 @@ def bulk_invite_users(
             new_invited_emails.append(email_info.normalized)
 
     except (EmailUndeliverableError, EmailNotValidError) as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid email address: {email} - {str(e)}",  # ty: ignore[possibly-unresolved-reference]
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Invalid email address: {email} - {str(e)}",  # ty: ignore[possibly-unresolved-reference]
         )
 
     # Count only new users (not already invited or existing) that need seats
@@ -808,14 +808,14 @@ def deactivate_user_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     if current_user.email == user_email.user_email:
-        raise HTTPException(status_code=400, detail="You cannot deactivate yourself")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "You cannot deactivate yourself")
 
     user_to_deactivate = get_user_by_email(
         email=user_email.user_email, db_session=db_session
     )
 
     if not user_to_deactivate:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     if user_to_deactivate.is_active is False:
         logger.warning("%s is already deactivated", user_to_deactivate.email)
@@ -851,12 +851,12 @@ async def delete_user(
         email=user_email.user_email, db_session=db_session
     )
     if not user_to_delete:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     if user_to_delete.is_active is True:
         logger.warning("%s must be deactivated before deleting", user_to_delete.email)
-        raise HTTPException(
-            status_code=400, detail="User must be deactivated before deleting"
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "User must be deactivated before deleting"
         )
 
     # Capture identifiers before the row is detached/deleted below.
@@ -896,7 +896,7 @@ async def delete_user(
     except Exception as e:
         db_session.rollback()
         logger.error("Error deleting user %s: %s", user_to_delete.email, str(e))
-        raise HTTPException(status_code=500, detail="Error deleting user")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Error deleting user")
 
 
 @router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)
@@ -911,7 +911,7 @@ def activate_user_api(
         email=user_email.user_email, db_session=db_session
     )
     if not user_to_activate:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     if user_to_activate.is_active is True:
         logger.warning("%s is already activated", user_to_activate.email)

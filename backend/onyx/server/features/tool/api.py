@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -101,9 +101,9 @@ def _validate_auth_settings(
     if tool_data.passthrough_auth and tool_data.custom_headers:
         for header in tool_data.custom_headers:
             if header.key.lower() == "authorization":
-                raise HTTPException(
-                    status_code=400,
-                    detail="Cannot use passthrough auth with custom authorization headers",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Cannot use passthrough auth with custom authorization headers",
                 )
 
     # Passthrough sends each chatting user's login token to the tool's URLs.
@@ -177,11 +177,11 @@ def _get_manageable_custom_tool(tool_id: int, db_session: Session, user: User) -
     try:
         tool = get_tool_by_id(tool_id, db_session)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
     if tool.in_code_tool_id is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="Built-in tools cannot be modified through this endpoint.",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Built-in tools cannot be modified through this endpoint.",
         )
     if not can_manage_tool(user, tool):
         raise OnyxError(
@@ -342,10 +342,10 @@ def delete_custom_tool(
     try:
         delete_tool__no_commit(tool_id, db_session)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
     except Exception as e:
         # handles case where tool is still used by an Assistant
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
     db_session.commit()
 
 
@@ -373,7 +373,7 @@ def update_tools_status(
     bulk updates.
     """
     if not update_data.tool_ids:
-        raise HTTPException(status_code=400, detail="No tool IDs provided")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "No tool IDs provided")
 
     tools = get_tools_by_ids(update_data.tool_ids, db_session)
     tools_by_id = {tool.id: tool for tool in tools}
@@ -382,8 +382,8 @@ def update_tools_status(
         tool_id for tool_id in update_data.tool_ids if tool_id not in tools_by_id
     ]
     if missing_tools:
-        raise HTTPException(
-            status_code=404, detail=f"Tools with IDs {missing_tools} not found"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"Tools with IDs {missing_tools} not found"
         )
     for tool_id in update_data.tool_ids:
         tool = tools_by_id[tool_id]
@@ -487,7 +487,7 @@ def get_custom_tool(
     try:
         tool = get_tool_by_id(tool_id, db_session)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
     if not _may_view_tool(tool, user, _connected_tool_ids(user, db_session)):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

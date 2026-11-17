@@ -4,7 +4,7 @@ import uuid
 from typing import Any, cast
 
 import requests
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -121,9 +121,9 @@ def handle_google_drive_oauth_callback(
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     if not GoogleDriveOAuth.CLIENT_ID or not GoogleDriveOAuth.CLIENT_SECRET:
-        raise HTTPException(
-            status_code=500,
-            detail="Google Drive client ID or client secret is not configured.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Google Drive client ID or client secret is not configured.",
         )
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -144,9 +144,9 @@ def handle_google_drive_oauth_callback(
 
     session_json_bytes = cast(bytes, r.get(r_key))
     if not session_json_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Google Drive OAuth failed - OAuth state key not found: key={r_key}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Google Drive OAuth failed - OAuth state key not found: key={r_key}",
         )
 
     session_json = session_json_bytes.decode("utf-8")

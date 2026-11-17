@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 import requests
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
@@ -161,9 +161,9 @@ def confluence_oauth_callback(
     after visiting the oauth authorization url."""
 
     if not ConfluenceCloudOAuth.CLIENT_ID or not ConfluenceCloudOAuth.CLIENT_SECRET:
-        raise HTTPException(
-            status_code=500,
-            detail="Confluence Cloud client ID or client secret is not configured.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Confluence Cloud client ID or client secret is not configured.",
         )
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -184,9 +184,9 @@ def confluence_oauth_callback(
 
     session_json_bytes = cast(bytes, r.get(r_key))
     if not session_json_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Confluence Cloud OAuth failed - OAuth state key not found: key={r_key}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Confluence Cloud OAuth failed - OAuth state key not found: key={r_key}",
         )
 
     session_json = session_json_bytes.decode("utf-8")
@@ -283,7 +283,9 @@ def confluence_oauth_accessible_resources(
         credential_id, user, db_session, access_level=CredentialAccessLevel.EDIT
     )
     if not credential:
-        raise HTTPException(400, f"Credential {credential_id} not found.")
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, f"Credential {credential_id} not found."
+        )
 
     credential_dict = to_source_credential_json(
         DocumentSource.CONFLUENCE,
@@ -356,9 +358,9 @@ def confluence_oauth_finalize(
         credential_id, user, db_session, access_level=CredentialAccessLevel.EDIT
     )
     if not credential:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Confluence Cloud OAuth failed - credential {credential_id} not found.",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Confluence Cloud OAuth failed - credential {credential_id} not found.",
         )
 
     existing_credential_json = to_source_credential_json(

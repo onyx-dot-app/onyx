@@ -7,7 +7,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import HTTPException
 from sqlalchemy import event, pool
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.exc import DBAPIError
@@ -39,6 +38,8 @@ from onyx.db.engine.shard_registry import (
     get_catalog_engine,
 )
 from onyx.db.engine.shard_routing import get_engine_for_tenant
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import (
@@ -524,7 +525,7 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
     resolves to the single default engine.
     """
     if not is_valid_schema_name(tenant_id):
-        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid tenant ID")
 
     engine = get_engine_for_tenant(tenant_id)
 
@@ -559,7 +560,7 @@ def get_session() -> Generator[Session, None, None]:
         raise BasicAuthenticationError(detail="User must authenticate")
 
     if not is_valid_schema_name(tenant_id):
-        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid tenant ID")
 
     with get_session_with_current_tenant() as db_session:
         yield db_session
@@ -578,7 +579,7 @@ def get_db_readonly_user_session_with_current_tenant() -> Generator[
     readonly_engine = get_readonly_sqlalchemy_engine()
 
     if not is_valid_schema_name(tenant_id):
-        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid tenant ID")
 
     # no need to use the schema translation map for self-hosted + default schema
     if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
