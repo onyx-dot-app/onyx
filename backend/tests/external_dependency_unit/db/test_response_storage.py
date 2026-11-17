@@ -2110,10 +2110,10 @@ def test_any_agent_in_the_visible_tree_is_listed_and_addressable(
 
     # The root addresses its grandchild; a child addresses its sibling and the root.
     assert send(parent, grandchild_id, "Check").content.startswith(
-        "Message from agent /root "
+        "Message from agent /root:\n"
     )
     assert send(child, sibling_id, "Compare").content.startswith(
-        "Message from agent /root/research "
+        "Message from agent /root/research:\n"
     )
     to_root = send(child, conversation.id, "Halfway")
     assert (to_root.target_response_id, to_root.delivery) == (
