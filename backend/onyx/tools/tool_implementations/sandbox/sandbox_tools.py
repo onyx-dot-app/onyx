@@ -8,10 +8,12 @@ sandbox (`chat/execution.py:create_chat_agent`), and they share a
 """
 
 import posixpath
-from collections.abc import Callable, Generator, Hashable, Iterator
+from collections.abc import Callable, Generator, Hashable, Iterator, Sequence
 from contextlib import closing, contextmanager
 from functools import partial
 from typing import Literal
+
+from pydantic import BaseModel
 
 from onyx.agents.tools import (
     ToolExecutionMode,
@@ -21,8 +23,13 @@ from onyx.agents.tools import (
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.sandbox_tools import (
     APPLY_PATCH_DESCRIPTION,
+    APPLY_PATCH_USE,
     EXEC_COMMAND_DESCRIPTION,
+    EXEC_COMMAND_USE,
+    SANDBOX_CODE_MODE_NOTE,
+    SANDBOX_GUIDANCE,
     WRITE_STDIN_DESCRIPTION,
+    WRITE_STDIN_USE,
 )
 from onyx.server.features.build.sandbox.harness_base import (
     HarnessSandboxError,
@@ -141,24 +148,21 @@ def _exec_result(result: ExecCommandResult) -> ToolResult:
     )
 
 
-class _SandboxTool(Tool):
-    """What the three sandbox tools share: the turn and the crash rule."""
+class SandboxTool(Tool):
+    """What the sandbox tools share: the turn, the crash rule, and the name,
+    description and arguments that each declares as class attributes."""
 
     id = None
     interrupted_result = INTERRUPTED_SANDBOX_RESULT
+    NAME: str
+    DESCRIPTION: str
+    ARGUMENTS: type[BaseModel]
+    # The tool's use in the system prompt's sandbox section; `{name}` is the
+    # name that the model calls.
+    USE: str
 
     def __init__(self, turn: SandboxTurn) -> None:
         self._turn = turn
-
-    @property
-    def code_mode_exposure(self) -> CodeModeExposure:
-        return CodeModeExposure.IMMEDIATE
-
-
-class ExecCommandTool(_SandboxTool):
-    NAME = "exec_command"
-    # Matches the web card title.
-    display_name = "Terminal"
 
     @property
     def name(self) -> str:
@@ -166,16 +170,29 @@ class ExecCommandTool(_SandboxTool):
 
     @property
     def description(self) -> str:
-        return EXEC_COMMAND_DESCRIPTION
+        return self.DESCRIPTION
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    def tool_definition(self) -> ToolDefinition:
+        return tool_definition_from_arguments(
+            self.name, self.description, self.ARGUMENTS, strict=True
+        )
+
+
+class ExecCommandTool(SandboxTool):
+    NAME = "exec_command"
+    USE = EXEC_COMMAND_USE
+    DESCRIPTION = EXEC_COMMAND_DESCRIPTION
+    ARGUMENTS = ExecCommandArguments
+    # Matches the web card title.
+    display_name = "Terminal"
 
     @property
     def code_mode_result(self) -> CodeModeResultSpec:
         return _EXEC_RESULT
-
-    def tool_definition(self) -> ToolDefinition:
-        return tool_definition_from_arguments(
-            self.name, self.description, ExecCommandArguments, strict=True
-        )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         arguments = parse_tool_arguments(ExecCommandArguments, invocation.arguments)
@@ -191,27 +208,17 @@ class ExecCommandTool(_SandboxTool):
         )
 
 
-class WriteStdinTool(_SandboxTool):
+class WriteStdinTool(SandboxTool):
     NAME = "write_stdin"
+    USE = WRITE_STDIN_USE
+    DESCRIPTION = WRITE_STDIN_DESCRIPTION
+    ARGUMENTS = WriteStdinArguments
     # Matches the web card title.
     display_name = "Terminal"
 
     @property
-    def name(self) -> str:
-        return self.NAME
-
-    @property
-    def description(self) -> str:
-        return WRITE_STDIN_DESCRIPTION
-
-    @property
     def code_mode_result(self) -> CodeModeResultSpec:
         return _EXEC_RESULT
-
-    def tool_definition(self) -> ToolDefinition:
-        return tool_definition_from_arguments(
-            self.name, self.description, WriteStdinArguments, strict=True
-        )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         arguments = parse_tool_arguments(WriteStdinArguments, invocation.arguments)
@@ -267,18 +274,13 @@ def _check_writable(path: str, info: SandboxPathInfo) -> None:
         raise PatchError(f"Failed to write file {path}: it is a directory")
 
 
-class ApplyPatchTool(_SandboxTool):
+class ApplyPatchTool(SandboxTool):
     NAME = "apply_patch"
+    USE = APPLY_PATCH_USE
+    DESCRIPTION = APPLY_PATCH_DESCRIPTION
+    ARGUMENTS = ApplyPatchArguments
     # Matches the web card title.
     display_name = "Apply Patch"
-
-    @property
-    def name(self) -> str:
-        return self.NAME
-
-    @property
-    def description(self) -> str:
-        return APPLY_PATCH_DESCRIPTION
 
     @property
     def execution_mode(self) -> ToolExecutionMode:
@@ -292,11 +294,6 @@ class ApplyPatchTool(_SandboxTool):
             annotation="str",
             returns="The summary: A (added), M (updated) and D (deleted) "
             "lines with the session-relative path of each file.",
-        )
-
-    def tool_definition(self) -> ToolDefinition:
-        return tool_definition_from_arguments(
-            self.name, self.description, ApplyPatchArguments, strict=True
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
@@ -492,3 +489,30 @@ class ApplyPatchTool(_SandboxTool):
                 ]
             ),
         )
+
+
+# The sandbox tools that a chat turn builds, in the order the prompt names them.
+SANDBOX_TOOLS: tuple[type[SandboxTool], ...] = (
+    ExecCommandTool,
+    WriteStdinTool,
+    ApplyPatchTool,
+)
+
+
+def sandbox_guidance(
+    tools: Sequence[SandboxTool | type[SandboxTool]],
+    called_name: Callable[[str], str],
+    *,
+    code_mode: bool,
+) -> str | None:
+    """The system prompt's sandbox section: the use of each of `tools`, in
+    order, by the name that `called_name` gives for its tool name; None
+    without any."""
+    uses = [tool.USE.format(name=f"`{called_name(tool.NAME)}`") for tool in tools]
+    if not uses:
+        return None
+    listed = uses[0] if len(uses) == 1 else f"{', '.join(uses[:-1])} and {uses[-1]}"
+    return SANDBOX_GUIDANCE.format(
+        uses=f"{listed[0].upper()}{listed[1:]}."
+        + (SANDBOX_CODE_MODE_NOTE if code_mode else "")
+    )

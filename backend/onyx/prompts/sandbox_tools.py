@@ -1,11 +1,21 @@
 # Descriptions of the sandbox tools that the model reads.
 
+# The chat system prompt's section about the sandbox, when the turn offers the
+# sandbox tools; `uses` names each tool with its use (the *_USE texts).
+SANDBOX_GUIDANCE = """
+## Sandbox
+You have a private Linux VM for this chat. Its files persist across turns in your working directory, the chat's session directory. {uses}
+""".lstrip()
+# In code mode the tools are functions of `execute_code` programs.
+SANDBOX_CODE_MODE_NOTE = " Call them from `execute_code` programs."
+EXEC_COMMAND_USE = "run commands with {name}"
+WRITE_STDIN_USE = "use {name} for commands that are still running"
+APPLY_PATCH_USE = "edit files with {name}"
+
 EXEC_COMMAND_DESCRIPTION = (
-    "Runs a command with bash in a private Linux sandbox, returning output or a "
-    "session ID for ongoing interaction. The command runs without a PTY: stdin, "
-    "stdout and stderr are plain pipes. The default working directory is this "
-    "chat's session directory; files there persist across turns of the chat. "
-    "Use apply_patch for manual file edits."
+    "Runs a command with bash, returning output or a session ID for ongoing "
+    "interaction. The command runs without a PTY: stdin, stdout and stderr are "
+    "plain pipes. The default working directory is this chat's session directory."
 )
 
 WRITE_STDIN_DESCRIPTION = (
@@ -16,7 +26,7 @@ WRITE_STDIN_DESCRIPTION = (
 
 # Code mode keeps at most 2,000 characters of a tool description
 # (code_mode/stubs.py MAX_TOOL_DESCRIPTION_CHARS); this one fits whole.
-APPLY_PATCH_DESCRIPTION = """Use the `apply_patch` tool to edit files. The patch format is a stripped-down, file-oriented diff:
+APPLY_PATCH_DESCRIPTION = """Edit files with a patch in this format, a stripped-down, file-oriented diff:
 
 *** Begin Patch
 [ one or more file sections ]

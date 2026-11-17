@@ -208,6 +208,11 @@ class Tool(abc.ABC):
         """How the model calls the configured tool `tool_id` through this tool."""
         return [self.name] if self.id == tool_id else []
 
+    def inner_call_hint(self, name: str) -> str | None:  # noqa: ARG002
+        """For a call of `name` as a tool of its own: how to call it through
+        this tool instead; None when `name` is none of its inner tools."""
+        return None
+
     @property
     @abc.abstractmethod
     def code_mode_exposure(self) -> CodeModeExposure:
@@ -323,6 +328,7 @@ class Tool(abc.ABC):
                 for tool in (self, *self.inner_tools)
                 if tool.approval is not None
             ],
+            inner_call_hint=self.inner_call_hint,
         )
 
 
