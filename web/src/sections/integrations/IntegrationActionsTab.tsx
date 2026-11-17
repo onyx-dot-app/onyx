@@ -231,7 +231,7 @@ export default function IntegrationActionsTab({
             <Button
               prominence="secondary"
               icon={SvgRefreshCw}
-              disabled={busy || readOnly}
+              disabled={busy || readOnly || dirty}
               onClick={() => void refresh()}
             >
               {t("refresh")}
