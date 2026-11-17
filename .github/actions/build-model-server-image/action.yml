@@ -43,6 +43,9 @@ inputs:
       public bases with a warning instead. Passed to the dhi-base-images action.
     required: false
     default: "true"
+  persist-pr-digest:
+    description: "Also persist the prebuilt digest for future runs of this PR."
+    default: "false"
 outputs:
   digest:
     description: "Digest of the pushed image. Consumers pull <runs-on-ecr-cache>@<digest>, never the mutable tag."
@@ -94,6 +97,7 @@ runs:
           ${{ env.DHI_PYTHON_BUILD_ARGS }}
           platforms=${{ inputs.platforms }}
         image-repo: ${{ inputs.runs-on-ecr-cache }}
+        persist-pr-digest: ${{ inputs.persist-pr-digest }}
 
     - name: Build and push Model Server Docker image
       id: build
@@ -133,3 +137,4 @@ runs:
         name: model-server
         save-key: ${{ steps.prebuilt.outputs.save-key }}
         save-digest: ${{ steps.build.outputs.digest }}
+        persist-pr-digest: ${{ inputs.persist-pr-digest }}

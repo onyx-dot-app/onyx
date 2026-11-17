@@ -259,6 +259,9 @@ jobs:
   build-model-server-image:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
+    permissions:
+      actions: read
+      contents: read
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     runs-on:
@@ -291,10 +294,14 @@ jobs:
           docker-token: ${{ secrets.DOCKER_TOKEN }}
           # A PR test image does not ship; build on the public bases if dhi.io is down.
           dhi-required: "false"
+          persist-pr-digest: "true"
 
   build-devcontainer-image:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
+    permissions:
+      actions: read
+      contents: read
     outputs:
       digest: ${{ steps.prebuilt.outputs.digest || steps.build.outputs.digest }}
     runs-on:
@@ -331,6 +338,7 @@ jobs:
             target=integration-tests
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           image-repo: ${{ env.RUNS_ON_ECR_CACHE }}
+          persist-pr-digest: "true"
 
       - name: Build and push Devcontainer Docker image
         id: build
@@ -369,6 +377,7 @@ jobs:
           name: integration-devcontainer
           save-key: ${{ steps.prebuilt.outputs.save-key }}
           save-digest: ${{ steps.build.outputs.digest }}
+          persist-pr-digest: "true"
 
   integration-tests:
     needs:
