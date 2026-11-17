@@ -105,14 +105,13 @@ Each plugin of an Agent lists the actions of its integrations. Each action has o
 The first row of each plugin, **Default for Other Actions**, applies to each action with no setting of its own.
 It also applies to actions that the integration adds later.
 
-An Agent cannot open an action that an admin locked. **Allow** is not available when:
+**Allow** is not available when:
 
 - An admin set the action to **Blocked** on the integration.
 - The integration does not let users save **Always allow**. Then the admin policy is final.
 
-The Agent editor shows why **Allow** is not available.
-An Agent setting of **Allow** that Onyx kept from an earlier release stays visible, and you can change it.
-A locked action follows the integration policy.
+The Agent editor shows why **Allow** is not available. If an Agent already has **Allow** on a locked action,
+the editor shows it and you can change it, but the action follows the integration policy.
 
 Under each action, the editor shows the setting that applies, for example **Asks (integration setting)**.
 To run an action that asks with no prompt, an admin sets it to **Allow** on the integration,

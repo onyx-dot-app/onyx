@@ -10797,8 +10797,6 @@
         "ariaLabel": "エージェントエディターページ"
       },
       "plugins": {
-        "actionSetting": "{action} の設定",
-        "add": "プラグインを追加",
         "askHint": "確認なしで実行するには、管理者が統合でこれを許可に設定するか、各ユーザーが常に許可を選びます。",
         "askHintAdminOnly": "確認なしで実行するには、管理者が統合でこれを許可に設定します。",
         "choice": {
@@ -10808,7 +10806,6 @@
           "description": "独自の設定がない各アクションに適用されます。統合が後で追加するアクションにも適用されます。",
           "title": "その他のアクションのデフォルト"
         },
-        "defaultSetting": "{plugin} のデフォルト設定",
         "description": "エージェントにプラグインを付与します。別の設定を選ばない限り、各アクションは統合の設定を使います。",
         "effective": "{policy, select, allow {許可} ask {確認} other {ブロック}}（{source, select, integration {統合の設定} agentDefault {エージェントのデフォルト} other {エージェントの設定}}）",
         "empty": "利用できる統合付きのプラグインはありません。",
@@ -10820,10 +10817,25 @@
         },
         "noActions": "この統合にはまだアクションがありません。",
         "notVisible": "このプラグインのアクションは表示できません。設定はそのまま保持されます。",
-        "openIntegration": "{integration} のアクションを開く",
-        "remove": "{plugin} を削除",
-        "retry": "再試行",
-        "title": "プラグイン"
+        "title": "プラグイン",
+        "add": {
+          "placeholder": "プラグインを追加"
+        },
+        "remove": {
+          "ariaLabel": "{plugin} を削除"
+        },
+        "retry": {
+          "label": "再試行"
+        },
+        "actionSetting": {
+          "label": "{action} の設定"
+        },
+        "defaultSetting": {
+          "label": "{plugin} のデフォルト設定"
+        },
+        "openIntegration": {
+          "label": "{integration} のアクションを開く"
+        }
       },
       "prompts": {
         "instructions": {

@@ -2,6 +2,7 @@ import { ValidSources } from "@/lib/connectors/types/source";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
+import type { LinkValue } from "@/lib/integrations/types";
 
 // ── Domain / application types ────────────────────────────────────────────────
 
@@ -56,24 +57,19 @@ export interface PersonaOwnerGroup {
   name: string;
 }
 
-/** The setting of one action on an agent's plugin link. */
-export type LinkValue = "inherit" | "allow" | "ask" | "blocked";
-
 /** `persona__plugin.action_settings`. A missing key inherits. */
 export interface AgentActionSettings {
   default?: LinkValue;
   actions?: Record<string, LinkValue>;
 }
 
-export interface AgentPluginLink {
-  plugin_id: string;
-  plugin_name: string;
-  action_settings: AgentActionSettings;
-}
-
 export interface AgentPluginInput {
   plugin_id: string;
   action_settings: AgentActionSettings;
+}
+
+export interface AgentPluginLink extends AgentPluginInput {
+  plugin_name: string;
 }
 
 export interface MinimalAgent {
@@ -171,7 +167,7 @@ export interface AgentUpsertRequest {
   users?: string[];
   groups?: number[];
   tool_ids: number[];
-  plugins: AgentPluginInput[] | null;
+  plugins: AgentPluginInput[];
   remove_image?: boolean;
   uploaded_image_id: string | null;
   icon_name: string | null;

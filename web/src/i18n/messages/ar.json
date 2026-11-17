@@ -10797,8 +10797,6 @@
         "ariaLabel": "صفحة محرر الوكلاء"
       },
       "plugins": {
-        "actionSetting": "إعداد {action}",
-        "add": "إضافة إضافة",
         "askHint": "لتشغيل هذا دون سؤال، يضبطه أحد المسؤولين على السماح في التكامل، أو يختار كل مستخدم السماح دائمًا.",
         "askHintAdminOnly": "لتشغيل هذا دون سؤال، يضبطه أحد المسؤولين على السماح في التكامل.",
         "choice": {
@@ -10808,7 +10806,6 @@
           "description": "ينطبق على كل إجراء ليس له إعداد خاص، وكذلك على الإجراءات التي يضيفها التكامل لاحقًا.",
           "title": "الافتراضي للإجراءات الأخرى"
         },
-        "defaultSetting": "الإعداد الافتراضي لـ {plugin}",
         "description": "امنح الوكيل إضافات. يستخدم كل إجراء إعداد التكامل ما لم تختر إعدادًا آخر.",
         "effective": "{policy, select, allow {يسمح} ask {يسأل} other {محظور}} ({source, select, integration {إعداد التكامل} agentDefault {افتراضي الوكيل} other {إعداد الوكيل}})",
         "empty": "لا توجد إضافات بتكاملات متاحة لك.",
@@ -10820,10 +10817,25 @@
         },
         "noActions": "لا يحتوي هذا التكامل على إجراءات بعد.",
         "notVisible": "لا يمكنك رؤية إجراءات هذه الإضافة. تبقى إعداداتها كما هي.",
-        "openIntegration": "فتح إجراءات {integration}",
-        "remove": "إزالة {plugin}",
-        "retry": "حاول مرة أخرى",
-        "title": "الإضافات"
+        "title": "الإضافات",
+        "add": {
+          "placeholder": "إضافة إضافة"
+        },
+        "remove": {
+          "ariaLabel": "إزالة {plugin}"
+        },
+        "retry": {
+          "label": "حاول مرة أخرى"
+        },
+        "actionSetting": {
+          "label": "إعداد {action}"
+        },
+        "defaultSetting": {
+          "label": "الإعداد الافتراضي لـ {plugin}"
+        },
+        "openIntegration": {
+          "label": "فتح إجراءات {integration}"
+        }
       },
       "prompts": {
         "instructions": {

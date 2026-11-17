@@ -103,11 +103,6 @@ export class AgentEditorPage {
     await expect(this.defaultModelListbox).toBeHidden();
   }
 
-  // ---------------------------------------------------------------------------
-  // Plugins
-  // ---------------------------------------------------------------------------
-
-  /** The setting select of one action; its value is the chosen setting. */
   actionSetting(actionName: string): Locator {
     return this.page.getByRole("combobox", {
       name: `Setting for ${actionName}`,

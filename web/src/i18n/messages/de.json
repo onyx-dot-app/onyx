@@ -10797,8 +10797,6 @@
         "ariaLabel": "Agenten-Editor-Seite"
       },
       "plugins": {
-        "actionSetting": "Einstellung für {action}",
-        "add": "Plugin hinzufügen",
         "askHint": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben, oder jeder Benutzer wählt Immer erlauben.",
         "askHintAdminOnly": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben.",
         "choice": {
@@ -10808,7 +10806,6 @@
           "description": "Gilt für jede Aktion ohne eigene Einstellung, auch für Aktionen, die die Integration später hinzufügt.",
           "title": "Standard für andere Aktionen"
         },
-        "defaultSetting": "Standardeinstellung für {plugin}",
         "description": "Geben Sie dem Agenten Plugins. Jede Aktion verwendet die Integrationseinstellung, sofern Sie keine andere wählen.",
         "effective": "{policy, select, allow {Erlaubt} ask {Fragt} other {Blockiert}} ({source, select, integration {Integrationseinstellung} agentDefault {Agentenstandard} other {Agenteneinstellung}})",
         "empty": "Für Sie sind keine Plugins mit Integrationen verfügbar.",
@@ -10820,10 +10817,25 @@
         },
         "noActions": "Diese Integration hat noch keine Aktionen.",
         "notVisible": "Sie können die Aktionen dieses Plugins nicht sehen. Seine Einstellungen bleiben unverändert.",
-        "openIntegration": "Aktionen von {integration} öffnen",
-        "remove": "{plugin} entfernen",
-        "retry": "Erneut versuchen",
-        "title": "Plugins"
+        "title": "Plugins",
+        "add": {
+          "placeholder": "Plugin hinzufügen"
+        },
+        "remove": {
+          "ariaLabel": "{plugin} entfernen"
+        },
+        "retry": {
+          "label": "Erneut versuchen"
+        },
+        "actionSetting": {
+          "label": "Einstellung für {action}"
+        },
+        "defaultSetting": {
+          "label": "Standardeinstellung für {plugin}"
+        },
+        "openIntegration": {
+          "label": "Aktionen von {integration} öffnen"
+        }
       },
       "prompts": {
         "instructions": {

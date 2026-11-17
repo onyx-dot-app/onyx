@@ -10797,8 +10797,6 @@
         "ariaLabel": "Page de l'éditeur d'agents"
       },
       "plugins": {
-        "actionSetting": "Réglage pour {action}",
-        "add": "Ajouter un plugin",
         "askHint": "Pour l'exécuter sans demande, un administrateur la règle sur Autoriser dans l'intégration, ou chaque utilisateur choisit Toujours autoriser.",
         "askHintAdminOnly": "Pour l'exécuter sans demande, un administrateur la règle sur Autoriser dans l'intégration.",
         "choice": {
@@ -10808,7 +10806,6 @@
           "description": "S'applique à chaque action sans réglage propre, y compris aux actions que l'intégration ajoutera plus tard.",
           "title": "Par Défaut pour les Autres Actions"
         },
-        "defaultSetting": "Réglage par défaut pour {plugin}",
         "description": "Attribuez des plugins à l'agent. Chaque action utilise le réglage de l'intégration, sauf si vous en choisissez un autre.",
         "effective": "{policy, select, allow {Autorise} ask {Demande} other {Bloquée}} ({source, select, integration {réglage de l'intégration} agentDefault {défaut de l'agent} other {réglage de l'agent}})",
         "empty": "Aucun plugin avec des intégrations n'est disponible pour vous.",
@@ -10820,10 +10817,25 @@
         },
         "noActions": "Cette intégration n'a pas encore d'actions.",
         "notVisible": "Vous ne pouvez pas voir les actions de ce plugin. Ses réglages restent inchangés.",
-        "openIntegration": "Ouvrir les actions de {integration}",
-        "remove": "Retirer {plugin}",
-        "retry": "Réessayer",
-        "title": "Plugins"
+        "title": "Plugins",
+        "add": {
+          "placeholder": "Ajouter un plugin"
+        },
+        "remove": {
+          "ariaLabel": "Retirer {plugin}"
+        },
+        "retry": {
+          "label": "Réessayer"
+        },
+        "actionSetting": {
+          "label": "Réglage pour {action}"
+        },
+        "defaultSetting": {
+          "label": "Réglage par défaut pour {plugin}"
+        },
+        "openIntegration": {
+          "label": "Ouvrir les actions de {integration}"
+        }
       },
       "prompts": {
         "instructions": {

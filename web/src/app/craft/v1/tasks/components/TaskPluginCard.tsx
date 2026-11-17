@@ -8,12 +8,11 @@ import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import type {
   TaskActionSettings,
   TaskActionView,
-  TaskLinkValue,
   TaskPluginView,
 } from "@/app/craft/v1/tasks/types";
-import type { PolicyValue } from "@/lib/integrations/types";
+import type { LinkValue, PolicyValue } from "@/lib/integrations/types";
 
-function runPolicy(value: TaskLinkValue, action: TaskActionView): PolicyValue {
+function runPolicy(value: LinkValue, action: TaskActionView): PolicyValue {
   if (value === "blocked" || action.integration_policy === "blocked")
     return "blocked";
   if (value === "inherit" || (value === "allow" && action.locked))
