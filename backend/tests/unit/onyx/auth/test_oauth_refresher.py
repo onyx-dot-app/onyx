@@ -217,15 +217,12 @@ async def _run_coalesced_refreshes(
     db_session: MagicMock,
     user_manager: MagicMock,
     on_refresh: Callable[[MagicMock, MagicMock], None],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncMock:
     """Runs check_and_refresh_oauth_tokens for both users so the second reaches
-    the per-user lock while the first is parked inside refresh_oauth_token.
+    the user lock while the first is parked inside refresh_oauth_token.
     `on_refresh(user, account)` models what a completed refresh persists."""
     import asyncio as _asyncio
 
-    monkeypatch.setattr(oauth_refresher, "_USER_REFRESH_LOCKS", {})
-    monkeypatch.setattr(oauth_refresher, "_USER_REFRESH_LOCKS_GUARD", None)
     refresh_started = _asyncio.Event()
     release_refresh = _asyncio.Event()
 
@@ -258,7 +255,6 @@ async def _run_coalesced_refreshes(
 @pytest.mark.asyncio
 async def test_check_and_refresh_oauth_tokens_coalesces_concurrent_refresh(
     mock_user_manager: MagicMock,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Two concurrent refreshes for the same user trigger only one IdP POST.
 
@@ -284,7 +280,7 @@ async def test_check_and_refresh_oauth_tokens_coalesces_concurrent_refresh(
         refreshed_account.expires_at = now_timestamp + 3600
 
     mock_refresh = await _run_coalesced_refreshes(
-        (user, user), db_session, mock_user_manager, refreshed, monkeypatch
+        (user, user), db_session, mock_user_manager, refreshed
     )
     assert mock_refresh.call_count == 1
 
@@ -292,7 +288,6 @@ async def test_check_and_refresh_oauth_tokens_coalesces_concurrent_refresh(
 @pytest.mark.asyncio
 async def test_coalesced_refresh_updates_stale_oidc_expiry(
     mock_user_manager: MagicMock,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The coroutine that skips its refresh still leaves with a live oidc_expiry.
 
@@ -338,7 +333,7 @@ async def test_coalesced_refresh_updates_stale_oidc_expiry(
 
     first_user, second_user = _request_user(), _request_user()
     mock_refresh = await _run_coalesced_refreshes(
-        (first_user, second_user), db_session, mock_user_manager, refreshed, monkeypatch
+        (first_user, second_user), db_session, mock_user_manager, refreshed
     )
     assert mock_refresh.call_count == 1
     assert first_user.oidc_expiry == second_user.oidc_expiry

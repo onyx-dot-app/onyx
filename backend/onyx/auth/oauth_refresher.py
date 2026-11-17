@@ -80,16 +80,6 @@ async def _get_discovery_lock(config_url: str) -> asyncio.Lock:
         return lock
 
 
-# Per-user locks coalescing concurrent token-refresh attempts. Without this,
-# two requests for the same user near expiry could both POST a refresh, and
-# IdPs that rotate refresh tokens (e.g. Microsoft Entra) would invalidate one
-# of them with `400 invalid_grant`. The lock pairs with a re-read inside
-# `check_and_refresh_oauth_tokens` so the second coroutine skips the redundant
-# request entirely once the first has succeeded.
-_USER_REFRESH_LOCKS: Dict[uuid.UUID, asyncio.Lock] = {}
-_USER_REFRESH_LOCKS_GUARD: Optional[asyncio.Lock] = None
-
-
 # The cache lock serializes the refresh of one user's login tokens across
 # processes: web requests, background jobs and the sandbox proxy.
 LOGIN_REFRESH_LOCK_LEASE_S = 60.0
@@ -98,24 +88,6 @@ LOGIN_REFRESH_LOCK_WAIT_S = 35.0
 
 def onyx_login_refresh_lock_name(user_id: uuid.UUID) -> str:
     return f"onyx_login_refresh:{get_current_tenant_id()}:{user_id}"
-
-
-def _get_user_refresh_locks_guard() -> asyncio.Lock:
-    """Lazy-init the meta-lock that protects the per-user lock dict itself."""
-    global _USER_REFRESH_LOCKS_GUARD
-    if _USER_REFRESH_LOCKS_GUARD is None:
-        _USER_REFRESH_LOCKS_GUARD = asyncio.Lock()
-    return _USER_REFRESH_LOCKS_GUARD
-
-
-async def _get_user_refresh_lock(user_id: uuid.UUID) -> asyncio.Lock:
-    """Get-or-create a per-user lock keyed by `user.id`."""
-    async with _get_user_refresh_locks_guard():
-        lock = _USER_REFRESH_LOCKS.get(user_id)
-        if lock is None:
-            lock = asyncio.Lock()
-            _USER_REFRESH_LOCKS[user_id] = lock
-        return lock
 
 
 def _cached_token_endpoint(config_url: str) -> tuple[bool, Optional[str]]:
@@ -524,32 +496,28 @@ async def check_and_refresh_oauth_tokens(
             oauth_account.expires_at
             and oauth_account.expires_at - now_timestamp < buffer_seconds
         ):
-            # The process lock coalesces concurrent requests of this process;
-            # the cache lock coalesces them with every other refresher.
-            user_lock = await _get_user_refresh_lock(user.id)
-            async with user_lock:
-                try:
-                    async with async_cache_shared_lock(
-                        onyx_login_refresh_lock_name(user.id),
-                        max_time_lock_held_s=LOGIN_REFRESH_LOCK_LEASE_S,
-                        wait_for_lock_s=LOGIN_REFRESH_LOCK_WAIT_S,
-                        logger=logger,
-                    ):
-                        await _refresh_if_still_stale(
-                            user,
-                            oauth_account,
-                            db_session,
-                            user_manager,
-                            now_timestamp,
-                            buffer_seconds,
-                        )
-                except CacheLockAcquisitionError:
-                    # Another process holds the lock and refreshes the token.
-                    logger.warning(
-                        "OAuth token refresh for %s is already running elsewhere",
-                        user.email,
+            try:
+                async with async_cache_shared_lock(
+                    onyx_login_refresh_lock_name(user.id),
+                    max_time_lock_held_s=LOGIN_REFRESH_LOCK_LEASE_S,
+                    wait_for_lock_s=LOGIN_REFRESH_LOCK_WAIT_S,
+                    logger=logger,
+                ):
+                    await _refresh_if_still_stale(
+                        user,
+                        oauth_account,
+                        db_session,
+                        user_manager,
+                        now_timestamp,
+                        buffer_seconds,
                     )
-                    await _reload_oidc_expiry(db_session, user)
+            except CacheLockAcquisitionError:
+                # Another process holds the lock and refreshes the token.
+                logger.warning(
+                    "OAuth token refresh for %s is already running elsewhere",
+                    user.email,
+                )
+                await _reload_oidc_expiry(db_session, user)
 
 
 async def check_oauth_account_has_refresh_token(
