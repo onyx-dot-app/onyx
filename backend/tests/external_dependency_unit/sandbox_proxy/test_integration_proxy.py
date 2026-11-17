@@ -645,6 +645,29 @@ def test_a_scheduled_run_matches_a_task_plugin_that_the_owner_turned_off(
     assert IntegrationResolver().allows_destination(_sandbox(user), "https", host, 443)
 
 
+def test_a_scheduled_run_ignores_a_plugin_that_is_not_on_the_task(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    host = _host()
+    in_task = _mcp(db_session, created, f"https://{host}/mcp")
+    # Turned on by the owner, with the same URL, but not on the task.
+    _run(db_session, [_mcp(db_session, created, f"https://{host}/mcp")])
+    plugin = _run(db_session, [in_task])
+    ctx = _session_ctx(db_session, user)
+    task = _task_run(
+        db_session,
+        user,
+        ctx.session_id,
+        {plugin.id: {"actions": {"update": "allow"}}},
+    )
+
+    matched = _evaluate(
+        _request(f"https://{host}/mcp", _tool_call("update")), user, task.id
+    )
+    assert isinstance(matched, AllMatchedActions)
+    assert matched.target.integration_id == in_task.id
+
+
 def test_the_task_catalog_locks_a_task_allow_that_the_policy_ignores(
     db_session: Session, created: list[int], user: User
 ) -> None:
@@ -754,7 +777,7 @@ def test_a_scheduled_session_config_lists_the_task_plugins_the_owner_turned_off(
     assert interactive[other.id] == ()
     # The task settings decide the tools, as in the proxy.
     assert scheduled[mcp.id] == ("update",)
-    assert scheduled[other.id] == ("search", "update")
+    assert other.id not in scheduled
     assert get_scheduled_task_id_for_session(db_session, ctx.session_id) == task.id
 
 

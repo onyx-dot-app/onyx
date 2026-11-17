@@ -103,9 +103,10 @@ def _pick(
 
 
 class IntegrationRequestEvaluator(RequestEvaluator):
-    """Matches a request against the integrations that the sandbox owner can
-    use. A scheduled run also matches the task plugins that the owner turned
-    off. The gate applies the stored policies.
+    """Matches a request against the integrations of the plugins that the
+    sandbox owner turned on. A scheduled run matches only the task plugins
+    that the owner can see, also one the owner turned off. The gate applies
+    the stored policies.
 
     * an MCP protocol message gives ``McpProtocolRequest``;
     * an MCP body that does not parse gives one blocked action;
@@ -126,8 +127,10 @@ class IntegrationRequestEvaluator(RequestEvaluator):
     ) -> AllMatchedActions | McpProtocolRequest | None:
         usable = self._usable.get(tenant_id, user_id)
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            ids = set(usable.turned_on)
-            if scheduled_task_id is not None:
+            if scheduled_task_id is None:
+                ids = set(usable.turned_on)
+            else:
+                ids = set()
                 for link in list_task_plugin_links(db, scheduled_task_id):
                     ids |= usable.by_visible_plugin.get(link.plugin_id, frozenset())
             picked = _pick(
