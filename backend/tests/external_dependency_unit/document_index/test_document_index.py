@@ -701,15 +701,31 @@ class TestDocumentIndex:
             (short_doc, 0),
         ]
 
-    def test_leading_chunks_retrieval_requires_attached_document_ids(
+    @pytest.mark.parametrize(
+        "filters",
+        [
+            IndexFilters(access_control_list=None),
+            IndexFilters(
+                access_control_list=None,
+                attached_document_ids=["a"],
+                hierarchy_node_ids=[7],
+            ),
+            IndexFilters(
+                access_control_list=None,
+                attached_document_ids=["a"],
+                document_set=["set"],
+            ),
+        ],
+        ids=["no_attached_ids", "with_hierarchy_nodes", "with_document_sets"],
+    )
+    def test_leading_chunks_retrieval_only_reads_attached_documents(
         self,
         document_index: DocumentIndex,
+        filters: IndexFilters,
     ) -> None:
         """
-        Tests that a call without attached_document_ids is refused instead of
-        reading the start of every document in the index.
+        Tests that a call is refused when attached_document_ids is missing, or
+        when another knowledge filter would add documents outside the list.
         """
         with pytest.raises(ValueError):
-            document_index.leading_chunks_retrieval(
-                filters=IndexFilters(access_control_list=None), max_chunk_index=2
-            )
+            document_index.leading_chunks_retrieval(filters=filters, max_chunk_index=2)

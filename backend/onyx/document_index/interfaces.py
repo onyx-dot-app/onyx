@@ -372,12 +372,15 @@ class IdRetrievalCapable(abc.ABC):
 
         Args:
             filters: Filters for the retrieval. attached_document_ids must be
-                set: it chooses the documents.
+                set, and it alone chooses the documents: the other knowledge
+                filters (hierarchy nodes, document sets, persona, project)
+                must be empty.
             max_chunk_index: The last chunk index to retrieve per document.
 
         Raises:
-            ValueError: attached_document_ids is empty, or the request could
-                return more chunks than one query allows.
+            ValueError: attached_document_ids is empty, another knowledge
+                filter is set, or the request could return more chunks than
+                one query allows.
 
         Returns:
             The chunks found, in no particular order.

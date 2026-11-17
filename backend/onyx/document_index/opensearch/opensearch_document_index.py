@@ -1007,6 +1007,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # Without it, the query would read the start of every document.
         if not filters.attached_document_ids:
             raise ValueError("Set attached_document_ids to choose the documents.")
+        # The other knowledge filters are joined to it with OR and would add
+        # documents outside the list.
+        if (
+            filters.hierarchy_node_ids
+            or filters.document_set
+            or filters.persona_id_filter is not None
+            or filters.project_id_filter is not None
+        ):
+            raise ValueError("Only attached_document_ids may choose the documents.")
         # One query returns at most this many chunks.
         if (
             len(filters.attached_document_ids) * (max_chunk_index + 1)
