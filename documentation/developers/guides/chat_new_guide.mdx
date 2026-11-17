@@ -24,10 +24,9 @@ You can receive a streaming response or one complete response.
 | `message` | The user message to send to the Agent. |
 | `llm_override` | Pass an object to override the default LLM settings for this request. If `None`, you will get the default Onyx behavior. <br/><br/>You can pass or exclude any of the following fields: <br/>• `model_configuration_id` – the exact model configuration to use. Preferred over the name-based fields, since provider display names are not unique <br/>• `model_provider` <br/>• `model_version` – must match a model configured on the resolved provider. If it does not, the request is rejected with `INVALID_INPUT`: an HTTP `400` when `stream=false`, or an error packet with `"error_code": "INVALID_INPUT"` when streaming (the default). If no provider resolves, or you cannot use that provider, Onyx uses the default LLM instead. Onyx does not check `model_version` when you pass `model_configuration_id` <br/>• `temperature` <br/>• `display_name` – label shown for the model in the UI; falls back to `model_version` |
 | `llm_overrides` | Two or three `llm_override` objects to run in parallel (multi-model mode), one per model. <br/><br/>**Requires `stream=true`.** Sending more than one entry with `stream=false` fails with `400 {"error_code": "INVALID_INPUT"}`. A list with a single entry is ignored — use `llm_override` for an ordinary single-model request. |
-| `allowed_tool_ids` | Each Agent has a set of Actions (built-in tools, MCP Actions, and OpenAPI Actions from **Admin Panel** > **Plugins**) that it can invoke. Use this parameter to narrow that set for this request. List the Actions and their IDs with the [GET /tool](/developers/api_reference/actions/list_tools) endpoint. Pass an empty list to disable all Actions. Omit the field or pass `null` to allow every Action configured for the Agent. |
-| `preferred_tool_id` | Prefer one Action when it helps answer this request. The Agent can use other Actions or answer without an Action. The preference lasts for this request only. |
+| `tool_options` | Narrows the built-in tools and the Plugins that the Agent can use for this request, and sets an optional preference. See [Tool options](#tool-options). Omit the field or pass `null` to allow every tool and Plugin of the Agent. |
 | `file_descriptors` | A list of files to include with your request. Each entry is `{"id": ..., "type": ..., "name": ...}`. Upload files with [POST /user/projects/file/upload](/developers/api_reference/projects/upload_user_files) and read them back with [GET /user/projects/file/{file_id}](/developers/api_reference/projects/get_user_file). |
-| `internal_search_filters` | Filters to narrow down the internal search results used by the Agent. All filter arguments are optional and can be combined: <br/><br/>• `source_type` – Source types like `web`, `slack`, `google_drive`, `confluence` <br/>• `document_set` – The name of the document sets to search within <br/>• `created_at_range` / `updated_at_range` – An inclusive window, `{"start": ..., "end": ...}`, in ISO 8601 format: `YYYY-MM-DDTHH:MM:SSZ`. Either bound may be omitted to leave that side open; naive timestamps are treated as UTC <br/>• `tags` – A list of `{"tag_key": ..., "tag_value": ...}` objects <br/><br/>**Note:** `time_cutoff` is still accepted as a deprecated alias for the start of `updated_at_range`. |
+| `internal_search_filters` | Send the filters as `tool_options.internal_search_filters`. The top-level field is still accepted; do not send both. Filters narrow down the internal search results used by the Agent. All filter arguments are optional and can be combined: <br/><br/>• `source_type` – Source types like `web`, `slack`, `google_drive`, `confluence` <br/>• `document_set` – The name of the document sets to search within <br/>• `created_at_range` / `updated_at_range` – An inclusive window, `{"start": ..., "end": ...}`, in ISO 8601 format: `YYYY-MM-DDTHH:MM:SSZ`. Either bound may be omitted to leave that side open; naive timestamps are treated as UTC <br/>• `tags` – A list of `{"tag_key": ..., "tag_value": ...}` objects <br/><br/>**Note:** `time_cutoff` is still accepted as a deprecated alias for the start of `updated_at_range`. |
 | `deep_research` | Enables Deep Research mode for this request. <br/><br/>**Note:** This mode uses many more tokens than a normal request. |
 | `mcp_headers` | Headers forwarded to MCP tool calls made while answering this message, e.g. `{"Authorization": "Bearer <user_jwt>"}`. Use this to pass end-user credentials through to MCP servers that require them. |
 | `parent_message_id` | The ID of the parent message in the chat history. Omit it (or pass `-1`) to place the new message after the latest message in the session. Pass a specific message ID to branch from that point. <br/><br/>**Warning:** If set to `null`, the new message starts from the root of the session, as the first message. |
@@ -38,11 +37,46 @@ You can receive a streaming response or one complete response.
 | `additional_context` | A string of extra context injected into the LLM call for this request. The model sees it, but Onyx does **not store it** and it does not appear in chat history.<br></br>Use it for request-scoped information such as the user's current page URL or session metadata.<br></br>Pass `null` or omit the field to send no additional context. |
 | `origin` | Where the message comes from, for usage reporting. Set it to `api` for scripts and integrations. Other values: `webapp`, `chrome_extension`, `slackbot`, `widget`, `discordbot`, `mobile`. Defaults to `unset`. |
 
+## Tool options
+
+`tool_options` has three fields. Each field is optional.
+
+| Field | Description |
+|-------|-------------|
+| `allowed` | A list of entries. Each entry keeps one built-in tool or one Plugin of the Agent, and the Agent cannot use what the list leaves out. Pass an empty list to disable all tools and Plugins. Omit the field or pass `null` to allow everything. <br/><br/>• `{"type": "capability", "tool_id": 3}` – a built-in tool, by its ID <br/>• `{"type": "plugin", "plugin_id": "...", "actions": ["..."]}` – a Plugin. `actions` is optional and keeps only the Actions it names. Omit it to keep each Action of the Plugin |
+| `preferred` | One tool to prefer when it helps answer this request. The Agent can use other tools or answer without one. <br/><br/>• `{"type": "capability", "tool_id": 3}` – a built-in tool <br/>• `{"type": "action", "plugin_id": "...", "action": "..."}` – one Action of a Plugin |
+| `internal_search_filters` | The internal search filters, as in the table above. |
+
+List the built-in tools and their IDs with the [GET /tool](/developers/api_reference/actions/list_tools) endpoint.
+In the same list, each MCP or OpenAPI Action has `plugin_ids`, the Plugins that hold it.
+The Action key is the MCP tool name or the OpenAPI `operationId`.
+
+The options only narrow what the Agent can use. An Action that an admin or the Agent blocks stays blocked.
+Selecting a tool does not grant permission to use it or bypass approval. The options last for this request only.
+To save options on a chat, send them to `PATCH /chat/chat-session/{chat_session_id}/tool-options`.
+Messages that Onyx starts in that chat, such as queued messages and background agents, use the saved options.
+A field that the body does not set keeps its saved value.
+
+This request allows only web search and the `listOrders` Action of one Plugin, and prefers that Action:
+
+```json
+{
+  "message": "Which orders shipped this week?",
+  "tool_options": {
+    "allowed": [
+      {"type": "capability", "tool_id": 3},
+      {"type": "plugin", "plugin_id": "6f1c2b9e-1d4a-4f7e-9a51-2b8c0d3e4f5a", "actions": ["listOrders"]}
+    ],
+    "preferred": {"type": "action", "plugin_id": "6f1c2b9e-1d4a-4f7e-9a51-2b8c0d3e4f5a", "action": "listOrders"}
+  }
+}
+```
+
 <Note>
-  `forced_tool_id` is no longer supported. Requests with a non-null value receive a validation error.
-  Use `preferred_tool_id` for an optional preference. Action invocation is not guaranteed.
-  Selecting an Action does not grant permission to use it or bypass approval.
-  Deep Research does not accept an Action preference. An unavailable Action produces an error.
+  `allowed_tool_ids`, `preferred_tool_id` and `forced_tool_id` are no longer supported.
+  A request that sends one of them with a value receives a validation error that names `tool_options`.
+  Use `tool_options.preferred` for an optional preference. Tool invocation is not guaranteed.
+  Deep Research does not accept a preference. An unavailable preferred tool produces an error.
   Slack also uses a search preference; it does not guarantee a search on every request.
 </Note>
 
