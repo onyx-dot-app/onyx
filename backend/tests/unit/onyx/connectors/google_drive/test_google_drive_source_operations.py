@@ -24,6 +24,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
 from onyx.connectors.google_utils.google_auth import GoogleUnreachableError
+from onyx.connectors.google_utils.google_utils import TRANSIENT_CONNECTION_ERRORS
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
@@ -34,8 +35,28 @@ from onyx.connectors.models import (
     ConnectorMissingCredentialError,
     ConnectorStopSignal,
 )
+from onyx.utils.retry_wrapper import retry_builder
 
 _ADMIN = "admin@co.com"
+
+
+@pytest.fixture(autouse=True)
+def _no_retry_wait() -> Any:
+    """Retries of transient Drive errors do not wait in these tests."""
+    with mock.patch.object(
+        source_operations,
+        "_retry_transient_drive_call",
+        retry_builder(
+            tries=3,
+            delay=0,
+            jitter=0,
+            exceptions=(HttpError, *TRANSIENT_CONNECTION_ERRORS),
+            retry_if=source_operations._is_transient_drive_error,
+        ),
+    ):
+        yield
+
+
 _CREDENTIALS = {
     DB_CREDENTIALS_DICT_TOKEN_KEY: "{}",
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY: _ADMIN,
@@ -1019,3 +1040,81 @@ def test_a_rate_limit_in_the_directory_probe_is_not_a_permission_error() -> None
 
     with pytest.raises(UnexpectedValidationError):
         connector.probe_directory_admin_permission()
+
+
+class _FakeBatch:
+    """A batch request that answers each added request through the callback,
+    or raises ``error`` on execute."""
+
+    def __init__(self, callback: Any, error: Exception | None) -> None:
+        self._callback = callback
+        self._error = error
+        self._ids: list[str] = []
+
+    def add(self, _request: Any, request_id: str) -> None:
+        self._ids.append(request_id)
+
+    def execute(self) -> None:
+        if self._error is not None:
+            raise self._error
+        for request_id in self._ids:
+            self._callback(request_id, {"id": request_id}, None)
+
+
+def _batch_service(error: Exception | None) -> mock.MagicMock:
+    service = mock.MagicMock()
+    service.new_batch_http_request.side_effect = lambda callback: _FakeBatch(
+        callback, error
+    )
+    return service
+
+
+@pytest.mark.parametrize(
+    "error", [ConnectionResetError(104, "reset"), BrokenPipeError(32, "pipe")]
+)
+def test_a_batch_read_retries_a_lost_connection_with_a_new_client(
+    error: Exception,
+) -> None:
+    """A stale keep-alive socket breaks one batch request. The read is sent
+    again from a new Drive client, and the caller gets every file."""
+    gateway = _gateway()
+    broken = _batch_service(error)
+    fresh = _batch_service(None)
+
+    with (
+        mock.patch.object(gateway, "_creds"),
+        mock.patch.object(
+            source_operations, "get_google_service", side_effect=[broken, fresh]
+        ) as build,
+    ):
+        result = gateway.batch_get_files(
+            user_email=_ADMIN,
+            file_ids_by_key={"k1": "f1", "k2": "f2"},
+            fields="id",
+        )
+
+    assert build.call_count == 2
+    assert result.files == {"k1": {"id": "k1"}, "k2": {"id": "k2"}}
+    assert result.errors == {}
+
+
+def test_a_batch_read_retries_a_server_error() -> None:
+    gateway = _gateway()
+    drive = mock.MagicMock()
+    batches = iter(
+        [
+            _FakeBatch(None, _http_error(503)),
+        ]
+    )
+
+    def new_batch(callback: Any) -> _FakeBatch:
+        return next(batches, None) or _FakeBatch(callback, None)
+
+    drive.new_batch_http_request.side_effect = new_batch
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        result = gateway.batch_get_files(
+            user_email=_ADMIN, file_ids_by_key={"k1": "f1"}, fields="id"
+        )
+
+    assert result.files == {"k1": {"id": "k1"}}

@@ -288,6 +288,46 @@ def _has_permission_fields(drive_file: GoogleDriveFileType) -> bool:
     return "permissions" in drive_file or "permissionIds" in drive_file
 
 
+# What permissions.list reads for a listed file whose fields lack some of its
+# permissions.
+_PERMISSION_LIST_FIELDS = f"nextPageToken, {PERMISSION_FULL_DESCRIPTION}"
+
+
+def _missing_permission_ids(
+    permissions: Iterable[dict[str, Any]], permission_ids: Iterable[str]
+) -> set[str]:
+    return set(permission_ids) - {str(p.get("id")) for p in permissions}
+
+
+def _has_every_permission(drive_file: GoogleDriveFileType) -> bool:
+    """Whether the file's fields hold its permissions, one for each id the
+    file lists. Drive can leave out `permissions`, or some of them, and give
+    only their ids."""
+    permissions = drive_file.get("permissions") or []
+    return bool(permissions) and not _missing_permission_ids(
+        permissions, drive_file.get("permissionIds") or []
+    )
+
+
+def _permission_read_failure(
+    target: ResolveTarget, drive_file: GoogleDriveFileType, error: Exception | None
+) -> ConnectorFailure:
+    """The failure of a file whose permissions could not all be read. The file
+    is not indexed with less access than it has. A later attempt reads it
+    again."""
+    return ConnectorFailure(
+        failed_document=DocumentFailure(
+            document_id=target.document_id,
+            document_link=drive_file.get(WEB_VIEW_LINK_KEY) or target.document_link,
+        ),
+        failure_message=(
+            f"Could not read every permission of {drive_file.get('name')}"
+            + (f": {error}" if error is not None else "")
+        ),
+        exception=error,
+    )
+
+
 def _get_parent_id_from_file(drive_file: GoogleDriveFileType) -> str | None:
     """Extract the first parent ID from a drive file."""
     parents = drive_file.get("parents")
@@ -1397,7 +1437,9 @@ class GoogleDriveConnector(
             if need_permissions
             else {}
         )
-        listed: list[tuple[GoogleDriveFileType, list[str], DriveListingPayload]] = []
+        listed: list[
+            tuple[ResolveTarget, GoogleDriveFileType, list[str], DriveListingPayload]
+        ] = []
         for target, payload in payloads:
             drive_file = dict(cast(GoogleDriveFileType, payload.drive_file))
             if need_permissions and not _has_permission_fields(drive_file):
@@ -1413,7 +1455,7 @@ class GoogleDriveConnector(
             readers = _rotated_readers(drive_file, payload)
             if self.primary_admin_email not in readers:
                 readers.append(self.primary_admin_email)
-            listed.append((drive_file, readers, payload))
+            listed.append((target, drive_file, readers, payload))
         if unlisted:
             yield from super().resolve_targets(unlisted, include_permissions)
 
@@ -1431,9 +1473,9 @@ class GoogleDriveConnector(
                 [
                     (
                         self._convert_listed_file,
-                        (drive_file, readers, permission_sync_context, payload),
+                        (target, drive_file, readers, permission_sync_context, payload),
                     )
-                    for drive_file, readers, payload in listed
+                    for target, drive_file, readers, payload in listed
                 ],
                 max_workers=DRIVE_CONVERSION_WORKERS,
             ),
@@ -1444,11 +1486,24 @@ class GoogleDriveConnector(
 
     def _convert_listed_file(
         self,
+        target: ResolveTarget,
         drive_file: GoogleDriveFileType,
         readers: list[str],
         permission_sync_context: PermissionSyncContext | None,
         payload: DriveListingPayload,
     ) -> Document | ConnectorFailure | None:
+        if permission_sync_context is not None and not _has_every_permission(
+            drive_file
+        ):
+            try:
+                completed = self._read_file_permissions(
+                    drive_file, [payload.retriever_email, *readers]
+                )
+            except Exception as e:
+                return _permission_read_failure(target, drive_file, e)
+            if completed is None:
+                return _permission_read_failure(target, drive_file, None)
+            drive_file = completed
         folder_path = payload.folder_path
         if folder_path is None:
             # The listing did not have every folder on the way. Build the
@@ -1475,6 +1530,48 @@ class GoogleDriveConnector(
         return self._convert_drive_file(
             drive_file, readers, permission_sync_context, folder_path
         )
+
+    def _read_file_permissions(
+        self, drive_file: GoogleDriveFileType, readers: Sequence[str]
+    ) -> GoogleDriveFileType | None:
+        """The file with every one of its permissions, read with
+        permissions.list as each reader in turn: the listing user first, as
+        on the inline path, since a drive member that only views the file
+        cannot read them. A reader that is denied passes to the next one.
+
+        None when the readers read only some of the permissions, or a shared
+        drive file's permissions could not be read at all. Conversion would
+        give such a document less access than it has: for a shared drive
+        file, it would leave out the drive's members. A My Drive file that no
+        reader can read the permissions of is returned as it is, so it is
+        converted as on the inline path (owned outside the domain)."""
+        file_id = str(drive_file.get("id"))
+        permission_ids: list[str] = drive_file.get("permissionIds") or []
+        found: dict[str, dict[str, Any]] = {
+            str(p.get("id")): p for p in drive_file.get("permissions") or []
+        }
+        for reader in dict.fromkeys(readers):
+            try:
+                permissions = list(
+                    self.ops.list_file_permissions(
+                        user_email=reader,
+                        file_id=file_id,
+                        fields=_PERMISSION_LIST_FIELDS,
+                    )
+                )
+            except GoogleDriveRefreshError:
+                continue
+            except GoogleDriveHttpError as error:
+                if not error.access_denied:
+                    raise
+                continue
+            for permission in permissions:
+                found.setdefault(str(permission.get("id")), permission)
+            if found and not _missing_permission_ids(found.values(), permission_ids):
+                return {**drive_file, "permissions": list(found.values())}
+        if found or drive_file.get("driveId"):
+            return None
+        return drive_file
 
     def _read_permission_fields(
         self, payloads: list[DriveListingPayload]
