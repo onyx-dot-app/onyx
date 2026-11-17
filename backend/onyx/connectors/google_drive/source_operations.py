@@ -24,6 +24,7 @@ from typing import Any, ParamSpec, TypeVar, cast
 import httplib2
 import requests
 from google.auth.exceptions import RefreshError, TransportError
+from google.auth.transport import Request as GoogleAuthRequest
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -371,6 +372,29 @@ _DEGRADES_ON_DENIAL = (
 )
 
 
+def _serialize_refresh(
+    creds: ServiceAccountCredentials | OAuthCredentials,
+) -> ServiceAccountCredentials | OAuthCredentials:
+    """Lets one thread at a time refresh a credential that threads share. A
+    thread that waited skips its refresh when the token changed meanwhile.
+    The check compares tokens, not ``valid``, so a forced refresh after a 401
+    still runs."""
+    if "_onyx_refresh_lock" in vars(creds):
+        return creds
+    lock = threading.Lock()
+    unlocked_refresh = creds.refresh
+
+    def refresh(request: GoogleAuthRequest) -> None:
+        token_before = creds.token
+        with lock:
+            if creds.token == token_before:
+                unlocked_refresh(request)
+
+    vars(creds)["refresh"] = refresh
+    vars(creds)["_onyx_refresh_lock"] = lock
+    return creds
+
+
 class GoogleDriveSourceOperations(SourceOperations):
     source = DocumentSource.GOOGLE_DRIVE
     sdk_modules = ("google", "googleapiclient")
@@ -436,10 +460,18 @@ class GoogleDriveSourceOperations(SourceOperations):
             self
         ).setdefault("_impersonated_by_email", {})
         creds = by_email.get(user_email)
-        if creds is None:
-            creds = by_email.setdefault(
-                user_email, get_impersonated_creds(self._creds(), user_email)
-            )
+        if creds is not None:
+            return creds
+        lock: threading.Lock = vars(self).setdefault(
+            "_impersonation_lock", threading.Lock()
+        )
+        with lock:
+            creds = by_email.get(user_email)
+            if creds is None:
+                creds = _serialize_refresh(
+                    get_impersonated_creds(self._creds(), user_email)
+                )
+                by_email[user_email] = creds
         return creds
 
     def _thread_clients(self) -> dict[tuple[str, str], Any]:
