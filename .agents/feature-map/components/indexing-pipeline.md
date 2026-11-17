@@ -112,14 +112,17 @@ most `DOCCONVERSION_WINDOW_BATCHES` batches in flight. With
 `ENABLE_CONVERSION_STAGE` on,
 `background/indexing/run_docfetching.py:connector_document_extraction` only
 lists a connector that can do it (`connector_uses_conversion_stage`): it stores
-stub batches and dispatches them. The attempt row keeps
-`uses_conversion_stage` and the last task that dispatched. An attempt that
+stub batches and dispatches them. The listing takes the attempt's choice to
+fetch permissions, so hierarchy nodes carry their permissions as on the
+fetching path. The attempt row keeps `uses_conversion_stage` and the last task
+that dispatched; a claim of no batch does not change it. An attempt that
 continues a failed one takes over its stub batches with new numbers; a change
 of the switch between attempts starts the listing again.
 `background/indexing/conversion_recovery.py:check_conversion_chain` runs in
 the watchdog: when stub batches wait, no conversion task exists and the last
 dispatcher is gone, it sends the lost batches again and counts that as a
-heartbeat. The watchdog fails the attempt only after two runs in a row in
+heartbeat. When every stub batch is converted but fewer batches are complete,
+it sends the stored document batches that have no docprocessing task. The watchdog fails the attempt only after two runs in a row in
 which a restart sent nothing. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
 local disk inside one docprocessing task, so a large batch is never in memory.
 

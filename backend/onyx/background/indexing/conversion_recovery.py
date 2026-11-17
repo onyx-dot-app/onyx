@@ -103,6 +103,39 @@ def _task_is_queued(task_id: str, broker: Redis) -> bool:
     return False
 
 
+def _send_stored_document_batches(
+    app: Celery,
+    *,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    is_backfill: bool,
+) -> int:
+    """Sends each document batch of the attempt in the store to docprocessing
+    and returns the number of sends. Call it only when no docprocessing task
+    of the attempt exists."""
+    doc_storage = get_document_batch_storage(
+        cc_pair_id, index_attempt_id, is_backfill=is_backfill
+    )
+    sends = 0
+    for batch_file_name in doc_storage.get_all_batches_for_cc_pair():
+        path_info = doc_storage.extract_path_info(batch_file_name)
+        if path_info is None or path_info.index_attempt_id != index_attempt_id:
+            continue
+        send_docprocessing_batch(
+            app,
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+            batch_num=path_info.batch_num,
+            priority=OnyxCeleryPriority.MEDIUM,
+            is_backfill=is_backfill,
+            expires=DOCCONVERSION_TASK_EXPIRES_SECONDS,
+        )
+        sends += 1
+    return sends
+
+
 def restart_conversion_chain(
     app: Celery,
     broker: Redis,
@@ -157,24 +190,13 @@ def restart_conversion_chain(
     if not _stage_has_tasks(
         BatchStage.DOCPROCESSING, index_attempt_id, tenant_id, broker
     ):
-        doc_storage = get_document_batch_storage(
-            cc_pair_id, index_attempt_id, is_backfill=is_backfill
+        sends += _send_stored_document_batches(
+            app,
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+            is_backfill=is_backfill,
         )
-        for batch_file_name in doc_storage.get_all_batches_for_cc_pair():
-            path_info = doc_storage.extract_path_info(batch_file_name)
-            if path_info is None or path_info.index_attempt_id != index_attempt_id:
-                continue
-            send_docprocessing_batch(
-                app,
-                index_attempt_id=index_attempt_id,
-                cc_pair_id=cc_pair_id,
-                tenant_id=tenant_id,
-                batch_num=path_info.batch_num,
-                priority=OnyxCeleryPriority.MEDIUM,
-                is_backfill=is_backfill,
-                expires=DOCCONVERSION_TASK_EXPIRES_SECONDS,
-            )
-            sends += 1
 
     sends += len(
         dispatch_stub_batches(
@@ -202,11 +224,17 @@ def check_conversion_chain(
         attempt = get_index_attempt(db_session, index_attempt_id)
         if attempt is None or not attempt.uses_conversion_stage:
             return ConversionChainState.IDLE
-        waiting = (
+        stubs_waiting = (
             attempt.stub_batches_stored > attempt.stub_batches_sent
             or attempt.stub_batches_sent > attempt.stub_batches_converted
         )
-        if not waiting:
+        # Each converted batch reaches docprocessing, which counts it complete.
+        # A worker that stopped after it counted the batch converted, and
+        # before it sent the batch on, leaves a document batch with no task.
+        documents_waiting = (
+            attempt.completed_batches or 0
+        ) < attempt.stub_batches_converted
+        if not stubs_waiting and not documents_waiting:
             return ConversionChainState.IDLE
         last_dispatch_at = attempt.last_dispatch_at
         last_dispatch_task_id = attempt.last_dispatch_task_id
@@ -224,6 +252,30 @@ def check_conversion_chain(
         last_dispatch_task_id, broker
     ):
         return ConversionChainState.HEALTHY
+    if not stubs_waiting:
+        # Only document batches can wait. Docprocessing tasks that exist
+        # count them, and nothing found to send is no sign of a dead chain.
+        if _stage_has_tasks(
+            BatchStage.DOCPROCESSING, index_attempt_id, tenant_id, broker
+        ):
+            return ConversionChainState.BUSY
+        sends = _send_stored_document_batches(
+            app,
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+            is_backfill=is_backfill,
+        )
+        if sends == 0:
+            return ConversionChainState.IDLE
+        with get_session_with_current_tenant() as db_session:
+            IndexingCoordination.record_heartbeat(db_session, index_attempt_id)
+        logger.warning(
+            "Sent %s stored document batches of attempt %s to docprocessing",
+            sends,
+            index_attempt_id,
+        )
+        return ConversionChainState.RECOVERED
 
     sends = restart_conversion_chain(
         app,

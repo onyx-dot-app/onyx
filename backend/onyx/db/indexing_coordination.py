@@ -1,7 +1,7 @@
 """Database-based indexing coordination to replace Redis fencing."""
 
 from pydantic import BaseModel
-from sqlalchemy import func, select, text, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -276,11 +276,22 @@ class IndexingCoordination:
         the batches sent but not converted at or under `window`.
 
         One statement: the CTE locks the row and reads `sent` before the
-        update, so concurrent callers never get the same number. The same
-        statement records the caller as the last task that dispatched. A
-        caller with no task of its own (the watchdog) keeps the task id and
-        moves the time. It is built from the model, so a tenant session's
-        schema applies to it."""
+        update, so concurrent callers never get the same number. When it
+        claims a batch, the same statement records the caller as the last task
+        that dispatched. A caller with no task of its own (the watchdog) keeps
+        the task id and moves the time. A claim of nothing changes neither: a
+        restart that sends nothing must not look like a healthy chain. It is
+        built from the model, so a tenant session's schema applies to it."""
+        claimed = func.greatest(
+            0,
+            func.least(
+                IndexAttempt.stub_batches_stored - IndexAttempt.stub_batches_sent,
+                window
+                - (
+                    IndexAttempt.stub_batches_sent - IndexAttempt.stub_batches_converted
+                ),
+            ),
+        )
         before = (
             select(
                 IndexAttempt.id.label("id"),
@@ -294,23 +305,18 @@ class IndexingCoordination:
             update(IndexAttempt)
             .where(IndexAttempt.id == before.c.id)
             .values(
-                stub_batches_sent=IndexAttempt.stub_batches_sent
-                + func.greatest(
-                    0,
-                    func.least(
-                        IndexAttempt.stub_batches_stored
-                        - IndexAttempt.stub_batches_sent,
-                        window
-                        - (
-                            IndexAttempt.stub_batches_sent
-                            - IndexAttempt.stub_batches_converted
-                        ),
+                stub_batches_sent=IndexAttempt.stub_batches_sent + claimed,
+                last_dispatch_task_id=case(
+                    (
+                        claimed > 0,
+                        func.coalesce(task_id, IndexAttempt.last_dispatch_task_id),
                     ),
+                    else_=IndexAttempt.last_dispatch_task_id,
                 ),
-                last_dispatch_task_id=func.coalesce(
-                    task_id, IndexAttempt.last_dispatch_task_id
+                last_dispatch_at=case(
+                    (claimed > 0, func.now()),
+                    else_=IndexAttempt.last_dispatch_at,
                 ),
-                last_dispatch_at=func.now(),
             )
             .returning(before.c.sent, IndexAttempt.stub_batches_sent)
         )
@@ -374,25 +380,24 @@ class IndexingCoordination:
         """Counts every sent stub batch as converted and returns how many
         that added. Call it only when no conversion task of the attempt exists
         and no sent stub batch is in the store: a task that stopped after it
-        deleted its stub batch never counted it."""
-        settle = text(
-            """
-            WITH before AS (
-                SELECT stub_batches_converted AS converted
-                FROM index_attempt
-                WHERE id = :index_attempt_id
-                FOR UPDATE
+        deleted its stub batch never counted it. It is built from the model,
+        so a tenant session's schema applies to it."""
+        before = (
+            select(
+                IndexAttempt.id.label("id"),
+                IndexAttempt.stub_batches_converted.label("converted"),
             )
-            UPDATE index_attempt
-            SET stub_batches_converted = stub_batches_sent
-            FROM before
-            WHERE index_attempt.id = :index_attempt_id
-            RETURNING index_attempt.stub_batches_sent - before.converted
-            """
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+            .cte("before")
         )
-        added = db_session.execute(
-            settle, {"index_attempt_id": index_attempt_id}
-        ).scalar_one_or_none()
+        settle = (
+            update(IndexAttempt)
+            .where(IndexAttempt.id == before.c.id)
+            .values(stub_batches_converted=IndexAttempt.stub_batches_sent)
+            .returning(IndexAttempt.stub_batches_sent - before.c.converted)
+        )
+        added = db_session.execute(settle).scalar_one_or_none()
         db_session.commit()
         return max(0, added or 0)
 
