@@ -10927,7 +10927,9 @@
         "organization": "Biblioteca de la organización",
         "personal": "Mis subidas de {owner}"
       },
-      "installation": "{policy, select, REQUIRED {Obligatorio} DEFAULT {Activado de forma predeterminada} AVAILABLE {Disponible} NOT_AVAILABLE {No disponible} other {Ninguno}}",
+      "installationSelect": "Configuración de instalación de {name}",
+      "installationSaved": "{name} ahora es {policy}.",
+      "installationSaveFailed": "No se pudo guardar la configuración de instalación.",
       "openIntegration": "Abrir {name}",
       "empty": {
         "title": "No hay complementos con integraciones",

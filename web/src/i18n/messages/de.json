@@ -10927,7 +10927,9 @@
         "organization": "Organisationsbibliothek",
         "personal": "Meine Uploads von {owner}"
       },
-      "installation": "{policy, select, REQUIRED {Erforderlich} DEFAULT {Standardmäßig aktiv} AVAILABLE {Verfügbar} NOT_AVAILABLE {Nicht verfügbar} other {Keine}}",
+      "installationSelect": "Installationseinstellung von {name}",
+      "installationSaved": "{name} ist jetzt {policy}.",
+      "installationSaveFailed": "Die Installationseinstellung konnte nicht gespeichert werden.",
       "openIntegration": "{name} öffnen",
       "empty": {
         "title": "Keine Plugins mit Integrationen",

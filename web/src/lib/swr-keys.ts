@@ -269,6 +269,8 @@ export const SWR_KEYS = {
     `/api/admin/integrations/${integrationId}`,
   adminIntegrationActions: (integrationId: number) =>
     `/api/admin/integrations/${integrationId}/actions`,
+  adminPluginInstallationPolicy: (pluginId: string) =>
+    `/api/admin/plugins/${pluginId}/installation-policy`,
 
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",

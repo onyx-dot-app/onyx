@@ -10927,7 +10927,9 @@
         "organization": "組織ライブラリ",
         "personal": "{owner} のマイアップロード"
       },
-      "installation": "{policy, select, REQUIRED {必須} DEFAULT {デフォルトでオン} AVAILABLE {利用可能} NOT_AVAILABLE {利用不可} other {なし}}",
+      "installationSelect": "{name} のインストール設定",
+      "installationSaved": "{name} は {policy} になりました。",
+      "installationSaveFailed": "インストール設定を保存できませんでした。",
       "openIntegration": "{name} を開く",
       "empty": {
         "title": "連携を含むプラグインはありません",
