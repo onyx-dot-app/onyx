@@ -1,17 +1,20 @@
 "use client";
 
+import { useMemo } from "react";
 import useSWR, { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import { toCraftApps } from "@/lib/integrations/craft";
+import type { MemberIntegration } from "@/lib/integrations/types";
 
 export default function useUserExternalApps(enabled: boolean = true) {
-  const { data, error, isLoading } = useSWR<ExternalAppUserResponse[]>(
-    enabled ? SWR_KEYS.buildExternalApps : null,
+  const { data, error, isLoading } = useSWR<MemberIntegration[]>(
+    enabled ? SWR_KEYS.integrations : null,
     errorHandlingFetcher
   );
+  const apps = useMemo(() => (data ? toCraftApps(data) : undefined), [data]);
 
-  const refresh = () => mutate(SWR_KEYS.buildExternalApps);
+  const refresh = () => mutate(SWR_KEYS.integrations);
 
-  return { data, error, isLoading, refresh };
+  return { data: apps, error, isLoading, refresh };
 }

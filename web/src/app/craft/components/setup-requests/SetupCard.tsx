@@ -17,10 +17,8 @@ import { connectWithOAuth } from "@/lib/integrations/connect";
 import { useMemberIntegrations } from "@/lib/integrations/hooks";
 import { startUserOAuth } from "@/lib/integrations/svc";
 import { isSilentOAuthOutcome, oauthFailureDetail } from "@/lib/oauth/launch";
-import {
-  ExternalAppUserResponse,
-  getAppTypeLogo,
-} from "@/app/craft/v1/apps/registry";
+import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
+import type { CraftApp } from "@/lib/integrations/craft";
 import IntegrationCredentialsModal from "@/sections/plugins/IntegrationCredentialsModal";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { refreshSkillLists } from "@/lib/skills/cache";
@@ -34,7 +32,7 @@ interface SetupCardProps {
   // The agent's one-line justification, when provided.
   reason: string | null;
   // The user-facing app row, when resolved — drives popup-vs-form + fields.
-  userApp?: ExternalAppUserResponse;
+  userApp?: CraftApp;
 }
 
 /**
@@ -100,7 +98,7 @@ export default function SetupCard({
       if (!mountedRef.current) return;
       setDecision(result);
       if (result === "connected") {
-        void mutate(SWR_KEYS.buildExternalApps);
+        void mutate(SWR_KEYS.integrations);
         void refreshSkillLists(mutate);
       }
     },

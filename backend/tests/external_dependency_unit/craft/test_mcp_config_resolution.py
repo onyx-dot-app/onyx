@@ -19,10 +19,11 @@ from onyx.db.enums import (
 )
 from onyx.db.integration import get_mcp_server_for_integration
 from onyx.db.models import Integration, User
+from onyx.integrations.connection_models import ConnectionState
 from onyx.server.features.build.sandbox.util.mcp_config import (
     resolve_craft_mcp_servers,
 )
-from onyx.server.features.mcp.api import get_craft_mcp_servers_for_user
+from onyx.server.features.integrations.api import list_integrations_for_member
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
@@ -110,15 +111,17 @@ def test_the_craft_list_agrees_with_the_session_config(
     )
 
     emitted = {c.integration_id for c in resolve_craft_mcp_servers(db_session, user)}
-    servers = {
-        server.id: server
-        for server in get_craft_mcp_servers_for_user(db_session, user).mcp_servers
+    listed = {
+        integration.id: integration
+        for integration in list_integrations_for_member(user, db_session)
     }
     assert open_mcp.id in emitted
     assert unconnected.id not in emitted
     open_server = get_mcp_server_for_integration(open_mcp.id, db_session)
     unconnected_server = get_mcp_server_for_integration(unconnected.id, db_session)
     assert open_server is not None and unconnected_server is not None
-    assert servers[open_server.id].craft_connected is True
-    assert servers[open_server.id].name == "Open"
-    assert servers[unconnected_server.id].craft_connected is False
+    assert listed[open_mcp.id].mcp_server_id == open_server.id
+    assert listed[open_mcp.id].status.state is ConnectionState.CONNECTED
+    assert listed[open_mcp.id].name == "Open"
+    assert listed[unconnected.id].mcp_server_id == unconnected_server.id
+    assert listed[unconnected.id].status.state is not ConnectionState.CONNECTED

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import useSWR from "swr";
 import { cn } from "@opal/utils";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -9,9 +8,7 @@ import { SvgAlertCircle } from "@opal/icons";
 import { AnimatePresence, motion } from "motion/react";
 import { FoldableLogo } from "@/lib/app/components";
 import SetupCard from "@/app/craft/components/setup-requests/SetupCard";
-import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
+import useUserExternalApps from "@/hooks/useUserExternalApps";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
@@ -124,10 +121,7 @@ export default function BuildMessageList({
   ]);
 
   // Resolve a connect card's app (oauth-vs-form, credential fields) by ID.
-  const { data: connectableApps } = useSWR<ExternalAppUserResponse[]>(
-    SWR_KEYS.buildExternalApps,
-    errorHandlingFetcher
-  );
+  const { data: connectableApps } = useUserExternalApps();
   const appsById = useMemo(
     () => new Map((connectableApps ?? []).map((app) => [app.id, app])),
     [connectableApps]

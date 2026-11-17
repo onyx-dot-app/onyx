@@ -4,11 +4,9 @@ import useSWR, { mutate } from "swr";
 import { useMemo } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import type {
-  AgentEditorMCPServer,
-  CraftMCPServersResponse,
-  MCPServersResponse,
-} from "@/lib/mcp/types";
+import { toCraftMcpServers } from "@/lib/integrations/craft";
+import type { MemberIntegration } from "@/lib/integrations/types";
+import type { AgentEditorMCPServer, MCPServersResponse } from "@/lib/mcp/types";
 
 /**
  * Every MCP server the current user can reach.
@@ -66,19 +64,23 @@ export function useMcpServersForAgent(agentId: number | undefined) {
 }
 
 /**
- * MCP servers an admin made available to Craft, with this user's connection
- * state (`craft_connected`).
+ * The MCP integrations of the plugins the user turned on, with the user's
+ * connection state (`craft_connected`).
  */
 export function useCraftMcpServers(enabled: boolean = true) {
-  const { data, error, isLoading } = useSWR<CraftMCPServersResponse>(
-    enabled ? SWR_KEYS.mcpServersCraft : null,
+  const { data, error, isLoading } = useSWR<MemberIntegration[]>(
+    enabled ? SWR_KEYS.integrations : null,
     errorHandlingFetcher,
     // The Apps page re-reads this after every connect/disconnect; holding the
     // previous list keeps the tab from flashing empty on revalidation.
     { keepPreviousData: true }
   );
+  const servers = useMemo(
+    () => (data ? toCraftMcpServers(data) : undefined),
+    [data]
+  );
 
-  const refresh = () => mutate(SWR_KEYS.mcpServersCraft);
+  const refresh = () => mutate(SWR_KEYS.integrations);
 
-  return { data, error, isLoading, refresh };
+  return { data: servers, error, isLoading, refresh };
 }

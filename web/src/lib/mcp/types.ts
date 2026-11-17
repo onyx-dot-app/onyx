@@ -56,26 +56,6 @@ export interface AgentEditorMCPServer extends MCPServer {
   can_attach: boolean;
 }
 
-/** An MCP server of a plugin the user runs in Craft (`GET /mcp/servers/craft`). */
-export interface CraftMCPServer {
-  id: number;
-  name: string;
-  description: string | null;
-  server_url: string;
-  owner: string;
-  transport: MCPTransportType | null;
-  connection_status: MCPConnectionStatus;
-  status: MCPServerStatus;
-  available_in_craft: boolean;
-  plugin_ids: string[];
-  // Whether Craft can authenticate this user against the server.
-  craft_connected: boolean;
-}
-
-export interface CraftMCPServersResponse {
-  mcp_servers: CraftMCPServer[];
-}
-
 export interface MCPServersResponse {
   assistant_id?: string | null;
   mcp_servers: MCPServer[];
@@ -89,12 +69,6 @@ export interface MCPTool {
   isAvailable: boolean;
   isEnabled: boolean;
   permissions?: PermissionsOf<"Action">;
-}
-
-export enum MCPConnectionStatus {
-  NOT_CONNECTED = "not_connected",
-  CONNECTED = "connected",
-  REAUTH_REQUIRED = "reauth_required",
 }
 
 export enum MCPAuthenticationType {

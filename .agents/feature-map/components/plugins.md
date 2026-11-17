@@ -272,7 +272,7 @@ only the configuration of a chat that does not exist yet.
   `connectAction` in `web/src/lib/integrations/connect.ts`, and a branch in
   `web/src/sections/plugins/IntegrationConnectionRow.tsx:connect`. The Craft
   connect card (`web/src/app/craft/components/setup-requests/SetupCard.tsx`)
-  signs in with the `integration_id` of `GET /build/apps`.
+  signs in with the integration id of the member list (`GET /integrations`).
 - `investigate-missing-default-chat-tool` **Investigate "a plugin is on, but its
   tool is missing in Default Chat".** Check, in order: the tool has a
   `Persona__Tool` row on the default assistant
