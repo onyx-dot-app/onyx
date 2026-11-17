@@ -355,7 +355,14 @@ def test_pdfium_text_module_has_light_imports() -> None:
         "'openpyxl', 'chardet') if m in sys.modules]\n"
         "assert not heavy, heavy\n"
     )
+    # The child does not get pytest's sys.path, so run it from the directory
+    # that holds the onyx package.
+    backend_dir = Path(pdfium_text.__file__).resolve().parents[2]
     result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=backend_dir,
     )
     assert result.returncode == 0, result.stderr
