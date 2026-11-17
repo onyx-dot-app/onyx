@@ -31,6 +31,7 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.credential_capability import (
     get_capability_report_row,
     upsert_completed_capability_report,
@@ -39,6 +40,7 @@ from onyx.db.enums import (
     AccessType,
     CapabilityCheckTrigger,
     CapabilityReportRunStatus,
+    ConnectorCredentialPairStatus,
     IndexingStatus,
 )
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt
@@ -434,6 +436,45 @@ def test_docfetching_failure_records_through_the_indexing_attempt_hook(
     (check_result,) = row.report["check_results"]
     assert check_result["is_fallback"] is True
     assert check_result["error_type"] == "RuntimeError"
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_stop_during_docfetching_validation_leaves_the_pair_active(
+    db_session: Session,
+    docfetching_validation: tuple[IndexAttempt, MagicMock],
+) -> None:
+    """A canceled attempt can stop while validation waits for the source-API
+    limiter. The stop is no validation outcome: the pair stays active and no
+    report is recorded."""
+    # Precondition.
+    attempt, instantiate_mock = docfetching_validation
+    instantiate_mock.return_value.validate_connector_settings.side_effect = (
+        ConnectorStopSignal("canceled")
+    )
+    cc_pair = attempt.connector_credential_pair
+    assert cc_pair.status == ConnectorCredentialPairStatus.ACTIVE
+
+    # Under test.
+    with pytest.raises(ConnectorStopSignal):
+        run_docfetching._get_connector_runner(
+            db_session=db_session,
+            attempt=attempt,
+            batch_size=16,
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc),
+            include_permissions=False,
+            leave_connector_active=False,
+        )
+
+    # Postcondition.
+    db_session.expire_all()
+    assert cc_pair.status == ConnectorCredentialPairStatus.ACTIVE
+    assert (
+        get_capability_report_row(
+            db_session, cc_pair.credential_id, cc_pair.connector_id
+        )
+        is None
+    )
 
 
 @pytest.mark.usefixtures("tenant_context")
