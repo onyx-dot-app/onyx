@@ -1,4 +1,5 @@
 import { type Locator, type Page, expect } from "@playwright/test";
+import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
 
 export type MemberPluginFilter = "All" | "Skills" | "Integrations";
 
@@ -69,12 +70,12 @@ export class MemberPluginsPage {
       dialog.getByRole("combobox", { name: "Owner", exact: true })
     ).toHaveCount(0);
     if (details.oauthClient) {
-      await dialog
-        .getByRole("textbox", { name: "Client ID", exact: true })
-        .fill(details.oauthClient.clientId);
-      await dialog
-        .getByLabel("Client Secret", { exact: true })
-        .fill(details.oauthClient.clientSecret);
+      const addForm = new AdminIntegrationsPage(this.page);
+      await addForm.expectOAuthProbe();
+      await addForm.fillOAuthClient(
+        details.oauthClient.clientId,
+        details.oauthClient.clientSecret
+      );
     }
     const response = this.page.waitForResponse(
       (candidate) =>
