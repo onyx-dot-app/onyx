@@ -449,6 +449,19 @@ def refresh_oauth_account_sync(
     return True
 
 
+async def _reload_oidc_expiry(db_session: AsyncSession, user: User) -> None:
+    """This User was loaded before any concurrent refresh. Its oidc_expiry is
+    re-read so a stale one cannot reject the request."""
+    try:
+        await reload_user_oidc_expiry(db_session, user)
+    except Exception:
+        logger.exception(
+            "Could not reload oidc_expiry for %s, a stale value may "
+            "reject this request",
+            user.email,
+        )
+
+
 async def _refresh_if_still_stale(
     user: User,
     oauth_account: OAuthAccount,
@@ -468,16 +481,7 @@ async def _refresh_if_still_stale(
         # attempt the refresh anyway.
         pass
 
-    try:
-        # This User was loaded before any concurrent refresh. Its
-        # oidc_expiry is re-read so a stale one cannot reject the request.
-        await reload_user_oidc_expiry(db_session, user)
-    except Exception:
-        logger.exception(
-            "Could not reload oidc_expiry for %s, a stale value may "
-            "reject this request",
-            user.email,
-        )
+    await _reload_oidc_expiry(db_session, user)
 
     if (
         oauth_account.expires_at
@@ -545,6 +549,7 @@ async def check_and_refresh_oauth_tokens(
                         "OAuth token refresh for %s is already running elsewhere",
                         user.email,
                     )
+                    await _reload_oidc_expiry(db_session, user)
 
 
 async def check_oauth_account_has_refresh_token(
