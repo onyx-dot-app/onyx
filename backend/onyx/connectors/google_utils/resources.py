@@ -71,7 +71,13 @@ def get_google_service(
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
-    creds = get_impersonated_creds(creds, user_email)
+    return build_google_service(service, get_impersonated_creds(creds, user_email))
+
+
+def build_google_service(
+    service: GoogleService, creds: ServiceAccountCredentials | OAuthCredentials
+) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
+    """A client that uses `creds` as given: impersonate before calling this."""
     service_name, service_version = service.value
     resource: Resource = build(service_name, service_version, credentials=creds)
     return resource  # ty: ignore[invalid-return-type]
