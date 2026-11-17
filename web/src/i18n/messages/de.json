@@ -12421,9 +12421,6 @@
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "Zeichen {start, number}–{end, number} von {total, number}"
-          },
           "read": {
             "status": "{fileName} gelesen (Zeichen {start, number}–{end, number} von {total, number})"
           },

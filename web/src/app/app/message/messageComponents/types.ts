@@ -5,7 +5,7 @@ import { Packet, StopReason } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { ProjectFile } from "@/lib/projects/types";
 import { LlmDescriptor } from "@/lib/hooks";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { CitationMap } from "@/app/app/types";
 import { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
 
@@ -44,7 +44,7 @@ export interface RendererResult {
   /** The header while the step runs, and after it fails or is stopped. */
   status: string | null;
   /** The header once the step is done. Defaults to `status`. */
-  doneStatus?: string | null;
+  doneStatus?: string | RichStr | null;
   content: JSX.Element;
 
   // can be used to override the look on the "expanded" view

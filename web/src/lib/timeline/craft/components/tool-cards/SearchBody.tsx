@@ -1,40 +1,23 @@
 "use client";
 
-import { Text } from "@opal/components";
 import { useTranslations } from "next-intl";
-import ToolCardSurface, {
-  ToolCardSection,
-} from "@/lib/timeline/components/bodies/ToolCardSurface";
+import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import type { ToolCardBodyProps } from "@/lib/timeline/craft/components/tool-cards/interfaces";
 
 /**
- * SearchBody - glob/grep results rendered as a single monospace block, matching
- * the command body. Each result line is `path` (glob) or `path:line:snippet`
- * (grep) exactly as the tool emitted it — no per-line icon rows.
+ * SearchBody - a glob or grep search in the shared command layout: the tool's
+ * name as the title, the pattern, and the matches as its output, each line
+ * `path` (glob) or `path:line:snippet` (grep) as the tool emitted it.
  */
 export default function SearchBody({ toolCall }: ToolCardBodyProps) {
   const t = useTranslations("craft.toolCards.search");
-  const output = toolCall.rawOutput?.trim();
-
-  if (!output) {
-    return (
-      <ToolCardSurface>
-        <ToolCardSection>
-          <Text font="secondary-mono" color="text-02">
-            {t("noMatches.label")}
-          </Text>
-        </ToolCardSection>
-      </ToolCardSurface>
-    );
-  }
-
   return (
-    <ToolCardSurface>
-      <ToolCardSection className="whitespace-pre-wrap wrap-break-word">
-        <Text as="p" font="secondary-mono" color="text-03">
-          {output}
-        </Text>
-      </ToolCardSection>
-    </ToolCardSurface>
+    <CommandBody
+      command={toolCall.description}
+      title={toolCall.toolName}
+      // A search that found nothing says so under its pattern.
+      output={toolCall.rawOutput?.trim() || t("noMatches.label")}
+      emptyLabel={t("noMatches.label")}
+    />
   );
 }

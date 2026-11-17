@@ -12421,9 +12421,6 @@
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "{total, number} 文字中 {start, number}–{end, number} 文字目"
-          },
           "read": {
             "status": "{fileName} を読み取りました ({total, number} 文字中 {start, number}–{end, number} 文字目)"
           },

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { markdown } from "@opal/utils";
+import { codeSpan, markdown } from "@opal/utils";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import BashBody from "@/lib/timeline/craft/components/tool-cards/BashBody";
@@ -19,19 +19,9 @@ function plain(text: string): string {
   return text.replace(/[\\`*_~[\]<>#|]/g, "\\$&");
 }
 
-/** A code span that holds any text, backticks included. */
-function code(text: string): string {
-  const longestRun = Math.max(
-    0,
-    ...(text.match(/`+/g) ?? []).map((run) => run.length)
-  );
-  const fence = "`".repeat(longestRun + 1);
-  return `${fence} ${text} ${fence}`;
-}
-
 /** A plain verb, then the command, pattern, skill or path as a code span. */
 function verbWithCode(verb: string, chip: string): RichStr {
-  return markdown(`${plain(verb)} ${code(chip)}`);
+  return markdown(`${plain(verb)} ${codeSpan(chip)}`);
 }
 
 /** The finished form of each running verb and tool title. */

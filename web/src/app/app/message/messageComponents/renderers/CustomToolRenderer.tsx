@@ -14,45 +14,10 @@ import {
   RenderType,
 } from "@/app/app/message/messageComponents/types";
 import { buildImgUrl } from "../../../components/files/images/utils";
-import { ShadowDiv, Text } from "@opal/components";
+import { CodePanel, ShadowDiv, Text } from "@opal/components";
 import { SvgDownload, SvgExternalLink } from "@opal/icons";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import { CodeBlock } from "@/app/app/message/CodeBlock";
-import hljs from "highlight.js/lib/core";
-import json from "highlight.js/lib/languages/json";
-import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
-
-// Lazy registration for hljs JSON language
-function ensureHljsRegistered() {
-  if (!hljs.listLanguages().includes("json")) {
-    hljs.registerLanguage("json", json);
-  }
-}
-
-// Component to render syntax-highlighted JSON
-interface HighlightedJsonCodeProps {
-  code: string;
-}
-function HighlightedJsonCode({ code }: HighlightedJsonCodeProps) {
-  const highlightedHtml = useMemo(() => {
-    ensureHljsRegistered();
-    try {
-      return hljs.highlight(code, { language: "json" }).value;
-    } catch {
-      return code
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    }
-  }, [code]);
-
-  return (
-    <span
-      dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-      className="hljs"
-    />
-  );
-}
+import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
 
 function constructCustomToolState(
   packets: CustomToolPacket[],
@@ -161,6 +126,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         : null,
     [data]
   );
+  const argsLines = useCodeLines(toolArgsJson ?? "", "json");
+  const dataLines = useCodeLines(dataJson ?? "", "json");
 
   const content = useMemo(
     () => (
@@ -188,29 +155,15 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
             </div>
           )}
 
-        {/* Tool arguments */}
+        {/* The request: the tool's arguments. */}
         {toolArgsJson && (
-          <div>
-            <IoBlockLabel label={t("customTool.requestBlock.label")} />
-            <div className="prose max-w-full">
-              <CodeBlock
-                className="font-secondary-mono"
-                codeText={toolArgsJson}
-                noPadding
-              >
-                <HighlightedJsonCode code={toolArgsJson} />
-              </CodeBlock>
-            </div>
-          </div>
-        )}
-
-        {/* Error display */}
-        {error && (
-          <div className="ps-(--timeline-common-text-padding)">
-            <Text font="main-ui-muted" color="text-03">
-              {error.message}
-            </Text>
-          </div>
+          <CodePanel>
+            <CodePanel.Header
+              title={t("customTool.requestBlock.label")}
+              copyText={toolArgsJson}
+            />
+            <CodePanel.Lines lineNumbers lines={argsLines} />
+          </CodePanel>
         )}
 
         {/* File responses */}
@@ -247,34 +200,35 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
           </div>
         )}
 
-        {/* JSON/Text responses */}
-        {!error && data !== undefined && data !== null && (
-          <div>
-            <IoBlockLabel label={t("customTool.responseBlock.label")} />
-            <div className="prose max-w-full">
-              {dataJson ? (
-                <CodeBlock
-                  className="font-secondary-mono"
-                  codeText={dataJson}
-                  noPadding
-                >
-                  <HighlightedJsonCode code={dataJson} />
-                </CodeBlock>
-              ) : (
-                <CodeBlock
-                  className="font-secondary-mono"
-                  codeText={String(data)}
-                  noPadding
-                >
-                  {String(data)}
-                </CodeBlock>
-              )}
-            </div>
-          </div>
+        {/* The response: JSON, text, or the tool's error. */}
+        {(error || (data !== undefined && data !== null)) && (
+          <CodePanel>
+            <CodePanel.Header
+              title={t("customTool.responseBlock.label")}
+              copyText={error ? undefined : (dataJson ?? String(data))}
+            />
+            {error ? (
+              <CodePanel.Output error>{error.message}</CodePanel.Output>
+            ) : dataJson ? (
+              <CodePanel.Lines lineNumbers lines={dataLines} />
+            ) : (
+              <CodePanel.Output>{String(data)}</CodePanel.Output>
+            )}
+          </CodePanel>
         )}
       </div>
     ),
-    [toolArgsJson, dataJson, data, fileIds, error, isRunning, t]
+    [
+      toolArgsJson,
+      dataJson,
+      argsLines,
+      dataLines,
+      data,
+      fileIds,
+      error,
+      isRunning,
+      t,
+    ]
   );
 
   // Blocked, unreachable, or auth error: always render FULL with error surface

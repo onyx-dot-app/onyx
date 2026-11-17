@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Button, CodePanel } from "@opal/components";
 import { SvgChevronDown } from "@opal/icons";
 import { getLanguageFromPath } from "@/app/craft/utils/codeLanguage";
-import { useCodeHighlighter } from "@/app/craft/hooks/useCodeHighlighter";
+import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
 
 const PREVIEW_LINE_COUNT = 8;
 
@@ -38,7 +38,7 @@ export function FileBody({
 }: FileBodyProps) {
   const [expanded, setExpanded] = useState(false);
   const language = useMemo(() => getLanguageFromPath(path), [path]);
-  const highlight = useCodeHighlighter(!!language);
+  const allLines = useCodeLines(content, language);
 
   if (!content) {
     return (
@@ -49,7 +49,6 @@ export function FileBody({
     );
   }
 
-  const allLines = content.split("\n");
   const visibleLines =
     expanded || excerpt ? allLines : allLines.slice(0, PREVIEW_LINE_COUNT);
   const hiddenCount = allLines.length - visibleLines.length;
@@ -60,18 +59,7 @@ export function FileBody({
       <CodePanel.Lines
         lineNumbers={!excerpt}
         copyText={path ? undefined : content}
-        lines={visibleLines.map((line, index) => {
-          const html = highlight ? highlight(line, language) : null;
-          return {
-            number: index + 1,
-            content:
-              html !== null ? (
-                <span dangerouslySetInnerHTML={{ __html: html || " " }} />
-              ) : (
-                line
-              ),
-          };
-        })}
+        lines={visibleLines}
       />
       {hiddenCount > 0 && (
         <CodePanel.Footer

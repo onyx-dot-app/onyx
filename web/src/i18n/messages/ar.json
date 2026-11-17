@@ -12421,9 +12421,6 @@
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "الأحرف {start, number}–{end, number} من {total, number}"
-          },
           "read": {
             "status": "قرأ {fileName} (الأحرف {start, number}–{end, number} من {total, number})"
           },

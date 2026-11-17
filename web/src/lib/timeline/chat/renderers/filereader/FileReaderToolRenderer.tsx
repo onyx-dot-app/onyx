@@ -1,8 +1,8 @@
 import { Section } from "@opal/layouts";
 import { FileBody } from "@/lib/timeline/components/bodies/FileBody";
 import { useEffect } from "react";
+import { codeSpan, markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
-import { Text } from "@opal/components";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   PacketType,
@@ -77,8 +77,14 @@ export const FileReaderToolRenderer: MessageRenderer<
   };
 
   const statusText = t("fileReader.reading.status");
+  // The file name reads as code.
   const doneStatusText = state.fileName
-    ? t("fileReader.read.status", { fileName: state.fileName, ...charRange })
+    ? markdown(
+        t("fileReader.read.status", {
+          fileName: codeSpan(state.fileName),
+          ...charRange,
+        })
+      )
     : statusText;
 
   const isCompact = renderType === RenderType.COMPACT;
@@ -109,20 +115,8 @@ export const FileReaderToolRenderer: MessageRenderer<
         <Section gap={2} alignItems="start" height="fit">
           {state.fileName ? (
             <>
-              <Section
-                flexDirection="row"
-                alignItems="center"
-                justifyContent="start"
-                gap={2}
-                height="fit"
-              >
-                <Text as="span" font="main-ui-action" color="text-02">
-                  {state.fileName}
-                </Text>
-                <Text as="span" font="main-ui-muted" color="text-04">
-                  {t("fileReader.charRange.label", charRange)}
-                </Text>
-              </Section>
+              {/* The panel's title row names the file; the step's title
+                  gives the character range. */}
               {hasPreview && (
                 <FileBody
                   content={
