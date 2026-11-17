@@ -22,7 +22,6 @@ from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    IntegrationKind,
 )
 from onyx.db.integration import get_integration_by_id
 from onyx.db.notification import create_notification
@@ -33,12 +32,12 @@ from onyx.db.scheduled_task import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
-    WHOLE_DOMAIN_ACTION_TYPE,
     AllMatchedActions,
     GatedTarget,
     actions_requiring_approval,
 )
 from onyx.integrations.craft import (
+    always_asks,
     resolve_craft_action_policies,
     task_link_settings,
 )
@@ -777,12 +776,9 @@ class GateAddon:
                 task_id=scheduled_context[1] if scheduled_context else None,
             )
         # These are recognition boundaries, not user-configurable actions.
-        if (
-            target.kind is IntegrationKind.API
-            and WHOLE_DOMAIN_ACTION_TYPE in effective_policies
-            and effective_policies[WHOLE_DOMAIN_ACTION_TYPE] is not ActionPolicy.DENY
-        ):
-            effective_policies[WHOLE_DOMAIN_ACTION_TYPE] = ActionPolicy.ASK
+        for action_key, policy in effective_policies.items():
+            if always_asks(target.kind, action_key) and policy is not ActionPolicy.DENY:
+                effective_policies[action_key] = ActionPolicy.ASK
         if MCP_UNCLASSIFIABLE_ACTION_TYPE in effective_policies:
             effective_policies[MCP_UNCLASSIFIABLE_ACTION_TYPE] = ActionPolicy.DENY
         authorized_actions = AllMatchedActions(
@@ -807,8 +803,8 @@ class GateAddon:
         self, db: Session, ctx: SessionContext, matched_actions: AllMatchedActions
     ) -> bool:
         """The user approved these identified actions for the session."""
-        if matched_actions.target.kind is IntegrationKind.API and any(
-            action.action_type == WHOLE_DOMAIN_ACTION_TYPE
+        if any(
+            always_asks(matched_actions.target.kind, action.action_type)
             for action in matched_actions.actions
         ):
             return False

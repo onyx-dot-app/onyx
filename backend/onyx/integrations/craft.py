@@ -20,6 +20,7 @@ from onyx.db.models import ExternalApp, Integration, User
 from onyx.db.plugin_access import load_user_plugin_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import integration_status
 from onyx.integrations.models import (
@@ -177,6 +178,23 @@ def resolve_craft_action_policies(
     return _interactive_policies(db_session, integration, action_keys, None, settings)
 
 
+def always_asks(kind: IntegrationKind, action_key: str) -> bool:
+    """The sandbox proxy asks for each request that matches no action of an
+    API integration, whatever the policy is, unless the policy is Blocked."""
+    return kind is IntegrationKind.API and action_key == WHOLE_DOMAIN_ACTION_TYPE
+
+
+def _shown_policy(
+    integration: Integration, action_key: str, policy: EffectivePolicy
+) -> EffectivePolicy:
+    if (
+        always_asks(integration.kind, action_key)
+        and policy is not EffectivePolicy.BLOCKED
+    ):
+        return EffectivePolicy.ASK
+    return policy
+
+
 def _integration_view(
     db_session: Session, integration: Integration, user: User
 ) -> TaskIntegrationView:
@@ -201,9 +219,12 @@ def _integration_view(
                 key=action.key,
                 display_name=action.display_name,
                 description=action.description,
-                integration_policy=inherited[action.key],
+                integration_policy=_shown_policy(
+                    integration, action.key, inherited[action.key]
+                ),
                 locked=inherited[action.key] is EffectivePolicy.BLOCKED
-                or not integration.users_can_save_always_allow,
+                or not integration.users_can_save_always_allow
+                or always_asks(integration.kind, action.key),
             )
             for action in actions
         ],
