@@ -4,11 +4,13 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import (
+    DocumentSource,
+    HtmlBasedConnectorTransformLinksStrategy,
+)
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.models import Document
-from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret
 

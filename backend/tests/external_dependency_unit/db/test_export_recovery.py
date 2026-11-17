@@ -341,3 +341,37 @@ def test_cleanup_deletes_the_file_of_an_expired_failure(db_session: Session) -> 
         if leftover is not None:
             db_session.delete(leftover)
             db_session.commit()
+
+
+def test_failed_file_delete_keeps_its_row_and_cleanup_continues(
+    db_session: Session, export_rows: list[TaskQueueState]
+) -> None:
+    when = datetime.now(timezone.utc) - timedelta(days=2)
+    expired = TaskQueueState(
+        task_id=str(uuid4()),
+        task_name=f"{QUERY_HISTORY_TASK_NAME_PREFIX}_{uuid4()}",
+        status=TaskStatus.FAILURE,
+        register_time=when,
+        start_time=when,
+    )
+    db_session.add(expired)
+    db_session.commit()
+    try:
+        with patch(
+            "ee.onyx.background.celery.tasks.cleanup.tasks.get_default_file_store"
+        ) as file_store:
+            file_store.return_value.delete_file.side_effect = ConnectionError(
+                "storage down"
+            )
+            export_query_history_cleanup_task.run(tenant_id="public")
+        db_session.expire_all()
+        # The row keeps hiding the file that cleanup could not delete.
+        assert get_task_with_id(db_session, expired.task_id) is not None
+        assert [row.status for row in export_rows[:2]] == [
+            TaskStatus.FAILURE,
+            TaskStatus.FAILURE,
+        ]
+    finally:
+        db_session.rollback()
+        db_session.delete(expired)
+        db_session.commit()

@@ -25,6 +25,16 @@ def delete_from_kg_entities__no_commit(
     )
 
 
+def delete_all_kg_entities_extraction_staging__no_commit(db_session: Session) -> None:
+    """Delete all entities from the extraction staging table."""
+    db_session.query(KGEntityExtractionStaging).delete()
+
+
+def delete_all_kg_entities__no_commit(db_session: Session) -> None:
+    """Delete all entities from the normalized table."""
+    db_session.query(KGEntity).delete()
+
+
 def get_entity_stats_by_grounded_source_name(
     db_session: Session,
 ) -> dict[str, tuple[datetime, int]]:

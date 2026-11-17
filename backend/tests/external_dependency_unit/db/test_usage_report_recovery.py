@@ -261,7 +261,7 @@ def test_job_failed_during_upload_removes_the_zip(
 
     from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
     from onyx.configs.constants import OnyxCeleryTask
-    from onyx.db.engine.sql_engine import get_session_with_current_tenant
+    from onyx.db.engine.sql_engine import get_sqlalchemy_engine
     from onyx.db.enums import TaskStatus
     from onyx.db.tasks import fail_task_with_id, register_task
     from onyx.file_store.file_store import get_default_file_store
@@ -278,9 +278,20 @@ def test_job_failed_during_upload_removes_the_zip(
     def save_file(**kwargs: object) -> str:
         if kwargs.get("file_type") == USAGE_REPORT_MEDIA_TYPE:
             # Cleanup fails the job while the ZIP uploads. It must not wait.
-            with get_session_with_current_tenant() as cleanup_session:
-                cleanup_session.execute(text("SET LOCAL lock_timeout = '5s'"))
-                fail_task_with_id(cleanup_session, report_id, TaskStatus.STARTED)
+            # One held connection keeps the timeout through the helper's
+            # rollback and commit, and receives the reset.
+            with get_sqlalchemy_engine().connect() as connection:
+                connection.execute(text("SET lock_timeout = '5s'"))
+                connection.commit()
+                try:
+                    with Session(bind=connection) as cleanup_session:
+                        fail_task_with_id(
+                            cleanup_session, report_id, TaskStatus.STARTED
+                        )
+                finally:
+                    connection.rollback()
+                    connection.execute(text("RESET lock_timeout"))
+                    connection.commit()
             uploaded.append(str(kwargs["file_id"]))
         return real_store.save_file(**kwargs)  # ty: ignore[invalid-argument-type]
 

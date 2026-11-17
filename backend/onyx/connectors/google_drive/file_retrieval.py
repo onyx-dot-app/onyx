@@ -8,14 +8,12 @@ from onyx.connectors.google_drive.constants import (
     DRIVE_FOLDER_TYPE,
     DRIVE_SHORTCUT_TYPE,
 )
-from onyx.connectors.google_drive.models import (
-    DriveBatchResult,
-    GoogleDriveFileType,
-)
+from onyx.connectors.google_drive.models import DriveBatchResult
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
 from onyx.connectors.google_utils.google_utils import GoogleFields
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,

@@ -1,8 +1,9 @@
 import math
 from collections.abc import Callable
 
-from onyx.cache.interface import CacheBackend, CacheBackendType
+from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import CACHE_BACKEND
+from onyx.configs.constants import CacheBackendType
 
 
 def _build_redis_backend(

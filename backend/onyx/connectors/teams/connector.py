@@ -751,7 +751,7 @@ def _rejects_saved_cursor(
 
 
 if __name__ == "__main__":
-    from tests.daily.connectors.utils import load_all_from_connector
+    from onyx.connectors.load_all import load_all_from_connector
 
     app_id = os.environ["TEAMS_APPLICATION_ID"]
     dir_id = os.environ["TEAMS_DIRECTORY_ID"]

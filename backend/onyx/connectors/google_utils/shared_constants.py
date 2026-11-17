@@ -83,3 +83,6 @@ ONYX_SCOPE_INSTRUCTIONS = (
 
 # This is the maximum number of threads that can be retrieved at once
 SLIM_BATCH_SIZE = 500
+
+# A file resource as the Drive API returns it.
+GoogleDriveFileType = dict[str, Any]

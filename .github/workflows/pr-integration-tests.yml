@@ -217,10 +217,23 @@ jobs:
             code_mode_dirs=""
           fi
 
+          # These suites would outlast the slowest connector suite in one job,
+          # so pytest-split runs each one across this many jobs. It balances
+          # the jobs with backend/tests/integration/.test_durations; refresh
+          # that file with `pytest --store-durations` after a suite changes.
+          declare -A splits=([usergroup]=2 [connector]=2 [indexing]=2 [permissions_membership]=2)
+
           # Create JSON array with directory info
           all_dirs=""
           for dir in $tests_dirs; do
-            all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir\"},"
+            count=${splits[$dir]:-1}
+            if [ "$count" -eq 1 ]; then
+              all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir\"},"
+              continue
+            fi
+            for group in $(seq 1 "$count"); do
+              all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir-$group\",\"splits\":$count,\"group\":$group},"
+            done
           done
           for dir in $code_mode_dirs; do
             all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir-code-mode\",\"code_mode\":true},"
@@ -283,7 +296,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
     outputs:
-      digest: ${{ steps.build.outputs.digest }}
+      digest: ${{ steps.prebuilt.outputs.digest || steps.build.outputs.digest }}
     runs-on:
       [
         runs-on,
@@ -307,8 +320,19 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
+      - name: Find a prebuilt Devcontainer image
+        id: prebuilt
+        uses: ./.github/actions/prebuilt-image
+        with:
+          name: devcontainer
+          context: .devcontainer
+          dockerfile: .devcontainer/Dockerfile
+          build-config: BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          image-repo: ${{ env.RUNS_ON_ECR_CACHE }}
+
       - name: Build and push Devcontainer Docker image
         id: build
+        if: steps.prebuilt.outputs.digest == ''
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: .devcontainer
@@ -334,6 +358,14 @@ jobs:
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ runner.arch }},mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+      - name: Save the Devcontainer image digest
+        if: steps.build.outcome == 'success'
+        uses: ./.github/actions/prebuilt-image
+        with:
+          name: devcontainer
+          save-key: ${{ steps.prebuilt.outputs.save-key }}
+          save-digest: ${{ steps.build.outputs.digest }}
 
   integration-tests:
     needs:
@@ -483,7 +515,7 @@ jobs:
             # TCP api_server; run one inside the test container and make every
             # missing prerequisite a hard failure instead of a skip.
             GATEWAY_CLIENTS_STRICT=""
-            RUN_CMD="uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}"
+            RUN_CMD="uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }} ${{ matrix.test-dir.splits && format('--splits {0} --group {1} --durations-path tests/integration/.test_durations', matrix.test-dir.splits, matrix.test-dir.group) || '' }}"
             if [ "${{ matrix.test-dir.path }}" = "tests/gateway_clients" ]; then
               GATEWAY_CLIENTS_STRICT="true"
               RUN_CMD="bash tests/integration/tests/gateway_clients/run_with_server.sh"

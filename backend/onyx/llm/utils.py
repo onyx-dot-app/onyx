@@ -3,7 +3,6 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from pydantic import JsonValue
-from sqlalchemy import select
 
 from onyx.configs.app_configs import (
     MAX_TOKENS_FOR_FULL_INCLUSION,
@@ -13,7 +12,9 @@ from onyx.configs.app_configs import (
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.models import LLMProvider, ModelConfiguration
+from onyx.db.model_configuration import (
+    fetch_model_configuration_by_name_and_provider,
+)
 from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_capabilities import (
@@ -295,16 +296,8 @@ def model_supports_image_input(
     # table, keyed by the admin's configured row name (not the deployment alias).
     try:
         with get_session_with_current_tenant() as db_session:
-            model_config = db_session.scalar(
-                select(ModelConfiguration)
-                .join(
-                    LLMProvider,
-                    ModelConfiguration.llm_provider_id == LLMProvider.id,
-                )
-                .where(
-                    ModelConfiguration.name == model_name,
-                    LLMProvider.provider == model_provider,
-                )
+            model_config = fetch_model_configuration_by_name_and_provider(
+                db_session, model_name, model_provider
             )
             if (
                 model_config

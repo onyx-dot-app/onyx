@@ -16,7 +16,6 @@ from onyx.connectors.google_drive import parallel_listing
 from onyx.connectors.google_drive.file_retrieval import owner_email
 from onyx.connectors.google_drive.models import (
     GoogleDriveCheckpoint,
-    GoogleDriveFileType,
     ListingPartitionKind,
     ListingShard,
 )
@@ -25,6 +24,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveHttpError,
     GoogleDriveRefreshError,
 )
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.connectors.models import SlimDocumentStub
 from onyx.utils import threadpool_concurrency
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive

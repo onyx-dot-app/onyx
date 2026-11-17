@@ -51,6 +51,11 @@ from onyx.connectors.microsoft_utils.drive_items import (
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
+from onyx.connectors.microsoft_utils.sharepoint_access import (
+    SharepointPermissionCache,
+    get_sharepoint_external_access,
+    get_sharepoint_hierarchy_node_external_access,
+)
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
@@ -65,9 +70,6 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.sharepoint.connector_utils import (
-    SharepointPermissionCache,
-    get_sharepoint_external_access,
-    get_sharepoint_hierarchy_node_external_access,
     validate_content_types,
     validate_site_url,
 )

@@ -7,8 +7,6 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 from fastapi_users_db_sqlalchemy import UUID_ID
-from sqlalchemy import cast
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.usage_export import (
@@ -25,11 +23,10 @@ from ee.onyx.server.reporting.usage_report_branding import load_report_branding
 from ee.onyx.server.reporting.usage_report_data import build_usage_report_data
 from ee.onyx.server.reporting.usage_report_pdf import render_usage_report_pdf
 from onyx.configs.constants import FileOrigin
-from onyx.db.models import User
 from onyx.db.system_usage import SystemUsageExportRow, iter_system_usage_export
 from onyx.db.tasks import complete_started_task__no_commit, is_task_started
 from onyx.db.user_usage import UsageExportRow, iter_usage_export
-from onyx.db.users import get_all_users
+from onyx.db.users import fetch_user_by_id, get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.utils.csv_utils import sanitize_csv_cell_or_none
@@ -403,9 +400,7 @@ def create_new_usage_report(
 
     # get user email
     requestor_user = (
-        db_session.query(User)
-        .filter(cast(User.id, UUID) == new_report.requestor_user_id)
-        .one_or_none()
+        fetch_user_by_id(db_session, new_report.requestor_user_id)
         if new_report.requestor_user_id
         else None
     )

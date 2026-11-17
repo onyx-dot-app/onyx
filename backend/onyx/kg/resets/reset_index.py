@@ -1,15 +1,19 @@
 from sqlalchemy.orm import Session
 
 from onyx.db.document import reset_all_document_kg_stages
-from onyx.db.models import (
-    Connector,
-    KGEntity,
-    KGEntityExtractionStaging,
-    KGEntityType,
-    KGRelationship,
-    KGRelationshipExtractionStaging,
-    KGRelationshipType,
-    KGRelationshipTypeExtractionStaging,
+from onyx.db.entities import (
+    delete_all_kg_entities__no_commit,
+    delete_all_kg_entities_extraction_staging__no_commit,
+)
+from onyx.db.entity_type import (
+    deactivate_grounded_entity_types__no_commit,
+    disable_kg_processing_for_all_connectors__no_commit,
+)
+from onyx.db.relationships import (
+    delete_all_kg_relationship_types__no_commit,
+    delete_all_kg_relationship_types_extraction_staging__no_commit,
+    delete_all_kg_relationships__no_commit,
+    delete_all_kg_relationships_extraction_staging__no_commit,
 )
 
 
@@ -18,19 +22,16 @@ def reset_full_kg_index__commit(db_session: Session) -> None:
     Resets the knowledge graph index.
     """
 
-    db_session.query(KGRelationship).delete()
-    db_session.query(KGRelationshipType).delete()
-    db_session.query(KGEntity).delete()
-    db_session.query(KGRelationshipExtractionStaging).delete()
-    db_session.query(KGEntityExtractionStaging).delete()
-    db_session.query(KGRelationshipTypeExtractionStaging).delete()
-    # Update all connectors to disable KG processing
-    db_session.query(Connector).update({"kg_processing_enabled": False})
+    delete_all_kg_relationships__no_commit(db_session)
+    delete_all_kg_relationship_types__no_commit(db_session)
+    delete_all_kg_entities__no_commit(db_session)
+    delete_all_kg_relationships_extraction_staging__no_commit(db_session)
+    delete_all_kg_entities_extraction_staging__no_commit(db_session)
+    delete_all_kg_relationship_types_extraction_staging__no_commit(db_session)
+    disable_kg_processing_for_all_connectors__no_commit(db_session)
 
     # Only reset grounded entity types
-    db_session.query(KGEntityType).filter(
-        KGEntityType.grounded_source_name.isnot(None)
-    ).update({"active": False})
+    deactivate_grounded_entity_types__no_commit(db_session)
 
     reset_all_document_kg_stages(db_session)
 

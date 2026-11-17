@@ -49,6 +49,7 @@ from onyx.db.enums import (
 from onyx.db.index_attempt import create_synthetic_seed_attempt, expire_index_attempts
 from onyx.db.llm import (
     fetch_default_model,
+    fetch_model_configuration_by_id,
     update_default_contextual_model,
     update_no_default_contextual_rag_provider,
 )
@@ -1281,9 +1282,7 @@ def validate_contextual_rag_model(
                 "model is configured, and no tenant default exists.",
             )
         return
-    from onyx.db.models import ModelConfiguration
-
-    model = db_session.get(ModelConfiguration, model_configuration_id)
+    model = fetch_model_configuration_by_id(db_session, model_configuration_id)
     if model is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

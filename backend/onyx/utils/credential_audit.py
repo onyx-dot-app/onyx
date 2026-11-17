@@ -21,8 +21,8 @@ import logging
 import time
 from typing import Any
 
-from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import CACHE_BACKEND
+from onyx.configs.constants import CacheBackendType
 
 # Dedicated audit logger. We intentionally use a plain ``logging.getLogger``
 # rather than ``setup_logger`` so the record message is exactly one clean JSON
