@@ -20,6 +20,7 @@ import os
 import tempfile
 import threading
 import time
+import uuid
 from collections.abc import Callable, Sequence
 from enum import Enum
 from pathlib import Path
@@ -47,8 +48,8 @@ logger = setup_logger()
 # The worker sets this for the processes it spawns.
 RELAY_DIR_ENV = "ONYX_CHILD_METRICS_RELAY_DIR"
 RELAY_INTERVAL_SECONDS = 5.0
-# A process that wrote no snapshot for this long has ended without its last
-# one, for example after a SIGKILL.
+# The gauges of a process that wrote no snapshot for this long no longer
+# count. Its counter watermark stays until the process has ended.
 STALE_SECONDS = 60.0
 
 
@@ -104,6 +105,28 @@ def _series_key(labels: _Labels) -> tuple[tuple[str, str], ...]:
     return tuple(sorted(labels.items()))
 
 
+def _snapshot_name(pid: int) -> str:
+    # The id keeps a new process with a reused PID apart from the snapshot
+    # and the watermark of the old one.
+    return f"{pid}-{uuid.uuid4().hex}.json"
+
+
+def _writer_has_ended(file_name: str) -> bool:
+    """True when the process that writes the snapshot no longer runs."""
+    try:
+        pid = int(file_name.split("-", 1)[0].removesuffix(".json"))
+    except ValueError:
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        # The process exists, and it belongs to another user.
+        return False
+    return False
+
+
 class RelayWriter:
     """Writes the snapshot of a spawned process."""
 
@@ -113,7 +136,7 @@ class RelayWriter:
         counters: Sequence[Counter] = RELAYED_COUNTERS,
         gauges: Sequence[tuple[Gauge, GaugeMerge]] = RELAYED_GAUGES,
     ) -> None:
-        self._path = directory / f"{os.getpid()}.json"
+        self._path = directory / _snapshot_name(os.getpid())
         self._counters = counters
         self._gauges = [gauge for gauge, _ in gauges]
         self._stop = threading.Event()
@@ -217,10 +240,16 @@ class RelayReader:
             except (OSError, ValueError):
                 continue
             self._add_counters(path.name, snapshot.get("counters", {}))
-            if snapshot.get("final") or now - modified > STALE_SECONDS:
+            if snapshot.get("final") or (
+                now - modified > STALE_SECONDS and _writer_has_ended(path.name)
+            ):
                 self._added.pop(path.name, None)
                 self._live_gauges.pop(path.name, None)
                 path.unlink(missing_ok=True)
+            elif now - modified > STALE_SECONDS:
+                # The process runs but could not write: its gauges are old.
+                # Its next snapshot still counts from the watermark.
+                self._live_gauges.pop(path.name, None)
             else:
                 self._live_gauges[path.name] = snapshot.get("gauges", {})
         self._publish_gauges()
