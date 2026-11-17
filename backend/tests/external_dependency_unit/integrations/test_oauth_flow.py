@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 import requests
+from fastapi import Request
 from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import OAuthClientInformationFull, OAuthMetadata
 from pydantic import AnyHttpUrl
@@ -23,6 +24,7 @@ from onyx.db.enums import (
     IntegrationAuthMode,
     IntegrationKind,
     IntegrationOAuthProviderMode,
+    Permission,
 )
 from onyx.db.integration import get_external_app_for_integration
 from onyx.db.integration_connection import get_connection, get_oauth_client
@@ -38,8 +40,14 @@ from onyx.integrations.oauth import (
     complete_integration_oauth,
     start_integration_oauth,
 )
-from onyx.server.features.integrations.connections_api import start_oauth
-from onyx.server.features.integrations.models import IntegrationOAuthStartRequest
+from onyx.server.features.integrations.connections_api import (
+    oauth_callback,
+    start_oauth,
+)
+from onyx.server.features.integrations.models import (
+    IntegrationOAuthCallbackRequest,
+    IntegrationOAuthStartRequest,
+)
 from onyx.server.features.mcp.oauth import OAuthAuthorizationRequired
 from onyx.server.features.mcp.oauth_flow import OAuthAuthorizationRedirect
 from tests.external_dependency_unit.conftest import MakeTestUser
@@ -49,6 +57,13 @@ from tests.external_dependency_unit.integrations.conftest import (
     MakeIntegration,
     token_response,
 )
+
+
+def _http_request(token_scopes: list[Permission] | None) -> Request:
+    request = Request({"type": "http"})
+    if token_scopes is not None:
+        request.state.token_scopes = token_scopes
+    return request
 
 
 def _query(url: str) -> dict[str, str]:
@@ -458,6 +473,7 @@ def test_start_route_hides_integrations_the_user_cannot_see(
 
     with pytest.raises(OnyxError) as error:
         start_oauth(
+            _http_request(None),
             integration.id,
             IntegrationOAuthStartRequest(),
             user=member,
@@ -466,9 +482,44 @@ def test_start_route_hides_integrations_the_user_cannot_see(
     assert error.value.error_code is OnyxErrorCode.NOT_FOUND
 
     response = start_oauth(
+        _http_request(None),
         integration.id,
         IntegrationOAuthStartRequest(return_path="/plugins"),
         user=admin,
         db_session=db_session,
     )
     assert _query(response.authorization_url)["client_id"] == "manual-client"
+
+
+def test_shared_sign_in_needs_a_token_that_allows_manage_actions(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+    manual_token_post: MagicMock,  # noqa: ARG001
+) -> None:
+    shared = _manual(make_integration, IntegrationAuthMode.SHARED)
+    individual = _manual(make_integration, IntegrationAuthMode.INDIVIDUAL)
+    admin = make_test_user("token_capped_admin", is_admin=True)
+    basic_token = _http_request([Permission.BASIC_ACCESS])
+
+    with pytest.raises(OnyxError) as error:
+        start_oauth(
+            basic_token, shared.id, IntegrationOAuthStartRequest(), admin, db_session
+        )
+    assert error.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+    state = _query(start_integration_oauth(shared, admin, db_session))["state"]
+    with pytest.raises(OnyxError) as error:
+        oauth_callback(
+            basic_token,
+            IntegrationOAuthCallbackRequest(code="code", state=state),
+            admin,
+            db_session,
+        )
+    assert error.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    assert get_connection(db_session, shared.id, None) is None
+
+    # A basic token is enough for an individual sign-in.
+    start_oauth(
+        basic_token, individual.id, IntegrationOAuthStartRequest(), admin, db_session
+    )

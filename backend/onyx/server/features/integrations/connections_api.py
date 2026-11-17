@@ -1,9 +1,13 @@
 """The one sign-in flow for integrations."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_global_permission, require_permission
+from onyx.auth.permissions import (
+    has_global_permission,
+    require_permission,
+    token_allows,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.integration import get_integration_by_id
@@ -27,6 +31,7 @@ router = APIRouter(prefix="/integrations")
 
 @router.post("/{integration_id}/oauth/start")
 def start_oauth(
+    http_request: Request,
     integration_id: int,
     request: IntegrationOAuthStartRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -40,15 +45,26 @@ def start_oauth(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
     return IntegrationOAuthStartResponse(
         authorization_url=start_integration_oauth(
-            integration, user, db_session, request.return_path
+            integration,
+            user,
+            db_session,
+            request.return_path,
+            token_may_manage=token_allows(http_request, Permission.MANAGE_ACTIONS),
         )
     )
 
 
 @router.post("/oauth/callback")
 def oauth_callback(
+    http_request: Request,
     request: IntegrationOAuthCallbackRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> IntegrationOAuthCallbackResult:
-    return complete_integration_oauth(request.code, request.state, user, db_session)
+    return complete_integration_oauth(
+        request.code,
+        request.state,
+        user,
+        db_session,
+        token_may_manage=token_allows(http_request, Permission.MANAGE_ACTIONS),
+    )
