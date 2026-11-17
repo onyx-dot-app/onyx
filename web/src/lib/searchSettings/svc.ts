@@ -227,9 +227,10 @@ export async function setNewSearchSettings({
   acknowledgedWontPortCcPairIds,
 }: SetNewSearchSettingsArgs): Promise<Response> {
   // The backend's EmbeddingProvider enum only contains cloud providers
-  // (openai/cohere/voyage/google/litellm/azure/bifrost). Self-hosted models live
-  // under the frontend's EmbeddingProviderName for UI grouping (icon,
-  // docs link), but the backend expects provider_type=null for them.
+  // (openai/cohere/voyage/google/litellm/azure/bifrost/openai_compatible).
+  // Self-hosted models live under the frontend's EmbeddingProviderName for UI
+  // grouping (icon, docs link), but the backend expects provider_type=null
+  // for them.
   const providerType = isCloudBased(providerName) ? providerName : null;
 
   return await fetch("/api/search-settings/set-new-search-settings", {
@@ -238,6 +239,7 @@ export async function setNewSearchSettings({
     body: JSON.stringify({
       model_name: model.modelName,
       model_dim: model.modelDim,
+      reduced_dimension: model.reducedDimension ?? null,
       normalize: model.normalize,
       query_prefix: model.queryPrefix,
       passage_prefix: model.passagePrefix,

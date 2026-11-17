@@ -43,6 +43,7 @@ def _generation_span(
     provider: str = "openai",
     flow: str = "chat_response",
     usage: dict[str, Any] | None = None,
+    model_configuration_id: int | None = None,
 ) -> Span[Any]:
     return _fake_span(
         GenerationSpanData(
@@ -51,6 +52,7 @@ def _generation_span(
             usage=usage
             if usage is not None
             else {"input_tokens": 0, "output_tokens": 0},
+            model_configuration_id=model_configuration_id,
         )
     )
 
@@ -168,6 +170,39 @@ def test_batch_aggregates_matching_ledger_dimensions(
     assert len(aggregated) == 1
     assert aggregated[0].input_tokens == 30
     assert aggregated[0].output_tokens == 5
+
+
+def test_batch_keeps_model_configurations_apart(
+    processor: UserUsageTracingProcessor,
+) -> None:
+    """Admin overrides key on the configuration, so two providers serving the
+    same model name must not merge into one priced record."""
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
+    try:
+        first = processor._capture(
+            _generation_span(
+                usage={"input_tokens": 10, "output_tokens": 2},
+                model_configuration_id=1,
+            )
+        )
+        second = processor._capture(
+            _generation_span(
+                usage={"input_tokens": 20, "output_tokens": 3},
+                model_configuration_id=2,
+            )
+        )
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
+
+    assert first is not None
+    assert second is not None
+    assert first.model_configuration_id == 1
+    assert second.model_configuration_id == 2
+    aggregated = processor._aggregate_batch([first, second])
+    assert sorted((r.model_configuration_id, r.input_tokens) for r in aggregated) == [
+        (1, 10),
+        (2, 20),
+    ]
 
 
 def test_batch_aggregates_cache_creation_tokens(
@@ -444,10 +479,12 @@ def test_routed_model_prices_the_call_but_keeps_router_as_ledger_key(
     processor: UserUsageTracingProcessor,
     recorded_calls: list[dict[str, Any]],
 ) -> None:
-    priced: list[tuple[str, str | None]] = []
+    priced: list[tuple[str, str | None, int | None]] = []
 
     def _compute(**kwargs: Any) -> tuple[float, float]:
-        priced.append((kwargs["model"], kwargs["served_model"]))
+        priced.append(
+            (kwargs["model"], kwargs["served_model"], kwargs["model_configuration_id"])
+        )
         return 1.0, 2.0
 
     monkeypatch.setattr(proc_mod, "compute_cost_cents", _compute)
@@ -455,6 +492,7 @@ def test_routed_model_prices_the_call_but_keeps_router_as_ledger_key(
         model="openrouter/auto",
         provider="openrouter",
         usage={"input_tokens": 10, "output_tokens": 5},
+        model_configuration_id=7,
     )
     span.span_data.routed_model = "deepseek/deepseek-v4-flash"
 
@@ -465,5 +503,7 @@ def test_routed_model_prices_the_call_but_keeps_router_as_ledger_key(
     finally:
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
-    assert priced == [("openrouter/auto", "deepseek/deepseek-v4-flash")]
+    # The router's configuration keys its override; the served model prices
+    # from the catalog.
+    assert priced == [("openrouter/auto", "deepseek/deepseek-v4-flash", 7)]
     assert recorded_calls[0]["usage"].model == "openrouter/auto"

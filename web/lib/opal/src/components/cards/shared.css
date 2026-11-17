@@ -3,7 +3,7 @@
 /* ============================================================================
    Shared status-border palette for card components.
 
-   Sets the `border-color` per `StatusVariants` value. Components opt in by
+   Sets the `border-color` per `StatusColor` value. Components opt in by
    setting the `data-opal-status-border` attribute on their root element
    (and, separately, declaring an actual border via Tailwind's `border` /
    `border-dashed` utility).
@@ -31,6 +31,10 @@
 
 [data-opal-status-border="pending"] {
   @apply border-theme-amber-02;
+}
+
+[data-opal-status-border="queued"] {
+  @apply border-theme-purple-02;
 }
 
 [data-opal-status-border="error"] {

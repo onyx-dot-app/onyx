@@ -7,7 +7,6 @@ on:
   pull_request:
     paths:
       - "backend/**"
-      - ".agents/hooks/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
@@ -63,6 +62,10 @@ jobs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 5
+    # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -71,12 +74,64 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          list-files: json
+          filters: |
+            changed:
+              - '**'
+
       - name: Discover test directories
         id: set-matrix
+        env:
+          CHANGED_FILES: ${{ steps.filter.outputs.changed_files || '[]' }}
         run: |
-          # Find all subdirectories in backend/tests/external_dependency_unit
-          dirs=$(find backend/tests/external_dependency_unit -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | jq -R -s -c 'split("\n")[:-1]')
-          echo "test-dirs=$dirs" >> $GITHUB_OUTPUT
+          root=backend/tests/external_dependency_unit
+          all=$(find "$root" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+          # A PR that changes only the Helm chart or Python files inside test
+          # directories runs only the directories it can affect: the changed
+          # directory and every directory that imports the changed module.
+          # Only craft_helm reads the chart. Any other change (or a tag push)
+          # runs every directory.
+          selected=""
+          scope_all=false
+          [ "$(jq length <<<"$CHANGED_FILES")" -gt 0 ] || scope_all=true
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            if [[ "$f" == deployment/helm/* ]]; then
+              selected+="craft_helm"$'\n'
+            elif [[ "$f" =~ ^$root/([^/]+)/(.+)\.py$ ]]; then
+              dir="${BASH_REMATCH[1]}"
+              mod="${BASH_REMATCH[2]//\//.}"
+              mod="${mod%.__init__}"
+              pkg="tests.external_dependency_unit.$dir.$mod"
+              parent="${pkg%.*}"
+              selected+="$dir"$'\n'
+              # Importers by full module path, or by `from <parent> import`.
+              users=$(grep -rlE --include='*.py' \
+                -e "${pkg//./\\.}([^a-zA-Z0-9_]|$)" \
+                -e "from ${parent//./\\.} import" "$root" || true)
+              for u in $users; do
+                rel="${u#"$root"/}"
+                # A file at the root (a shared conftest or helper) is not a directory.
+                [[ "$rel" == */* ]] && selected+="${rel%%/*}"$'\n'
+              done
+            else
+              scope_all=true
+            fi
+          done < <(jq -r '.[]' <<<"$CHANGED_FILES")
+          if [ "$scope_all" = true ]; then
+            selected="$all"
+          else
+            selected=$(comm -12 <(echo "$all") <(echo "$selected" | sort -u))
+            # A PR that only deletes test directories still needs a matrix.
+            [ -n "$selected" ] || selected="$all"
+          fi
+          dirs=$(echo "$selected" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "Test directories: $dirs"
+          echo "test-dirs=$dirs" >> "$GITHUB_OUTPUT"
 
   external-dependency-unit-tests:
     needs: discover-test-dirs

@@ -244,6 +244,7 @@ def test_confluence_declares_its_binding_checks() -> None:
 # The sign-in checks of each source with named checks. A pass of one unlocks
 # the create form, whether or not the source has credential-bound fields.
 _SIGN_IN_CHECK_IDS: dict[DocumentSource, frozenset[str]] = {
+    DocumentSource.ASANA: frozenset({"asana_token"}),
     DocumentSource.CONFLUENCE: frozenset(
         {"confluence_auth", "confluence_scoped_token_auth"}
     ),
@@ -258,6 +259,8 @@ _SIGN_IN_CHECK_IDS: dict[DocumentSource, frozenset[str]] = {
     DocumentSource.SHAREPOINT: frozenset({"sharepoint_token_auth"}),
     DocumentSource.SLACK: frozenset({"slack_token_auth"}),
     DocumentSource.YOUTRACK: frozenset({"youtrack_token"}),
+    DocumentSource.AZURE_DATALAKE: frozenset({"adls_sign_in"}),
+    DocumentSource.EGNYTE: frozenset({"egnyte_token"}),
 }
 
 

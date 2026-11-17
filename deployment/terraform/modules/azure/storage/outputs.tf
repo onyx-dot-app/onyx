@@ -23,3 +23,13 @@ output "primary_access_key" {
   value       = var.shared_access_key_enabled ? azurerm_storage_account.this.primary_access_key : null
   sensitive   = true
 }
+
+output "key_vault_key_id" {
+  description = "Versionless ID of the customer-managed key. Null unless create_customer_managed_key is true."
+  value       = var.create_customer_managed_key ? azurerm_key_vault_key.cmk[0].versionless_id : null
+}
+
+output "key_vault_id" {
+  description = "Resource ID of the Key Vault that holds the customer-managed key. Null unless create_customer_managed_key is true."
+  value       = var.create_customer_managed_key ? azurerm_key_vault.cmk[0].id : null
+}

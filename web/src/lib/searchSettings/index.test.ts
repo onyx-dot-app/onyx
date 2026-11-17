@@ -98,6 +98,7 @@ describe("visibleEmbeddingProviders", () => {
       EmbeddingProviderName.LITELLM,
       EmbeddingProviderName.AZURE,
       EmbeddingProviderName.BIFROST,
+      EmbeddingProviderName.OPENAI_COMPATIBLE,
     ]);
   });
 

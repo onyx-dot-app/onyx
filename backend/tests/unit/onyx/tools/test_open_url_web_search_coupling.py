@@ -7,14 +7,25 @@ links are still served from indexed documents, nothing is fetched from the
 live internet.
 """
 
+from contextlib import nullcontext
 from unittest.mock import MagicMock
 
+import pytest
+
+from onyx.agents.runtime import Agent
+from onyx.context.search.models import InferenceSection
+from onyx.llm.interfaces import GenerationContext
+from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_constructor import should_disable_open_url_web_fetch
+from onyx.tools.tool_implementations.open_url.models import FailedFetch
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     WEB_FETCH_DISABLED_REASON,
     OpenURLTool,
 )
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.tracing.flows import LLMFlow
+from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
 def _tool(tool_id: int, in_code_tool_id: str | None) -> MagicMock:
@@ -71,7 +82,6 @@ def _build_tool(web_fetch_disabled: bool) -> OpenURLTool:
     # try to resolve one (and must not raise when none is configured).
     return OpenURLTool(
         tool_id=2,
-        emitter=MagicMock(),
         document_index=MagicMock(),
         user=MagicMock(),
         content_provider=None if web_fetch_disabled else MagicMock(),
@@ -99,3 +109,39 @@ def test_fetch_web_content_guard_when_provider_missing() -> None:
     assert sections == []
     assert [f.url for f in failures] == ["https://example.com"]
     assert failures[0].failure_reason == WEB_FETCH_DISABLED_REASON
+
+
+@pytest.mark.parametrize("web_fetch_disabled", [True, False])
+def test_open_url_without_content_reports_an_error(
+    web_fetch_disabled: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = "onyx.tools.tool_implementations.open_url.open_url_tool"
+    monkeypatch.setattr(f"{module}.DISABLE_VECTOR_DB", True)
+    monkeypatch.setattr(
+        f"{module}.get_session_with_current_tenant", lambda: nullcontext(MagicMock())
+    )
+    tool = _build_tool(web_fetch_disabled=web_fetch_disabled)
+    url = "https://example.com"
+
+    def fetch_nothing(
+        _urls: list[str], _url_snippet_map: dict[str, str]
+    ) -> tuple[list[InferenceSection], list[FailedFetch]]:
+        return [], [FailedFetch(url=url, failure_reason="blocked")]
+
+    monkeypatch.setattr(tool, "_fetch_web_content", fetch_nothing)
+    call = ToolCall(id="open", name=tool.name, arguments={"urls": [url]})
+    run = Agent(
+        FakeModelClient(lambda *_: AssistantMessage(content=[call])),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[tool.bind(lambda: ToolContext())],
+    ).start(max_steps=1)
+    run.result(timeout=5)
+    assert run.wait_for_idle(5)
+    [result] = [
+        message
+        for message in run.snapshot().messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert result.is_error
+    expected = WEB_FETCH_DISABLED_REASON if web_fetch_disabled else "blocked"
+    assert expected in result.text

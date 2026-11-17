@@ -74,6 +74,13 @@ The chat system uses a **Retrieval-Augmented Generation (RAG)** pipeline:
 
 When documents contain conflicting information, the system presents the most relevant and recent information first, and includes citations so users can verify the source material themselves.`;
 
+const TABLE_COPY_AI_RESPONSE = `Here is a table:
+
+| Tool | Status |
+| --- | --- |
+| [Onyx](https://onyx.app) | Available |
+| Search | Beta |`;
+
 const MARKDOWN_AI_RESPONSE = `Here's a quick overview with various formatting:
 
 ### Key Features
@@ -247,12 +254,30 @@ for (const theme of THEMES) {
 
         await sendMessage(page, "Give me an overview of Onyx features");
 
-        const aiMessage = page.getByTestId("onyx-ai-message").first();
-        await expect(aiMessage).toContainText("Key Features");
-        await expect(aiMessage).toContainText("OnyxClient");
-        await expect(aiMessage).toContainText("Privacy");
+        await chat.expectAnswerHeading("Key Features");
+        await chat.expectAnswerTable(["Feature", "Status", "Notes"], 5);
+        await chat.expectAnswerCode("from onyx import OnyxClient");
+        await chat.expectAnswerListItem(
+          "Privacy: Your data stays within your infrastructure"
+        );
 
         await chat.screenshotContainer(`chat-markdown-code-response-${theme}`);
+      });
+
+      test("table copy button writes the table as TSV", async ({ page }) => {
+        await page
+          .context()
+          .grantPermissions(["clipboard-read", "clipboard-write"]);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(TABLE_COPY_AI_RESPONSE));
+
+        await sendMessage(page, "Show me a table");
+        await chat.expectAnswerTable(["Tool", "Status"], 3);
+
+        await chat.copyAnswerTable();
+        await chat.expectClipboardText(
+          "Tool\tStatus\nOnyx (https://onyx.app)\tAvailable\nSearch\tBeta"
+        );
       });
 
       test("AI response with LaTeX math renders correctly", async ({
@@ -529,6 +554,7 @@ The platform architecture document provides additional context on how these impr
         await expect(aiMessage).toContainText("Platform stability");
         await expect(aiMessage).toContainText("New integrations");
         await expect(aiMessage).toContainText("Performance");
+        await chat.expectInlineCitationsFitLine(2);
 
         await chat.screenshotContainer(
           `chat-internal-search-with-citations-${theme}`

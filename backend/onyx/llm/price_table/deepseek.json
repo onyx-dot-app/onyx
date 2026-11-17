@@ -34,7 +34,7 @@
       },
       "family": "deepseek-flash",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -135,7 +135,7 @@
       },
       "family": "deepseek-flash",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -168,7 +168,7 @@
       },
       "family": "deepseek-flash",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -201,7 +201,7 @@
       },
       "family": "deepseek-thinking",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -216,10 +216,14 @@
       "name": "DeepSeek V4 Pro",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-08-12",
+      "release_date": "2026-08-13",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "search": {
+      "mode": "search",
+      "name": "search"
     }
   },
   "models_dev_providers": [

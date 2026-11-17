@@ -118,7 +118,10 @@ from onyx.server.gateway.models import (
 )
 from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
-from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.query_and_chat.token_limit import (
+    check_model_spend_limits,
+    check_token_rate_limits,
+)
 from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tracing.flows import LLMFlow
@@ -128,14 +131,10 @@ from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
     from litellm.types.llms.anthropic import (
-        AnthopicMessagesAssistantMessageParam,
-        AnthropicMessagesUserMessageParam,
+        AllAnthropicPassThroughMessageValues,
+        AnthropicThinkingParam,
     )
     from litellm.types.llms.openai import ChatCompletionToolParam
-
-    _AnthropicAdapterMessage = (
-        AnthropicMessagesUserMessageParam | AnthopicMessagesAssistantMessageParam
-    )
 
 logger = setup_logger()
 
@@ -919,7 +918,7 @@ def _anthropic_messages_to_raw_messages(
 
     adapter = LiteLLMAnthropicMessagesAdapter()
     translated = adapter.translate_anthropic_messages_to_openai(
-        messages=cast("list[_AnthropicAdapterMessage]", messages)
+        messages=cast("list[AllAnthropicPassThroughMessageValues]", messages)
     )
     raw: list[dict[str, Any]] = []
     system_message = _anthropic_system_to_raw_message(system)
@@ -1028,7 +1027,7 @@ def _anthropic_reasoning_effort(
     )
 
     effort = LiteLLMAnthropicMessagesAdapter.translate_anthropic_thinking_to_reasoning_effort(
-        thinking
+        cast("AnthropicThinkingParam", thinking)
     )
     return _parse_reasoning_effort(effort)
 
@@ -1433,6 +1432,7 @@ def _resolve_metered_gateway_model(
             tenant_id=get_current_tenant_id(),
             llm_provider_api_key=provider.api_key,
         )
+    check_model_spend_limits(user, model_config.id)
     return provider, model_config
 
 

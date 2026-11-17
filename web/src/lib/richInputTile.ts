@@ -1,12 +1,13 @@
-import { TAG_COLORS } from "@opal/components/tag/colors";
-import type { TagColor } from "@opal/components/tag/colors";
+import { BADGE_COLORS, badgeTextClass } from "@opal/components/badge/colors";
+import type { StatusColor } from "@opal/types";
+import type { Mention } from "@/lib/chat/types";
 
-/** Value stored in a tile's `data-tile-type` for slash-command skill tiles. */
-export const SKILL_TILE_TYPE = "skill";
+/** Value stored in a tile's `data-tile-type` for `@` mention tiles. */
+export const MENTION_TILE_TYPE = "mention";
 
-/** Whether `el` is a skill rich tile. */
-export function isSkillTile(el: Element | null): boolean {
-  return el?.getAttribute("data-tile-type") === SKILL_TILE_TYPE;
+/** Whether `el` is a mention rich tile. */
+export function isMentionTile(el: Element | null): boolean {
+  return el?.getAttribute("data-tile-type") === MENTION_TILE_TYPE;
 }
 
 export const PASTE_TILE_THRESHOLD_CHARS = 200;
@@ -60,25 +61,26 @@ interface IconSpec {
 }
 
 interface TileSpec {
-  /** Opal Tag tint sourcing the tile's fill/text colors (single source of truth). */
-  tagColor: TagColor;
+  /** Opal Badge tint sourcing the tile's fill/text colors (single source of truth). */
+  tagColor: StatusColor;
   icon: IconSpec;
 }
 
-// Spec per tile type. Keyed by RichTileConfig.type; falls back to "paste".
-const TILE_SPECS: Record<string, TileSpec> = {
-  paste: {
-    tagColor: "gray",
-    icon: {
-      paths: [CLIPBOARD_PATH],
-      viewBox: "0 0 16 16",
-      size: 14,
-      strokeWidth: 1.5,
-      strokeLinecap: "round",
-    },
+const PASTE_TILE_SPEC: TileSpec = {
+  tagColor: "default",
+  icon: {
+    paths: [CLIPBOARD_PATH],
+    viewBox: "0 0 16 16",
+    size: 14,
+    strokeWidth: 1.5,
+    strokeLinecap: "round",
   },
+};
+
+// Spec per mention kind; other tiles use the paste spec.
+const MENTION_TILE_SPECS: Record<Mention["type"], TileSpec> = {
   skill: {
-    tagColor: "blue",
+    tagColor: "info",
     icon: {
       paths: [SPARKLE_PATH],
       viewBox: "0 0 16 16",
@@ -114,43 +116,76 @@ function createSvgIcon(
   return svg;
 }
 
-export interface RichTileConfig {
-  type: string;
+const TILE_TITLE_MAX_CHARS = 200;
+
+/** Text-derived content of a tile. */
+export interface RichTileText {
   text: string;
   preview: string;
   meta: string;
-  /** Skill slug, set for skill tiles. Stored as data-skill-slug. */
-  skillSlug?: string;
+  /** Translated accessible name of the tile. */
+  label: string;
+}
+
+export function getPasteTileText(
+  text: string,
+  formatLabel: (values: { preview: string; meta: string }) => string
+): RichTileText {
+  const preview = getPasteTilePreview(text);
+  const meta = getPasteTileMeta(text);
+  return { text, preview, meta, label: formatLabel({ preview, meta }) };
+}
+
+/** Writes a tile's text-derived attributes and preview/meta spans. Create and
+ * edit both use it so the two cannot drift. */
+export function setRichTileText(
+  tile: HTMLElement,
+  content: RichTileText
+): void {
+  tile.setAttribute("data-text", content.text);
+  tile.title =
+    content.text.length > TILE_TITLE_MAX_CHARS
+      ? content.text.slice(0, TILE_TITLE_MAX_CHARS) + "…"
+      : content.text;
+  tile.setAttribute("aria-label", content.label);
+  const previewEl = tile.querySelector(".rich-input-tile-preview");
+  if (previewEl) {
+    previewEl.textContent = content.preview;
+  }
+  const metaEl = tile.querySelector(".rich-input-tile-meta");
+  if (metaEl) {
+    metaEl.textContent = content.meta;
+  }
+}
+
+export interface RichTileConfig extends RichTileText {
+  type: string;
+  /** Set for mention tiles. Stored as data-mention-type and
+   * data-mention-name. */
+  mention?: Mention;
+  /** Translated accessible name of the remove button. */
+  removeLabel: string;
 }
 
 export function createRichInputTileNode(
   config: RichTileConfig
 ): HTMLSpanElement {
-  const isSkill = config.type === SKILL_TILE_TYPE;
+  const { mention } = config;
 
   const tile = document.createElement("span");
   tile.contentEditable = "false";
   tile.setAttribute("data-rich-tile", "");
   tile.setAttribute("data-tile-type", config.type);
-  tile.setAttribute("data-text", config.text);
-  if (config.skillSlug !== undefined) {
-    tile.setAttribute("data-skill-slug", config.skillSlug);
+  if (mention !== undefined) {
+    tile.setAttribute("data-mention-type", mention.type);
+    tile.setAttribute("data-mention-name", mention.name);
   }
   tile.className = "rich-input-tile";
-  const spec = TILE_SPECS[config.type] ?? TILE_SPECS.paste!;
-  const tagColor = TAG_COLORS[spec.tagColor];
+  const spec =
+    mention !== undefined ? MENTION_TILE_SPECS[mention.type] : PASTE_TILE_SPEC;
+  const tagColor = BADGE_COLORS[spec.tagColor];
+  const textClass = badgeTextClass(spec.tagColor);
   tile.classList.add(...tagColor.bg.split(" "));
-  tile.title = isSkill
-    ? config.preview
-    : config.text.length > 200
-      ? config.text.slice(0, 200) + "…"
-      : config.text;
-  tile.setAttribute(
-    "aria-label",
-    isSkill
-      ? config.preview
-      : "Pasted text: " + config.preview + ", " + config.meta
-  );
 
   const icon = createSvgIcon(
     spec.icon.paths,
@@ -160,21 +195,19 @@ export function createRichInputTileNode(
     spec.icon.strokeLinecap
   );
   icon.classList.add("rich-input-tile-icon");
-  icon.classList.add(...tagColor.text.split(" "));
+  icon.classList.add(...textClass.split(" "));
   tile.appendChild(icon);
 
   const previewSpan = document.createElement("span");
   previewSpan.className = "rich-input-tile-preview";
-  previewSpan.classList.add(...tagColor.text.split(" "));
-  previewSpan.textContent = config.preview;
+  previewSpan.classList.add(...textClass.split(" "));
   tile.appendChild(previewSpan);
 
-  // Skill tiles pass an empty meta — only render it when present.
+  // Mention tiles pass an empty meta — only render it when present.
   if (config.meta) {
     const metaSpan = document.createElement("span");
     metaSpan.className = "rich-input-tile-meta";
-    metaSpan.classList.add(...tagColor.text.split(" "));
-    metaSpan.textContent = config.meta;
+    metaSpan.classList.add(...textClass.split(" "));
     tile.appendChild(metaSpan);
   }
 
@@ -182,13 +215,11 @@ export function createRichInputTileNode(
   removeBtn.className = "rich-input-tile-remove";
   removeBtn.setAttribute("data-rich-tile-remove", "");
   removeBtn.setAttribute("role", "button");
-  removeBtn.setAttribute(
-    "aria-label",
-    isSkill ? "Remove skill" : "Remove pasted text"
-  );
+  removeBtn.setAttribute("aria-label", config.removeLabel);
   removeBtn.appendChild(createSvgIcon([X_PATH], "0 0 28 28", 10, 2.5));
   tile.appendChild(removeBtn);
 
+  setRichTileText(tile, config);
   return tile;
 }
 

@@ -1,9 +1,7 @@
-import mimetypes
 import os
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from datetime import datetime, timezone
-from io import BytesIO
 from numbers import Integral
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import quote
@@ -17,15 +15,10 @@ from botocore.session import get_session
 from onyx.configs.app_configs import (
     BLOB_STORAGE_SIZE_THRESHOLD,
     INDEX_BATCH_SIZE,
-    SKIP_SPREADSHEET_CONTENT,
 )
-from onyx.configs.constants import BlobType, DocumentSource, FileOrigin
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    process_onyx_metadata,
-)
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    extract_and_stage_tabular_file,
-    is_tabular_file,
+from onyx.configs.constants import BlobType, DocumentSource
+from onyx.connectors.cross_connector_utils.storage_file_document import (
+    build_storage_file_document,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -35,21 +28,22 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
     LoadConnector,
     PollConnector,
     SecondsSinceUnixEpoch,
+    SlimConnector,
 )
 from onyx.connectors.models import (
     ConnectorMissingCredentialError,
     Document,
     HierarchyNode,
-    ImageSection,
-    TabularSection,
+    SlimDocument,
     TextSection,
 )
-from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
+from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
-from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
@@ -62,7 +56,7 @@ DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 SIZE_THRESHOLD_BUFFER = 64
 
 
-class BlobStorageConnector(LoadConnector, PollConnector):
+class BlobStorageConnector(LoadConnector, PollConnector, SlimConnector):
     def __init__(
         self,
         bucket_type: str,
@@ -395,195 +389,96 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
         return None
 
+    def _document_id(self, key: str) -> str:
+        return f"{self.bucket_type}:{self.bucket_name}:{key}"
+
+    def _iter_object_pages(self) -> Iterator[list[Mapping[str, Any]]]:
+        """Each listing page of file objects under the prefix."""
+        if self.s3_client is None:
+            raise ConnectorMissingCredentialError("Blob storage")
+
+        paginator = self.s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix):
+            yield [
+                obj for obj in page.get("Contents", []) if not obj["Key"].endswith("/")
+            ]
+
+    def _is_indexable_object(self, obj: Mapping[str, Any]) -> bool:
+        """The skips that need only listing metadata, shared by indexing and
+        pruning so both see the same set of objects."""
+        key: str = obj["Key"]
+        file_name = os.path.basename(key)
+
+        size_bytes = self._extract_size_bytes(obj)
+        if (
+            self.size_threshold is not None
+            and isinstance(size_bytes, int)
+            and size_bytes > self.size_threshold
+        ):
+            logger.warning(
+                "%s exceeds size threshold of %s. Skipping.",
+                file_name,
+                self.size_threshold,
+            )
+            return False
+
+        if (
+            get_file_ext(file_name) in OnyxFileExtensions.IMAGE_EXTENSIONS
+            and not self._allow_images
+        ):
+            logger.debug(
+                "Skipping image file: %s (image processing not enabled)",
+                key,
+            )
+            return False
+
+        return True
+
     def _yield_blob_objects(
         self,
         start: datetime,
         end: datetime,
     ) -> GenerateDocumentsOutput:
-        if self.s3_client is None:
-            raise ConnectorMissingCredentialError("Blob storage")
-
-        paginator = self.s3_client.get_paginator("list_objects_v2")
-        pages = paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix)
-
         batch: list[Document | HierarchyNode] = []
-        for page in pages:
-            if "Contents" not in page:
-                continue
-
-            for obj in page["Contents"]:
-                if obj["Key"].endswith("/"):
-                    continue
-
+        for objects in self._iter_object_pages():
+            for obj in objects:
                 last_modified = obj["LastModified"].replace(tzinfo=timezone.utc)
 
                 if not start <= last_modified <= end:
                     continue
 
-                file_name = os.path.basename(obj["Key"])
-                file_ext = get_file_ext(file_name)
+                if not self._is_indexable_object(obj):
+                    continue
+
                 key = obj["Key"]
+                file_name = os.path.basename(key)
                 link = self._get_blob_link(key)
 
-                size_bytes = self._extract_size_bytes(obj)
-                if (
-                    self.size_threshold is not None
-                    and isinstance(size_bytes, int)
-                    and self.size_threshold is not None
-                    and size_bytes > self.size_threshold
-                ):
-                    logger.warning(
-                        "%s exceeds size threshold of %s. Skipping.",
-                        file_name,
-                        self.size_threshold,
-                    )
-                    continue
-
-                # Handle image files
-                if file_ext in OnyxFileExtensions.IMAGE_EXTENSIONS:
-                    if not self._allow_images:
-                        logger.debug(
-                            "Skipping image file: %s (image processing not enabled)",
-                            key,
-                        )
-                        continue
-
-                    # Process the image file
-                    try:
-                        downloaded_file = self._download_object(key)
-                        if downloaded_file is None:
-                            continue
-
-                        # TODO: Refactor to avoid direct DB access in connector
-                        # This will require broader refactoring across the codebase
-                        image_section, _ = store_image_and_create_section(
-                            image_data=downloaded_file,
-                            file_id=f"{self.bucket_type}_{self.bucket_name}_{key.replace('/', '_')}",
-                            display_name=file_name,
-                            link=link,
-                            file_origin=FileOrigin.CONNECTOR,
-                        )
-
-                        batch.append(
-                            Document(
-                                id=f"{self.bucket_type}:{self.bucket_name}:{key}",
-                                sections=[image_section],
-                                source=DocumentSource(self.bucket_type.value),
-                                semantic_identifier=file_name,
-                                doc_updated_at=last_modified,
-                                metadata={},
-                            )
-                        )
-
-                        if len(batch) == self.batch_size:
-                            yield batch
-                            batch = []
-                    except Exception:
-                        logger.exception("Error processing image %s", key)
-                    continue
-
-                # Handle tabular files (xlsx, csv, tsv) — produce one
-                # TabularSection per sheet (or per file for csv/tsv)
-                # instead of a flat TextSection.
-                if is_tabular_file(file_name):
-                    try:
-                        downloaded_file = self._download_object(key)
-                        if downloaded_file is None:
-                            continue
-                        tabular_sections: list[TabularSection | TextSection] = []
-                        staged_file_id: str | None = None
-                        if self.raw_file_callback is not None:
-                            content_type, _ = mimetypes.guess_type(file_name)
-                            result = extract_and_stage_tabular_file(
-                                file=BytesIO(downloaded_file),
-                                file_name=file_name,
-                                content_type=content_type or "application/octet-stream",
-                                raw_file_callback=self.raw_file_callback,
-                                link=link,
-                                skip_content=SKIP_SPREADSHEET_CONTENT,
-                            )
-                            tabular_sections = result.sections
-                            staged_file_id = result.staged_file_id
-                        else:
-                            logger.warning(
-                                "Skipping tabular file %s because raw_file_callback is not set",
-                                file_name,
-                            )
-                            continue
-                        if not tabular_sections:
-                            logger.warning(
-                                "No content extracted from tabular file %s", file_name
-                            )
-                            continue
-                        batch.append(
-                            Document(
-                                id=f"{self.bucket_type}:{self.bucket_name}:{key}",
-                                sections=tabular_sections,
-                                source=DocumentSource(self.bucket_type.value),
-                                semantic_identifier=file_name,
-                                doc_updated_at=last_modified,
-                                metadata={},
-                                file_id=staged_file_id,
-                            )
-                        )
-                        if len(batch) == self.batch_size:
-                            yield batch
-                            batch = []
-                    except Exception:
-                        logger.exception("Error processing tabular file %s", key)
-                    continue
-
-                # Handle text and document files
                 try:
                     downloaded_file = self._download_object(key)
                     if downloaded_file is None:
                         continue
-                    extraction_result = extract_text_and_images(
-                        BytesIO(downloaded_file), file_name=file_name
+                    document = build_storage_file_document(
+                        file_bytes=downloaded_file,
+                        file_name=file_name,
+                        document_id=self._document_id(key),
+                        source=DocumentSource(self.bucket_type.value),
+                        link=link,
+                        last_modified=last_modified,
+                        image_file_id=f"{self.bucket_type}_{self.bucket_name}_{key.replace('/', '_')}",
+                        raw_file_callback=self.raw_file_callback,
+                        include_embedded_images=False,
                     )
-
-                    onyx_metadata, custom_tags = process_onyx_metadata(
-                        extraction_result.metadata
-                    )
-                    file_display_name = onyx_metadata.file_display_name or file_name
-                    time_updated = onyx_metadata.doc_updated_at or last_modified
-                    link = onyx_metadata.link or link
-                    primary_owners = onyx_metadata.primary_owners
-                    secondary_owners = onyx_metadata.secondary_owners
-                    source_type = onyx_metadata.source_type or DocumentSource(
-                        self.bucket_type.value
-                    )
-
-                    sections: list[TextSection | ImageSection] = []
-                    if extraction_result.text_content.strip():
-                        logger.debug(
-                            "Creating TextSection for %s with link: %s", file_name, link
-                        )
-                        sections.append(
-                            TextSection(
-                                link=link,
-                                text=extraction_result.text_content.strip(),
-                            )
-                        )
-
-                    batch.append(
-                        Document(
-                            id=f"{self.bucket_type}:{self.bucket_name}:{key}",
-                            sections=(sections or [TextSection(link=link, text="")]),
-                            source=source_type,
-                            semantic_identifier=file_display_name,
-                            doc_updated_at=time_updated,
-                            metadata=custom_tags,
-                            primary_owners=primary_owners,
-                            secondary_owners=secondary_owners,
-                        )
-                    )
-                    if len(batch) == self.batch_size:
-                        yield batch
-                        batch = []
-
                 except Exception:
-                    logger.exception("Error decoding object %s as UTF-8", key)
+                    logger.exception("Error processing object %s", key)
+                    continue
+                if document is None:
+                    continue
+
+                batch.append(document)
+                if len(batch) == self.batch_size:
+                    yield batch
+                    batch = []
         if batch:
             yield batch
 
@@ -607,6 +502,29 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             yield batch
 
         return None
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Every indexable object under the prefix, from the key listing only.
+
+        Ignores the window: a prune deletes each indexed document this does not
+        list. Objects that fail to download stay listed, so they are kept.
+        """
+        for objects in self._iter_object_pages():
+            # A partial listing would read as deleted objects, so stopping raises.
+            if callback is not None and callback.should_stop():
+                raise RuntimeError("Blob storage slim listing: stop signal detected")
+            batch: list[SlimDocument | HierarchyNode] = [
+                SlimDocument(id=self._document_id(obj["Key"]))
+                for obj in objects
+                if self._is_indexable_object(obj)
+            ]
+            if batch:
+                yield batch
 
     def validate_connector_settings(self) -> None:
         if self.s3_client is None:

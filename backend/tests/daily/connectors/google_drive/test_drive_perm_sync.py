@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
 from ee.onyx.external_permissions.models import DocSyncResume
@@ -34,6 +35,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     PILL_FOLDER_ID,
     PUBLIC_RANGE,
     RESTRICTED_ACCESS_FOLDER_ID,
+    SHORTCUTTED_3_FOLDER_ID,
     TEST_USER_1_DRIVE_B_FOLDER_ID,
     TEST_USER_1_DRIVE_B_ID,
     TEST_USER_1_EXTRA_DRIVE_1_ID,
@@ -166,6 +168,8 @@ def test_gdrive_perm_sync_with_real_data(
     group_id_to_email_mapping: dict[str, set[str]] = defaultdict(set)
     groups_with_anyone_access: set[str] = set()
     for group in external_user_groups:
+        # The test drive reads clean, so no user or group may be skipped.
+        assert isinstance(group, ExternalUserGroup)
         for email in group.user_emails:
             group_id_to_email_mapping[group.id].add(email)
 
@@ -284,6 +288,7 @@ def test_gdrive_perm_sync_with_real_data(
             EXTERNAL_SHARED_FOLDER_ID,
             FOLDER_3_ID,
             *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+            SHORTCUTTED_3_FOLDER_ID,
             *PARTIAL_VISIBILITY_FIXTURE_NODE_IDS,
         )
     )

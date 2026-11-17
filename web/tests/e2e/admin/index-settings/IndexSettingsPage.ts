@@ -23,8 +23,6 @@ export class IndexSettingsPage {
   readonly viewAllModelsButton: Locator;
   readonly cloudTab: Locator;
   readonly selfHostedTab: Locator;
-  /** Toggle of the collapsed "bring your own" section (LiteLLM, Azure, Bifrost, custom). */
-  readonly bringYourOwnToggle: Locator;
   readonly applyReindexButton: Locator;
   readonly applyWithoutReindexButton: Locator;
   readonly revertButton: Locator;
@@ -49,9 +47,6 @@ export class IndexSettingsPage {
     });
     this.cloudTab = page.getByRole("tab", { name: /cloud.based/i });
     this.selfHostedTab = page.getByRole("tab", { name: /self.hosted/i });
-    this.bringYourOwnToggle = page.getByRole("button", {
-      name: "Advanced: bring your own model or proxy",
-    });
     this.applyReindexButton = page.getByRole("button", {
       name: "Apply & Re-index",
     });
@@ -99,25 +94,9 @@ export class IndexSettingsPage {
     await this.cloudTab.click();
   }
 
-  /** Open the collapsed "bring your own" section of the active tab. */
-  async expandBringYourOwnSection(): Promise<void> {
-    await expect(this.bringYourOwnToggle).toBeVisible({ timeout: 10000 });
-    // Control flow only: the section stays open after an earlier expand.
-    if (
-      (await this.bringYourOwnToggle.getAttribute("aria-expanded")) !== "true"
-    ) {
-      await this.bringYourOwnToggle.click();
-    }
-    await expect(this.bringYourOwnToggle).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
-  }
-
   // ---------------------------------------------------------------------------
   // Cloud-provider setup modal (LiteLLM / Azure — providers with no
-  // pre-registered models render an "Add Configuration" card inside the
-  // collapsed "bring your own" section)
+  // pre-registered models render an "Add Configuration" card)
   // ---------------------------------------------------------------------------
 
   private setupModalFor(displayName: string): Locator {
@@ -136,7 +115,6 @@ export class IndexSettingsPage {
   }
 
   async openProviderSetup(displayName: string): Promise<void> {
-    await this.expandBringYourOwnSection();
     await this.page
       .getByText(
         new RegExp(
@@ -182,6 +160,12 @@ export class IndexSettingsPage {
   }): Promise<void> {
     await this.activeSetupModal.locator("#apiUrl").fill(creds.apiBaseUrl);
     await this.activeSetupModal.locator("#apiKey").fill(creds.apiKey);
+  }
+
+  async fillReducedDimension(reducedDimension: number): Promise<void> {
+    await this.activeSetupModal
+      .locator("#reducedDimension")
+      .fill(String(reducedDimension));
   }
 
   async fillAzureCredentials(creds: {
@@ -238,13 +222,6 @@ export class IndexSettingsPage {
     );
   }
 
-  async expectBringYourOwnSectionOpen(): Promise<void> {
-    await expect(this.bringYourOwnToggle).toHaveAttribute(
-      "aria-expanded",
-      "true"
-    );
-  }
-
   /** The card is listed and its button carries the given state label. */
   async expectModelCardState(
     providerType: string,
@@ -296,7 +273,7 @@ export class IndexSettingsPage {
     const listbox = this.page.getByRole("listbox", { name: "Select model" });
     await expect(listbox).toBeVisible();
     await this.page
-      .getByRole("textbox", { name: "Search" })
+      .getByRole("searchbox", { name: "Search" })
       .and(this.page.locator(":focus"))
       .fill(displayName);
     await listbox.getByRole("option", { name: displayName }).click();
@@ -341,6 +318,34 @@ export class IndexSettingsPage {
     await expect(this.page.getByText("A full re-index will run.")).toHaveCount(
       0
     );
+  }
+
+  /**
+   * Opens the Vector Quantization list and checks one level: whether it can be
+   * picked, and the note beside it when it cannot. Closes the list after.
+   */
+  async expectVectorQuantizationOption(
+    label: string,
+    expected: { disabled: boolean; note?: string }
+  ): Promise<void> {
+    await this.page
+      .locator("label")
+      .filter({ hasText: "Vector Quantization" })
+      .getByRole("combobox")
+      .click();
+    const option: Locator = this.page
+      .getByRole("listbox", { name: "Select an option" })
+      .getByRole("option")
+      .filter({ hasText: label });
+    if (expected.disabled) {
+      await expect(option).toBeDisabled();
+    } else {
+      await expect(option).toBeEnabled();
+    }
+    if (expected.note) {
+      await expect(option).toContainText(expected.note);
+    }
+    await this.page.keyboard.press("Escape");
   }
 
   /** Pick a Vector Quantization level by its option title, e.g. "1-bit". */

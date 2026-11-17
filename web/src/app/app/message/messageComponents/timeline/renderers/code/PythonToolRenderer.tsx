@@ -17,7 +17,7 @@ import { CodeBlock } from "@/app/app/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import python from "highlight.js/lib/languages/python";
 import { SvgTerminal } from "@opal/icons";
-import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
+import { ShadowDiv } from "@opal/components";
 
 // Register Python language for highlighting
 hljs.registerLanguage("python", python);
@@ -28,7 +28,10 @@ function HighlightedPythonCode({ code }: { code: string }) {
     try {
       return hljs.highlight(code, { language: "python" }).value;
     } catch {
-      return code;
+      return code
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
     }
   }, [code]);
 
@@ -231,12 +234,14 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       supportsCollapsible: true,
       alwaysCollapsible: true,
       content: (
-        <FadingEdgeContainer
-          direction="bottom"
+        <ShadowDiv
+          shadowDirection="bottom-only"
+          variant="mask"
+          shadowHeight={8}
           className="max-h-24 overflow-hidden"
         >
           {content}
-        </FadingEdgeContainer>
+        </ShadowDiv>
       ),
     },
   ]);

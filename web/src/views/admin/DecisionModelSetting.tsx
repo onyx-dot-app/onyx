@@ -32,7 +32,6 @@ export default function DecisionModelSetting() {
     try {
       await saveDecisionModel(selection);
       await refetch();
-      toast.success(t("decisionModel.saved"));
     } catch (error) {
       toast.error(
         error instanceof Error && error.message

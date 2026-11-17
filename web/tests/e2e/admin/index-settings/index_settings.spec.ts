@@ -11,6 +11,8 @@ const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
 const EMBEDDING_PROVIDER_API = "**/api/admin/embedding/embedding-provider**";
 const TEST_EMBEDDING_API = "**/api/admin/embedding/test-embedding";
 const SET_NEW_SETTINGS_API = "**/api/search-settings/set-new-search-settings**";
+const VECTOR_QUANTIZATION_SUPPORT_API =
+  "**/api/search-settings/vector-quantization-support";
 const UPDATE_INFERENCE_SETTINGS_API =
   "**/api/search-settings/update-inference-settings**";
 const CURRENT_SEARCH_SETTINGS_API =
@@ -50,7 +52,6 @@ interface TestSearchSettings {
 
 interface TestSettings {
   image_extraction_and_analysis_enabled?: boolean | null;
-  image_analysis_max_size_mb?: number | null;
   [key: string]: unknown;
 }
 
@@ -690,7 +691,6 @@ async function mockImageProcessing(
   let servedSettings: TestSettings = {
     ...settings,
     image_extraction_and_analysis_enabled: options.imageOn,
-    image_analysis_max_size_mb: 20,
   };
   let servedSearchSettings: TestSearchSettings =
     options.contextualModelId === undefined
@@ -788,12 +788,11 @@ test.describe("Index Settings: image processing @exclusive", () => {
 
     await indexSettings.applyWithoutReindexButton.click();
     await expect.poll(() => mocks!.calls.length).toBe(2);
-    // The model lands first, then the toggle and size.
+    // The model lands first, then the toggle.
     expect(mocks!.calls).toEqual(["vision", "settings"]);
     expect(mocks!.visionBodies[0]?.model_name).toBe(mocks!.visionModel.name);
     expect(mocks!.settingsBodies[0]).toMatchObject({
       image_extraction_and_analysis_enabled: true,
-      image_analysis_max_size_mb: 20,
     });
 
     // The form rebased onto the saved settings: clean banner, switch still on.
@@ -1068,6 +1067,46 @@ test.describe("Index Settings: vector quantization @exclusive", () => {
     await loginAs(page, "admin");
   });
 
+  test("1-bit is disabled on an OpenSearch older than 3.6", async ({
+    page,
+  }) => {
+    await page.route(VECTOR_QUANTIZATION_SUPPORT_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          opensearch_version: "3.3",
+          levels: [
+            {
+              vector_quantization: "none",
+              supported: true,
+              min_opensearch_version: null,
+            },
+            {
+              vector_quantization: "scalar_7_bit",
+              supported: true,
+              min_opensearch_version: "2.16",
+            },
+            {
+              vector_quantization: "scalar_1_bit",
+              supported: false,
+              min_opensearch_version: "3.6",
+            },
+          ],
+        }),
+      });
+    });
+
+    const indexSettings: IndexSettingsPage = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expectVectorQuantizationOption("1-bit", {
+      disabled: true,
+      note: "Needs OpenSearch 3.6+",
+    });
+    await indexSettings.expectVectorQuantizationOption("7-bit", {
+      disabled: false,
+    });
+  });
+
   test("a quantization change re-indexes with the chosen level", async ({
     page,
   }) => {
@@ -1179,6 +1218,7 @@ interface EmptyRegistryProviderCase {
   // Fills the credential fields unique to this provider via the page object
   // (the shared model-spec fields are filled by the test body).
   fillCredentials: (indexSettings: IndexSettingsPage) => Promise<void>;
+  reducedDimension?: number;
 }
 
 const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
@@ -1202,6 +1242,18 @@ const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
         deploymentName: "my-deployment",
       }),
   },
+  {
+    providerType: "openai_compatible",
+    displayName: "OpenAI-Compatible",
+    fillCredentials: async (indexSettings) => {
+      await indexSettings.fillLiteLLMCredentials({
+        apiBaseUrl: "http://localhost:8000/v1",
+        apiKey: "sk-test-key",
+      });
+      await indexSettings.fillReducedDimension(512);
+    },
+    reducedDimension: 512,
+  },
 ];
 
 test.describe("Index Settings: empty-registry providers @exclusive", () => {
@@ -1214,6 +1266,7 @@ test.describe("Index Settings: empty-registry providers @exclusive", () => {
     providerType,
     displayName,
     fillCredentials,
+    reducedDimension,
   } of EMPTY_REGISTRY_PROVIDERS) {
     test(`connecting ${displayName} stages its model and applies with provider_type="${providerType}"`, async ({
       page,
@@ -1275,6 +1328,7 @@ test.describe("Index Settings: empty-registry providers @exclusive", () => {
       // sent as provider_type=null (which the backend treats as self-hosted
       // and would ignore the credentials we just saved).
       expect(body.provider_type).toBe(providerType);
+      expect(body.reduced_dimension).toBe(reducedDimension ?? null);
     });
   }
 });
@@ -1283,8 +1337,7 @@ test.describe("Index Settings: empty-registry providers @exclusive", () => {
 // Bring-your-own model cards (ENG-4417)
 //
 // LiteLLM, Azure and Bifrost list no registry models. The picker must still
-// show the configured model as a card, and open the bring-your-own section
-// that holds it.
+// show the configured model as a card.
 // ---------------------------------------------------------------------------
 
 const BIFROST_MODEL = "openai/text-embedding-3-small";
@@ -1349,7 +1402,6 @@ test.describe("Index Settings: bring-your-own model cards @exclusive", () => {
     await indexSettings.submitProviderSetup();
 
     await indexSettings.expectModelStaged();
-    await indexSettings.expectBringYourOwnSectionOpen();
     await indexSettings.expectModelCardState(
       "bifrost",
       BIFROST_MODEL,
@@ -1360,9 +1412,7 @@ test.describe("Index Settings: bring-your-own model cards @exclusive", () => {
     );
   });
 
-  test("a current Bifrost model opens the bring-your-own section on its card", async ({
-    page,
-  }) => {
+  test("a current Bifrost model shows as its card", async ({ page }) => {
     const current = await getCurrentSearchSettings(page);
     await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
       await route.fulfill({
@@ -1404,7 +1454,6 @@ test.describe("Index Settings: bring-your-own model cards @exclusive", () => {
     await indexSettings.goto();
     await indexSettings.expandModelPicker();
 
-    await indexSettings.expectBringYourOwnSectionOpen();
     await indexSettings.expectModelCardState(
       "bifrost",
       BIFROST_MODEL,

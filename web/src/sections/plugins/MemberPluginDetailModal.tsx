@@ -1,9 +1,9 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import isEqual from "lodash/isEqual";
 import { useId, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import {
   Button,
   Card,
@@ -21,7 +21,6 @@ import type {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { AppActionPoliciesView } from "@/lib/plugins/types";
-import { saveAppActionPolicies } from "@/app/craft/services/apiServices";
 import { SkillPreviewContent } from "@/sections/modals/SkillPreviewModal";
 import PolicyEditor from "@/sections/actions/PolicyEditor";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
@@ -44,15 +43,18 @@ import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import { useExternalAppSkillIssues } from "@/lib/externalApps/hooks";
 import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 import useUserSkills from "@/hooks/useUserSkills";
+import { refreshSkillLists } from "@/lib/skills/cache";
 import type { Skill, SkillsList } from "@/lib/skills/types";
 import { useSettings } from "@/lib/settings/hooks";
 import {
+  saveMemberActionPolicies,
   saveMemberMCPPreferences,
   saveMemberOpenAPIPreferences,
   disconnectMemberPlugin,
   memberPluginName,
   type MemberPlugin,
 } from "@/lib/plugins/member";
+import { useSkillLimitCopy } from "@/lib/skills/hooks";
 
 interface MemberPluginDetailModalProps {
   plugin: MemberPlugin;
@@ -224,7 +226,8 @@ export function MemberPluginDetailContent({
   onDisconnected,
 }: MemberPluginDetailModalProps) {
   const t = useTranslations("actions.memberPlugins");
-  const router = useRouter();
+  const { describeError } = useSkillLimitCopy();
+  const navigation = useNavigation();
   const craftEnabled = useSettings().onyx_craft_enabled === true;
   const actions = useTranslations("actions");
   const switchCopy = useTranslations("skills.page.switchModal");
@@ -235,14 +238,14 @@ export function MemberPluginDetailContent({
   const craftCopy = useTranslations("craft.apps.page");
   const [preview, setPreview] = useState<Skill | null>(null);
   const [action, setAction] = useState<DetailAction>({ kind: "details" });
+  // MCP approvals apply to chat and Craft; external apps exist only in Craft.
+  const supportsApprovals =
+    plugin.kind === "external-app"
+      ? craftEnabled
+      : plugin.kind === "mcp" &&
+        plugin.server.users_can_manage_policies === true;
   const [tab, setTab] = useState<string>(
-    initialTab === "approvals" &&
-      craftEnabled &&
-      plugin.kind !== "openapi" &&
-      (plugin.kind === "external-app" ||
-        plugin.server.available_in_craft === true)
-      ? "approvals"
-      : "connection"
+    initialTab === "approvals" && supportsApprovals ? "approvals" : "connection"
   );
   const approvalCopy = useTranslations("craft.actionPolicies");
   const openingId = useId();
@@ -255,11 +258,6 @@ export function MemberPluginDetailContent({
   const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const supportsApprovals =
-    craftEnabled &&
-    plugin.kind !== "openapi" &&
-    (plugin.kind === "external-app" ||
-      plugin.server.available_in_craft === true);
   const showApprovals =
     supportsApprovals && plugin.connection.kind === "connected";
   const activeTab = tab === "approvals" && !showApprovals ? "connection" : tab;
@@ -351,7 +349,7 @@ export function MemberPluginDetailContent({
   function reviewSkills() {
     if (plugin.kind !== "external-app" || saving) return;
     guard.requestLeave(() =>
-      router.push(`/craft/v1/skills?externalAppId=${plugin.app.id}`)
+      navigation.go(`/craft/v1/skills?externalAppId=${plugin.app.id}`)
     );
   }
 
@@ -364,6 +362,7 @@ export function MemberPluginDetailContent({
       return;
     setSaving(true);
     setSaveError(null);
+    let skillChanged = false;
     try {
       if (preferencesDirty) {
         if (plugin.kind === "mcp") {
@@ -387,9 +386,10 @@ export function MemberPluginDetailContent({
         }
         setInitialPreferences(preferences);
       }
-      if (policiesDirty && policyApp) {
-        await saveAppActionPolicies(
-          policyApp.gated_app_id,
+      if (policiesDirty && policyTarget) {
+        await saveMemberActionPolicies(
+          policyTarget.kind,
+          policyTarget.id,
           policies,
           approvalCopy("saveError")
         );
@@ -418,6 +418,7 @@ export function MemberPluginDetailContent({
           }
           throw error;
         }
+        skillChanged = true;
         if (skillId === replaceSkillId) setSkillConflict(null);
         const updateSkill = (skill: Skill): Skill =>
           skill.id === updated.id
@@ -442,10 +443,10 @@ export function MemberPluginDetailContent({
       }
       onClose();
     } catch (error) {
-      setSaveError(
-        error instanceof Error ? error.message : t("defaults.saveFailed")
-      );
+      setSaveError(describeError(error, t("defaults.saveFailed")));
     } finally {
+      // Other skill lists must see the changes saved before a failure too.
+      if (skillChanged) void refreshSkillLists(mutate);
       setSaving(false);
     }
   }
@@ -828,7 +829,7 @@ export function MemberPluginDetailContent({
                     ) : (
                       <div className="flex flex-col gap-4">
                         <InputTypeIn
-                          searchIcon
+                          icon="search"
                           value={endpointSearch}
                           onChange={(event) =>
                             setEndpointSearch(event.target.value)
@@ -890,7 +891,11 @@ export function MemberPluginDetailContent({
                     <div className="flex flex-1">
                       <Button
                         prominence="tertiary"
-                        href={`/craft/v1/skills?externalAppId=${plugin.app.id}`}
+                        href={
+                          navigation.linkTo(
+                            `/craft/v1/skills?externalAppId=${plugin.app.id}`
+                          ).href
+                        }
                         onClick={(event) => {
                           event.preventDefault();
                           reviewSkills();

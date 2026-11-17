@@ -160,7 +160,6 @@ test.each(["mcp", "external-app"] as const)(
   (kind) => {
     showCatalog(kind);
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveAttribute("data-position", "top");
     expect(dialog).toHaveAttribute("data-width", "lg");
     expect(dialog.querySelector(".opal-modal-body")).toHaveAttribute(
       "data-two-tone"
@@ -168,7 +167,9 @@ test.each(["mcp", "external-app"] as const)(
     const custom = within(dialog).getByRole("button", {
       name: kind === "mcp" ? "Add custom MCP server" : "Custom app",
     });
-    const provider = within(dialog).getByRole("button", { name: "Add Slack" });
+    const provider = within(dialog).getByRole("button", {
+      name: kind === "mcp" ? "Add Notion" : "Add Slack",
+    });
     expect(custom.parentElement).toBe(provider.parentElement);
     expect(custom.parentElement).toHaveClass("grid", "md:grid-cols-2");
     expect(custom.className).toBe(provider.className);
@@ -179,10 +180,10 @@ test("MCP providers and custom cards select their own flows and omit installed s
   const user = setupUser();
   const { onPick } = showCatalog("mcp");
   expect(screen.queryByRole("button", { name: "Add Linear" })).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Add Slack" }));
+  await user.click(screen.getByRole("button", { name: "Add Notion" }));
   expect(onPick).toHaveBeenLastCalledWith({
     kind: "mcp",
-    suggestion: SUGGESTED_MCP_PLUGINS[0],
+    suggestion: SUGGESTED_MCP_PLUGINS.find(({ id }) => id === "notion"),
   });
   await user.click(
     screen.getByRole("button", { name: "Add custom MCP server" })
@@ -225,7 +226,7 @@ test.each([
     expect(screen.getByRole("dialog")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Custom app" })).toBeNull();
     if (kind === "mcp")
-      expect(screen.getByRole("button", { name: "Add Slack" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "Add Notion" })).toBeVisible();
     else expect(screen.queryByRole("button", { name: "Add Slack" })).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   }

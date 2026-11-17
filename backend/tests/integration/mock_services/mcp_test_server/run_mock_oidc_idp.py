@@ -40,6 +40,8 @@ Env (all optional):
   MOCK_OIDC_ADVERTISE_CIMD  advertise CIMD next to DCR when true
   MOCK_OIDC_EXPECTED_CLIENT_ID
                             exact CIMD URL accepted by the authorization endpoint
+  MOCK_OIDC_FAIL            "deny": /authorize returns error=access_denied;
+                            "token": /token rejects the authorization code
   MOCK_OIDC_CLIENT_METADATA_CA_FILE
                             CA used to fetch the HTTPS client metadata document
 """
@@ -73,6 +75,8 @@ from pydantic import AnyUrl, BaseModel
 KEY_ID = "mock-oidc-key-1"
 CIMD_ONLY_ENV_VAR = "MOCK_OIDC_CIMD_ONLY"
 ADVERTISE_CIMD_ENV_VAR = "MOCK_OIDC_ADVERTISE_CIMD"
+FAIL_ENV_VAR = "MOCK_OIDC_FAIL"
+FAIL_MODES = frozenset({"deny", "token"})
 EXPECTED_CLIENT_ID_ENV_VAR = "MOCK_OIDC_EXPECTED_CLIENT_ID"
 CLIENT_METADATA_CA_FILE_ENV_VAR = "MOCK_OIDC_CLIENT_METADATA_CA_FILE"
 TRUE_VALUES = frozenset({"1", "true", "yes"})
@@ -230,7 +234,7 @@ class MockOidc:
         )
 
 
-def build_app(oidc: MockOidc) -> FastAPI:
+def build_app(oidc: MockOidc, fail: str | None = None) -> FastAPI:
     app = FastAPI(title="Mock OIDC IdP for MCP tests")
 
     metadata: dict[str, Any] = {
@@ -321,10 +325,15 @@ def build_app(oidc: MockOidc) -> FastAPI:
         except (OSError, ValueError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
 
+        sep = "&" if "?" in redirect_uri else "?"
+        if fail == "deny":
+            location = f"{redirect_uri}{sep}error=access_denied"
+            if state:
+                location += f"&state={state}"
+            return RedirectResponse(location, status_code=302)
         code = oidc.issue_code(
             code_challenge=code_challenge, redirect_uri=redirect_uri, scope=scope
         )
-        sep = "&" if "?" in redirect_uri else "?"
         location = f"{redirect_uri}{sep}code={code}"
         if state:
             location += f"&state={state}"
@@ -343,6 +352,8 @@ def build_app(oidc: MockOidc) -> FastAPI:
     ) -> JSONResponse:
         try:
             if grant_type == "authorization_code":
+                if fail == "token":
+                    return JSONResponse({"error": "invalid_grant"}, status_code=400)
                 record = oidc.redeem_code(code, code_verifier, redirect_uri)
                 granted_scope = record["scope"]
             elif grant_type == "refresh_token":
@@ -384,6 +395,9 @@ def main() -> None:
     advertise_cimd = os.getenv(ADVERTISE_CIMD_ENV_VAR, "").lower() in TRUE_VALUES
     expected_client_id = os.getenv(EXPECTED_CLIENT_ID_ENV_VAR)
     client_metadata_ca_file = os.getenv(CLIENT_METADATA_CA_FILE_ENV_VAR)
+    fail = os.getenv(FAIL_ENV_VAR) or None
+    if fail is not None and fail not in FAIL_MODES:
+        raise SystemExit(f"{FAIL_ENV_VAR} must be one of {sorted(FAIL_MODES)}")
 
     oidc = MockOidc(
         issuer=issuer,
@@ -395,11 +409,12 @@ def main() -> None:
         expected_client_id=expected_client_id,
         client_metadata_ca_file=client_metadata_ca_file,
     )
-    app = build_app(oidc)
+    app = build_app(oidc, fail)
 
     print(
         f"[mock-oidc] issuer={issuer} audience={audience} "
-        f"scope={scope} cimd_only={cimd_only} advertise_cimd={advertise_cimd}"
+        f"scope={scope} cimd_only={cimd_only} advertise_cimd={advertise_cimd} "
+        f"fail={fail}"
     )
     print(f"[mock-oidc] discovery: {issuer}/.well-known/oauth-authorization-server")
     print(f"[mock-oidc] jwks: {issuer}/jwks")

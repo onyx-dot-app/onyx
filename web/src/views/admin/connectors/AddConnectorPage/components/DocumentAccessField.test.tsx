@@ -1,5 +1,7 @@
-import { render, screen, userEvent, waitFor } from "@tests/setup/test-utils";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { Formik } from "formik";
+import type { SelectOption } from "@opal/components";
+import { useTierAtLeast, useTierLockedOptions } from "@/lib/tiers/hooks";
 import DocumentAccessField from "@/views/admin/connectors/AddConnectorPage/components/DocumentAccessField";
 import {
   ConfigurableSources,
@@ -12,6 +14,7 @@ jest.mock("@/lib/permissions/hooks", () => ({
 jest.mock("@/lib/tiers/hooks", () => ({
   ...jest.requireActual("@/lib/tiers/hooks"),
   useTierAtLeast: jest.fn(),
+  useTierLockedOptions: jest.fn(),
 }));
 jest.mock(
   "@/views/admin/connectors/AddConnectorPage/components/AutoSyncOptions",
@@ -26,7 +29,10 @@ jest.mock("@/lib/connectors/components/GroupShareList", () => ({
 }));
 
 const { usePermissionAuthority } = jest.requireMock("@/lib/permissions/hooks");
-const { useTierAtLeast } = jest.requireMock("@/lib/tiers/hooks");
+const mockedUseTierAtLeast = jest.mocked(useTierAtLeast);
+const mockedUseTierLockedOptions = jest.mocked(useTierLockedOptions);
+const { useTierLockedOptions: actualUseTierLockedOptions } =
+  jest.requireActual<typeof import("@/lib/tiers/hooks")>("@/lib/tiers/hooks");
 
 function renderForm(connector: ConfigurableSources) {
   return render(
@@ -48,9 +54,37 @@ function renderForm(connector: ConfigurableSources) {
   );
 }
 
+// One Formik form whose DocumentAccessField remounts when `mountKey` changes.
+function AccessFormWithMountKey({
+  connector,
+  mountKey,
+}: {
+  connector: ConfigurableSources;
+  mountKey: number;
+}) {
+  return (
+    <Formik
+      initialValues={{
+        access_type: "public",
+        groups: [],
+        data_access_group_ids: [],
+      }}
+      onSubmit={() => {}}
+    >
+      {({ values }) => (
+        <>
+          <DocumentAccessField key={mountKey} connector={connector} />
+          <output data-testid="access-type">{values.access_type}</output>
+        </>
+      )}
+    </Formik>
+  );
+}
+
 describe("DocumentAccessField", () => {
   beforeEach(() => {
-    useTierAtLeast.mockReturnValue(true);
+    mockedUseTierAtLeast.mockReturnValue(true);
+    mockedUseTierLockedOptions.mockImplementation(actualUseTierLockedOptions);
     usePermissionAuthority.mockReturnValue({
       isGlobalHolder: true,
       isScopedManager: false,
@@ -97,9 +131,42 @@ describe("DocumentAccessField", () => {
     );
   });
 
+  it("keeps a picked access type when the field remounts", async () => {
+    // The options are pickable, as on a Business deployment.
+    mockedUseTierLockedOptions.mockReturnValue(
+      (options: SelectOption[]): SelectOption[] => options
+    );
+    const user = setupUser();
+    const { rerender } = render(
+      <AccessFormWithMountKey
+        connector={ValidSources.Confluence as ConfigurableSources}
+        mountKey={1}
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("access-type")).toHaveTextContent("sync")
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("option", { name: /Specific Groups/ }));
+    expect(screen.getByTestId("access-type")).toHaveTextContent("private");
+
+    // A parent that remounts the field, as a form lock toggle does.
+    rerender(
+      <AccessFormWithMountKey
+        connector={ValidSources.Confluence as ConfigurableSources}
+        mountKey={2}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("access-type")).toHaveTextContent("private")
+    );
+  });
+
   it("lists the Business options locked under an upgrade link below Business", async () => {
-    useTierAtLeast.mockReturnValue(false);
-    const user = userEvent.setup();
+    mockedUseTierAtLeast.mockReturnValue(false);
+    const user = setupUser();
     renderForm(ValidSources.Confluence as ConfigurableSources);
 
     expect(screen.getByText("Business Plan")).toBeInTheDocument();

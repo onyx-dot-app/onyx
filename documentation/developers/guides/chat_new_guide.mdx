@@ -1,0 +1,424 @@
+---
+title: "Send a Message to Onyx"
+description: "Sending messages programmatically to Onyx"
+icon: "bolt"
+---
+
+<Note>
+  `/chat/send-message` and `/chat/send-message-simple-api` have been removed. Use this API instead.
+</Note>
+
+Use the `/chat/send-chat-message` API to send a message to Onyx.
+It is the same API that the Onyx web app uses to send and receive messages.
+You can receive a streaming response or one complete response.
+
+<Note>
+  Authenticate with an API key or a Personal Access Token. A limited-access token needs the **Chat &mdash;
+  Write** scope. See [Authentication](/developers/overview#authentication).
+</Note>
+
+## Request Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `message` | The user message to send to the Agent. |
+| `llm_override` | Pass an object to override the default LLM settings for this request. If `None`, you will get the default Onyx behavior. <br/><br/>You can pass or exclude any of the following fields: <br/>• `model_configuration_id` – the exact model configuration to use. Preferred over the name-based fields, since provider display names are not unique <br/>• `model_provider` <br/>• `model_version` – must match a model configured on the resolved provider. If it does not, the request is rejected with `INVALID_INPUT`: an HTTP `400` when `stream=false`, or an error packet with `"error_code": "INVALID_INPUT"` when streaming (the default). If no provider resolves, or you cannot use that provider, Onyx uses the default LLM instead. Onyx does not check `model_version` when you pass `model_configuration_id` <br/>• `temperature` <br/>• `display_name` – label shown for the model in the UI; falls back to `model_version` |
+| `llm_overrides` | Two or three `llm_override` objects to run in parallel (multi-model mode), one per model. <br/><br/>**Requires `stream=true`.** Sending more than one entry with `stream=false` fails with `400 {"error_code": "INVALID_INPUT"}`. A list with a single entry is ignored — use `llm_override` for an ordinary single-model request. |
+| `allowed_tool_ids` | Each Agent has a set of Actions (built-in tools, MCP Actions, and OpenAPI Actions from **Admin Panel** > **Plugins**) that it can invoke. Use this parameter to narrow that set for this request. List the Actions and their IDs with the [GET /tool](/developers/api_reference/actions/list_tools) endpoint. Pass an empty list to disable all Actions. Omit the field or pass `null` to allow every Action configured for the Agent. |
+| `preferred_tool_id` | Prefer one Action when it helps answer this request. The Agent can use other Actions or answer without an Action. The preference lasts for this request only. |
+| `file_descriptors` | A list of files to include with your request. Each entry is `{"id": ..., "type": ..., "name": ...}`. Upload files with [POST /user/projects/file/upload](/developers/api_reference/projects/upload_user_files) and read them back with [GET /user/projects/file/{file_id}](/developers/api_reference/projects/get_user_file). |
+| `internal_search_filters` | Filters to narrow down the internal search results used by the Agent. All filter arguments are optional and can be combined: <br/><br/>• `source_type` – Source types like `web`, `slack`, `google_drive`, `confluence` <br/>• `document_set` – The name of the document sets to search within <br/>• `created_at_range` / `updated_at_range` – An inclusive window, `{"start": ..., "end": ...}`, in ISO 8601 format: `YYYY-MM-DDTHH:MM:SSZ`. Either bound may be omitted to leave that side open; naive timestamps are treated as UTC <br/>• `tags` – A list of `{"tag_key": ..., "tag_value": ...}` objects <br/><br/>**Note:** `time_cutoff` is still accepted as a deprecated alias for the start of `updated_at_range`. |
+| `deep_research` | Enables Deep Research mode for this request. <br/><br/>**Note:** This mode uses many more tokens than a normal request. |
+| `mcp_headers` | Headers forwarded to MCP tool calls made while answering this message, e.g. `{"Authorization": "Bearer <user_jwt>"}`. Use this to pass end-user credentials through to MCP servers that require them. |
+| `parent_message_id` | The ID of the parent message in the chat history. Omit it (or pass `-1`) to place the new message after the latest message in the session. Pass a specific message ID to branch from that point. <br/><br/>**Warning:** If set to `null`, the new message starts from the root of the session, as the first message. |
+| `chat_session_id` | To continue an existing conversation, pass the chat session ID. If left blank, Onyx creates a new chat session from `chat_session_info`. Pass only one of `chat_session_id` and `chat_session_info`. |
+| `chat_session_info` | Settings for a new chat session. They apply to every message in the session. Leave fields blank to use defaults. <br/><br/>• `persona_id` – The ID of the Agent to use. Defaults to `0`, the default Agent <br/>• `project_id` – ID of a Project if the chat should be scoped to a Project <br/>• `incognito` – Start the session in incognito mode. The request fails with an error when incognito is not available to the user. It is never silently downgraded to an ordinary chat <br/>• `incognito_session_id` – The session ID you already used when uploading files, so the new session owns those files. Ignored unless `incognito` is true |
+| `stream` | Defaults to `true`. If true, Onyx responds with an SSE stream of packets, the same set the Onyx UI uses. You assemble the answer, reasoning tokens, and tool calls from the streamed packets. If false, Onyx returns one `ChatFullResponse` JSON object. |
+| `include_citations` | Defaults to `true`. If false, Onyx removes citation markers such as `[1]` from the answer text and does not emit `citation_info` packets. |
+| `additional_context` | A string of extra context injected into the LLM call for this request. The model sees it, but Onyx does **not store it** and it does not appear in chat history.<br></br>Use it for request-scoped information such as the user's current page URL or session metadata.<br></br>Pass `null` or omit the field to send no additional context. |
+| `origin` | Where the message comes from, for usage reporting. Set it to `api` for scripts and integrations. Other values: `webapp`, `chrome_extension`, `slackbot`, `widget`, `discordbot`, `mobile`. Defaults to `unset`. |
+
+<Note>
+  `forced_tool_id` is no longer supported. Requests with a non-null value receive a validation error.
+  Use `preferred_tool_id` for an optional preference. Action invocation is not guaranteed.
+  Selecting an Action does not grant permission to use it or bypass approval.
+  Deep Research does not accept an Action preference. An unavailable Action produces an error.
+  Slack also uses a search preference; it does not guarantee a search on every request.
+</Note>
+
+## Response Format
+
+### Streaming Response
+
+Onyx returns different packet types in the streaming response, depending on what the Agent does.
+Each packet is one JSON object with a `type` field.
+
+See our
+[streaming_models.py](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/server/query_and_chat/streaming_models.py)
+on GitHub for the complete list of packet types and their corresponding fields.
+
+```python expandable
+class StreamingType(Enum):
+    """Enum defining all streaming packet types. This is the single source of truth for type strings."""
+
+    SECTION_END = "section_end"
+    STOP = "stop"
+    ERROR = "error"
+    CHAT_HEARTBEAT = "chat_heartbeat"
+    REPLAY_END = "replay_end"
+
+    MESSAGE_START = "message_start"
+    MESSAGE_DELTA = "message_delta"
+    SEARCH_TOOL_START = "search_tool_start"
+    SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta"
+    SEARCH_TOOL_FILTER_DELTA = "search_tool_filter_delta"
+    SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta"
+    OPEN_URL_START = "open_url_start"
+    OPEN_URL_URLS = "open_url_urls"
+    OPEN_URL_DOCUMENTS = "open_url_documents"
+    IMAGE_GENERATION_START = "image_generation_start"
+    IMAGE_GENERATION_HEARTBEAT = "image_generation_heartbeat"
+    IMAGE_GENERATION_FINAL = "image_generation_final"
+    PYTHON_TOOL_START = "python_tool_start"
+    PYTHON_TOOL_DELTA = "python_tool_delta"
+    CUSTOM_TOOL_START = "custom_tool_start"
+    CUSTOM_TOOL_ARGS = "custom_tool_args"
+    CUSTOM_TOOL_DELTA = "custom_tool_delta"
+    TOOL_APPROVAL_REQUEST = "tool_approval_request"
+    TOOL_APPROVAL_RESOLVED = "tool_approval_resolved"
+    FILE_READER_START = "file_reader_start"
+    FILE_READER_RESULT = "file_reader_result"
+    REASONING_START = "reasoning_start"
+    REASONING_DELTA = "reasoning_delta"
+    REASONING_DONE = "reasoning_done"
+    CITATION_INFO = "citation_info"
+    TOOL_CALL_DEBUG = "tool_call_debug"
+    TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta"
+
+    MEMORY_TOOL_START = "memory_tool_start"
+    MEMORY_TOOL_DELTA = "memory_tool_delta"
+    MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access"
+
+    DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
+    DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
+    RESEARCH_AGENT_START = "research_agent_start"
+    INTERMEDIATE_REPORT_START = "intermediate_report_start"
+    INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
+    INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
+
+    CODING_AGENT_START = "coding_agent_start"
+    CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta"
+    CODING_AGENT_FINAL = "coding_agent_final"
+
+    BASH_TOOL_START = "bash_tool_start"
+    BASH_TOOL_DELTA = "bash_tool_delta"
+
+    CODE_MODE_START = "code_mode_start"
+    CODE_MODE_DELTA = "code_mode_delta"
+
+    EXEC_COMMAND_START = "exec_command_start"
+    WRITE_STDIN_START = "write_stdin_start"
+    EXEC_OUTPUT_DELTA = "exec_output_delta"
+    EXEC_END = "exec_end"
+    APPLY_PATCH_START = "apply_patch_start"
+    APPLY_PATCH_END = "apply_patch_end"
+```
+
+### Non-streaming Response
+
+```python
+class ChatFullResponse(BaseModel):
+    """Complete non-streaming response with all available data."""
+
+    # Core response fields
+    answer: str
+    answer_citationless: str
+    pre_answer_reasoning: str | None = None
+    tool_calls: list[ToolCallResponse] = []
+
+    # Documents & citations
+    top_documents: list[SearchDoc]
+    citation_info: list[CitationInfo]
+
+    # Metadata
+    message_id: int
+    chat_session_id: UUID | None = None
+    incognito: bool = False
+    error_msg: str | None = None
+    # Not empty when the response stopped to wait for approval decisions
+    pending_tool_approvals: list[ToolApprovalRequest] = []
+```
+
+## Tool Approvals
+
+An MCP Action with the **Ask** approval policy does not run until the user approves the call.
+Every client of this API must handle approvals. See [Approvals in Chat](/admins/plugins/mcp#approvals-in-chat)
+for the policies.
+
+<Warning>
+  A client that does not handle approvals cannot answer a request. A request has no time limit. The call does not run,
+  and the chat session does not accept new messages, until the user decides in a client that handles approvals.
+  Older mobile app builds, Onyx CLI versions, and pinned widget versions do not handle approvals. Upgrade them.
+</Warning>
+
+### Approval packets
+
+When a call needs approval, the stream sends a `tool_approval_request` packet at the call's placement.
+The packet has these fields:
+
+| Field | Description |
+|-------|-------------|
+| `approval_id` | The ID to send with the decision. |
+| `tool_call_id` | The ID of the tool call that waits. |
+| `tool_name` | The name of the tool that the model called. |
+| `display_name` | The tool name to show to the user. |
+| `arguments` | The arguments of the call. Show them to the user before they decide. |
+| `agent_name` | The name of the background agent that made the request, or `null` for the answer's own calls. |
+
+A request waits until the user decides. Other calls of the answer can continue while it waits.
+When only approval requests remain, Onyx saves the answer,
+and the stream ends with a `stop` packet whose `stop_reason` is `awaiting_approval`.
+That stop does not end the requests. Keep them open for a decision. After the decisions,
+the answer continues in a new stream. See [Send a decision](#send-a-decision). In a turn that compares models,
+one answer can wait while the other answers continue in the same stream.
+Its new stream starts after the stream of the turn ends.
+
+A `tool_approval_resolved` packet with `approval_id` and `outcome` ends each request:
+
+| `outcome` | Meaning |
+|-----------|---------|
+| `approved` | The user approved the call, and it runs. |
+| `approved_for_chat` | The user approved the tool for the chat session, with this request or an earlier one, and the call runs. |
+| `rejected` | The user rejected the call, or stopped the answer while the call waited. It did not run. |
+| `disabled` | The user approved the call, but the tool became disabled while the call waited. The call did not run. |
+| `cancelled` | The call stopped waiting without a decision, for example because its code mode program ended or held too much data to pause. |
+
+Stop applies only while the answer runs. When you stop a running answer,
+Onyx rejects each call of the answer that waits.
+The stream sends the `tool_approval_resolved` packet with `rejected` before its `stop` packet.
+If you close the stream after you send the stop, read the chat session to get the outcomes.
+After the stream ends with `awaiting_approval`, a stop does not end the wait, and the requests still wait.
+A stop without a `stream_id` still pauses the queue of the chat session:
+queued messages and results of background agents do not start a turn until the next message starts one.
+Do not offer Stop for an answer that waits for approval. To end the wait, reject each request.
+
+The server sends a `tool_approval_resolved` packet for every request that it ends, live and in replay.
+An ended request with no decision gets `cancelled`. Ignore an `outcome` that you do not recognize.
+A continuation stream can send the same resolution two times: in its replay, and again live when the call continues.
+Keep one record for each `approval_id`, with the last outcome.
+
+### Approvals of background agents
+
+When a send-message request sets `accepts_follow_ups` to `true`, the answer can start background agents.
+An agent's call can also need approval. Its request has an `agent_name`. The request waits on its own:
+it stays open when the answer stops for any reason, a stop of the answer does not reject it,
+and it does not block new messages. The live stream of the answer does not send an agent's request or its resolution.
+The replay of a continuation stream can send them, as the chat session does.
+`GET /chat/chat-session/{chat_session_id}/status` has `approvals_version`,
+an opaque string that changes when the approval requests that wait in the chat session change. When it changes,
+read `GET /chat/get-chat-session/{chat_session_id}` again.
+`GET /chat/get-chat-session/{chat_session_id}` returns the same `approvals_version` for the requests it shows,
+so take the first value from the session load.
+The chat session returns each agent request in the answer that started the agent, with its resolution if it has one.
+After the decision, the agent continues in the background, with no new stream for the answer.
+Its record and its result arrive with the chat session, as for any background agent.
+From the decision until the agent finishes or waits for approval again, `has_active_subagents` is `true`.
+To show the agent's later requests, read the status once after the decision. While `has_active_subagents` is `true`,
+read the status again every few seconds. Read the chat session again each time `approvals_version` changes.
+
+### Approvals in saved answers
+
+`GET /chat/get-chat-session/{chat_session_id}` returns the approval packets of each answer that has ended or that waits
+for approval, so a client shows the same records and requests after a reload.
+Each request has its `tool_approval_request` packet, then its `tool_approval_resolved` packet if it has a decision,
+at the placement of the call's card.
+An answer that waits for approval ends with a `stop` packet whose `stop_reason` is `awaiting_approval`,
+as its stream did. In a saved answer:
+
+- `tool_call_id` is the ID of the call whose card shows the request. For a call that a code mode program made,
+  it is the ID of the program's call.
+- `arguments` are the arguments of the call, also for a call that a code mode program made.
+- `agent_name` names the background agent that made the request, as in the stream.
+
+An answer that runs has no approval packets in the chat session.
+Read its requests from `GET /chat/chat-session/{chat_session_id}/resume-stream`.
+A `200` stream starts with a cursor line. A `404` means that the stream cannot continue from your cursor;
+read the chat session instead.
+
+### Send a decision
+
+Call `POST /chat/approvals/{approval_id}/decision` with one of these bodies:
+
+- `{"decision": "approve_once"}` approves this call.
+- `{"decision": "approve_session"}` approves this call and later calls of the same tool in the chat session.
+- `{"decision": "reject"}` rejects this call.
+
+Each body can also have `mcp_headers`,
+an object of headers that Onyx forwards to MCP tool calls when the answer continues, for example `{"decision":
+"approve_once", "mcp_headers": {"Authorization": "Bearer <user_jwt>"}}`. Onyx does not save these headers.
+If your MCP servers need them, send the same `mcp_headers` with each decision.
+The headers reach the continuation only when this decision call starts it.
+A continuation that Onyx starts in a different way does not get them. A status read or a retried start sends no headers.
+An answer that continues after a running turn ends, such as a decision while another answer of the turn still ran,
+gets the headers of the request that started that turn.
+
+The response contains `approval_id`, `decision` (`APPROVED` or `REJECTED`), `continuation` (see below),
+and `decided_via`:
+
+| `decided_via` | Meaning |
+|---------------|---------|
+| `USER` | The user's decision for this call. |
+| `SESSION_GRANT` | `approve_session` approved this call, from this request or an earlier request for the same tool in the chat session. |
+| `POLICY` | The tool is disabled now, so Onyx saved `REJECTED` for your approval. The `outcome` is `disabled`. |
+
+Only the user who owns the chat session can decide. Other users get a `404`.
+A repeated decision returns `200` with the saved decision, also after the answer ends or the tool's policy changes.
+A `409` means that the request has a different decision or no longer waits, for example because its answer ended.
+
+When the last request of a waiting answer has a decision, the answer continues in a new stream.
+Onyx starts that stream before the decision call returns, and `continuation` in the response names it:
+
+| Field | Description |
+|-------|-------------|
+| `continuation.stream_id` | The ID of the new stream. It is not a message ID. |
+| `continuation.response_ids` | The IDs of the assistant messages that the stream writes, in model order for a turn that compares models. |
+
+`continuation` names a stream when a continuation stream of the answer runs after the decision.
+That can be the stream that you already read: a continued answer that asks again,
+when the user decides while that stream still runs.
+Ignore a `continuation` whose `stream_id` is the stream that you read. It is `null` in these cases:
+
+- The decision leaves other requests of the answer open, and no continuation stream of the answer runs.
+- The answer's first stream still runs. For example, the decision came before that stream ended with `awaiting_approval`. Keep reading the current stream.
+- Another stream of the chat runs, such as another answer of a turn that compares models.
+  The continuation starts when that stream ends. Read the status, as described below.
+- The request is a background agent's request.
+
+To follow the continuation,
+read `GET /chat/chat-session/{chat_session_id}/resume-stream` with `stream_id` set to `continuation.stream_id` and
+`cursor=0`. The stream replays the saved answer, sends a `replay_end` packet, then continues the answer live.
+Show its packets in place of the saved messages in `response_ids`.
+The `replay_end` packet has only a `type` in its `obj`.
+It also comes before the `error` or `stop` packet when the answer cannot continue. A send stream does not send it.
+
+The new stream of an answer can start without a `continuation` in your decision response,
+for example when the decision came while another stream of the chat ran.
+Read the status after any stream of the chat ends.
+When an answer of the chat waits to continue and each of its requests has a decision,
+Onyx keeps `is_processing` `true` from the end of that stream until the new stream starts,
+so the first status read after the end shows it. While `is_processing` is `true`,
+read it again until `current_stream.response_ids` includes the answer, then read that stream from `cursor=0`.
+Stop when `is_processing` is `false`. Do not open a second reader for a stream that you already read.
+If a temporary storage error stops the new stream from starting, Onyx tries again several times after short waits.
+Between the tries, `is_processing` can be `false`. Read the chat session again later to get the answer.
+
+After a `409` or `404` from the decision call, or when you open the chat session again,
+read `GET /chat/chat-session/{chat_session_id}/status` once. While an answer runs, `is_processing` is `true`,
+and `current_stream` has the same `stream_id` and `response_ids` fields.
+`GET /chat/get-chat-session/{chat_session_id}` returns the same `current_stream`.
+
+While the latest answer waits for approval, that is, after its stream ended with `awaiting_approval`,
+a new message to that session gets a `409` with the `error_code` `APPROVAL_PENDING`. Send the decisions first.
+Requests of background agents do not block new messages.
+Turns that start from queued messages can also wait for approval.
+
+### Approvals without streaming
+
+With `stream=false`, Onyx does not wait for the decision. When the answer stops to wait for approval,
+the response returns with:
+
+- `pending_tool_approvals`: every request of the answer that waits for a decision,
+  with the same fields as the `tool_approval_request` packet
+- `message_id`: the ID of the assistant message that waits
+- the `answer` text so far, which can be empty
+
+The answer does not continue until every request has a decision. Send the decisions, then read the answer:
+
+- Read `GET /chat/chat-session/{chat_session_id}/status` until `is_processing` is `false`,
+  then read the chat session with `GET /chat/get-chat-session/{chat_session_id}`, or
+- Read the new stream with `GET /chat/chat-session/{chat_session_id}/resume-stream`, with `stream_id` set to
+  `continuation.stream_id` from the response of the last decision, and `cursor=0`.
+
+The answer can stop again for more approvals after your decision. In the chat session,
+the message with `message_id` then ends with a `stop` packet whose `stop_reason` is `awaiting_approval`,
+and its `tool_approval_request` packets without a resolution are the requests that wait.
+A new message to the session gets a `409` with `APPROVAL_PENDING` while the answer waits for approval.
+
+<Note>
+  The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.
+  They cannot use tools with the **Disabled** policy.
+</Note>
+
+## Sample Request
+
+<CodeGroup>
+  ```python Python expandable
+  import requests
+
+  API_BASE_URL = "https://cloud.onyx.app/api"  # or your own domain
+  API_KEY = "YOUR_KEY_HERE"
+
+  headers = {
+      "Authorization": f"Bearer {API_KEY}",
+      "Content-Type": "application/json"
+  }
+
+  response = requests.post(
+      f"{API_BASE_URL}/chat/send-chat-message",
+      headers=headers,
+      json={
+          "message": "What is Onyx?",
+      }
+  )
+
+  data = response.json()
+  print("Answer:", data["answer"])
+  print("Message ID:", data["message_id"])
+  ```
+
+  ```bash Shell expandable
+  #!/bin/bash
+
+  API_BASE_URL="https://cloud.onyx.app/api"  # or your own domain
+  API_KEY="YOUR_KEY_HERE"
+
+  RESPONSE=$(curl -s -X POST "${API_BASE_URL}/chat/send-chat-message" \
+    -H "Authorization: Bearer ${API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "message": "What is Onyx?"
+    }'
+  )
+
+  echo "Answer:" $(echo "$RESPONSE" | jq -r '.answer')
+  echo "Message ID:" $(echo "$RESPONSE" | jq -r '.message_id')
+  ```
+</CodeGroup>
+
+## Other ways to integrate
+
+- To get ranked documents without an answer, use the [Search API](/developers/guides/search_api_guide).
+- To let an external LLM client such as Claude Code or Codex search Onyx,
+  connect it to the [Onyx MCP server](/overview/onyx_anywhere/mcp_server).
+- To call your organization's models through Onyx from your own application,
+  use the [LLM Gateway](/developers/guides/llm_gateway).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Guide: Search with the API" icon="magnifying-glass" href="/developers/guides/search_api_guide">
+    Get ranked documents back instead of an answer
+  </Card>
+
+  <Card title="Guide: Use the Ingestion API" icon="upload" href="/developers/guides/index_files_ingestion_api">
+    Use the lightweight ingestion API to index documents
+  </Card>
+
+  <Card title="Guide: Create a Connector" icon="link" href="/developers/guides/create_connector">
+    Learn how to create and configure Connectors programmatically
+  </Card>
+
+  <Card title="Onyx MCP server" icon="plug" href="/overview/onyx_anywhere/mcp_server">
+    Search Onyx from MCP clients
+  </Card>
+</CardGroup>

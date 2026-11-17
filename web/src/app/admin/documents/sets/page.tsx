@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, NavLink } from "@opal/navigation";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { PageLoader } from "@opal/loaders";
@@ -23,11 +24,12 @@ import {
 import { Button, Divider, InputTypeIn, Text } from "@opal/components";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
-import { DocumentSetSummary } from "@/lib/types";
+import { DocumentSetSummary, Permission } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
 import useFilter from "@/hooks/useFilter";
 import { can } from "@/lib/permissions/resource-actions";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { IllustrationContent, SettingsLayouts, toast } from "@opal/layouts";
@@ -35,12 +37,10 @@ import SvgNoResult from "@opal/illustrations/no-result";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { FiUnlock } from "react-icons/fi";
 import { DeleteButton } from "@/components/DeleteButton";
-import { useRouter } from "next/navigation";
 import { TableHeader } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
-import Link from "next/link";
 import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
@@ -88,12 +88,12 @@ const FederatedConnectorTitle = ({
   return (
     <div className="my-auto max-w-full">
       {isLink ? (
-        <Link
+        <NavLink
           className={mainSectionClassName}
           href={`/admin/federated/${federatedConnector.id}`}
         >
           {mainDisplay}
-        </Link>
+        </NavLink>
       ) : (
         <div className={mainSectionClassName}>{mainDisplay}</div>
       )}
@@ -125,7 +125,7 @@ const EditRow = ({
   isEditable: boolean;
 }) => {
   const t = useTranslations("admin.documents");
-  const router = useRouter();
+  const navigation = useNavigation();
 
   if (!isEditable) {
     return (
@@ -156,7 +156,7 @@ const EditRow = ({
           aria-disabled={!documentSet.is_up_to_date}
           onClick={() => {
             if (!documentSet.is_up_to_date) return;
-            router.push(`/admin/documents/sets/${documentSet.id}`);
+            navigation.go(`/admin/documents/sets/${documentSet.id}`);
           }}
         >
           <SvgEdit className="me-2 shrink-0" size={16} />
@@ -181,6 +181,11 @@ const DocumentSetTable = ({
   refresh,
 }: DocumentSetTableProps) => {
   const t = useTranslations("admin.documents");
+  // The federated connector page's writes need global MANAGE_CONNECTORS, which a
+  // document-set manager may not hold.
+  const { isGlobalHolder: canManageConnectors } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   // editable rows first, then by name — editability now rides on each row's
   // permissions map, so no second fetch + set-diff is needed.
@@ -270,6 +275,7 @@ const DocumentSetTable = ({
                                     <FederatedConnectorTitle
                                       federatedConnector={federatedConnector}
                                       showMetadata={true}
+                                      isLink={canManageConnectors}
                                     />
                                   </div>
                                 );
@@ -361,6 +367,7 @@ const DocumentSetTable = ({
 
 function Main() {
   const t = useTranslations("admin.documents");
+  const navigation = useNavigation();
   const { appName } = useSettings();
   const [page, setPage] = useState(1);
   const {
@@ -418,7 +425,7 @@ function Main() {
         <Button
           icon={SvgPlusCircle}
           prominence="secondary"
-          href="/admin/documents/sets/new"
+          {...navigation.linkTo("/admin/documents/sets/new")}
         >
           {t("sets.newButton.label")}
         </Button>
@@ -427,12 +434,12 @@ function Main() {
       {documentSets.length > 0 && (
         <>
           <Divider />
-          <Text as="h1" font="heading-h3-muted" color="text-05">
+          <Text as="h1" font="heading-section-muted" color="text-05">
             {t("sets.table.title")}
           </Text>
           <Spacer rem={0.5} />
           <InputTypeIn
-            searchIcon
+            icon="search"
             placeholder={t("sets.search.placeholder")}
             value={searchQuery}
             onChange={(e) => {

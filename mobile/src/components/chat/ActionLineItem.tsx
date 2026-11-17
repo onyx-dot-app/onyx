@@ -9,15 +9,15 @@ import SvgSlash from "@/icons/slash";
 
 interface ActionLineItemProps {
   tool: ToolSnapshot;
-  isForced: boolean;
+  isPreferred: boolean;
   // Switched off in this user's agent preferences, not unavailable: the row stays tappable.
   isDisabled: boolean;
   // Assigned to the agent, but its backend integration isn't configured right now — the row is
-  // inert (no toggle) unless it's already forced, which stays tappable so it can be un-forced.
+  // inert (no toggle) unless it's already preferred, which stays tappable so it can be deselected.
   isUnavailable: boolean;
   // Non-null on the row that owns the source sub-view (internal search).
   sourceCounts: { enabled: number; total: number } | null;
-  onForceToggle: () => void;
+  onPreferenceToggle: () => void;
   onToggleEnabled: () => void;
   onOpenSources: () => void;
   onClose: () => void;
@@ -25,34 +25,34 @@ interface ActionLineItemProps {
 
 export function ActionLineItem({
   tool,
-  isForced,
+  isPreferred,
   isDisabled,
   isUnavailable,
   sourceCounts,
-  onForceToggle,
+  onPreferenceToggle,
   onToggleEnabled,
   onOpenSources,
   onClose,
 }: ActionLineItemProps) {
   const hasSources = sourceCounts !== null;
-  const blocked = isUnavailable && !isForced;
+  const blocked = isUnavailable && !isPreferred;
 
   function handlePress() {
     if (isUnavailable) {
-      onForceToggle();
+      onPreferenceToggle();
       onClose();
       return;
     }
     if (isDisabled) onToggleEnabled();
-    onForceToggle();
-    // Forcing search is when its sources matter, so drill in instead of dismissing.
-    if (hasSources && !isForced) onOpenSources();
+    onPreferenceToggle();
+    // Preferring search is when its sources matter, so drill in instead of dismissing.
+    if (hasSources && !isPreferred) onOpenSources();
     else onClose();
   }
 
   const showCount =
     sourceCounts !== null &&
-    isForced &&
+    isPreferred &&
     sourceCounts.enabled > 0 &&
     sourceCounts.enabled < sourceCounts.total;
 
@@ -62,18 +62,22 @@ export function ActionLineItem({
       title={tool.display_name || tool.name}
       titleMaxLines={1}
       description={
-        isUnavailable ? "Ask an admin to configure this." : undefined
+        isUnavailable
+          ? "Ask an admin to configure this."
+          : "Prefer this tool; use is optional."
       }
       sizePreset="main-ui"
       variant="section"
       disabled={blocked}
       /*
-       * Not LineItemButton's `selected`: its tint is the sheet surface's own token, so a forced
-       * row would look identical to an unforced one.
+       * Not LineItemButton's `selected`: its tint is the sheet surface's own token, so a preferred
+       * row would look identical to an unpreferred one.
        */
-      className={isForced ? "bg-background-tint-02" : undefined}
+      className={isPreferred ? "bg-background-tint-02" : undefined}
       // Mobile Text has no strikethrough (web's off-state), so an off/unavailable tool reads muted.
-      color={isDisabled || (isUnavailable && !isForced) ? "muted" : "default"}
+      color={
+        isDisabled || (isUnavailable && !isPreferred) ? "muted" : "default"
+      }
       onPress={handlePress}
       rightChildren={
         <View className="flex-row items-center gap-2">

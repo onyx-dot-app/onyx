@@ -618,3 +618,62 @@ def test_remote_catalog_malformed_entry_falls_back_to_vendored() -> None:
         finally:
             _reset_caches()
             model_catalog.reset_remote_cache()
+
+
+def test_latest_models_read_the_remote_supplement() -> None:
+    """Auto-update reads the provider file and the supplement from main, and
+    gives no list when either one can't be read."""
+    files: dict[str, dict[str, Any]] = {
+        "openai": {"models": {"gpt-new": {"mode": "chat"}}},
+        "_supplement": {
+            "openai": {
+                "models": {
+                    "gpt-alias": {"mode": "chat"},
+                    "gpt-retired": {"status": "deprecated"},
+                }
+            }
+        },
+    }
+
+    def fake_get(name: str) -> Any:
+        return _remote_response(files[name])
+
+    with patch.object(model_catalog, "_fetch_provider_file", side_effect=fake_get):
+        model_catalog.reset_remote_cache()
+        try:
+            assert model_catalog.iter_latest_models("openai", mode="chat") == [
+                "gpt-alias",
+                "gpt-new",
+            ]
+        finally:
+            model_catalog.reset_remote_cache()
+
+    def no_supplement(name: str) -> Any:
+        if name == "_supplement":
+            raise RuntimeError("supplement unavailable")
+        return _remote_response(files[name])
+
+    with patch.object(model_catalog, "_fetch_provider_file", side_effect=no_supplement):
+        model_catalog.reset_remote_cache()
+        try:
+            assert model_catalog.iter_latest_models("openai", mode="chat") is None
+        finally:
+            model_catalog.reset_remote_cache()
+
+    files["openai"] = {"models": {"gpt-new": {"mode": "chat"}, "gpt-broken": "x"}}
+    with patch.object(model_catalog, "_fetch_provider_file", side_effect=fake_get):
+        model_catalog.reset_remote_cache()
+        try:
+            assert model_catalog.iter_latest_models("openai", mode="chat") is None
+        finally:
+            model_catalog.reset_remote_cache()
+
+    for malformed in (None, [], {"models": None}):
+        files["openai"] = {"models": {"gpt-new": {"mode": "chat"}}}
+        files["_supplement"] = {"openai": malformed}
+        with patch.object(model_catalog, "_fetch_provider_file", side_effect=fake_get):
+            model_catalog.reset_remote_cache()
+            try:
+                assert model_catalog.iter_latest_models("openai", mode="chat") is None
+            finally:
+                model_catalog.reset_remote_cache()

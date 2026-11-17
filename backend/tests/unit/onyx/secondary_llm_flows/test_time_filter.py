@@ -4,7 +4,12 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import BaseFilters, TimeRange
+from onyx.context.search.models import (
+    BaseFilters,
+    DocumentTimeField,
+    TimeFilter,
+    TimeRange,
+)
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
@@ -13,8 +18,6 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.secondary_llm_flows.time_filter import (
-    DocumentTimeField,
-    TimeFilter,
     _parse_time_decision,
     decide_time_filter,
 )

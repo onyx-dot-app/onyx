@@ -1,5 +1,6 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- $relayTls := include "onyx.craftFcRelayTls.enabled" . }}
 # Ingress restricted to the sandbox namespace. The proxy has no
 # authentication on its port; this is the K8s-level control that keeps
 # unrelated pods from connecting and getting their flows logged as
@@ -22,7 +23,22 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ $sandboxNs }}
+        {{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
+        {{- /* With relayTls off, the relays use the plain port. With it on,
+        the port stays open to them so that agents that have not rolled yet
+        keep egress during an upgrade; agents with relayTls never use it. */}}
+        - {{- include "onyx.craftFcRelayTls.agentPeer" . | nindent 10 }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ include "onyx.sandboxProxyPort" . }}
+    {{- if $relayTls }}
+    {{- /* Firecracker VM egress arrives from the host agent relays over
+    mTLS, signed per connection. Pod sandboxes keep the plain port. */}}
+    - from:
+        - {{- include "onyx.craftFcRelayTls.agentPeer" . | nindent 10 }}
+      ports:
+        - protocol: TCP
+          port: {{ include "onyx.craftFcRelayTls.port" . }}
+    {{- end }}
 {{- end }}

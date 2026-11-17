@@ -219,7 +219,9 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
                     # is exceeded
                     task_logger.info(str(e))
 
-                    if not redis_connector.stop.fenced:
+                    # Keyed on the timeout, not the fence: a pause sets the
+                    # fence too, and must not skip the revoke and the wait.
+                    if not redis_connector.stop.timeout_set:
                         # one time revoke of celery tasks
                         task_logger.info("Revoking any tasks blocking deletion.")
                         revoke_tasks_blocking_deletion(
@@ -256,6 +258,7 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
                     # signal it set. Another pair's signal belongs to its pause.
                     if cc_pair_id in deleting_cc_pair_ids:
                         redis_connector.stop.set_fence(False)
+                        redis_connector.stop.clear_timeout()
 
         lock_beat.reacquire()
         keys = cast(set[Any], r_replica.smembers(OnyxRedisConstants.ACTIVE_FENCES))
@@ -291,8 +294,8 @@ def try_generate_document_cc_pair_cleanup_tasks(
     lock_beat: RedisLock,
     tenant_id: str,
 ) -> int | None:
-    """Returns an int if syncing is needed. The int represents the number of sync tasks generated.
-    Note that syncing can still be required even if the number of sync tasks generated is zero.
+    """Returns an int if syncing is needed. The int represents the number of docs queued.
+    Note that syncing can still be required even if the number of docs queued is zero.
     Returns None if no syncing is required.
 
     Will raise TaskDependencyError if dependent tasks such as indexing and pruning are
@@ -331,7 +334,7 @@ def try_generate_document_cc_pair_cleanup_tasks(
     # set a basic fence to start
     redis_connector.delete.set_active()
     fence_payload = RedisConnectorDeletePayload(
-        num_tasks=None,
+        num_docs_queued=None,
         submitted=datetime.now(timezone.utc),
     )
 
@@ -399,7 +402,7 @@ def try_generate_document_cc_pair_cleanup_tasks(
         task_logger.info(
             f"RedisConnectorDeletion.generate_tasks starting. cc_pair={cc_pair_id}"
         )
-        tasks_generated = redis_connector.delete.generate_tasks(
+        docs_queued = redis_connector.delete.generate_tasks(
             app,
             db_session,
             lock_beat,
@@ -428,20 +431,20 @@ def try_generate_document_cc_pair_cleanup_tasks(
         # Currently we are allowing the sync to proceed with 0 tasks.
         # It's possible for sets/groups to be generated initially with no entries
         # and they still need to be marked as up to date.
-        # if tasks_generated == 0:
+        # if docs_queued == 0:
         #     return 0
 
         task_logger.info(
-            f"RedisConnectorDeletion.generate_tasks finished. cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
+            f"RedisConnectorDeletion.generate_tasks finished. cc_pair={cc_pair_id} docs_queued={docs_queued}"
         )
 
         # set this only after all tasks have been added
-        fence_payload.num_tasks = tasks_generated
+        fence_payload.num_docs_queued = docs_queued
         fence_payload.docs_remaining = docs_remaining
         redis_connector.delete.set_fence(fence_payload)
         inc_deletion_started(tenant_id)
 
-    return tasks_generated
+    return docs_queued
 
 
 def monitor_connector_deletion_taskset(
@@ -468,7 +471,7 @@ def monitor_connector_deletion_taskset(
         )
         return
 
-    if fence_data.num_tasks is None:
+    if fence_data.num_docs_queued is None:
         # the fence is setting up but isn't ready yet
         return
 
@@ -481,7 +484,7 @@ def monitor_connector_deletion_taskset(
                 entity_id=cc_pair_id,
                 sync_type=SyncType.CONNECTOR_DELETION,
                 sync_status=SyncStatus.IN_PROGRESS,
-                num_docs_synced=fence_data.num_tasks,
+                num_docs_synced=fence_data.num_docs_queued,
             )
         return
 
@@ -508,7 +511,7 @@ def monitor_connector_deletion_taskset(
         )
         if docs_remaining and made_progress:
             redis_connector.delete.set_active()
-            tasks_generated = redis_connector.delete.generate_tasks(
+            docs_queued = redis_connector.delete.generate_tasks(
                 celery_app,
                 db_session,
                 lock_beat,
@@ -516,12 +519,12 @@ def monitor_connector_deletion_taskset(
                 cc_pair.credential_id,
                 DOCUMENT_INDEX_SYNC_MAX_TASKS,
             )
-            fence_data.num_tasks += tasks_generated
+            fence_data.num_docs_queued += docs_queued
             fence_data.docs_remaining = docs_remaining
             redis_connector.delete.set_fence(fence_data)
             task_logger.info(
                 f"Connector deletion - queued next batch: cc_pair={cc_pair_id} "
-                f"tasks_generated={tasks_generated} docs_remaining={docs_remaining}"
+                f"docs_queued={docs_queued} docs_remaining={docs_remaining}"
             )
             return
 
@@ -533,7 +536,7 @@ def monitor_connector_deletion_taskset(
                     "Connector deletion - the last batch did not lower the linked document count. "
                     "Clearing the current deletion attempt and allowing deletion to restart: "
                     f"cc_pair={cc_pair_id} "
-                    f"docs_deleted={fence_data.num_tasks} "
+                    f"docs_deleted={fence_data.num_docs_queued} "
                     f"docs_remaining={docs_remaining}"
                 )
 
@@ -661,7 +664,7 @@ def monitor_connector_deletion_taskset(
                 entity_id=cc_pair_id,
                 sync_type=SyncType.CONNECTOR_DELETION,
                 sync_status=SyncStatus.SUCCESS,
-                num_docs_synced=fence_data.num_tasks,
+                num_docs_synced=fence_data.num_docs_queued,
             )
 
             duration = (
@@ -681,7 +684,7 @@ def monitor_connector_deletion_taskset(
                 entity_id=cc_pair_id,
                 sync_type=SyncType.CONNECTOR_DELETION,
                 sync_status=SyncStatus.FAILED,
-                num_docs_synced=fence_data.num_tasks,
+                num_docs_synced=fence_data.num_docs_queued,
             )
 
             task_logger.exception(
@@ -700,7 +703,7 @@ def monitor_connector_deletion_taskset(
         f"cc_pair={cc_pair_id} "
         f"connector={connector_id_to_delete} "
         f"credential={credential_id_to_delete} "
-        f"docs_deleted={fence_data.num_tasks}"
+        f"docs_deleted={fence_data.num_docs_queued}"
     )
 
     redis_connector.delete.reset()

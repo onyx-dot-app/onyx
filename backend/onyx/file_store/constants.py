@@ -10,3 +10,5 @@ CONTENT_SHA256_METADATA_KEY = "content_sha256"
 # Marks a file uploaded during a connector edit. Apply removes the mark; the
 # cleanup task deletes marked files after they expire.
 STAGED_FOR_CC_PAIR_METADATA_KEY = "staged_for_cc_pair_id"
+
+AGENT_CHECKPOINT_FILE_PREFIX = "agent-checkpoint/"

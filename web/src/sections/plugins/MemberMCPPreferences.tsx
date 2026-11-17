@@ -53,6 +53,7 @@ export default function MemberMCPPreferences({
     <Section padding={0} gap={4} alignItems="stretch" height="auto">
       {rows.map((row) => (
         <ContentAction
+          font="main-ui-action"
           key={row.key}
           title={t(row.key)}
           description={
@@ -64,8 +65,6 @@ export default function MemberMCPPreferences({
                   ),
                 })
           }
-          sizePreset="main-ui"
-          variant="section"
           padding={0}
           rightChildren={
             <Tooltip

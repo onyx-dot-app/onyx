@@ -7,6 +7,21 @@ CITATION_GUIDANCE_REPLACEMENT_PAT = "{{CITATION_GUIDANCE}}"
 REMINDER_TAG_REPLACEMENT_PAT = "{{REMINDER_TAG_DESCRIPTION}}"
 
 
+CONTENT_PENDING_NOTICE = (
+    "[This file is still being processed and its contents are not yet "
+    "available. Do not guess what it contains — tell the user the file is "
+    "still processing and to ask again in a moment.]"
+)
+
+
+CONTENT_UNAVAILABLE_NOTICE = (
+    "[No machine-readable text could be extracted from this file. It is "
+    "likely image-only (e.g. a scanned document) or in an unsupported "
+    "format. Its contents are not available to you — do not guess them. If "
+    "needed, ask the user for a text-based copy.]"
+)
+
+
 # Note this uses a string pattern replacement so the user can also include it in their custom prompts. Keeps the replacement logic simple
 # This is editable by the user in the admin UI.
 # The first line is intended to help guide the general feel/behavior of the system.
@@ -75,7 +90,7 @@ If you do have enough to answer, remember to provide INLINE citations using the 
 
 
 IMAGE_GEN_REMINDER = """
-Very briefly describe the image(s) generated. Do not include any links or attachments.
+Do not link or embed the generated image(s). Continue the task if needed; otherwise briefly describe them.
 """.strip()
 
 
@@ -85,7 +100,7 @@ If you reference or share these files, use the exact markdown format [filename](
 """.strip()
 
 
-# Wrapped in <system-reminder> tags by translate_history_to_llm_format when
+# Wrapped in <system-reminder> tags by prepare_model_messages when
 # the per-request image cap drops images from the outgoing request.
 IMAGE_DROP_REMINDER = """
 {dropped_count} earlier image(s) attached to this conversation were omitted to fit the model's per-request image limit.
@@ -98,6 +113,20 @@ Here is some additional context which may be relevant to the user query:
 
 {additional_context}
 """.strip()
+
+
+TOOL_PREFERENCE_REMINDER = (
+    "The user selected these operations for this request: {operations}. "
+    "{guidance} "
+    "If the selected operations are unsuitable or unavailable, explain why."
+)
+TOOL_PREFERENCE_GUIDANCE = (
+    "Prefer them when they help answer the request. "
+    "You may use other available tools or answer without tools."
+)
+TOOL_PREFERENCE_LAST_STEP_GUIDANCE = (
+    "No more tools can run. Answer from the available evidence."
+)
 
 
 TOOL_CALL_RESPONSE_CROSS_MESSAGE = """
@@ -132,3 +161,11 @@ Provide a short name for the conversation. Refer to other messages in the conver
 IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
 """.strip()
 # ruff: noqa: E501, W605 end
+
+
+SUBAGENT_INSTRUCTIONS = """You are an agent in a team of agents. Your parent agent gave you a task; you do not see the user's conversation. Your final answer goes to your parent.
+You can start your own agents with the same tools. Their results arrive as messages before you give your final answer."""
+
+
+ROOT_AGENT_INSTRUCTIONS = """You are the root agent in a team of agents that works for the user. Results from your agents arrive automatically as messages.
+To answer with the combined results of your agents, call wait_agents. To answer now, end your response; later results start a new response."""

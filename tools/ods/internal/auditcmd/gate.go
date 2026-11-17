@@ -86,17 +86,26 @@ func runAuditGate(opts *AuditGateOptions, stdout, stderr io.Writer) error {
 		}
 		ref := strings.TrimSpace(string(out))
 		_, _ = fmt.Fprintf(stderr, "\nScanning %s: %s\n", component, ref)
+		var sboms []string
+		if component == "sandbox" {
+			sboms = []string{"/opt/chrome/browser.cdx.json"}
+		}
 		res, err := runImage(audit.ImageOptions{
-			Image:     ref,
-			Format:    "text",
-			FailOn:    audit.SeverityCritical,
-			IgnoreURL: opts.IgnoreURL,
-			Strict:    true,
-			Stdout:    stdout,
-			Stderr:    stderr,
+			Image:           ref,
+			SBOMs:           sboms,
+			UpdatePolicyURL: audit.DefaultUpdatePolicyURL,
+			Format:          "text",
+			FailOn:          audit.SeverityCritical,
+			IgnoreURL:       opts.IgnoreURL,
+			Strict:          true,
+			Stdout:          stdout,
+			Stderr:          stderr,
 		})
 		if err != nil {
 			return failf("Image audit of %s failed: %v", component, err)
+		}
+		if res.BlockingUpdates() > 0 {
+			return failf("%s has overdue package updates", component)
 		}
 		blocking += len(res.Blocking)
 	}

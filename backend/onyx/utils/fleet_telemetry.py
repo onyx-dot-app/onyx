@@ -12,12 +12,13 @@ import uuid
 from collections import deque
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, NamedTuple
 
 import requests
 
 from onyx.configs.app_configs import DISABLE_TELEMETRY, DISABLE_VECTOR_DB, WEB_DOMAIN
 from onyx.configs.constants import OnyxCeleryQueues
+from onyx.connectors.models import DocumentTypeLabel
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -103,6 +104,8 @@ CONNECTOR_ROW_SETTINGS: tuple[str, ...] = (
     "auto_sync_enabled",
     "permission_sync_enabled",
 )
+# The document types a corpus count can break down by.
+_DOCUMENT_TYPES: frozenset[str] = frozenset(label.value for label in DocumentTypeLabel)
 # Nested maps: their values must be numbers or booleans.
 _NESTED_FIELDS: dict[str, frozenset[str]] = {
     "metadata": frozenset(
@@ -121,6 +124,8 @@ _NESTED_FIELDS: dict[str, frozenset[str]] = {
             "write_errors",
         }
     ),
+    "expected_by_type": _DOCUMENT_TYPES,
+    "expected_bytes_by_type": _DOCUMENT_TYPES,
 }
 # The keys each event type may carry. The fleet service checks the values.
 _FIELDS: dict[str, frozenset[str]] = {
@@ -142,6 +147,8 @@ _FIELDS: dict[str, frozenset[str]] = {
     ),
     "license": frozenset({"license_present", "first_set_at"}),
     "tenant_domain": frozenset({"domain", "first_signup_at"}),
+    "users": frozenset({"total"}),
+    "feedback": frozenset({"feedback_id", "positive", "channel"}),
     "query": frozenset(
         {
             "query_id",
@@ -165,6 +172,11 @@ _FIELDS: dict[str, frozenset[str]] = {
             "config_hash",
             "metadata",
             "last_success_at",
+            "last_permission_sync_at",
+            "last_group_sync_at",
+            "permission_sync_pending_since",
+            "permission_sync_seconds",
+            "group_sync_seconds",
         }
     ),
     "attempt": frozenset(
@@ -199,6 +211,7 @@ _FIELDS: dict[str, frozenset[str]] = {
             "docs_processed",
             "duration_ms",
             "error_count",
+            "error_code",
             "started_at",
             "ended_at",
             "entity_id",
@@ -236,6 +249,20 @@ _FIELDS: dict[str, frozenset[str]] = {
             "cpu_limit_cores",
             "cpu_throttled_seconds",
             "shared",
+        }
+    ),
+    "corpus": frozenset(
+        {
+            "attempt_id",
+            "cc_pair_id",
+            "connector_type",
+            "window_start",
+            "window_end",
+            "duration_ms",
+            "expected_docs",
+            "expected_partial",
+            "expected_by_type",
+            "expected_bytes_by_type",
         }
     ),
     "runtime": frozenset({"service_instance_id", "reason"}),
@@ -337,6 +364,18 @@ def deployment_key() -> str:
     return get_or_create_deployment_key()
 
 
+class _QueuedEvent(NamedTuple):
+    """An event that waits for the sender thread. A tuple, so emitters stay cheap."""
+
+    event_type: str
+    data: dict[str, Any]
+    tenant_id: str | None
+    occurred_at: float
+    event_id: str | None
+    service: str
+    revision: int
+
+
 class BoundedTelemetry:
     """One daemon thread per process. A full queue sheds events; emitters never wait."""
 
@@ -355,9 +394,7 @@ class BoundedTelemetry:
         # One ID for this process's runtime and resource events.
         self.instance_id: str = fingerprint(f"{self.pid}:{os.uname().nodename}")
         # deque append/popleft are thread-safe, so emitters take no lock.
-        self._queue: deque[
-            tuple[str, dict[str, Any], str | None, float, str | None, str]
-        ] = deque()
+        self._queue: deque[_QueuedEvent] = deque()
         self._stop: threading.Event = threading.Event()
         self._thread: threading.Thread | None = None
         self.sent: int = 0
@@ -389,8 +426,12 @@ class BoundedTelemetry:
         event_id: str | None = None,
         occurred_at: float | None = None,
         service: str | None = None,
+        revision: int = 0,
     ) -> bool:
-        """No locks, thread creation, serialization, logging, network, disk, or database calls."""
+        """No locks, thread creation, serialization, logging, network, disk, or database calls.
+
+        The service orders the states of one entity by `revision`, then by
+        `occurred_at`."""
         try:
             if self.pid != os.getpid() or self._stop.is_set():
                 return False
@@ -404,13 +445,14 @@ class BoundedTelemetry:
                 self.dropped += 1
                 return False
             self._queue.append(
-                (
-                    event_type,
-                    safe,
-                    tenant_id,
-                    occurred_at if occurred_at is not None else time.time(),
-                    event_id,
-                    service or self.service,
+                _QueuedEvent(
+                    event_type=event_type,
+                    data=safe,
+                    tenant_id=tenant_id,
+                    occurred_at=occurred_at if occurred_at is not None else time.time(),
+                    event_id=event_id,
+                    service=service or self.service,
+                    revision=revision,
                 )
             )
             return True
@@ -454,53 +496,40 @@ class BoundedTelemetry:
         events: list[dict[str, Any]] = []
         for _ in range(_BATCH_SIZE):
             try:
-                event_type, data, tenant, occurred_at, event_id, service = (
-                    self._queue.popleft()
-                )
+                queued: _QueuedEvent = self._queue.popleft()
             except IndexError:
                 break
             try:
-                events.append(
-                    self._envelope(
-                        event_type, data, tenant, occurred_at, event_id, service
-                    )
-                )
+                events.append(self._envelope(queued))
             except Exception:
                 # One malformed entry is dropped without losing the rest of the batch.
                 self.dropped += 1
         return events
 
-    def _envelope(
-        self,
-        event_type: str,
-        data: dict[str, Any],
-        tenant: str | None,
-        occurred_at: float,
-        event_id: str | None,
-        service: str,
-    ) -> dict[str, Any]:
+    def _envelope(self, queued: _QueuedEvent) -> dict[str, Any]:
         if self._customer is None or self._deployment is None:
             raise RuntimeError("Fleet enrollment is not complete")
         customer: str = self._customer
         scope: str | None = None
         # Each Cloud tenant reports as its own customer inside this deployment.
         # Shared events describe the whole deployment.
-        if MULTI_TENANT and tenant and not data.get("shared"):
-            scope = str(uuid.uuid5(uuid.NAMESPACE_X500, tenant))
+        if MULTI_TENANT and queued.tenant_id and not queued.data.get("shared"):
+            scope = str(uuid.uuid5(uuid.NAMESPACE_X500, queued.tenant_id))
             customer = str(uuid.uuid5(uuid.UUID(customer), scope))
         return {
             "schema_version": 2,
-            "event_id": event_id or str(uuid.uuid4()),
-            "event_type": event_type,
+            "event_id": queued.event_id or str(uuid.uuid4()),
+            "event_type": queued.event_type,
             "occurred_at": datetime.fromtimestamp(
-                occurred_at, timezone.utc
+                queued.occurred_at, timezone.utc
             ).isoformat(),
             "customer_uuid": customer,
             "deployment_id": self._deployment,
             **({"installation_scope": scope} if scope else {}),
-            "service": service,
+            "service": queued.service,
             "is_cloud": MULTI_TENANT,
-            "data": data,
+            "revision": queued.revision,
+            "data": queued.data,
         }
 
     def flush_once(self, transport: Any = None) -> bool:
@@ -829,6 +858,40 @@ def emit_stage_counter(
             },
             tenant_id=tenant_id,
         )
+
+
+def emit_corpus_count(
+    attempt_id: int,
+    cc_pair_id: int,
+    connector_type: str,
+    *,
+    window_start: float,
+    window_end: float,
+    duration_ms: int,
+    docs_by_type: dict[DocumentTypeLabel, int],
+    bytes_by_type: dict[DocumentTypeLabel, int],
+    partial: bool,
+) -> None:
+    """One event when the listing of an attempt's window finishes: how many
+    documents it found, by type, with their bytes. ``partial`` means the
+    listing could not reach a part of the source, so the real total is at
+    least this. The fleet compares the count with the attempt's own
+    docs_indexed."""
+    emit_telemetry(
+        "corpus",
+        {
+            "attempt_id": attempt_id,
+            "cc_pair_id": cc_pair_id,
+            "connector_type": connector_type,
+            "window_start": window_start,
+            "window_end": window_end,
+            "duration_ms": duration_ms,
+            "expected_docs": sum(docs_by_type.values()),
+            "expected_partial": partial,
+            "expected_by_type": {k.value: v for k, v in docs_by_type.items()},
+            "expected_bytes_by_type": {k.value: v for k, v in bytes_by_type.items()},
+        },
+    )
 
 
 def error_category(error: BaseException) -> str:

@@ -51,6 +51,7 @@ resource "onyx_connector" "test" {
   source       = "web"
   input_type   = "load_state"
   refresh_freq = 86400
+  check_freq   = 3600
   connector_specific_config = jsonencode({
     base_url           = "https://example.com"
     web_connector_type = "single"
@@ -60,6 +61,7 @@ resource "onyx_connector" "test" {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("onyx_connector.test", "name", "tf-acc-connector-renamed"),
 					resource.TestCheckResourceAttr("onyx_connector.test", "refresh_freq", "86400"),
+					resource.TestCheckResourceAttr("onyx_connector.test", "check_freq", "3600"),
 					resource.TestCheckResourceAttr("onyx_connector.test", "prune_freq", "604800"),
 				),
 			},

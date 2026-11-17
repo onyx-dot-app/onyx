@@ -6,7 +6,8 @@ import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   CostOverride,
-  CostOverrideUpsert,
+  CostOverrideCreate,
+  CostOverrideUpdate,
 } from "@/lib/languageModels/types";
 
 /**
@@ -28,16 +29,13 @@ export function useCostOverrides() {
   };
 }
 
-/**
- * Upserts a cost override. PUT is idempotent — re-sending an existing model
- * updates its rates rather than erroring.
- * @throws Error with the API detail message on failure.
- */
-export async function upsertCostOverride(
-  body: CostOverrideUpsert
+async function sendOverride(
+  url: string,
+  method: "POST" | "PUT",
+  body: CostOverrideCreate | CostOverrideUpdate
 ): Promise<CostOverride> {
-  const response = await fetch(SWR_KEYS.costOverrides, {
-    method: "PUT",
+  const response = await fetch(url, {
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -50,23 +48,43 @@ export async function upsertCostOverride(
 }
 
 /**
- * Deletes a cost override by model name. A 404 (already gone) is swallowed —
+ * Creates an override for a model configuration that has none.
+ * @throws Error with the API detail message on failure, including a 409 when
+ * the configuration already has an override.
+ */
+export async function createCostOverride(
+  body: CostOverrideCreate
+): Promise<CostOverride> {
+  return sendOverride(SWR_KEYS.costOverrides, "POST", body);
+}
+
+/**
+ * Sets an existing override's rates, and moves it to `body.model_configuration_id`
+ * when that is another model.
+ * @throws Error with the API detail message on failure, including a 409 when
+ * the target model already has an override.
+ */
+export async function updateCostOverride(
+  modelConfigurationId: number,
+  body: CostOverrideUpdate
+): Promise<CostOverride> {
+  return sendOverride(
+    `${SWR_KEYS.costOverrides}/${modelConfigurationId}`,
+    "PUT",
+    body
+  );
+}
+
+/**
+ * Deletes a model configuration's override. A 404 (already gone) is swallowed —
  * the caller's intent (override absent) is satisfied either way.
  * @throws Error with the API detail message on non-404 failures.
  */
 export async function deleteCostOverride(
-  model: string,
-  provider: string = ""
+  modelConfigurationId: number
 ): Promise<void> {
-  // Keep "/" as real path separators (backend route is {model:path}) but encode
-  // each segment, so slash-containing model ids (e.g. "bedrock/...") delete.
-  const encodedModel = model
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-  const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
   const response = await fetch(
-    `${SWR_KEYS.costOverrides}/${encodedModel}${query}`,
+    `${SWR_KEYS.costOverrides}/${modelConfigurationId}`,
     { method: "DELETE" }
   );
 

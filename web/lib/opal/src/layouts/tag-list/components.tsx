@@ -1,5 +1,5 @@
 import type { IconFunctionComponent } from "@opal/types";
-import { Chip, type TagItem } from "@opal/components";
+import { Tag, type TagItem } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,7 +37,7 @@ function TagList({ items, onRemove, maxVisible, overflowIcon }: TagListProps) {
   return (
     <div className="flex w-full flex-wrap items-center gap-1">
       {visible.map((item) => (
-        <Chip
+        <Tag
           key={item.id}
           title={item.label}
           error={item.error}
@@ -46,7 +46,7 @@ function TagList({ items, onRemove, maxVisible, overflowIcon }: TagListProps) {
         />
       ))}
       {hidden.length > 0 && (
-        <Chip
+        <Tag
           icon={overflowIcon}
           title={`+${hidden.length}`}
           tooltip={hidden.map((item) => item.label).join(", ")}

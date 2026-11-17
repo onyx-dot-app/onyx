@@ -136,7 +136,9 @@ func (r *customToolResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Default:  booldefault.StaticBool(true),
 				MarkdownDescription: "Whether the action is available in default Chat (without a custom agent). " +
 					"Defaults to true. Custom agents keep their own tool settings. This does not disable " +
-					"the action globally. Changing this setting requires a workspace admin.",
+					"the action globally. Changing this setting requires a workspace admin. `false` needs " +
+					"Onyx v5.0 or later. Before v5.0, Onyx has no default Chat selection, so Terraform " +
+					"reads `true` for an action that is turned on.",
 			},
 			"display_name": schema.StringAttribute{
 				Computed:            true,
@@ -325,8 +327,14 @@ func applyRemoteCustomTool(ctx context.Context, model *customToolResourceModel, 
 		model.OAuthConfigID = types.StringValue(strconv.FormatInt(*remote.OAuthConfigID, 10))
 	}
 	if remote.DefaultChatEnabled == nil {
+		// Onyx before v5.0. Its global flag can only stand in for the default,
+		// an action that is on everywhere.
+		if remote.Enabled && (model.Enabled.IsNull() || model.Enabled.ValueBool()) {
+			model.Enabled = types.BoolValue(true)
+			return true
+		}
 		diags.AddError("Onyx server does not report default Chat availability",
-			"The action response is missing default_chat_enabled. Upgrade the Onyx server before managing enabled with this provider. The legacy global enabled field cannot represent default Chat selection.")
+			"The action response is missing default_chat_enabled. Upgrade the Onyx server to v5.0 or later before managing enabled = false with this provider. The legacy global enabled field cannot represent default Chat selection.")
 		return false
 	}
 	model.Enabled = types.BoolValue(*remote.DefaultChatEnabled)

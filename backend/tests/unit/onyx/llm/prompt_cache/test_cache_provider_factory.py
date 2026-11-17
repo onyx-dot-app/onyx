@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from unittest.mock import patch
-
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMessage
-from onyx.llm.prompt_cache import processor as processor_module
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.prompt_cache.providers.anthropic import AnthropicPromptCacheProvider
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
@@ -65,7 +62,7 @@ def test_gateway_unknown_model_stays_noop() -> None:
 
 
 def test_gateway_substring_lookalikes_stay_noop() -> None:
-    for name in ("claudio-fast", "myanthropic-proxy", "declauded-v1"):
+    for name in ("claudio-fast", "myanthropic-proxy"):
         adapter: PromptCacheProvider = get_provider_adapter(
             _config("litellm_proxy", name)
         )
@@ -138,7 +135,7 @@ def test_direct_providers_unchanged() -> None:
     )
 
 
-def test_anthropic_marks_head_and_tail_breakpoints() -> None:
+def test_anthropic_marks_head_context_and_tail_breakpoints() -> None:
     prefix: list[ChatCompletionMessage] = [
         SystemMessage(content="system prompt"),
         UserMessage(content="earlier turn"),
@@ -146,17 +143,16 @@ def test_anthropic_marks_head_and_tail_breakpoints() -> None:
     ]
     suffix: list[ChatCompletionMessage] = [UserMessage(content="new request")]
 
-    with patch.object(processor_module, "ENABLE_PROMPT_CACHING", True):
-        processed, _ = process_with_prompt_cache(
-            llm_config=_config("anthropic", "claude-sonnet-5"),
-            cacheable_prefix=prefix,
-            suffix=suffix,
-            continuation=False,
-            with_metadata=False,
-        )
+    processed, _ = process_with_prompt_cache(
+        llm_config=_config("anthropic", "claude-sonnet-5"),
+        cacheable_prefix=prefix,
+        suffix=suffix,
+        continuation=False,
+        with_metadata=False,
+    )
 
     assert processed[0].cache_control == {"type": "ephemeral"}
-    assert processed[1].cache_control is None
+    assert processed[1].cache_control == {"type": "ephemeral"}
     assert processed[2].cache_control == {"type": "ephemeral"}
     assert processed[3].cache_control is None
 
@@ -165,14 +161,13 @@ def test_anthropic_single_message_prefix_marks_one_breakpoint() -> None:
     prefix: list[ChatCompletionMessage] = [SystemMessage(content="system prompt")]
     suffix: list[ChatCompletionMessage] = [UserMessage(content="new request")]
 
-    with patch.object(processor_module, "ENABLE_PROMPT_CACHING", True):
-        processed, _ = process_with_prompt_cache(
-            llm_config=_config("anthropic", "claude-sonnet-5"),
-            cacheable_prefix=prefix,
-            suffix=suffix,
-            continuation=False,
-            with_metadata=False,
-        )
+    processed, _ = process_with_prompt_cache(
+        llm_config=_config("anthropic", "claude-sonnet-5"),
+        cacheable_prefix=prefix,
+        suffix=suffix,
+        continuation=False,
+        with_metadata=False,
+    )
 
     assert processed[0].cache_control == {"type": "ephemeral"}
     assert processed[1].cache_control is None

@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from onyx.chat.mention_models import RecordedMention
 from onyx.configs.constants import MessageType, QAFeedbackType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.db.enums import AccessType
@@ -15,7 +16,7 @@ from onyx.server.documents.models import (
     IndexingStatus,
     InputType,
 )
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
+from onyx.tools.models import GeneratedImage
 
 """
 These data models are used to represent the data on the testing side of things.
@@ -143,6 +144,7 @@ class DATestImageGenerationConfig(BaseModel):
     llm_provider_id: int
     llm_provider_name: str
     is_default: bool
+    llm_provider_owned: bool = True
 
 
 class DATestDocumentSet(BaseModel):
@@ -183,6 +185,7 @@ class DATestChatMessage(BaseModel):
     message: str
     message_type: MessageType | None = None
     files: list | None = None
+    mentions: list[RecordedMention] = []
     reasoning_tokens: str | None = None
 
 
@@ -197,8 +200,8 @@ class DAQueryHistoryEntry(DATestChatSession):
 
 
 class ToolName(str, Enum):
-    INTERNET_SEARCH = "internet_search"
-    INTERNAL_SEARCH = "run_search"
+    INTERNET_SEARCH = "web_search"
+    INTERNAL_SEARCH = "internal_search"
     IMAGE_GENERATION = "generate_image"
 
 
@@ -219,11 +222,15 @@ class ToolCallDebug(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     stack_trace: str
+    error_code: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class StreamedResponse(BaseModel):
     full_message: str
     assistant_message_id: int
+    # What the question tagged, from its ID packet.
+    mentions: list[RecordedMention]
     top_documents: list[SearchDoc]
     used_tools: list[ToolResult]
     tool_call_debug: list[ToolCallDebug] = Field(default_factory=list)

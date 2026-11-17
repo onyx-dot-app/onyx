@@ -1,11 +1,14 @@
 """External dependency unit tests for the port-aware swap criterion (T7/D8).
 
-The port-flow branch of `check_and_perform_index_swap` swaps on four conditions
+The port-flow branch of `check_and_perform_index_swap` swaps on three conditions
 rather than the legacy successful-index count: every required cc_pair's port is
-SUCCESS, a real (non-seed) FUTURE index attempt landed after the port, nothing is
-in progress, and the deferred metadata-sync backlog has drained. The push-based
-Ingestion pair is gated on its port only (it never runs a connector index attempt).
-Mode C (INSTANT) swaps immediately; the legacy (flag-off) path is untouched.
+SUCCESS, no FUTURE index attempt of a required pair is running, and no user-file
+reconcile is pending. Documents FUTURE may lack do not hold the swap: their
+content hash is cleared at the swap so the next poll on the new PRESENT
+re-indexes them, and a pending-sync flag becomes a plain needs-sync. The
+push-based Ingestion pair is gated on its port only (it never runs a connector
+index attempt). Mode C (INSTANT) swaps immediately; the legacy (flag-off) path
+is untouched.
 
 `_perform_index_swap` must flip PRESENT -> PAST and FUTURE -> PRESENT in one
 commit, so no other session ever reads a state with no PRESENT row.
@@ -22,7 +25,7 @@ port outright, `mark_port_in_progress` starts only NOT_STARTED (no double writer
 """
 
 from collections.abc import Generator
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -40,6 +43,7 @@ from onyx.db.document import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
+    IndexingStatus,
     IndexModelStatus,
     PortAttemptStatus,
     SwitchoverType,
@@ -53,8 +57,8 @@ from onyx.db.index_attempt import (
 from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
-    DocumentByConnectorCredentialPair,
     IndexAttempt,
+    IndexAttemptError,
     PortAttempt,
     SearchSettings,
     UserFile,
@@ -81,7 +85,6 @@ from onyx.db.swap_index import (
     check_and_perform_index_swap,
 )
 from onyx.db.user_file import PortedUserScope, sample_ported_user_file_ids
-from onyx.kg.models import KGStage
 from onyx.redis.redis_pool import get_redis_client
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
@@ -224,32 +227,201 @@ def test_port_swap_paused_user_blocks(
         db_session.commit()
 
 
-def test_port_swap_blocks_on_pending_sync_backlog(
+def test_pending_sync_flag_does_not_hold_the_swap_and_becomes_needs_sync(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
+    """A document deferred for FUTURE no longer holds the swap: the swap turns
+    its flag into a plain needs-sync, so the new PRESENT re-syncs it."""
     cc_pair, future_id = cc_pair_and_future
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
     _make_success_port(db_session, cc_pair.id, future_id)
-    # A deferred-sync doc owned by the ported cc_pair remains -> the scoped backlog
-    # gate fails. The count JOINs through DocumentByConnectorCredentialPair, so the
-    # doc must be linked to the cc_pair or it's invisible to the query.
-    doc_id = f"{_PENDING_DOC_PREFIX}pending"
-    db_session.add(
-        DbDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)
+    (doc_id,) = seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX, chunk_count=3
     )
-    db_session.flush()
-    db_session.add(
-        DocumentByConnectorCredentialPair(
-            id=doc_id,
-            connector_id=cc_pair.connector_id,
-            credential_id=cc_pair.credential_id,
-            has_been_indexed=True,
-        )
+    mark_document_synced_secondary_pending(doc_id, db_session)
+    _clear_verification_backoff(future_id)
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+
+    swap_index._clear_what_future_missed__no_commit(
+        db_session, future_ss, [cc_pair], skip_locked=False
     )
     db_session.commit()
-    mark_document_synced_secondary_pending(doc_id, db_session)
-    assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+    db_session.expire_all()
+    doc = db_session.get(DbDocument, doc_id)
+    assert doc is not None
+    assert doc.secondary_only_sync_pending is False and doc.last_synced is None
+
+
+def _future_poll(
+    db_session: Session, cc_pair_id: int, future_id: int, window_end: datetime
+) -> IndexAttempt:
+    """A successful FUTURE poll whose window ended at `window_end`."""
+    now = datetime.now(tz=timezone.utc)
+    attempt = IndexAttempt(
+        connector_credential_pair_id=cc_pair_id,
+        search_settings_id=future_id,
+        status=IndexingStatus.SUCCESS,
+        from_beginning=False,
+        poll_range_end=window_end,
+        time_started=now,
+        time_finished=now,
+    )
+    db_session.add(attempt)
+    db_session.commit()
+    return attempt
+
+
+def _set_doc(db_session: Session, doc_id: str, **fields: object) -> None:
+    doc = db_session.get(DbDocument, doc_id)
+    assert doc is not None
+    for name, value in fields.items():
+        setattr(doc, name, value)
+    db_session.commit()
+
+
+def _hashes(db_session: Session, doc_ids: list[str]) -> dict[str, str | None]:
+    db_session.expire_all()
+    rows = db_session.execute(
+        select(DbDocument.id, DbDocument.content_hash).where(DbDocument.id.in_(doc_ids))
+    )
+    return {row.id: row.content_hash for row in rows}
+
+
+def _restore_present(db_session: Session, future_id: int, old_present_id: int) -> None:
+    """Undo a real swap, so the fixture can delete the test row."""
+    db_session.rollback()
+    restored_future = db_session.get(SearchSettings, future_id)
+    old_present = db_session.get(SearchSettings, old_present_id)
+    assert restored_future is not None and old_present is not None
+    if restored_future.status == IndexModelStatus.PRESENT:
+        update_search_settings_status__no_commit(
+            restored_future, IndexModelStatus.PAST, db_session
+        )
+    update_search_settings_status__no_commit(
+        old_present, IndexModelStatus.PRESENT, db_session
+    )
+    db_session.commit()
+
+
+def test_swap_clears_hashes_future_may_lack(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """At the swap, documents the old PRESENT wrote at or after FUTURE's last
+    successful poll end (minus the poll overlap) lose their hash, as do
+    documents a FUTURE attempt failed on; earlier ones keep it. A paused pair is
+    cleared like any other."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _make_success_port(db_session, cc_pair.id, future_id)
+    window_end = datetime.now(tz=timezone.utc) + timedelta(hours=3)
+    poll = _future_poll(db_session, cc_pair.id, future_id, window_end)
+    early, late, failed = seed_cc_pair_documents(
+        db_session, cc_pair, 3, prefix=_VERIFY_DOC_PREFIX
+    )
+    _set_doc(
+        db_session,
+        early,
+        content_hash="h",
+        last_modified=window_end - timedelta(hours=1),
+    )
+    _set_doc(db_session, late, content_hash="h", last_modified=window_end)
+    _set_doc(
+        db_session,
+        failed,
+        content_hash="h",
+        last_modified=window_end - timedelta(hours=1),
+    )
+    error = IndexAttemptError(
+        index_attempt_id=poll.id,
+        connector_credential_pair_id=cc_pair.id,
+        document_id=failed,
+        failure_message="embedding failed",
+        is_resolved=True,
+    )
+    db_session.add(error)
+    cc_pair.status = ConnectorCredentialPairStatus.PAUSED
+    db_session.commit()
+    try:
+        swap_index._clear_what_future_missed__no_commit(
+            db_session, future_ss, [cc_pair], skip_locked=False
+        )
+        db_session.commit()
+        assert _hashes(db_session, [early, late, failed]) == {
+            early: "h",
+            late: None,
+            failed: None,
+        }
+    finally:
+        db_session.delete(error)
+        db_session.commit()
+
+
+def test_swap_delta_pass_skips_rows_a_batch_still_holds(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The pass inside the flip's transaction never waits on a row an indexing
+    batch holds; that batch reads PAST at its stamp and leaves the hash alone."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _make_success_port(db_session, cc_pair.id, future_id)
+    held, free = seed_cc_pair_documents(
+        db_session, cc_pair, 2, prefix=_VERIFY_DOC_PREFIX
+    )
+    later = datetime.now(tz=timezone.utc) + timedelta(hours=1)
+    for doc_id in (held, free):
+        _set_doc(db_session, doc_id, content_hash="h", last_modified=later)
+
+    with get_session_with_current_tenant() as other_session:
+        other_session.execute(
+            select(DbDocument).where(DbDocument.id == held).with_for_update()
+        )
+        swap_index._clear_what_future_missed__no_commit(
+            db_session, future_ss, [cc_pair], skip_locked=True
+        )
+        db_session.commit()
+        other_session.rollback()
+    assert _hashes(db_session, [held, free]) == {held: "h", free: None}
+
+
+def test_swap_with_no_required_pairs_still_clears_failed_documents(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The failed-document clear is keyed by the FUTURE settings, not by a pair,
+    so a swap whose required list is empty still runs it."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    old_present_id = get_current_search_settings(db_session).id
+    poll = _future_poll(
+        db_session, cc_pair.id, future_id, datetime.now(tz=timezone.utc)
+    )
+    (failed,) = seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX
+    )
+    _set_doc(db_session, failed, content_hash="h")
+    error = IndexAttemptError(
+        index_attempt_id=poll.id,
+        connector_credential_pair_id=cc_pair.id,
+        document_id=failed,
+        failure_message="embedding failed",
+    )
+    db_session.add(error)
+    db_session.commit()
+    try:
+        with patch.object(swap_index, "get_default_document_index"):
+            _perform_index_swap(
+                db_session, future_ss, all_cc_pairs=[], clear_for_cc_pairs=[]
+            )
+        assert _hashes(db_session, [failed]) == {failed: None}
+    finally:
+        db_session.rollback()
+        db_session.delete(error)
+        db_session.commit()
+        _restore_present(db_session, future_id, old_present_id)
 
 
 def test_port_swap_blocks_on_unfinished_ingestion_port(
@@ -406,19 +578,7 @@ def test_instant_swap_never_commits_a_state_without_present(
         assert result is not None and result.id == old_present_id
     finally:
         event.remove(db_session, "after_commit", _read_committed_state)
-        # Put the original PRESENT back before the fixture deletes the test row.
-        db_session.rollback()
-        restored_future = db_session.get(SearchSettings, future_id)
-        old_present = db_session.get(SearchSettings, old_present_id)
-        assert restored_future is not None and old_present is not None
-        if restored_future.status == IndexModelStatus.PRESENT:
-            update_search_settings_status__no_commit(
-                restored_future, IndexModelStatus.PAST, db_session
-            )
-        update_search_settings_status__no_commit(
-            old_present, IndexModelStatus.PRESENT, db_session
-        )
-        db_session.commit()
+        _restore_present(db_session, future_id, old_present_id)
 
     assert observed, "the swap made no commit"
     assert all(count == 1 for count, _, _ in observed), observed

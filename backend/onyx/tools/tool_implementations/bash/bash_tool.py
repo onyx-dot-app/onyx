@@ -1,25 +1,26 @@
-from typing import Any
-
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
-from onyx.chat.emitter import Emitter
+from onyx.agents.tools import ToolInvocation
 from onyx.configs.app_configs import (
     CODE_INTERPRETER_BASE_URL,
     CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
     CODE_INTERPRETER_MAX_OUTPUT_LENGTH,
 )
 from onyx.db.code_interpreter import fetch_code_interpreter_server
-from onyx.llm.models import ToolDefinition
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import (
-    BashToolDelta,
-    BashToolStart,
-    Packet,
+from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.interface import (
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
 )
-from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException, ToolResponse
+from onyx.tools.models import (
+    BashArguments,
+    CodeModeExposure,
+    LlmBashExecutionResult,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
@@ -28,22 +29,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-CMD_FIELD = "cmd"
 
-
-class BashToolOverrideKwargs(BaseModel):
-    pass
-
-
-class LlmBashExecutionResult(BaseModel):
-    stdout: str
-    stderr: str
-    exit_code: int | None
-    timed_out: bool
-    error: str | None = None
-
-
-class BashTool(Tool[BashToolOverrideKwargs]):
+class BashTool(Tool):
     """Bash command execution tool backed by a Code Interpreter session."""
 
     NAME = "bash"
@@ -52,14 +39,17 @@ class BashTool(Tool[BashToolOverrideKwargs]):
         "Execute a bash command inside an isolated, network-restricted session."
     )
 
-    def __init__(self, tool_id: int, session_id: str, emitter: Emitter) -> None:
-        super().__init__(emitter=emitter)
+    def __init__(self, tool_id: int, session_id: str) -> None:
         self._id = tool_id
         self._session_id = session_id
 
     @property
     def id(self) -> int:
         return self._id
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
 
     @property
     def name(self) -> str:
@@ -104,58 +94,12 @@ class BashTool(Tool[BashToolOverrideKwargs]):
             )
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=self.description,
-            parameters={
-                "type": "object",
-                "properties": {
-                    CMD_FIELD: {
-                        "type": "string",
-                        "description": "Bash command to execute in the session.",
-                    },
-                },
-                "required": [CMD_FIELD],
-            },
+        return tool_definition_from_arguments(
+            self.name, self.description, BashArguments, strict=True
         )
 
-    def emit_start(self, placement: Placement) -> None:
-        """Emit start packet for this tool. Code will be emitted in run() method."""
-        # cmd isn't available until run(); BashToolStart is emitted there,
-        # mirroring PythonTool's pattern.
-
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: BashToolOverrideKwargs,  # noqa: ARG002
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
-        if CMD_FIELD not in llm_kwargs:
-            raise ToolCallException(
-                message=f"Missing required '{CMD_FIELD}' parameter in bash tool call",
-                llm_facing_message=(
-                    f"The bash tool requires a '{CMD_FIELD}' parameter containing "
-                    f"the bash command to execute. Please provide like: "
-                    f'{{"cmd": "ls -la"}}'
-                ),
-            )
-        cmd = llm_kwargs[CMD_FIELD]
-        if not isinstance(cmd, str):
-            raise ToolCallException(
-                message=(
-                    f"'{CMD_FIELD}' must be a string in bash tool call, "
-                    f"got {type(cmd).__name__}"
-                ),
-                llm_facing_message=(
-                    f"The bash tool requires '{CMD_FIELD}' to be a string "
-                    f"(got {type(cmd).__name__}). Pass a single shell "
-                    f'command, e.g. {{"cmd": "ls -la"}}.'
-                ),
-            )
-
-        self.emitter.emit(
-            Packet(placement=placement, obj=BashToolStart(cmd=cmd)),
-        )
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        cmd = parse_tool_arguments(BashArguments, invocation.arguments).cmd
 
         adapter = TypeAdapter(LlmBashExecutionResult)
 
@@ -177,20 +121,10 @@ class BashTool(Tool[BashToolOverrideKwargs]):
                 timed_out=False,
                 error=error_msg,
             )
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=BashToolDelta(
-                        stdout="",
-                        stderr=error_msg,
-                        exit_code=-1,
-                        timed_out=False,
-                    ),
-                ),
-            )
-            return ToolResponse(
-                rich_response=None,
-                llm_facing_response=adapter.dump_json(error_result).decode(),
+            return ToolResult(
+                content=adapter.dump_json(error_result).decode(),
+                details=error_result,
+                is_error=True,
             )
 
         truncated_stdout = _truncate_output(
@@ -208,24 +142,8 @@ class BashTool(Tool[BashToolOverrideKwargs]):
             error=(None if response.exit_code == 0 else truncated_stderr),
         )
 
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=BashToolDelta(
-                    stdout=truncated_stdout,
-                    stderr=truncated_stderr,
-                    exit_code=response.exit_code,
-                    timed_out=response.timed_out,
-                ),
-            ),
+        return ToolResult(
+            content=adapter.dump_json(result).decode(),
+            details=result,
+            is_error=response.exit_code != 0,
         )
-
-        return ToolResponse(
-            rich_response=None,
-            llm_facing_response=adapter.dump_json(result).decode(),
-        )
-
-    @classmethod
-    @override
-    def should_emit_argument_deltas(cls) -> bool:
-        return True

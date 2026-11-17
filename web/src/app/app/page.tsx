@@ -1,6 +1,6 @@
+import { redirect } from "@opal/navigation";
 import AppPage from "@/views/AppPage";
 import { defaultAgentRedirectTarget } from "@/lib/app/utils";
-import { redirect } from "next/navigation";
 
 export interface PageProps {
   searchParams: Promise<{ [key: string]: string }>;

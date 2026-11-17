@@ -1,31 +1,6 @@
 {
   "aliases": {},
   "models": {
-    "kimi-k2.5": {
-      "cost": {
-        "cache_read": 0.09999999999999999,
-        "input": 0.6,
-        "output": 3.0
-      },
-      "limit": {
-        "context": 262144,
-        "output": 262144
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "kimi-k2.5",
-      "reasoning": true,
-      "structured_output": true,
-      "tool_call": true
-    },
     "kimi-k2.6": {
       "attachment": true,
       "cost": {
@@ -52,9 +27,9 @@
       "name": "Kimi K2.6",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-04-21",
+      "release_date": "2026-04-20",
       "structured_output": true,
-      "temperature": true,
+      "temperature": false,
       "tool_call": true
     },
     "kimi-k2.7-code": {
@@ -123,6 +98,7 @@
       "cost": {
         "cache_read": 0.3,
         "cache_write": 3,
+        "cache_write_above_1hr": 6.0,
         "input": 3,
         "output": 15
       },
@@ -150,161 +126,70 @@
       "temperature": false,
       "tool_call": true
     },
-    "moonshot-v1-128k": {
+    "kimi-k3.1-pro": {
+      "attachment": true,
       "cost": {
-        "input": 2.0,
-        "output": 5.0
+        "cache_read": 0.2,
+        "cache_write": 2,
+        "cache_write_above_1hr": 4.0,
+        "input": 2,
+        "output": 10
       },
+      "family": "kimi-k3",
       "limit": {
-        "context": 131072,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "moonshot-v1-128k",
-      "structured_output": true,
-      "tool_call": true
-    },
-    "moonshot-v1-128k-vision-preview": {
-      "cost": {
-        "input": 2.0,
-        "output": 5.0
-      },
-      "limit": {
-        "context": 131072,
-        "output": 131072
+        "context": 1048576,
+        "output": 1048576
       },
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "video"
         ],
         "output": [
           "text"
         ]
       },
       "mode": "chat",
-      "name": "moonshot-v1-128k-vision-preview",
+      "name": "Kimi K3.1 Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
       "structured_output": true,
+      "temperature": false,
       "tool_call": true
     },
-    "moonshot-v1-32k": {
+    "kimi-k3.1-pro-highspeed": {
+      "attachment": true,
       "cost": {
-        "input": 1.0,
-        "output": 3.0
+        "cache_read": 0.2,
+        "cache_write": 4,
+        "cache_write_above_1hr": 8.0,
+        "input": 4,
+        "output": 20
       },
+      "family": "kimi-k3",
       "limit": {
-        "context": 32768,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "moonshot-v1-32k",
-      "structured_output": true,
-      "tool_call": true
-    },
-    "moonshot-v1-32k-vision-preview": {
-      "cost": {
-        "input": 1.0,
-        "output": 3.0
-      },
-      "limit": {
-        "context": 32768,
-        "output": 32768
+        "context": 1048576,
+        "output": 1048576
       },
       "modalities": {
         "input": [
           "text",
-          "image"
+          "image",
+          "video"
         ],
         "output": [
           "text"
         ]
       },
       "mode": "chat",
-      "name": "moonshot-v1-32k-vision-preview",
+      "name": "Kimi K3.1 Pro Highspeed",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
       "structured_output": true,
-      "tool_call": true
-    },
-    "moonshot-v1-8k": {
-      "cost": {
-        "input": 0.19999999999999998,
-        "output": 2.0
-      },
-      "limit": {
-        "context": 8192,
-        "output": 8192
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "moonshot-v1-8k",
-      "structured_output": true,
-      "tool_call": true
-    },
-    "moonshot-v1-8k-vision-preview": {
-      "cost": {
-        "input": 0.19999999999999998,
-        "output": 2.0
-      },
-      "limit": {
-        "context": 8192,
-        "output": 8192
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "moonshot-v1-8k-vision-preview",
-      "structured_output": true,
-      "tool_call": true
-    },
-    "moonshot-v1-auto": {
-      "cost": {
-        "input": 2.0,
-        "output": 5.0
-      },
-      "limit": {
-        "context": 131072,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "moonshot-v1-auto",
-      "structured_output": true,
+      "temperature": false,
       "tool_call": true
     }
   },

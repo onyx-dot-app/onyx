@@ -15,6 +15,10 @@ export type OpalStrings = {
   loadingPage: string;
   /** The Cancel action `SettingsLayouts.Header` renders when `cancel` is set. */
   settingsHeaderCancel: string;
+  /** `SettingsLayouts.Body`'s error state: a title from the page name, and the description used when the page gives none. */
+  settingsBodyErrorTitle: (page: string) => string;
+  /** `ErrorState`'s description when the caller gives none. */
+  errorStateDescription: string;
   copy: string;
   copied: string;
   copyCode: string;
@@ -36,6 +40,10 @@ export type OpalStrings = {
   inputUploadDropToAdd: string;
   /** InputSingleUpload's copy while a file is dragged over it and it holds one. */
   inputUploadDropToReplace: string;
+  /** InputSingleUpload's trailing button, which opens the file picker. */
+  inputUploadSelect: string;
+  /** InputMultiUpload's trailing button, which opens the file picker. */
+  inputMultiUploadSelect: string;
   clearFilter: string;
   date: string;
   dateRange: string;
@@ -154,6 +162,8 @@ export const defaultOpalStrings: OpalStrings = {
   loading: "Loading",
   loadingPage: "Loading …",
   settingsHeaderCancel: "Cancel",
+  settingsBodyErrorTitle: (page: string) => `${page} failed to load`,
+  errorStateDescription: "Something went wrong. Try again in a moment.",
   copy: "Copy",
   copied: "Copied!",
   copyCode: "Copy code",
@@ -167,6 +177,8 @@ export const defaultOpalStrings: OpalStrings = {
   inputUploadAttached: "File attached",
   inputUploadDropToAdd: "Drop file here to add",
   inputUploadDropToReplace: "Drop here to replace file",
+  inputUploadSelect: "Select File",
+  inputMultiUploadSelect: "Select Files",
   clearFilter: "Clear filter",
   date: "Date",
   dateRange: "Date range",

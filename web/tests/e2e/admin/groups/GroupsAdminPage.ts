@@ -176,6 +176,11 @@ export class GroupsAdminPage {
     return this.page.getByText(displayName, { exact: true });
   }
 
+  /** The switch of one permission row, matched by its display name. */
+  permissionSwitch(displayName: string): Locator {
+    return this.page.getByRole("switch", { name: displayName, exact: true });
+  }
+
   /** Every permission switch on the edit page. */
   get permissionSwitches(): Locator {
     return this.page.getByRole("switch");
@@ -206,6 +211,11 @@ export class GroupsAdminPage {
     const row = this.page.getByRole("row").filter({ hasText: emailOrName });
     // The remove button is an IconButton with SvgMinusCircle in the actions column
     await row.getByRole("button").last().click();
+  }
+
+  /** Flip one permission switch, matched by its row's display name. */
+  async togglePermission(displayName: string) {
+    await this.permissionSwitch(displayName).click();
   }
 
   /** Save the edit form. */

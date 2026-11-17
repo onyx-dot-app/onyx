@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, usePathname } from "@opal/navigation";
 import {
   createContext,
   useContext,
@@ -8,7 +9,6 @@ import {
   useState,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { usePathname } from "next/navigation";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
@@ -26,6 +26,7 @@ export function CraftStreamingProvider({
   children: React.ReactNode;
 }) {
   const { user, userResolution } = useUser();
+  const navigation = useNavigation();
   const pathname = usePathname();
   const userId = user?.id ?? null;
   const [ownerId, setOwnerId] = useState(userId);
@@ -55,7 +56,7 @@ export function CraftStreamingProvider({
       return;
     if (userId !== null) {
       if (ownerId !== null) {
-        window.location.reload();
+        navigation.reload();
         return;
       }
       setOwnerId(userId);
@@ -66,7 +67,7 @@ export function CraftStreamingProvider({
       store.cleanupOldSessions(0);
       store.setCurrentSession(null);
     }
-  }, [ownerId, userId, userResolution]);
+  }, [ownerId, userId, userResolution, navigation]);
 
   return (
     <CraftStreamingContext.Provider value={actions}>

@@ -1,14 +1,15 @@
-"""Filter resolution in the MCP document-search tool.
+"""Argument handling in the MCP document-search tool.
 
 `agent`, `source_types` and `document_set_names` all resolve on the search call
 itself, so the happy path needs no discovery round trip. A value that does not
 resolve must fail rather than be dropped, and the error teaches the caller
-without dumping the whole inventory.
+without dumping the whole inventory. `retrieval_only` sends the search to
+`/search/raw`, and the server setting can force it on.
 """
 
 import json
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -24,13 +25,15 @@ _TOKEN = AccessToken(token="test-token", client_id="test", scopes=[])
 
 @dataclass
 class _Stub:
-    """Bodies the tool sent to /search, plus what the API server returns."""
+    """Bodies the tool sent to /search or /search/raw, plus what the API
+    server returns."""
 
     search_requests: list[dict[str, Any]]
     agents: list[dict[str, Any]]
     sources: list[str]
     document_sets: list[dict[str, Any]]
     inventory_status: int | None = None
+    search_routes: list[str] = field(default_factory=list)
 
 
 async def _unreachable_indexed_sources(_access_token: AccessToken) -> list[str]:
@@ -66,7 +69,10 @@ async def stub(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[_Stub, None]:
             return httpx.Response(200, json=state.document_sets)
         if path.endswith("/persona"):
             return httpx.Response(200, json=state.agents)
-        if path.endswith("/search"):
+        if path.endswith(("/search", "/search/raw")):
+            state.search_routes.append(
+                "/search/raw" if path.endswith("/raw") else "/search"
+            )
             state.search_requests.append(json.loads(request.content))
             return httpx.Response(200, json={"results": []})
         return httpx.Response(404, json={"detail": f"unexpected path {path}"})
@@ -251,3 +257,25 @@ async def test_ambiguous_agent_name_errors(stub: _Stub) -> None:
     assert payload["results"] == []
     assert "ambiguous" in payload["error"]
     assert stub.search_requests == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("requested", "forced", "sent"),
+    [(False, False, False), (True, False, True), (False, True, True)],
+)
+async def test_retrieval_only_calls_retrieve_when_requested_or_forced(
+    stub: _Stub,
+    monkeypatch: pytest.MonkeyPatch,
+    requested: bool,
+    forced: bool,
+    sent: bool,
+) -> None:
+    monkeypatch.setattr(search_module, "MCP_SERVER_SEARCH_RETRIEVAL_ONLY", forced)
+
+    payload = await search_module.search_indexed_documents(
+        query="anything", retrieval_only=requested
+    )
+
+    assert "error" not in payload
+    assert stub.search_routes == ["/search/raw" if sent else "/search"]

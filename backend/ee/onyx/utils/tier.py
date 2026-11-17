@@ -190,6 +190,18 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
         )
 
 
+def require_business_tier_for_personal_access(access_type: AccessType) -> None:
+    """Raise FEATURE_NOT_AVAILABLE if PERSONAL access is requested below
+    BUSINESS. Owner-only connectors are a Business+ feature."""
+    if access_type != AccessType.PERSONAL:
+        return
+    if not tier_at_least(get_tier(), Tier.BUSINESS):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Owner-only access requires the Business or Enterprise plan.",
+        )
+
+
 def require_business_tier_for_connector_group_restrictions() -> None:
     """Gate turning on data-access group restrictions for perm-synced
     connectors. Groups and perm sync are Business+, so the setting would be

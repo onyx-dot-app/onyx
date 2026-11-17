@@ -18,7 +18,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from onyx.configs.constants import DocumentSource
-from onyx.secondary_llm_flows.source_filter import SearchCycle
+from onyx.context.search.models import SearchCycle
 
 ASANA = DocumentSource.ASANA
 CONFLUENCE = DocumentSource.CONFLUENCE

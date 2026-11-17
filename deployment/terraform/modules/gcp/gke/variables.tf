@@ -380,10 +380,79 @@ variable "sandbox_gvisor_enabled" {
   default     = false
 }
 
+variable "craft_sandbox_runtime" {
+  type        = string
+  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". \"firecracker\" turns on nested virtualization and needs an Intel n2 or c3 machine type. Opencode sessions still run as pods; see enable_craft_pod_sandbox_node_pool. \"firecracker\" also maps the workload service account to a Google service account that can sign GCS URLs. See \"Craft sandboxes on Firecracker\" in the gcp module README."
+  default     = "pod"
+
+  validation {
+    condition     = contains(["pod", "firecracker"], var.craft_sandbox_runtime)
+    error_message = "craft_sandbox_runtime must be \"pod\" or \"firecracker\"."
+  }
+
+  # GCP offers nested virtualization on Intel types only. n2d, c2d, t2d and
+  # t2a (AMD and Arm) and e2 have none, and c3d is AMD.
+  validation {
+    condition     = var.craft_sandbox_runtime != "firecracker" || can(regex("^(n2|c3)-", var.sandbox_node_machine_type))
+    error_message = "craft_sandbox_runtime = \"firecracker\" needs an Intel n2 or c3 sandbox_node_machine_type, such as n2-standard-8. Other types have no /dev/kvm; keep craft_sandbox_runtime = \"pod\" on them."
+  }
+
+  # A gVisor pool runs pods under its own kernel, which gives them no /dev/kvm.
+  validation {
+    condition     = var.craft_sandbox_runtime != "firecracker" || !var.sandbox_gvisor_enabled
+    error_message = "craft_sandbox_runtime = \"firecracker\" cannot be used with sandbox_gvisor_enabled. Turn one of them off."
+  }
+}
+
+variable "enable_craft_pod_sandbox_node_pool" {
+  type        = bool
+  description = "With craft_sandbox_runtime = \"firecracker\", also create a small pod sandbox pool under the key \"sandboxpod\" (label onyx.app/workload=sandbox, taint workload=sandbox, no onyx.app/kvm). Pod sandboxes and the image prepuller run there, because the Firecracker pool carries the onyx.app/kvm taint."
+  default     = false
+
+  validation {
+    condition     = !var.enable_craft_pod_sandbox_node_pool || (var.enable_sandbox_node_pool && var.craft_sandbox_runtime == "firecracker")
+    error_message = "enable_craft_pod_sandbox_node_pool needs enable_sandbox_node_pool = true and craft_sandbox_runtime = \"firecracker\". With the pod runtime, the sandbox pool already runs pod sandboxes."
+  }
+
+  validation {
+    condition     = !var.enable_craft_pod_sandbox_node_pool || !contains(keys(var.node_pools), "sandboxpod")
+    error_message = "enable_craft_pod_sandbox_node_pool adds a pool under the key \"sandboxpod\", which node_pools already defines. Rename yours so the pod sandbox pool does not replace it."
+  }
+}
+
+variable "craft_pod_sandbox_node_machine_type" {
+  type        = string
+  description = "Machine type for the pod sandbox pool next to a Firecracker pool. One pod sandbox requests about 1.1 vCPU, 2.3 GiB and 5.5 GiB of ephemeral storage. The boot disk is sandbox_node_disk_size_gb."
+  default     = "n2-standard-4"
+}
+
+variable "craft_pod_sandbox_node_min_count" {
+  type        = number
+  description = "Minimum nodes in the pod sandbox pool, across all its zones"
+  default     = 1
+
+  validation {
+    condition     = var.craft_pod_sandbox_node_min_count >= 0
+    error_message = "craft_pod_sandbox_node_min_count must be 0 or more."
+  }
+}
+
+variable "craft_pod_sandbox_node_max_count" {
+  type        = number
+  description = "Maximum nodes in the pod sandbox pool, across all its zones"
+  default     = 2
+
+  validation {
+    condition     = var.craft_pod_sandbox_node_max_count >= 1 && var.craft_pod_sandbox_node_max_count >= var.craft_pod_sandbox_node_min_count
+    error_message = "craft_pod_sandbox_node_max_count must be 1 or more and at least craft_pod_sandbox_node_min_count."
+  }
+}
+
 # --- Workload identity -------------------------------------------------------
-# GKE federates a Kubernetes service account straight to IAM, so there is no
-# Google service account to impersonate. Grant roles to the
-# workload_identity_principal output instead.
+# GKE federates a Kubernetes service account straight to IAM, so by default
+# there is no Google service account to impersonate. The Firecracker runtime
+# adds one, because GCS signed URLs need it. Either way, grant roles to the
+# workload_identity_principal output.
 
 variable "workload_namespace" {
   type        = string
@@ -418,7 +487,7 @@ variable "create_workload_namespace" {
 
 variable "create_workload_service_account" {
   type        = bool
-  description = "Create the service account named by workload_service_account_name. Turn this off when the Helm chart already creates it; the principal output still names it."
+  description = "Create the service account named by workload_service_account_name. Turn this off when the Helm chart already creates it; the principal output still names it. With craft_sandbox_runtime = \"firecracker\", the chart must then add the iam.gke.io/gcp-service-account annotation from the workload_google_service_account_email output."
   default     = true
 }
 

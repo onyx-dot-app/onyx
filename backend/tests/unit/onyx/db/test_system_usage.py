@@ -21,6 +21,7 @@ def test_record_system_usage_builds_accumulating_upsert() -> None:
             model="claude-sonnet",
             flow="image_summarization",
             provider="anthropic",
+            model_configuration_id=None,
             input_tokens=100,
             output_tokens=20,
             cache_read_tokens=10,

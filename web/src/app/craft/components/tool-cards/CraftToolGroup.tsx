@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Collapsible, Tag, Text } from "@opal/components";
+import { Collapsible, Badge, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgCheckAll, SvgChevronDown, SvgLoader } from "@opal/icons";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
-import CometEdge from "@/app/craft/components/CometEdge";
+import CometEdge from "@/refresh-components/CometEdge";
 import { isSkillCall } from "@/app/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
@@ -14,8 +14,6 @@ interface CraftToolGroupProps {
   toolCalls: ToolCallState[];
   /** Once an assistant message follows, animate the block closed. */
   autoCollapse?: boolean;
-  /** Override the initial open/closed state (useful in Storybook). */
-  defaultOpen?: boolean;
 }
 
 function aggregateStatus(toolCalls: ToolCallState[]): ToolCallState["status"] {
@@ -44,15 +42,12 @@ function renderStatusIcon(toolCalls: ToolCallState[]) {
 export default function CraftToolGroup({
   toolCalls,
   autoCollapse = false,
-  defaultOpen,
 }: CraftToolGroupProps) {
   const t = useTranslations("craft.toolCards.group");
   const aggregate = aggregateStatus(toolCalls);
   // Open while the run is active so streaming calls stay visible and nothing
   // collapses as new calls append; settled groups start collapsed.
-  const [isOpen, setIsOpen] = useState(
-    defaultOpen ?? aggregate === "in_progress"
-  );
+  const [isOpen, setIsOpen] = useState(aggregate === "in_progress");
   // Skill groups get a comet while running and a thin border at rest.
   const skillGroup = toolCalls.some(isSkillCall);
   const skillActive = aggregate === "in_progress" && skillGroup;
@@ -92,10 +87,10 @@ export default function CraftToolGroup({
                   {t("working.label")}
                 </Text>
                 <span className="ms-auto shrink-0 flex items-center gap-2">
-                  <Tag
+                  <Badge
                     title={t("calls.tag", { count: toolCalls.length })}
-                    size="sm"
-                    color="gray"
+                    size={4}
+                    color="default"
                   />
                 </span>
                 <SvgChevronDown

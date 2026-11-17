@@ -10,7 +10,6 @@ import type { ReactNode, SVGProps } from "react";
 //   - Interactive.Container  (height + min-width + padding)
 //   - Button                 (icon sizing)
 //   - ContentAction          (padding only)
-//   - Content (ContentXl / ContentLg / ContentMd)  (edit-button size)
 // ---------------------------------------------------------------------------
 
 // Base Size Types:
@@ -132,12 +131,10 @@ export type ContextualMenuWidth = 30 | 40 | 50 | 60 | 70 | 80 | 90 | 120 | 160;
 export type ShadowVariants = "none" | Extract<SizeVariants, "sm" | "md" | "lg">;
 
 /**
- * Size variants with numeric overrides.
- *
- * Allows size specification as a named preset or a custom numeric value.
- * Used in components that need programmatic sizing flexibility.
+ * `"fit"`, `"full"`, or a fixed length as a {@link Spacing} step (`N / 4` rem,
+ * converted with `spacingToRem`), e.g. `46` is `11.5rem`.
  */
-export type OverridableExtremaSizeVariants = ExtremaSizeVariants | number;
+export type OverridableExtremaSizeVariants = ExtremaSizeVariants | Spacing;
 
 // ---------------------------------------------------------------------------
 // Orientation Variants
@@ -172,32 +169,11 @@ export type CardColor =
   | "status-success-00"
   | "status-warning-00"
   | "status-error-00"
-  | "theme-amber-01";
+  | "theme-amber-01"
+  | "theme-purple-01";
 
 // ---------------------------------------------------------------------------
-// Color Types
-// ---------------------------------------------------------------------------
-
-/**
- * Semantic color roles used across the design system for foreground, border,
- * and other colorable surfaces.
- *
- * - `"default"` — standard text/border color (`text-04` / `border-01`)
- * - `"muted"` — de-emphasized color (`text-03`)
- * - `"success"` / `"warning"` / `"danger"` — a status glyph against muted body
- *   text: the icon carries the state and the text stays secondary (`text-03`)
- * - `"interactive"` — follows the interactive coloring system (`currentColor` / `--interactive-foreground`)
- */
-export type ColorTypes =
-  | "default"
-  | "muted"
-  | "success"
-  | "warning"
-  | "danger"
-  | "interactive";
-
-// ---------------------------------------------------------------------------
-// Status Variants
+// Status Colors
 // ---------------------------------------------------------------------------
 
 /**
@@ -205,12 +181,13 @@ export type ColorTypes =
  * MessageCard}, {@link Card}'s `borderColor`). Each variant maps to a
  * dedicated background/border/icon palette in the design system.
  */
-export type StatusVariants =
+export type StatusColor =
   | "default"
   | "info"
   | "success"
   | "warning"
   | "pending"
+  | "queued"
   | "error";
 
 // ---------------------------------------------------------------------------

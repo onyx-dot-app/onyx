@@ -23,7 +23,7 @@
       "name": "Jamba Large",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-07-01",
+      "release_date": "2025-07-03",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -50,7 +50,7 @@
       "name": "Jamba Mini",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2026-01-01",
+      "release_date": "2026-01-08",
       "structured_output": true,
       "temperature": true,
       "tool_call": true

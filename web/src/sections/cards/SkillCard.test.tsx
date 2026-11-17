@@ -5,10 +5,6 @@ import SkillCard, {
 } from "@/sections/cards/SkillCard";
 import type { CustomSkill } from "@/lib/skills/types";
 
-jest.mock("@/providers/UserProvider", () => ({
-  useUser: () => ({ isAdmin: false }),
-}));
-
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
 }));
@@ -42,6 +38,10 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     enabled: true,
     can_toggle: true,
     installation_policy: "AVAILABLE",
+    default_installation_policy: "AVAILABLE",
+    can_delete: true,
+    group_summaries: [],
+    required_for_user: false,
     author_user_id: "user-id",
     author_email: "owner@example.com",
     owner: { id: "user-id", email: "owner@example.com" },
@@ -53,6 +53,10 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     public_permission: null,
     user_permission: "OWNER",
     external_app: null,
+    current_version_id: null,
+    current_version_number: null,
+    published_version_number: null,
+    pending_version_number: null,
     ...overrides,
   };
   return {
@@ -78,10 +82,48 @@ function invalidCustom(): CustomSkillCardItem {
     enabled: false,
     can_toggle: false,
     installation_policy: "AVAILABLE",
+    default_installation_policy: "AVAILABLE",
+    can_delete: true,
+    required_for_user: false,
   });
 }
 
 describe("SkillCard", () => {
+  it.each([
+    { label: "Personal", is_personal: true, public_permission: null },
+    { label: "Shared", is_personal: false, public_permission: null },
+    { label: "Organization", is_personal: false, public_permission: "VIEWER" },
+  ] as const)(
+    "shows $label access from the saved sharing state",
+    ({ label, is_personal, public_permission }) => {
+      render(<SkillCard item={custom({ is_personal, public_permission })} />);
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.queryByText("Custom")).not.toBeInTheDocument();
+    }
+  );
+
+  it("keeps selection and preview clicks separate", async () => {
+    const user = setupUser();
+    const item = custom();
+    const onClick = jest.fn();
+    const onCheckedChange = jest.fn();
+    render(
+      <SkillCard
+        item={item}
+        onClick={onClick}
+        selection={{ checked: false, disabled: false, onCheckedChange }}
+      />
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select Report Writer" })
+    );
+    expect(onCheckedChange).toHaveBeenCalledWith(true);
+    expect(onClick).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: item.name }));
+    expect(onClick).toHaveBeenCalledWith(item);
+    expect(onCheckedChange).toHaveBeenCalledTimes(1);
+  });
+
   it("opens a required skill preview for a viewer by click or keyboard", async () => {
     const user = setupUser();
     const item = custom({
@@ -150,7 +192,7 @@ describe("SkillCard", () => {
     const user = setupUser();
     render(
       <SkillCard
-        item={custom({ installation_policy: "REQUIRED", can_toggle: false })}
+        item={custom({ required_for_user: true, can_toggle: false })}
       />
     );
 
@@ -163,7 +205,12 @@ describe("SkillCard", () => {
   it("shows required skills without a switch or delete action", () => {
     render(
       <SkillCard
-        item={custom({ installation_policy: "REQUIRED", can_toggle: false })}
+        item={custom({
+          installation_policy: "REQUIRED",
+          can_delete: false,
+          required_for_user: true,
+          can_toggle: false,
+        })}
         onDelete={jest.fn()}
       />
     );
@@ -183,6 +230,74 @@ describe("SkillCard", () => {
     await user.click(screen.getByRole("button", { name: "Edit sharing" }));
     expect(onShare).toHaveBeenCalledWith(item);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("lists the groups and their settings the caller may see", () => {
+    render(
+      <SkillCard
+        item={custom({
+          group_summaries: [
+            {
+              group_id: 3,
+              group_name: "Design",
+              permission: "VIEWER",
+              installation_policy: null,
+            },
+            {
+              group_id: 4,
+              group_name: "Ops",
+              permission: null,
+              installation_policy: "NOT_AVAILABLE",
+            },
+          ],
+        })}
+      />
+    );
+    expect(
+      screen.getByText("Groups: Design and Ops: Not available")
+    ).toBeInTheDocument();
+  });
+
+  it("shows no groups line without group summaries", () => {
+    render(<SkillCard item={custom()} />);
+    expect(screen.queryByText(/^Groups:/)).not.toBeInTheDocument();
+  });
+
+  it("shows Unpublished changes when the current version is newer than the published one", () => {
+    const { rerender } = render(
+      <SkillCard
+        item={custom({
+          public_permission: "VIEWER",
+          current_version_number: 3,
+          published_version_number: 2,
+        })}
+      />
+    );
+    expect(screen.getByText("Unpublished changes")).toBeInTheDocument();
+    rerender(
+      <SkillCard
+        item={custom({
+          public_permission: "VIEWER",
+          current_version_number: 3,
+          published_version_number: 3,
+        })}
+      />
+    );
+    expect(screen.queryByText("Unpublished changes")).not.toBeInTheDocument();
+  });
+
+  it("hides Unpublished changes from viewers, who run the published version", () => {
+    render(
+      <SkillCard
+        item={custom({
+          public_permission: "VIEWER",
+          user_permission: "VIEWER",
+          current_version_number: 3,
+          published_version_number: 2,
+        })}
+      />
+    );
+    expect(screen.queryByText("Unpublished changes")).not.toBeInTheDocument();
   });
 
   it("hides sharing controls from viewers", () => {
@@ -387,18 +502,18 @@ test("invalid editable skills can be deleted without opening their preview", asy
   expect(onClick).not.toHaveBeenCalled();
 });
 
-test.each(["OWNER", "EDITOR", "VIEWER"] as const)(
-  "delete follows %s permissions even when the skill is invalid",
-  (user_permission) => {
+test.each([true, false])(
+  "Delete follows can_delete (%s) even when the skill is invalid",
+  (can_delete) => {
     render(
       <SkillCard
-        item={custom({ user_permission, is_valid: false })}
+        item={custom({ can_delete, is_valid: false })}
         onDelete={jest.fn()}
       />
     );
     const button = screen.queryByRole("button", { name: "Delete skill" });
-    if (user_permission === "VIEWER") expect(button).not.toBeInTheDocument();
-    else expect(button).toBeInTheDocument();
+    if (can_delete) expect(button).toBeInTheDocument();
+    else expect(button).not.toBeInTheDocument();
   }
 );
 

@@ -1,0 +1,231 @@
+"""The sandbox interface for an agent harness that runs outside the sandbox.
+
+The harness (agent loop, LLM calls, event stream) runs in an Onyx process and
+calls into the sandbox only through `HarnessSandbox`. One sandbox serves one
+user; each chat session has its own directory in it
+(`SESSION_WORKSPACE_ROOT/<session_id>`), which is the default working
+directory. Commands are not confined to that directory.
+
+Every call blocks the calling thread (agent runtime tools run in threads).
+`exec_command` and `write_stdin` stream output as it arrives: iterate their
+events and read the last one, an `ExecCommandResult`, or call
+`collect_exec_result`.
+
+Exec contract (Codex `exec_command` / `write_stdin`):
+- `exec_command` starts a command and waits up to `yield_time_ms`. If the
+  command ended, the result has its exit code. Otherwise it has a
+  `session_id` for `write_stdin`.
+- `write_stdin` with no chars polls for new output. Chars go to the
+  command's stdin. "\\x03" interrupts the command.
+- Output of one call keeps at most `EXEC_CALL_OUTPUT_MAX_BYTES` (head and
+  tail); the result text keeps at most `max_output_tokens` (head and tail).
+- Exec session IDs stay valid across turns and API pods until the command's
+  record is evicted, or the sandbox stops (idle stop, restore): then the call
+  raises `ExecSessionEndedError`.
+- A cancel of the current signal (`onyx.llm.cancellation`: a Stop, or the
+  end of the code mode cell that made the call) ends the wait at once and
+  kills the command (SIGKILL), however the wait ends; the call raises
+  `AgentCancelled`. A call cancelled before it starts its command, or writes
+  its input, does neither.
+"""
+
+import abc
+import posixpath
+from collections.abc import Generator, Iterator, Sequence
+from uuid import UUID
+
+from onyx.server.features.build.sandbox.models import (
+    ExecCommandResult,
+    ExecEvent,
+    HarnessSandboxRef,
+    SandboxPathInfo,
+)
+
+# Parent of each chat session's working directory in the sandbox.
+SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
+
+# Most exec session records per sandbox; the least recently used goes
+# first. The guest daemon caps the running commands.
+MAX_EXEC_SESSIONS_PER_SANDBOX = 64
+
+# The env of every command, so that tools write plain, unpaged UTF-8 text.
+EXEC_DEFAULT_ENV: dict[str, str] = {
+    "NO_COLOR": "1",
+    "TERM": "dumb",
+    "PAGER": "cat",
+    "GIT_PAGER": "cat",
+    "GH_PAGER": "cat",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+}
+
+INTERRUPT_CHAR = "\x03"
+
+
+def session_workspace(session_id: UUID) -> str:
+    return f"{SESSION_WORKSPACE_ROOT}/{session_id}"
+
+
+def collect_exec_result(events: Iterator[ExecEvent]) -> ExecCommandResult:
+    """Drain an exec stream and return its result. Reads the stream to its
+    end, so the implementation releases what it holds."""
+    result: ExecCommandResult | None = None
+    for event in events:
+        if isinstance(event, ExecCommandResult):
+            result = event
+    if result is None:
+        raise RuntimeError("The exec stream ended without a result")
+    return result
+
+
+class HarnessSandboxError(Exception):
+    """A sandbox call failed in a way the model can read and act on."""
+
+
+class ExecSessionNotFoundError(HarnessSandboxError):
+    def __init__(self, exec_session_id: str) -> None:
+        super().__init__(
+            f"Unknown exec session {exec_session_id!r}: it was never started in "
+            "this chat session, or it was evicted"
+        )
+
+
+class ExecSessionEndedError(HarnessSandboxError):
+    def __init__(self, exec_session_id: str) -> None:
+        super().__init__(
+            f"Exec session {exec_session_id!r} ended: the sandbox restarted, "
+            "and processes do not survive a restart. Run the command again."
+        )
+
+
+class ExecCapReachedError(HarnessSandboxError):
+    def __init__(self) -> None:
+        super().__init__(
+            "Too many commands run in this sandbox. Stop one (write_stdin "
+            'with "\\x03") or wait for one to end, then run the command again.'
+        )
+
+
+class SandboxPathError(HarnessSandboxError):
+    """The path is outside the session directory."""
+
+
+class SandboxFileTooLargeError(HarnessSandboxError):
+    pass
+
+
+class SandboxFileNotFoundError(HarnessSandboxError):
+    def __init__(self, path: str) -> None:
+        super().__init__(f"{path!r} does not exist")
+
+
+def session_relative_path(ref: HarnessSandboxRef, path: str) -> str:
+    """The session-relative form of `path` ("" = the session directory).
+    Accepts a relative path or an absolute path in the session directory."""
+    root = session_workspace(ref.session_id)
+    normalized = posixpath.normpath(path or ".")
+    if posixpath.isabs(normalized):
+        if normalized == root:
+            return ""
+        if not normalized.startswith(root + "/"):
+            raise SandboxPathError(
+                f"{path!r} is outside the session directory {root}; use "
+                "exec_command elsewhere"
+            )
+        return normalized[len(root) + 1 :]
+    if normalized == ".." or normalized.startswith("../"):
+        raise SandboxPathError(f"{path!r} leaves the session directory")
+    return "" if normalized == "." else normalized
+
+
+class HarnessSandbox(abc.ABC):
+    """What the harness calls. All methods block; see the module docstring."""
+
+    @abc.abstractmethod
+    def ensure_running(self, ref: HarnessSandboxRef) -> None:
+        """Start the sandbox if needed and return when the guest is
+        initialized. Every other call does this first."""
+
+    @abc.abstractmethod
+    def exec_command(
+        self,
+        ref: HarnessSandboxRef,
+        cmd: str,
+        *,
+        workdir: str | None = None,
+        yield_time_ms: int | None = None,
+        max_output_tokens: int | None = None,
+    ) -> Generator[ExecEvent]:
+        """Run `cmd` with bash in `workdir` (default: the session
+        directory)."""
+
+    @abc.abstractmethod
+    def write_stdin(
+        self,
+        ref: HarnessSandboxRef,
+        exec_session_id: str,
+        chars: str = "",
+        *,
+        yield_time_ms: int | None = None,
+        max_output_tokens: int | None = None,
+    ) -> Generator[ExecEvent]:
+        """Write to a running command, or poll it with empty chars."""
+
+    # Files: only what exec_command cannot do well. view_image needs exact
+    # bytes (exec output is text), and apply_patch needs exact writes of any
+    # content (no shell quoting) and typed path facts. Paths are relative to
+    # the session directory, or absolute inside it.
+
+    @abc.abstractmethod
+    def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
+        """Follows links inside the session directory. Raises
+        SandboxFileNotFoundError for a missing file and
+        SandboxFileTooLargeError over max_bytes."""
+
+    @abc.abstractmethod
+    def write_file(
+        self, ref: HarnessSandboxRef, path: str, data: bytes, *, mode: int = 0o644
+    ) -> None:
+        """Atomic replace (a link is replaced, not followed); creates parent
+        directories. `mode`: permission bits."""
+
+    @abc.abstractmethod
+    def stat_files(
+        self, ref: HarnessSandboxRef, paths: Sequence[str]
+    ) -> list[SandboxPathInfo]:
+        """The facts of each path, in order: the entry itself, and what it
+        names through the links inside the session directory. A missing path,
+        a link out of the session and a link loop are reported, not raised."""
+
+    @abc.abstractmethod
+    def delete_file(self, ref: HarnessSandboxRef, path: str) -> bool:
+        """Delete a file or a link (not a directory). False when nothing was
+        at the path."""
+
+    @abc.abstractmethod
+    def publish_artifact(
+        self, ref: HarnessSandboxRef, path: str, *, display_name: str | None = None
+    ) -> str:
+        """Copy a session file to the file store. Returns the file ID."""
+
+    @abc.abstractmethod
+    def touch(self, ref: HarnessSandboxRef) -> None:
+        """Record activity for the idle stop. Never starts the sandbox."""
+
+    @abc.abstractmethod
+    def begin_turn(self, ref: HarnessSandboxRef) -> None:
+        """Mark a turn in progress (the sandbox is busy). Call again to
+        renew; the mark expires on its own if end_turn never runs."""
+
+    @abc.abstractmethod
+    def end_turn(self, ref: HarnessSandboxRef) -> None:
+        pass
+
+    @abc.abstractmethod
+    def set_approval_parked(self, ref: HarnessSandboxRef, parked: bool) -> None:
+        """Mark or clear an approval that waits for the user (busy)."""
+
+    @abc.abstractmethod
+    def is_busy(self, *, tenant_id: str, sandbox_id: UUID) -> bool:
+        """True while a command runs, a turn is in progress, or an approval
+        waits. Never starts the sandbox."""

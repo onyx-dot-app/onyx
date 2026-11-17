@@ -76,6 +76,7 @@ _Note: bash completion requires the [bash-completion](https://github.com/scop/ba
 | Use a separate dataset and infrastructure | `ods --isolated stack up` | Background, inspect with `ods --isolated stack status` |
 | Run a frontend build, test, or other package script | `ods web <script> [args...]` | Until the script exits |
 | Run Onyx in Docker containers | `ods compose [profile]` | Docker-managed containers |
+| Run Craft against the shared Firecracker dev cluster | `ods craft-dev api` and `ods craft-dev web` | Foreground, stop with Ctrl-C |
 
 Source commands use the selected project's ports and environment. Shared
 infrastructure is the default. `--project NAME` selects an existing project;
@@ -247,6 +248,49 @@ ods backend model-server
 ods backend model-server --port 9001
 ```
 
+### `craft-dev` - Run Craft Against the Firecracker Dev Cluster
+
+Run a local Craft API and web server against the shared remote Firecracker dev
+cluster, and work with your own sandbox VM there. The commands run the Python
+launchers in `deployment/helm/dev` with `uv run`. That directory's
+[README](../../deployment/helm/dev/README.md) has the full workflow.
+
+A profile file holds the cluster facts: `--profile`, else `CRAFT_DEV_PROFILE`,
+else `dev/craft-dev.yaml` in the onyx-internal checkout next to this repository.
+kubectl always gets an explicit context. `--context` (or `CRAFT_DEV_CONTEXT`)
+must be in the profile's `kube.allowed_contexts`.
+
+```shell
+ods craft-dev <subcommand>
+```
+
+**Subcommands:**
+
+- `doctor` - Check AWS SSO, VPN egress, kube access, Telepresence, host agent mTLS, and the Alembic head. Changes nothing.
+- `api` - Start the local API server. Needs `telepresence connect`. Arguments after `--` go to uvicorn.
+- `web` - Start the local web server against the local API.
+- `vms` - Show your VM.
+- `skills push <dir>` - Put a local directory on a managed mount of your VM (`--mount`, `--wake`).
+- `exec -- <command>` - Run a command in your VM as the sandbox user (`--wake`, `--cwd`).
+- `logs` - Show the guest and agent lines of your VM (`--guest`, `--agent`, `--since`, `--tail`, `-f`).
+- `reset` - Save your sessions, then stop your VM (`--force` skips the save).
+
+The VM commands act only on your user: `--user`, else `CRAFT_DEV_USER`, else
+`user.email` in the profile.
+
+**Examples:**
+
+```shell
+ods craft-dev doctor
+ods craft-dev api --port 8081
+ods craft-dev web --port 8081
+CRAFT_DEV_USER=me@example.com ods craft-dev skills push ./my-skills --wake
+ods craft-dev exec -- ls -la /mnt/skills
+```
+
+Until an `onyx-devtools` release includes `craft-dev`, run it from source at the
+repository root: `go -C tools/ods run . craft-dev doctor`.
+
 ### `stack` - Run the Local Dev Stack of a Worktree
 
 Run the whole local dev stack from a source checkout without an editor:
@@ -348,9 +392,15 @@ forgets a service. `down` also stops the Compose containers; volumes are kept.
 | `default` | `minimal` plus the primary, light, beat, docfetching, docprocessing and user_file_processing Celery workers |
 | `full` | Every service in the `Run All Onyx Services` compound |
 
-The model server comes from Compose. `--local-model-server` runs it from the
-checkout instead, on its own leased port, and leaves the Compose inference
-server down. The Slack bot (`full` only) binds its metrics server to port 8000;
+The model server comes from Compose and runs the `edge` image, which is built
+from `main` and bundles the checkout's default embedding model. The release
+image (`latest`) can lack that model, and the model server then downloads it
+from Hugging Face on the first embed. `up` pulls the current `edge` image and
+applies it when it creates or recreates the Compose containers; a failed pull
+keeps the cached image. `start` and `restart` do not touch the containers.
+Set `ONYX_MODEL_SERVER_IMAGE` or `IMAGE_TAG` in your shell to run another
+image. `--local-model-server` runs it from the checkout instead, on its own
+leased port, and leaves the Compose inference server down. The Slack bot (`full` only) binds its metrics server to port 8000;
 the stack never leases 8000 and skips the bot when the port is taken.
 
 **Flags** (`up`, `start`, `restart`):
@@ -529,6 +579,7 @@ later arguments go to the suite's test runner.
 | `ods` | | `tools/ods` | `go test` |
 | `cli` | | `cli` | `go test` |
 | `terraform` | `tf` | `terraform-provider-onyx` | `go test` |
+| `microvm` | | `microvm` | `go test` |
 
 The Go suites run with `-race`, the same as `pr-golang-tests.yml`. A runner that
 takes packages rather than files, such as `go test`, runs the package that holds
@@ -573,8 +624,8 @@ number counts only its own tests. That is a number the package's owner can act
 on; a cross-package `-coverpkg` total would credit a package for statements its
 own tests never assert on.
 
-The suites are the same Go modules `ods test` knows: `ods`, `cli`, and
-`terraform`. A module directory such as `tools/ods` is accepted in place of a
+The suites are the same Go modules `ods test` knows: `ods`, `cli`,
+`terraform` and `microvm`. A module directory such as `tools/ods` is accepted in place of a
 suite name, which is what CI passes.
 
 **Flags:**
@@ -996,6 +1047,52 @@ ods audit --format=sarif,text > audit.sarif
 ods audit --all-lockfiles --web --python
 ```
 
+#### Rust-built PyPI tools in images
+
+The image scanner records the `uv` binary as the crates.io crate `uv`, but uv advisories are
+filed on PyPI. `ods audit image` also matches each such crate as the PyPI package of the same
+version. Add other tools of this kind to `pypiToolsFromCrates` in `internal/audit/image.go`.
+
+#### Audit software installed outside package managers
+
+Use `ods audit image IMAGE --sbom /path/in/image.cdx.json` for a required CycloneDX inventory.
+ODS scans the inventory with pinned Grype and combines its findings with the OSV image report.
+Docker must be available. Missing inventory, empty inventory, and scanner errors fail the audit.
+Use `--sbom-only` when a job checks only software from supplemental inventories.
+The same advisory exceptions, JSON/SARIF reports, and CVE alerts apply to both scanners.
+
+Deployment opts into update deadlines with `--update-policy s3://onyx-internal-tools/audit/updates.json`.
+PR audits and CVE collection scan vulnerabilities without reading update policy.
+Missing or invalid policy fails deployment audits.
+This state is separate from advisory exceptions. It records an emergency minimum and each release's first observation.
+Routine updates warn after 24 hours and block after 72 hours. Emergency minimums block immediately.
+Stale upstream observations warn without resetting recorded deadlines.
+Image scans leave freshness checks disabled unless `--update-policy` is supplied.
+`ods audit gate` includes freshness checks as part of its deployment checks.
+
+CVE Tracking owns policy observation and S3 writes. Its manual `minimum` input raises Chrome's emergency minimum.
+It saves this minimum before upstream discovery, preserving release timestamps even if discovery fails.
+It checks main and supported release branches. Update Sandbox Browser opens or updates pin PRs for stale branches.
+CI builds the audit binary from source. Installed ODS commands receive these features through the normal devtools release.
+
+#### Audit the Craft Firecracker guest kernel and Firecracker
+
+A scanner cannot read a bare `vmlinux` or the Firecracker binaries.
+`ods audit craft-fc` reads the `KERNEL_TAG` and `FC_VERSION` pins in
+`deployment/craft-fc/Dockerfile.artifacts` and matches them against advisory feeds:
+
+- The guest kernel is an `amazonlinux/linux` tag: the AL2023 kernel package source
+  (`kernel6.18-<version>`) or a `microvm-kernel` tag. Each Amazon Linux 2023 advisory (ALAS)
+  for the same kernel series, fixed in a newer package than the pin, is a finding.
+- Firecracker is matched against the GitHub security advisories of `firecracker-microvm/firecracker`.
+
+The allowlist, report formats and `--fail-on` work as for `ods audit image`.
+A feed that cannot be read fails the command. Set `GH_TOKEN` to raise the GitHub API rate limit.
+
+```shell
+ods audit craft-fc --fail-on=high
+```
+
 #### Checking a release branch before a tag
 
 `ods audit gate` runs the deploy gate on the checked-out tree: the lockfiles,
@@ -1276,6 +1373,58 @@ ods trace --project admin
 ods trace --list
 ```
 
+### `deploy edge` - Deploy main or a Branch to Edge
+
+Build images from `origin/main` or a pushed branch, then deploy them to the
+edge environment.
+
+```shell
+ods deploy edge [flags]
+```
+
+Without `--ref`, or with `--ref main`, the command force-pushes the `edge` tag
+to `origin/main`. With `--ref <branch or commit>`, it pushes the tag
+`dev-build-<branch>-<short-sha>` on that commit. The tag starts
+`deployment.yml`, which publishes the images to Docker Hub. When the build
+succeeds, the command dispatches the configured deploy workflow with
+`version_tag=<tag>`.
+
+A `dev-build-` tag never moves. If the tag already points at the commit, the
+command waits for its build and does not push again. If the tag points at
+another commit, the command stops.
+
+On first run, the command asks for the deploy target repo and the workflow
+filename, and saves them in the ods config file.
+
+| Flag                | Default | Description                                                         |
+| ------------------- | ------- | ------------------------------------------------------------------- |
+| `--ref`             | `main`  | Branch name or full commit SHA on origin to build                   |
+| `--tag`             |         | Tag for `--ref` instead of the derived tag; must start `dev-build-`, and must not contain `cloud` or end in `-dev` |
+| `--dry-run`         | `false` | Resolve the ref and tag only; push and dispatch nothing             |
+| `--yes`             | `false` | Skip the confirmation prompt                                        |
+| `--no-wait-deploy`  | `false` | Do not wait for the deploy workflow to finish                       |
+| `--verify`          | `false` | Run pre-push hooks when you push the tag                            |
+| `--target-repo`     |         | Deploy workflow repo (owner/name); overrides saved config           |
+| `--target-workflow` |         | Deploy workflow filename; overrides saved config                    |
+
+> [!IMPORTANT]
+> For a branch deploy, the onyx repo's `release` environment must admit tags
+> that match `dev-build-*` (Settings > Environments > release > Deployment
+> branches and tags). Without this rule, GitHub rejects the build jobs. The
+> images are public on Docker Hub. The scheduled nightly deploy replaces a
+> branch deployment.
+
+```shell
+# Build and deploy origin/main
+ods deploy edge
+
+# Build and deploy a pushed branch
+ods deploy edge --ref user/my-feature
+
+# Show the tag, push nothing
+ods deploy edge --ref user/my-feature --dry-run
+```
+
 ### Testing Changes Locally (Dry Run)
 
 Both `run-ci` and `cherry-pick` support `--dry-run` to test without making remote changes:
@@ -1345,10 +1494,14 @@ matching `[build-system] requires` in all three `pyproject.toml` files; the
 `build-constraints-drift` hook fails if they disagree.
 
 `go-bin` ships the Go toolchain used to compile the binary. Bumping Go means
-moving it everywhere at once: the `go` directive in `go.mod`, `cli/Dockerfile`,
-the `setup-go` and `GO_VERSION` pins across `.github/workflows/`,
-`.devcontainer/Dockerfile`, the `go-bin` pin in all three `pyproject.toml` files
-and in `tools/requirements/build-constraints.in`, and the compiled `build-constraints.txt`.
+moving it everywhere at once: the `go` directive in every `go.mod`, the `golang`
+image tag and digest in `cli/Dockerfile` and `microvm/Dockerfile`, the `setup-go`
+and `GO_VERSION` pins across `.github/workflows/`, `GO_VERSION` and both tarball
+checksums in `.devcontainer/Dockerfile`, the `go-bin` pin in all three
+`pyproject.toml` files and in `tools/requirements/build-constraints.in`, the
+compiled `build-constraints.txt`, and the golangci-lint `language_version` in
+`.pre-commit-config.yaml`. A new Go release can need a newer golangci-lint, so
+run the hook on a file in each module after the bump.
 
 ## Deploy
 

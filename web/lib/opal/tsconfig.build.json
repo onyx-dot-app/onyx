@@ -14,5 +14,5 @@
       "@onyx-ai/shared/contracts": ["../shared/dist/contracts/index.d.ts"]
     }
   },
-  "exclude": ["node_modules", "**/*.stories.tsx", "**/*.test.ts", "**/*.test.tsx"]
+  "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx"]
 }

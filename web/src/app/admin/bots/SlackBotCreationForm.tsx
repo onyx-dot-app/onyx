@@ -2,7 +2,6 @@
 
 import CardSection from "@/components/admin/CardSection";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SlackTokensForm } from "./SlackTokensForm";
 import { SettingsLayouts } from "@opal/layouts";
@@ -17,7 +16,6 @@ export function NewSlackBotForm() {
     app_token: "",
     user_token: "",
   });
-  const router = useRouter();
 
   return (
     <SettingsLayouts.Root>
@@ -30,11 +28,7 @@ export function NewSlackBotForm() {
       <SettingsLayouts.Body>
         <CardSection>
           <div className="p-4">
-            <SlackTokensForm
-              isUpdate={false}
-              initialValues={formValues}
-              router={router}
-            />
+            <SlackTokensForm isUpdate={false} initialValues={formValues} />
           </div>
         </CardSection>
       </SettingsLayouts.Body>

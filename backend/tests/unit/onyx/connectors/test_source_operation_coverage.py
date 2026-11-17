@@ -7,16 +7,37 @@ a gateway is picked up here automatically; it cannot forget to wire the test.
 """
 
 from collections.abc import Callable
+from datetime import datetime, timezone
+from io import BytesIO
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.azure_datalake.models import (
+    AzureDataLakePath,
+    AzureDataLakePathPage,
+    AzureRoleAssignment,
+    AzureRoleDefinition,
+    AzureStorageAccountPage,
+    AzureStorageAccountResource,
+    AzureSubscription,
+    AzureSubscriptionPage,
+)
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
+)
+from onyx.connectors.egnyte.models import (
+    EgnyteFile,
+    EgnyteFolder,
+    EgnyteFolderPage,
+    EgnyteGroup,
+    EgnyteGroupRef,
+    EgnyteUserInfo,
+    EgnyteUserType,
 )
 from onyx.connectors.github.models import (
     GitHubGitTree,
@@ -336,9 +357,96 @@ def _configure_youtrack_spy(spy: MagicMock) -> None:
     )
 
 
+def _configure_azure_datalake_spy(spy: MagicMock) -> None:
+    """A container holding one file, so the read check reaches the download,
+    in an account that Azure Resource Manager lists with one role assignment,
+    in a tenant with one group."""
+    spy.list_subscriptions.return_value = AzureSubscriptionPage(
+        subscriptions=[AzureSubscription(subscription_id="sub")]
+    )
+    spy.list_storage_accounts.return_value = AzureStorageAccountPage(
+        accounts=[
+            AzureStorageAccountResource(
+                id="/subscriptions/sub/resourceGroups/rg/providers/"
+                "Microsoft.Storage/storageAccounts/onyxtest",
+                name="onyxtest",
+            )
+        ]
+    )
+    spy.list_role_assignments.return_value = [
+        AzureRoleAssignment(
+            id="assignment",
+            principal_id="user",
+            principal_type="User",
+            role_definition_id="/providers/Microsoft.Authorization/roleDefinitions/r",
+        )
+    ]
+    spy.get_role_definition.return_value = AzureRoleDefinition(id="r")
+    spy.list_deny_assignments.return_value = []
+    spy.list_groups.return_value = EntraPage[EntraGroup](items=[EntraGroup(id="group")])
+    spy.list_paths_page.return_value = AzureDataLakePathPage(
+        paths=[
+            AzureDataLakePath(
+                name="docs/readme.txt",
+                is_directory=False,
+                last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                content_length=10,
+            )
+        ],
+        continuation_token=None,
+    )
+
+
+def _configure_asana_spy(spy: MagicMock) -> None:
+    """One project holding one task with a comment and a creator, so the
+    tasks sample reaches the comment and user reads."""
+    workspace = {"gid": "1", "name": "Acme"}
+    project = {"gid": "2", "name": "Roadmap", "archived": False, "workspace": workspace}
+    spy.get_me.return_value = {"gid": "u", "workspaces": [workspace]}
+    spy.get_workspace.return_value = workspace
+    spy.get_team.return_value = {"gid": "3", "name": "Eng", "organization": workspace}
+    spy.get_project.return_value = project
+    spy.iterate_projects.side_effect = lambda **_kwargs: iter([project])
+    spy.iterate_project_tasks.side_effect = lambda **_kwargs: iter(
+        [{"gid": "4", "name": "Task", "created_by": {"gid": "u"}}]
+    )
+    spy.iterate_task_stories.side_effect = lambda **_kwargs: iter(
+        [{"gid": "5", "resource_subtype": "comment_added"}]
+    )
+
+
+def _configure_egnyte_spy(spy: MagicMock) -> None:
+    """A folder holding one file, so the files check reaches the download."""
+    folder = EgnyteFolder(name="Docs", path="/Shared/Docs", folder_id="f1")
+    spy.list_folder_page.return_value = EgnyteFolderPage(
+        folder=folder,
+        folders=[],
+        files=[
+            EgnyteFile(
+                name="a.txt",
+                path="/Shared/Docs/a.txt",
+                group_id="g1",
+                entry_id="e1",
+                last_modified="Tue, 10 Nov 2026 18:00:00 GMT",
+            )
+        ],
+    )
+    spy.list_folder_page_with_permissions.return_value = (
+        spy.list_folder_page.return_value
+    )
+    spy.download_file.return_value = BytesIO(b"text")
+    spy.get_user_info.return_value = EgnyteUserInfo(
+        username="admin", user_type=EgnyteUserType.ADMIN
+    )
+    spy.list_users.return_value = []
+    spy.list_groups.return_value = [EgnyteGroupRef(id="g1", display_name="Team")]
+    spy.get_group.return_value = EgnyteGroup(id="g1", display_name="Team")
+
+
 # A unit is covered when the checks exercise it under any one configuration:
 # a source whose credential picks the API family needs one per family.
 _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
+    DocumentSource.ASANA: [_configure_asana_spy],
     DocumentSource.CONFLUENCE: [
         _configure_confluence_spy,
         _configure_confluence_rest_spy,
@@ -349,11 +457,19 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.GITHUB: [_configure_github_spy, _configure_github_user_owner_spy],
     DocumentSource.SLACK: [_configure_slack_spy],
     DocumentSource.YOUTRACK: [_configure_youtrack_spy],
+    DocumentSource.AZURE_DATALAKE: [_configure_azure_datalake_spy],
+    DocumentSource.EGNYTE: [_configure_egnyte_spy],
 }
 
 # The connector config the checks read, per source (default: empty). Every
 # spy configuration runs with every config listed here.
 _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
+    # The team filter applies only without project IDs, and the workspace
+    # listing only without them too.
+    DocumentSource.ASANA: [
+        {"asana_workspace_id": "1", "asana_project_ids": "2"},
+        {"asana_workspace_id": "1", "asana_team_id": "3"},
+    ],
     DocumentSource.GITHUB: [
         {
             "repo_owner": "acme",
@@ -370,6 +486,10 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
     DocumentSource.NOTION: [{"root_page_id": "17ab3186873d418fb899c3f6a43f68de"}],
     # The selected-scope checks read teams and projects only when some are set.
     DocumentSource.LINEAR: [{"team_keys": ["ENG"], "projects": ["Roadmap"]}],
+    DocumentSource.AZURE_DATALAKE: [
+        {"account_name": "onyxtest", "container_name": "docs", "path_prefix": "docs"}
+    ],
+    DocumentSource.EGNYTE: [{"folder_path": "/Shared/Docs"}],
 }
 
 

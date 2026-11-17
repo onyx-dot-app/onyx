@@ -12,12 +12,22 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.tenants.team_membership_api import leave_organization
 from onyx.auth.users import UserManager
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.models import User, User__UserGroup
-from onyx.db.skill import transfer_skill_ownership
+from onyx.db.enums import SkillSharePermission
+from onyx.db.models import (
+    Plugin,
+    User,
+    User__UserGroup,
+)
+from onyx.db.skill import (
+    delete_skill,
+    set_skill_public_permission,
+    transfer_skill_ownership,
+)
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import UserByEmail
+from onyx.server.manage.users import delete_user
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.craft.db_helpers import make_skill, make_user
 
@@ -41,6 +51,70 @@ def test_owner_must_transfer_private_skills_before_deletion(
     delete_user_from_db__no_commit(owner, db_session)
     assert db_session.get(User, owner.id) is None
     assert skill.author_user_id == successor.id
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_admin_delete_route_returns_private_skill_conflict(
+    db_session: Session,
+) -> None:
+    admin = make_user(db_session, is_admin=True)
+    owner = make_user(db_session, standard_account=True)
+    skill = make_skill(db_session, author_user_id=owner.id)
+    owner.is_active = False
+    db_session.commit()
+    owner_id = owner.id
+    try:
+        with pytest.raises(OnyxError) as exc:
+            await delete_user(
+                UserByEmail(user_email=owner.email),
+                current_user=admin,
+                db_session=db_session,
+            )
+        assert exc.value.error_code == OnyxErrorCode.CONFLICT
+        assert "Transfer or delete" in exc.value.detail
+        assert db_session.get(User, owner_id) is not None
+    finally:
+        delete_skill(skill, db_session)
+        remaining_owner = db_session.get(User, owner_id)
+        assert remaining_owner is not None
+        delete_user_from_db__no_commit(remaining_owner, db_session)
+        delete_user_from_db__no_commit(admin, db_session)
+        db_session.commit()
+
+
+@pytest.mark.parametrize("change", ["transfer", "delete", "publish"])
+def test_copied_plugin_does_not_block_deletion_of_former_owner(
+    db_session: Session,
+    change: str,
+) -> None:
+    """A transfer or publish moves the plugin out of the former owner's "My
+    uploads". A delete removes it. Either way the user delete goes through."""
+    owner = make_user(db_session, standard_account=True)
+    successor = make_user(db_session, standard_account=True)
+    skill = make_skill(db_session, author_user_id=owner.id)
+    plugin_id = skill.id
+
+    if change == "transfer":
+        transfer_skill_ownership(
+            skill=skill, new_owner_user_id=successor.id, db_session=db_session
+        )
+    elif change == "delete":
+        delete_skill(skill, db_session)
+    else:
+        set_skill_public_permission(
+            skill=skill,
+            public_permission=SkillSharePermission.VIEWER,
+            db_session=db_session,
+        )
+
+    delete_user_from_db__no_commit(owner, db_session)
+    assert db_session.get(User, owner.id) is None
+    plugin = db_session.scalar(select(Plugin).where(Plugin.id == plugin_id))
+    if change == "delete":
+        assert plugin is None
+    else:
+        assert plugin is not None
+        assert plugin.author_user_id == (successor.id if change == "transfer" else None)
 
 
 def test_database_rejects_deletion_that_would_orphan_private_skill(
@@ -99,8 +173,7 @@ async def test_auth_deletion_uses_same_private_ownership_guard(
             await session.rollback()
         assert db_session.get(User, owner_id) is not None
     finally:
-        db_session.delete(skill)
-        db_session.flush()
+        delete_skill(skill, db_session)
         delete_user_from_db__no_commit(owner, db_session)
         db_session.commit()
 
@@ -161,3 +234,13 @@ async def test_auth_deletion_cleans_up_group_membership(db_session: Session) -> 
         if remaining_user is not None:
             delete_user_from_db__no_commit(remaining_user, db_session)
             db_session.commit()
+
+
+def test_delete_skill_with_no_plugin_returns_its_bundle(
+    db_session: Session,
+) -> None:
+    skill = make_skill(db_session, with_plugin=False)
+    bundle_file_id = skill.bundle_file_id
+
+    assert delete_skill(skill, db_session) == [bundle_file_id]
+    assert db_session.get(Plugin, skill.id) is None

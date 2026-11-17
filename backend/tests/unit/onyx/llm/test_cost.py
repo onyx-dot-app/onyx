@@ -12,7 +12,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
-from onyx.db.models import ModelCostOverride
+from onyx.db.models import LLMProvider, ModelConfiguration, ModelCostOverride
 from onyx.llm import cost as cost_mod
 from onyx.llm import cost_overrides
 from onyx.llm.cost import compute_cost_cents, get_model_price_per_million
@@ -30,12 +30,47 @@ def _compile_jsonb_sqlite(_element: object, _compiler: object, **_kw: object) ->
     return "JSON"
 
 
+def _new_session() -> Session:
+    engine: Engine = create_engine("sqlite://")
+    for model in (LLMProvider, ModelConfiguration, ModelCostOverride):
+        cast(Table, model.__table__).create(bind=engine)
+    return sessionmaker(bind=engine)()
+
+
+def _seed_config(db_session: Session, model: str, provider: str = "openai") -> int:
+    """Adds a provider with one model configuration; returns the config id."""
+    llm_provider = LLMProvider(name=f"{provider}-{model}", provider=provider)
+    db_session.add(llm_provider)
+    db_session.flush()
+    config = ModelConfiguration(
+        llm_provider_id=llm_provider.id, name=model, is_visible=True
+    )
+    db_session.add(config)
+    db_session.commit()
+    return config.id
+
+
+def _add_override(
+    db_session: Session,
+    model_configuration_id: int,
+    input_rate: float,
+    output_rate: float,
+    cache_read: float | None = None,
+) -> None:
+    db_session.add(
+        ModelCostOverride(
+            model_configuration_id=model_configuration_id,
+            input_cost_per_mtok=input_rate,
+            output_cost_per_mtok=output_rate,
+            cache_read_cost_per_mtok=cache_read,
+        )
+    )
+    db_session.commit()
+
+
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
-    engine: Engine = create_engine("sqlite://")
-    cast(Table, ModelCostOverride.__table__).create(bind=engine)
-    SessionLocal = sessionmaker(bind=engine)
-    session = SessionLocal()
+    session = _new_session()
     try:
         yield session
     finally:
@@ -463,14 +498,8 @@ class TestImageFlow:
     def test_token_override_does_not_replace_image_price(
         self, db_session: Session
     ) -> None:
-        db_session.add(
-            ModelCostOverride(
-                model="dall-e-3",
-                input_cost_per_mtok=0.0,
-                output_cost_per_mtok=0.0,
-            )
-        )
-        db_session.commit()
+        config_id = _seed_config(db_session, "dall-e-3")
+        _add_override(db_session, config_id, 0.0, 0.0)
 
         in_cents, out_cents = compute_cost_cents(
             model="dall-e-3",
@@ -479,20 +508,16 @@ class TestImageFlow:
             completion_tokens=0,
             flow=LLMFlow.IMAGE_GENERATION,
             db_session=db_session,
+            model_configuration_id=config_id,
         )
         assert (in_cents + out_cents) == pytest.approx(4.0)
 
 
 class TestOverride:
     def test_override_wins_over_litellm(self, db_session: Session) -> None:
-        db_session.add(
-            ModelCostOverride(
-                model="gpt-6-sol",
-                input_cost_per_mtok=1.0,  # $1.00/Mtok in
-                output_cost_per_mtok=2.0,  # $2.00/Mtok out
-            )
-        )
-        db_session.commit()
+        config_id = _seed_config(db_session, "gpt-6-sol")
+        # $1.00/Mtok in, $2.00/Mtok out.
+        _add_override(db_session, config_id, 1.0, 2.0)
 
         in_cents, out_cents = compute_cost_cents(
             model="gpt-6-sol",
@@ -500,10 +525,48 @@ class TestOverride:
             prompt_tokens=1_000_000,
             completion_tokens=1_000_000,
             db_session=db_session,
+            model_configuration_id=config_id,
         )
         # $1.00 = 100 cents in, $2.00 = 200 cents out.
         assert in_cents == pytest.approx(100.0)
         assert out_cents == pytest.approx(200.0)
+
+    def test_no_override_without_model_configuration_id(
+        self, db_session: Session
+    ) -> None:
+        config_id = _seed_config(db_session, "gpt-6-sol")
+        _add_override(db_session, config_id, 1.0, 2.0)
+
+        # Same model name, but no configuration: the catalog prices it.
+        # 1000 tokens each stays below gpt-6-sol's long-prompt tier.
+        in_cents, out_cents = compute_cost_cents(
+            model="gpt-6-sol",
+            provider="openai",
+            prompt_tokens=1000,
+            completion_tokens=1000,
+            db_session=db_session,
+        )
+        # litellm gpt-6-sol: $2.00/Mtok in, $10.00/Mtok out.
+        assert (in_cents, out_cents) == pytest.approx((0.2, 1.0))
+
+    def test_override_applies_only_to_its_configuration(
+        self, db_session: Session
+    ) -> None:
+        priced_id = _seed_config(db_session, "gpt-6-sol")
+        # A second provider of the same type serving the same model name.
+        other_id = _seed_config(db_session, "gpt-6-sol")
+        _add_override(db_session, priced_id, 1.0, 2.0)
+
+        in_cents, out_cents = compute_cost_cents(
+            model="gpt-6-sol",
+            provider="openai",
+            prompt_tokens=1000,
+            completion_tokens=1000,
+            db_session=db_session,
+            model_configuration_id=other_id,
+        )
+        # The catalog price, as without an override.
+        assert (in_cents, out_cents) == pytest.approx((0.2, 1.0))
 
     @staticmethod
     def _served_catalog(_provider: str, model: str) -> dict[str, Any] | None:
@@ -515,6 +578,11 @@ class TestOverride:
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr("onyx.llm.cost.find_model_cost", self._served_catalog)
+        router_id = _seed_config(db_session, "openrouter/auto", "openrouter")
+        # An override on a configuration named like the served model does not
+        # price a routed call; only the router's own configuration counts.
+        served_id = _seed_config(db_session, "deepseek/deepseek-v4-flash", "openrouter")
+        _add_override(db_session, served_id, 9.0, 9.0)
 
         in_cents, out_cents = compute_cost_cents(
             model="openrouter/auto",
@@ -523,6 +591,7 @@ class TestOverride:
             prompt_tokens=1_000_000,
             completion_tokens=1_000_000,
             db_session=db_session,
+            model_configuration_id=router_id,
         )
         assert in_cents == pytest.approx(100.0)
         assert out_cents == pytest.approx(200.0)
@@ -531,15 +600,8 @@ class TestOverride:
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr("onyx.llm.cost.find_model_cost", self._served_catalog)
-        db_session.add(
-            ModelCostOverride(
-                model="openrouter/auto",
-                provider="openrouter",
-                input_cost_per_mtok=5.0,
-                output_cost_per_mtok=6.0,
-            )
-        )
-        db_session.commit()
+        router_id = _seed_config(db_session, "openrouter/auto", "openrouter")
+        _add_override(db_session, router_id, 5.0, 6.0)
 
         in_cents, out_cents = compute_cost_cents(
             model="openrouter/auto",
@@ -548,19 +610,14 @@ class TestOverride:
             prompt_tokens=1_000_000,
             completion_tokens=1_000_000,
             db_session=db_session,
+            model_configuration_id=router_id,
         )
         assert in_cents == pytest.approx(500.0)
         assert out_cents == pytest.approx(600.0)
 
     def test_override_counts_cache_reads_as_input(self, db_session: Session) -> None:
-        db_session.add(
-            ModelCostOverride(
-                model="gpt-6-sol",
-                input_cost_per_mtok=1.0,
-                output_cost_per_mtok=2.0,
-            )
-        )
-        db_session.commit()
+        config_id = _seed_config(db_session, "gpt-6-sol")
+        _add_override(db_session, config_id, 1.0, 2.0)
 
         in_cents, _ = compute_cost_cents(
             model="gpt-6-sol",
@@ -569,21 +626,15 @@ class TestOverride:
             completion_tokens=0,
             cache_read_tokens=500_000,
             db_session=db_session,
+            model_configuration_id=config_id,
         )
         assert in_cents == pytest.approx(100.0)
 
     def test_override_bills_cache_writes_at_the_input_rate(
         self, db_session: Session
     ) -> None:
-        db_session.add(
-            ModelCostOverride(
-                model="gpt-6-sol",
-                input_cost_per_mtok=1.0,
-                output_cost_per_mtok=2.0,
-                cache_read_cost_per_mtok=0.1,
-            )
-        )
-        db_session.commit()
+        config_id = _seed_config(db_session, "gpt-6-sol")
+        _add_override(db_session, config_id, 1.0, 2.0, cache_read=0.1)
 
         in_cents, _ = compute_cost_cents(
             model="gpt-6-sol",
@@ -592,19 +643,14 @@ class TestOverride:
             completion_tokens=0,
             cache_creation_tokens=1_000_000,
             db_session=db_session,
+            model_configuration_id=config_id,
         )
         assert in_cents == pytest.approx(200.0)
 
     def test_override_cache_rate_applied_when_set(self, db_session: Session) -> None:
-        db_session.add(
-            ModelCostOverride(
-                model="gpt-6-sol",
-                input_cost_per_mtok=1.0,
-                output_cost_per_mtok=2.0,
-                cache_read_cost_per_mtok=0.1,  # cache reads 10x cheaper than input
-            )
-        )
-        db_session.commit()
+        config_id = _seed_config(db_session, "gpt-6-sol")
+        # Cache reads 10x cheaper than input.
+        _add_override(db_session, config_id, 1.0, 2.0, cache_read=0.1)
 
         in_cents, _ = compute_cost_cents(
             model="gpt-6-sol",
@@ -613,24 +659,18 @@ class TestOverride:
             completion_tokens=0,
             cache_read_tokens=1_000_000,
             db_session=db_session,
+            model_configuration_id=config_id,
         )
         # 1M non-cached @ $1 = 100c + 1M cache reads @ $0.10 = 10c = 110 cents.
         assert in_cents == pytest.approx(110.0)
 
     def test_override_cache_is_tenant_scoped(self) -> None:
-        # Override cache is tenant-scoped.
-        def _session() -> Session:
-            engine = create_engine("sqlite://")
-            cast(Table, ModelCostOverride.__table__).create(bind=engine)
-            return sessionmaker(bind=engine)()
-
-        tenant_a, tenant_b = _session(), _session()
-        tenant_a.add(
-            ModelCostOverride(
-                model="gpt-6-sol", input_cost_per_mtok=1.0, output_cost_per_mtok=2.0
-            )
-        )
-        tenant_a.commit()
+        # Both tenants have the same configuration id; only tenant A prices it.
+        tenant_a, tenant_b = _new_session(), _new_session()
+        a_config = _seed_config(tenant_a, "gpt-6-sol")
+        b_config = _seed_config(tenant_b, "gpt-6-sol")
+        assert a_config == b_config
+        _add_override(tenant_a, a_config, 1.0, 2.0)
 
         token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_a")
         try:
@@ -640,6 +680,7 @@ class TestOverride:
                 prompt_tokens=1_000_000,
                 completion_tokens=1_000_000,
                 db_session=tenant_a,
+                model_configuration_id=a_config,
             )
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -653,6 +694,7 @@ class TestOverride:
                 prompt_tokens=1_000_000,
                 completion_tokens=1_000_000,
                 db_session=tenant_b,
+                model_configuration_id=b_config,
             )
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -662,39 +704,27 @@ class TestOverride:
 
 class TestGetOverride:
     def test_returns_none_when_absent(self, db_session: Session) -> None:
-        assert cost_overrides.get_override(db_session, "no-such-model") is None
+        assert cost_overrides.get_override(db_session, 999) is None
 
     def test_returns_rates_when_present(self, db_session: Session) -> None:
-        db_session.add(
-            ModelCostOverride(
-                model="claude-x",
-                input_cost_per_mtok=3.0,
-                output_cost_per_mtok=15.0,
-            )
-        )
-        db_session.commit()
+        config_id = _seed_config(db_session, "claude-x", "anthropic")
+        _add_override(db_session, config_id, 3.0, 15.0)
 
-        rates = cost_overrides.get_override(db_session, "claude-x")
+        rates = cost_overrides.get_override(db_session, config_id)
         assert rates is not None
         assert rates.input_cost_per_mtok == 3.0
         assert rates.output_cost_per_mtok == 15.0
         assert rates.cache_read_cost_per_mtok is None
 
     def test_cache_invalidation_picks_up_new_row(self, db_session: Session) -> None:
-        assert cost_overrides.get_override(db_session, "late-model") is None
-        db_session.add(
-            ModelCostOverride(
-                model="late-model",
-                input_cost_per_mtok=4.0,
-                output_cost_per_mtok=8.0,
-            )
-        )
-        db_session.commit()
+        config_id = _seed_config(db_session, "late-model")
+        assert cost_overrides.get_override(db_session, config_id) is None
+        _add_override(db_session, config_id, 4.0, 8.0)
         # Stale cache still says None until invalidated.
-        assert cost_overrides.get_override(db_session, "late-model") is None
+        assert cost_overrides.get_override(db_session, config_id) is None
         cost_overrides.invalidate_override_cache()
         assert cost_overrides.get_override(
-            db_session, "late-model"
+            db_session, config_id
         ) == cost_overrides.CostOverrideRates(
             input_cost_per_mtok=4.0,
             output_cost_per_mtok=8.0,
@@ -716,13 +746,11 @@ class TestGetOverride:
             ),
         )
 
-        def _load(
-            _db_session: Session,
-        ) -> dict[tuple[str, str], cost_overrides.CostOverrideRates]:
+        def _load(_db_session: Session) -> dict[int, cost_overrides.CostOverrideRates]:
             nonlocal loads
             loads += 1
             return {
-                ("", "model"): cost_overrides.CostOverrideRates(
+                1: cost_overrides.CostOverrideRates(
                     input_cost_per_mtok=float(loads),
                     output_cost_per_mtok=float(loads),
                     cache_read_cost_per_mtok=None,
@@ -730,23 +758,21 @@ class TestGetOverride:
             }
 
         monkeypatch.setattr(cost_overrides, "_load_cache", _load)
-        first = cost_overrides.get_override(db_session, "model")
+        first = cost_overrides.get_override(db_session, 1)
         assert first is not None
         assert first.input_cost_per_mtok == 1.0
 
         now = 61.0
-        second = cost_overrides.get_override(db_session, "model")
+        second = cost_overrides.get_override(db_session, 1)
         assert second is not None
         assert second.input_cost_per_mtok == 2.0
 
-        def _fail_load(
-            _: Session,
-        ) -> dict[tuple[str, str], cost_overrides.CostOverrideRates]:
+        def _fail_load(_: Session) -> dict[int, cost_overrides.CostOverrideRates]:
             raise RuntimeError("database unavailable")
 
         monkeypatch.setattr(cost_overrides, "_load_cache", _fail_load)
         now = 122.0
-        stale = cost_overrides.get_override(db_session, "model")
+        stale = cost_overrides.get_override(db_session, 1)
         assert stale == second
 
     def test_invalidation_during_reload_discards_stale_snapshot(
@@ -754,22 +780,20 @@ class TestGetOverride:
     ) -> None:
         loads = 0
 
-        def _load(
-            _db_session: Session,
-        ) -> dict[tuple[str, str], cost_overrides.CostOverrideRates]:
+        def _load(_db_session: Session) -> dict[int, cost_overrides.CostOverrideRates]:
             nonlocal loads
             loads += 1
             if loads == 1:
                 cost_overrides.invalidate_override_cache()
                 return {
-                    ("", "model"): cost_overrides.CostOverrideRates(
+                    1: cost_overrides.CostOverrideRates(
                         input_cost_per_mtok=1.0,
                         output_cost_per_mtok=1.0,
                         cache_read_cost_per_mtok=None,
                     )
                 }
             return {
-                ("", "model"): cost_overrides.CostOverrideRates(
+                1: cost_overrides.CostOverrideRates(
                     input_cost_per_mtok=2.0,
                     output_cost_per_mtok=2.0,
                     cache_read_cost_per_mtok=None,
@@ -778,7 +802,7 @@ class TestGetOverride:
 
         monkeypatch.setattr(cost_overrides, "_load_cache", _load)
         assert cost_overrides.get_override(
-            db_session, "model"
+            db_session, 1
         ) == cost_overrides.CostOverrideRates(
             input_cost_per_mtok=2.0,
             output_cost_per_mtok=2.0,

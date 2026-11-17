@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, NavLink } from "@opal/navigation";
 import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
@@ -23,10 +24,8 @@ import { InputSingleComboBox } from "@opal/components";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
 import { SvgAlertCircle } from "@opal/icons";
-import { useRouter } from "next/navigation";
 import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
-import Link from "next/link";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -61,7 +60,7 @@ export function SlackChannelConfigFormFields({
 }: SlackChannelConfigFormFieldsProps) {
   const t = useTranslations("admin.slackBots");
   const { appName } = useSettings();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { values, setFieldValue } = useFormikContext<any>();
   const [viewUnselectableSets, setViewUnselectableSets] = useState(false);
   const [viewSyncEnabledAgents, setViewSyncEnabledAgents] = useState(false);
@@ -76,7 +75,8 @@ export function SlackChannelConfigFormFields({
   // Helper function to check if a document set contains private connectors
   const documentSetContainsPrivate = (documentSet: DocumentSetSummary) => {
     return documentSet.cc_pair_summaries.some(
-      (summary) => summary.access_type === "private"
+      (summary) =>
+        summary.access_type === "private" || summary.access_type === "personal"
     );
   };
 
@@ -105,13 +105,35 @@ export function SlackChannelConfigFormFields({
     return documentSets.filter(documentSetContainsSync);
   }, [documentSets]);
 
+  // The document sets this channel would search: the selected sets, or the
+  // chosen agent's. The privacy alert lists only their connectors.
+  const searchedSets = useMemo((): DocumentSetSummary[] => {
+    if (values.knowledge_source === "document_sets") {
+      return documentSets.filter((ds) => values.document_sets.includes(ds.id));
+    }
+    if (values.knowledge_source === "assistant") {
+      return (
+        searchEnabledAgents.find((p) => p.id == values.persona_id)
+          ?.document_sets ?? []
+      );
+    }
+    return [];
+  }, [
+    documentSets,
+    searchEnabledAgents,
+    values.knowledge_source,
+    values.document_sets,
+    values.persona_id,
+  ]);
+
   const memoizedPrivateConnectors = useMemo(() => {
     const uniqueDescriptors = new Map();
-    documentSets.forEach((ds: DocumentSetSummary) => {
+    searchedSets.forEach((ds: DocumentSetSummary) => {
       const ccPairSummaries = getCcPairSummaries(ds);
       ccPairSummaries.forEach((summary: any) => {
         if (
-          summary.access_type === "private" &&
+          (summary.access_type === "private" ||
+            summary.access_type === "personal") &&
           !uniqueDescriptors.has(summary.id)
         ) {
           uniqueDescriptors.set(summary.id, summary);
@@ -119,7 +141,7 @@ export function SlackChannelConfigFormFields({
       });
     });
     return Array.from(uniqueDescriptors.values());
-  }, [documentSets]);
+  }, [searchedSets]);
 
   const selectableSets = useMemo(() => {
     return documentSets.filter((ds) => !documentSetContainsSync(ds));
@@ -158,22 +180,10 @@ export function SlackChannelConfigFormFields({
     }
   }, [unselectableSets, values.document_sets, setFieldValue, t]);
 
-  const shouldShowPrivacyAlert = useMemo(() => {
-    if (values.knowledge_source === "document_sets") {
-      const selectedSets = documentSets.filter((ds) =>
-        values.document_sets.includes(ds.id)
-      );
-      return selectedSets.some((ds) => documentSetContainsPrivate(ds));
-    } else if (values.knowledge_source === "assistant") {
-      const chosenAgent = searchEnabledAgents.find(
-        (p) => p.id == values.persona_id
-      );
-      return chosenAgent?.document_sets.some((ds) =>
-        documentSetContainsPrivate(ds)
-      );
-    }
-    return false;
-  }, [values.knowledge_source, values.document_sets, values.persona_id]);
+  const shouldShowPrivacyAlert = useMemo(
+    () => searchedSets.some((ds) => documentSetContainsPrivate(ds)),
+    [searchedSets]
+  );
 
   return (
     <>
@@ -380,7 +390,7 @@ export function SlackChannelConfigFormFields({
                     <button
                       type="button"
                       onClick={() =>
-                        router.push(`/app/agents/edit/${persona.id}`)
+                        navigation.go(`/app/agents/edit/${persona.id}`)
                       }
                       key={persona.id}
                       className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
@@ -572,7 +582,7 @@ export function SlackChannelConfigFormFields({
                   </h4>
                   <div className="max-h-40 overflow-y-auto border-t border-text-subtle flex-col gap-y-2">
                     {memoizedPrivateConnectors.map((ccpairinfo: any) => (
-                      <Link
+                      <NavLink
                         key={ccpairinfo.id}
                         href={`/admin/connector/${ccpairinfo.id}`}
                         className="flex items-center p-2 rounded-md hover:bg-background-100 transition-colors"
@@ -586,7 +596,7 @@ export function SlackChannelConfigFormFields({
                         <span className="text-sm text-text-darker font-medium">
                           {ccpairinfo.name}
                         </span>
-                      </Link>
+                      </NavLink>
                     ))}
                   </div>
                 </div>
@@ -603,7 +613,10 @@ export function SlackChannelConfigFormFields({
             ? t("form.updateButton.label")
             : t("form.createButton.label")}
         </Button>
-        <Button prominence="secondary" onClick={() => router.back()}>
+        <Button
+          prominence="secondary"
+          onClick={() => navigation.clampedBack(`/admin/bots/${slack_bot_id}`)}
+        >
           {t("form.cancelButton.label")}
         </Button>
       </div>

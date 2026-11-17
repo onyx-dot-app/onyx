@@ -52,13 +52,14 @@ function DecisionProviderCard({
   const t = useTranslations("admin.decisionModels");
   const tLlm = useTranslations("admin.languageModels");
   const { mutate } = useSWRConfig();
-  const [open, setOpen] = useState(false);
+  const providerModal = useCreateModal();
+  const setOpen = providerModal.toggle;
   const [removing, setRemoving] = useState(false);
   const deleteModal = useCreateModal();
   const { model: selectedModel } = useDecisionModel();
   const providerId = provider?.id ?? null;
   const { llmProvider: fullProvider, error } = useAdminLanguageModel(
-    open ? providerId : null
+    providerModal.isPresent ? providerId : null
   );
   const { icon, companyName, productName, decisionOnly } =
     getProvider(providerName);
@@ -109,46 +110,51 @@ function DecisionProviderCard({
 
   return (
     <>
-      {open &&
-        (!provider || fullProvider) &&
-        (providerName === "zoom_ai" ? (
-          <ZoomDecisionModal
-            existingLlmProvider={fullProvider ?? undefined}
-            onOpenChange={setOpen}
-            onSuccess={() => refreshLlmProviderCaches(mutate)}
-          />
-        ) : (
-          <DecisionProviderModal
-            providerName={providerName}
-            existingLlmProvider={fullProvider ?? undefined}
-            onOpenChange={setOpen}
-            onSuccess={() => refreshLlmProviderCaches(mutate)}
-          />
-        ))}
-      {provider && deleteModal.isOpen && (
-        <ConfirmationModalLayout
-          icon={SvgTrash}
-          title={markdown(tLlm("deleteModal.title", { provider: displayName }))}
-          onClose={() => deleteModal.toggle(false)}
-          submit={
-            <Button
-              variant="danger"
-              disabled={isSelected || removing}
-              onClick={() => void remove()}
-            >
-              {tLlm("deleteModal.submit.label")}
-            </Button>
-          }
-        >
-          <Text font="main-ui-body" color="text-03">
-            {isSelected
-              ? t("providers.clearBeforeRemoval")
-              : markdown(
-                  tLlm("deleteModal.description", { provider: displayName })
-                )}
-          </Text>
-        </ConfirmationModalLayout>
-      )}
+      <providerModal.Provider>
+        {(!provider || fullProvider) &&
+          (providerName === "zoom_ai" ? (
+            <ZoomDecisionModal
+              existingLlmProvider={fullProvider ?? undefined}
+              onOpenChange={setOpen}
+              onSuccess={() => refreshLlmProviderCaches(mutate)}
+            />
+          ) : (
+            <DecisionProviderModal
+              providerName={providerName}
+              existingLlmProvider={fullProvider ?? undefined}
+              onOpenChange={setOpen}
+              onSuccess={() => refreshLlmProviderCaches(mutate)}
+            />
+          ))}
+      </providerModal.Provider>
+      <deleteModal.Provider>
+        {provider && (
+          <ConfirmationModalLayout
+            icon={SvgTrash}
+            title={markdown(
+              tLlm("deleteModal.title", { provider: displayName })
+            )}
+            onClose={() => deleteModal.toggle(false)}
+            submit={
+              <Button
+                variant="danger"
+                disabled={isSelected || removing}
+                onClick={() => void remove()}
+              >
+                {tLlm("deleteModal.submit.label")}
+              </Button>
+            }
+          >
+            <Text font="main-ui-body" color="text-03">
+              {isSelected
+                ? t("providers.clearBeforeRemoval")
+                : markdown(
+                    tLlm("deleteModal.description", { provider: displayName })
+                  )}
+            </Text>
+          </ConfirmationModalLayout>
+        )}
+      </deleteModal.Provider>
       <Hoverable.Root
         group="DecisionProviderCard"
         interaction={deleteModal.isOpen ? "hover" : "rest"}
@@ -162,13 +168,12 @@ function DecisionProviderCard({
           onClick={() => setOpen(true)}
         >
           <ContentAction
+            font="main-ui-action"
             icon={icon}
             title={displayName}
             description={modelNames || productName}
             titleMaxLines={1}
             descriptionMaxLines={1}
-            sizePreset="main-ui"
-            variant="section"
             padding={2}
             rightChildren={
               provider ? (
@@ -260,10 +265,9 @@ function DecisionModelsContent() {
       </Card>
       <Section gap={3} alignItems="stretch">
         <Content
+          font="main-content-emphasis"
           title={t("providers.title")}
           description={t("providers.description")}
-          sizePreset="main-content"
-          variant="section"
         />
         <CardGrid>
           {supportedProviders.map((providerName) => {

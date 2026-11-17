@@ -65,3 +65,20 @@ it("restores the value of a cleared field that does not allow empty", async () =
   expect(screen.getByRole("textbox")).toHaveValue("5");
   expect(screen.getByTestId("value")).toHaveTextContent("5");
 });
+
+it("shows the value suffix only beside a value", async () => {
+  const user = userEvent.setup();
+  render(
+    <InputNumber
+      id="n"
+      value={null}
+      onChange={() => {}}
+      placeholder="No token limit"
+      valueSuffix="K"
+      plain
+    />
+  );
+  expect(screen.queryByText("K")).toBeNull();
+  await user.type(screen.getByPlaceholderText("No token limit"), "100");
+  expect(screen.getByText("K")).toBeInTheDocument();
+});

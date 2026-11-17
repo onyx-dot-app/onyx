@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, type MouseEvent } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
   Card,
   InputSwitch,
-  Tag,
+  InputCheckbox,
+  Badge,
   Text,
   Tooltip,
 } from "@opal/components";
@@ -19,13 +20,14 @@ import {
   SvgTrash,
   SvgUser,
 } from "@opal/icons";
-import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import type {
   CustomSkill,
   SkillExternalAppDependency,
 } from "@/lib/skills/types";
 import { cn } from "@opal/utils";
+import { hasUnpublishedChanges } from "@/lib/skills/sharing";
+import { useInstallationPolicyCopy } from "@/lib/skills/hooks";
 
 export type SkillCardSource = "builtin" | "custom";
 
@@ -66,6 +68,11 @@ export interface SkillCardProps {
   onDelete?: (item: CustomSkillCardItem) => void;
   onEnabledChange?: (item: SkillCardItem, enabled: boolean) => void;
   enablementPending?: boolean;
+  selection?: {
+    checked: boolean;
+    disabled: boolean;
+    onCheckedChange: (checked: boolean) => void;
+  };
 }
 
 export default function SkillCard({
@@ -77,18 +84,39 @@ export default function SkillCard({
   onDelete,
   onEnabledChange,
   enablementPending = false,
+  selection,
 }: SkillCardProps) {
   const t = useTranslations("cards");
   const skillCopy = useTranslations("skills");
   const { appName } = useSettings();
+  const format = useFormatter();
+  const policyCopy = useInstallationPolicyCopy();
 
   const handleClick = useCallback(() => {
     onClick?.(item);
   }, [onClick, item]);
 
-  const { isAdmin } = useUser();
-  const isRequired =
-    item.source === "custom" && item.skill.installation_policy === "REQUIRED";
+  const isRequired = item.source === "custom" && item.skill.required_for_user;
+  const canDelete = item.source === "custom" && item.skill.can_delete;
+
+  // Only callers who may see share details get summaries.
+  const groupSummaries =
+    item.source === "custom" ? item.skill.group_summaries : [];
+  const groupsLine =
+    groupSummaries.length > 0
+      ? skillCopy("groups.card", {
+          groups: format.list(
+            groupSummaries.map((summary) =>
+              summary.installation_policy === null
+                ? summary.group_name
+                : skillCopy("groups.entry", {
+                    name: summary.group_name,
+                    policy: policyCopy.label(summary.installation_policy),
+                  })
+            )
+          ),
+        })
+      : null;
 
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
@@ -158,6 +186,7 @@ export default function SkillCard({
   return (
     <Tooltip tooltip={tooltip} side="top">
       <Card
+        data-testid="SkillCard"
         onClick={handleClick}
         className="group/SkillCard cursor-pointer"
         disabled={
@@ -185,18 +214,43 @@ export default function SkillCard({
             height="auto"
             gap={1}
           >
-            <Button
-              prominence="internal"
-              icon={SvgBlocks}
-              aria-label={item.name}
-              onClick={(event) => {
-                event.stopPropagation();
-                handleClick();
-              }}
+            <Section
+              flexDirection="row"
+              height="auto"
+              justifyContent="start"
+              gap={0}
+              width="auto"
             >
-              {item.name}
-            </Button>
-            {item.source === "custom" && canEdit ? (
+              {selection && (
+                <Section
+                  width="auto"
+                  height="auto"
+                  padding={2}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <InputCheckbox
+                    checked={selection.checked}
+                    disabled={selection.disabled}
+                    onCheckedChange={selection.onCheckedChange}
+                    aria-label={skillCopy("bulk.selectSkill", {
+                      name: item.name,
+                    })}
+                  />
+                </Section>
+              )}
+              <Button
+                prominence="internal"
+                icon={selection ? undefined : SvgBlocks}
+                aria-label={item.name}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleClick();
+                }}
+              >
+                {item.name}
+              </Button>
+            </Section>
+            {item.source === "custom" && canEdit && !selection?.checked ? (
               <Section
                 flexDirection="row"
                 justifyContent="start"
@@ -228,7 +282,7 @@ export default function SkillCard({
                   aria-label={t("skill.edit.tooltip")}
                   onClick={handleEditClick}
                 />
-                {onDelete && (!isRequired || isAdmin) && (
+                {onDelete && canDelete && (
                   <Button
                     prominence="secondary"
                     variant="danger"
@@ -257,27 +311,58 @@ export default function SkillCard({
           </Section>
         </Section>
 
-        <div className="bg-background-tint-01 p-1 flex flex-row items-center justify-between w-full">
-          <div className="py-1 px-2 min-w-0 flex-1">
+        {groupsLine && (
+          <Section height="auto" alignItems="stretch" padding={2}>
+            <Text
+              font="secondary-body"
+              color="text-03"
+              maxLines={1}
+              overflowTooltip
+            >
+              {groupsLine}
+            </Text>
+          </Section>
+        )}
+        <Section
+          flexDirection="row"
+          height="auto"
+          justifyContent="between"
+          padding={1}
+          gap={0}
+          className="bg-background-tint-01"
+        >
+          <Section
+            height="auto"
+            width="auto"
+            padding={1}
+            className="min-w-0 flex-1"
+          >
             <Content
+              font="secondary-body"
               icon={dependency ? SvgPlug : SvgUser}
               title={dependencyStatus ?? authorTitle}
-              sizePreset="secondary"
-              variant="body"
-              color="muted"
+              titleColor="text-03"
             />
-          </div>
-          <div className="p-0.5 pe-1.5 flex items-center gap-1">
+          </Section>
+          <Section
+            flexDirection="row"
+            height="auto"
+            width="auto"
+            padding={0.5}
+            gap={1}
+            className="me-1"
+          >
             {isRequired && (
-              <Tooltip tooltip={t("skill.tags.required.tooltip")} side="top">
-                <Tag
-                  title={skillCopy("modals.share.installation.required")}
-                  color="blue"
-                />
-              </Tooltip>
+              <Badge
+                title={skillCopy("installationPolicy.REQUIRED.label")}
+                color="info"
+                tooltip={t("skill.tags.required.tooltip")}
+              />
             )}
             {item.can_toggle && (
-              <div
+              <Section
+                width="auto"
+                height="auto"
                 role="presentation"
                 onClick={(event) => event.stopPropagation()}
               >
@@ -287,25 +372,45 @@ export default function SkillCard({
                   disabled={enablementPending || isInvalid}
                   aria-label={toggleAriaLabel}
                 />
-              </div>
+              </Section>
             )}
             {item.source === "builtin" ? (
               item.is_available ? (
-                <Tag title={t("skill.tags.builtin.label")} color="blue" />
+                <Badge title={t("skill.tags.builtin.label")} color="info" />
               ) : (
-                <Tag title={t("skill.tags.unavailable.label")} color="amber" />
+                <Badge
+                  title={t("skill.tags.unavailable.label")}
+                  color="pending"
+                />
               )
             ) : isInvalid ? (
-              <Tag title={t("skill.tags.invalid.label")} color="amber" />
+              <Badge title={t("skill.tags.invalid.label")} color="pending" />
             ) : dependency ? (
-              <Tag title={t("skill.tags.appSkill.label")} color="blue" />
-            ) : item.is_personal ? (
-              <Tag title={t("skill.tags.personal.label")} color="purple" />
-            ) : (
-              <Tag title={t("skill.tags.custom.label")} color="gray" />
+              <Badge title={t("skill.tags.appSkill.label")} color="info" />
+            ) : null}
+            {canEdit && hasUnpublishedChanges(item.skill) && (
+              <Badge
+                title={t("skill.tags.unpublished.label")}
+                color="warning"
+                tooltip={t("skill.tags.unpublished.tooltip", {
+                  number: item.skill.published_version_number ?? 0,
+                })}
+              />
             )}
-          </div>
-        </div>
+            {item.source === "custom" && (
+              <Badge
+                title={t(
+                  item.skill.public_permission !== null
+                    ? "skill.tags.organization.label"
+                    : item.skill.is_personal
+                      ? "skill.tags.personal.label"
+                      : "skill.tags.shared.label"
+                )}
+                color={item.skill.is_personal ? "default" : "info"}
+              />
+            )}
+          </Section>
+        </Section>
       </Card>
     </Tooltip>
   );

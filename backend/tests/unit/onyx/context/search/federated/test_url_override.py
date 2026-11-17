@@ -1,7 +1,12 @@
 """Tests for Slack URL parsing and direct thread fetch via URL override."""
 
+import importlib
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+import onyx.configs.slack_configs as slack_configs
+import onyx.context.search.federated.slack_search_utils as slack_search_utils
 from onyx.context.search.federated.models import DirectThreadFetch
 from onyx.context.search.federated.slack_search import _fetch_thread_from_url
 from onyx.context.search.federated.slack_search_utils import extract_slack_message_urls
@@ -45,6 +50,24 @@ class TestExtractSlackMessageUrls:
         assert ts == "1775491616.524769"
         assert not ts.startswith("p")
         assert "." in ts
+
+    def test_govslack_url_follows_slack_api_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """On GovSlack, GovSlack links resolve and commercial links do not."""
+        monkeypatch.setenv("SLACK_API_URL", "https://slack-gov.com/api/")
+        importlib.reload(slack_configs)
+        utils = importlib.reload(slack_search_utils)
+        try:
+            gov = "https://acme.slack-gov.com/archives/C111/p1234567890123456"
+            commercial = "https://acme.slack.com/archives/C222/p1234567890123456"
+            assert utils.extract_slack_message_urls(f"{gov} {commercial}") == [
+                ("C111", "1234567890.123456")
+            ]
+        finally:
+            monkeypatch.delenv("SLACK_API_URL")
+            importlib.reload(slack_configs)
+            importlib.reload(slack_search_utils)
 
 
 class TestFetchThreadFromUrl:

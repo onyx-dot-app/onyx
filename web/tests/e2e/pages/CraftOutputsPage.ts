@@ -98,12 +98,12 @@ export class CraftOutputsPage {
   }
   async expectSearch(query: string) {
     await expect(
-      this.page.getByRole("textbox", { name: "Search files", exact: true })
+      this.page.getByRole("searchbox", { name: "Search files", exact: true })
     ).toHaveValue(query);
   }
   async search(query: string) {
     await this.page
-      .getByRole("textbox", { name: "Search files", exact: true })
+      .getByRole("searchbox", { name: "Search files", exact: true })
       .fill(query);
   }
   async expectHeaderStable(action: () => Promise<void>) {

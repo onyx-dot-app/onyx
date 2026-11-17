@@ -35,13 +35,11 @@ test.describe("SCIM Token Management", () => {
       .context()
       .grantPermissions(["clipboard-read", "clipboard-write"]);
     await adminPage.getByRole("button", { name: "Copy Token" }).click();
-    await expect(adminPage.getByText("Token copied to clipboard")).toBeVisible({
-      timeout: 5000,
-    });
-    const clipboardText = await adminPage.evaluate(() =>
-      navigator.clipboard.readText()
-    );
-    expect(clipboardText).toBe(tokenValue);
+    await expect
+      .poll(() => adminPage.evaluate(() => navigator.clipboard.readText()), {
+        timeout: 5000,
+      })
+      .toBe(tokenValue);
 
     // Download
     const downloadPromise = adminPage.waitForEvent("download");

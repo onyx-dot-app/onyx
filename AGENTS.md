@@ -64,8 +64,20 @@ there:
 - `web/` — Next.js frontend. Standards (also cover `desktop/`, the Tauri shell): `web/AGENTS.md`.
 - `mobile/` — React Native + Expo app. Standards: `mobile/AGENTS.md`. Mobile differs from web on
   several points (no DOM, NativeWind, expo-router), so do **not** assume the web rules apply there.
+- `documentation/` — customer docs (Mintlify, docs.onyx.app). Standards: `documentation/AGENTS.md`. Production docs
+  follow the latest stable release, not `main`.
 
 Explore the tree with `ls` rather than relying on docs for the full package list.
+
+### Docs
+
+When you change something a customer sees or configures (UI, admin settings, connectors, environment variables, the
+public API, deployment), check the matching page in `documentation/`. If the change makes the page wrong or leaves out
+something a customer needs, update it in the same PR. Write for the page's reader and task, at the level of detail of
+the whole page. Keep the behavior a reader can see, such as contracts, limits, sync, and failure handling.
+Recapture the screenshots that your change makes wrong. Follow "Decide what to include" and the other rules in
+`.agents/skills/docs-writing/SKILL.md`, and use the local app and admin login above. Skip docs for internal refactors,
+tests, CI, and multi-tenant cloud operations, which customers cannot use.
 
 ### Feature Map
 
@@ -75,14 +87,14 @@ review a diff or PR, and when you need to know what a feature does or what a cha
 can break. The `feature-map` skill (`.agents/skills/feature-map/SKILL.md`) gives the
 procedure.
 
+- For new work, start at the Common tasks table in `.agents/feature-map/INDEX.md`.
 - Look up a code path in `.agents/feature-map/PATHS.md` to find its component.
 - The step-by-step review procedure is `.agents/feature-map/VERIFYING.md`.
 - Onyx overloads words such as Persona, Tool, turn, and SearchDoc. Read
   `.agents/feature-map/GLOSSARY.md` before trusting a name.
 
-If you change behaviour a component document describes, update that document in the
-same pull request. The `feature-map-integrity` pre-commit hook fails when a file the
-map cites is renamed or deleted.
+If your change makes a map document wrong, update it in the same pull request, as
+`.agents/feature-map/README.md` ("Keeping the map true") describes.
 
 ### Skills
 
@@ -104,11 +116,20 @@ Claude Code and Codex also run pre-commit on the files you changed in a turn whe
 you end it (`.agents/hooks/pre_commit_on_stop.py`, wired as `UserPromptSubmit` and
 `Stop` hooks in `.claude/settings.json` and `.codex/hooks.json`). Files that were
 already dirty when the turn started are skipped unless you change them. Codex runs
-the hooks only after you trust the project `.codex/` layer. If pre-commit fails, fix
-the reported problems before you finish. When the repo has the feature map
-(`.agents/feature-map/stale_docs.py`), the same hook also names any feature-map
-component whose code the turn changed but whose document the branch did not. Update
-the document if your change alters what it states.
+the hooks only after you trust the project `.codex/` layer. Committed changes come from
+local commit, amend, cherry-pick, revert, and conflict-resolution entries in the
+worktree HEAD reflog. For a merge commit, only files that differ from Git's automatic
+merge result are checked. For a rebase, the check includes every file in each commit
+resolved with `git rebase --continue`, and skips clean picks. The `--apply` rebase
+backend logs resolved conflicts as picks, so the hook skips them. Checkout, pull, clean
+merge, and clean rebase updates do not add files to the check.
+If pre-commit fails, fix the reported problems before you finish. When the repo has the feature map
+(`.agents/feature-map/stale_docs.py`), the same hook blocks the stop once with an
+editing brief: the sections and keys of the feature-map documents that cite code
+the turn changed, and changed files that `PATHS.md` does not cover. Ownership
+through `PATHS.md` alone does not block. Answer it
+with "Editing judgment" in `.agents/feature-map/README.md`. No update is a normal
+answer; edit only what the change made wrong or what a future agent needs.
 
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
 
@@ -132,6 +153,11 @@ Follow ASD-STE100 Simplified Technical English for technical text:
 There are 4 main types of tests: unit, external dependency unit, integration, and playwright e2e
 (`web/tests/e2e`). Commands and guidance for all four live in `backend/AGENTS.md`; shared fixtures
 and deeper detail in `backend/tests/README.md`. Prefer integration tests over the other types.
+
+- A regression test for a fix must fail without the fix. Revert the fix, see the test fail, then
+  restore the fix. Do this before you push.
+- Run each README command and Playwright spec that you add or change before you push. If you
+  cannot run one, say so in the PR description.
 
 ## Logs
 
@@ -178,8 +204,23 @@ router and settings patterns. Do not invent a parallel mechanism. If the existin
 do enough, extend it so other callers get the change too. A new pattern needs a reason that the
 existing ones cannot meet.
 
+## Review Follow-up
+
+Use these rules when you fix findings from human or bot reviewers.
+
+- **Fix the class, not the instance.** Before you fix a finding, name its defect class in one line,
+  for example "limit counted in characters, not bytes". Search the PR for other instances. In a
+  stack, also search the later PRs. Fix all instances in one push, each in the stack PR that adds it.
+- **Review your fix diff.** Before you push, read `git diff <last reviewed commit>..HEAD` against
+  the comments. Fixes cause most late findings.
+- **Review locally first.** Before the first push, review the full diff with a local reviewer, for
+  example the `cli-review` skill. Handle its findings the same way.
+- **Push fixes together.** After a review round, push all fixes at one time. Request another full
+  bot round only if the round had P1 or P2 findings, or if a fix changed logic. For P3 and
+  doc-wording fixes, review the diff yourself and push without a new request.
+
 ## Best Practices
 
 In addition to the other content in this file, best practices for contributing
-to the codebase can be found in the "Engineering Best Practices" section of
-`CONTRIBUTING.md`. Understand its contents and follow them.
+to the codebase are in `contributing_guides/best_practices.md`. Understand its
+contents and follow them.

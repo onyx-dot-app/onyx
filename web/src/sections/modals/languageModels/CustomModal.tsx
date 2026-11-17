@@ -34,8 +34,7 @@ import {
 import { InputSingleComboBox } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
-import { Button, Card, EmptyMessageCard } from "@opal/components";
+import { Button, Card, EmptyMessageCard, Text } from "@opal/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
@@ -45,8 +44,8 @@ import {
   InputPadder,
   InputVertical,
   toast,
+  Section,
 } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 
 // ─── Model Configuration List ─────────────────────────────────────────────────
 
@@ -171,11 +170,19 @@ function ModelConfigurationList() {
       {models.length > 0 ? (
         <div className={`grid items-center gap-1 ${MODEL_GRID_COLS}`}>
           <div className="pb-1">
-            <Text mainUiAction>{t("custom.modelTable.name.header")}</Text>
+            <Text font="main-ui-action" color="text-05">
+              {t("custom.modelTable.name.header")}
+            </Text>
           </div>
-          <Text mainUiAction>{t("custom.modelTable.displayName.header")}</Text>
-          <Text mainUiAction>{t("custom.modelTable.inputType.header")}</Text>
-          <Text mainUiAction>{t("custom.modelTable.maxTokens.header")}</Text>
+          <Text font="main-ui-action" color="text-05">
+            {t("custom.modelTable.displayName.header")}
+          </Text>
+          <Text font="main-ui-action" color="text-05">
+            {t("custom.modelTable.inputType.header")}
+          </Text>
+          <Text font="main-ui-action" color="text-05">
+            {t("custom.modelTable.maxTokens.header")}
+          </Text>
           <div aria-hidden />
           <div aria-hidden />
 
@@ -464,11 +471,10 @@ export default function CustomModal({
       <InputPadder>
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("custom.envVars.title")}
             description={markdown(t("custom.envVars.description"))}
             width="full"
-            variant="section"
-            sizePreset="main-content"
           />
 
           <CustomConfigKeyValue />
@@ -486,10 +492,9 @@ export default function CustomModal({
       <Section gap={2}>
         <InputPadder>
           <Content
+            font="main-content-emphasis"
             title={t("custom.models.title")}
             description={t("custom.models.description")}
-            variant="section"
-            sizePreset="main-content"
             width="full"
           />
         </InputPadder>

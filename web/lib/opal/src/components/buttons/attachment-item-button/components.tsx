@@ -266,8 +266,7 @@ function AttachmentItemButton({
               )}
             </div>
             <Content
-              sizePreset="main-ui"
-              variant="section"
+              font="main-ui-action"
               color="interactive"
               title={title}
               titleMaxLines={titleMaxLines}

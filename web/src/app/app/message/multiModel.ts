@@ -1,5 +1,5 @@
-import { Message } from "@/app/app/interfaces";
-import { MultiModelResponse } from "@/app/app/message/interfaces";
+import { Message } from "@/app/app/types";
+import { MultiModelResponse } from "@/app/app/message/types";
 
 // The model that produced a message. Error responses carry the model that
 // failed, so they count for attribution too.
@@ -29,9 +29,22 @@ export function getMultiModelChildren(
   return multiModelChildren.length >= 2 ? multiModelChildren : null;
 }
 
+// The model label of one answer of a multi-model turn. `modelProviderLookup`
+// maps model → provider slug for icons and may be empty (e.g. the shared
+// view). `getModelIcon` then falls back to the name.
+export function getMultiModelLabel(
+  msg: Message,
+  modelProviderLookup: Map<string, string>
+): Pick<MultiModelResponse, "provider" | "modelName" | "displayName"> {
+  const modelVersion = msg.overridden_model || msg.modelDisplayName || "Model";
+  return {
+    provider: modelProviderLookup.get(modelVersion) ?? "",
+    modelName: modelVersion,
+    displayName: msg.modelDisplayName || modelVersion,
+  };
+}
+
 // Group a user message's sibling responses into multi-model panels.
-// `modelProviderLookup` maps model → provider slug for icons and may be
-// empty (e.g. the shared view). `getModelIcon` then falls back to the name.
 export function getMultiModelResponses(
   userMessage: Message,
   messageTree: Map<number, Message>,
@@ -41,23 +54,17 @@ export function getMultiModelResponses(
   if (!multiModelChildren) return null;
 
   return multiModelChildren.map((msg, idx): MultiModelResponse => {
-    const modelVersion =
-      msg.overridden_model || msg.modelDisplayName || "Model";
-    const provider = modelProviderLookup.get(modelVersion) ?? "";
-    const displayName = msg.modelDisplayName || modelVersion;
     const isError = msg.type === "error";
     return {
       modelIndex: idx,
-      provider,
-      modelName: modelVersion,
-      displayName,
+      ...getMultiModelLabel(msg, modelProviderLookup),
       packets: msg.packets || [],
       packetCount: msg.packetCount || msg.packets?.length || 0,
       nodeId: msg.nodeId,
       messageId: msg.messageId,
       currentFeedback: msg.currentFeedback,
       isGenerating: msg.is_generating || false,
-      errorMessage: isError ? msg.message : null,
+      errorMessage: isError ? msg.errorMessage : null,
       errorCode: isError ? msg.errorCode : null,
       isRetryable: isError ? msg.isRetryable : undefined,
       errorStackTrace: isError ? msg.stackTrace : null,
@@ -72,15 +79,19 @@ export interface UnresolvedMultiModelTurn {
 }
 
 // The multi-model turn a new message would continue from, when the user
-// never picked a preferred response. `chain` is the tree's latest chain.
+// never picked a preferred response. `chain` is the tree's latest chain; a
+// turn the chain continues past is not the one a new message continues.
 export function getUnresolvedMultiModelTurn(
   chain: Message[],
   messageTree: Map<number, Message>
 ): UnresolvedMultiModelTurn | null {
-  const lastUserMsg = [...chain].reverse().find((m) => m.type === "user");
-  if (!lastUserMsg || lastUserMsg.preferredResponseId != null) return null;
-  const responses = getMultiModelChildren(lastUserMsg, messageTree);
-  return responses ? { userMessage: lastUserMsg, responses } : null;
+  const parentNodeId = chain.at(-1)?.parentNodeId;
+  const userMessage =
+    parentNodeId == null ? undefined : messageTree.get(parentNodeId);
+  if (userMessage?.type !== "user" || userMessage.preferredResponseId != null)
+    return null;
+  const responses = getMultiModelChildren(userMessage, messageTree);
+  return responses ? { userMessage, responses } : null;
 }
 
 // The model of the most recent preferred response before `excludeNodeId`'s

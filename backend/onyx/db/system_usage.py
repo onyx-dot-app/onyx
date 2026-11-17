@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import SystemUsageAttribution, UsageActorKind
 from onyx.db.llm_usage import LLMUsageRecord, build_usage_upsert_values
-from onyx.db.models import UserUsage
+from onyx.db.models import USAGE_MODEL_CONFIGURATION_KEY, UserUsage
 from onyx.utils.datetime import datetime_to_utc
 
 _CONFLICT_COLUMNS = [
@@ -17,6 +17,7 @@ _CONFLICT_COLUMNS = [
     "model",
     "flow",
     "provider",
+    USAGE_MODEL_CONFIGURATION_KEY,
 ]
 _SYSTEM_ACTOR_INDEX_PREDICATE = text("actor_kind = 'SYSTEM'")
 UNATTRIBUTED_SYSTEM_USAGE_CATEGORY = "unattributed"
@@ -56,6 +57,7 @@ def record_system_usage(
         flow=usage.flow,
         provider=usage.provider or "",
         incognito=False,
+        model_configuration_id=usage.model_configuration_id,
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
         cache_read_tokens=usage.cache_read_tokens,

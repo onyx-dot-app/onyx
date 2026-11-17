@@ -14,7 +14,7 @@ import {
   INITIAL_QUERIES_TO_SHOW,
   QUERIES_PER_EXPANSION,
 } from "./searchStateUtils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
   id: `query-${index}`,
@@ -73,9 +73,11 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
         timelineLayout: "content",
         content: (
           <div className="flex flex-col">
-            <Text as="p" text04 mainUiMuted className="mb-1">
-              {queriesHeader}
-            </Text>
+            <div className="mb-1">
+              <Text as="p" font="main-ui-muted" color="text-04">
+                {queriesHeader}
+              </Text>
+            </div>
             <SearchChipList
               items={queries}
               initialCount={INITIAL_QUERIES_TO_SHOW}

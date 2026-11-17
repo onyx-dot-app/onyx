@@ -22,6 +22,6 @@ dependencies:
   version: 5.4.0
 - name: code-interpreter
   repository: https://onyx-dot-app.github.io/python-sandbox/
-  version: 0.4.9
-digest: sha256:fd6d41856cf609b9a1ee7ca01f726dd7677fc6bdc000422a20ba77babaa57e53
-generated: "2026-10-02T14:26:22.496579-07:00"
+  version: 0.4.10
+digest: sha256:94f8454f3390123b5a4886abf65c9ccccdae09b36b1d1bb667729c9b158ed1d2
+generated: "2026-10-27T11:32:38.48739-07:00"

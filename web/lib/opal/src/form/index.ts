@@ -10,6 +10,10 @@ export {
   type InputCheckboxFieldProps,
 } from "@opal/form/InputCheckboxField";
 export {
+  InputCurrencyField,
+  type InputCurrencyFieldProps,
+} from "@opal/form/InputCurrencyField";
+export {
   InputNumberField,
   type InputNumberFieldProps,
 } from "@opal/form/InputNumberField";

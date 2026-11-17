@@ -159,9 +159,9 @@ def test_vector_quantization_mapping_and_retrieval(
             # Spy on the search bodies; the real queries still run.
             with patch.object(
                 OpenSearchIndexClient,
-                "search",
+                "_run_search",
                 autospec=True,
-                side_effect=OpenSearchIndexClient.search,
+                side_effect=OpenSearchIndexClient._run_search,
             ) as search_spy:
                 semantic_results = document_index.semantic_retrieval(
                     query_embedding=query_embedding,
@@ -190,10 +190,18 @@ def test_vector_quantization_mapping_and_retrieval(
                     "oversample_factor": lucene_scalar_quantization.rescore_oversample_factor
                 }
             )
-            assert search_spy.call_count == 2
-            for search_call in search_spy.call_args_list:
-                knn_field_queries = _get_knn_field_queries(search_call.kwargs["body"])
-                assert knn_field_queries
+            # Hybrid retrieval also sends a fetch request with no knn clause.
+            knn_field_queries_per_search = [
+                knn_field_queries
+                for search_call in search_spy.call_args_list
+                if (
+                    knn_field_queries := _get_knn_field_queries(
+                        search_call.kwargs["body"]
+                    )
+                )
+            ]
+            assert len(knn_field_queries_per_search) == 2
+            for knn_field_queries in knn_field_queries_per_search:
                 for knn_field_query in knn_field_queries:
                     assert knn_field_query.get("rescore") == expected_rescore
         finally:

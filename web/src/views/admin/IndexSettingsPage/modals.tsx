@@ -8,9 +8,8 @@ import * as Yup from "yup";
 import { Button } from "@opal/components";
 import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Modal } from "@opal/components";
-import { InputVertical, toast } from "@opal/layouts";
+import { InputVertical, toast, Section } from "@opal/layouts";
 import { InputSingleSelectField } from "@opal/form";
 import {
   EmbeddingModelRequest,
@@ -75,7 +74,7 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
           onClose={onClose}
         />
         <Modal.Body twoTone>
-          <GeneralLayouts.Section gap={4}>{children}</GeneralLayouts.Section>
+          <Section gap={4}>{children}</Section>
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={onClose}>
@@ -592,6 +591,125 @@ function LiteLLMProviderModal({
 }
 
 // ---------------------------------------------------------------------------
+// OpenAI-compatible: any `/v1/embeddings` endpoint, through the OpenAI SDK.
+// ---------------------------------------------------------------------------
+
+interface OpenAICompatibleFormValues extends LiteLLMFormValues {
+  /** A string, so an empty field stays empty instead of becoming NaN. */
+  reducedDimension: string;
+}
+function OpenAICompatibleProviderModal({
+  provider,
+  existingCredentials,
+  existingModel,
+  onSubmit,
+}: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
+  const isEditing = !!existingCredentials;
+  const maskedApiKey = existingCredentials?.api_key ?? "";
+
+  const schema = Yup.object({
+    apiUrl: Yup.string()
+      .trim()
+      .required(t("validation.apiBaseUrlRequired"))
+      .test("http-url", t("validation.urlInvalid"), isHttpUrl),
+    apiKey: isEditing
+      ? Yup.string().trim()
+      : Yup.string().trim().required(t("validation.apiKeyRequired")),
+    ...modelSpecSchemaShape(t),
+    reducedDimension: Yup.string()
+      .trim()
+      .matches(/^[1-9]\d*$/, {
+        message: t("validation.modelDimPositive"),
+        excludeEmptyString: true,
+      })
+      .test(
+        "below-model-dim",
+        t("validation.reducedDimensionTooLarge"),
+        function (value) {
+          return !value || Number(value) < Number(this.parent.modelDim);
+        }
+      ),
+  });
+
+  const initialValues: OpenAICompatibleFormValues = {
+    apiUrl: existingCredentials?.api_url ?? "",
+    apiKey: maskedApiKey,
+    modelName: existingModel?.modelName ?? "",
+    modelDim: existingModel?.modelDim ?? 0,
+    queryPrefix: existingModel?.queryPrefix ?? "",
+    passagePrefix: existingModel?.passagePrefix ?? "",
+    normalize: existingModel?.normalize ?? false,
+    reducedDimension: "",
+  };
+
+  return (
+    <Formik<OpenAICompatibleFormValues>
+      initialValues={initialValues}
+      validationSchema={schema}
+      validateOnMount
+      onSubmit={async (values) => {
+        const apiKey =
+          values.apiKey === maskedApiKey ? null : values.apiKey || null;
+        if (
+          await testAndSaveProviderCredentials({
+            provider,
+            apiKey,
+            apiUrl: values.apiUrl.trim(),
+            modelName: values.modelName.trim(),
+            unknownErrorMessage: t("toasts.unknownError"),
+          })
+        ) {
+          onSubmit({
+            modelName: values.modelName.trim(),
+            modelDim: values.modelDim,
+            normalize: values.normalize,
+            // The cloud embedding path rejects prefixes, so none are offered.
+            queryPrefix: null,
+            passagePrefix: null,
+            reducedDimension: values.reducedDimension.trim()
+              ? Number(values.reducedDimension)
+              : null,
+          });
+        }
+      }}
+    >
+      <ModalShell provider={provider} isEditing={isEditing}>
+        <ApiUrlField
+          title={t("openaiCompatible.apiUrl.title")}
+          placeholder={t("placeholders.apiUrl")}
+          subDescription={t("openaiCompatible.apiUrl.description", {
+            appName,
+          })}
+        />
+
+        <ApiKeyField provider={provider} />
+
+        <ModelSpecFields
+          modelNameSubDescription={t("openaiCompatible.modelName.description", {
+            appName,
+          })}
+          showPrefixes={false}
+        />
+
+        {/* Editing saves the connection only; it does not stage a model. */}
+        {!isEditing && (
+          <TextField
+            name="reducedDimension"
+            title={t("openaiCompatible.reducedDimension.title")}
+            suffix={t("fields.optional.suffix")}
+            placeholder={t("openaiCompatible.reducedDimension.placeholder")}
+            inputMode="numeric"
+            subDescription={t("openaiCompatible.reducedDimension.description")}
+          />
+        )}
+      </ModalShell>
+    </Formik>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Bifrost — the model is free text. Every save embeds a test string, which
 // rejects non-embedding models and gives the dimension.
 // ---------------------------------------------------------------------------
@@ -750,6 +868,8 @@ export function ProviderCredentialsModal(props: ProviderModalProps) {
       return <AzureProviderModal {...props} />;
     case EmbeddingProviderName.LITELLM:
       return <LiteLLMProviderModal {...props} />;
+    case EmbeddingProviderName.OPENAI_COMPATIBLE:
+      return <OpenAICompatibleProviderModal {...props} />;
     case EmbeddingProviderName.BIFROST:
       return <BifrostProviderModal {...props} />;
     case EmbeddingProviderName.CUSTOM:

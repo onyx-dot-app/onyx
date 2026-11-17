@@ -1,5 +1,3 @@
-import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
-import { parseErrorDetail } from "@/lib/fetcher";
 import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/types";
 import { downloadFile } from "@/lib/download";
 import { FetchError } from "@/lib/fetcher";
@@ -22,14 +20,9 @@ import {
   type OutputInventory,
   type OutputCard,
 } from "@/app/craft/types/streamingTypes";
-import {
-  ApprovalView,
-  ApprovalSubmitDecision,
-} from "@/app/craft/types/approvals";
-import {
-  RATE_LIMITED_ERROR_CODE,
-  RateLimitDetails,
-} from "@/app/app/interfaces";
+import { ApprovalView } from "@/app/craft/types/approvals";
+import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
+import { RATE_LIMITED_ERROR_CODE, RateLimitDetails } from "@/app/app/types";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
@@ -1167,22 +1160,6 @@ export async function deleteLibraryFile(documentId: string): Promise<void> {
       errorData
     );
   }
-}
-
-export async function saveAppActionPolicies(
-  appId: number,
-  actionPolicies: Record<string, ActionPolicy>,
-  errorMessage: string
-): Promise<void> {
-  const response = await fetch(`/api/build/action-policies/${appId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      action_policies: actionPolicies,
-    }),
-  });
-  if (!response.ok)
-    throw new Error(await parseErrorDetail(response, errorMessage));
 }
 
 /** Mint a folder-scoped URL; the isolated frame never receives login credentials. */

@@ -6,5 +6,5 @@
 # UV_BUILD_CONSTRAINT with UV_REQUIRE_HASHES so every wheel builds against the
 # same verified closure.
 hatchling==1.29.0
-go-bin==1.27.1
+go-bin==1.27.4
 manygo==0.2.0

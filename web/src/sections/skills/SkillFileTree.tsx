@@ -13,7 +13,7 @@ import {
 } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import { formatBytes } from "@/lib/utils";
+import { useFormatBytes } from "@/hooks/useFormatBytes";
 import type { SkillBundleFile } from "@/lib/skills/types";
 
 interface SkillFileTreeNode {
@@ -43,6 +43,7 @@ function SkillFileTreeNodes({
   removeDisabled,
 }: SkillFileTreeNodesProps) {
   const t = useTranslations("skills.sections");
+  const formatBytes = useFormatBytes();
 
   return nodes.map((node) => {
     const isDirectory = node.size === null;
@@ -64,7 +65,7 @@ function SkillFileTreeNodes({
     ) : (
       <div className="flex items-center gap-1">
         <Text font="secondary-body" color="text-02">
-          {formatBytes(node.size!, 1)}
+          {formatBytes(node.size!)}
         </Text>
         {onRemove && (
           <Button
@@ -86,7 +87,7 @@ function SkillFileTreeNodes({
         <div style={{ paddingLeft: `${depth * 20}px` }}>
           {isDirectory ? (
             <LineItemButton
-              sizePreset="main-ui"
+              font="main-ui-action"
               rounding={2}
               icon={FileIcon}
               onClick={() => onToggle(node.path)}
@@ -100,7 +101,7 @@ function SkillFileTreeNodes({
             // LineItemButton applies, so the two line up.
             <div className="w-full p-1.5">
               <ContentAction
-                sizePreset="main-ui"
+                font="main-ui-action"
                 padding={0.5}
                 icon={FileIcon}
                 rightChildren={rightChildren}

@@ -68,7 +68,7 @@ export default function UrlBar({
         {onSearchChange ? (
           <InputTypeIn
             variant="internal"
-            searchIcon
+            icon="search"
             value={searchValue ?? ""}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder={placeholder}

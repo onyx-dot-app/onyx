@@ -717,6 +717,8 @@ describe("Output resources and inventory", () => {
         run_id: "scheduled-run",
         task_id: "task",
         task_name: "Report",
+        revision: 0,
+        viewed_revision: null,
         status,
         started_at: "2026-10-10T00:00:00Z",
         finished_at:
@@ -1269,6 +1271,7 @@ describe("Session loading and restoration", () => {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_omissions: null,
       nextjs_port: null,
       session_loaded_in_sandbox: false,
       sandbox: {
@@ -2861,6 +2864,8 @@ describe("Session loading and restoration", () => {
           run_id: "scheduled-run",
           task_id: "task",
           task_name: "Report",
+          revision: 0,
+          viewed_revision: null,
           status,
           started_at: "2026-10-10T00:00:00Z",
           finished_at: "2026-10-10T00:01:00Z",
@@ -2896,6 +2901,8 @@ describe("Session loading and restoration", () => {
         run_id: "scheduled-run",
         task_id: "task",
         task_name: "Report",
+        revision: 0,
+        viewed_revision: null,
         status: "FAILED",
         started_at: "2026-10-10T00:00:00Z",
         finished_at: "2026-10-10T00:01:00Z",
@@ -2934,6 +2941,8 @@ describe("Session loading and restoration", () => {
           run_id: "scheduled-run",
           task_id: "task",
           task_name: "Daily report",
+          revision: 0,
+          viewed_revision: null,
           status: "RUNNING" as const,
           started_at: "2026-10-10T00:00:00Z",
           finished_at: null,
@@ -3532,6 +3541,7 @@ describe("session history races and discarded queued starts", () => {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_omissions: null,
       session_loaded_in_sandbox: true,
     });
   });
@@ -4066,6 +4076,7 @@ describe("Session naming", () => {
     agent_provider: null,
     agent_model: null,
     skills_stale: false,
+    skill_omissions: null,
   };
   beforeEach(() => {
     useBuildSessionStore.setState({

@@ -345,6 +345,22 @@
       "problemMatcher": []
     },
     {
+      "label": "craft-dev: doctor",
+      "detail": "Check AWS SSO, VPN egress, kube access, Telepresence, host agent mTLS, and the Alembic head against the craft-dev profile cluster (the same check as ods craft-dev doctor). Changes nothing.",
+      "type": "process",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "deployment/helm/dev/dev.py",
+        "--target",
+        "craft-dev",
+        "doctor"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "craft: disk usage",
       "type": "process",
       "command": "make",

@@ -3,7 +3,9 @@ import { importGitHubSkills, previewGitHubSkills } from "@/lib/skills/api";
 import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useUser } from "@/providers/UserProvider";
+import type { SkillSharingDraft } from "@/lib/skills/sharing";
 import type { GitHubSkillsPreview } from "@/lib/skills/types";
+import { Modal } from "@opal/components";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 
 jest.mock("@/lib/skills/api", () => ({
@@ -16,6 +18,42 @@ jest.mock("@/hooks/useUserExternalApps", () => ({
 }));
 jest.mock("@/providers/UserProvider", () => ({
   useUser: jest.fn(),
+}));
+
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({
+    isGlobalHolder: jest.mocked(useUser)().isAdmin,
+    isScopedManager: false,
+  }),
+}));
+jest.mock("@/sections/modals/skills/ShareSkillModal", () => ({
+  __esModule: true,
+  default: ({
+    draft,
+    onSaveDraft,
+    onClose,
+  }: {
+    draft: SkillSharingDraft;
+    onSaveDraft: (draft: SkillSharingDraft) => void;
+    onClose: () => void;
+  }) => (
+    <Modal open>
+      <Modal.Content>
+        <button
+          onClick={() => {
+            onSaveDraft({
+              ...draft,
+              public_permission: "VIEWER",
+              installation_policy: "DEFAULT",
+            });
+            onClose();
+          }}
+        >
+          Share selected skills with organization
+        </button>
+      </Modal.Content>
+    </Modal>
+  ),
 }));
 
 const mockedPreview = jest.mocked(previewGitHubSkills);
@@ -111,6 +149,48 @@ describe("ImportSkillsFromGitHubModal", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/1 not selected/)).toBeInTheDocument();
     expect(onImported).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies organization access and installation policy to the entire import", async () => {
+    const user = setupUser();
+    mockedUseUser.mockReturnValue({ isAdmin: true } as ReturnType<
+      typeof useUser
+    >);
+    mockedPreview.mockResolvedValue(preview);
+    mockedImport.mockResolvedValue({ imported: [], not_imported: [] });
+    render(
+      <ImportSkillsFromGitHubModal
+        open
+        onClose={jest.fn()}
+        onImported={jest.fn()}
+      />
+    );
+    await user.type(screen.getByRole("textbox"), "owner/repository");
+    await user.click(screen.getByRole("button", { name: "Search repository" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Configure access" })
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Share selected skills with organization",
+      })
+    );
+    expect(
+      screen.getByText("Everyone in the organization can access these skills.")
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Import 2 skills" }));
+    await waitFor(() =>
+      expect(mockedImport).toHaveBeenCalledWith(
+        preview,
+        ["skills/alpha", "skills/beta"],
+        {
+          public_permission: "VIEWER",
+          installation_policy: "DEFAULT",
+          user_shares: [],
+          group_shares: [],
+        }
+      )
+    );
   });
 
   it("shows name conflicts as successful disabled imports", async () => {

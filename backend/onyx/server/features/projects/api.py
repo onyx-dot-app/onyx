@@ -25,10 +25,11 @@ from onyx.configs.constants import (
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
+from onyx.db.chat import get_owned_chat_session
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, UserFileStatus
 from onyx.db.incognito import mark_incognito_user_files_deleting
-from onyx.db.models import ChatSession, Project__UserFile, User, UserFile, UserProject
+from onyx.db.models import Project__UserFile, User, UserFile, UserProject
 from onyx.db.persona import get_personas_by_ids
 from onyx.db.projects import (
     check_project_ownership,
@@ -636,11 +637,7 @@ def move_chat_session(
     db_session: Session = Depends(get_session),
 ) -> Response:
     user_id = user.id
-    chat_session = (
-        db_session.query(ChatSession)
-        .filter(ChatSession.id == body.chat_session_id, ChatSession.user_id == user_id)
-        .one_or_none()
-    )
+    chat_session = get_owned_chat_session(body.chat_session_id, user_id, db_session)
     if chat_session is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat session not found")
     if not check_project_ownership(project_id, user_id, db_session):
@@ -657,11 +654,7 @@ def remove_chat_session(
     db_session: Session = Depends(get_session),
 ) -> Response:
     user_id = user.id
-    chat_session = (
-        db_session.query(ChatSession)
-        .filter(ChatSession.id == body.chat_session_id, ChatSession.user_id == user_id)
-        .one_or_none()
-    )
+    chat_session = get_owned_chat_session(body.chat_session_id, user_id, db_session)
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Chat session not found")
     chat_session.project_id = None
@@ -680,11 +673,7 @@ def get_chat_session_project_token_count(
     If the chat session has no project, returns 0.
     """
     user_id = user.id
-    chat_session = (
-        db_session.query(ChatSession)
-        .filter(ChatSession.id == chat_session_id, ChatSession.user_id == user_id)
-        .one_or_none()
-    )
+    chat_session = get_owned_chat_session(chat_session_id, user_id, db_session)
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Chat session not found")
 
@@ -710,11 +699,7 @@ def get_chat_session_project_files(
     """
     user_id = user.id
 
-    chat_session = (
-        db_session.query(ChatSession)
-        .filter(ChatSession.id == chat_session_id, ChatSession.user_id == user_id)
-        .one_or_none()
-    )
+    chat_session = get_owned_chat_session(chat_session_id, user_id, db_session)
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Chat session not found")
 

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import threading
+import time
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -9,10 +12,17 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
 from onyx.db.models import (
+    Plugin,
     Skill,
     Skill__User,
     Skill__UserGroup,
+    UserPluginPreference,
     UserSkillPreference,
+)
+from onyx.db.plugin import (
+    lock_plugin,
+    lock_skill_plugin__no_commit,
+    publish_plugin__no_commit,
 )
 from onyx.db.skill import (
     add_new_skill__no_commit,
@@ -28,6 +38,8 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.skills.ingest import IngestedBundle
+from onyx.skills.models import PluginSkillContent, PluginVersionContent
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_built_in_skill_row,
@@ -35,6 +47,8 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_group,
     make_skill,
     make_user,
+    set_current_version_validity,
+    set_plugin_created_at,
     share_skill_with_group,
     share_skill_with_user,
 )
@@ -69,7 +83,7 @@ def test_skill_user_states_resolve_defaults_and_visibility(
         is_public=True,
         name=f"invalid-{uuid4().hex[:8]}",
     )
-    invalid_custom.is_valid = False
+    set_current_version_validity(db_session, invalid_custom.id, False)
     built_in = make_built_in_skill_row(
         db_session,
         built_in_skill_id=f"built-in-{uuid4().hex[:8]}",
@@ -354,7 +368,7 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
     )
 
     assert {
-        skill.id
+        skill.skill.id
         for skill in list_runtime_skills_for_user(
             user=first_user,
             db_session=db_session,
@@ -362,7 +376,7 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
         if skill.name == name
     } == {first_skill.id}
     assert {
-        skill.id
+        skill.skill.id
         for skill in list_runtime_skills_for_user(
             user=second_user,
             db_session=db_session,
@@ -550,11 +564,34 @@ def test_installation_policies_preserve_choices_through_updates(
     set_skill_enabled_for_user(
         skill_id=skill.id, enabled=False, user=user, db_session=db_session
     )
+    # A save needs edit access; an admin edits the published skill.
+    editor = make_user(db_session, is_admin=True)
     replace_skill_bundle(
         skill=skill,
-        new_bundle_file_id="updated-bundle",
-        new_bundle_sha256="new-hash",
-        new_description="Updated",
+        ingested=IngestedBundle(
+            canonical_name=skill.name,
+            bundle_file_id="updated-bundle",
+            bundle_sha256="new-hash",
+            description="Updated",
+            content=PluginVersionContent(
+                bundle_file_id="updated-bundle",
+                bundle_sha256="new-hash",
+                is_valid=True,
+                file_manifest=[],
+                unpacked_size_bytes=0,
+                file_count=0,
+                skills=[
+                    PluginSkillContent(
+                        path="",
+                        skill_md=None,
+                        frontmatter={"name": skill.name, "description": "Updated"},
+                    )
+                ],
+            ),
+        ),
+        base_version_id=None,
+        user=editor,
+        skip_if_unchanged=False,
         db_session=db_session,
     )
     assert not skill_user_states(user, [skill.id], db_session)[skill.id].enabled
@@ -563,7 +600,8 @@ def test_installation_policies_preserve_choices_through_updates(
     state = skill_user_states(user, [skill.id], db_session)[skill.id]
     assert state.enabled and not state.can_toggle
     assert skill.id in {
-        row.id for row in list_runtime_skills_for_user(user=user, db_session=db_session)
+        row.skill.id
+        for row in list_runtime_skills_for_user(user=user, db_session=db_session)
     }
     with pytest.raises(OnyxError):
         set_skill_enabled_for_user(
@@ -583,6 +621,8 @@ def test_automatic_skill_name_conflicts(db_session: Session) -> None:
     name = f"policy-conflict-{uuid4().hex[:8]}"
     optional = make_skill(db_session, name=name, is_public=True)
     automatic = make_skill(db_session, name=name, is_public=True)
+    # Of two published skills with one name, the older one runs.
+    set_plugin_created_at(db_session, optional.id, datetime(2025, 1, 1, tzinfo=UTC))
     set_skill_enabled_for_user(
         skill_id=optional.id, enabled=True, user=user, db_session=db_session
     )
@@ -638,7 +678,7 @@ def test_installation_policy_follows_invited_users_and_groups(
         assert state.enabled
         assert state.can_toggle == (policy != SkillInstallationPolicy.REQUIRED)
         assert skill.id in {
-            row.id
+            row.skill.id
             for row in list_runtime_skills_for_user(user=user, db_session=db_session)
         }
     assert not skill_user_states(outsider, [skill.id], db_session)[skill.id].enabled
@@ -654,7 +694,7 @@ def test_installation_policy_follows_invited_users_and_groups(
     for user in (invited, member):
         assert not skill_user_states(user, [skill.id], db_session)[skill.id].enabled
         assert skill.id not in {
-            row.id
+            row.skill.id
             for row in list_runtime_skills_for_user(user=user, db_session=db_session)
         }
 
@@ -685,9 +725,11 @@ def test_replacing_default_skill_remembers_opt_out(db_session: Session) -> None:
 
 
 @pytest.mark.parametrize("share_via_group", [False, True])
-def test_inaccessible_selection_does_not_suppress_default(
+def test_published_default_keeps_its_name_over_a_shared_selection(
     db_session: Session, share_via_group: bool
 ) -> None:
+    """Name order: a published skill wins over a shared one, also when the
+    user turned the shared one on. The hidden choice stays saved."""
     owner = make_user(db_session)
     user = make_user(db_session)
     selected = make_skill(db_session, is_public=False, author_user_id=owner.id)
@@ -702,34 +744,32 @@ def test_inaccessible_selection_does_not_suppress_default(
     )
     default = make_skill(db_session, name=selected.name, is_public=True)
     set_skill_installation_policy(default, SkillInstallationPolicy.DEFAULT, db_session)
-    assert not skill_user_states(user, [default.id], db_session)[default.id].enabled
+
+    def runtime_ids() -> set[UUID]:
+        return {
+            skill.skill.id
+            for skill in list_runtime_skills_for_user(user=user, db_session=db_session)
+        }
+
+    states = skill_user_states(user, [default.id, selected.id], db_session)
+    assert states[default.id].enabled
+    assert not states[selected.id].enabled
+    assert default.id in runtime_ids() and selected.id not in runtime_ids()
 
     replace_skill_shares(
         skill=selected, user_shares={}, group_shares={}, db_session=db_session
     )
     assert skill_user_states(user, [default.id], db_session)[default.id].enabled
-    runtime_ids = {
-        skill.id
-        for skill in list_runtime_skills_for_user(user=user, db_session=db_session)
-    }
-    assert default.id in runtime_ids
-    assert selected.id not in runtime_ids
+    assert default.id in runtime_ids() and selected.id not in runtime_ids()
     preference = db_session.get(UserSkillPreference, (user.id, selected.id))
     assert preference is not None and preference.enabled
 
-    # Restoring access restores the saved selection without enabling both skills.
-    if share_via_group:
-        share_skill_with_group(db_session, selected, group)
-    else:
-        share_skill_with_user(db_session, selected, user)
-    states = skill_user_states(user, [default.id, selected.id], db_session)
-    assert states[selected.id].enabled
-    assert not states[default.id].enabled
 
-
-def test_replacement_clears_inaccessible_selection_and_effective_default(
+def test_replacement_clears_effective_default_and_keeps_hidden_choice(
     db_session: Session,
 ) -> None:
+    """A switch turns off the visible same-name skill only. The kept choice of
+    a skill the user can no longer see neither blocks it nor changes."""
     user = make_user(db_session)
     owner = make_user(db_session)
     previous = make_skill(db_session, is_public=False, author_user_id=owner.id)
@@ -751,13 +791,21 @@ def test_replacement_clears_inaccessible_selection_and_effective_default(
         user=user,
         db_session=db_session,
     )
-    for skill in (previous, default):
-        preference = db_session.get(UserSkillPreference, (user.id, skill.id))
-        assert preference is not None and not preference.enabled
+    default_choice = db_session.get(UserPluginPreference, (user.id, default.id))
+    assert default_choice is not None and not default_choice.enabled
+    hidden_choice = db_session.get(UserPluginPreference, (user.id, previous.id))
+    assert hidden_choice is not None and hidden_choice.enabled
     set_skill_enabled_for_user(
         skill_id=replacement.id, enabled=False, user=user, db_session=db_session
     )
+    set_skill_enabled_for_user(
+        skill_id=default.id, enabled=False, user=user, db_session=db_session
+    )
     share_skill_with_user(db_session, previous, user)
+    assert skill_user_states(user, [previous.id], db_session)[previous.id].enabled
+    set_skill_enabled_for_user(
+        skill_id=previous.id, enabled=False, user=user, db_session=db_session
+    )
     assert not any(
         state.enabled
         for state in skill_user_states(
@@ -774,6 +822,174 @@ def test_creation_does_not_displace_default_skill(db_session: Session) -> None:
     assert not enable_new_skill_if_name_available__no_commit(new, user.id, db_session)
     assert db_session.get(UserSkillPreference, (user.id, new.id)) is None
     assert skill_user_states(user, [default.id], db_session)[default.id].enabled
+
+
+def test_same_name_switch_locks_plugins_in_id_order(db_session: Session) -> None:
+    user = make_user(db_session)
+    name = f"lock-order-{uuid4().hex[:8]}"
+    lower, higher = sorted(
+        (make_skill(db_session, name=name, is_public=True) for _ in range(2)),
+        key=lambda skill: skill.id,
+    )
+    set_skill_enabled_for_user(
+        skill_id=lower.id, enabled=True, user=user, db_session=db_session
+    )
+    lock_skill_plugin__no_commit(higher, db_session)
+    db_session.commit()
+
+    # Hold the lower plugin, then switch to the higher skill.
+    lock_plugin(lower.id, db_session)
+    holder_pid = db_session.scalar(text("SELECT pg_backend_pid()"))
+    errors: list[Exception] = []
+
+    def switch() -> None:
+        with Session(bind=db_session.get_bind()) as switch_session:
+            try:
+                switch_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+                set_skill_enabled_for_user(
+                    skill_id=higher.id,
+                    enabled=True,
+                    replace_conflict=True,
+                    user=user,
+                    db_session=switch_session,
+                )
+                switch_session.commit()
+            except Exception as error:
+                errors.append(error)
+
+    switcher = threading.Thread(target=switch)
+    switcher.start()
+    try:
+        with Session(bind=db_session.get_bind()) as probe:
+            deadline = time.monotonic() + 10
+            while not probe.scalar(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_stat_activity "
+                    "WHERE :pid = ANY(pg_blocking_pids(pid)))"
+                ),
+                {"pid": holder_pid},
+            ):
+                assert time.monotonic() < deadline, "The switch did not wait."
+                time.sleep(0.05)
+            # The waiting switch holds no plugin with a higher id.
+            probe.execute(text("SET LOCAL lock_timeout = '200ms'"))
+            assert lock_plugin(higher.id, probe) is not None
+            probe.rollback()
+    finally:
+        db_session.rollback()
+        switcher.join(timeout=15)
+    assert not switcher.is_alive(), "The switch did not finish."
+    assert not errors
+
+
+def _wait_until_blocked_by(holder: Session, pid: int, message: str) -> None:
+    with Session(bind=holder.get_bind()) as probe:
+        deadline = time.monotonic() + 10
+        while not probe.scalar(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity "
+                "WHERE :pid = ANY(pg_blocking_pids(pid)))"
+            ),
+            {"pid": pid},
+        ):
+            assert time.monotonic() < deadline, message
+            time.sleep(0.05)
+
+
+def test_opposite_same_name_switches_do_not_deadlock(db_session: Session) -> None:
+    switching_user = make_user(db_session)
+    other_user = make_user(db_session)
+    name = f"opposite-{uuid4().hex[:8]}"
+    lower, higher = sorted(
+        (make_skill(db_session, name=name, is_public=True) for _ in range(2)),
+        key=lambda skill: skill.id,
+    )
+    set_skill_enabled_for_user(
+        skill_id=lower.id, enabled=True, user=switching_user, db_session=db_session
+    )
+    lock_skill_plugin__no_commit(higher, db_session)
+    db_session.commit()
+
+    # The other user's switch to the lower skill holds the lower plugin and
+    # next inserts its first preference for the higher skill.
+    lock_plugin(lower.id, db_session)
+    holder_pid = db_session.scalar(text("SELECT pg_backend_pid()"))
+    errors: list[Exception] = []
+
+    def switch() -> None:
+        with Session(bind=db_session.get_bind()) as switch_session:
+            try:
+                switch_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+                set_skill_enabled_for_user(
+                    skill_id=higher.id,
+                    enabled=True,
+                    replace_conflict=True,
+                    user=switching_user,
+                    db_session=switch_session,
+                )
+                switch_session.commit()
+            except Exception as error:
+                errors.append(error)
+
+    switcher = threading.Thread(target=switch)
+    switcher.start()
+    try:
+        _wait_until_blocked_by(db_session, holder_pid, "The switch did not wait.")
+        db_session.execute(text("SET LOCAL lock_timeout = '5s'"))
+        db_session.add(
+            UserSkillPreference(
+                user_id=other_user.id, skill_id=higher.id, name=name, enabled=False
+            )
+        )
+        db_session.flush()
+    finally:
+        db_session.rollback()
+        switcher.join(timeout=15)
+    assert not switcher.is_alive(), "The switch did not finish."
+    assert not errors
+
+
+def test_publish_rename_retries_when_a_concurrent_write_takes_the_name(
+    db_session: Session,
+) -> None:
+    owner = make_user(db_session)
+    name = f"race-{uuid4().hex[:8]}"
+    moving = make_skill(db_session, name=name, author_user_id=owner.id)
+    published = make_skill(db_session, name=name, is_public=True)
+    for skill in (moving, published):
+        lock_skill_plugin__no_commit(skill, db_session)
+    db_session.commit()
+
+    # Another transaction publishes a plugin under the first free name and
+    # commits while the move waits on it.
+    racer = make_skill(db_session, name=f"{name}-2", is_public=True)
+    lock_skill_plugin__no_commit(racer, db_session)
+    holder_pid = db_session.scalar(text("SELECT pg_backend_pid()"))
+    errors: list[Exception] = []
+
+    def publish() -> None:
+        with Session(bind=db_session.get_bind()) as publish_session:
+            try:
+                publish_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+                publish_plugin__no_commit(moving.id, "rename", publish_session)
+                publish_session.commit()
+            except Exception as error:
+                errors.append(error)
+
+    publisher = threading.Thread(target=publish)
+    publisher.start()
+    try:
+        _wait_until_blocked_by(db_session, holder_pid, "The publish did not wait.")
+        db_session.commit()
+    finally:
+        db_session.rollback()
+        publisher.join(timeout=15)
+    assert not publisher.is_alive(), "The publish did not finish."
+    assert not errors
+    plugin = db_session.get(Plugin, moving.id)
+    assert plugin is not None
+    db_session.refresh(plugin)
+    assert plugin.name == f"{name}-3"
 
 
 def test_toggle_lock_allows_concurrent_share_foreign_key_read(
@@ -823,12 +1039,58 @@ def test_creation_serializes_with_toggle_preference_writes(db_session: Session) 
         assert error.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
 
 
-def test_ownerless_public_skill_requires_owner_before_becoming_private(
+def test_ownerless_public_skill_stays_published(
     db_session: Session,
 ) -> None:
     skill = make_skill(db_session, is_public=True)
-    with pytest.raises(OnyxError, match="Assign an owner"):
+    with pytest.raises(OnyxError, match="cannot be made private"):
         set_skill_public_permission(
             skill=skill, public_permission=None, db_session=db_session
         )
     assert skill.public_permission == SkillSharePermission.VIEWER
+
+
+def test_required_skill_that_cannot_run_does_not_hold_its_name(
+    db_session: Session,
+) -> None:
+    """A Required app skill whose app the user has not connected does not load,
+    so the user's own skill with that name can be turned off and on again."""
+    user = make_user(db_session, standard_account=True)
+    name = f"app-name-{uuid4().hex[:8]}"
+    required = make_skill(db_session, name=name, is_public=True)
+    set_skill_installation_policy(
+        required, SkillInstallationPolicy.REQUIRED, db_session
+    )
+    make_external_app(db_session, skill=required, auth_template={}, enabled=False)
+    own = make_skill(db_session, name=name, author_user_id=user.id)
+    set_current_version_validity(db_session, own.id, True)
+
+    for enabled in (True, False, True):
+        set_skill_enabled_for_user(
+            skill_id=own.id, enabled=enabled, user=user, db_session=db_session
+        )
+    assert [
+        runtime.skill.id
+        for runtime in list_runtime_skills_for_user(user=user, db_session=db_session)
+        if runtime.name == name
+    ] == [own.id]
+
+
+def test_hidden_enabled_choice_does_not_block_a_toggle(db_session: Session) -> None:
+    """A user who turned on a shared skill and lost the share can turn on
+    their own skill with the same name."""
+    user = make_user(db_session, standard_account=True)
+    owner = make_user(db_session, standard_account=True)
+    name = f"hidden-{uuid4().hex[:8]}"
+    shared = make_skill(db_session, name=name, author_user_id=owner.id)
+    share_skill_with_user(db_session, shared, user, SkillSharePermission.VIEWER)
+    set_skill_enabled_for_user(
+        skill_id=shared.id, enabled=True, user=user, db_session=db_session
+    )
+    replace_skill_shares(skill=shared, user_shares={}, db_session=db_session)
+
+    own = make_skill(db_session, name=name, author_user_id=user.id)
+    set_skill_enabled_for_user(
+        skill_id=own.id, enabled=True, user=user, db_session=db_session
+    )
+    assert skill_user_states(user, [own.id], db_session)[own.id].enabled

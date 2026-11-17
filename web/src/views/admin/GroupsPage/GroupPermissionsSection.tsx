@@ -20,6 +20,7 @@ import {
   SvgShield,
   SvgCpu,
   SvgFiles,
+  SvgLinkedDots,
   SvgCreateAgent,
   SvgManageAgent,
 } from "@opal/icons";
@@ -35,7 +36,8 @@ import type { PermissionRegistryEntry } from "@/views/admin/GroupsPage/types";
 // `id` keys must match the backend PERMISSION_REGISTRY entries.
 const ICON_MAP: Record<string, IconFunctionComponent> = {
   manage_llms: SvgCpu,
-  manage_connectors_and_document_sets: SvgFiles,
+  manage_connectors: SvgLinkedDots,
+  manage_document_sets: SvgFiles,
   manage_actions: SvgActions,
   manage_groups: SvgUsers,
   manage_service_accounts: SvgUserKey,
@@ -104,14 +106,14 @@ function GroupPermissionsSection({
                     <Divider paddingParallel={0} paddingPerpendicular={0} />
                   )}
                   <ContentAction
+                    font="main-ui-action"
                     icon={icon}
                     title={entry.display_name}
                     description={entry.description}
-                    sizePreset="main-ui"
-                    variant="section"
                     padding={1}
                     rightChildren={
                       <InputSwitch
+                        aria-label={entry.display_name}
                         checked={isRowEnabled(entry)}
                         onCheckedChange={(checked: boolean) =>
                           handleToggle(entry, checked)

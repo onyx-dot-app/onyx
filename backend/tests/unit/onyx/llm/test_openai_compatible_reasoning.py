@@ -139,11 +139,11 @@ def test_admin_flagged_gpt_6_gets_effort_without_tools() -> None:
     assert "reasoning_effort" in kwargs["allowed_openai_params"]
 
 
-def test_gpt_6_tool_turn_delivers_explicit_none() -> None:
-    """GPT-6 tool turns stay on chat completions, which need "none"; LiteLLM
-    must not drop it."""
+def test_gpt_6_tool_turn_keeps_effort_for_the_responses_bridge() -> None:
+    """LiteLLM files GPT-6 under its GPT-5 config, so the tool turn takes the
+    responses bridge and keeps the admin-flagged effort."""
     kwargs = _sent_kwargs(_llm("gpt-6", supports_reasoning=True), _TOOL_LOOP)
-    assert kwargs["reasoning_effort"] == "none"
+    assert kwargs["reasoning_effort"] == "high"
     assert "reasoning_effort" in kwargs["allowed_openai_params"]
 
 

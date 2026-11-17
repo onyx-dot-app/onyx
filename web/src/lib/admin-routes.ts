@@ -3,6 +3,7 @@ import { Tier } from "@/lib/tiers/types";
 import { IconFunctionComponent } from "@opal/types";
 import {
   SvgActions,
+  SvgBlocks,
   SvgActivity,
   SvgArrowExchange,
   SvgAudio,
@@ -47,6 +48,8 @@ export interface FeatureFlags {
   tier: Tier | undefined;
   customAnalyticsEnabled: boolean;
   hasSubscription: boolean;
+  // The playground has no billing: the trial is free and sales handles the rest.
+  isPlayground: boolean;
   hooksEnabled: boolean;
   queryHistoryEnabled: boolean;
   craftAvailable: boolean;
@@ -193,6 +196,16 @@ export const ADMIN_ROUTES = {
     icon: SvgPlug,
     title: "Apps",
     sidebarLabel: "",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Craft",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => f.craftAvailable,
+  },
+  SKILLS: {
+    path: "/admin/skills",
+    icon: SvgBlocks,
+    title: "Skills",
+    sidebarLabel: "Skills",
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Craft",
     requiredTier: null,
@@ -437,7 +450,7 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Organization",
     requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => f.hasSubscription,
+    visibleWhen: (f: FeatureFlags) => f.hasSubscription && !f.isPlayground,
   },
   THEME: {
     path: "/admin/theme",
@@ -481,6 +494,16 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Usage",
     requiredTier: Tier.BUSINESS,
+    visibleWhen: null,
+  },
+  SPENDING_LIMITS: {
+    path: "/admin/spending-limits",
+    icon: SvgWallet,
+    title: "Spending Limits",
+    sidebarLabel: "Spending Limits",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Usage",
+    requiredTier: Tier.ENTERPRISE,
     visibleWhen: null,
   },
   WORKSPACE_ANALYTICS: {

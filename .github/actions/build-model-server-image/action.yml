@@ -43,6 +43,10 @@ inputs:
       public bases with a warning instead. Passed to the dhi-base-images action.
     required: false
     default: "true"
+outputs:
+  digest:
+    description: "Digest of the pushed image. Consumers pull <runs-on-ecr-cache>@<digest>, never the mutable tag."
+    value: ${{ steps.build.outputs.digest }}
 runs:
   using: "composite"
   steps:
@@ -79,6 +83,7 @@ runs:
         required: ${{ inputs.dhi-required }}
 
     - name: Build and push Model Server Docker image
+      id: build
       uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # ratchet:docker/build-push-action@v6
       with:
         context: ./backend
@@ -95,10 +100,12 @@ runs:
         # stable across runs and caps out at 100 per subject.
         provenance: false
         sbom: false
+        # Any pull_request job can push to the RunsOn ECR cache, so only fork PR runs,
+        # which get no secrets, import it. Other runs import only the published image.
         cache-from: |
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ inputs.github-sha }}
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache
+          ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:model-server-cache-{1}', inputs.runs-on-ecr-cache, inputs.github-sha) || '' }}
+          ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:model-server-cache-{1}', inputs.runs-on-ecr-cache, steps.format-branch.outputs.cache-suffix) || '' }}
+          ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:model-server-cache', inputs.runs-on-ecr-cache) || '' }}
           type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-model-server:latest
         cache-to: |
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ inputs.github-sha }},mode=max

@@ -148,10 +148,12 @@ export function modelSpecSchemaShape(t: IndexSettingsTranslator) {
 
 interface ModelSpecFieldsProps {
   modelNameSubDescription?: string;
+  showPrefixes?: boolean;
 }
 
 export function ModelSpecFields({
   modelNameSubDescription,
+  showPrefixes = true,
 }: ModelSpecFieldsProps) {
   const t = useTranslations("admin.indexSettings");
   const { appName } = useSettings();
@@ -178,21 +180,25 @@ export function ModelSpecFields({
         subDescription={t("fields.modelDim.description")}
       />
 
-      <TextField
-        name="queryPrefix"
-        title={t("fields.queryPrefix.title")}
-        suffix={t("fields.optional.suffix")}
-        placeholder={t("fields.queryPrefix.placeholder")}
-        subDescription={t("fields.queryPrefix.description")}
-      />
+      {showPrefixes && (
+        <>
+          <TextField
+            name="queryPrefix"
+            title={t("fields.queryPrefix.title")}
+            suffix={t("fields.optional.suffix")}
+            placeholder={t("fields.queryPrefix.placeholder")}
+            subDescription={t("fields.queryPrefix.description")}
+          />
 
-      <TextField
-        name="passagePrefix"
-        title={t("fields.passagePrefix.title")}
-        suffix={t("fields.optional.suffix")}
-        placeholder={t("fields.passagePrefix.placeholder")}
-        subDescription={t("fields.passagePrefix.description")}
-      />
+          <TextField
+            name="passagePrefix"
+            title={t("fields.passagePrefix.title")}
+            suffix={t("fields.optional.suffix")}
+            placeholder={t("fields.passagePrefix.placeholder")}
+            subDescription={t("fields.passagePrefix.description")}
+          />
+        </>
+      )}
 
       <InputHorizontal
         title={t("fields.normalize.title")}

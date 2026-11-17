@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import LoginText from "@/app/auth/login/LoginText";
 import CloudSSOSignIn from "@/app/auth/login/CloudSSOSignIn";
@@ -33,6 +34,7 @@ export default function LoginPage({
   autoRedirectToSso,
 }: LoginPageProps) {
   const t = useTranslations("auth");
+  const navigation = useNavigation();
   useSendAuthRequiredMessage();
 
   // Honor any existing nextUrl; only default to new team flow for first users with no nextUrl
@@ -69,7 +71,7 @@ export default function LoginPage({
             nextUrl={effectiveNextUrl}
           />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
-            <Button href="/auth/forgot-password">
+            <Button {...navigation.linkTo("/auth/forgot-password")}>
               {t("login.resetPasswordButton.label")}
             </Button>
           )}
@@ -111,7 +113,7 @@ export default function LoginPage({
               if (typeof window !== "undefined" && window.top) {
                 window.top.location.href = "/auth/signup";
               } else {
-                window.location.href = "/auth/signup";
+                navigation.load("/auth/signup");
               }
             }}
             className="text-link font-medium cursor-pointer"

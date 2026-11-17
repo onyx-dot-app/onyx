@@ -8,10 +8,24 @@ from sqlalchemy.pool import NullPool
 
 from onyx.server.metrics.postgres_connection_pool import (
     PoolStateCollector,
+    _checkout_timeout_total,
     _register_pool_events,
     setup_postgres_connection_pool_metrics,
 )
 from onyx.utils.middleware import _build_route_map, _match_route
+
+# --- Checkout timeout counter ---
+
+
+def test_checkout_timeout_counter_is_exported_before_any_timeout() -> None:
+    exported = {
+        sample.labels["engine"]
+        for metric in _checkout_timeout_total.collect()
+        for sample in metric.samples
+        if sample.name == "onyx_db_pool_checkout_timeout_total"
+    }
+    assert exported == {"unknown"}
+
 
 # --- PoolStateCollector tests ---
 

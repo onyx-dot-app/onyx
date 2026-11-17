@@ -295,6 +295,7 @@ def test_prunes_and_check_runs_join_the_feed(db_session: Session) -> None:
     ]
     assert everything.status_counts == {
         CCPairRunStatusGroup.RUNNING: 1,
+        CCPairRunStatusGroup.SCHEDULED: 0,
         CCPairRunStatusGroup.SUCCEEDED: 2,
         CCPairRunStatusGroup.FAILED: 2,
         CCPairRunStatusGroup.CANCELED: 0,

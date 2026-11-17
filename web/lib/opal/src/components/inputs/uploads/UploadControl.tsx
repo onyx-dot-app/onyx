@@ -6,6 +6,10 @@ import React, { useRef } from "react";
 import { Button } from "@opal/components/buttons/button/components";
 import { Text } from "@opal/components/text/components";
 import { SvgImport, SvgX } from "@opal/icons";
+import {
+  InputContainer,
+  InputTitleLine,
+} from "@opal/components/inputs/container";
 import { noProp } from "@opal/utils";
 import { useOpalStrings } from "@opal/strings";
 import useUploadTarget from "@opal/components/inputs/uploads/useUploadTarget";
@@ -44,6 +48,8 @@ type UploadControlProps = UploadBaseProps & {
   dropToAdd: string;
   /** The copy while files are dragged over the control and it holds a value. */
   dropOverValue: string;
+  /** The trailing button's text; it opens the file picker. */
+  selectLabel: string;
   /** Receives the picked or dropped files that pass `accept` and the size limit. */
   onFiles: (files: File[]) => void;
   /** Clears the value: the ×, or Delete or Backspace on the control. */
@@ -57,8 +63,8 @@ type UploadControlProps = UploadBaseProps & {
  * `InputSingleUpload`'s control: the input chrome with no caret, showing one
  * value's label. A click focuses it, so a copied file can be pasted; a double
  * click (or Enter or Space) opens the file picker, and a file can be dropped
- * on it (see `useUploadTarget`). With a value, the × at the end, or Delete or
- * Backspace, clears it.
+ * on it (see `useUploadTarget`). The select button at the end also opens the
+ * picker. With a value, the × before it, or Delete or Backspace, clears it.
  */
 export default function UploadControl({
   variant = "primary",
@@ -72,6 +78,7 @@ export default function UploadControl({
   placeholder,
   dropToAdd,
   dropOverValue,
+  selectLabel,
   onFiles,
   onClear,
   onPasteText,
@@ -111,10 +118,17 @@ export default function UploadControl({
       data-drag={drag ?? undefined}
     >
       {fileInput}
-      <div className="opal-input" data-variant={variant}>
+      <InputContainer
+        variant={variant}
+        // Focus moving to the picker is not the user leaving the field.
+        onFieldBlur={(e) => {
+          if (!pickerOpenRef.current) onBlur?.(e);
+        }}
+      >
         {/* The whole field picks files, as a button a label can point at;
         the × beside it is its own button. Its name is the label, else its
         text. Enter and Space open the picker, as on any button. */}
+        {/* oxlint-disable-next-line jsx-a11y/control-has-associated-label -- its text is the label inside InputTitleLine; an aria-label would override the <label> name */}
         <button
           id={id}
           type="button"
@@ -140,32 +154,28 @@ export default function UploadControl({
             e.preventDefault();
             onClear();
           }}
-          onBlur={(e) => {
-            if (!pickerOpenRef.current) onBlur?.(e);
-          }}
         >
-          <div className="opal-input-leading-icon">
-            <SvgImport className="opal-input-leading-icon-svg" />
-          </div>
-          <span
-            className="opal-input-upload-label"
-            data-placeholder={shownLabel === null ? true : undefined}
-          >
-            <Text
-              as="p"
-              font={
-                drag !== null
-                  ? "main-ui-action"
-                  : shownLabel === null
-                    ? "main-ui-muted"
-                    : "main-ui-body"
-              }
-              color="inherit"
-              maxLines={1}
+          <InputTitleLine icon={SvgImport} iconMuted>
+            <span
+              className="opal-input-upload-label"
+              data-placeholder={shownLabel === null ? true : undefined}
             >
-              {shownLabel ?? placeholder}
-            </Text>
-          </span>
+              <Text
+                as="p"
+                font={
+                  drag !== null
+                    ? "main-ui-action"
+                    : shownLabel === null
+                      ? "main-ui-muted"
+                      : "main-ui-body"
+                }
+                color="inherit"
+                maxLines={1}
+              >
+                {shownLabel ?? placeholder}
+              </Text>
+            </span>
+          </InputTitleLine>
         </button>
         {hasValue && !isNonEditable && drag === null && (
           <Button
@@ -182,7 +192,16 @@ export default function UploadControl({
             aria-label={strings.clearFile}
           />
         )}
-      </div>
+        <Button
+          onClick={noProp(openFilePicker)}
+          type="button"
+          prominence="secondary"
+          size="sm"
+          disabled={isNonEditable}
+        >
+          {selectLabel}
+        </Button>
+      </InputContainer>
     </div>
   );
 }

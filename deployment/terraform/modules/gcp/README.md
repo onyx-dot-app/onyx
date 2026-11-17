@@ -281,6 +281,36 @@ A bucket with uniform access, public access prevention, versioning, and a
 lifecycle rule for old versions. It grants the workload identity principal
 object access and the narrow read that Onyx needs at startup.
 
+`create_kms_key` (default off) creates a Cloud KMS key ring and key named after
+the bucket, in the bucket's location, with 90-day rotation. It grants only the
+project's GCS service agent use of the key. Dots in the bucket name become
+hyphens in the key ring and key names. Cloud KMS never deletes key rings or
+keys, so the names stay taken after a destroy. To turn the option on again
+after a destroy, `terraform import` the key ring and key, or use a new bucket
+name. `expiration_days` (default off)
+deletes live objects after that many days.
+
+#### Sandbox archive bucket
+
+`onyx` creates a second `gcs` bucket when `enable_sandbox_archive_bucket` is
+true. It holds Craft sandbox session archives:
+
+- Its own Cloud KMS key (`create_kms_key = true`). The composition enables the
+  Cloud KMS API when `enable_project_apis` is on
+- Public access prevention, uniform access, versioning
+- Objects expire after `sandbox_archive_expiration_days` (default 30).
+  Noncurrent versions expire after `sandbox_archive_noncurrent_expiration_days`
+  (default 7)
+- No workload identity gets access. The api_server will hand out signed URLs
+- The plan fails if `sandbox_archive_bucket_name` equals the file store bucket
+  name, so the expiry rules cannot reach it
+- Turning `enable_sandbox_archive_bucket` off and on again fails on the key
+  ring create. Import the old ring and key, or set a new
+  `sandbox_archive_bucket_name`
+
+Outputs: `sandbox_archive_bucket_name`, `sandbox_archive_kms_key_name` (null
+when off).
+
 ### `cloud-armor`
 
 A backend security policy with the OWASP Core Rule Set at sensitivity 1, an API
@@ -352,7 +382,9 @@ chart's OpenSearch subchart runs on the tainted index pool.
 Federation lets IAM name a Kubernetes service account directly. The bucket
 grant goes to the `workload_identity_principal` output. There is no Google
 service account to impersonate and no annotation on the Kubernetes service
-account. Use the same output to grant access to other resources.
+account. Use the same output to grant access to other resources. The exception
+is `craft_sandbox_runtime = "firecracker"`; see [Craft sandboxes on
+Firecracker](#craft-sandboxes-on-firecracker).
 
 **Cloud Armor attaches only to an L7 load balancer.** The chart's
 ingress-nginx controller sits behind a Service of type `LoadBalancer`, which is
@@ -374,7 +406,9 @@ it keeps them off.
 **The composition enables the project APIs.** A new project has most of them
 off. `enable_project_apis` turns on Compute, GKE, Cloud SQL Admin, Memorystore,
 Service Networking, Storage, Monitoring, Logging, IAM and Resource Manager.
-With `enable_l7_ingress` it also turns on Certificate Manager. It never turns
+With `enable_l7_ingress` it also turns on Certificate Manager. With
+`craft_sandbox_runtime = "firecracker"` it also turns on IAM Credentials, for
+GCS signed URLs. It never turns
 them off on destroy, because other workloads may use them.
 
 ## Installing the Onyx Helm chart (after Terraform)
@@ -601,6 +635,118 @@ so these values need two GPUs and one pod stays pending. Give the GPU to one
 model server only, or use the `gke` module with `gpu_accelerator_count = 2`.
 Helm merges `resources` with the chart defaults, so the CPU and memory requests
 and limits stay.
+
+## Craft sandboxes on Firecracker
+
+`craft_sandbox_runtime = "firecracker"` prepares the sandbox nodes for Craft
+Firecracker microVMs, which need `/dev/kvm`. The chart value
+`craft.sandboxRuntime: firecracker` then runs the Firecracker host agent on
+these nodes. Opencode sessions still run as pods, so add a pod sandbox pool
+too. Set both when you create the pools:
+
+```hcl
+enable_sandbox_node_pool           = true
+craft_sandbox_runtime              = "firecracker"
+enable_craft_pod_sandbox_node_pool = true
+```
+
+With `"firecracker"`, the `gke` module:
+
+- turns on nested virtualization for the sandbox pool;
+- sets `vm.max_map_count` to `1048576` (COS ships `65530`);
+- adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`;
+- keeps Shielded VM secure boot on;
+- creates a Google service account for the Onyx workloads (see below).
+
+Kubelet does not count microVM memory, so only the Firecracker host agent and
+the preflight check tolerate the `onyx.app/kvm` taint. Pod sandboxes and the
+sandbox image prepuller do not run on the sandbox pool. They run on the pod
+sandbox pool:
+
+```hcl
+enable_craft_pod_sandbox_node_pool  = true
+craft_pod_sandbox_node_machine_type = "n2-standard-4" # default
+craft_pod_sandbox_node_min_count    = 1               # default
+craft_pod_sandbox_node_max_count    = 2               # default
+```
+
+The `gke` module adds this pool under the key `sandboxpod`. It has the label
+`onyx.app/workload=sandbox` and the taint `workload=sandbox:NO_SCHEDULE`, but no
+`onyx.app/kvm` label or taint, and no nested virtualization. These match the
+chart's `sandboxPod` defaults, so you set no extra values. The boot disk is
+`sandbox_node_disk_size_gb`. One pod sandbox requests about 1.1 vCPU, 2.3 GiB
+of memory and 5.5 GiB of ephemeral storage. The flag needs
+`enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`.
+The `onyx` composition passes only `enable_craft_pod_sandbox_node_pool`; call
+the `gke` module directly to change the size.
+
+Unlike the other tainted pools, the Firecracker pool and the pod sandbox pool
+start with one node in each zone of the cluster (when their minimum is above 0).
+Their first workloads are DaemonSets (the host agent and the sandbox image
+prepuller), and a DaemonSet never makes the autoscaler add a node. GKE does not
+grow an empty pool to its minimum. Later, the autoscaler scales each pool
+between its minimum and maximum. The start size applies only when the module
+creates a pool. On a Firecracker pool that has no nodes, resize it by hand.
+Use the cluster location (the `location` output: the region, or the zone of a
+zonal cluster). `--num-nodes` counts the nodes in each zone. The autoscaler
+then keeps the pool between its minimum and maximum:
+
+```bash
+gcloud container clusters resize <cluster> --node-pool <sandbox pool> \
+  --num-nodes 1 --location <cluster location>
+```
+
+### Signed GCS URLs
+
+Craft Firecracker gives sandboxes signed GCS URLs. Without a key file, a signed
+URL is signed through the IAM `signBlob` API, which needs a Google service
+account. The direct Workload Identity principal has none, so with `"firecracker"`
+the `gke` module:
+
+- creates the Google service account `<cluster name>-workload` (shortened with
+  a digest for long names);
+- maps `onyx-workload-access` to it: the
+  `iam.gke.io/gcp-service-account` annotation and
+  `roles/iam.workloadIdentityUser` for that Kubernetes service account only;
+- grants the account `roles/iam.serviceAccountTokenCreator` on itself, which
+  holds `iam.serviceAccounts.signBlob`.
+
+The pods then act as the Google service account, so `workload_identity_principal`
+becomes `serviceAccount:<email>` and the file store bucket grant moves to it.
+The `workload_google_service_account_email` output names the account. It is
+null with `"pod"`. Grants that you made to the old `principal://` member on
+other resources do not move; grant them again to the new member.
+
+If you set `create_workload_service_account = false` on the `gke` module, the
+chart creates the Kubernetes service account. Add the annotation in the values:
+
+```yaml
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: <workload_google_service_account_email output>
+```
+
+The default, `"pod"`, leaves the pool as it is. GCP turns on nested
+virtualization only when it creates a pool, so a change to
+`craft_sandbox_runtime` replaces the sandbox pool. The replacement pool comes
+up before the old one drains. Pod sandboxes on the old pool stop when GKE
+drains it, and new pod sandboxes go to the pod sandbox pool.
+
+Node requirements:
+
+| Item | Allowed | Blocked |
+|---|---|---|
+| Cluster | GKE Standard | GKE Autopilot |
+| Machine type | Intel `n2`, `c3` (default `n2-standard-8`) | `n2d`, `c2d`, `c3d`, `t2d` (AMD), `t2a` (Arm), `e2` |
+| Image | `COS_CONTAINERD` (fixed) | — |
+| Pool | — | `sandbox_gvisor_enabled = true` |
+
+The module refuses a blocked machine type, and gVisor with Firecracker on the
+same pool. These setups must keep `craft_sandbox_runtime = "pod"`:
+
+- Autopilot. It blocks privileged pods and nested virtualization.
+- AMD or Arm machine types. GCP gives them no nested virtualization.
+- gVisor pools. A gVisor pod gets no `/dev/kvm`.
 
 ## Serving through an L7 load balancer (Cloud Armor)
 

@@ -14,6 +14,7 @@ in test_index_reclaim_task.py; here we cover the guards + query logic):
 - fetch_reclaimable_past_settings: actionable PAST rows only, excludes BLOCKED, honors limit
 - name-reuse guard: refuses a reindex whose new index_name still belongs to a not-yet-
   reclaimed PAST; find_unreclaimed_past_by_index_name decides which rows count
+- RECLAIMED storage: both stored forms count as reclaimed
 - consent: set_reclaim_intent stamps the PRESENT; drift enforcement rejects deleting a
   cc_pair the admin never acknowledged
 """
@@ -23,6 +24,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 import onyx.server.manage.search_settings as search_settings_api
@@ -581,6 +583,32 @@ def test_find_unreclaimed_includes_blocked_and_legacy_excludes_reclaimed(
         assert reclaimed.id not in found
     finally:
         for row in (blocked, legacy, reclaimed):
+            db_session.delete(row)
+        db_session.commit()
+
+
+def test_find_unreclaimed_excludes_both_stored_forms_of_reclaimed(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Releases without the widening migration write RECLAIMED as "RECLAIMD". Both
+    forms mean the index is gone."""
+    name = f"test_find_reclaimed_forms_{uuid4().hex[:8]}"
+    reclaimed = _make_settings(
+        db_session, IndexReclaimStatus.RECLAIMED, index_name=name
+    )
+    short_reclaimed = _make_settings(db_session, None, index_name=name)
+    db_session.execute(
+        text("UPDATE search_settings SET reclaim_status = 'RECLAIMD' WHERE id = :id"),
+        {"id": short_reclaimed.id},
+    )
+    db_session.commit()
+    db_session.refresh(short_reclaimed)
+    try:
+        assert short_reclaimed.reclaim_status == IndexReclaimStatus.RECLAIMED
+        assert find_unreclaimed_past_by_index_name(db_session, name) == []
+    finally:
+        for row in (reclaimed, short_reclaimed):
             db_session.delete(row)
         db_session.commit()
 

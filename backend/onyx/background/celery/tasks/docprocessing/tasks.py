@@ -2,7 +2,6 @@ import gc
 import os
 import time
 import traceback
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -57,7 +56,6 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
-    CELERY_INDEXING_LOCK_TIMEOUT,
     DocumentSource,
     MilestoneRecordType,
     NotificationType,
@@ -101,19 +99,21 @@ from onyx.db.enums import (
     IndexingStatus,
     SwitchoverType,
 )
+from onyx.db.hierarchy import remove_unfilled_stub_hierarchy_nodes_for_cc_pair
 from onyx.db.index_attempt import (
-    IndexAttemptError,
     cc_pair_has_dispatched_index_attempts,
     create_index_attempt_error,
     get_active_index_attempts_without_task,
     get_index_attempt,
-    get_index_attempt_errors_for_cc_pair,
     get_stale_not_started_index_attempts,
     get_waiting_index_attempt,
+    index_attempt_has_errors_without_document,
     mark_attempt_canceled,
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
     mark_attempt_succeeded,
+    resolve_index_attempt_entity_errors__no_commit,
+    resolve_index_attempt_errors_for_documents,
 )
 from onyx.db.index_attempt_metrics import (
     IndexAttemptStage,
@@ -125,6 +125,7 @@ from onyx.db.models import ConnectorCredentialPair, IndexAttempt, SearchSettings
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
+    port_reindex_in_progress,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.error_handling.exceptions import OnyxError
@@ -135,6 +136,7 @@ from onyx.file_store.document_batch_storage import (
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing
+from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import (
     SCAN_ITER_COUNT_DEFAULT,
     get_redis_client,
@@ -163,10 +165,6 @@ from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
     INDEX_ATTEMPT_INFO_CONTEXTVAR,
 )
-
-# Bound for waiting on the shared cross-batch DB lock (see usage below).
-CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S = 300
-
 
 logger = setup_logger()
 
@@ -532,20 +530,60 @@ def monitor_indexing_attempt_progress(
             logger.exception("Failed to cleanup storage after monitoring failure")
 
 
-def _resolve_indexing_entity_errors(
-    cc_pair_id: int,
-    db_session: Session,
+def _remove_unfilled_stub_nodes(
+    db_session: Session, cc_pair: ConnectorCredentialPair
 ) -> None:
-    unresolved_errors = get_index_attempt_errors_for_cc_pair(
-        cc_pair_id=cc_pair_id,
-        unresolved_only=True,
-        db_session=db_session,
-    )
-    for error in unresolved_errors:
-        if error.entity_id:
-            error.is_resolved = True
-            db_session.add(error)
-    db_session.commit()
+    """After an attempt whose listing completed, a STUB parent that is still
+    not filled will not be filled: its folder is not in the source, or the
+    connector cannot see it. Move what is under it to the source root and
+    remove it, so nothing stays hidden from the tree. A failed or canceled
+    attempt, or one with a listing failure, keeps its STUBs, because the
+    next attempt can still fill them. A STUB that a failed cleanup keeps is
+    removed by the next attempt that completes its listing. So is a STUB that
+    the cleanup keeps because another attempt of the pair is not finished."""
+    source = cc_pair.connector.source
+    # The attempt is complete. A cleanup error must not undo that.
+    try:
+        removed = remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+            db_session, source, cc_pair.connector_id, cc_pair.credential_id
+        )
+        failed = False
+    except Exception:
+        db_session.rollback()
+        logger.exception(
+            "Could not remove the unfilled STUB hierarchy nodes of cc_pair %s",
+            cc_pair.id,
+        )
+        removed = []
+        failed = True
+    if removed:
+        logger.info(
+            "Removed %s unfilled STUB hierarchy nodes of cc_pair %s",
+            len(removed),
+            cc_pair.id,
+        )
+    if not removed and not failed:
+        return
+    try:
+        # Cached parent chains can go through a removed STUB. Batches commit
+        # one at a time, so a failed cleanup can also have removed some.
+        invalidate_hierarchy_cache_for_source(get_redis_client(), source)
+    except Exception:
+        logger.exception(
+            "Could not invalidate the hierarchy cache of source %s", source
+        )
+
+
+def _attempt_listed_every_parent(db_session: Session, attempt: IndexAttempt) -> bool:
+    """Whether the attempt's listing completed, so a STUB that is still not
+    filled will not be filled. Failures of single documents do not change
+    that. A failure that names no document (a listing, a partition or a
+    batch) can mean a parent was not seen."""
+    if attempt.status == IndexingStatus.SUCCESS:
+        return True
+    if attempt.status != IndexingStatus.COMPLETED_WITH_ERRORS:
+        return False
+    return not index_attempt_has_errors_without_document(attempt.id, db_session)
 
 
 def check_indexing_completion(
@@ -612,6 +650,13 @@ def check_indexing_completion(
             raise RuntimeError(
                 f"CC pair {attempt.connector_credential_pair_id} not found in database"
             )
+
+        # A backfill can run with a partial config, so it does not list
+        # every parent.
+        if not attempt.is_backfill and _attempt_listed_every_parent(
+            db_session, attempt
+        ):
+            _remove_unfilled_stub_nodes(db_session, cc_pair)
 
         source = cc_pair.connector.source.value
         connector_name = cc_pair.connector.name or f"cc_pair_{cc_pair.id}"
@@ -701,10 +746,12 @@ def check_indexing_completion(
                 logger.info(
                     "Resolving indexing entity errors for attempt %s", index_attempt_id
                 )
-                _resolve_indexing_entity_errors(
-                    cc_pair_id=attempt.connector_credential_pair_id,
+                resolve_index_attempt_entity_errors__no_commit(
                     db_session=db_session,
+                    cc_pair_id=attempt.connector_credential_pair_id,
+                    resolved_by_index_attempt_id=index_attempt_id,
                 )
+                db_session.commit()
 
     # Clean up FileStore storage (still needed for document batches during transition)
     try:
@@ -777,6 +824,7 @@ class _KickoffResult:
     skipped_active: int = 0
     skipped_not_found: int = 0
     skipped_not_indexable: int = 0
+    skipped_waiting_for_swap: int = 0
     failed_to_create: int = 0
 
     @property
@@ -786,6 +834,7 @@ class _KickoffResult:
             + self.skipped_active
             + self.skipped_not_found
             + self.skipped_not_indexable
+            + self.skipped_waiting_for_swap
             + self.failed_to_create
         )
 
@@ -863,9 +912,11 @@ def _try_creating_pending_backfill(
     """Settles the pair's ended backfill attempts, then creates the attempt of
     its oldest ready backfill on the current index. The caller checked that no
     attempt is active there. The backfill waits while the pair is not ACTIVE,
-    and while an indexing trigger, a prune-after-reindex or a full re-index
-    request is pending: that run goes first, and a full re-index covers the
-    backfill. The creation checks these again under the pair's row lock."""
+    while an indexing trigger, a prune-after-reindex or a full re-index
+    request is pending (that run goes first, and a full re-index covers the
+    backfill), and while a port-flow reindex builds FUTURE (see
+    port_reindex_in_progress). The creation checks these again under the
+    pair's row lock."""
     if not search_settings.status.is_current() or not cc_pair.pending_backfills:
         return False
     if (
@@ -873,6 +924,7 @@ def _try_creating_pending_backfill(
         or cc_pair.indexing_trigger is not None
         or cc_pair.prune_after_reindex_requested_at is not None
         or cc_pair.full_reindex_requested_at is not None
+        or port_reindex_in_progress(db_session)
         or (DISABLE_INDEX_UPDATE_ON_SWAP and secondary_index_building)
     ):
         return False
@@ -1006,6 +1058,25 @@ def _kickoff_indexing_tasks(
             f"search_settings={search_settings.id}, "
             f"secondary_index_building={secondary_index_building}"
         )
+
+        # A full run during a port-flow reindex adds documents FUTURE never
+        # fetches. Leave the request as it is; it runs after the swap, on the
+        # new index (see raise_if_port_reindex_in_progress).
+        if (
+            search_settings.status.is_current()
+            and (
+                cc_pair.indexing_trigger == IndexingMode.REINDEX
+                or cc_pair.full_reindex_requested_at is not None
+                or cc_pair.prune_after_reindex_requested_at is not None
+            )
+            and port_reindex_in_progress(db_session)
+        ):
+            task_logger.debug(
+                f"_kickoff_indexing_tasks - Full run waits for the reindex swap: "
+                f"cc_pair={cc_pair.id}"
+            )
+            result.skipped_waiting_for_swap += 1
+            continue
 
         reindex = False
         # the indexing trigger is only checked and cleared with the current search settings
@@ -1466,6 +1537,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         f"skipped_active={primary_result.skipped_active} "
         f"skipped_not_found={primary_result.skipped_not_found} "
         f"skipped_not_indexable={primary_result.skipped_not_indexable} "
+        f"skipped_waiting_for_swap={primary_result.skipped_waiting_for_swap} "
         f"failed={primary_result.failed_to_create}]"
         + (
             f" secondary=[evaluated={secondary_result.evaluated} "
@@ -1691,48 +1763,6 @@ def _check_failure_threshold(
         )
 
 
-def _resolve_indexing_document_errors(
-    cc_pair_id: int,
-    failures: list[ConnectorFailure],
-    document_batch: list[Document],
-) -> None:
-    with get_session_with_current_tenant() as db_session_temp:
-        # get previously unresolved errors
-        unresolved_errors = get_index_attempt_errors_for_cc_pair(
-            cc_pair_id=cc_pair_id,
-            unresolved_only=True,
-            db_session=db_session_temp,
-        )
-        doc_id_to_unresolved_errors: dict[str, list[IndexAttemptError]] = defaultdict(
-            list
-        )
-        for error in unresolved_errors:
-            if error.document_id:
-                doc_id_to_unresolved_errors[error.document_id].append(error)
-
-        # resolve errors for documents that were successfully indexed
-        failed_document_ids = [
-            failure.failed_document.document_id
-            for failure in failures
-            if failure.failed_document
-        ]
-        successful_document_ids = [
-            document.id
-            for document in document_batch
-            if document.id not in failed_document_ids
-        ]
-        for document_id in successful_document_ids:
-            if document_id not in doc_id_to_unresolved_errors:
-                continue
-
-            logger.info("Resolving IndexAttemptError for document '%s'", document_id)
-            for error in doc_id_to_unresolved_errors[document_id]:
-                error.is_resolved = True
-                db_session_temp.add(error)
-
-        db_session_temp.commit()
-
-
 # Acknowledged on receipt, like docfetching. With acks_late, the broker
 # redelivers a batch that runs past visibility_timeout while the first worker is
 # still processing it, and the duplicate completion can count one batch twice and
@@ -1811,7 +1841,6 @@ def _record_docprocessing_failure_persistent(
     tenant_id: str,
     batch_num: int,
     documents: list[Document] | None,
-    cross_batch_db_lock: RedisLock | None,
 ) -> None:
     """Catch-all recovery for `_docprocessing_task` under PERSISTENT_INDEXING.
 
@@ -1874,30 +1903,17 @@ def _record_docprocessing_failure_persistent(
         )
 
     # Mark the batch complete with zero counts so check_indexing_completion
-    # doesn't wait forever for this batch. Best-effort: if the lock or DB
-    # write fails we still return cleanly.
+    # doesn't wait forever for this batch. Best-effort: if the DB write fails
+    # we still return cleanly.
     try:
-        if cross_batch_db_lock is not None:
-            with (
-                get_session_with_current_tenant() as db_session,
-                cross_batch_db_lock,
-            ):
-                IndexingCoordination.update_batch_completion_and_docs(
-                    db_session=db_session,
-                    index_attempt_id=index_attempt_id,
-                    total_docs_indexed=0,
-                    new_docs_indexed=0,
-                    total_chunks=0,
-                )
-        else:
-            with get_session_with_current_tenant() as db_session:
-                IndexingCoordination.update_batch_completion_and_docs(
-                    db_session=db_session,
-                    index_attempt_id=index_attempt_id,
-                    total_docs_indexed=0,
-                    new_docs_indexed=0,
-                    total_chunks=0,
-                )
+        with get_session_with_current_tenant() as db_session:
+            IndexingCoordination.update_batch_completion_and_docs(
+                db_session=db_session,
+                index_attempt_id=index_attempt_id,
+                total_docs_indexed=0,
+                new_docs_indexed=0,
+                total_chunks=0,
+            )
     except Exception:
         task_logger.exception(
             "Failed to mark batch %s complete during persistent indexing "
@@ -1965,15 +1981,13 @@ def _docprocessing_task(
     )
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    r = get_redis_client(tenant_id=tenant_id)
 
     # dummy lock to satisfy linter
     per_batch_lock: RedisLock | None = None
 
-    # Hoisted so the except block can safely reference them under
+    # Hoisted so the except block can safely reference it under
     # PERSISTENT_INDEXING when the failure happens mid-try.
     documents: list[Document] | None = None
-    cross_batch_db_lock: RedisLock | None = None
 
     try:
         # Inside the try so a failed first-use import still marks the attempt failed.
@@ -2052,12 +2066,6 @@ def _docprocessing_task(
                 raise RuntimeError(
                     f"Index attempt {index_attempt_id} is not running, status {index_attempt.status}"
                 )
-
-            cross_batch_db_lock: RedisLock = r.lock(
-                redis_connector.db_lock_key(index_attempt.search_settings.id),
-                timeout=CELERY_INDEXING_LOCK_TIMEOUT,
-                thread_local=False,
-            )
 
             callback = IndexingCallback(
                 redis_connector,
@@ -2139,6 +2147,7 @@ def _docprocessing_task(
             adapter=adapter,
             from_beginning=from_beginning,
             skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,
+            written_search_settings_id=search_settings_id,
         )
 
         # Track chunk indexing usage for cloud usage limits
@@ -2157,51 +2166,32 @@ def _docprocessing_task(
                 # Log but don't fail indexing if usage tracking fails
                 task_logger.warning(f"Failed to track chunk indexing usage: {e}")
 
-        # Update batch completion and document counts atomically using database coordination
-
-        # Time the lock-acquire wait (the contention signal); record it after
-        # release (below) so the metric write doesn't extend this shared lock.
-        lock_acquire_start = time.monotonic()
-        # Bounded acquire: the lock guards a short DB update (normal hold well
-        # under a second), but a holder killed mid-section (worker restart /
-        # OOM) leaves the key for its full CELERY_INDEXING_LOCK_TIMEOUT (3h15m).
-        # An unbounded acquire() then wedges every docprocessing thread across
-        # all workers until the fossil expires — observed in production. Fail
-        # the task instead. A failed task is not redelivered: its batch stays in
-        # storage, and the next attempt re-issues it.
-        if not cross_batch_db_lock.acquire(
-            blocking_timeout=CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S
-        ):
-            raise RuntimeError(
-                f"Could not acquire cross-batch DB lock for index attempt "
-                f"{index_attempt_id} within "
-                f"{CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S}s — likely a fossil "
-                f"lock from a killed worker; the next attempt re-issues this batch."
-            )
-        lock_acquire_ms = max(0, int((time.monotonic() - lock_acquire_start) * 1000))
-        try:
-            with get_session_with_current_tenant() as db_session:
-                with time_stage(
-                    IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id
-                ):
-                    IndexingCoordination.update_batch_completion_and_docs(
-                        db_session=db_session,
-                        index_attempt_id=index_attempt_id,
-                        total_docs_indexed=index_pipeline_result.total_docs,
-                        new_docs_indexed=index_pipeline_result.new_docs,
-                        total_chunks=index_pipeline_result.total_chunks,
-                    )
-
-                _resolve_indexing_document_errors(
-                    cc_pair_id,
-                    index_pipeline_result.failures,
-                    documents,
+        # The attempt row lock serializes concurrent batches' counter increments.
+        with get_session_with_current_tenant() as db_session:
+            with time_stage(IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id):
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=index_pipeline_result.total_docs,
+                    new_docs_indexed=index_pipeline_result.new_docs,
+                    total_chunks=index_pipeline_result.total_chunks,
                 )
-        finally:
-            cross_batch_db_lock.release()
-        safe_record_single_event(
-            IndexAttemptStage.COORD_LOCK_ACQUIRE_WAIT, index_attempt_id, lock_acquire_ms
-        )
+
+            failed_document_ids = {
+                failure.failed_document.document_id
+                for failure in index_pipeline_result.failures
+                if failure.failed_document
+            }
+            resolve_index_attempt_errors_for_documents(
+                db_session=db_session,
+                cc_pair_id=cc_pair_id,
+                document_ids=[
+                    document.id
+                    for document in documents
+                    if document.id not in failed_document_ids
+                ],
+                resolved_by_index_attempt_id=index_attempt_id,
+            )
 
         # Post-coordination tail; whatever isn't timed falls into BATCH_UNACCOUNTED.
         _finalization_start = time.monotonic()
@@ -2296,7 +2286,6 @@ def _docprocessing_task(
             tenant_id=tenant_id,
             batch_num=batch_num,
             documents=documents,
-            cross_batch_db_lock=cross_batch_db_lock,
         )
         return
     finally:

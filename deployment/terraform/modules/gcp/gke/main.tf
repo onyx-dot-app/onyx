@@ -1,6 +1,21 @@
 locals {
   location = coalesce(var.zonal_location, var.region)
 
+  sandbox_firecracker = var.enable_sandbox_node_pool && var.craft_sandbox_runtime == "firecracker"
+  sandbox_node_labels = merge(
+    { "onyx.app/workload" = "sandbox" },
+    local.sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
+  )
+  # The Craft pools this module makes whose first workloads are DaemonSets;
+  # see initial_node_count. A caller's own pool of the same name is not one.
+  daemonset_first_pools = local.sandbox_firecracker ? concat(["sandbox"], var.enable_craft_pod_sandbox_node_pool ? ["sandboxpod"] : []) : []
+  # Kubelet does not count microVM memory, so a Firecracker pool also carries
+  # the onyx.app/kvm taint. Only the host agent and preflight tolerate it.
+  sandbox_node_taints = concat(
+    [{ key = "workload", value = "sandbox", effect = "NO_SCHEDULE" }],
+    local.sandbox_firecracker ? [{ key = "onyx.app/kvm", value = "true", effect = "NO_SCHEDULE" }] : [],
+  )
+
   # GKE adds this taint to a GPU pool itself, but only when a non-GPU pool
   # already exists. On a fresh apply the pools are built in parallel, so the
   # module declares it rather than rely on the order.
@@ -26,6 +41,22 @@ locals {
       max_count      = var.sandbox_node_max_count
       disk_size_gb   = var.sandbox_node_disk_size_gb
       disk_type      = "pd-balanced"
+      labels         = local.sandbox_node_labels
+      taints         = local.sandbox_node_taints
+      node_locations = []
+    }
+  } : {}
+
+  # Pod sandbox pool beside a Firecracker pool. Same label and workload taint
+  # as a pod-runtime sandbox pool but no onyx.app/kvm, so pod sandboxes and the
+  # image prepuller land here and not on the KVM nodes.
+  craft_pod_sandbox_node_pool = local.sandbox_firecracker && var.enable_craft_pod_sandbox_node_pool ? {
+    sandboxpod = {
+      machine_type   = var.craft_pod_sandbox_node_machine_type
+      min_count      = var.craft_pod_sandbox_node_min_count
+      max_count      = var.craft_pod_sandbox_node_max_count
+      disk_size_gb   = var.sandbox_node_disk_size_gb
+      disk_type      = "pd-balanced"
       labels         = { "onyx.app/workload" = "sandbox" }
       taints         = [{ key = "workload", value = "sandbox", effect = "NO_SCHEDULE" }]
       node_locations = []
@@ -39,6 +70,7 @@ locals {
     },
     local.gpu_node_pool,
     local.sandbox_node_pool,
+    local.craft_pod_sandbox_node_pool,
   )
 
   # A service account ID is capped at 30 characters and a cluster name can be
@@ -57,6 +89,15 @@ locals {
   ])
 
   workload_pool = "${var.project_id}.svc.id.goog"
+
+  # GCS signed URLs need an IAM service account to sign through signBlob, and
+  # a direct principal has none. So the Firecracker runtime, which hands
+  # sandboxes signed URLs, maps the workload account to a Google one.
+  workload_google_service_account    = local.sandbox_firecracker
+  workload_google_service_account_id = length(var.name) <= 21 ? "${var.name}-workload" : "${substr(var.name, 0, 15)}-${substr(sha1(var.name), 0, 5)}-workload"
+  # Built from inputs so the bucket grant's for_each key is known at plan.
+  workload_google_service_account_email = "${local.workload_google_service_account_id}@${var.project_id}.iam.gserviceaccount.com"
+  workload_principal                    = "principal://iam.googleapis.com/projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/${local.workload_pool}/subject/ns/${var.workload_namespace}/sa/${var.workload_service_account_name}"
 }
 
 data "google_project" "this" {
@@ -226,8 +267,11 @@ resource "google_container_node_pool" "this" {
   # makes one node in each zone of an untainted pool. A tainted pool starts
   # empty: only pods that ask for it can use it, and those pods make the
   # autoscaler add a node. That keeps a regional GPU pool from asking for a
-  # GPU in every zone before it settles to one.
-  initial_node_count = length(each.value.taints) == 0 && each.value.min_count > 0 ? 1 : 0
+  # GPU in every zone before it settles to one. The Craft pools beside
+  # Firecracker are the exception: their first workloads are DaemonSets (host
+  # agent, image prepuller), which never make the autoscaler add a node, and
+  # GKE does not scale an empty pool up to its minimum.
+  initial_node_count = each.value.min_count > 0 && (length(each.value.taints) == 0 || contains(local.daemonset_first_pools, each.key)) ? 1 : 0
 
   # The totals count the whole pool. The per-zone form would triple every
   # number on a regional cluster.
@@ -287,6 +331,27 @@ resource "google_container_node_pool" "this" {
       }
     }
 
+    # Firecracker needs /dev/kvm. GCP offers it only on Intel types with
+    # nested virtualization, which can be set only when the pool is created.
+    # threads_per_core 0 keeps the machine type's default.
+    dynamic "advanced_machine_features" {
+      for_each = each.key == "sandbox" && local.sandbox_firecracker ? [1] : []
+      content {
+        threads_per_core             = 0
+        enable_nested_virtualization = true
+      }
+    }
+
+    # COS ships 65530, too few map areas for many guests with large memory.
+    dynamic "linux_node_config" {
+      for_each = each.key == "sandbox" && local.sandbox_firecracker ? [1] : []
+      content {
+        sysctls = {
+          "vm.max_map_count" = "1048576"
+        }
+      }
+    }
+
     shielded_instance_config {
       enable_secure_boot          = true
       enable_integrity_monitoring = true
@@ -325,16 +390,48 @@ resource "kubernetes_namespace" "workload" {
   depends_on = [google_container_cluster.this]
 }
 
-# No annotation: IAM grants name this account directly through the
-# workload_identity_principal output, so there is no Google account to map to.
+# By default there is no annotation: IAM grants name this account directly
+# through the workload_identity_principal output. The Firecracker runtime maps
+# it to the Google account below instead.
 resource "kubernetes_service_account" "workload" {
   count = var.create_workload_service_account ? 1 : 0
 
   metadata {
     name = var.workload_service_account_name
+    annotations = local.workload_google_service_account ? {
+      "iam.gke.io/gcp-service-account" = local.workload_google_service_account_email
+    } : null
     # Reading the name back off the namespace is what orders this after it.
     namespace = var.create_workload_namespace ? kubernetes_namespace.workload[0].metadata[0].name : var.workload_namespace
   }
 
   depends_on = [google_container_cluster.this]
+}
+
+resource "google_service_account" "workload" {
+  count = local.workload_google_service_account ? 1 : 0
+
+  project      = var.project_id
+  account_id   = local.workload_google_service_account_id
+  display_name = "Onyx workloads for ${var.name}"
+}
+
+resource "google_service_account_iam_member" "workload_identity_user" {
+  count = local.workload_google_service_account ? 1 : 0
+
+  service_account_id = google_service_account.workload[0].name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${local.workload_pool}[${var.workload_namespace}/${var.workload_service_account_name}]"
+
+  # GKE creates the identity pool with the cluster.
+  depends_on = [google_container_cluster.this]
+}
+
+# Signing a GCS URL without a key calls signBlob on the account itself.
+resource "google_service_account_iam_member" "workload_token_creator" {
+  count = local.workload_google_service_account ? 1 : 0
+
+  service_account_id = google_service_account.workload[0].name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.workload[0].email}"
 }

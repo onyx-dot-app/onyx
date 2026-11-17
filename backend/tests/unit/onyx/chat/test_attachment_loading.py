@@ -8,9 +8,9 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_utils import load_all_chat_files
+from onyx.chat.files import load_chat_files
 from onyx.db.enums import UserFileStatus
-from onyx.db.models import ChatMessage, UserFile
+from onyx.db.user_file import prepare_chat_file_inputs
 from onyx.file_store.models import ChatFileType, FileDescriptor
 
 
@@ -28,11 +28,15 @@ def test_attachment_metadata_is_read_before_workers() -> None:
         for file_id in file_ids
     ]
 
-    def get_metadata(user_file_id: UUID | str, db_session: Session) -> UserFile:
+    def get_metadata(
+        user_file_ids: list[UUID], db_session: Session
+    ) -> dict[str, tuple[int, UserFileStatus]]:
         assert get_ident() == caller_thread
         assert db_session is session
-        metadata_reads.append(user_file_id)
-        return UserFile(token_count=17, status=UserFileStatus.COMPLETED)
+        metadata_reads.extend(user_file_ids)
+        return {
+            str(file_id): (17, UserFileStatus.COMPLETED) for file_id in user_file_ids
+        }
 
     def read_plaintext(*_args: object, **_kwargs: object) -> str:
         assert get_ident() != caller_thread
@@ -40,13 +44,13 @@ def test_attachment_metadata_is_read_before_workers() -> None:
         return "cached text"
 
     with (
-        patch("onyx.chat.chat_utils.get_user_file_by_id", side_effect=get_metadata),
         patch(
-            "onyx.chat.chat_utils._get_or_extract_plaintext", side_effect=read_plaintext
+            "onyx.db.user_file.get_user_file_processing_info", side_effect=get_metadata
         ),
-        patch("onyx.chat.chat_utils.get_default_file_store") as store,
+        patch("onyx.chat.files._get_or_extract_plaintext", side_effect=read_plaintext),
+        patch("onyx.chat.files.get_default_file_store") as store,
     ):
-        loaded = load_all_chat_files([ChatMessage(files=descriptors)], session)
+        loaded = load_chat_files(prepare_chat_file_inputs(descriptors, session))
         assert [file.file_id for file in loaded] == [
             str(file_id) for file_id in file_ids
         ]
@@ -68,16 +72,16 @@ def test_loading_preserves_processing_plaintext_guard(
         "type": ChatFileType.PLAIN_TEXT,
         "user_file_id": user_file_id,
     }
-    user_file = UserFile(token_count=None, status=status) if status else None
+    metadata = {user_file_id: (0, status)} if status else {}
     session = MagicMock(spec=Session)
     pending = status in (UserFileStatus.PROCESSING, UserFileStatus.INDEXING)
     with (
-        patch("onyx.chat.chat_utils.get_user_file_by_id", return_value=user_file),
+        patch("onyx.db.user_file.get_user_file_processing_info", return_value=metadata),
         patch(
-            "onyx.chat.chat_utils._get_or_extract_plaintext", return_value="text"
+            "onyx.chat.files._get_or_extract_plaintext", return_value="text"
         ) as plaintext,
     ):
-        loaded = load_all_chat_files([ChatMessage(files=[descriptor])], session)[0]
+        loaded = load_chat_files(prepare_chat_file_inputs([descriptor], session))[0]
     assert loaded.token_count == 0
     assert loaded.content_pending is pending
     assert plaintext.call_args.args[0] == user_file_id
@@ -92,13 +96,11 @@ def test_history_without_valid_user_file_id_keeps_lazy_image(
     if user_file_id is not None:
         descriptor["user_file_id"] = user_file_id
     with (
-        patch("onyx.chat.chat_utils.get_user_file_by_id") as lookup,
-        patch("onyx.chat.chat_utils.get_default_file_store") as store,
+        patch("onyx.chat.files.get_default_file_store") as store,
     ):
-        loaded = load_all_chat_files(
-            [ChatMessage(files=[descriptor])], MagicMock(spec=Session)
-        )
-    lookup.assert_not_called()
+        session = MagicMock(spec=Session)
+        loaded = load_chat_files(prepare_chat_file_inputs([descriptor], session))
+    session.execute.assert_not_called()
     store.assert_not_called()
     assert loaded[0].token_count == 0
     assert not loaded[0].content_pending

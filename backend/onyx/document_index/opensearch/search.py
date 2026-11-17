@@ -153,6 +153,14 @@ def get_normalization_pipeline_name_and_config() -> tuple[str, dict[str, Any]]:
         )
 
 
+# Fields that identify a chunk within a tenant, read from doc values.
+CHUNK_KEY_FIELD_NAMES = (
+    DOCUMENT_ID_FIELD_NAME,
+    CHUNK_INDEX_FIELD_NAME,
+    MAX_CHUNK_SIZE_FIELD_NAME,
+)
+
+
 class DocumentQuery:
     """
     TODO(andrei): Implement multi-phase search strategies.
@@ -297,6 +305,30 @@ class DocumentQuery:
         return final_delete_query
 
     @staticmethod
+    def delete_from_document_ids_query(
+        document_ids: list[str],
+        tenant_state: TenantState,
+    ) -> dict[str, Any]:
+        """Delete-by-query matching every chunk, hidden or not, of the given
+        documents in this tenant."""
+        filter_clauses: list[dict[str, Any]] = [
+            {"terms": {DOCUMENT_ID_FIELD_NAME: list(document_ids)}},
+        ]
+        # Single-tenant indices have no tenant_id field. Mirror _get_search_filters.
+        if tenant_state.multitenant:
+            filter_clauses.append(
+                {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
+            )
+        final_delete_query: dict[str, Any] = {
+            "query": {"bool": {"filter": filter_clauses}},
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+        }
+        if not OPENSEARCH_PROFILING_DISABLED:
+            final_delete_query["profile"] = True
+
+        return final_delete_query
+
+    @staticmethod
     def delete_port_written_chunks_query(
         document_ids: list[str],
         tenant_state: TenantState,
@@ -429,6 +461,7 @@ class DocumentQuery:
         index_filters: IndexFilters,
         include_hidden: bool,
         vector_quantization: VectorQuantization = VectorQuantization.NONE,
+        chunk_keys_only: bool = False,
     ) -> dict[str, Any]:
         """Returns a final hybrid search query.
 
@@ -448,6 +481,10 @@ class DocumentQuery:
             include_hidden: Whether to include hidden documents.
             vector_quantization: Quantization of the index vector fields. Sets
                 the rescoring of the vector subqueries.
+            chunk_keys_only: Return only the chunk key fields, read from doc
+                values, instead of the stored source. Highlighting and explain
+                are left out of this query; get_from_chunk_keys_query
+                highlights the top hits.
 
         Returns:
             A dictionary representing the final hybrid search query.
@@ -471,27 +508,10 @@ class DocumentQuery:
             vector_quantization,
             vector_candidates=max_results_per_subquery,
         )
-        hybrid_search_filters = DocumentQuery._get_search_filters(
+        hybrid_search_filters = DocumentQuery._get_hybrid_search_filters(
             tenant_state=tenant_state,
+            index_filters=index_filters,
             include_hidden=include_hidden,
-            # TODO(andrei): We've done no filtering for PUBLIC_DOC_PAT up to
-            # now. This should not cause any issues but it can introduce
-            # redundant filters in queries that may affect performance.
-            access_control_list=index_filters.access_control_list,
-            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
-            restricted_cc_pair_guard=index_filters.cc_pair_access,
-            source_types=index_filters.source_type or [],
-            tags=index_filters.tags or [],
-            document_sets=index_filters.document_set or [],
-            project_id_filter=index_filters.project_id_filter,
-            persona_id_filter=index_filters.persona_id_filter,
-            created_at_range=index_filters.created_at_range,
-            updated_at_range=index_filters.updated_at_range,
-            min_chunk_index=None,
-            max_chunk_index=None,
-            attached_document_ids=index_filters.attached_document_ids,
-            hierarchy_node_ids=index_filters.hierarchy_node_ids,
-            forced_document_sets=index_filters.forced_document_set,
         )
 
         # See https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
@@ -527,6 +547,17 @@ class DocumentQuery:
             },
         }
 
+        if chunk_keys_only:
+            # On a single-shard index, OpenSearch fetches every hybrid candidate
+            # (up to pagination_depth per subquery) before the normalization
+            # processor keeps the top num_hits. Reading no stored fields, not
+            # even _id, keeps that fetch to a few bytes of doc values per
+            # candidate; the caller fetches the source of the top hits.
+            del final_hybrid_search_body["_source"]
+            final_hybrid_search_body["stored_fields"] = "_none_"
+            final_hybrid_search_body["docvalue_fields"] = list(CHUNK_KEY_FIELD_NAMES)
+            return final_hybrid_search_body
+
         if not OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED:
             final_hybrid_search_body["highlight"] = (
                 DocumentQuery._get_match_highlights_configuration()
@@ -538,6 +569,112 @@ class DocumentQuery:
             final_hybrid_search_body["explain"] = True
 
         return final_hybrid_search_body
+
+    @staticmethod
+    def _get_hybrid_search_filters(
+        tenant_state: TenantState,
+        index_filters: IndexFilters,
+        include_hidden: bool,
+    ) -> list[dict[str, Any]]:
+        """Returns the filters of a hybrid search.
+
+        The source fetch for the top hits of a keys-only hybrid search applies
+        the same filters, so a chunk whose access changed between the two
+        requests is not returned.
+        """
+        return DocumentQuery._get_search_filters(
+            tenant_state=tenant_state,
+            include_hidden=include_hidden,
+            # TODO(andrei): We've done no filtering for PUBLIC_DOC_PAT up to
+            # now. This should not cause any issues but it can introduce
+            # redundant filters in queries that may affect performance.
+            access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
+            source_types=index_filters.source_type or [],
+            tags=index_filters.tags or [],
+            document_sets=index_filters.document_set or [],
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
+            created_at_range=index_filters.created_at_range,
+            updated_at_range=index_filters.updated_at_range,
+            min_chunk_index=None,
+            max_chunk_index=None,
+            attached_document_ids=index_filters.attached_document_ids,
+            hierarchy_node_ids=index_filters.hierarchy_node_ids,
+            forced_document_sets=index_filters.forced_document_set,
+        )
+
+    @staticmethod
+    def get_from_chunk_keys_query(
+        chunk_keys: list[tuple[str, int, int]],
+        query_text: str,
+        tenant_state: TenantState,
+        index_filters: IndexFilters,
+        include_hidden: bool,
+    ) -> dict[str, Any]:
+        """Returns a query for the top hits of a keys-only hybrid search.
+
+        Applies the hybrid search filters again, so a chunk whose access or
+        hidden state changed after the hybrid search is not returned. Match
+        highlights use the keyword subquery of the hybrid search, the only
+        subquery with terms.
+
+        Args:
+            chunk_keys: (document_id, chunk_index, max_chunk_size) of each
+                chunk to get.
+            query_text: The text of the hybrid search.
+            tenant_state: Tenant state containing the tenant ID.
+            index_filters: Filters of the hybrid search.
+            include_hidden: Whether the hybrid search included hidden
+                documents.
+
+        Returns:
+            A dictionary representing the final chunk retrieval query.
+        """
+        chunk_clauses: list[dict[str, Any]] = [
+            {
+                "bool": {
+                    "filter": [
+                        {"term": {DOCUMENT_ID_FIELD_NAME: {"value": document_id}}},
+                        {"term": {CHUNK_INDEX_FIELD_NAME: {"value": chunk_index}}},
+                        {
+                            "term": {
+                                MAX_CHUNK_SIZE_FIELD_NAME: {"value": max_chunk_size}
+                            }
+                        },
+                    ]
+                }
+            }
+            for document_id, chunk_index, max_chunk_size in chunk_keys
+        ]
+        query: dict[str, Any] = {
+            "bool": {
+                "should": chunk_clauses,
+                "minimum_should_match": 1,
+                "filter": DocumentQuery._get_hybrid_search_filters(
+                    tenant_state=tenant_state,
+                    index_filters=index_filters,
+                    include_hidden=include_hidden,
+                ),
+            }
+        }
+        final_chunk_keys_query: dict[str, Any] = {
+            "query": query,
+            "size": len(chunk_keys),
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
+        }
+        if not OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED:
+            final_chunk_keys_query["highlight"] = {
+                **DocumentQuery._get_match_highlights_configuration(),
+                "highlight_query": DocumentQuery._get_title_content_combined_keyword_search_query(
+                    query_text
+                ),
+            }
+        return final_chunk_keys_query
 
     @staticmethod
     def get_keyword_search_query(

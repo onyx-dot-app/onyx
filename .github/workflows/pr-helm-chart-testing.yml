@@ -5,6 +5,8 @@ concurrency:
 
 on:
   pull_request:
+    paths-ignore:
+      - "documentation/**"
   push:
     tags:
       - "v*.*.*"
@@ -42,7 +44,7 @@ jobs:
       - name: Set up chart-testing
         uses: helm/chart-testing-action@d6db0ca01d3598ea552ccf97edb5de6fe6b54ce0
         with:
-          uv_version: "0.11.25"
+          uv_version: "0.13.8"
 
       # even though we specify chart-dirs in ct.yaml, it isn't used by ct for the list-changed command...
       # Diff against the PR's own base so a stacked PR only lists its own chart

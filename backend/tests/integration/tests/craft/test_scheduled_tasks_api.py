@@ -21,6 +21,7 @@ from onyx.db.enums import (
 )
 from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
 from onyx.db.models import ScheduledTask, ScheduledTaskRun, Tool
+from onyx.db.scheduled_task import insert_run, mark_run_status
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -107,8 +108,11 @@ def _list_runs(
     *,
     cursor: str | None = None,
     limit: int | None = None,
+    unviewed: bool = False,
 ) -> httpx.Response:
     params: dict[str, Any] = {}
+    if unviewed:
+        params["unviewed"] = True
     if cursor is not None:
         params["cursor"] = cursor
     if limit is not None:
@@ -372,3 +376,116 @@ def test_list_runs_paginates_by_started_at_cursor(admin_user: DATestUser) -> Non
     page_two_body = page_two.json()
     assert len(page_two_body["items"]) >= 1
     assert page_one_body["items"][0]["id"] != page_two_body["items"][0]["id"]
+
+
+def _insert_run_with_status(task_id: UUID, *statuses: ScheduledTaskRunStatus) -> UUID:
+    with get_session_with_current_tenant() as db_session:
+        run = insert_run(
+            db_session=db_session,
+            task_id=task_id,
+            trigger_source=ScheduledTaskTriggerSource.MANUAL_RUN_NOW,
+        )
+        for status in statuses:
+            mark_run_status(db_session=db_session, run_id=run.id, status=status)
+        db_session.commit()
+        return run.id
+
+
+def _set_run_status(run_id: UUID, status: ScheduledTaskRunStatus) -> None:
+    with get_session_with_current_tenant() as db_session:
+        mark_run_status(db_session=db_session, run_id=run_id, status=status)
+        db_session.commit()
+
+
+def _view_run(
+    user: DATestUser, task_id: UUID, run_id: UUID, revision: int
+) -> httpx.Response:
+    return client.patch(
+        _url(str(task_id), "runs", str(run_id), "viewed"),
+        json={"revision": revision},
+        headers=user.headers,
+        cookies=user.cookies,
+    )
+
+
+def _unviewed_run_count(user: DATestUser, task_id: UUID) -> int:
+    response = client.get(_url(), headers=user.headers, cookies=user.cookies)
+    response.raise_for_status()
+    item = next(i for i in response.json()["items"] if i["id"] == str(task_id))
+    return item["unviewed_run_count"]
+
+
+def test_run_results_stay_unviewed_until_opened(
+    admin_user: DATestUser, basic_user: DATestUser
+) -> None:
+    response = _create_task(admin_user, status=ScheduledTaskStatus.PAUSED)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+
+    with get_session_with_current_tenant() as db_session:
+        skipped_id = insert_run(
+            db_session=db_session,
+            task_id=task_id,
+            trigger_source=ScheduledTaskTriggerSource.MANUAL_RUN_NOW,
+            status=ScheduledTaskRunStatus.SKIPPED,
+        ).id
+        db_session.commit()
+    run_id = _insert_run_with_status(
+        task_id, ScheduledTaskRunStatus.RUNNING, ScheduledTaskRunStatus.SUCCEEDED
+    )
+    assert _unviewed_run_count(admin_user, task_id) == 1
+    count = client.get(
+        _url("unviewed-count"), headers=admin_user.headers, cookies=admin_user.cookies
+    )
+    count.raise_for_status()
+    assert count.json()["count"] >= 1
+
+    runs = {run["id"]: run for run in _list_runs(admin_user, task_id).json()["items"]}
+    assert runs[str(run_id)]["revision"] == 1
+    assert runs[str(run_id)]["viewed_revision"] is None
+    assert runs[str(skipped_id)]["revision"] == 0
+    unviewed = _list_runs(admin_user, task_id, unviewed=True).json()["items"]
+    assert [run["id"] for run in unviewed] == [str(run_id)]
+
+    assert _view_run(admin_user, task_id, run_id, 2).status_code == 409
+    assert _view_run(basic_user, task_id, run_id, 1).status_code == 404
+
+    viewed = _view_run(admin_user, task_id, run_id, 1)
+    viewed.raise_for_status()
+    assert viewed.json()["viewed_revision"] == 1
+    assert _unviewed_run_count(admin_user, task_id) == 0
+    assert _list_runs(admin_user, task_id, unviewed=True).json()["items"] == []
+
+
+def test_bulk_view_keeps_newer_run_results_unviewed(admin_user: DATestUser) -> None:
+    response = _create_task(admin_user, status=ScheduledTaskStatus.PAUSED)
+    response.raise_for_status()
+    task_id = UUID(response.json()["id"])
+
+    run_id = _insert_run_with_status(
+        task_id,
+        ScheduledTaskRunStatus.RUNNING,
+        ScheduledTaskRunStatus.FAILED,
+    )
+    bulk = client.patch(
+        _url(str(task_id), "runs", "viewed"),
+        json={"revisions": {str(run_id): 1}},
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    bulk.raise_for_status()
+    assert [run["viewed_revision"] for run in bulk.json()["items"]] == [1]
+    assert _unviewed_run_count(admin_user, task_id) == 0
+
+    _set_run_status(run_id, ScheduledTaskRunStatus.RUNNING)
+    _set_run_status(run_id, ScheduledTaskRunStatus.SUCCEEDED)
+    assert _unviewed_run_count(admin_user, task_id) == 1
+
+    stale = client.patch(
+        _url(str(task_id), "runs", "viewed"),
+        json={"revisions": {str(run_id): 1}},
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    stale.raise_for_status()
+    assert _unviewed_run_count(admin_user, task_id) == 1

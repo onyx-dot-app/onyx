@@ -4,6 +4,9 @@ const mockRedirect = jest.fn((href: string) => {
   throw new Error(href);
 });
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   redirect: (href: string) => mockRedirect(href),
 }));
 

@@ -8,7 +8,6 @@ import React, {
   useState,
 } from "react";
 import { useTranslations } from "next-intl";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import useCCPairs from "@/hooks/useCCPairs";
 import { fetchHierarchyNodeSearch } from "@/lib/hierarchy/svc";
@@ -363,7 +362,7 @@ export default function AgentKnowledgePane({
 
       case "add":
         return (
-          <GeneralLayouts.Section gap={2} alignItems="stretch" height="auto">
+          <Section gap={2} alignItems="stretch" height="auto">
             {vectorDbEnabled && (
               <KnowledgeSearchBar
                 query={searchQuery}
@@ -413,7 +412,7 @@ export default function AgentKnowledgePane({
                 vectorDbEnabled={vectorDbEnabled}
               />
             )}
-          </GeneralLayouts.Section>
+          </Section>
         );
 
       case "document-sets":
@@ -518,17 +517,16 @@ export default function AgentKnowledgePane({
   ]);
 
   return (
-    <GeneralLayouts.Section gap={2} alignItems="stretch" height="auto">
+    <Section gap={2} alignItems="stretch" height="auto">
       <Content
+        font="main-content-emphasis"
         title={t("pane.header.title")}
         description={t("pane.header.description")}
-        sizePreset="main-content"
-        variant="section"
       />
 
       <Card border="solid" rounding={4}>
         <Section alignItems="start" height="fit">
-          <GeneralLayouts.Section gap={2} alignItems="stretch" height="auto">
+          <Section gap={2} alignItems="stretch" height="auto">
             <InputHorizontal
               title={t("pane.useKnowledge.title")}
               description={t("pane.useKnowledge.description")}
@@ -542,13 +540,13 @@ export default function AgentKnowledgePane({
             </InputHorizontal>
 
             <Disabled disabled={!enableKnowledge}>
-              <GeneralLayouts.Section alignItems="stretch" height="auto">
+              <Section alignItems="stretch" height="auto">
                 {renderedContent}
-              </GeneralLayouts.Section>
+              </Section>
             </Disabled>
-          </GeneralLayouts.Section>
+          </Section>
         </Section>
       </Card>
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

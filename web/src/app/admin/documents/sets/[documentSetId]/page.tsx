@@ -1,4 +1,5 @@
 "use client";
+import { useNavigation } from "@opal/navigation";
 import { use } from "react";
 import { useTranslations } from "next-intl";
 
@@ -10,14 +11,13 @@ import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import CardSection from "@/components/admin/CardSection";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
-import { useRouter } from "next/navigation";
 import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
 function Main({ documentSetId }: { documentSetId: number }) {
   const t = useTranslations("admin.documents");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { vectorDbEnabled } = useSettings();
 
   const {
@@ -76,7 +76,7 @@ function Main({ documentSetId }: { documentSetId: number }) {
         ccPairs={ccPairs ?? []}
         onClose={() => {
           refreshDocumentSets();
-          router.push("/admin/documents/sets");
+          navigation.go("/admin/documents/sets");
         }}
         existingDocumentSet={documentSet}
       />

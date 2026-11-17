@@ -150,7 +150,9 @@ def test_switch_to_workload_identity_clears_stored_json_key() -> None:
 
 def test_connection_test_reuses_saved_api_key() -> None:
 
-    stored = SimpleNamespace(api_key=_build_sensitive_value("stored-secret"))
+    stored = SimpleNamespace(
+        api_key=_build_sensitive_value("stored-secret"), api_url=None
+    )
     request = EmbeddingTestRequest(
         provider_type=EmbeddingProvider.OPENAI, model_name="text-embedding-3-small"
     )
@@ -188,7 +190,10 @@ def test_workload_identity_connection_test_never_loads_saved_key() -> None:
 
 def test_gateway_connection_test_reuses_saved_api_key() -> None:
     # Editing a Bifrost connection sends no key; the stored virtual key must be used.
-    stored = SimpleNamespace(api_key=_build_sensitive_value("sk-bf-stored"))
+    stored = SimpleNamespace(
+        api_key=_build_sensitive_value("sk-bf-stored"),
+        api_url="https://bifrost.example",
+    )
     request = EmbeddingTestRequest(
         provider_type=EmbeddingProvider.BIFROST,
         api_url="https://bifrost.example",

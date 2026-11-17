@@ -2,6 +2,7 @@ import json
 import pathlib
 import threading
 import time
+from collections.abc import Callable
 
 from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import (
@@ -113,7 +114,7 @@ def get_recommendations() -> LLMRecommendations:
         return result
 
 
-def get_openai_model_names() -> list[str]:
+def get_openai_model_names(chat_models: list[str] | None = None) -> list[str]:
     """Get OpenAI model names from the vendored model catalog."""
     import re
 
@@ -150,30 +151,39 @@ def get_openai_model_names() -> list[str]:
     return sorted(
         (
             model
-            for model in model_catalog.iter_models(LlmProviderNames.OPENAI, mode="chat")
+            for model in (
+                chat_models
+                if chat_models is not None
+                else model_catalog.iter_models(LlmProviderNames.OPENAI, mode="chat")
+            )
             if is_valid_model(model)
         ),
         reverse=True,
     )
 
 
-def get_anthropic_model_names() -> list[str]:
+def get_anthropic_model_names(chat_models: list[str] | None = None) -> list[str]:
     """Get Anthropic model names from the vendored model catalog."""
     from onyx.llm import model_catalog
 
     return sorted(
-        model_catalog.iter_models(LlmProviderNames.ANTHROPIC, mode="chat"), reverse=True
+        chat_models
+        if chat_models is not None
+        else model_catalog.iter_models(LlmProviderNames.ANTHROPIC, mode="chat"),
+        reverse=True,
     )
 
 
-def get_vertexai_model_names() -> list[str]:
+def get_vertexai_model_names(chat_models: list[str] | None = None) -> list[str]:
     """Get Vertex AI model names from the vendored model catalog (the
     vertex_ai section already merges google-vertex and
     google-vertex-anthropic models)."""
     from onyx.llm import model_catalog
 
     vertex_models = set(
-        model_catalog.iter_models(LlmProviderNames.VERTEX_AI, mode="chat")
+        chat_models
+        if chat_models is not None
+        else model_catalog.iter_models(LlmProviderNames.VERTEX_AI, mode="chat")
     )
 
     return sorted(
@@ -266,6 +276,25 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
 
 def fetch_models_for_provider(provider_name: str) -> list[str]:
     return _get_provider_to_models_map().get(provider_name, [])
+
+
+def fetch_latest_models_for_provider(provider_name: str) -> list[str] | None:
+    """The provider's model list from the latest catalog on main, for
+    auto-update. None when the provider has no catalog or it can't be read."""
+    from onyx.llm import model_catalog
+
+    getters: dict[str, Callable[[list[str] | None], list[str]]] = {
+        OPENAI_PROVIDER_NAME: get_openai_model_names,
+        ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names,
+        VERTEXAI_PROVIDER_NAME: get_vertexai_model_names,
+    }
+    getter = getters.get(provider_name)
+    if getter is None:
+        return None
+    chat_models = model_catalog.iter_latest_models(provider_name, mode="chat")
+    if chat_models is None:
+        return None
+    return getter(chat_models)
 
 
 def fetch_model_names_for_provider_as_set(provider_name: str) -> set[str] | None:

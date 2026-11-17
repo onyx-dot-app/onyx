@@ -9,6 +9,7 @@ class EmbeddingProvider(str, Enum):
     LITELLM = "litellm"
     AZURE = "azure"
     BIFROST = "bifrost"
+    OPENAI_COMPATIBLE = "openai_compatible"
 
 
 class RerankerProvider(str, Enum):

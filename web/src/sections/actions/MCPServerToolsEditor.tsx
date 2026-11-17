@@ -18,7 +18,6 @@ import { Section } from "@opal/layouts";
 import MCPToolRow from "@/sections/plugins/MCPToolRow";
 import { SvgRefreshCw } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
-import { useSettings } from "@/lib/settings/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { can } from "@/lib/permissions/resource-actions";
@@ -49,8 +48,6 @@ export default function MCPServerToolsEditor({
   const t = useTranslations("actions");
   const policyText = useTranslations("craft.apps.mcpPolicy");
   const policyEditorText = useTranslations("craft.apps.policyEditor");
-  const settings = useSettings();
-  const craftAvailable = settings.onyx_craft_available === true;
   const {
     data: tools = [],
     error: loadError,
@@ -72,7 +69,6 @@ export default function MCPServerToolsEditor({
   const [savedPolicies, setSavedPolicies] = useState(policies);
   const [search, setSearch] = useState("");
   const [policiesView, setPoliciesView] = useState(false);
-  const showPolicies = craftAvailable && policiesView;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const changedTools = tools.filter(
@@ -82,7 +78,7 @@ export default function MCPServerToolsEditor({
       enabledDraft[tool.id] !== tool.enabled
   );
   const policiesDirty =
-    craftAvailable && can(server, "edit") && !isEqual(policies, savedPolicies);
+    can(server, "edit") && !isEqual(policies, savedPolicies);
   const dirty = changedTools.length > 0 || policiesDirty;
   useEffect(() => {
     onDirtyChange(dirty);
@@ -94,7 +90,7 @@ export default function MCPServerToolsEditor({
     enabledDraft[tool.id] ?? tool.enabled;
   const visibleTools = tools.filter(
     (tool) =>
-      (!showPolicies || isEnabled(tool)) &&
+      (!policiesView || isEnabled(tool)) &&
       `${tool.display_name} ${tool.name} ${tool.description}`
         .toLowerCase()
         .includes(search.trim().toLowerCase())
@@ -129,11 +125,12 @@ export default function MCPServerToolsEditor({
         const currentPolicies = Object.fromEntries(
           Object.entries(policies).filter(([name]) => toolNames.has(name))
         );
-        await updateMCPServer(server.id, {
+        const updated = await updateMCPServer(server.id, {
           action_policies: currentPolicies,
         });
-        setPolicies(currentPolicies);
-        setSavedPolicies(currentPolicies);
+        const storedPolicies = updated.action_policies ?? currentPolicies;
+        setPolicies(storedPolicies);
+        setSavedPolicies(storedPolicies);
       }
       await onSaved();
     } catch (cause) {
@@ -166,7 +163,7 @@ export default function MCPServerToolsEditor({
   const enabledCount = tools.filter(isEnabled).length;
   const enabledTools = tools.filter(isEnabled);
   const effectivePolicies = enabledTools.map(
-    (tool) => policies[tool.name] ?? "ASK"
+    (tool) => policies[tool.name] ?? tool.default_action_policy ?? "ASK"
   );
   const bulkPolicy =
     effectivePolicies.every((policy) => policy === "ALWAYS") &&
@@ -180,10 +177,15 @@ export default function MCPServerToolsEditor({
     tools.length > 0 && tools.every((tool) => can(tool, "toggle"));
   const toolsContent = (
     <div className="flex flex-col gap-4">
+      {policiesView && (
+        <Text font="secondary-body" color="text-03">
+          {policyText("description")}
+        </Text>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <div className="min-w-40 flex-1">
           <InputTypeIn
-            searchIcon
+            icon="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t("mcpTools.search")}
@@ -217,7 +219,7 @@ export default function MCPServerToolsEditor({
             </Text>
           </div>
           <div className="flex min-h-10 items-center justify-end">
-            {showPolicies && tools.length > 0 ? (
+            {policiesView && tools.length > 0 ? (
               <div className="flex items-center gap-2">
                 <Text font="secondary-body" color="text-03">
                   {policyEditorText("permissions.title")}
@@ -305,7 +307,7 @@ export default function MCPServerToolsEditor({
         ) : visibleTools.length === 0 ? (
           <Section padding={6} height="auto">
             <Text font="secondary-body" color="text-03">
-              {showPolicies && enabledCount === 0 && !search.trim()
+              {policiesView && enabledCount === 0 && !search.trim()
                 ? policyText("emptyPolicies")
                 : t(
                     search.trim()
@@ -321,10 +323,14 @@ export default function MCPServerToolsEditor({
                 key={tool.id}
                 tool={tool}
                 control={
-                  showPolicies ? (
+                  policiesView ? (
                     <PolicyToggle
                       label={tool.display_name || tool.name}
-                      value={policies[tool.name] ?? "ASK"}
+                      value={
+                        policies[tool.name] ??
+                        tool.default_action_policy ??
+                        "ASK"
+                      }
                       disabled={policyDisabled}
                       onChange={(value) =>
                         setPolicies((current) => ({
@@ -368,30 +374,24 @@ export default function MCPServerToolsEditor({
           />
         )}
         <fieldset disabled={busy} className="flex min-w-0 flex-col gap-4">
-          {craftAvailable ? (
-            <Tabs
-              value={showPolicies ? "policies" : "enabled"}
-              onValueChange={(value) => setPoliciesView(value === "policies")}
-              variant="underline"
-              gap={4}
-            >
-              <Tabs.List>
-                <Tabs.Trigger value="enabled">
-                  {t("mcpTools.enabledTab")}
-                </Tabs.Trigger>
-                {craftAvailable && (
-                  <Tabs.Trigger value="policies">
-                    {t("mcpTools.policiesTab")}
-                  </Tabs.Trigger>
-                )}
-              </Tabs.List>
-              <Tabs.Content value={showPolicies ? "policies" : "enabled"}>
-                {toolsContent}
-              </Tabs.Content>
-            </Tabs>
-          ) : (
-            toolsContent
-          )}
+          <Tabs
+            value={policiesView ? "policies" : "enabled"}
+            onValueChange={(value) => setPoliciesView(value === "policies")}
+            variant="underline"
+            gap={4}
+          >
+            <Tabs.List>
+              <Tabs.Trigger value="enabled">
+                {t("mcpTools.enabledTab")}
+              </Tabs.Trigger>
+              <Tabs.Trigger value="policies">
+                {t("mcpTools.policiesTab")}
+              </Tabs.Trigger>
+            </Tabs.List>
+            <Tabs.Content value={policiesView ? "policies" : "enabled"}>
+              {toolsContent}
+            </Tabs.Content>
+          </Tabs>
         </fieldset>
         {error && (
           <MessageCard

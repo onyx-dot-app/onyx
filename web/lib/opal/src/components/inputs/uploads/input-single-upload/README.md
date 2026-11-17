@@ -5,9 +5,10 @@
 
 An upload control in the input chrome, for one file in a form row. Nothing is typed: a click focuses
 it, so a copied file can be pasted; a double click, Enter or Space opens the file picker; and a file
-can be dropped on it. With a value, Delete or Backspace
+can be dropped on it. A "Select File" secondary button at the end of the control is always shown, is a tab
+stop, and opens the picker too. With a value, Delete or Backspace
 clears it, as the × does; clearing with the × returns focus to the control. It leads with an import icon, shows
-the placeholder until a file is in, then the file's name, with a × at the end that clears it.
+the placeholder until a file is in, then the file's name, with a × before the select button that clears it.
 
 While files are dragged anywhere over the page (`useWindowFileDrag` from `@opal/hooks`), the control
 shows itself as a drop target: a dashed `action-selection-05` border, `action-selection-01` fill, and
@@ -50,7 +51,7 @@ text mode, a `File | null` field in file mode. An upload, paste or clear marks t
 touched field with an error shows the error variant.
 
 Labels come from `OpalStrings`: `inputUploadPlaceholder`, `clearFile`, `inputUploadPasted`, `inputUploadAttached`,
-`inputUploadDropToAdd` and `inputUploadDropToReplace`.
+`inputUploadDropToAdd`, `inputUploadDropToReplace` and `inputUploadSelect`.
 
 ## Usage
 

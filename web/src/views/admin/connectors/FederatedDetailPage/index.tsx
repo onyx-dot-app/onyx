@@ -1,8 +1,8 @@
 "use client";
 
+import { notFound } from "@opal/navigation";
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { notFound } from "next/navigation";
 import { SvgLoader } from "@opal/icons";
 import { useFederatedConnector } from "@/lib/connectors/hooks";
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";

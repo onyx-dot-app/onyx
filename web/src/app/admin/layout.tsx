@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import AdminSSChrome from "@/layouts/chromes/AdminSSChrome";
+import { AdminSSChrome } from "@/layouts/chromes";
 import { generateAdminTitleMetadata } from "@/lib/app/svcSS";
 
 export async function generateMetadata(): Promise<Metadata> {

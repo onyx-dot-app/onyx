@@ -23,6 +23,8 @@ function run(
     summary: null,
     skip_reason: null,
     error_class: null,
+    revision: 0,
+    viewed_revision: null,
   };
 }
 
@@ -31,6 +33,8 @@ function context(status: ScheduledTaskRunStatus): ScheduledRunContextResponse {
     run_id: `run-${status}`,
     task_id: "task-1",
     task_name: "Task",
+    revision: 0,
+    viewed_revision: null,
     status,
     started_at: "2026-01-01T00:00:00Z",
     finished_at: null,

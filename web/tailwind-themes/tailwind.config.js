@@ -27,9 +27,15 @@ module.exports = {
           "0%": { opacity: "0", transform: "translateY(10px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        shake: {
+          "0%, 100%": { transform: "translateX(0)" },
+          "20%, 60%": { transform: "translateX(-6px)" },
+          "40%, 80%": { transform: "translateX(6px)" },
+        },
       },
       animation: {
         "fade-in-up": "fade-in-up 0.5s ease-out",
+        shake: "shake 0.4s ease-in-out",
       },
       gradientColorStops: {
         "neutral-10": "var(--neutral-10) 5%",

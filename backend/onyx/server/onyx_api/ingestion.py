@@ -29,8 +29,6 @@ from onyx.db.port_orphan_candidate import (
 )
 from onyx.db.search_settings import (
     get_active_search_settings,
-    get_current_search_settings,
-    get_secondary_search_settings,
 )
 from onyx.db.user_file import get_owned_file_ids, get_user_file_by_id
 from onyx.document_index.factory import get_default_document_index
@@ -189,14 +187,14 @@ def upsert_ingestion_doc(
             "Document ID is reserved for a user file",
         )
 
-    # Need to index for both the primary and secondary index if possible
+    # Index into the primary and, while one is building, the secondary index.
+    # Embedder, index and settings id of each write come from the same settings
+    # row: a swap between two lookups would pair one model's embedder with
+    # another model's index.
     active_search_settings = get_active_search_settings(db_session)
     document_index = get_default_document_index(active_search_settings.primary, None)
-
-    search_settings = get_current_search_settings(db_session)
-
     index_embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
-        search_settings=search_settings
+        search_settings=active_search_settings.primary
     )
 
     # Build adapter for primary indexing
@@ -219,25 +217,16 @@ def upsert_ingestion_doc(
         document_batch=[document],
         request_id=None,
         adapter=adapter,
+        written_search_settings_id=active_search_settings.primary.id,
     )
 
     # If there's a secondary index being built, index the doc but don't use it for return here
-    if active_search_settings.secondary:
-        sec_search_settings = get_secondary_search_settings(db_session)
-
-        if sec_search_settings is None:
-            # Should not ever happen
-            raise RuntimeError(
-                "Secondary index exists but no search settings configured"
-            )
-
+    sec_search_settings = active_search_settings.secondary
+    if sec_search_settings is not None:
         new_index_embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
             search_settings=sec_search_settings
         )
-
-        sec_document_index = get_default_document_index(
-            active_search_settings.secondary, None
-        )
+        sec_document_index = get_default_document_index(sec_search_settings, None)
 
         run_indexing_pipeline(
             embedder=new_index_embedding_model,
@@ -251,6 +240,7 @@ def upsert_ingestion_doc(
             document_batch=[document],
             request_id=None,
             adapter=adapter,
+            written_search_settings_id=sec_search_settings.id,
         )
 
     return IngestionResult(

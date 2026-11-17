@@ -9,7 +9,9 @@ descendants. Works with any children — DOM elements, React components, or frag
 When `disabled` is true, it also blocks the keyboard: the children sit in a `<fieldset>` (with
 `display: contents`) that is disabled, so the form controls inside leave the tab order and take no
 input. `allowClick` keeps the children interactive, so it leaves the keyboard enabled too. The
-fieldset is always rendered, so toggling `disabled` does not remount the children.
+fieldset is always rendered, so toggling `disabled` does not remount the children. Pass `tooltip`
+whether or not the region is disabled: the tooltip stays mounted and is suppressed while enabled. A
+tooltip given only while disabled adds a wrapper on each toggle, which remounts the children.
 
 A `tooltip` only shows on hover, and nothing in a disabled region can take focus to open it. So
 `Disabled` also keeps the tooltip's plain text in a visually hidden, polite live region while it is

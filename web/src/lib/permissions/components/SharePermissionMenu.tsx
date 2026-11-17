@@ -3,7 +3,8 @@
 import { useTranslations } from "next-intl";
 import {
   Dropdown,
-  OpenButton,
+  RowAction,
+  SelectButton,
   type DropdownItem,
   type DropdownWidth,
 } from "@opal/components";
@@ -25,13 +26,15 @@ export interface SharePermissionMenuProps<T extends string> {
   onRemove?: () => void;
   removeLabel?: string;
   disabled?: boolean;
-  width?: "fit" | "full";
   /** A fixed width for the open list. Left out, it follows the trigger. */
   menuWidth?: DropdownWidth;
   /** The status row's qualifier already shows the scope icon — the mock's
       scope pill is text + chevron only */
   showTriggerIcon?: boolean;
   ariaLabel?: string;
+  /** `"row"` renders a full-width `RowAction` for a table cell: a
+      chevron trigger when it can change, static text when it cannot. */
+  layout?: "inline" | "row";
 }
 
 export default function SharePermissionMenu<T extends string>({
@@ -41,10 +44,10 @@ export default function SharePermissionMenu<T extends string>({
   onRemove,
   removeLabel,
   disabled = false,
-  width = "fit",
   menuWidth,
   showTriggerIcon = true,
   ariaLabel,
+  layout = "inline",
 }: SharePermissionMenuProps<T>) {
   const t = useTranslations("chat.modals.share");
   const selectedOption =
@@ -54,9 +57,19 @@ export default function SharePermissionMenu<T extends string>({
     return null;
   }
 
+  const triggerIcon = showTriggerIcon ? selectedOption.icon : undefined;
+
   if (disabled || (!onChange && !onRemove)) {
+    if (layout === "row") {
+      return (
+        <RowAction aria-label={ariaLabel} icon={triggerIcon}>
+          {selectedOption.label}
+        </RowAction>
+      );
+    }
     return (
-      <OpenButton
+      <SelectButton
+        chevron
         aria-label={ariaLabel}
         disabled
         foldable={false}
@@ -65,10 +78,9 @@ export default function SharePermissionMenu<T extends string>({
         labelFont="main-ui-action"
         size="sm"
         variant="select-light"
-        width={width}
       >
         {selectedOption.label}
-      </OpenButton>
+      </SelectButton>
     );
   }
 
@@ -107,18 +119,24 @@ export default function SharePermissionMenu<T extends string>({
   return (
     <Dropdown width={menuWidth}>
       <Dropdown.Trigger asChild>
-        <OpenButton
-          aria-label={ariaLabel}
-          foldable={false}
-          icon={showTriggerIcon ? selectedOption.icon : undefined}
-          labelColor="text-04"
-          labelFont="main-ui-action"
-          size="sm"
-          variant="select-light"
-          width={width}
-        >
-          {selectedOption.label}
-        </OpenButton>
+        {layout === "row" ? (
+          <RowAction chevron aria-label={ariaLabel} icon={triggerIcon}>
+            {selectedOption.label}
+          </RowAction>
+        ) : (
+          <SelectButton
+            chevron
+            aria-label={ariaLabel}
+            foldable={false}
+            icon={showTriggerIcon ? selectedOption.icon : undefined}
+            labelColor="text-04"
+            labelFont="main-ui-action"
+            size="sm"
+            variant="select-light"
+          >
+            {selectedOption.label}
+          </SelectButton>
+        )}
       </Dropdown.Trigger>
       <Dropdown.Data
         label={ariaLabel}

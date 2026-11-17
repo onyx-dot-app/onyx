@@ -1,0 +1,72 @@
+## Onyx CLI
+
+The recommended way to install Onyx is the guided installer built into the [Onyx CLI](/overview/onyx_anywhere/cli):
+
+```bash
+uv tool install onyx-cli && onyx-cli deploy install
+```
+
+The installer will:
+
+- Check your system resources and requirements (installing Docker on Linux if needed)
+- Let you choose between **Lite** and **Standard** deployment modes
+- Prompt for the version of Onyx to deploy
+- Set up the deployment configuration in `~/.config/onyx`
+- Pull the Onyx containers, start them, and wait until every service is healthy
+
+After installation, the same command group manages the deployment: `onyx-cli deploy upgrade`, `status`, `logs`, `stop`,
+and `uninstall`.
+
+<Card title="Deploy with the Onyx CLI" icon="terminal" href="/deployment/local/onyx_cli">
+  Full documentation for `onyx-cli deploy` and its lifecycle commands.
+</Card>
+
+## Installation Scripts
+
+The installation scripts are thin wrappers around the CLI:
+they install `onyx-cli` if needed and run `onyx-cli deploy install`, producing the same deployment as the command above.
+Use them when you want a single copy-paste one-liner:
+
+<Tabs>
+  <Tab title="Linux / macOS">
+    ```bash
+    curl -fsSL https://onyx.app/install_onyx.sh | bash
+    ```
+  </Tab>
+
+  <Tab title="Windows (PowerShell)">
+    ```powershell
+    irm https://onyx.app/install_onyx.ps1 | iex
+    ```
+  </Tab>
+</Tabs>
+
+Or download the script and run it manually:
+
+<CardGroup cols={2}>
+  <Card title="Linux / macOS (Bash)" icon="terminal" href="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh">
+    Download **install.sh** and run it with `bash install.sh`.
+  </Card>
+
+  <Card title="Windows (PowerShell)" icon="windows" href="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.ps1">
+    Download **install.ps1** and run it with `.\install.ps1` in PowerShell.
+  </Card>
+</CardGroup>
+
+<Info>
+  Older versions of the scripts were standalone and installed into a directory called **onyx_data**.
+  The Onyx CLI detects those deployments and manages them in place — see [migrating an existing
+  deployment](/deployment/local/onyx_cli#migrating-an-existing-deployment).
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Set Up the Desktop App" icon="desktop" href="/deployment/local/desktop_app">
+    Install the Onyx desktop application for a native experience on Windows, macOS, and Linux.
+  </Card>
+
+  <Card title="Deploy Onyx on AWS EC2" icon="aws" href="/deployment/cloud/aws/ec2">
+    Follow our guide to deploy Onyx on an AWS EC2 instance.
+  </Card>
+</CardGroup>
