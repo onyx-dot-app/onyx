@@ -1020,7 +1020,10 @@ describe("useChatController", () => {
       await act(async () => {
         await result.current.submit("hi", [], undefined, {
           deepResearch,
-          allowedToolIds: [1, 3],
+          allowed: [
+            { type: "capability", tool_id: 1 },
+            { type: "plugin", plugin_id: "p1" },
+          ],
           preferredToolId: deepResearch ? null : 3,
           internalSearchFilters: { source_type: ["web"] },
           llmOverride: {
@@ -1033,17 +1036,25 @@ describe("useChatController", () => {
 
       await waitFor(() => expect(result.current.chatState).toBe("input"));
 
-      const body = streamMock.mock.calls[0]![0] as unknown as {
+      const body = streamMock.mock.calls[0]![0] as unknown as Record<
+        string,
+        unknown
+      > & {
         deep_research: boolean;
-        allowed_tool_ids: number[] | null;
-        preferred_tool_id: number | null;
-        internal_search_filters: { source_type: string[] | null } | null;
+        tool_options: unknown;
         llm_override: { model_configuration_id: number } | null;
       };
       expect(body.deep_research).toBe(deepResearch);
-      expect(body.allowed_tool_ids).toEqual([1, 3]);
-      expect(body.preferred_tool_id).toBe(deepResearch ? null : 3);
-      expect(body.internal_search_filters).toEqual({ source_type: ["web"] });
+      expect(body.tool_options).toEqual({
+        allowed: [
+          { type: "capability", tool_id: 1 },
+          { type: "plugin", plugin_id: "p1" },
+        ],
+        preferred: deepResearch ? null : { type: "capability", tool_id: 3 },
+        internal_search_filters: { source_type: ["web"] },
+      });
+      expect(body).not.toHaveProperty("allowed_tool_ids");
+      expect(body).not.toHaveProperty("preferred_tool_id");
       expect(body.llm_override).toEqual({
         model_configuration_id: 7,
         model_provider: "OpenAI Prod",
@@ -1067,15 +1078,15 @@ describe("useChatController", () => {
 
     const body = streamMock.mock.calls[0]![0] as unknown as {
       deep_research: boolean;
-      allowed_tool_ids: number[] | null;
-      preferred_tool_id: number | null;
-      internal_search_filters: unknown;
+      tool_options: unknown;
       llm_override: unknown;
     };
     expect(body.deep_research).toBe(false);
-    expect(body.allowed_tool_ids).toBeNull();
-    expect(body.preferred_tool_id).toBeNull();
-    expect(body.internal_search_filters).toBeNull();
+    expect(body.tool_options).toEqual({
+      allowed: null,
+      preferred: null,
+      internal_search_filters: null,
+    });
     // Null, not omitted: the backend then runs the agent's own default model.
     expect(body.llm_override).toBeNull();
   });

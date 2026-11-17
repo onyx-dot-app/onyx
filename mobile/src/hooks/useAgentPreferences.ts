@@ -31,14 +31,17 @@ export interface UseAgentPreferences {
   // An empty record reads as "nothing disabled", so a caller reconciling against it must wait.
   isLoaded: boolean;
   disabledToolIdsFor: (agentId: number) => number[];
+  disabledPluginIdsFor: (agentId: number) => string[];
   /*
    * A target, not a flip: the write re-reads the record as it runs, so a flip computed from a
-   * stale render lands inverted.
+   * stale render lands inverted. A tool with `pluginIds` (OpenAPI, MCP) switches those plugins;
+   * a built-in tool switches itself.
    */
   setToolDisabled: (
     agentId: number,
     toolId: number,
     disabled: boolean,
+    pluginIds?: string[],
   ) => Promise<void>;
 }
 
@@ -60,8 +63,19 @@ export function useAgentPreferences(): UseAgentPreferences {
     [preferences],
   );
 
+  const disabledPluginIdsFor = useCallback(
+    (agentId: number) =>
+      preferences[String(agentId)]?.disabled_plugin_ids ?? [],
+    [preferences],
+  );
+
   const setToolDisabled = useCallback(
-    async (agentId: number, toolId: number, disabled: boolean) => {
+    async (
+      agentId: number,
+      toolId: number,
+      disabled: boolean,
+      pluginIds: string[] = [],
+    ) => {
       const key = QUERY_KEYS.agentPreferences(serverUrl);
 
       /*
@@ -84,15 +98,31 @@ export function useAgentPreferences(): UseAgentPreferences {
       await queryClient.cancelQueries({ queryKey: key });
 
       const previous = queryClient.getQueryData<AgentPreferences | null>(key);
-      const current = previous?.[String(agentId)]?.disabled_tool_ids ?? [];
-      if (current.includes(toolId) === disabled) return;
-      const next = disabled
-        ? [...current, toolId]
-        : current.filter((id) => id !== toolId);
+      const currentTools = previous?.[String(agentId)]?.disabled_tool_ids ?? [];
+      const currentPlugins =
+        previous?.[String(agentId)]?.disabled_plugin_ids ?? [];
+      let nextTools = currentTools;
+      let nextPlugins = currentPlugins;
+      if (pluginIds.length > 0) {
+        if (pluginIds.every((id) => currentPlugins.includes(id)) === disabled) {
+          return;
+        }
+        nextPlugins = disabled
+          ? [...new Set([...currentPlugins, ...pluginIds])]
+          : currentPlugins.filter((id) => !pluginIds.includes(id));
+      } else {
+        if (currentTools.includes(toolId) === disabled) return;
+        nextTools = disabled
+          ? [...currentTools, toolId]
+          : currentTools.filter((id) => id !== toolId);
+      }
 
       queryClient.setQueryData<AgentPreferences>(key, {
         ...(previous ?? EMPTY_PREFERENCES),
-        [String(agentId)]: { disabled_tool_ids: next },
+        [String(agentId)]: {
+          disabled_tool_ids: nextTools,
+          disabled_plugin_ids: nextPlugins,
+        },
       });
 
       try {
@@ -102,7 +132,7 @@ export function useAgentPreferences(): UseAgentPreferences {
            * queued before a logout or instance switch would land on whoever signs in next.
            */
           if (useSession.getState().serverUrl !== serverUrl) return;
-          await patchAgentPreferences(agentId, next);
+          await patchAgentPreferences(agentId, nextTools, nextPlugins);
         });
       } catch (error) {
         console.error("Failed to save agent preferences", error);
@@ -119,6 +149,7 @@ export function useAgentPreferences(): UseAgentPreferences {
     preferences,
     isLoaded: query.isSuccess,
     disabledToolIdsFor,
+    disabledPluginIdsFor,
     setToolDisabled,
   };
 }
