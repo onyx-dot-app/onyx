@@ -188,7 +188,6 @@ def test_worker_removes_an_upload_for_an_export_failed_during_upload(
     assert row.status == TaskStatus.FAILURE
 
 
-
 def _open_transactions() -> int:
     with get_session_with_current_tenant() as session:
         return session.scalar(
@@ -215,11 +214,12 @@ def test_upload_runs_without_an_open_transaction(
             "ee.onyx.background.celery.tasks.query_history.tasks.get_default_file_store"
         ) as file_store,
     ):
-        file_store.return_value.save_file.side_effect = (
-            lambda **_: open_during_upload.append(_open_transactions())
+        file_store.return_value.save_file.side_effect = lambda **_: (
+            open_during_upload.append(_open_transactions())
         )
         _run_export(row.task_id)
     assert open_during_upload == [0]
+
 
 def _export_task_ids(db_session: Session) -> set[str]:
     return {task.task_id for task in get_all_query_history_export_tasks(db_session)}
