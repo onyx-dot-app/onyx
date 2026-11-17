@@ -86,10 +86,11 @@ export function mockFetch(
   return jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
-    const route = routes[`${method} ${url}`] ?? routes[url];
-    if (route === undefined)
+    const key = `${method} ${url}` in routes ? `${method} ${url}` : url;
+    if (!(key in routes))
       throw new Error(`Unexpected request: ${method} ${url}`);
-    const body = typeof route === "function" ? route(init) : route;
+    const route = routes[key];
+    const body = typeof route === "function" ? await route(init) : route;
     if (body instanceof Response) return body;
     return new Response(body === null ? null : JSON.stringify(body), {
       status: body === null ? 204 : 200,
