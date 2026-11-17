@@ -218,13 +218,25 @@ _PROMPT: list[ChatCompletionMessage] = [
 ]
 
 
-def _llm(provider: str, model: str) -> LitellmLLM:
+_TOOLS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+]
+
+
+def _llm(provider: str, model: str, supports_reasoning: bool = False) -> LitellmLLM:
     return LitellmLLM(
         api_key="test-key",
         model_provider=provider,
         model_name=model,
         max_input_tokens=100000,
         api_base="https://example.test" if provider == LlmProviderNames.AZURE else None,
+        supports_reasoning=supports_reasoning,
     )
 
 
@@ -238,7 +250,7 @@ def _complete(llm: LitellmLLM, completion: Any) -> list[dict[str, Any]]:
     ):
         llm._completion(
             prompt=_PROMPT,
-            tools=None,
+            tools=_TOOLS,
             tool_choice=None,
             stream=False,
             parallel_tool_calls=False,
@@ -252,13 +264,18 @@ def _complete(llm: LitellmLLM, completion: Any) -> list[dict[str, Any]]:
     [
         (LlmProviderNames.OPENAI, "gpt-5", True),
         (LlmProviderNames.AZURE, "gpt-5", True),
+        # An uncatalogued deployment alias the admin flags as reasoning takes
+        # LiteLLM's effort style and reaches Responses through the tool-turn
+        # bridge.
+        (LlmProviderNames.AZURE, "gpt-5.4-team-alias", True),
         (LlmProviderNames.ANTHROPIC, "claude-sonnet-4-5", False),
     ],
 )
 def test_only_responses_routes_request_and_replay_reasoning_items(
     provider: str, model: str, replays_reasoning_items: bool
 ) -> None:
-    (kwargs,) = _complete(_llm(provider, model), lambda **_: None)
+    llm = _llm(provider, model, supports_reasoning="alias" in model)
+    (kwargs,) = _complete(llm, lambda **_: None)
     assistant = kwargs["messages"][1]
 
     if replays_reasoning_items:

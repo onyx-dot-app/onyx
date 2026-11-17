@@ -280,7 +280,7 @@ build their own clients.
 16. `openai-reasoning-items-replay` **OpenAI reasoning items are replayable
     thinking state.** A Responses API `reasoning` item (id, encrypted content,
     summary) is kept as `llm/models.py:ReasoningItemBlock` inside the message's
-    `ThinkingContent.blocks`, tagged with the Onyx model name that produced it.
+    `ThinkingContent.blocks`.
     `llm/model_request.py:format_provider_message` replays it as
     `reasoning_items`, which LiteLLM's responses bridge turns back into the
     item. `llm/multi_llm.py` keeps `reasoning_items` only on responses routes

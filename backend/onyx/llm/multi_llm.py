@@ -1269,10 +1269,6 @@ class LitellmLLM(LLM):
                     )
                 if send_reasoning:
                     optional_kwargs["reasoning"] = openai_style_reasoning
-                    if uses_responses_api and not sends_explicit_reasoning_none:
-                        # Replaying a reasoning item by id alone needs server
-                        # storage; the encrypted content replays anywhere.
-                        optional_kwargs["include"] = ["reasoning.encrypted_content"]
                     if (
                         sends_explicit_reasoning_none
                         and self.config.model_provider == LlmProviderNames.OPENAI
@@ -1351,6 +1347,18 @@ class LitellmLLM(LLM):
                     "reasoning", _OPENAI_REASONING_NONE
                 )
             required_kwarg_keys = required_kwarg_keys | {"reasoning_effort"}
+
+        # Every reasoning style can land on the Responses API, and replaying a
+        # reasoning item by id alone needs server storage; the encrypted content
+        # replays anywhere.
+        if (
+            uses_responses_api
+            and reasoning_effort is not ReasoningEffort.OFF
+            and (
+                "reasoning" in optional_kwargs or "reasoning_effort" in optional_kwargs
+            )
+        ):
+            optional_kwargs["include"] = ["reasoning.encrypted_content"]
 
         # Claude 5 thinks unless told not to, and 4.7/4.8 take the same param.
         # No effort with it, which Opus 5 and Sonnet 5.5 cap, and no signed-block
