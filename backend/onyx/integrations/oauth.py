@@ -24,7 +24,11 @@ from onyx.db.enums import (
     MCPTransport,
     Permission,
 )
-from onyx.db.integration import get_integration_by_id, get_mcp_server_for_integration
+from onyx.db.integration import (
+    get_integration_by_id,
+    get_mcp_server_for_integration,
+    lock_integration__no_commit,
+)
 from onyx.db.integration_connection import (
     get_oauth_client,
     upsert_connection__no_commit,
@@ -461,17 +465,9 @@ def complete_integration_oauth(
     if integration is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "The integration no longer exists.")
     for_organization = _check_may_connect(integration, user)
-    oauth_client = _oauth_client_or_raise(integration, db_session)
-    if for_organization != payload.for_organization or not secrets.compare_digest(
-        payload.configuration_fingerprint,
-        _configuration_fingerprint(
-            integration, oauth_client, for_organization, db_session
-        ),
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "The sign-in settings changed while you signed in. Try again.",
-        )
+    if for_organization != payload.for_organization:
+        _raise_settings_changed()
+    oauth_client = _check_settings_unchanged(integration, payload, db_session)
     owner_id = _owner_id(user, for_organization)
 
     if integration.kind is IntegrationKind.MCP:
@@ -483,6 +479,40 @@ def complete_integration_oauth(
     return IntegrationOAuthCallbackResult(
         integration_id=integration.id, return_path=payload.return_path
     )
+
+
+def _raise_settings_changed() -> None:
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        "The sign-in settings changed while you signed in. Try again.",
+    )
+
+
+def _check_settings_unchanged(
+    integration: Integration,
+    payload: IntegrationOAuthAttemptPayload,
+    db_session: Session,
+) -> IntegrationOAuthClient:
+    oauth_client = _oauth_client_or_raise(integration, db_session)
+    if not secrets.compare_digest(
+        payload.configuration_fingerprint,
+        _configuration_fingerprint(
+            integration, oauth_client, payload.for_organization, db_session
+        ),
+    ):
+        _raise_settings_changed()
+    return oauth_client
+
+
+def _lock_and_check_settings_unchanged(
+    integration: Integration,
+    payload: IntegrationOAuthAttemptPayload,
+    db_session: Session,
+) -> None:
+    """A settings change holds the integration row lock, so a grant from the
+    old settings is not saved after the change commits."""
+    lock_integration__no_commit(integration.id, db_session)
+    _check_settings_unchanged(integration, payload, db_session)
 
 
 def _complete_manual(
@@ -519,6 +549,7 @@ def _complete_manual(
             OnyxErrorCode.BAD_GATEWAY,
             f"{integration.name} did not complete the sign-in.",
         ) from error
+    _lock_and_check_settings_unchanged(integration, payload, db_session)
     expires_at = token_data.get("expires_at")
     scope = token_data.get("scope")
     refresh_token = token_data.get("refresh_token")
@@ -563,6 +594,7 @@ def _complete_preset(
         redirect_uri=integration_oauth_redirect_uri(integration, oauth_client),
         code_verifier=payload.code_verifier,
     )
+    _lock_and_check_settings_unchanged(integration, payload, db_session)
     secret, expires_at = preset_credentials_to_secret(grant.credentials)
     upsert_connection__no_commit(
         db_session,
