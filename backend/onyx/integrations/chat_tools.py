@@ -44,7 +44,9 @@ def _integration_tools(
         )
         return []
     actions = list_integration_actions(integration.id, db_session)
-    if not actions and sync_api_actions_if_missing(integration.id):
+    if not actions:
+        # Read again also when another chat wrote the actions first.
+        sync_api_actions_if_missing(integration.id)
         actions = list_integration_actions(integration.id, db_session)
     keys = [action.key for action in actions]
     policies = resolve_action_policies(
