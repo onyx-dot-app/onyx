@@ -118,8 +118,14 @@ The Agent editor shows why **Allow** is not available. If an Agent already has *
 the editor shows it and you can change it, but the action follows the integration policy.
 
 Under each action, the editor shows the setting that applies, for example **Asks (integration setting)**.
-To run an action that asks with no prompt, an admin sets it to **Allow** on the integration,
-or each user picks **Always allow**. Admins see a link to the **Actions** tab of the integration.
+To run an action that asks with no prompt:
+
+- If the integration setting asks, an admin sets the action to **Allow** on the integration,
+  or each user picks **Always allow**. Admins see a link to the **Actions** tab of the integration.
+- If the Agent setting asks, change the Agent setting, or each user picks **Always allow**.
+  An integration setting of **Allow** does not remove an Agent setting of **Ask**.
+
+Users can pick **Always allow** only when the integration lets them save it.
 See [Approvals](/admins/plugins/overview#approvals).
 
 After you save the Agent, users find it on the **Explore Agents** page in the chat sidebar. On Business, Enterprise,

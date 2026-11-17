@@ -10799,6 +10799,8 @@
       "plugins": {
         "askHint": "Para executar sem perguntar, um administrador define como Permitir na integração, ou cada usuário escolhe Sempre permitir.",
         "askHintAdminOnly": "Para executar sem perguntar, um administrador define como Permitir na integração.",
+        "askHintAgent": "Para executar isto sem confirmação, altere a configuração do agente, ou cada usuário escolhe Sempre permitir.",
+        "askHintAgentOnly": "Para executar isto sem confirmação, altere a configuração do agente.",
         "choice": {
           "inherit": "Usar a configuração da integração",
           "agentDefault": "Usar o padrão do agente"
