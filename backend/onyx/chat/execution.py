@@ -81,6 +81,7 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.server.settings.store import load_settings
 from onyx.tools.constants import CODING_AGENT_TOOL_ID
 from onyx.tools.interface import Tool
+from onyx.tools.models import ToolOptions
 from onyx.tools.tool_constructor import (
     CustomToolConfig,
     FileReaderToolConfig,
@@ -821,7 +822,9 @@ def bind_run_store(
         on_root_parked=on_root_parked,
         model_configuration_id=llm.config.model_configuration_id,
         temperature=llm.config.temperature,
-        tool_options=setup.new_msg_req.tool_options,
+        # Explicit defaults: a turn that the server starts later compares
+        # them with its own, and None would fall back to the chat's options.
+        tool_options=setup.new_msg_req.tool_options or ToolOptions(),
     )
     view = store.bind(
         coordinator,
