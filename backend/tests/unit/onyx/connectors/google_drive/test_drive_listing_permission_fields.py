@@ -88,7 +88,10 @@ def test_the_stub_listing_asks_for_no_permissions(
 
 
 def _stub_listing(
-    connector: GoogleDriveConnector, folder: dict[str, Any], file: dict[str, Any]
+    connector: GoogleDriveConnector,
+    folder: dict[str, Any],
+    file: dict[str, Any],
+    include_permissions: bool = True,
 ) -> tuple[list[HierarchyNode], list[SlimDocumentStub], list[Any], list[Any]]:
     checkpoint = _checkpoint(connector)
     listed = [
@@ -124,7 +127,7 @@ def _stub_listing(
     ):
         items = list(
             connector.retrieve_slim_docs_from_checkpoint(
-                0, 1, checkpoint, include_permissions=True
+                0, 1, checkpoint, include_permissions=include_permissions
             )
         )
     nodes = [item for item in items if isinstance(item, HierarchyNode)]
@@ -180,3 +183,20 @@ def test_a_folder_whose_permissions_cannot_be_read_is_not_public() -> None:
     assert nodes[0].external_access is not None
     assert not nodes[0].external_access.is_public
     assert "permissionIds" not in folder_access_inputs[0]
+
+
+def test_a_folder_listed_without_permission_sync_keeps_its_stored_access() -> None:
+    """Without permission sync, the node has no access value, so the stored
+    access stays. The listing reads no folder permissions."""
+    connector = _connector()
+    ops = MagicMock(spec=GoogleDriveSourceOperations)
+    connector._ops = ops
+
+    nodes, _, _, folder_access_inputs = _stub_listing(
+        connector, dict(_FOLDER), dict(_FILE), include_permissions=False
+    )
+
+    assert [node.raw_node_id for node in nodes] == ["folder-1"]
+    assert nodes[0].external_access is None
+    ops.get_file.assert_not_called()
+    assert folder_access_inputs == []

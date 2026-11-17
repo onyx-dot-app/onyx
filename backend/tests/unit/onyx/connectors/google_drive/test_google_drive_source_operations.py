@@ -910,9 +910,9 @@ def test_a_batch_read_retries_a_lost_connection_with_a_new_client(
     fresh = _batch_service(None)
 
     with (
-        mock.patch.object(gateway, "_creds"),
+        mock.patch.object(gateway, "_impersonated"),
         mock.patch.object(
-            source_operations, "get_google_service", side_effect=[broken, fresh]
+            source_operations, "build_google_service", side_effect=[broken, fresh]
         ) as build,
     ):
         result = gateway.batch_get_files(
