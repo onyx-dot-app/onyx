@@ -32,6 +32,30 @@ async function openCommandMenu(page: Page): Promise<Locator> {
   return dialog;
 }
 
+async function searchChats(
+  page: Page,
+  dialog: Locator,
+  query: string
+): Promise<void> {
+  const searchResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === "/api/chat/search" &&
+      url.searchParams.get("query") === query &&
+      url.searchParams.get("page") === "1" &&
+      response.request().method() === "GET"
+    );
+  });
+  await dialog
+    .getByPlaceholder("Search chat sessions, projects...")
+    .fill(query);
+  const response = await searchResponse;
+  expect(
+    response.ok(),
+    `Chat search failed with HTTP ${response.status()}`
+  ).toBe(true);
+}
+
 test.describe("Chat Search Command Menu", () => {
   test.beforeAll(async ({ browser }, workerInfo) => {
     const context = await browser.newContext();
@@ -205,8 +229,7 @@ test.describe("Chat Search Command Menu", () => {
   test("Search finds matching chat session", async ({ page }) => {
     const dialog = await openCommandMenu(page);
 
-    const input = dialog.getByPlaceholder("Search chat sessions, projects...");
-    await input.fill(`${TEST_PREFIX} Chat 3`);
+    await searchChats(page, dialog, `${TEST_PREFIX} Chat 3`);
     await expect(
       dialog.locator(`[data-command-item="chat-${chatSessionIds[2]}"]`)
     ).toBeVisible();
@@ -243,8 +266,7 @@ test.describe("Chat Search Command Menu", () => {
   test("Search with no results shows empty state", async ({ page }) => {
     const dialog = await openCommandMenu(page);
 
-    const input = dialog.getByPlaceholder("Search chat sessions, projects...");
-    await input.fill("xyz123nonexistent9999");
+    await searchChats(page, dialog, "xyz123nonexistent9999");
     const noResults = dialog.getByText("No results found");
     const noMore = dialog.getByText("No more results");
     await expect(noResults.or(noMore)).toBeVisible();
@@ -269,8 +291,7 @@ test.describe("Chat Search Command Menu", () => {
   test("Clicking a chat session navigates to its URL", async ({ page }) => {
     const dialog = await openCommandMenu(page);
 
-    const input = dialog.getByPlaceholder("Search chat sessions, projects...");
-    await input.fill(`${TEST_PREFIX} Chat 1`);
+    await searchChats(page, dialog, `${TEST_PREFIX} Chat 1`);
     await dialog
       .locator(`[data-command-item="chat-${chatSessionIds[0]}"]`)
       .click();
