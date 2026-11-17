@@ -9,8 +9,9 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
+use crate::state::AppState;
+
 pub const LABEL: &str = "main";
-const SESSION_COOKIE: &str = "fastapiusersauth";
 static POPUP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, PartialEq, Eq)]
@@ -31,18 +32,42 @@ pub fn classify(url: &Url, server_origin: &str) -> LinkAction {
     }
 }
 
+/// The web app opens popups for OAuth consent (connectors, MCP): it opens a
+/// same-origin `about:blank` popup and then sends it to the provider. So a
+/// popup, unlike the main window, may load other HTTPS sites; its title shows
+/// the site's host so it is never mistaken for Onyx. Plain HTTP and other
+/// schemes follow the main window's rules.
+fn popup_navigation_allowed(app: &AppHandle, url: &Url, server_origin: &str) -> bool {
+    match classify(url, server_origin) {
+        LinkAction::Allow => true,
+        LinkAction::External if url.scheme() == "https" => true,
+        LinkAction::External => {
+            open_external(app, url.as_str());
+            false
+        }
+        LinkAction::Block => false,
+    }
+}
+
+fn popup_title(url: &Url) -> String {
+    match url.host_str() {
+        Some(host) => format!("Onyx — {host}"),
+        None => "Onyx".to_string(),
+    }
+}
+
 pub fn open_external(app: &AppHandle, url: &str) {
     if let Err(e) = app.opener().open_url(url, None::<&str>) {
         log::warn!("could not open {url}: {e}");
     }
 }
 
-fn session_cookie(server: &Url, token: &str) -> Result<Cookie<'static>, String> {
+fn session_cookie(server: &Url, name: &str, token: &str) -> Result<Cookie<'static>, String> {
     let host = server
         .host_str()
         .ok_or_else(|| "server URL has no host".to_string())?
         .to_string();
-    let mut cookie = Cookie::build((SESSION_COOKIE, token.to_string()))
+    let mut cookie = Cookie::build((name.to_string(), token.to_string()))
         .domain(host)
         .path("/")
         .http_only(true)
@@ -75,14 +100,14 @@ fn choose_download_path(destination: &mut std::path::PathBuf) -> bool {
 fn hand_over_session(
     window: &tauri::WebviewWindow,
     server_url: &Url,
+    name: &str,
     token: &str,
 ) -> Result<(), String> {
     #[cfg(target_os = "macos")]
-    let result =
-        crate::macos_cookies::set_session_cookie(window, server_url, SESSION_COOKIE, token);
+    let result = crate::macos_cookies::set_session_cookie(window, server_url, name, token);
     #[cfg(not(target_os = "macos"))]
     let result = window
-        .set_cookie(session_cookie(server_url, token)?)
+        .set_cookie(session_cookie(server_url, name, token)?)
         .map_err(|e| e.to_string());
     result.map_err(|e| format!("Could not hand the session to the window: {e}"))
 }
@@ -125,9 +150,19 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
             LinkAction::Allow => {
                 let label = format!("popup-{}", POPUP_COUNTER.fetch_add(1, Ordering::Relaxed));
                 let blank = WebviewUrl::External("about:blank".parse().expect("valid url"));
+                let popup_nav_app = popup_app.clone();
+                let popup_nav_origin = popup_origin.clone();
                 match WebviewWindowBuilder::new(&popup_app, label, blank)
                     .title("Onyx")
                     .window_features(features)
+                    .on_navigation(move |url| {
+                        popup_navigation_allowed(&popup_nav_app, url, &popup_nav_origin)
+                    })
+                    .on_page_load(|window, payload| {
+                        if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                            let _ = window.set_title(&popup_title(payload.url()));
+                        }
+                    })
                     .build()
                 {
                     Ok(window) => NewWindowResponse::Create { window },
@@ -157,7 +192,8 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
     #[cfg(target_os = "macos")]
     crate::macos_dialogs::install(&window);
 
-    hand_over_session(&window, &server_url, token)?;
+    let cookie_name = app.state::<AppState>().cookie_name(server).await;
+    hand_over_session(&window, &server_url, &cookie_name, token)?;
     window.navigate(target).map_err(|e| e.to_string())?;
     let _ = window.set_focus();
     Ok(())
@@ -170,8 +206,9 @@ pub fn close(app: &AppHandle, server: &str) {
     };
     if let Ok(server_url) = Url::parse(server) {
         #[cfg(target_os = "macos")]
-        let _ = crate::macos_cookies::clear_session_cookie(&window, &server_url, SESSION_COOKIE);
-        if let Ok(cookie) = session_cookie(&server_url, "") {
+        let name = app.state::<AppState>().cached_cookie_name(server);
+        let _ = crate::macos_cookies::clear_session_cookie(&window, &server_url, &name);
+        if let Ok(cookie) = session_cookie(&server_url, &name, "") {
             let _ = window.delete_cookie(cookie);
         }
     }

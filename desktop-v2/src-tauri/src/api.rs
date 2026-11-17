@@ -13,6 +13,14 @@ pub struct Api {
     http: Client,
 }
 
+/// The web UI's default session cookie (`AUTH_COOKIE_NAME` unset).
+pub const DEFAULT_SESSION_COOKIE: &str = "fastapiusersauth";
+
+#[derive(Deserialize)]
+struct CookieNameResponse {
+    auth_cookie_name: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct VersionResponse {
     backend_version: String,
@@ -91,6 +99,27 @@ impl Api {
             .await
             .map(|v| v.backend_version)
             .map_err(|_| format!("{server} does not look like an Onyx server."))
+    }
+
+    /// The session cookie name from `GET /api/auth/type`, or the default when
+    /// the server does not report one.
+    pub async fn session_cookie_name(&self, server: &str) -> String {
+        let reported = async {
+            self.http
+                .get(format!("{server}/api/auth/type"))
+                .timeout(Duration::from_secs(15))
+                .send()
+                .await
+                .ok()?
+                .json::<CookieNameResponse>()
+                .await
+                .ok()?
+                .auth_cookie_name
+        }
+        .await;
+        reported
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| DEFAULT_SESSION_COOKIE.to_string())
     }
 
     pub async fn login(&self, server: &str, email: &str, password: &str) -> Result<String, String> {

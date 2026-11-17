@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use crate::api::Api;
@@ -9,6 +10,11 @@ pub struct AppState {
     pub api: Api,
     // Cached so the keychain is read once per run.
     token: Mutex<Option<(String, String)>>,
+    /// Bumped when a session ends (sign-out, server change). Work that started
+    /// under an older value is stale and must not save tokens or open windows.
+    epoch: AtomicU64,
+    /// The server's session cookie name, by server origin.
+    cookie_name: Mutex<Option<(String, String)>>,
 }
 
 impl AppState {
@@ -17,6 +23,49 @@ impl AppState {
             config,
             api: Api::new(),
             token: Mutex::new(None),
+            epoch: AtomicU64::new(0),
+            cookie_name: Mutex::new(None),
+        }
+    }
+
+    pub fn epoch(&self) -> u64 {
+        self.epoch.load(Ordering::SeqCst)
+    }
+
+    /// Marks every sign-in or renewal still in flight as stale.
+    pub fn end_epoch(&self) {
+        self.epoch.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// The cookie the server's web UI reads its session from. Servers can
+    /// rename it (`AUTH_COOKIE_NAME`); older servers do not report it.
+    pub async fn cookie_name(&self, server: &str) -> String {
+        if let Some((cached_server, name)) = self
+            .cookie_name
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+        {
+            if cached_server == server {
+                return name.clone();
+            }
+        }
+        let name = self.api.session_cookie_name(server).await;
+        *self.cookie_name.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some((server.to_string(), name.clone()));
+        name
+    }
+
+    /// The cookie name already looked up for `server`, or the default.
+    pub fn cached_cookie_name(&self, server: &str) -> String {
+        match self
+            .cookie_name
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+        {
+            Some((cached_server, name)) if cached_server == server => name.clone(),
+            _ => crate::api::DEFAULT_SESSION_COOKIE.to_string(),
         }
     }
 

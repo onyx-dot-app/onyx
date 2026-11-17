@@ -6,7 +6,7 @@
 //! would ask for the user's password each time, so debug builds keep the token
 //! in a file only the user can read (mode 600) in the app's support folder.
 
-#[cfg(not(debug_assertions))]
+#[cfg(not(all(debug_assertions, unix)))]
 mod backend {
     use keyring::Entry;
 
@@ -34,7 +34,7 @@ mod backend {
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, unix))]
 mod backend {
     use std::collections::BTreeMap;
     use std::fs;
@@ -56,20 +56,30 @@ mod backend {
             .unwrap_or_default()
     }
 
+    /// The file is created with mode 600, and an existing file is made private
+    /// before any token is written, so no other user can read it at any point.
     fn write(tokens: &BTreeMap<String, String>) -> Result<(), String> {
+        use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
         let path = path().ok_or("HOME is not set")?;
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        }
-        let raw = serde_json::to_string(tokens).map_err(|e| e.to_string())?;
-        fs::write(&path, raw).map_err(|e| format!("Could not save the session: {e}"))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
                 .map_err(|e| e.to_string())?;
         }
-        Ok(())
+        let raw = serde_json::to_string(tokens).map_err(|e| e.to_string())?;
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(&path)
+            .map_err(|e| format!("Could not save the session: {e}"))?;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())?;
+        file.set_len(0).map_err(|e| e.to_string())?;
+        file.write_all(raw.as_bytes())
+            .map_err(|e| format!("Could not save the session: {e}"))
     }
 
     pub fn load(server: &str) -> Option<String> {

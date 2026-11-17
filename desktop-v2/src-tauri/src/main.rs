@@ -19,12 +19,13 @@ use crate::config::ConfigStore;
 use crate::state::AppState;
 
 fn main() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // Must come first: a second launch hands over to the running instance.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             windows::show_primary(app);
         }))
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_opener::init());
+    let app = builder
         .setup(|app| {
             let config_path = app.path().app_config_dir()?.join("config.json");
             app.manage(AppState::new(ConfigStore::load(config_path)));

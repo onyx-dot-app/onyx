@@ -50,7 +50,12 @@ pub async fn login(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let server = state.server()?;
+    let epoch = state.epoch();
     let token = state.api.login(&server, &email, &password).await?;
+    // The user changed server or signed out while this request was running.
+    if state.epoch() != epoch {
+        return Err("Sign-in was cancelled.".into());
+    }
     state.set_token(&server, &token)?;
     main_window::open(&app, &server, &token, "/app").await?;
     windows::close(&app, windows::LOGIN);
@@ -72,6 +77,7 @@ pub fn get_prefs(state: State<'_, AppState>) -> Prefs {
 
 async fn end_session(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
+    state.end_epoch();
     let Ok(server) = state.server() else {
         return Ok(());
     };

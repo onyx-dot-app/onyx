@@ -52,7 +52,7 @@ function Login() {
               />
             </Field>
             <Section flexDirection="row" justifyContent="between" height="fit">
-              <Button prominence="tertiary" onClick={() => void changeServer()}>
+              <Button prominence="tertiary" disabled={busy} onClick={() => void changeServer()}>
                 Change server
               </Button>
               <Button type="submit" disabled={busy || email.trim() === "" || password === ""}>
