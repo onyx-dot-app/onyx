@@ -24,7 +24,7 @@ packages:
   src/app/craft: 99.4
   src/app/ee: 95.6
   src/app/federated: 97
-  src/app/mcp: 99.5
+  src/app/mcp: 100
   src/app/nrf: 99.2
   src/app/oauth: 100
   src/app/oauth-config: 100
@@ -59,7 +59,7 @@ packages:
   src/layouts/chromes: 99.8
   src/layouts/craft: 96.1
   src/lib: 99.2
-  src/lib/agents: 99.3
+  src/lib/agents: 99.5
   src/lib/analytics: 99.4
   src/lib/app: 99.9
   src/lib/approvals: 100
@@ -79,7 +79,7 @@ packages:
   src/lib/hooks: 96
   src/lib/integrations: 100
   src/lib/languageModels: 99.1
-  src/lib/mcp: 99.4
+  src/lib/mcp: 99
   src/lib/multiModel: 100
   src/lib/navigation: 100
   src/lib/notifications: 99.3

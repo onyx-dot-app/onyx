@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "Add Connectors"
       },
-      "authenticate": {
-        "label": "Authenticate"
-      },
       "codingAgentIncognito": {
         "tooltip": "Coding agent isn't available in incognito mode"
       },
@@ -221,53 +218,6 @@
         "title": "Disconnect *{name}*"
       }
     },
-    "mcpOauthCallback": {
-      "autoRedirect": {
-        "text": "Taking you back automatically…"
-      },
-      "backToChatButton": {
-        "label": "Back to Chat"
-      },
-      "cancelled": {
-        "description": "The authorization was cancelled or denied, so no connection was made. To try again, restart the connection from the MCP server's authentication settings.",
-        "title": "Authorization cancelled"
-      },
-      "continueButton": {
-        "label": "Continue"
-      },
-      "genericError": {
-        "fallbackDetail": "Failed to complete authorization",
-        "title": "Something went wrong"
-      },
-      "invalidLink": {
-        "description": "This link is missing the required authorization parameters. Restart the connection from the MCP server's authentication settings.",
-        "title": "Invalid authorization link"
-      },
-      "processing": {
-        "description": "Finishing the connection to your MCP server. This may take a few moments…",
-        "title": "Completing authorization"
-      },
-      "serverNotFound": {
-        "description": "The MCP server this authorization belongs to no longer exists or is no longer configured. Recreate or reconfigure the server, then connect again.",
-        "title": "MCP server not found"
-      },
-      "sessionExpired": {
-        "description": "This authorization link is invalid, has expired, or was already used. Restart the connection from the MCP server's authentication settings.",
-        "title": "Authorization session expired"
-      },
-      "success": {
-        "description": "Authorization completed successfully. You can now use this server's tools in chat.",
-        "title": "Connected to {serverName}"
-      },
-      "timedOut": {
-        "description": "The MCP server didn't confirm the authorization in time. Try connecting again — if this keeps happening, verify the server's OAuth configuration.",
-        "title": "Authorization timed out"
-      },
-      "tokenExchangeFailed": {
-        "description": "The provider approved the authorization but a valid access token could not be obtained. Check the server's OAuth client credentials and endpoints, then try connecting again.",
-        "title": "Token exchange failed"
-      }
-    },
     "policyToggle": {
       "always": {
         "label": "Allow"
@@ -297,8 +247,7 @@
         "tooltip": "Disable all tools"
       },
       "empty": {
-        "message": "No tools available",
-        "searchMessage": "No tools found"
+        "message": "No tools available"
       },
       "showAllButton": {
         "ariaLabel": "Show all tools",
@@ -427,134 +376,18 @@
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
     "memberPlugins": {
-      "chat": {
-        "trigger": {
-          "label": "Plugins"
-        },
-        "search": {
-          "placeholder": "Search plugins"
-        },
-        "empty": {
-          "text": "No plugins are available in this chat.",
-          "searchText": "No plugins match your search."
-        },
-        "loading": {
-          "label": "Loading plugins"
-        },
-        "loadError": {
-          "text": "Some plugins could not load. Try again."
-        },
-        "retry": {
-          "label": "Try again"
-        },
-        "browse": {
-          "label": "Browse plugins"
-        },
-        "toggle": {
-          "ariaLabel": "Use {name} in this chat"
-        },
-        "connect": {
-          "label": "Connect"
-        },
-        "connection": {
-          "connected": "Connected",
-          "workspace": "Workspace connection",
-          "session": "Session connection",
-          "none": "No connection needed",
-          "oauth": "Connect your account",
-          "credentials": "Add your credentials",
-          "checking": "Checking connection",
-          "unconfigured": "Workspace setup required",
-          "unavailable": "Connection unavailable"
-        },
-        "intent": {
-          "unavailable": "This plugin is not available to this chat's agent.",
-          "invalid": "This plugin link is invalid."
-        }
-      },
-      "oauthComplete": {
-        "success": {
-          "title": "Plugin connected",
-          "description": "Return to the previous tab to continue."
-        },
-        "error": {
-          "title": "Connection not confirmed",
-          "description": "Return to the previous tab and try connecting again."
-        },
-        "return": {
-          "label": "Return to plugins"
-        },
-        "close": {
-          "label": "Close tab"
-        }
-      },
-      "title": "Plugins",
-      "description": "Connect your accounts to use workspace plugins.",
-      "manageWorkspace": "Manage workspace plugins",
-      "search": "Search plugins",
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "Craft App"
-      },
       "row": {
-        "view": "View {name}",
         "connect": "Connect {name}"
       },
       "status": {
-        "connected": "Connected",
-        "workspace": "Workspace connection",
-        "session": "Uses your connected account",
-        "none": "Ready to use",
-        "oauth": "Connect your account",
-        "credentials": "Add your credentials",
-        "unconfigured": "Workspace setup required",
-        "checking": "Checking connection",
         "unavailable": "Connection unavailable"
       },
-      "availability": {
-        "label": "Connection status for {name}",
-        "chat": "Main Chat",
-        "craft": "Craft",
-        "on": "On",
-        "off": "Off",
-        "unknown": "Unknown",
-        "disabledByAdmin": "Disabled by admin",
-        "disabledByYou": "Disabled by you",
-        "agents": "Custom agents",
-        "notAvailable": "Not available"
-      },
       "state": {
-        "loading": "Loading plugins",
         "serversError": "MCP plugins could not load.",
-        "toolsError": "Plugin tools could not load.",
-        "oauthError": "Account connections could not load.",
-        "retry": "Retry",
-        "noResultsTitle": "No matching plugins",
-        "noResultsDescription": "Try a different name or description.",
-        "clearSearch": "View all plugins",
-        "appsError": "Craft apps could not load.",
-        "appsLoading": "Loading Craft apps",
-        "emptyTitle": "No plugins found",
-        "emptyDescription": "Try another connection filter or ask your workspace admin to add a plugin."
+        "appsError": "Craft apps could not load."
       },
       "detail": {
-        "noAuthentication": "No authentication required",
-        "connection": "Connection",
-        "tools": "Tools",
-        "toolCount": "{count, plural, one {# action} other {# actions}}",
-        "noTools": "No visible tools are stored for this plugin.",
-        "connect": "Connect account",
-        "useInChat": "Use in Chat",
-        "disconnect": "Disconnect",
-        "disconnectTitle": "Disconnect {name}?",
-        "disconnectDescription": "This removes your account connection. Workspace availability stays the same.",
-        "oauthDisconnectWarning": "This account connection is shared by all plugins and apps that use the same OAuth configuration. Disconnecting removes your connection from all of them.",
-        "disconnecting": "Disconnecting...",
-        "disconnectFailed": "Your account could not be disconnected. Try again.",
-        "cancel": "Cancel",
-        "close": "Done",
-        "openInCraft": "Open in Craft"
+        "toolCount": "{count, plural, one {# action} other {# actions}}"
       },
       "connection": {
         "title": "Connect {name}",
@@ -582,41 +415,12 @@
           "not_connected": "Your account connection could not be confirmed. Try again.",
           "request_failed": "The connection failed. Try again."
         }
-      },
-      "filters": {
-        "label": "Connection status",
-        "all": "All",
-        "connected": "Connected",
-        "needsSignIn": "Needs sign-in",
-        "showAll": "View all plugins"
-      },
-      "defaults": {
-        "chat": "Enable in default Chat",
-        "craft": "Enable in Craft",
-        "chatDescription": "Make this plugin available in your chats without a custom agent.",
-        "craftDescription": "Make this plugin available in your Craft sessions and scheduled tasks. Your organization’s tool permissions still apply.",
-        "unavailable": "Your admin has disabled this plugin for {surface}.",
-        "saveFailed": "Could not save your plugin defaults. Try again.",
-        "chatUnavailable": "Your admin has disabled this plugin for {surface}. Custom agents configured with this plugin may still use it."
-      },
-      "openapi": {
-        "chatOnly": "Chat only",
-        "chatOnlyDescription": "This plugin is available in Chat, not Craft."
-      },
-      "externalApp": {
-        "description": "Use your account in Craft.",
-        "craftOnly": "Craft only",
-        "craftOnlyDescription": "This app is available in Craft. Main Chat does not support it.",
-        "craftDisabledDescription": "This app is disabled in Craft. Main Chat does not support it."
       }
     },
     "plugins": {
       "availability": {
-        "mainChat": "Main Chat",
-        "craft": "Craft",
         "on": "On",
         "off": "Off",
-        "unknown": "Unknown",
         "enabled": "Enabled",
         "disabled": "Disabled",
         "chatEnabled": "Chat on",
@@ -720,8 +524,6 @@
       "back": "Back"
     },
     "mcpTools": {
-      "enabledTab": "Available tools",
-      "policiesTab": "Approval settings",
       "search": "Search tools",
       "enabledCount": "Tools enabled: {enabled} of {total}"
     }
@@ -11016,7 +10818,8 @@
             "title": "Connect the server first",
             "description": "Onyx loads the actions of an MCP server after the server is connected.",
             "open": "Open Configuration",
-            "individualDescription": "Each user signs in to this server. Connect your own account on the Plugins page, then click Refresh."
+            "individualDescription": "Each user signs in to this server. Connect your own account on the Plugins page, then click Refresh.",
+            "openPlugins": "Open Plugins"
           }
         }
       }
@@ -11985,40 +11788,6 @@
     }
   },
   "chat": {
-    "mcpConnections": {
-      "trigger": {
-        "label": "Tools need credentials ({count})",
-        "tooltip": "Some tools are unavailable until you connect your account or add credentials."
-      },
-      "modal": {
-        "title": "Connect tools",
-        "description": "Add your credentials to use these tools in Onyx.",
-        "hint": "You can keep chatting without connecting these tools, but your agent may have limited capabilities."
-      },
-      "connect": {
-        "label": "Connect",
-        "accessibleLabel": "Connect {server}"
-      },
-      "reconnect": {
-        "label": "Reconnect",
-        "accessibleLabel": "Reconnect {server}"
-      },
-      "connecting": {
-        "label": "Connecting…"
-      },
-      "connected": {
-        "label": "Connected"
-      },
-      "required": {
-        "label": "Credentials required"
-      },
-      "done": {
-        "label": "Done"
-      },
-      "error": {
-        "description": "Could not connect. Try again."
-      }
-    },
     "app": {
       "createSessionFailed": {
         "toast": "Could not start a new chat. Try again."
@@ -12452,91 +12221,6 @@
       },
       "pendingUserInput": {
         "toast": "Answer the pending approval requests or questions first."
-      }
-    },
-    "mcpApiKey": {
-      "apiKeyField": {
-        "label": "API Key",
-        "placeholder": "Enter your API Key"
-      },
-      "apiKeyVisibilityButton": {
-        "hideAriaLabel": "Hide API key",
-        "showAriaLabel": "Show API key"
-      },
-      "cancelButton": {
-        "label": "Cancel"
-      },
-      "credentialField": {
-        "placeholder": "Enter your {field}"
-      },
-      "credentialVisibilityButton": {
-        "hideAriaLabel": "Hide credential",
-        "showAriaLabel": "Show credential"
-      },
-      "header": {
-        "enterApiKey": {
-          "title": "Enter API Key"
-        },
-        "enterCredentials": {
-          "title": "Enter Credentials"
-        },
-        "manageApiKey": {
-          "title": "Manage API Key"
-        },
-        "manageCredentials": {
-          "title": "Manage Credentials"
-        }
-      },
-      "intro": {
-        "enterApiKey": {
-          "text": "Enter your API Key for {server} to enable authentication."
-        },
-        "enterCredentials": {
-          "text": "Enter your Credentials for {server} to enable authentication."
-        },
-        "updateApiKey": {
-          "text": "Update your API Key for {server}."
-        },
-        "updateCredentials": {
-          "text": "Update your Credentials for {server}."
-        }
-      },
-      "saveApiKeyError": {
-        "message": "Failed to save API key"
-      },
-      "saveCredentialsError": {
-        "message": "Failed to save credentials"
-      },
-      "submitButton": {
-        "saveApiKey": {
-          "label": "Save API Key"
-        },
-        "saveCredentials": {
-          "label": "Save Credentials"
-        },
-        "saving": {
-          "label": "Saving..."
-        },
-        "updateApiKey": {
-          "label": "Update API Key"
-        },
-        "updateCredentials": {
-          "label": "Update Credentials"
-        }
-      },
-      "validationNote": {
-        "apiKey": {
-          "text": "Your API Key will be validated against the server and stored securely."
-        },
-        "authenticated": {
-          "text": "Changes will be validated against the server before being saved."
-        },
-        "credentials": {
-          "text": "Your Credentials will be validated against the server and stored securely."
-        }
-      },
-      "backButton": {
-        "label": "Back to tools"
       }
     },
     "messages": {
@@ -14398,22 +14082,6 @@
       }
     },
     "apps": {
-      "oauthCallback": {
-        "backButton": "Back to My Apps",
-        "description": "Finishing the OAuth handshake…",
-        "errors": {
-          "cancelled": "OAuth was cancelled or denied: {reason}",
-          "failed": "Connection failed.",
-          "missingParams": "Missing code or state in callback URL."
-        },
-        "exchanging": {
-          "label": "Exchanging authorization code…"
-        },
-        "success": {
-          "label": "Connected. Redirecting back to your apps…"
-        },
-        "title": "Connecting your app"
-      },
       "policyEditor": {
         "loading": {
           "label": "Loading…"
@@ -14960,7 +14628,6 @@
       "error": {
         "generic": "Something went wrong. Please try again.",
         "notConfigurable": "This app can't be set up from here.",
-        "popupBlocked": "Couldn't open the setup window — allow popups and try again.",
         "startFailed": "Failed to start setup"
       },
       "loading": {
@@ -15562,10 +15229,8 @@
       "loading": "Loading approval settings…",
       "loadError": "Could not load approval settings.",
       "retry": "Try again",
-      "save": "Save",
       "saving": "Saving…",
       "cancel": "Cancel",
-      "saveError": "Could not save approval settings.",
       "emptyActions": "No known actions. Unknown actions require approval.",
       "agentPermissionRequired": "This run stopped because an action needed approval. Review approval settings, then run the task again.",
       "enableForTask": "Enable for this task",
@@ -17479,5 +17144,218 @@
     "jvmMemoryTitle": "JVM memory",
     "vectorMemoryTitle": "Vector memory",
     "viewDetails": "View details"
+  },
+  "plugins": {
+    "member": {
+      "title": "Plugins",
+      "description": "Skills and integrations that you can use in chats and agents.",
+      "filters": {
+        "label": "Plugin type",
+        "all": {
+          "label": "All"
+        },
+        "skills": {
+          "label": "Skills"
+        },
+        "integrations": {
+          "label": "Integrations"
+        }
+      },
+      "sections": {
+        "organization": "Organization library",
+        "mine": "My uploads",
+        "shared": "Shared with you"
+      },
+      "row": {
+        "skillCount": "{count, plural, one {# skill} other {# skills}}",
+        "integrationCount": "{count, plural, one {# integration} other {# integrations}}",
+        "needsConnection": "{count, plural, one {# needs sign-in} other {# need sign-in}}",
+        "open": {
+          "label": "Open {name}"
+        }
+      },
+      "state": {
+        "loading": "Loading plugins",
+        "loadFailed": "Some plugins could not load.",
+        "emptyTitle": "No plugins yet",
+        "emptyDescription": "Ask your admin to add a plugin.",
+        "noResultsTitle": "No matching plugins",
+        "noResultsDescription": "Try another name or filter.",
+        "retry": {
+          "label": "Try again"
+        },
+        "clear": {
+          "label": "Show all plugins"
+        }
+      },
+      "detail": {
+        "title": "Plugin",
+        "notFound": "This plugin is not available to you.",
+        "loadFailed": "Could not load the plugin.",
+        "tabs": {
+          "overview": "Overview",
+          "skills": "Skills",
+          "integrations": "Integrations",
+          "versions": "Versions"
+        },
+        "overview": {
+          "noDescription": "No description.",
+          "location": "Location",
+          "owner": "Owner",
+          "skills": "Skills",
+          "integrations": "Integrations"
+        },
+        "skills": {
+          "off": "Off",
+          "invalid": "Not valid"
+        },
+        "back": {
+          "label": "Plugins"
+        },
+        "switch": {
+          "title": "Use this plugin",
+          "description": "When this is on, the default agent can use this plugin.",
+          "label": "Use {name}",
+          "required": "Your admin made this plugin required. You cannot turn it off.",
+          "notAvailable": "Your admin made this plugin not available.",
+          "unavailable": "You cannot turn this plugin on or off.",
+          "failed": "Could not change the plugin."
+        },
+        "share": {
+          "label": "Share"
+        },
+        "publish": {
+          "label": "Publish",
+          "blocked": "Only a user with the organization-wide Manage Actions permission can publish a plugin that holds an integration.",
+          "confirmTitle": "Publish {name}?",
+          "confirmMessage": "The plugin moves to the Organization library. You cannot undo this. Admins then set its install setting.",
+          "done": "{name} is now in the Organization library.",
+          "failed": "Could not publish the plugin."
+        }
+      },
+      "connection": {
+        "status": {
+          "connected": "Connected",
+          "notConnected": "Not connected",
+          "needsReconnect": "Needs reconnect",
+          "notSetUp": "Not set up"
+        },
+        "askAdmin": "Ask your admin",
+        "connected": "Connected {name}.",
+        "disconnected": "Disconnected {name}.",
+        "failed": "Could not connect. Try again.",
+        "disconnectFailed": "Could not disconnect. Try again.",
+        "connect": {
+          "label": "Connect",
+          "ariaLabel": "Connect {name}"
+        },
+        "reconnect": {
+          "label": "Reconnect",
+          "ariaLabel": "Reconnect {name}"
+        },
+        "disconnect": {
+          "label": "Disconnect",
+          "ariaLabel": "Disconnect {name}"
+        }
+      },
+      "credentials": {
+        "title": "Connect {name}",
+        "description": "Enter your credentials. Only you use them.",
+        "required": "Add this value.",
+        "failed": "Could not save your credentials. Try again.",
+        "submit": {
+          "label": "Connect",
+          "pendingLabel": "Connecting…"
+        },
+        "cancel": {
+          "label": "Cancel"
+        }
+      },
+      "alwaysAllow": {
+        "title": "Always Allow",
+        "description": "Run an action that asks for approval with no prompt.",
+        "loadFailed": "Could not load the actions.",
+        "saveFailed": "Could not save. Try again.",
+        "alwaysAsks": "Craft asks for approval for each of these requests.",
+        "switch": {
+          "label": "Always allow {name}"
+        },
+        "retry": {
+          "label": "Try again"
+        }
+      },
+      "oauthCallback": {
+        "processing": "Connecting your account…",
+        "successTitle": "Account connected",
+        "successDescription": "Onyx is taking you back.",
+        "errorTitle": "Could not connect",
+        "cancelled": "Sign-in was cancelled.",
+        "invalidLink": "This sign-in link is not valid. Start the sign-in again.",
+        "failed": "The sign-in did not finish. Try again.",
+        "back": {
+          "label": "Back to plugins"
+        }
+      },
+      "search": {
+        "placeholder": "Search plugins"
+      },
+      "addIntegration": {
+        "label": "Add Integration"
+      },
+      "manage": {
+        "label": "Manage plugins"
+      },
+      "share": {
+        "title": "Share {name}",
+        "description": "Give people and groups access to this plugin.",
+        "sharedSignIn": "{names} uses one account. People with access use the account that you connected.",
+        "loadFailed": "Could not load the people with access.",
+        "empty": "Only you have access.",
+        "remove": {
+          "label": "Remove {name}"
+        },
+        "cancel": {
+          "label": "Cancel"
+        },
+        "submit": {
+          "label": "Save",
+          "pendingLabel": "Saving..."
+        },
+        "saved": "Saved the access of {name}.",
+        "failed": "Could not save the access."
+      }
+    },
+    "chat": {
+      "popover": {
+        "empty": "This agent has no plugins with integrations.",
+        "searchEmpty": "No plugins match your search.",
+        "loading": "Loading plugins",
+        "loadError": "Some plugins could not load. Try again.",
+        "trigger": {
+          "label": "Plugins"
+        },
+        "retry": {
+          "label": "Try again"
+        },
+        "browse": {
+          "label": "Browse plugins"
+        },
+        "toggle": {
+          "label": "Use {name} with this agent"
+        }
+      },
+      "connectPrompt": {
+        "tooltip": "The agent cannot use these integrations until you connect your account.",
+        "title": "Connect Integrations",
+        "description": "Sign in to use these integrations in this chat.",
+        "hint": "You can keep chatting. The agent does not use an integration until you connect it.",
+        "trigger": {
+          "label": "{count, plural, one {# integration needs sign-in} other {# integrations need sign-in}}"
+        },
+        "done": {
+          "label": "Done"
+        }
+      }
+    }
   }
 }

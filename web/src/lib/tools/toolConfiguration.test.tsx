@@ -52,18 +52,22 @@ const SIGNED_IN: Pick<User, "id" | "email" | "is_anonymous_user"> = {
 };
 let mockUser: Pick<User, "id" | "email" | "is_anonymous_user"> | null =
   SIGNED_IN;
-// No plugins: these tests cover the built-in tools and the filters.
-let mockCatalogLoading = false;
-jest.mock("@/lib/plugins/member", () => ({
-  useMemberPlugins: () => ({
+// The agent's plugins and the plugins the user turned off for it.
+let mockPluginIds: string[] | null = [];
+let mockDisabledPluginIds: string[] = [];
+const mockSetPluginsDisabled = jest.fn(() => Promise.resolve());
+jest.mock("@/lib/plugins/hooks", () => ({
+  useAgentChatPlugins: () => ({
+    pluginIds: mockPluginIds,
     plugins: [],
-    loading: {
-      apps: false,
-      servers: mockCatalogLoading,
-      tools: false,
-      oauth: false,
-    },
-    errors: {},
+    isLoading: false,
+    error: undefined,
+    refresh: jest.fn(),
+  }),
+  useAgentPluginPreferences: () => ({
+    loaded: true,
+    disabledPluginIds: () => mockDisabledPluginIds,
+    setPluginsDisabled: mockSetPluginsDisabled,
   }),
 }));
 jest.mock("@/providers/UserProvider", () => ({
@@ -73,10 +77,12 @@ jest.mock("@/providers/UserProvider", () => ({
 beforeEach(() => {
   sessionStorage.clear();
   mockChatId = "abc";
-  mockCatalogLoading = false;
   mockIncognitoEnabled = false;
   mockActiveAgent = undefined;
   mockUser = SIGNED_IN;
+  mockPluginIds = [];
+  mockDisabledPluginIds = [];
+  mockSetPluginsDisabled.mockClear();
   echoSaves();
 });
 
@@ -276,7 +282,7 @@ describe("useToolConfiguration: an existing chat", () => {
   });
 
   test("keeps the saved selection for a send while the plugin catalogs load", () => {
-    mockCatalogLoading = true;
+    mockPluginIds = null;
     const saved: ChatToolOptions = {
       allowed: [
         { type: "capability", tool_id: 1 },
@@ -865,4 +871,86 @@ test("an incognito chat sends its selection and keeps it when the server stores 
   unmount();
   const reopened = renderHook(() => useToolConfiguration());
   expect(reopened.result.current.disabledToolIds).toEqual([2]);
+});
+
+describe("useToolConfiguration: plugins of the agent", () => {
+  test("a new chat starts with the plugins the user turned off for the agent", () => {
+    mockChatId = null;
+    mockActiveAgent = AGENT;
+    mockPluginIds = ["plugin-a", "plugin-b"];
+    mockDisabledPluginIds = ["plugin-b"];
+    const { result } = renderHook(() => useToolConfiguration(7));
+
+    expect(result.current.ready).toBe(true);
+    expect(result.current.isPluginEnabled("plugin-a")).toBe(true);
+    expect(result.current.isPluginEnabled("plugin-b")).toBe(false);
+    expect(result.current.allowed).toEqual([
+      { type: "capability", tool_id: 1 },
+      { type: "capability", tool_id: 2 },
+      { type: "plugin", plugin_id: "plugin-a" },
+    ]);
+  });
+
+  test("a switch in a new chat saves disabled_plugin_ids for the agent", () => {
+    mockChatId = null;
+    mockActiveAgent = AGENT;
+    mockPluginIds = ["plugin-a"];
+    const { result } = renderHook(() => useToolConfiguration(7));
+
+    act(() => result.current.setPluginEnabled(["plugin-a"], false));
+    expect(mockSetPluginsDisabled).toHaveBeenCalledWith(
+      AGENT.id,
+      ["plugin-a"],
+      true
+    );
+  });
+
+  test("a tool change sends a saved actions list of a plugin back unchanged", async () => {
+    mockPluginIds = ["plugin-a", "plugin-b"];
+    const saved: ChatToolOptions = {
+      allowed: [
+        { type: "capability", tool_id: 1 },
+        { type: "capability", tool_id: 2 },
+        { type: "plugin", plugin_id: "plugin-a", actions: ["listOrders"] },
+        { type: "plugin", plugin_id: "plugin-b" },
+      ],
+      preferred: null,
+      internal_search_filters: NO_FILTERS,
+    };
+    openSavedChats({ abc: saved });
+    const fetchSpy = echoSaves((sent) => ({ ...saved, ...sent }));
+    const { result } = renderHook(() => useToolConfiguration());
+
+    act(() => result.current.toggleToolState(2, "disabled"));
+
+    await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
+    const [, init] = patchesOf(fetchSpy)[0]!;
+    expect(JSON.parse(String(init.body)).allowed).toEqual([
+      { type: "capability", tool_id: 1 },
+      { type: "plugin", plugin_id: "plugin-a", actions: ["listOrders"] },
+      { type: "plugin", plugin_id: "plugin-b" },
+    ]);
+  });
+
+  test("a switch in a chat saves the agent choice and the chat's tool options", async () => {
+    mockPluginIds = ["plugin-a", "plugin-b"];
+    const fetchSpy = echoSaves();
+    openSavedChats();
+    const { result } = renderHook(() => useToolConfiguration());
+
+    act(() => result.current.setPluginEnabled(["plugin-a"], false));
+    expect(mockSetPluginsDisabled).toHaveBeenCalledWith(
+      AGENT.id,
+      ["plugin-a"],
+      true
+    );
+    await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
+    const [url, init] = patchesOf(fetchSpy)[0]!;
+    expect(url).toBe("/api/chat/chat-session/abc/tool-options");
+    expect(JSON.parse(String(init.body)).allowed).toEqual([
+      { type: "capability", tool_id: 1 },
+      { type: "capability", tool_id: 2 },
+      { type: "plugin", plugin_id: "plugin-b" },
+    ]);
+  });
 });

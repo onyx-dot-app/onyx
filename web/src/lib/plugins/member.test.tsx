@@ -4,9 +4,7 @@ import {
   buildMemberPlugins,
   canUseMemberPlugin,
   connectMemberPlugin,
-  disconnectMemberPlugin,
   memberPluginReference,
-  saveMemberOpenAPIPreferences,
   verifyMemberPluginConnection,
   useMemberPlugins,
   type MemberPlugin,
@@ -92,21 +90,6 @@ test("saves external app user credentials and verifies only its backend", async 
   expect(fetchSpy.mock.calls.map(([input]) => input)).toEqual([
     "/api/build/apps/7/credentials",
     "/api/build/apps",
-  ]);
-});
-
-test("disconnects external app personal credentials and preserves workspace credentials", async () => {
-  const fetchSpy = jest
-    .spyOn(global, "fetch")
-    .mockResolvedValue(new Response("{}"));
-  await disconnectMemberPlugin(appPlugin({ authenticated: true }));
-  await expect(
-    disconnectMemberPlugin(
-      appPlugin({ authenticated: true, credential_keys: [] })
-    )
-  ).rejects.toMatchObject({ reason: "unconfigured" });
-  expect(fetchSpy.mock.calls).toEqual([
-    ["/api/build/apps/7/credentials", { method: "DELETE" }],
   ]);
 });
 
@@ -600,132 +583,6 @@ test("refreshes agent and member connections within the active SWR provider", as
   ]);
 });
 
-describe("personal OpenAPI preferences", () => {
-  function renderPreferences(tools?: ToolSnapshot[]) {
-    const otherTools = [tool({ id: 99 })];
-    const cache = new Map([
-      [SWR_KEYS.openApiTools, { data: otherTools }],
-      ...(tools ? [[SWR_KEYS.tools, { data: tools }] as const] : []),
-    ]);
-    return renderHook(
-      () => ({
-        mutate: useSWRConfig().mutate,
-        tools: useSWR<ToolSnapshot[]>(tools ? SWR_KEYS.tools : null).data,
-        admin: useSWR<ToolSnapshot[]>(SWR_KEYS.openApiTools).data,
-      }),
-      {
-        wrapper: ({ children }) => (
-          <SWRConfig value={{ provider: () => cache }}>{children}</SWRConfig>
-        ),
-      }
-    );
-  }
-
-  test("optimistically updates only the personal flag and preserves other tools and admin data", async () => {
-    let finish = (_response: Response) => {};
-    const response = new Promise<Response>((resolve) => {
-      finish = resolve;
-    });
-    const fetchSpy = jest.spyOn(global, "fetch").mockReturnValue(response);
-    const original = tool({ id: 20, default_chat_enabled: true });
-    const other = tool({ id: 21 });
-    const { result } = renderPreferences([original, other]);
-    let save: Promise<void> | undefined;
-    act(() => {
-      save = saveMemberOpenAPIPreferences(
-        20,
-        { enabled_in_chat: false },
-        result.current.mutate
-      );
-    });
-    await waitFor(() =>
-      expect(result.current.tools).toEqual([
-        { ...original, user_enabled_in_chat: false },
-        other,
-      ])
-    );
-    expect(result.current.admin).toEqual([tool({ id: 99 })]);
-    await act(async () => {
-      finish(new Response(JSON.stringify({ enabled_in_chat: false })));
-      await save;
-    });
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy).toHaveBeenCalledWith("/api/tool/20/preferences", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled_in_chat: false }),
-    });
-    expect(result.current.tools?.[0]).toEqual({
-      ...original,
-      user_enabled_in_chat: false,
-    });
-  });
-
-  test("rolls back rejected saves and retains workspace settings", async () => {
-    let finish = (_response: Response) => {};
-    jest.spyOn(global, "fetch").mockReturnValue(
-      new Promise<Response>((resolve) => {
-        finish = resolve;
-      })
-    );
-    const original = tool({ id: 20, default_chat_enabled: true });
-    const { result } = renderPreferences([original]);
-    let error: unknown;
-    let save: Promise<void> | undefined;
-    act(() => {
-      save = saveMemberOpenAPIPreferences(
-        20,
-        { enabled_in_chat: false },
-        result.current.mutate
-      ).catch((failure) => {
-        error = failure;
-      });
-    });
-    await waitFor(() =>
-      expect(result.current.tools?.[0]?.user_enabled_in_chat).toBe(false)
-    );
-    await act(async () => {
-      finish(
-        new Response(JSON.stringify({ detail: "Workspace access changed" }), {
-          status: 403,
-        })
-      );
-      await save;
-    });
-    expect(error).toEqual(new Error("Workspace access changed"));
-    expect(result.current.tools).toEqual([original]);
-  });
-
-  test("awaits the request without a mounted member tools cache", async () => {
-    let finish = (_response: Response) => {};
-    const fetchSpy = jest.spyOn(global, "fetch").mockReturnValue(
-      new Promise<Response>((resolve) => {
-        finish = resolve;
-      })
-    );
-    const { result } = renderPreferences();
-    let completed = false;
-    const save = saveMemberOpenAPIPreferences(
-      20,
-      { enabled_in_chat: false },
-      result.current.mutate
-    ).then(() => {
-      completed = true;
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(completed).toBe(false);
-    await act(async () => {
-      finish(new Response(JSON.stringify({ enabled_in_chat: false })));
-      await save;
-    });
-    expect(completed).toBe(true);
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(result.current.admin).toEqual([tool({ id: 99 })]);
-  });
-});
-
 test("saves actual per-user credentials and verifies member authentication", async () => {
   const fetchSpy = jest
     .spyOn(global, "fetch")
@@ -826,33 +683,6 @@ test("rejects blank required fields before saving and refuses a false credential
     connectMemberPlugin(plugin, { api_key: "secret" })
   ).rejects.toMatchObject({ reason: "not_connected" });
   expect(fetchSpy).toHaveBeenCalledWith("/api/mcp/servers");
-});
-
-test("disconnects only personal credentials using the native endpoints", async () => {
-  const fetchSpy = jest
-    .spyOn(global, "fetch")
-    .mockResolvedValue(new Response("{}"));
-  await disconnectMemberPlugin(
-    firstMCP({ connection_status: MCPConnectionStatus.CONNECTED })
-  );
-  const openAPI = buildMemberPlugins([], [tool({ oauth_config_id: 4 })], {
-    kind: "loaded",
-    tokens: [{ oauth_config_id: 4, expires_at: null, is_expired: false }],
-  })[0];
-  if (!openAPI) throw new Error("Missing fixture");
-  await disconnectMemberPlugin(openAPI);
-  await expect(
-    disconnectMemberPlugin(
-      firstMCP({
-        auth_performer: MCPAuthenticationPerformer.ADMIN,
-        connection_status: MCPConnectionStatus.CONNECTED,
-      })
-    )
-  ).rejects.toMatchObject({ reason: "unconfigured" });
-  expect(fetchSpy.mock.calls).toEqual([
-    ["/api/mcp/user-credentials/7", { method: "DELETE" }],
-    ["/api/oauth-config/4/token", { method: "DELETE" }],
-  ]);
 });
 
 test.each([

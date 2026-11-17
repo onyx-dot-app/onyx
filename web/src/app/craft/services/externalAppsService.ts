@@ -32,27 +32,6 @@ export async function startExternalAppOAuth(
   return res.json();
 }
 
-interface OAuthCallbackResponse {
-  success: boolean;
-  external_app_id: number;
-  return_path?: string | null;
-}
-
-export async function completeExternalAppOAuthCallback(
-  code: string,
-  state: string
-): Promise<OAuthCallbackResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/apps/oauth/callback`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code, state }),
-  });
-  if (!res.ok) {
-    throw new Error(await readErrorDetail(res, "OAuth exchange failed"));
-  }
-  return res.json();
-}
-
 export type ConnectAppDecision = "connected" | "declined";
 
 /**

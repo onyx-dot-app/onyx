@@ -125,6 +125,10 @@ jest.mock("@/refresh-components/popovers/FilePickerPopover", () => ({
   default: () => null,
 }));
 jest.mock("@/lib/tools/components", () => ({ ToolsPopover: () => null }));
+jest.mock("@/sections/plugins/IntegrationConnectPrompt", () => ({
+  __esModule: true,
+  default: () => null,
+}));
 jest.mock("@/lib/tools/hooks", () => ({
   ...jest.requireActual("@/lib/tools/hooks"),
   flushToolOptions: jest.fn(() => Promise.resolve()),

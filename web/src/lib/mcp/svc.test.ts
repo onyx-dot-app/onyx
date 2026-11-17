@@ -1,6 +1,4 @@
 import {
-  completeMCPUserOAuth,
-  getMCPUserOAuthNavigationUrl,
   MCPUserOAuthStartResponse,
   streamMCPServerProbe,
   startMCPUserOAuth,
@@ -27,7 +25,6 @@ describe("MCP OAuth start", () => {
     name: string;
     forceReauthentication: boolean;
     response: MCPUserOAuthStartResponse;
-    expectedNavigation: string;
   }>([
     {
       name: "opens provider authorization for a forced reconnect",
@@ -38,7 +35,6 @@ describe("MCP OAuth start", () => {
         authorization_url: "https://accounts.example.com/authorize",
         redirect_url: "/app",
       },
-      expectedNavigation: "https://accounts.example.com/authorize",
     },
     {
       name: "returns internally when the existing grant is usable",
@@ -49,33 +45,29 @@ describe("MCP OAuth start", () => {
         authorization_url: null,
         redirect_url: "/app",
       },
-      expectedNavigation: "/app",
     },
-  ])(
-    "$name",
-    async ({ forceReauthentication, response, expectedNavigation }) => {
-      const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValueOnce({
-        ok: true,
-        json: async () => response,
-      } as Response);
+  ])("$name", async ({ forceReauthentication, response }) => {
+    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: async () => response,
+    } as Response);
 
-      const result = await startMCPUserOAuth(42, "/app", {
-        forceReauthentication,
-      });
+    const result = await startMCPUserOAuth(42, "/app", {
+      forceReauthentication,
+    });
 
-      expect(fetchSpy).toHaveBeenCalledWith("/api/mcp/oauth/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          server_id: 42,
-          return_path: "/app",
-          include_resource_param: true,
-          force_reauthentication: forceReauthentication,
-        }),
-      });
-      expect(getMCPUserOAuthNavigationUrl(result)).toBe(expectedNavigation);
-    }
-  );
+    expect(fetchSpy).toHaveBeenCalledWith("/api/mcp/oauth/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        server_id: 42,
+        return_path: "/app",
+        include_resource_param: true,
+        force_reauthentication: forceReauthentication,
+      }),
+    });
+    expect(result).toEqual(response);
+  });
 });
 
 describe("MCP setup requests", () => {
@@ -128,24 +120,5 @@ describe("MCP setup requests", () => {
     await expect(
       streamMCPServerProbe("https://mcp.example/mcp", jest.fn())
     ).rejects.toThrow();
-  });
-});
-
-describe("MCP OAuth callback cancellation", () => {
-  afterEach(() => jest.restoreAllMocks());
-
-  test("reports provider denial with the correlated attempt and no authorization code", async () => {
-    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ detail: "Authorization cancelled" }), {
-        status: 400,
-      })
-    );
-    await expect(
-      completeMCPUserOAuth(null, "mcp-setup_attempt", "access_denied")
-    ).rejects.toThrow("Authorization cancelled");
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "/api/mcp/oauth/callback?state=mcp-setup_attempt&error=access_denied",
-      { method: "POST" }
-    );
   });
 });

@@ -7,46 +7,6 @@ import {
 } from "@/lib/mcp/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
-import englishMessages from "@/i18n/messages/en.json";
-
-export const memberPluginMessages = {
-  ...englishMessages,
-  actions: {
-    ...englishMessages.actions,
-    memberPlugins: {
-      ...englishMessages.actions.memberPlugins,
-      filters: {
-        label: "Connection status",
-        all: "All",
-        connected: "Connected",
-        needsSignIn: "Needs sign-in",
-        showAll: "Show all plugins",
-      },
-      kind: {
-        ...englishMessages.actions.memberPlugins.kind,
-        "external-app": "Craft App",
-      },
-      externalApp: {
-        description: "Use your account in Craft.",
-        craftOnly: "Craft only",
-        craftOnlyDescription:
-          "This app is available in Craft. Main Chat does not support it.",
-      },
-      detail: {
-        ...englishMessages.actions.memberPlugins.detail,
-        openInCraft: "Open in Craft",
-      },
-      state: {
-        ...englishMessages.actions.memberPlugins.state,
-        appsError: "Craft apps could not load.",
-        appsLoading: "Loading Craft apps",
-        emptyTitle: "No plugins found",
-        emptyDescription:
-          "Try another connection filter or ask your workspace admin to add a plugin.",
-      },
-    },
-  },
-};
 
 export function memberApp(
   overrides: Partial<ExternalAppUserResponse> = {}

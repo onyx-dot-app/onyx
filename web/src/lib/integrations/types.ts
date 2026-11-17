@@ -148,6 +148,36 @@ export interface IntegrationActionsUpdate {
   actions: Record<string, PolicyValue | null>;
 }
 
+export interface MemberIntegration {
+  id: number;
+  kind: IntegrationKind;
+  shape: IntegrationShape;
+  name: string;
+  description: string | null;
+  preset_id: string | null;
+  auth_mode: AuthMode;
+  auth_method: AuthMethod | null;
+  credential_fields: CredentialField[];
+  status: IntegrationStatus;
+  plugins: IntegrationPluginRef[];
+  users_can_save_always_allow: boolean;
+}
+
+export interface MemberAction extends IntegrationAction {
+  /** The user's saved "Always allow". */
+  user_policy: "allow" | null;
+}
+
+export interface MemberActionPolicies {
+  users_can_save_always_allow: boolean;
+  actions: MemberAction[];
+}
+
+export interface IntegrationOAuthCallbackResult {
+  integration_id: number;
+  return_path: string | null;
+}
+
 export interface AdminPluginEntry {
   plugin: IntegrationPluginRef;
   integrations: AdminIntegration[];

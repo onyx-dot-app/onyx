@@ -95,7 +95,20 @@ export interface Agent extends MinimalAgent {
   datetime_aware: boolean;
 }
 
+export type LinkValue = "inherit" | "allow" | "ask" | "blocked";
+
+/** A plugin the agent attaches, with the agent's setting for its actions. */
+export interface AgentPluginLink {
+  plugin_id: string;
+  plugin_name: string;
+  action_settings: {
+    default: LinkValue;
+    actions: Record<string, LinkValue>;
+  };
+}
+
 export interface FullAgent extends Agent {
+  plugins?: AgentPluginLink[];
   search_start_date: string | null;
   // per-action affordance map for the requesting user; stamped by GET /persona/{id}
   permissions: PermissionsOf<"Agent">;
