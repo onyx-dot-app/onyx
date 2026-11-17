@@ -8,7 +8,7 @@ export function makeMemberIntegration(
 ): MemberIntegration {
   return {
     id: 1,
-    kind: "mcp_server",
+    kind: "mcp",
     shape: "mcp_server",
     name: "Linear",
     description: "Manage issues",
@@ -28,6 +28,11 @@ export function makeMemberIntegration(
       },
     ],
     users_can_save_always_allow: false,
+    credential_values: {},
+    external_app_id: null,
+    service_urls: [],
+    mcp_server_id: 7,
+    server_url: "https://mcp.linear.app/mcp",
     ...overrides,
   };
 }
