@@ -17,7 +17,7 @@ const MCP_TOOL = "tool_0";
 function openApiSchema(title: string): string {
   return JSON.stringify({
     openapi: "3.0.0",
-    info: { title, version: "1.0.0" },
+    info: { title, description: `${title} API`, version: "1.0.0" },
     servers: [{ url: "https://api.example.com" }],
     paths: {
       "/reports": {
