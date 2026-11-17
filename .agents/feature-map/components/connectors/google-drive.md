@@ -135,3 +135,12 @@ not thread safe.
 - External dependency tests:
   `backend/tests/external_dependency_unit/connectors/google_drive/`.
 - Daily tests against a live domain: `backend/tests/daily/connectors/google_drive/`.
+- Without a Workspace: the mock server in
+  `backend/tests/integration/mock_services/mock_google_drive_server/` serves the
+  token, Drive, Admin SDK and Docs calls, with Google's quotas and errors.
+  Onyx has no setting for it. In tests,
+  `backend/tests/integration/mock_services/mock_google_drive_server/mock_gdrive/patch_onyx.py`
+  patches the clients, token endpoints and Docs/Forms URLs.
+  `backend/tests/integration/mock_services/mock_google_drive_server/sitecustomize.py`
+  does the same for a running Onyx.
+  `backend/scripts/benchmark_google_drive_connector.py` measures throughput.
