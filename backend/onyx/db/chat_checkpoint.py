@@ -12,7 +12,7 @@ from onyx.chat.models import ParkedRun, ResponseCheckpoint, SavedCheckpoint
 from onyx.db.approval_request import close_pending_approval_requests__no_commit
 from onyx.db.chat import (
     configure_response_transaction__no_commit,
-    legacy_tool_options,
+    resolve_tool_options,
     response_invocation_chain,
     session_descendants,
 )
@@ -120,15 +120,13 @@ def _saved_tool_options(
     tool_options: JsonValue | None,
     tool_selection: JsonValue | None,
 ) -> ToolOptions | None:
-    """The tool options of a checkpoint, also of one saved before tool
-    options existed."""
-    if tool_options is not None:
-        return ToolOptions.model_validate(tool_options)
-    if tool_selection is not None:
-        return legacy_tool_options(
-            session, LegacyToolSelection.model_validate(tool_selection)
-        )
-    return None
+    return resolve_tool_options(
+        session,
+        None if tool_options is None else ToolOptions.model_validate(tool_options),
+        None
+        if tool_selection is None
+        else LegacyToolSelection.model_validate(tool_selection),
+    )
 
 
 def parked_response_settings(

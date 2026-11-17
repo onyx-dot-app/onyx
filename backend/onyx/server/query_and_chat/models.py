@@ -148,45 +148,6 @@ class SendMessageRequest(BaseModel):
     # tool and plugin of the agent.
     tool_options: ToolOptions | None = None
 
-    @model_validator(mode="before")
-    @classmethod
-    def reject_removed_tool_fields(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        if data.get("forced_tool_id") is not None:
-            raise ValueError(
-                "forced_tool_id is no longer supported. Use tool_options.preferred "
-                "for an optional Action preference; invocation is not guaranteed."
-            )
-        for field in ("allowed_tool_ids", "preferred_tool_id"):
-            if data.get(field) is not None:
-                raise ValueError(
-                    f"{field} is no longer supported. Use tool_options: "
-                    "tool_options.allowed narrows the Actions and "
-                    "tool_options.preferred sets an optional preference."
-                )
-        # The filters were a field of their own before tool_options.
-        if "internal_search_filters" not in data:
-            return data
-        data = dict(data)
-        filters = data.pop("internal_search_filters")
-        if filters is None:
-            return data
-        options = data.get("tool_options") or {}
-        if isinstance(options, ToolOptions):
-            options = options.model_dump(exclude_unset=True)
-        if options.get("internal_search_filters") is not None:
-            raise ValueError(
-                "Send internal_search_filters in tool_options or at the top "
-                "level, not in both"
-            )
-        data["tool_options"] = {**options, "internal_search_filters": filters}
-        return data
-
-    @property
-    def internal_search_filters(self) -> BaseFilters | None:
-        return self.tool_options.internal_search_filters if self.tool_options else None
-
     file_descriptors: list[FileDescriptor] = []
 
     mentions: Mentions = Field(
@@ -242,6 +203,43 @@ class SendMessageRequest(BaseModel):
     # (not shown in chat history). Used e.g. by the Chrome extension to pass
     # the current tab URL when "Read this tab" is enabled.
     additional_context: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_removed_tool_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        if data.get("forced_tool_id") is not None:
+            raise ValueError(
+                "forced_tool_id is no longer supported. Use tool_options.preferred "
+                "for an optional Action preference; invocation is not guaranteed."
+            )
+        for field in ("allowed_tool_ids", "preferred_tool_id"):
+            if data.get(field) is not None:
+                raise ValueError(
+                    f"{field} is no longer supported. Use tool_options: "
+                    "tool_options.allowed narrows the Actions and "
+                    "tool_options.preferred sets an optional preference."
+                )
+        # The filters were a field of their own before tool_options.
+        if "internal_search_filters" not in data:
+            return data
+        data = dict(data)
+        filters = data.pop("internal_search_filters")
+        if filters is None:
+            return data
+        options = data.get("tool_options") or {}
+        if options.get("internal_search_filters") is not None:
+            raise ValueError(
+                "Send internal_search_filters in tool_options or at the top "
+                "level, not in both"
+            )
+        data["tool_options"] = {**options, "internal_search_filters": filters}
+        return data
+
+    @property
+    def internal_search_filters(self) -> BaseFilters | None:
+        return self.tool_options.internal_search_filters if self.tool_options else None
 
     @model_validator(mode="after")
     def check_preference_supported(self) -> "SendMessageRequest":

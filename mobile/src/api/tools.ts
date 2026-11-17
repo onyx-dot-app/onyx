@@ -4,8 +4,6 @@ import { apiFetch } from "@/api/client";
 import { QUERY_KEYS } from "@/api/query-keys";
 import { useSession } from "@/state/session";
 
-// The endpoint actually returns full ToolSnapshot objects; this only types the fields callers
-// need — the id, to test membership, and the plugins that hold an OpenAPI or MCP tool.
 export interface AvailableTool {
   id: number;
   plugin_ids?: string[];

@@ -100,7 +100,7 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
 )
 from onyx.server.utils import get_json_line
-from onyx.tools.models import CapabilityPreference
+from onyx.tools.models import CapabilityEntry
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import (
     start_thread_future,
@@ -3619,7 +3619,7 @@ def test_a_run_that_ends_at_the_deadline_but_saves_past_the_backstop_stops_once(
 
 def test_invalid_preferred_tool_returns_an_actionable_error() -> None:
     setup = _make_setup(n_models=1)
-    setup.preferred_tool = CapabilityPreference(tool_id=1)
+    setup.preferred_tool = CapabilityEntry(tool_id=1)
     setup.preferred_tool_saved = False
     with patch("onyx.chat.execution.construct_tools", return_value={}):
         with pytest.raises(OnyxError) as raised:

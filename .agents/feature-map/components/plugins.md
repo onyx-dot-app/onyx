@@ -104,13 +104,14 @@ Default Chat when the user's preference turns it off.
 (`tool_options`, held in the chat session store). The composer keeps built-in
 tool states by tool id and plugin states by plugin id. A plugin toggle in
 `ChatPluginsPopover` (`lib/plugins/chat.ts:setChatPluginEnabled`) switches the
-plugin ids of the MCP server or OpenAPI tool (`plugin_ids` on the
-`/api/mcp/servers` and `/api/tool` rows). When something is off, `allowed`
+plugin ids of the MCP server or OpenAPI tool (`plugin_ids` on the rows of the
+MCP server lists and `/api/tool`). When something is off, `allowed`
 names each built-in tool that is on and each plugin of the catalog that is on;
 the hook reads both member catalogs (all plugins and the agent's), because the
-server leaves out each plugin that the list does not name. When a signed-in
-user changes tools or filters in an existing chat, the store keeps the change
-as an unconfirmed edit, and the chat's save loop PATCHes
+server leaves out each plugin that the list does not name.
+
+When a signed-in user changes tools or filters in an existing chat, the store
+keeps the change as an unconfirmed edit, and the chat's save loop PATCHes
 `/api/chat/chat-session/{id}/tool-options` at once with only the changed
 part: `allowed` and `preferred`, or `internal_search_filters`. One request runs
 at a time per chat; later edits go out together in the next one. The server

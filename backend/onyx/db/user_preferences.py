@@ -366,9 +366,6 @@ def update_assistant_preferences(
     new_assistant_preference: UserSpecificAssistantPreference,
     db_session: Session,
 ) -> None:
-    """Update the disabled tools and plugins for a specific assistant for a
-    specific user."""
-    # First check if a config already exists
     result = db_session.execute(
         select(Assistant__UserSpecificConfig)
         .where(Assistant__UserSpecificConfig.assistant_id == assistant_id)
@@ -377,12 +374,10 @@ def update_assistant_preferences(
     config = result.scalar_one_or_none()
 
     if config:
-        # Update existing config
         config.disabled_tool_ids = new_assistant_preference.disabled_tool_ids
         if new_assistant_preference.disabled_plugin_ids is not None:
             config.disabled_plugin_ids = new_assistant_preference.disabled_plugin_ids
     else:
-        # Create new config
         config = Assistant__UserSpecificConfig(
             assistant_id=assistant_id,
             user_id=user_id,

@@ -92,6 +92,15 @@ from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet
 from onyx.tracing.flows import LLMFlow
 
 
+def _offered_preference(
+    preference: ToolPreference | None, tools: list[Tool]
+) -> ToolPreference | None:
+    # A run saved before tool options can prefer an old MCP or custom tool id.
+    if preference is None or not any(tool.matches(preference) for tool in tools):
+        return None
+    return preference
+
+
 class ChatAgent(Agent, RestorableFeature):
     """Chat step preparation and result handling for the shared runtime."""
 
@@ -166,7 +175,7 @@ class ChatAgent(Agent, RestorableFeature):
         self.inject_memories = inject_memories_in_prompt
         self.search_context = SearchContext()
         self.started = time.monotonic()
-        self.preferred_tool = preferred_tool
+        self.preferred_tool = _offered_preference(preferred_tool, self.configured_tools)
         self.chat_files = list(chat_files or [])
         # Only the Python tool reads the files of found documents.
         self.stages_files = any(
@@ -283,7 +292,8 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.reasoning_effort != self.reasoning_effort
             or saved.include_citations != self.include_citations
             or saved.inject_memories != self.inject_memories
-            or saved.preferred_tool != self.preferred_tool
+            or _offered_preference(saved.preferred_tool, self.configured_tools)
+            != self.preferred_tool
             or saved.code_mode != self.code_mode
             or saved.base_prompt != self.base_system_prompt
             or saved.custom_prompt != self.custom_agent_prompt

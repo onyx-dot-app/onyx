@@ -147,6 +147,9 @@ class CapabilityEntry(BaseModel):
     type: Literal["capability"] = "capability"
     tool_id: int
 
+    def __str__(self) -> str:
+        return f"tool {self.tool_id}"
+
 
 class PluginEntry(BaseModel):
     """A plugin of the agent. ``actions`` names the action keys to keep;
@@ -157,16 +160,6 @@ class PluginEntry(BaseModel):
     type: Literal["plugin"] = "plugin"
     plugin_id: UUID
     actions: list[str] | None = None
-
-
-class CapabilityPreference(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    type: Literal["capability"] = "capability"
-    tool_id: int
-
-    def __str__(self) -> str:
-        return f"tool {self.tool_id}"
 
 
 class ActionPreference(BaseModel):
@@ -184,7 +177,7 @@ class ActionPreference(BaseModel):
 
 ToolOptionsEntry = Annotated[CapabilityEntry | PluginEntry, Field(discriminator="type")]
 ToolPreference = Annotated[
-    CapabilityPreference | ActionPreference, Field(discriminator="type")
+    CapabilityEntry | ActionPreference, Field(discriminator="type")
 ]
 
 
@@ -245,7 +238,7 @@ class LegacyToolSelection(BaseModel):
                 for tool_id in self.allowed_tool_ids
                 if tool_id in built_in_tool_ids
             ],
-            preferred=CapabilityPreference(tool_id=self.preferred_tool_id)
+            preferred=CapabilityEntry(tool_id=self.preferred_tool_id)
             if self.preferred_tool_id is not None
             and self.preferred_tool_id in built_in_tool_ids
             else None,

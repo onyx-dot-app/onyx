@@ -38,7 +38,6 @@ from onyx.server.query_and_chat.chat_backend import (
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.models import (
     CapabilityEntry,
-    CapabilityPreference,
     LegacyToolSelection,
     PluginEntry,
     ToolOptions,
@@ -52,7 +51,7 @@ SAVED = ToolOptions(
         CapabilityEntry(tool_id=3),
         PluginEntry(plugin_id=uuid4(), actions=["hello"]),
     ],
-    preferred=CapabilityPreference(tool_id=3),
+    preferred=CapabilityEntry(tool_id=3),
     internal_search_filters=BaseFilters(tags=[]),
 )
 
@@ -136,7 +135,7 @@ def test_a_partial_update_keeps_the_saved_fields_it_does_not_set(
         chat_session.id,
         ToolOptions(
             allowed=[CapabilityEntry(tool_id=3)],
-            preferred=CapabilityPreference(tool_id=3),
+            preferred=CapabilityEntry(tool_id=3),
         ),
         owner,
         db_session,
@@ -150,7 +149,7 @@ def test_a_partial_update_keeps_the_saved_fields_it_does_not_set(
     )
     expected = ToolOptions(
         allowed=[CapabilityEntry(tool_id=3)],
-        preferred=CapabilityPreference(tool_id=3),
+        preferred=CapabilityEntry(tool_id=3),
         internal_search_filters=filters,
     )
     assert stored == expected
@@ -331,7 +330,7 @@ def test_an_old_tool_selection_keeps_its_built_in_tools(
     db_session.commit()
     detail = get_chat_session(chat_session.id, user=owner, db_session=db_session)
     assert detail.tool_options == ToolOptions(
-        preferred=CapabilityPreference(tool_id=search_id)
+        preferred=CapabilityEntry(tool_id=search_id)
     )
 
 

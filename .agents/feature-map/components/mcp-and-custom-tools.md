@@ -607,8 +607,11 @@ it.
     (`ResponseCheckpoint.model_configuration_id`, `.tool_options`; a
     checkpoint saved before tool options has `.tool_selection`, read with the
     same carry-over as the chat column), and `prepare_chat_turn` uses them
-    instead of the chat's current model and saved options. It checks document-set access again. An agent host
-    uses those of the first parked agent that it resumes.
+    instead of the chat's current model and saved options. It checks
+    document-set access again. An agent host uses those of the first parked
+    agent that it resumes. A restored run whose saved preferred tool matches
+    no tool of the turn runs without the preference
+    (`chat/agent.py:_offered_preference`).
     Resumable agent runs resume in the store of their branch, selected or not
     (`ChatRunStore._dispatch_messages`), with no stream; dispatch starts an
     agent host (`chat/execution.py:host_agent_work`) for the selected branch,

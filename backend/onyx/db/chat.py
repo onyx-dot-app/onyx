@@ -1035,26 +1035,19 @@ MAX_TOOL_OPTIONS_ITEMS = 1000
 MAX_TOOL_OPTIONS_BYTES = 64 * 1024
 
 
-def legacy_tool_options(
-    db_session: Session, legacy: LegacyToolSelection
-) -> ToolOptions:
-    """An old tool selection as tool options: built-in tool ids carry over."""
+def resolve_tool_options(
+    db_session: Session,
+    options: ToolOptions | None,
+    legacy: LegacyToolSelection | None,
+) -> ToolOptions | None:
+    """Saved tool options; a chat or run saved before tool options existed
+    gives its old tool selection instead."""
+    if options is not None or legacy is None:
+        return options
     built_in_tool_ids = set(
         db_session.scalars(select(Tool.id).where(Tool.in_code_tool_id.is_not(None)))
     )
     return legacy.to_tool_options(built_in_tool_ids)
-
-
-def get_chat_session_tool_options(
-    db_session: Session, chat_session: ChatSession
-) -> ToolOptions | None:
-    """The saved tool options of the chat. A chat saved before
-    ``tool_options`` existed gives its old tool selection as tool options."""
-    if chat_session.tool_options is not None:
-        return chat_session.tool_options
-    if chat_session.tool_selection is not None:
-        return legacy_tool_options(db_session, chat_session.tool_selection)
-    return None
 
 
 def set_chat_session_tool_options__no_commit(
@@ -1098,16 +1091,20 @@ def set_chat_session_tool_options__no_commit(
         db_session, filters.document_set if filters else None, user
     )
     changes = tool_options.model_dump(include=tool_options.model_fields_set)
-    saved = get_chat_session_tool_options(db_session, chat_session)
+    saved = chat_session.tool_options
     if (
-        chat_session.tool_options is not None
-        and saved is not None
+        saved is not None
         and ToolOptions.model_validate(saved.model_dump() | changes) == saved
     ):
         return saved
     # Merge under the row lock, so a concurrent save keeps the fields it set.
     db_session.refresh(chat_session, with_for_update=True)
-    current = get_chat_session_tool_options(db_session, chat_session) or ToolOptions()
+    current = (
+        resolve_tool_options(
+            db_session, chat_session.tool_options, chat_session.tool_selection
+        )
+        or ToolOptions()
+    )
     chat_session.tool_options = ToolOptions.model_validate(
         current.model_dump() | changes
     )

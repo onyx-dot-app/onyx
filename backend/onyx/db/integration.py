@@ -2,7 +2,7 @@ from collections.abc import Collection, Sequence
 from uuid import UUID
 
 from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.enums import IntegrationActionSource
 from onyx.db.models import (
@@ -27,21 +27,43 @@ def list_integrations(db_session: Session) -> list[Integration]:
     return list(db_session.scalars(select(Integration).order_by(Integration.id)).all())
 
 
+def _plugin_ids_by(
+    key: InstrumentedAttribute[int] | InstrumentedAttribute[int | None],
+    ids: Collection[int],
+    db_session: Session,
+) -> dict[int, list[UUID]]:
+    if not ids:
+        return {}
+    plugin_ids: dict[int, list[UUID]] = {}
+    for row_id, plugin_id in db_session.execute(
+        select(key, Plugin__Integration.plugin_id)
+        .join(Integration, Integration.id == Plugin__Integration.integration_id)
+        .join(Plugin, Plugin.id == Plugin__Integration.plugin_id)
+        .where(key.in_(ids))
+        .order_by(Plugin.created_at, Plugin.id)
+    ).tuples():
+        if row_id is not None:
+            plugin_ids.setdefault(row_id, []).append(plugin_id)
+    return plugin_ids
+
+
 def get_integration_plugin_ids(
     integration_ids: Collection[int], db_session: Session
 ) -> dict[int, list[UUID]]:
     """The plugins that hold each integration, oldest first."""
-    if not integration_ids:
-        return {}
-    plugin_ids: dict[int, list[UUID]] = {}
-    for integration_id, plugin_id in db_session.execute(
-        select(Plugin__Integration.integration_id, Plugin__Integration.plugin_id)
-        .join(Plugin, Plugin.id == Plugin__Integration.plugin_id)
-        .where(Plugin__Integration.integration_id.in_(integration_ids))
-        .order_by(Plugin.created_at, Plugin.id)
-    ).tuples():
-        plugin_ids.setdefault(integration_id, []).append(plugin_id)
-    return plugin_ids
+    return _plugin_ids_by(Integration.id, integration_ids, db_session)
+
+
+def get_mcp_server_plugin_ids(
+    mcp_server_ids: Collection[int], db_session: Session
+) -> dict[int, list[UUID]]:
+    return _plugin_ids_by(Integration.mcp_server_id, mcp_server_ids, db_session)
+
+
+def get_tool_plugin_ids(
+    tool_ids: Collection[int], db_session: Session
+) -> dict[int, list[UUID]]:
+    return _plugin_ids_by(Integration.tool_id, tool_ids, db_session)
 
 
 def get_mcp_server_for_integration(

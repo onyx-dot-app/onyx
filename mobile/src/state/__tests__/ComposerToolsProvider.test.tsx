@@ -407,9 +407,8 @@ describe("useComposerToolsState", () => {
     const { result } = renderTools({
       agent: agent([searchTool, imageTool]),
     });
-    await waitFor(() =>
-      expect(result.current.resolveToolOptions().allowed).toBeNull(),
-    );
+    // The plugins of a tool come from the tool list.
+    await waitFor(() => expect(client.isFetching()).toBe(0));
 
     await act(async () => {
       result.current.toggleToolEnabled(2);

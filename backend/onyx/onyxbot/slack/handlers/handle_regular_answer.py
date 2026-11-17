@@ -39,7 +39,7 @@ from onyx.server.query_and_chat.models import (
 )
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tools.constants import SEARCH_TOOL_ID
-from onyx.tools.models import CapabilityPreference, ToolOptions
+from onyx.tools.models import CapabilityEntry, ToolOptions
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import OnyxLoggingAdapter
 from onyx.utils.retry_wrapper import retry_builder
@@ -395,7 +395,7 @@ def handle_regular_answer(
         new_message_request = SendMessageRequest(
             message=user_message.message,
             tool_options=ToolOptions(
-                preferred=CapabilityPreference(tool_id=preferred_search_tool_id)
+                preferred=CapabilityEntry(tool_id=preferred_search_tool_id)
                 if preferred_search_tool_id is not None
                 else None,
                 internal_search_filters=filters,

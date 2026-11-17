@@ -1104,7 +1104,6 @@ export default function useChatController({
           })(),
           chatSessionId: currChatSessionId,
           toolOptions: {
-            // Only set when something is off; see `allowed` on the handle.
             allowed: activeAgent ? toolConfiguration.allowed : null,
             preferred:
               effectivePreferredToolId === null

@@ -19,7 +19,7 @@ from onyx.configs.constants import MessageType
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 from onyx.tools.models import (
     DEFAULT_CODE_MODE_RESULT,
-    CapabilityPreference,
+    CapabilityEntry,
     ChatMinimalTextMessage,
     CodeModeExposure,
     CodeModeFunctionName,
@@ -212,7 +212,7 @@ class Tool(abc.ABC):
         return []
 
     def matches(self, preference: ToolPreference) -> bool:
-        if isinstance(preference, CapabilityPreference):
+        if isinstance(preference, CapabilityEntry):
             return self.id == preference.tool_id
         return (
             self.plugin_action is not None

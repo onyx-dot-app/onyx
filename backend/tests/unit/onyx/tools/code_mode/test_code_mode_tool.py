@@ -26,7 +26,7 @@ from onyx.llm.models import ToolResult
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL
 from onyx.tools.models import (
-    CapabilityPreference,
+    CapabilityEntry,
     ChatFile,
     CodeModeExposure,
     CustomToolCallSummary,
@@ -566,11 +566,11 @@ def test_preferences_name_a_tool_as_its_program_function() -> None:
         cells=CodeCells(),
         limits=LIMITS,
     )
-    assert tool.operation_names(CapabilityPreference(tool_id=7)) == [
+    assert tool.operation_names(CapabilityEntry(tool_id=7)) == [
         "tools.list_issues (a function in `execute_code` programs; find its stub with "
         "`await tool_search(query)`)"
     ]
-    assert tool.operation_names(CapabilityPreference(tool_id=8)) == []
+    assert tool.operation_names(CapabilityEntry(tool_id=8)) == []
 
 
 def test_without_deferred_functions_there_is_no_tool_search() -> None:

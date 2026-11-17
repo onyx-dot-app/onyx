@@ -65,10 +65,10 @@ interface ChatSessionData {
   // The chat's saved tools and search filters, owned by the server; the tab's
   // only copy for a chat that stores no content. Undefined until known.
   toolOptions?: ChatToolOptions | null;
-  // The user's changes to that selection that the server has not confirmed;
+  // The user's changes to those options that the server has not confirmed;
   // the composer shows them over the server's copy.
   toolOptionsEdits?: Partial<ChatToolOptions>;
-  // Counts the server's confirmations of that selection; a chat load that
+  // Counts the server's confirmations of those options; a chat load that
   // started before the latest one carries an older copy.
   toolOptionsVersion?: number;
 
@@ -572,10 +572,10 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     toolOptionsVersion: number = 0
   ) => {
     const existingSession = get().sessions.get(sessionId);
-    // A load that started before a save was confirmed holds a stale selection.
-    // The server never clears a stored selection, so a load without one keeps
+    // A load that started before a save was confirmed holds stale options.
+    // The server never clears stored options, so a load without them keeps
     // the tab's copy: that chat stores none, and the tab holds the only copy.
-    const selectionIsCurrent =
+    const optionsAreCurrent =
       (existingSession?.toolOptionsVersion ?? 0) === toolOptionsVersion &&
       (backendSession?.tool_options != null ||
         existingSession?.toolOptions == null);
@@ -585,7 +585,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       personaId: backendSession?.persona_id,
       incognito: backendSession?.incognito ?? false,
       ...(backendSession &&
-        selectionIsCurrent && {
+        optionsAreCurrent && {
           toolOptions: backendSession.tool_options ?? null,
         }),
     };

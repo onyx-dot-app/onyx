@@ -211,7 +211,6 @@ export function useComposerToolsState({
       .filter((tool) => {
         const pluginIds = pluginIdsByTool.get(tool.id) ?? [];
         return (
-          tool.in_code_tool_id === null &&
           pluginIds.length > 0 &&
           pluginIds.every((id) => disabledPluginIds.includes(id))
         );
@@ -285,19 +284,15 @@ export function useComposerToolsState({
       if (currentAgentId == null) return Promise.resolve();
       // The backend fails the turn when the preferred tool isn't among the constructed ones.
       if (disabled && preferredToolId === toolId) clearPreferredTool();
-      const tool = effectiveAgent?.tools.find((entry) => entry.id === toolId);
       return setToolDisabled(
         currentAgentId,
         toolId,
         disabled,
-        tool && tool.in_code_tool_id === null
-          ? (pluginIdsByTool.get(toolId) ?? [])
-          : [],
+        pluginIdsByTool.get(toolId) ?? [],
       );
     },
     [
       clearPreferredTool,
-      effectiveAgent,
       effectiveAgentId,
       pluginIdsByTool,
       preferredToolId,

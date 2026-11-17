@@ -35,7 +35,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
-from onyx.tools.models import CapabilityEntry, CapabilityPreference, ToolOptions
+from onyx.tools.models import CapabilityEntry, ToolOptions
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -49,7 +49,7 @@ def _tool_options(
         allowed=[CapabilityEntry(tool_id=tool_id) for tool_id in allowed_tool_ids],
         preferred=None
         if preferred_tool is None
-        else CapabilityPreference(
+        else CapabilityEntry(
             tool_id=get_builtin_tool(db_session, BUILT_IN_TOOL_MAP[preferred_tool]).id
         ),
     )

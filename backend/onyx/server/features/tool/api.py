@@ -15,7 +15,7 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.constants import UNSET
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PermissionAuthority
-from onyx.db.integration import get_integration_plugin_ids
+from onyx.db.integration import get_mcp_server_plugin_ids, get_tool_plugin_ids
 from onyx.db.mcp import get_mcp_servers_accessible_to_user
 from onyx.db.models import Tool, User
 from onyx.db.oauth_config import get_oauth_config
@@ -567,24 +567,14 @@ def list_tools(
     tools = get_tools(db_session, only_enabled=True, only_connected_mcp=True)
 
     # Attach catalog: omit MCP tools the user cannot put on a persona.
-    server_integration_ids = {
-        server.id: server.integration_id
-        for server in get_mcp_servers_accessible_to_user(user, db_session)
+    accessible_mcp_server_ids = {
+        server.id for server in get_mcp_servers_accessible_to_user(user, db_session)
     }
-    accessible_mcp_server_ids = set(server_integration_ids)
-
-    def integration_id_of(tool: Tool) -> int | None:
-        if tool.mcp_server_id is not None:
-            return server_integration_ids.get(tool.mcp_server_id)
-        return tool.integration_id
-
-    plugin_ids = get_integration_plugin_ids(
-        [
-            integration_id
-            for tool in tools
-            if (integration_id := integration_id_of(tool)) is not None
-        ],
-        db_session,
+    mcp_server_plugin_ids = get_mcp_server_plugin_ids(
+        accessible_mcp_server_ids, db_session
+    )
+    tool_plugin_ids = get_tool_plugin_ids(
+        [tool.id for tool in tools if tool.mcp_server_id is None], db_session
     )
 
     filtered_tools: list[ToolSnapshot] = []
@@ -611,9 +601,9 @@ def list_tools(
         filtered_tools.append(
             ToolSnapshot.from_model(
                 tool,
-                plugin_ids=plugin_ids.get(integration_id)
-                if (integration_id := integration_id_of(tool)) is not None
-                else None,
+                plugin_ids=mcp_server_plugin_ids.get(tool.mcp_server_id)
+                if tool.mcp_server_id is not None
+                else tool_plugin_ids.get(tool.id),
             )
         )
 
