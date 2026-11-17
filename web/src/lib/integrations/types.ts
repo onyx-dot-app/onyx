@@ -119,7 +119,7 @@ export interface IntegrationCreate {
   description: string | null;
   auth_mode: AuthMode;
   auth_method: AuthMethod | null;
-  credential_fields: CredentialField[] | null;
+  credential_fields?: CredentialField[] | null;
   header_template: Record<string, string> | null;
   oauth_client: OAuthClientInput | null;
   config: IntegrationConfig;

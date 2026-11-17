@@ -199,7 +199,6 @@ test("saves the sign-in settings", async () => {
     expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual({
       auth_mode: "individual",
       auth_method: "oauth2",
-      credential_fields: null,
       header_template: null,
       oauth_client: {
         provider_mode: "manual",
@@ -613,6 +612,9 @@ test("keeps every saved header when the API key header changes", async () => {
         header_template: { "X-Org": "{org}", Authorization: "Token {api_key}" },
       })
     )
+  );
+  expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).not.toHaveProperty(
+    "credential_fields"
   );
 });
 

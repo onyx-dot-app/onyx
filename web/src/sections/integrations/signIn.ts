@@ -2,7 +2,6 @@ import type {
   AdminIntegrationDetail,
   AuthMethod,
   AuthMode,
-  CredentialField,
   IntegrationCreate,
   IntegrationShape,
   OAuthClientInput,
@@ -49,11 +48,7 @@ export interface SignInDraft {
 
 export type SignInPayload = Pick<
   IntegrationCreate,
-  | "auth_mode"
-  | "auth_method"
-  | "credential_fields"
-  | "header_template"
-  | "oauth_client"
+  "auth_mode" | "auth_method" | "header_template" | "oauth_client"
 >;
 
 export type SignInError =
@@ -101,14 +96,6 @@ function headerTemplate(draft: SignInDraft): Record<string, string> {
   return { ...others, [name]: draft.headerValue };
 }
 
-function credentialFields(draft: SignInDraft): CredentialField[] {
-  return placeholders(headerTemplate(draft)).map((key) => ({
-    key,
-    label: key.replace(/_/g, " "),
-    secret: true,
-  }));
-}
-
 export function normalizedUrl(value: string): string | null {
   try {
     const url = new URL(value.trim());
@@ -132,7 +119,8 @@ export function signInErrors(draft: SignInDraft): SignInError[] {
   const errors: SignInError[] = [];
   if (draft.authMethod === "api_key") {
     if (!draft.headerName.trim()) errors.push("headerName");
-    if (credentialFields(draft).length === 0) errors.push("headerValue");
+    if (placeholders(headerTemplate(draft)).length === 0)
+      errors.push("headerValue");
   }
   if (draft.authMethod === "oauth2" && draft.providerMode === "manual") {
     if (!normalizedUrl(draft.authorizationUrl)) errors.push("authorizationUrl");
@@ -162,7 +150,6 @@ export function signInPayload(draft: SignInDraft): SignInPayload {
   return {
     auth_mode: draft.authMode,
     auth_method: method,
-    credential_fields: method === "api_key" ? credentialFields(draft) : null,
     header_template: method === "api_key" ? headerTemplate(draft) : null,
     oauth_client: oauthClient,
   };
