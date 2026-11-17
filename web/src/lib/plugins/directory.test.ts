@@ -1,6 +1,7 @@
 import {
   memberPluginEntries,
   ownsPrivateIntegrationPlugin,
+  pendingIntegrations,
   pluginSwitch,
 } from "@/lib/plugins/directory";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
@@ -124,4 +125,15 @@ test("a plugin a group makes Required has a locked switch", () => {
   );
   if (!entry) throw new Error("Missing entry");
   expect(pluginSwitch(entry).blocked).toBe("required");
+});
+
+test("an integration only an admin can fix is not pending for the member", () => {
+  const stale = { state: "needs_reconnect" as const, reason: "Expired" };
+  const own = makeMemberIntegration({ id: 7, status: stale });
+  const shared = makeMemberIntegration({
+    id: 8,
+    auth_mode: "shared",
+    status: stale,
+  });
+  expect(pendingIntegrations([own, shared])).toEqual([own]);
 });

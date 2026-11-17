@@ -16,7 +16,7 @@ import { IconLoader } from "@opal/loaders";
 import { useFocusOnMount } from "@opal/hooks";
 import { useNavigation } from "@opal/navigation";
 import useScreenSize from "@/hooks/useScreenSize";
-import { connectAction } from "@/lib/integrations/connect";
+import { connectAction, needsAdmin } from "@/lib/integrations/connect";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import {
   useAgentPluginPreferences,
@@ -101,9 +101,7 @@ export default function ChatPluginsPopover({
   );
 
   function row(plugin: ChatPluginEntry) {
-    const notSetUp = plugin.integrations.every(
-      (integration) => integration.status.state === "not_set_up"
-    );
+    const adminOnly = plugin.integrations.every(needsAdmin);
     const enabled = toolConfiguration.isPluginEnabled(plugin.pluginId);
     const action =
       plugin.integrations.map(connectAction).find((a) => a !== null) ?? null;
@@ -113,7 +111,7 @@ export default function ChatPluginsPopover({
         key={plugin.pluginId}
         title={plugin.name}
         titleMaxLines={1}
-        description={notSetUp ? connectionCopy("askAdmin") : undefined}
+        description={adminOnly ? connectionCopy("askAdmin") : undefined}
         descriptionMaxLines={1}
         icon={SvgBlocks}
         padding={0}

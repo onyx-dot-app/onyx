@@ -3,6 +3,7 @@ import type {
   MemberPluginRef,
 } from "@/lib/integrations/types";
 import type { CustomSkill, Skill } from "@/lib/skills/types";
+import { connectAction } from "@/lib/integrations/connect";
 
 /** Where a plugin sits: the Organization library, the user's own uploads, or
  * a personal plugin of someone else that the user can see. */
@@ -155,9 +156,7 @@ export function pendingIntegrations(
   integrations: readonly MemberIntegration[]
 ): MemberIntegration[] {
   return integrations.filter(
-    (integration) =>
-      integration.status.state === "not_connected" ||
-      integration.status.state === "needs_reconnect"
+    (integration) => connectAction(integration) !== null
   );
 }
 

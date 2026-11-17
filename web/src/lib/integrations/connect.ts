@@ -19,6 +19,14 @@ export function connectAction(integration: MemberIntegration): ConnectAction {
   return null;
 }
 
+/** The connection does not work and only an admin can fix it. */
+export function needsAdmin(integration: MemberIntegration): boolean {
+  return (
+    connectAction(integration) === null &&
+    integration.status.state !== "connected"
+  );
+}
+
 /**
  * Runs the user's OAuth sign-in in a new tab and resolves when the callback
  * page reports. When the browser blocks the tab, the sign-in continues in
