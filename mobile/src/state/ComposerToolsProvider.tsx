@@ -492,8 +492,9 @@ export function useComposerToolsState({
       disableAllSources,
       notePendingSend,
       toolOptionsReady:
-        availableToolsLoaded ||
-        (disabledToolIds.length === 0 && disabledPluginIds.length === 0),
+        preferencesLoaded &&
+        (availableToolsLoaded ||
+          (disabledToolIds.length === 0 && disabledPluginIds.length === 0)),
       // Gated on `showDeepResearch` so a control the admin has since hidden can't send true.
       resolveToolOptions: () => {
         /*
@@ -564,6 +565,7 @@ export function useComposerToolsState({
       disableAllSources,
       notePendingSend,
       availableToolsLoaded,
+      preferencesLoaded,
     ],
   );
 }

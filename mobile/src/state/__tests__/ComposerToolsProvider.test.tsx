@@ -453,6 +453,23 @@ describe("useComposerToolsState", () => {
     expect(result.current.toolOptionsReady).toBe(false);
   });
 
+  it("holds a send until the saved switches load", async () => {
+    const api = mockApi({
+      holdPreferences: true,
+      preferences: {
+        "0": { disabled_tool_ids: [], disabled_plugin_ids: ["p"] },
+      },
+    });
+    const { result } = renderTools();
+    await act(async () => {});
+    expect(result.current.toolOptionsReady).toBe(false);
+
+    await act(async () => {
+      api.releasePreferences();
+    });
+    await waitFor(() => expect(result.current.toolOptionsReady).toBe(true));
+  });
+
   it("sends at once when nothing is switched off, before the plugin list loads", async () => {
     mockApi({ holdTools: true });
     const { result } = renderTools();
