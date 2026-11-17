@@ -195,6 +195,12 @@ export interface MemberIntegration {
   status: IntegrationStatus;
   plugins: MemberPluginRef[];
   users_can_save_always_allow: boolean;
+  /** The user's saved credential values, masked. */
+  credential_values: Record<string, string>;
+  external_app_id: number | null;
+  service_urls: string[];
+  mcp_server_id: number | null;
+  server_url: string | null;
 }
 
 export interface MemberAction extends IntegrationAction {
