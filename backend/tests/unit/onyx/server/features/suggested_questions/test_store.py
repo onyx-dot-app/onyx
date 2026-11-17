@@ -145,6 +145,14 @@ def test_record_seen_and_mark_used_update_one_record() -> None:
     assert record.used == ["q1"]
 
 
+@pytest.mark.usefixtures("kv")
+def test_record_seen_never_moves_the_time_back() -> None:
+    user_id = uuid4()
+    store.record_seen(user_id, NOW)
+    store.record_seen(user_id, NOW - timedelta(minutes=1))
+    assert store.load_user_record(user_id).last_seen_at == NOW
+
+
 def test_locked_update_reads_postgres_not_the_cache(kv: _FakeKvStore) -> None:
     store.record_seen(uuid4(), NOW)
     assert kv.refresh_cache_calls == [True]
