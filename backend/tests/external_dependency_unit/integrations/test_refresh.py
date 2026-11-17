@@ -24,7 +24,6 @@ from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
     IntegrationConnectionStatus,
-    IntegrationKind,
     IntegrationOAuthProviderMode,
 )
 from onyx.db.integration import get_integration_by_id
@@ -50,28 +49,35 @@ from onyx.integrations.connections import (
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import (
+    make_app_integration,
+    make_mcp_integration,
+)
 from tests.external_dependency_unit.integrations.conftest import (
     TOKEN_URL,
     FakeTokenEndpoint,
-    MakeIntegration,
     add_connection,
     expired,
     far_future,
+    new_oauth_client,
     token_response,
 )
 
 logger = setup_logger()
 
 
-def _manual_integration(make_integration: MakeIntegration) -> Integration:
-    return make_integration(
+def _manual_integration(db_session: Session) -> Integration:
+    return make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
         header_template={"Authorization": "Bearer {access_token}"},
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="client",
-        client_secret="secret",
-    )
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL,
+            client_id="client",
+            client_secret="secret",
+        ),
+    )[0]
 
 
 def _stale_secret() -> ConnectionSecret:
@@ -82,11 +88,10 @@ def _stale_secret() -> ConnectionSecret:
 
 def test_two_concurrent_refreshes_make_one_call(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     user = make_test_user("concurrent_refresh")
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
@@ -165,12 +170,11 @@ def _sign_in_during_refresh(
 @pytest.mark.parametrize("status_code", [200, 400], ids=["refreshed", "refused"])
 def test_refresh_result_does_not_replace_a_newer_sign_in(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
     status_code: int,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     user = make_test_user("refresh_race")
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
@@ -195,11 +199,10 @@ def test_refresh_result_does_not_replace_a_newer_sign_in(
 
 def test_refresh_result_does_not_undo_a_sign_in_settings_change(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     user = make_test_user("refresh_settings_change")
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
@@ -225,12 +228,11 @@ def test_refresh_result_does_not_undo_a_sign_in_settings_change(
 @pytest.mark.parametrize("status_code", [200, 400], ids=["refreshed", "refused"])
 def test_refresh_does_not_commit_or_discard_the_work_of_the_caller(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
     status_code: int,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     name = integration.name
     user = make_test_user("refresh_caller_session")
     connection = add_connection(
@@ -255,11 +257,10 @@ def test_refresh_does_not_commit_or_discard_the_work_of_the_caller(
 
 def test_fresh_token_makes_no_call(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     user = make_test_user("fresh_token")
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=far_future()
@@ -270,11 +271,10 @@ def test_fresh_token_makes_no_call(
 
 def test_dead_refresh_token_needs_reconnect_and_keeps_row(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     user = make_test_user("dead_refresh")
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
@@ -300,11 +300,10 @@ def test_dead_refresh_token_needs_reconnect_and_keeps_row(
 
 def test_temporary_error_keeps_token(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     user = make_test_user("temporary_refresh")
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
@@ -322,11 +321,10 @@ def test_temporary_error_keeps_token(
 
 def test_client_error_keeps_the_connection_connected(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     user = make_test_user("invalid_client_refresh")
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
@@ -343,11 +341,10 @@ def test_client_error_keeps_the_connection_connected(
 
 def test_connection_deleted_during_the_lock_wait_is_not_connected(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     user = make_test_user("deleted_during_refresh")
     add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
@@ -373,12 +370,11 @@ def test_connection_deleted_during_the_lock_wait_is_not_connected(
 @pytest.mark.parametrize("status_code", [200, 400], ids=["refreshed", "refused"])
 def test_connection_deleted_during_the_token_request_is_not_connected(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
     status_code: int,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     user = make_test_user("deleted_during_token_request")
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
@@ -403,11 +399,10 @@ def test_connection_deleted_during_the_token_request_is_not_connected(
 
 def test_expired_token_after_a_temporary_refresh_error_is_not_used(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     user = make_test_user("expired_after_temporary_error")
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
@@ -428,11 +423,10 @@ def test_expired_token_after_a_temporary_refresh_error_is_not_used(
 
 def test_expired_token_without_refresh_token_needs_reconnect(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _manual_integration(make_integration)
+    integration = _manual_integration(db_session)
     user = make_test_user("no_refresh_token")
     connection = add_connection(
         db_session,
@@ -448,16 +442,18 @@ def test_expired_token_without_refresh_token_needs_reconnect(
 
 def test_preset_refresh_uses_provider(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.PRESET,
-        client_id="linear-client",
-        client_secret="linear-secret",
         app_type=ExternalAppType.LINEAR,
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.PRESET,
+            client_id="linear-client",
+            client_secret="linear-secret",
+        ),
     )
     user = make_test_user("preset_refresh")
     connection = add_connection(
@@ -494,16 +490,18 @@ def test_preset_refresh_uses_provider(
 
 def test_preset_refresh_with_a_bad_expires_in_has_no_expiry(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.PRESET,
-        client_id="linear-client",
-        client_secret="linear-secret",
         app_type=ExternalAppType.LINEAR,
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.PRESET,
+            client_id="linear-client",
+            client_secret="linear-secret",
+        ),
     )
     user = make_test_user("preset_bad_expiry")
     connection = add_connection(
@@ -523,35 +521,36 @@ def test_preset_refresh_with_a_bad_expires_in_has_no_expiry(
 _SDK_TOKEN_URL = "https://mcp-auth.example.test/oauth/token"
 
 
-def _discovery_mcp_integration(make_integration: MakeIntegration) -> Integration:
-    return make_integration(
-        kind=IntegrationKind.MCP,
+def _discovery_mcp_integration(db_session: Session) -> Integration:
+    return make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
-        client_id="dcr-client",
-        registration={
-            OAUTH_CLIENT_INFO_KEY: {
-                "client_id": "dcr-client",
-                "redirect_uris": ["https://onyx.example.test/mcp/oauth/callback"],
-                "token_endpoint_auth_method": "none",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.DISCOVERY,
+            client_id="dcr-client",
+            registration={
+                OAUTH_CLIENT_INFO_KEY: {
+                    "client_id": "dcr-client",
+                    "redirect_uris": ["https://onyx.example.test/mcp/oauth/callback"],
+                    "token_endpoint_auth_method": "none",
+                },
+                OAUTH_METADATA_KEY: {
+                    "issuer": "https://mcp-auth.example.test",
+                    "authorization_endpoint": "https://mcp-auth.example.test/authorize",
+                    "token_endpoint": _SDK_TOKEN_URL,
+                },
             },
-            OAUTH_METADATA_KEY: {
-                "issuer": "https://mcp-auth.example.test",
-                "authorization_endpoint": "https://mcp-auth.example.test/authorize",
-                "token_endpoint": _SDK_TOKEN_URL,
-            },
-        },
-    )
+        ),
+    )[0]
 
 
 def test_mcp_refresh_uses_sdk_request(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _discovery_mcp_integration(make_integration)
+    integration = _discovery_mcp_integration(db_session)
     user: User = make_test_user("mcp_refresh")
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
@@ -569,11 +568,10 @@ def test_mcp_refresh_uses_sdk_request(
 
 def test_mcp_refresh_reads_form_encoded_responses(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _discovery_mcp_integration(make_integration)
+    integration = _discovery_mcp_integration(db_session)
     token_endpoint.form_encoded = True
     rotated = make_test_user("mcp_refresh_form")
     rotated_connection = add_connection(

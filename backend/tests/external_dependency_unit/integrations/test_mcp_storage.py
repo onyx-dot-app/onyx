@@ -14,7 +14,6 @@ from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
     IntegrationConnectionStatus,
-    IntegrationKind,
     IntegrationOAuthProviderMode,
 )
 from onyx.db.integration_connection import (
@@ -40,7 +39,8 @@ from onyx.server.features.mcp.oauth import (
     MCPClientRegistrationConflict,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.external_dependency_unit.integrations.conftest import MakeIntegration
+from tests.external_dependency_unit.integration_helpers import make_mcp_integration
+from tests.external_dependency_unit.integrations.conftest import new_oauth_client
 
 
 def _client(client_id: str) -> OAuthClientInformationFull:
@@ -53,14 +53,13 @@ def _client(client_id: str) -> OAuthClientInformationFull:
 
 def test_storage_round_trip(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
+        oauth_client=new_oauth_client(IntegrationOAuthProviderMode.DISCOVERY),
     )
     user = make_test_user("mcp_storage")
     storage = IntegrationTokenStorage(integration.id, user.id)
@@ -123,14 +122,13 @@ def test_storage_round_trip(
 
 def test_refreshed_tokens_do_not_revive_a_row_that_needs_reconnect(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
+        oauth_client=new_oauth_client(IntegrationOAuthProviderMode.DISCOVERY),
     )
     user = make_test_user("mcp_storage_revive")
     storage = IntegrationTokenStorage(integration.id, user.id)
@@ -152,15 +150,17 @@ def test_refreshed_tokens_do_not_revive_a_row_that_needs_reconnect(
 
 
 def test_entered_client_id_without_registration(
-    make_integration: MakeIntegration,
+    db_session: Session,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.SHARED,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="own-client",
-        client_secret="own-secret",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL,
+            client_id="own-client",
+            client_secret="own-secret",
+        ),
     )
     client = asyncio.run(
         IntegrationTokenStorage(integration.id, None).get_client_info()
@@ -173,14 +173,13 @@ def test_entered_client_id_without_registration(
 
 def test_storage_loads_the_expiry_with_the_refresh_buffer(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
+        oauth_client=new_oauth_client(IntegrationOAuthProviderMode.DISCOVERY),
     )
     user = make_test_user("mcp_storage_expiry")
     storage = IntegrationTokenStorage(integration.id, user.id)
@@ -199,16 +198,17 @@ def test_storage_loads_the_expiry_with_the_refresh_buffer(
 
 def test_grant_for_an_entered_client_that_changed_is_refused(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="client-a",
-        client_secret="secret-a",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL,
+            client_id="client-a",
+            client_secret="secret-a",
+        ),
     )
     user = make_test_user("mcp_entered_client_changed")
     started_with = asyncio.run(
@@ -263,16 +263,15 @@ def test_grant_for_an_entered_client_that_changed_is_refused(
 
 def test_refresh_locks_the_oauth_client_before_the_connection(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
     """The sign-in callback locks the OAuth client and then the connection.
     A refresh that saves new metadata must use the same order."""
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
+        oauth_client=new_oauth_client(IntegrationOAuthProviderMode.DISCOVERY),
     )
     user = make_test_user("mcp_storage_lock_order")
     storage = IntegrationTokenStorage(integration.id, user.id)

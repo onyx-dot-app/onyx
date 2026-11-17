@@ -22,7 +22,6 @@ from onyx.db.enums import (
     ExternalAppType,
     IntegrationAuthMethod,
     IntegrationAuthMode,
-    IntegrationKind,
     IntegrationOAuthProviderMode,
     Permission,
 )
@@ -54,10 +53,14 @@ from onyx.server.features.integrations.models import (
 from onyx.server.features.mcp.oauth import OAuthAuthorizationRequired
 from onyx.server.features.mcp.oauth_flow import OAuthAuthorizationRedirect
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import (
+    make_app_integration,
+    make_mcp_integration,
+)
 from tests.external_dependency_unit.integrations.conftest import (
     AUTHORIZE_URL,
     TOKEN_URL,
-    MakeIntegration,
+    new_oauth_client,
     token_response,
 )
 
@@ -93,27 +96,27 @@ def manual_token_post() -> Generator[MagicMock, None, None]:
         yield post
 
 
-def _manual(
-    make_integration: MakeIntegration, mode: IntegrationAuthMode
-) -> Integration:
-    return make_integration(
+def _manual(db_session: Session, mode: IntegrationAuthMode) -> Integration:
+    return make_app_integration(
+        db_session,
         auth_mode=mode,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="manual-client",
-        client_secret="manual-secret",
-        pkce=True,
-        scopes=["read", "write"],
-    )
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL,
+            client_id="manual-client",
+            client_secret="manual-secret",
+            pkce=True,
+            scopes=["read", "write"],
+        ),
+    )[0]
 
 
 def test_individual_manual_sign_in_stores_user_connection(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     manual_token_post: MagicMock,
 ) -> None:
-    integration = _manual(make_integration, IntegrationAuthMode.INDIVIDUAL)
+    integration = _manual(db_session, IntegrationAuthMode.INDIVIDUAL)
     user = make_test_user("oauth_individual")
 
     url = start_integration_oauth(integration, user, db_session, "/plugins")
@@ -149,11 +152,10 @@ def test_individual_manual_sign_in_stores_user_connection(
 
 def test_shared_sign_in_needs_organization_wide_manage_actions(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     manual_token_post: MagicMock,  # noqa: ARG001
 ) -> None:
-    integration = _manual(make_integration, IntegrationAuthMode.SHARED)
+    integration = _manual(db_session, IntegrationAuthMode.SHARED)
     member = make_test_user("oauth_member")
     admin = make_test_user("oauth_admin", is_admin=True)
 
@@ -170,11 +172,10 @@ def test_shared_sign_in_needs_organization_wide_manage_actions(
 
 def test_settings_change_during_sign_in_is_refused(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     manual_token_post: MagicMock,
 ) -> None:
-    integration = _manual(make_integration, IntegrationAuthMode.INDIVIDUAL)
+    integration = _manual(db_session, IntegrationAuthMode.INDIVIDUAL)
     user = make_test_user("oauth_changed")
     state = _query(start_integration_oauth(integration, user, db_session))["state"]
 
@@ -201,21 +202,23 @@ def _change_client_id(integration_id: int) -> None:
 @pytest.mark.parametrize("preset", [False, True], ids=["manual", "preset"])
 def test_settings_change_during_the_token_exchange_is_refused(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     preset: bool,
 ) -> None:
     integration = (
-        make_integration(
+        make_app_integration(
+            db_session,
             auth_mode=IntegrationAuthMode.INDIVIDUAL,
             auth_method=IntegrationAuthMethod.OAUTH2,
-            provider_mode=IntegrationOAuthProviderMode.PRESET,
-            client_id="linear-client",
-            client_secret="linear-secret",
             app_type=ExternalAppType.LINEAR,
-        )
+            oauth_client=new_oauth_client(
+                IntegrationOAuthProviderMode.PRESET,
+                client_id="linear-client",
+                client_secret="linear-secret",
+            ),
+        )[0]
         if preset
-        else _manual(make_integration, IntegrationAuthMode.INDIVIDUAL)
+        else _manual(db_session, IntegrationAuthMode.INDIVIDUAL)
     )
     user = make_test_user("oauth_changed_during_exchange")
     state = _query(start_integration_oauth(integration, user, db_session))["state"]
@@ -238,16 +241,18 @@ def test_settings_change_during_the_token_exchange_is_refused(
 
 def test_preset_sign_in_uses_provider(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.PRESET,
-        client_id="linear-client",
-        client_secret="linear-secret",
         app_type=ExternalAppType.LINEAR,
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.PRESET,
+            client_id="linear-client",
+            client_secret="linear-secret",
+        ),
     )
     user = make_test_user("oauth_preset")
     url = start_integration_oauth(integration, user, db_session)
@@ -269,17 +274,20 @@ def test_preset_sign_in_uses_provider(
 
 
 def test_preset_host_values_come_from_the_oauth_client(
-    db_session: Session, make_integration: MakeIntegration
+    db_session: Session,
 ) -> None:
-    preset = make_integration(
+    preset, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.PRESET,
-        client_id="zd-client",
-        client_secret="zd-secret",
         app_type=ExternalAppType.ZENDESK,
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.PRESET,
+            client_id="zd-client",
+            client_secret="zd-secret",
+        ),
     )
-    manual = _manual(make_integration, IntegrationAuthMode.INDIVIDUAL)
+    manual = _manual(db_session, IntegrationAuthMode.INDIVIDUAL)
     for integration, params in ((preset, {"subdomain": "acme"}), (manual, {"a": "b"})):
         oauth_client = get_oauth_client(db_session, integration.id)
         assert oauth_client is not None
@@ -297,15 +305,15 @@ def test_preset_host_values_come_from_the_oauth_client(
 
 def test_mcp_known_provider_sign_in_uses_sdk_exchange(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="mcp-client",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL, client_id="mcp-client"
+        ),
     )
     user = make_test_user("oauth_mcp")
     seen: list[httpx.Request] = []
@@ -355,15 +363,15 @@ def test_mcp_known_provider_sign_in_uses_sdk_exchange(
 
 def test_mcp_server_change_during_the_token_exchange_is_refused(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="mcp-client",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL, client_id="mcp-client"
+        ),
     )
     user = make_test_user("oauth_mcp_changed_during_exchange")
 
@@ -399,16 +407,15 @@ def test_mcp_server_change_during_the_token_exchange_is_refused(
 
 def test_first_mcp_discovery_sign_in_registers_a_client_and_completes(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
     """Dynamic registration writes the client id during the sign-in. The
     callback must still accept the attempt."""
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
+        oauth_client=new_oauth_client(IntegrationOAuthProviderMode.DISCOVERY),
     )
     user = make_test_user("oauth_mcp_discovery")
 
@@ -480,19 +487,18 @@ def test_first_mcp_discovery_sign_in_registers_a_client_and_completes(
 
 def test_mcp_discovery_sends_the_static_headers_of_the_integration(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
         header_template={
             "Authorization": "Bearer {access_token}",
             "X-Tenant": "acme",
             "X-Key": "{api_key}",
         },
+        oauth_client=new_oauth_client(IntegrationOAuthProviderMode.DISCOVERY),
     )
     user = make_test_user("oauth_mcp_headers")
     sent: list[dict[str, str]] = []
@@ -511,10 +517,9 @@ def test_mcp_discovery_sends_the_static_headers_of_the_integration(
 
 def test_start_route_hides_integrations_the_user_cannot_see(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = _manual(make_integration, IntegrationAuthMode.INDIVIDUAL)
+    integration = _manual(db_session, IntegrationAuthMode.INDIVIDUAL)
     member = make_test_user("route_member")
     admin = make_test_user("route_admin", is_admin=True)
 
@@ -540,12 +545,11 @@ def test_start_route_hides_integrations_the_user_cannot_see(
 
 def test_shared_sign_in_needs_a_token_that_allows_manage_actions(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     manual_token_post: MagicMock,  # noqa: ARG001
 ) -> None:
-    shared = _manual(make_integration, IntegrationAuthMode.SHARED)
-    individual = _manual(make_integration, IntegrationAuthMode.INDIVIDUAL)
+    shared = _manual(db_session, IntegrationAuthMode.SHARED)
+    individual = _manual(db_session, IntegrationAuthMode.INDIVIDUAL)
     admin = make_test_user("token_capped_admin", is_admin=True)
     basic_token = _http_request([Permission.BASIC_ACCESS])
 

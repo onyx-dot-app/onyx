@@ -35,29 +35,32 @@ from onyx.integrations.connections import (
     resolve_connection,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import make_app_integration
 from tests.external_dependency_unit.integrations.conftest import (
-    MakeIntegration,
     add_connection,
     expect_problem,
     expect_resolved,
     far_future,
+    new_oauth_client,
 )
 
 
 def test_none_mode_runs_without_credential(
-    db_session: Session, make_integration: MakeIntegration
+    db_session: Session,
 ) -> None:
-    integration = make_integration(auth_mode=IntegrationAuthMode.NONE, auth_method=None)
+    integration, _ = make_app_integration(
+        db_session, auth_mode=IntegrationAuthMode.NONE, auth_method=None
+    )
     resolved = expect_resolved(resolve_connection(integration, None, db_session))
     assert resolved.secret is None
 
 
 def test_shared_api_key_uses_organization_row_only(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.SHARED,
         auth_method=IntegrationAuthMethod.API_KEY,
         header_template={"X-Api-Key": "{api_key}"},
@@ -85,15 +88,16 @@ def test_shared_api_key_uses_organization_row_only(
 
 def test_shared_oauth2_uses_organization_token(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.SHARED,
         auth_method=IntegrationAuthMethod.OAUTH2,
         header_template={"Authorization": "Bearer {access_token}"},
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="client",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL, client_id="client"
+        ),
     )
     add_connection(
         db_session,
@@ -111,14 +115,15 @@ def test_shared_oauth2_uses_organization_token(
 
 def test_individual_oauth2_uses_acting_user_row_only(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="client",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL, client_id="client"
+        ),
     )
     owner = make_test_user("individual_owner")
     other = make_test_user("individual_other")
@@ -138,10 +143,10 @@ def test_individual_oauth2_uses_acting_user_row_only(
 
 def test_individual_api_key_and_needs_reconnect(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
         header_template={"Authorization": "Token {api_key}"},
@@ -163,9 +168,10 @@ def test_individual_api_key_and_needs_reconnect(
 
 
 def test_anonymous_user_gets_no_individual_connection(
-    db_session: Session, make_integration: MakeIntegration
+    db_session: Session,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
     )
@@ -197,10 +203,10 @@ def _add_login_account(
 
 def test_onyx_login_uses_and_refreshes_login_token(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.ONYX_LOGIN,
         header_template={"Authorization": "Bearer {access_token}"},
@@ -262,10 +268,10 @@ def test_onyx_login_uses_and_refreshes_login_token(
 
 def test_onyx_login_uses_a_refreshed_token_that_has_no_expiry(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.ONYX_LOGIN,
         header_template={"Authorization": "Bearer {access_token}"},
@@ -307,10 +313,10 @@ def test_onyx_login_uses_a_refreshed_token_that_has_no_expiry(
 
 def test_onyx_login_account_deleted_during_the_lock_wait_needs_reconnect(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.ONYX_LOGIN,
         header_template={"Authorization": "Bearer {access_token}"},
@@ -353,10 +359,10 @@ def test_onyx_login_account_deleted_during_the_lock_wait_needs_reconnect(
 
 def test_onyx_login_status_of_an_expired_token_without_refresh_needs_reconnect(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.ONYX_LOGIN,
     )
@@ -380,10 +386,10 @@ def test_onyx_login_status_of_an_expired_token_without_refresh_needs_reconnect(
 
 def test_onyx_login_without_a_login_account_is_not_connected(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.ONYX_LOGIN,
     )
