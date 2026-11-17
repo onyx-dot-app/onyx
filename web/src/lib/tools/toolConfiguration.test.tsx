@@ -294,6 +294,25 @@ describe("useToolConfiguration: an existing chat", () => {
     expect(result.current.filters.selectedSources).toEqual(["notion"]);
   });
 
+  test("holds a send until its saved options load", () => {
+    openSavedChats({});
+    const { result, rerender } = renderHook(() => useToolConfiguration());
+    expect(result.current.optionsLoaded).toBe(false);
+
+    act(() =>
+      useChatSessionStore.getState().createSession("abc", {
+        incognito: false,
+        toolOptions: {
+          allowed: [{ type: "capability", tool_id: 1 }],
+          preferred: null,
+          internal_search_filters: NO_FILTERS,
+        },
+      })
+    );
+    rerender();
+    expect(result.current.optionsLoaded).toBe(true);
+  });
+
   test("drops writes until its details load", () => {
     openSavedChats({});
     const { result, rerender } = renderHook(() => useToolConfiguration());

@@ -414,7 +414,7 @@ const AppInputBar = React.memo(
         if (!questionRefusesFiles) void answerQuestion(submitted);
         return;
       }
-      if (chatState !== "input") return;
+      if (chatState !== "input" || !toolConfiguration.optionsLoaded) return;
       // Stop TTS first to prevent overlapping voices.
       stopTTS();
       onSubmit(submitted);

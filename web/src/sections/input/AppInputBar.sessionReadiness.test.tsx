@@ -186,7 +186,9 @@ function props(chatState: AppInputBarProps["chatState"]): ComposerProps {
       hasTemperatureOverride: false,
       temperature: 0.5,
     } as AppInputBarProps["llmManager"],
-    toolConfiguration: {} as AppInputBarProps["toolConfiguration"],
+    toolConfiguration: {
+      optionsLoaded: true,
+    } as AppInputBarProps["toolConfiguration"],
   };
 }
 

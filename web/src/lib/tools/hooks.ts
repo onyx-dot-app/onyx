@@ -666,6 +666,12 @@ export interface ToolConfigurationHandle {
   ready: boolean;
 
   /**
+   * False while an existing chat's saved options have not loaded. A send
+   * then would carry no allow-list and turn on what the chat turned off.
+   */
+  optionsLoaded: boolean;
+
+  /**
    * The search filters this chat sends with. Orthogonal to the tool states:
    * changing one never changes the other.
    */
@@ -1043,6 +1049,7 @@ export function useToolConfiguration(
                 pluginIds ?? []
               ),
       ready,
+      optionsLoaded: !isChat || chatConfiguration !== null,
       filters: configuration.filters,
       setFilters,
       handOffTo,
@@ -1051,6 +1058,8 @@ export function useToolConfiguration(
   }, [
     configuration,
     ready,
+    isChat,
+    chatConfiguration,
     savedAllowed,
     activeAgent,
     pluginIds,
