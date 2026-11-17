@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { SvgAddLines, SvgMaximize2 } from "@opal/icons";
-import { Button, Text } from "@opal/components";
+import { Button, Presence, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Tooltip } from "@opal/components";
 import { ContentAction, Section } from "@opal/layouts";
@@ -148,19 +148,26 @@ export function CompletedHeader({
       ? t("generatedImages.label", { count: generatedImageCount })
       : null;
 
+  const shownText = isExpanded ? durationText : (imageText ?? durationText);
+  const showMemoryTag = !!memoryOperation && !isExpanded;
+
+  // The summary swaps through Presence.Swap whenever what it shows changes
+  // (opening the card shows the duration in place of the image count).
   return (
-    <div className="flex flex-1 min-w-0 items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-      <Text as="p" font="main-ui-action" color="text-03">
-        {isExpanded ? durationText : (imageText ?? durationText)}
-      </Text>
-      {memoryOperation && !isExpanded && (
-        <MemoryTagWithTooltip
-          memoryText={memoryText}
-          memoryOperation={memoryOperation}
-          memoryId={memoryId}
-          memoryIndex={memoryIndex}
-        />
-      )}
-    </div>
+    <Presence.Swap swapKey={`${shownText}|${showMemoryTag}`}>
+      <div className="flex flex-1 min-w-0 items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+        <Text as="p" font="main-ui-action" color="text-03">
+          {shownText}
+        </Text>
+        {showMemoryTag && (
+          <MemoryTagWithTooltip
+            memoryText={memoryText}
+            memoryOperation={memoryOperation}
+            memoryId={memoryId}
+            memoryIndex={memoryIndex}
+          />
+        )}
+      </div>
+    </Presence.Swap>
   );
 }

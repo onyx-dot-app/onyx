@@ -3,6 +3,7 @@
 import { Section } from "@opal/layouts/general/components";
 import { Text } from "@opal/components/text/components";
 import { Collapsible } from "@opal/components/collapsible/components";
+import { Presence } from "@opal/components/presence/components";
 import {
   LineRoot,
   LineRow,
@@ -78,14 +79,18 @@ function LineStep({
       className="min-w-0 flex-1"
     >
       <span className="opal-line-title">
-        <Text
-          maxLines={1}
-          overflowTooltip
-          font="secondary-action"
-          color="inherit"
-        >
-          {title}
-        </Text>
+        {/* A new title (e.g. "Searching" to "Searched") swaps; it never
+            flashes. */}
+        <Presence.Swap swapKey={typeof title === "string" ? title : title.raw}>
+          <Text
+            maxLines={1}
+            overflowTooltip
+            font="secondary-action"
+            color="inherit"
+          >
+            {title}
+          </Text>
+        </Presence.Swap>
       </span>
     </Section>
   );
