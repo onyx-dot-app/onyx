@@ -2060,7 +2060,6 @@ def update_connector_from_model(
 
 @router.delete(
     "/admin/connector/{connector_id}",
-    response_model=StatusResponse[int],
     tags=PUBLIC_API_TAGS,
 )
 def delete_connector_by_id(

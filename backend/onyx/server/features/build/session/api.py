@@ -98,7 +98,7 @@ router = APIRouter(prefix="/sessions")
 # =============================================================================
 
 
-@router.get("", response_model=SessionListResponse)
+@router.get("")
 def list_sessions(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -116,7 +116,7 @@ def list_sessions(
     )
 
 
-@router.post("", response_model=DetailedSessionResponse)
+@router.post("")
 def create_session(
     request: SessionCreateRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -175,7 +175,7 @@ def create_session(
         raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Session creation failed: {e}")
 
 
-@router.get("/{session_id}", response_model=DetailedSessionResponse)
+@router.get("/{session_id}")
 def get_session_details(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -247,9 +247,7 @@ def get_sandbox_status(
     )
 
 
-@router.get(
-    "/{session_id}/pre-provisioned-check", response_model=PreProvisionedCheckResponse
-)
+@router.get("/{session_id}/pre-provisioned-check")
 def check_pre_provisioned_session(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -282,7 +280,7 @@ def check_pre_provisioned_session(
     return PreProvisionedCheckResponse(valid=False, session_id=None)
 
 
-@router.post("/{session_id}/generate-name", response_model=SessionNameGenerateResponse)
+@router.post("/{session_id}/generate-name")
 def generate_session_name(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -299,7 +297,7 @@ def generate_session_name(
     return SessionNameGenerateResponse(name=generated_name)
 
 
-@router.put("/{session_id}/name", response_model=SessionResponse)
+@router.put("/{session_id}/name")
 def update_session_name(
     session_id: UUID,
     request: SessionUpdateRequest,
@@ -376,7 +374,7 @@ def delete_session(
     return Response(status_code=204)
 
 
-@router.post("/{session_id}/restore", response_model=DetailedSessionResponse)
+@router.post("/{session_id}/restore")
 def restore_session(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -516,6 +514,7 @@ def create_session_opencode_history_snapshot(
 
 @router.get(
     "/{session_id}/artifacts",
+    # no-response-model: allow the handler returns dicts that this model validates and filters
     response_model=list[ArtifactResponse],
 )
 def list_artifacts(
@@ -608,7 +607,7 @@ def get_output_inventory(
     return SessionManager(db_session).get_output_inventory(session_id, user.id)
 
 
-@router.get("/{session_id}/files", response_model=DirectoryListing)
+@router.get("/{session_id}/files")
 def list_directory(
     session_id: UUID,
     path: str = "",
@@ -777,7 +776,7 @@ def get_output_thumbnail(
     )
 
 
-@router.get("/{session_id}/webapp-info", response_model=WebappInfo)
+@router.get("/{session_id}/webapp-info")
 def get_webapp_info(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -866,7 +865,7 @@ def download_directory(
     )
 
 
-@router.post("/{session_id}/upload", response_model=UploadResponse)
+@router.post("/{session_id}/upload")
 def upload_file_endpoint(
     session_id: UUID,
     file: UploadFile = File(...),

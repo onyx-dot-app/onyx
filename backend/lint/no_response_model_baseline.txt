@@ -6,15 +6,3 @@
 # Do not regenerate to admit a new use. Type the handler's return instead.
 #
 # One `<count> <path>` per line, sorted by path.
-1 backend/ee/onyx/server/evals/api.py
-1 backend/ee/onyx/server/query_and_chat/search_backend.py
-1 backend/onyx/auth/users.py
-1 backend/onyx/server/documents/connector.py
-11 backend/onyx/server/features/build/session/api.py
-13 backend/onyx/server/features/mcp/api.py
-9 backend/onyx/server/features/projects/api.py
-3 backend/onyx/server/features/web_search/api.py
-8 backend/onyx/server/manage/discord_bot/api.py
-1 backend/onyx/server/manage/embedding/api.py
-4 backend/onyx/server/manage/web_search/api.py
-1 backend/onyx/server/query_and_chat/chat_backend.py

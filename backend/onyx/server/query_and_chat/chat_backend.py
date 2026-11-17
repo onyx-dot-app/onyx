@@ -977,7 +977,7 @@ def _reject_while_approval_waits(db_session: Session, chat_session_id: UUID) -> 
 # team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
 @router.post(
     "/send-chat-message",
-    response_model=ChatFullResponse,
+    response_model=ChatFullResponse,  # no-response-model: allow the handler also returns a Response, so the annotation is a union
     tags=PUBLIC_API_TAGS,
     responses={
         200: {
