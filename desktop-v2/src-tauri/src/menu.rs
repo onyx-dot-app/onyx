@@ -130,7 +130,9 @@ pub fn handle(app: &AppHandle, id: &str) {
         }
         RELOAD => {
             if let Some(window) = app.get_webview_window(main_window::LABEL) {
-                let _ = window.reload();
+                if let Err(e) = window.reload() {
+                    log::warn!("could not reload: {e}");
+                }
             }
         }
         _ => {}

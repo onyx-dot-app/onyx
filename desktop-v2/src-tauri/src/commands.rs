@@ -101,7 +101,12 @@ pub async fn sign_out(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn change_server(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     end_session(&app).await?;
-    state.config.update(|c| c.server_url = None)?;
+    // The session has ended either way; if the server cannot be cleared, the
+    // user still gets a window (sign-in for the same server) and the error.
+    if let Err(e) = state.config.update(|c| c.server_url = None) {
+        let _ = windows::open_login(&app);
+        return Err(e);
+    }
     windows::open_onboarding(&app)?;
     windows::close(&app, windows::LOGIN);
     windows::close(&app, windows::PREFERENCES);

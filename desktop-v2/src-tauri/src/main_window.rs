@@ -4,7 +4,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tauri::webview::cookie::{Cookie, SameSite};
-use tauri::webview::{DownloadEvent, NewWindowResponse};
+use tauri::webview::{DownloadEvent, NewWindowFeatures, NewWindowResponse};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
@@ -13,6 +13,7 @@ use crate::state::AppState;
 
 pub const LABEL: &str = "main";
 static POPUP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+const LINK_SHIM_JS: &str = include_str!("link_shim.js");
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum LinkAction {
@@ -37,15 +38,102 @@ pub fn classify(url: &Url, server_origin: &str) -> LinkAction {
 /// popup, unlike the main window, may load other HTTPS sites; its title shows
 /// the site's host so it is never mistaken for Onyx. Plain HTTP and other
 /// schemes follow the main window's rules.
-fn popup_navigation_allowed(app: &AppHandle, url: &Url, server_origin: &str) -> bool {
+fn popup_navigation_allowed(app: &AppHandle, label: &str, url: &Url, server_origin: &str) -> bool {
     match classify(url, server_origin) {
         LinkAction::Allow => true,
         LinkAction::External if url.scheme() == "https" => true,
         LinkAction::External => {
             open_external(app, url.as_str());
+            close_if_blank(app, label);
             false
         }
         LinkAction::Block => false,
+    }
+}
+
+/// Closes a popup that never showed a page (it went straight to a link that
+/// opened in the browser), so no empty window stays behind.
+fn close_if_blank(app: &AppHandle, label: &str) {
+    let blank = app
+        .get_webview_window(label)
+        .and_then(|w| w.url().ok())
+        .is_none_or(|url| url.as_str() == "about:blank");
+    if !blank {
+        return;
+    }
+    let app = app.clone();
+    let label = label.to_string();
+    // Not from inside the navigation callback of the window being closed.
+    tauri::async_runtime::spawn(async move {
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            if let Some(window) = handle.get_webview_window(&label) {
+                let _ = window.destroy();
+            }
+        });
+    });
+}
+
+/// Handles `window.open` and `target="_blank"` from the main window or a
+/// popup: a server page opens in a popup that follows the same rules (its own
+/// popups, downloads), other web pages open in the browser.
+fn open_new_window(
+    app: &AppHandle,
+    url: Url,
+    features: NewWindowFeatures,
+    origin: &str,
+) -> NewWindowResponse<tauri::Wry> {
+    match classify(&url, origin) {
+        LinkAction::Allow => {
+            let label = format!("popup-{}", POPUP_COUNTER.fetch_add(1, Ordering::Relaxed));
+            let blank = WebviewUrl::External("about:blank".parse().expect("valid url"));
+            let nav_app = app.clone();
+            let nav_origin = origin.to_string();
+            let nav_label = label.clone();
+            let child_app = app.clone();
+            let child_origin = origin.to_string();
+            match WebviewWindowBuilder::new(app, label, blank)
+                .title("Onyx")
+                .window_features(features)
+                .initialization_script(LINK_SHIM_JS)
+                .on_navigation(move |url| {
+                    popup_navigation_allowed(&nav_app, &nav_label, url, &nav_origin)
+                })
+                .on_new_window(move |url, features| {
+                    open_new_window(&child_app, url, features, &child_origin)
+                })
+                .on_download(|_webview, event| handle_download(event))
+                .on_page_load(|window, payload| {
+                    if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                        let _ = window.set_title(&popup_title(payload.url()));
+                    }
+                })
+                .build()
+            {
+                Ok(window) => NewWindowResponse::Create { window },
+                Err(e) => {
+                    log::warn!("could not open popup: {e}");
+                    NewWindowResponse::Deny
+                }
+            }
+        }
+        LinkAction::External => {
+            open_external(app, url.as_str());
+            NewWindowResponse::Deny
+        }
+        LinkAction::Block => NewWindowResponse::Deny,
+    }
+}
+
+/// Downloads from any app window ask where to save, like a browser.
+fn handle_download(event: DownloadEvent) -> bool {
+    match event {
+        DownloadEvent::Requested { destination, .. } => choose_download_path(destination),
+        DownloadEvent::Finished { url, success, .. } => {
+            log::info!("download of {url} finished (success: {success})");
+            true
+        }
+        _ => true,
     }
 }
 
@@ -137,6 +225,7 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
         .inner_size(1280.0, 840.0)
         .min_inner_size(800.0, 600.0)
         .center()
+        .initialization_script(LINK_SHIM_JS)
         // Let the web page receive dropped files (chat attachments).
         .disable_drag_drop_handler()
         .on_navigation(move |url| match classify(url, &nav_origin) {
@@ -147,46 +236,10 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
             }
             LinkAction::Block => false,
         })
-        .on_new_window(move |url, features| match classify(&url, &popup_origin) {
-            LinkAction::Allow => {
-                let label = format!("popup-{}", POPUP_COUNTER.fetch_add(1, Ordering::Relaxed));
-                let blank = WebviewUrl::External("about:blank".parse().expect("valid url"));
-                let popup_nav_app = popup_app.clone();
-                let popup_nav_origin = popup_origin.clone();
-                match WebviewWindowBuilder::new(&popup_app, label, blank)
-                    .title("Onyx")
-                    .window_features(features)
-                    .on_navigation(move |url| {
-                        popup_navigation_allowed(&popup_nav_app, url, &popup_nav_origin)
-                    })
-                    .on_page_load(|window, payload| {
-                        if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-                            let _ = window.set_title(&popup_title(payload.url()));
-                        }
-                    })
-                    .build()
-                {
-                    Ok(window) => NewWindowResponse::Create { window },
-                    Err(e) => {
-                        log::warn!("could not open popup: {e}");
-                        NewWindowResponse::Deny
-                    }
-                }
-            }
-            LinkAction::External => {
-                open_external(&popup_app, url.as_str());
-                NewWindowResponse::Deny
-            }
-            LinkAction::Block => NewWindowResponse::Deny,
+        .on_new_window(move |url, features| {
+            open_new_window(&popup_app, url, features, &popup_origin)
         })
-        .on_download(move |_webview, event| match event {
-            DownloadEvent::Requested { destination, .. } => choose_download_path(destination),
-            DownloadEvent::Finished { url, success, .. } => {
-                log::info!("download of {url} finished (success: {success})");
-                true
-            }
-            _ => true,
-        });
+        .on_download(|_webview, event| handle_download(event));
 
     let window = builder.build().map_err(|e| e.to_string())?;
 
