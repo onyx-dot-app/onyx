@@ -266,9 +266,8 @@ the preferred tool and the search filters at send time; the controller sends
 them as `tool_options`. An OpenAPI or MCP tool is on or off through its plugins
 (`plugin_ids` from `GET /tool`), which the agent preferences save in
 `disabled_plugin_ids`; a built-in tool stays in `disabled_tool_ids`. The
-allow-list names every plugin of the agent (`api/plugins.ts:useAgentPluginIds`:
-persona detail `plugins`, or for the default agent the enabled plugin refs of
-`GET /integrations`), because `GET /tool` lists no MCP plugins. Sources
+allow-list names every plugin of the agent (`api/plugins.ts:useAgentPluginIds`,
+`GET /plugins/agents/{id}`, the list the web reads), because `GET /tool` lists no MCP plugins. Sources
 are tied to the search tool: turning a source on prefers search, and turning
 search off clears the sources.
 
