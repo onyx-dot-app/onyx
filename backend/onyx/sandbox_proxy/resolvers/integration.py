@@ -1,21 +1,8 @@
-"""Integration credential resolver.
-
-Injects the credential of the integration that the request evaluator matched:
-``resolve_call_credentials`` resolves the connection of the sandbox owner (or
-of the organization), refreshes a token that expires soon and renders the
-header template. It also claims each request to the host of an enabled MCP
-integration that the evaluator did not match, and blocks it: a request outside
-every server URL, to a server the user cannot use, or with no gate verdict
-never forwards. ``claims()`` serves host ownership from a short-TTL per-tenant
-cache, the one deliberate DB touch on the claims path.
-"""
+"""Injects the credential of the integration the gate matched; claims MCP hosts
+so unmatched requests fail closed."""
 
 from __future__ import annotations
 
-import threading
-from uuid import UUID
-
-from cachetools import TTLCache
 from mitmproxy import http
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -24,7 +11,6 @@ from onyx.db.users import fetch_user_by_id
 from onyx.external_apps.matching.engine import GatedTarget
 from onyx.integrations.call_credentials import resolve_call_credentials
 from onyx.integrations.connections import ConnectionProblem
-from onyx.integrations.craft import list_visible_integrations
 from onyx.sandbox_proxy.credential_injection import (
     CredentialResolver,
     CredentialUnavailableError,
@@ -39,28 +25,23 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     parse_target,
 )
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
+from onyx.sandbox_proxy.usable_integrations import (
+    CACHE_TTL_S,
+    TTLMemo,
+    UsableIntegrations,
+)
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_TARGET_CACHE_TTL_S = 30.0
-
 
 class IntegrationResolver(CredentialResolver):
-    """Injects the credential of the matched integration."""
-
-    def __init__(self, cache_ttl_s: float = _TARGET_CACHE_TTL_S) -> None:
-        self._cache_lock = threading.Lock()
+    def __init__(self, usable: UsableIntegrations | None = None) -> None:
+        self._usable = usable or UsableIntegrations()
         # MCP host ownership (claims): user-agnostic, so a claimed host never
         # forwards bare for a user who cannot use the server.
-        self._targets_by_tenant: TTLCache[str, tuple[CraftMCPTarget, ...]] = TTLCache(
-            maxsize=10_000, ttl=cache_ttl_s
-        )
-        # The integrations of the plugins each user can see.
-        self._accessible_ids_by_user: TTLCache[tuple[str, UUID], frozenset[int]] = (
-            TTLCache(maxsize=10_000, ttl=cache_ttl_s)
-        )
+        self._targets: TTLMemo[str, tuple[CraftMCPTarget, ...]] = TTLMemo(CACHE_TTL_S)
 
     def allows_destination(
         self, sandbox: ResolvedSandbox, scheme: str, host: str, port: int
@@ -70,13 +51,13 @@ class IntegrationResolver(CredentialResolver):
         user turned off; the gate matches each request."""
         if scheme not in {"http", "https"}:
             return False
-        runnable = self._accessible_ids(sandbox.tenant_id, sandbox.user_id)
+        visible = self._usable.get(sandbox.tenant_id, sandbox.user_id).visible
         return bool(
             host_targets(
                 tuple(
                     target
-                    for target in self._targets(sandbox.tenant_id)
-                    if target.server_id in runnable
+                    for target in self._tenant_targets(sandbox.tenant_id)
+                    if target.server_id in visible
                 ),
                 scheme,
                 host,
@@ -89,7 +70,7 @@ class IntegrationResolver(CredentialResolver):
             return True
         return bool(
             host_targets(
-                self._targets(ctx.sandbox.tenant_id),
+                self._tenant_targets(ctx.sandbox.tenant_id),
                 request.scheme,
                 request.host,
                 request.port,
@@ -159,17 +140,8 @@ class IntegrationResolver(CredentialResolver):
                 )
             return credentials.headers
 
-    def _targets(self, tenant_id: str) -> tuple[CraftMCPTarget, ...]:
-        with self._cache_lock:
-            cached = self._targets_by_tenant.get(tenant_id)
-        if cached is not None:
-            return cached
-        # Loaded outside the lock so a slow query can't stall other tenants'
-        # claims; a concurrent duplicate load is harmless.
-        targets = self._load_targets(tenant_id)
-        with self._cache_lock:
-            self._targets_by_tenant[tenant_id] = targets
-        return targets
+    def _tenant_targets(self, tenant_id: str) -> tuple[CraftMCPTarget, ...]:
+        return self._targets.get(tenant_id, lambda: self._load_targets(tenant_id))
 
     def _load_targets(self, tenant_id: str) -> tuple[CraftMCPTarget, ...]:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
@@ -178,20 +150,3 @@ class IntegrationResolver(CredentialResolver):
                 for integration_id, server_url in list_enabled_mcp_server_urls(db)
             ]
         return tuple(target for target in parsed if target is not None)
-
-    def _accessible_ids(self, tenant_id: str, user_id: UUID) -> frozenset[int]:
-        key = (tenant_id, user_id)
-        with self._cache_lock:
-            cached = self._accessible_ids_by_user.get(key)
-        if cached is not None:
-            return cached
-        ids = self._load_accessible_ids(tenant_id, user_id)
-        with self._cache_lock:
-            self._accessible_ids_by_user[key] = ids
-        return ids
-
-    def _load_accessible_ids(self, tenant_id: str, user_id: UUID) -> frozenset[int]:
-        with get_session_with_tenant(tenant_id=tenant_id) as db:
-            return frozenset(
-                integration.id for integration in list_visible_integrations(db, user_id)
-            )

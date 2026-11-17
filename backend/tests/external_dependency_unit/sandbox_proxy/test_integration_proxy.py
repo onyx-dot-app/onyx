@@ -42,6 +42,7 @@ from onyx.db.models import (
 )
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.integrations.connection_models import ConnectionSecret
+from onyx.integrations.craft import list_task_plugin_views
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import (
     CredentialInjectionDispatcher,
@@ -601,3 +602,25 @@ def test_a_scheduled_run_matches_a_task_plugin_that_the_owner_turned_off(
     # the run reach the server host.
     assert _headers(request, user, run_matched) == {}
     assert IntegrationResolver().allows_destination(_sandbox(user), "https", host, 443)
+
+
+def test_the_task_catalog_locks_a_task_allow_that_the_policy_ignores(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    open_mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
+    no_always_allow = _mcp(
+        db_session,
+        created,
+        f"https://{_host()}/mcp",
+        users_can_save_always_allow=False,
+    )
+    _run(db_session, [open_mcp, no_always_allow])
+
+    locked = {
+        (integration.id, action.key): action.locked
+        for view in list_task_plugin_views(db_session, user, None)
+        for integration in view.integrations
+        for action in integration.actions
+    }
+    assert locked[(open_mcp.id, "update")] is False
+    assert locked[(no_always_allow.id, "update")] is True

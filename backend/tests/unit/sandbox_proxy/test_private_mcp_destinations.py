@@ -21,6 +21,7 @@ from tests.unit.sandbox_proxy.conftest import (
     make_flow,
     make_resolved_sandbox,
     unused_cache,
+    usable_ids,
 )
 
 
@@ -67,12 +68,12 @@ async def test_private_mcp_origin(
     )
     load_targets = MagicMock(return_value=targets)
     load_access = MagicMock(
-        return_value=frozenset() if case == "inaccessible" else frozenset({1})
+        return_value=usable_ids() if case == "inaccessible" else usable_ids(1)
     )
     if case == "db_error":
         load_access.side_effect = RuntimeError("database unavailable")
     monkeypatch.setattr(resolver, "_load_targets", load_targets)
-    monkeypatch.setattr(resolver, "_load_accessible_ids", load_access)
+    monkeypatch.setattr(resolver._usable, "_load", load_access)
     pin = MagicMock()
     monkeypatch.setattr("onyx.sandbox_proxy.addons.gate.pin_destination", pin)
     addon = GateAddon(
@@ -212,9 +213,7 @@ def test_mcp_rechecks_tenant_ssrf_settings(
             ),
         ),
     )
-    monkeypatch.setattr(
-        resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
-    )
+    monkeypatch.setattr(resolver._usable, "_load", lambda _tenant, _user: usable_ids(1))
 
     def settings(*, allow_fallback: bool = True) -> MagicMock:
         assert not allow_fallback
@@ -289,9 +288,9 @@ def test_private_mcp_denies_real_settings_read_failure(
             ),
         )
     )
-    access = MagicMock(return_value=frozenset({1}))
+    access = MagicMock(return_value=usable_ids(1))
     monkeypatch.setattr(resolver, "_load_targets", targets)
-    monkeypatch.setattr(resolver, "_load_accessible_ids", access)
+    monkeypatch.setattr(resolver._usable, "_load", access)
     monkeypatch.setattr(store, "_CACHE", TTLCache(maxsize=100, ttl=10))
     monkeypatch.setattr(store, "MULTI_TENANT", False)
     monkeypatch.setattr(store._cfg, "MCP_SERVER_ALLOW_PRIVATE_NETWORK", True)

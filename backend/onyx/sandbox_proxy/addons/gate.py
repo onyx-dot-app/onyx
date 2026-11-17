@@ -28,7 +28,7 @@ from onyx.db.integration import get_integration_by_id
 from onyx.db.notification import create_notification
 from onyx.db.scheduled_task import (
     get_active_scheduled_task_context,
-    user_has_running_scheduled_run,
+    get_running_task_id,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -737,24 +737,13 @@ class GateAddon:
     def _running_task_id(
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
     ) -> UUID | None:
-        """The task of the running scheduled run of the tagged session, so the
-        run also matches the integrations of its task plugins. The session tag
-        is read only while the owner has a running run, so other traffic pays
-        one query. Any doubt gives None: the interactive set, never more."""
+        """Task id of the running run of the tagged session; None on any doubt."""
+        tag = self._extract_session_tag(flow, log=False)
+        if tag is None:
+            return None
         try:
             with get_session_with_tenant(tenant_id=sandbox.tenant_id) as db:
-                if not user_has_running_scheduled_run(db, sandbox.user_id):
-                    return None
-            tag = self._extract_session_tag(flow)
-            if tag is None:
-                return None
-            session_id = self._identity.resolve_session_by_id(
-                UUID(tag), sandbox.user_id, sandbox.tenant_id
-            )
-            if session_id is None:
-                return None
-            with get_session_with_tenant(tenant_id=sandbox.tenant_id) as db:
-                scheduled_context = get_active_scheduled_task_context(db, session_id)
+                return get_running_task_id(db, UUID(tag), sandbox.user_id)
         except Exception:
             logger.warning(
                 "scheduled_run_lookup_failed tenant=%s host=%s",
@@ -763,7 +752,6 @@ class GateAddon:
                 exc_info=True,
             )
             return None
-        return scheduled_context[1] if scheduled_context else None
 
     def _task_can_use_app(self, ctx: SessionContext, target: GatedTarget) -> bool:
         """A scheduled run uses only the integrations of its task plugins."""
@@ -795,11 +783,7 @@ class GateAddon:
             and effective_policies[WHOLE_DOMAIN_ACTION_TYPE] is not ActionPolicy.DENY
         ):
             effective_policies[WHOLE_DOMAIN_ACTION_TYPE] = ActionPolicy.ASK
-        if any(
-            action.action_type == MCP_UNCLASSIFIABLE_ACTION_TYPE
-            and action.policy is ActionPolicy.DENY
-            for action in recognized_actions.actions
-        ):
+        if MCP_UNCLASSIFIABLE_ACTION_TYPE in effective_policies:
             effective_policies[MCP_UNCLASSIFIABLE_ACTION_TYPE] = ActionPolicy.DENY
         authorized_actions = AllMatchedActions(
             actions=tuple(
@@ -1439,7 +1423,9 @@ class GateAddon:
         )
         return exact
 
-    def _extract_session_tag(self, flow: http.HTTPFlow) -> str | None:
+    def _extract_session_tag(
+        self, flow: http.HTTPFlow, *, log: bool = True
+    ) -> str | None:
         """The originating session tag, or None.
 
         HTTPS: cached from the CONNECT in `http_connect`. HTTP: read off the
@@ -1463,6 +1449,8 @@ class GateAddon:
         # still blocked by the src-IP-pinned sandbox identity in resolve_sandbox.
         mcp_header = flow.request.headers.get(MCP_SESSION_TAG_HEADER)
         tag = mcp_header or cached or direct
+        if not log:
+            return tag
 
         logger.debug(
             "session_tag_resolved conn=%s host=%s cached=%s direct=%s "

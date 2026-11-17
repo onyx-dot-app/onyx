@@ -95,18 +95,18 @@ def create_scheduled_task(
     return task
 
 
-def user_has_running_scheduled_run(db_session: Session, user_id: UUID) -> bool:
-    return (
-        db_session.scalar(
-            select(ScheduledTaskRun.id)
-            .join(ScheduledTask, ScheduledTask.id == ScheduledTaskRun.task_id)
-            .where(
-                ScheduledTask.user_id == user_id,
-                ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING,
-            )
-            .limit(1)
+def get_running_task_id(
+    db_session: Session, session_id: UUID, user_id: UUID
+) -> UUID | None:
+    return db_session.scalar(
+        select(ScheduledTaskRun.task_id)
+        .join(BuildSession, BuildSession.id == ScheduledTaskRun.session_id)
+        .where(
+            BuildSession.id == session_id,
+            BuildSession.user_id == user_id,
+            ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING,
         )
-        is not None
+        .limit(1)
     )
 
 

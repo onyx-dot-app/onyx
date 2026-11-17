@@ -124,8 +124,9 @@ If your admin does not let users save **Always allow** on an integration,
 **Allow** in a task does not change the admin setting.
 
 <Warning>
-  Keep the prompt and the list of enabled Apps as narrow as possible. Allow only the actions that the task must perform.
-  Be especially cautious with Apps that can send messages, modify customer data, delete content, or publish externally.
+  Keep the prompt and the list of plugins that you turn on as narrow as possible.
+  Allow only the actions that the task must perform. Be especially cautious with integrations that can send messages,
+  modify customer data, delete content, or publish externally.
 </Warning>
 
 ## Review run history
@@ -171,7 +172,8 @@ Deleting a task does not cancel a run that is already queued or running.
 <AccordionGroup>
   <Accordion title="A run succeeded, but I did not receive anything">
     Open the run session from history and inspect its output. If the task should deliver somewhere else,
-    add an explicit destination to the prompt, connect that App, and set the delivery action to **Allow** in the task.
+    add an explicit destination to the prompt, connect that integration,
+    and set the delivery action to **Allow** in the task.
   </Accordion>
 
 <Accordion title="A run was skipped">

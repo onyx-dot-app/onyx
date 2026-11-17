@@ -1,5 +1,4 @@
-"""The Craft policy catalog: the plugins the user runs in Craft, with the
-effective policy of each integration action for the user."""
+"""The Craft policy catalog: the plugins the user runs in Craft."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -18,6 +17,5 @@ def list_personal_action_policies(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[TaskPluginView]:
-    """Each action inherits; the effective policy includes the user's saved
-    Always allow. A new task starts from this catalog."""
+    """A new task starts from this catalog."""
     return list_task_plugin_views(db_session, user, None)

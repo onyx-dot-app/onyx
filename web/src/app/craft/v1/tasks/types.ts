@@ -156,9 +156,9 @@ export interface TaskActionView {
   key: string;
   display_name: string;
   description: string | null;
-  value: TaskLinkValue;
-  effective_policy: TaskEffectivePolicy;
   integration_policy: TaskEffectivePolicy;
+  /** A task Allow keeps the integration policy. */
+  locked: boolean;
 }
 
 export interface TaskIntegrationView {

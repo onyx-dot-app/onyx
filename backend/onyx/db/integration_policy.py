@@ -127,8 +127,11 @@ def get_plugin_names(
 ) -> dict[UUID, str]:
     if not plugin_ids:
         return {}
+    # .all(): a Result has keys(), so dict() would read it as a mapping.
     return dict(
         db_session.execute(
             select(Plugin.id, Plugin.name).where(Plugin.id.in_(plugin_ids))
-        ).tuples()
+        )
+        .tuples()
+        .all()
     )

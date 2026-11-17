@@ -17,9 +17,11 @@ from onyx.db.integration import (
 from onyx.db.models import Integration, User
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import integration_status
-from onyx.integrations.craft import list_runnable_integrations
-from onyx.integrations.models import ApprovalMode, EffectivePolicy
-from onyx.integrations.policy import resolve_action_policies
+from onyx.integrations.craft import (
+    list_runnable_integrations,
+    resolve_craft_action_policies,
+)
+from onyx.integrations.models import EffectivePolicy
 from onyx.server.features.build.sandbox.models import CraftMCPServerConfig
 from onyx.utils.logger import setup_logger
 
@@ -41,14 +43,12 @@ def _blocked_actions(
     keys = [
         action.key for action in list_integration_actions(integration.id, db_session)
     ]
-    policies = resolve_action_policies(
+    policies = resolve_craft_action_policies(
         db_session,
         integration=integration,
         action_keys=keys,
         user_id=user.id,
-        link_settings=[],
-        approval_mode=ApprovalMode.INTERACTIVE,
-        chat_session_id=None,
+        task_id=None,
     )
     return tuple(
         sorted(

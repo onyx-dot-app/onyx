@@ -7,9 +7,22 @@ import { SvgPlug, SvgSettings } from "@opal/icons";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import type {
   TaskActionSettings,
+  TaskActionView,
   TaskEffectivePolicy,
+  TaskLinkValue,
   TaskPluginView,
 } from "@/app/craft/v1/tasks/types";
+
+function runPolicy(
+  value: TaskLinkValue,
+  action: TaskActionView
+): TaskEffectivePolicy {
+  if (value === "blocked" || action.integration_policy === "blocked")
+    return "blocked";
+  if (value === "inherit" || (value === "allow" && action.locked))
+    return action.integration_policy;
+  return value;
+}
 
 interface TaskPluginCardProps {
   plugin: TaskPluginView;
@@ -34,8 +47,9 @@ export default function TaskPluginCard({
   };
   for (const integration of plugin.integrations) {
     for (const action of integration.actions) {
-      const value = settings.actions[action.key] ?? settings.default;
-      counts[value === "inherit" ? action.integration_policy : value]++;
+      counts[
+        runPolicy(settings.actions[action.key] ?? settings.default, action)
+      ]++;
     }
   }
   const signInProblem = plugin.integrations.find(

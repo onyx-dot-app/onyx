@@ -1,11 +1,9 @@
-"""The integrations that Craft uses for a user: each enabled integration that a
-plugin the user runs holds. A scheduled run uses only the integrations of the
-plugins of its task, with the action settings of the task."""
+"""The integrations that Craft uses for a user and for the tasks of the user."""
 
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType, IntegrationKind
@@ -25,12 +23,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import IntegrationStatus, integration_status
-from onyx.integrations.models import (
-    ActionSettings,
-    ApprovalMode,
-    EffectivePolicy,
-    LinkValue,
-)
+from onyx.integrations.models import ActionSettings, ApprovalMode, EffectivePolicy
 from onyx.integrations.policy import (
     parse_action_settings,
     resolve_action_policies,
@@ -61,44 +54,36 @@ def list_runnable_integrations(db_session: Session, user_id: UUID) -> list[Integ
     )
 
 
-def list_visible_integrations(db_session: Session, user_id: UUID) -> list[Integration]:
-    """The enabled integrations of the plugins that the user can see, on or
-    off."""
-    return _enabled_integrations(
-        db_session,
-        [state.plugin_id for state in load_user_plugin_states([user_id], db_session)],
+class UsableIntegrationIds(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # Of the plugins that the user turned on.
+    turned_on: frozenset[int]
+    # Of each plugin that the user can see, on or off.
+    by_visible_plugin: dict[UUID, frozenset[int]]
+
+    @property
+    def visible(self) -> frozenset[int]:
+        return frozenset().union(*self.by_visible_plugin.values())
+
+
+def load_usable_integration_ids(
+    db_session: Session, user_id: UUID
+) -> UsableIntegrationIds:
+    states = load_user_plugin_states([user_id], db_session)
+    turned_on = {state.plugin_id for state in states if state.enabled}
+    by_plugin: dict[UUID, set[int]] = {state.plugin_id: set() for state in states}
+    for plugin_id, integration in list_plugin_integrations(db_session, by_plugin):
+        if integration.enabled:
+            by_plugin[plugin_id].add(integration.id)
+    return UsableIntegrationIds(
+        turned_on=frozenset().union(
+            *(ids for plugin_id, ids in by_plugin.items() if plugin_id in turned_on)
+        ),
+        by_visible_plugin={
+            plugin_id: frozenset(ids) for plugin_id, ids in by_plugin.items()
+        },
     )
-
-
-def _visible_task_plugin_ids(
-    db_session: Session, task_id: UUID, user_id: UUID
-) -> set[UUID]:
-    """The plugins of the task that the owner can still see. The task attached
-    them on purpose, so the owner's on/off choice does not apply."""
-    links = list_task_plugin_links(db_session, task_id)
-    return {
-        state.plugin_id
-        for state in load_user_plugin_states(
-            [user_id], db_session, [link.plugin_id for link in links]
-        )
-    }
-
-
-def list_scheduled_run_integrations(
-    db_session: Session, task_id: UUID, user_id: UUID
-) -> list[Integration]:
-    """The integrations a scheduled run can match: those the owner runs (the
-    gate blocks each one that no task plugin holds) and those of the task
-    plugins the owner can see."""
-    integrations = {
-        integration.id: integration
-        for integration in list_runnable_integrations(db_session, user_id)
-    }
-    for integration in _enabled_integrations(
-        db_session, _visible_task_plugin_ids(db_session, task_id, user_id)
-    ):
-        integrations.setdefault(integration.id, integration)
-    return sorted(integrations.values(), key=lambda integration: integration.id)
 
 
 def list_connectable_apps(db_session: Session, user: User) -> list[ExternalApp]:
@@ -124,7 +109,12 @@ def task_link_settings(
     """The settings of each plugin of the task that holds the integration and
     that the task owner can still see."""
     links = list_task_plugin_links(db_session, task_id)
-    visible = _visible_task_plugin_ids(db_session, task_id, user_id)
+    visible = [
+        state.plugin_id
+        for state in load_user_plugin_states(
+            [user_id], db_session, [link.plugin_id for link in links]
+        )
+    ]
     holders = {
         plugin_id
         for plugin_id, integration in list_plugin_integrations(db_session, visible)
@@ -137,6 +127,24 @@ def task_link_settings(
     ]
 
 
+def _interactive_policies(
+    db_session: Session,
+    integration: Integration,
+    action_keys: Collection[str],
+    user_id: UUID,
+    link_settings: Sequence[ActionSettings | None],
+) -> dict[str, EffectivePolicy]:
+    return resolve_action_policies(
+        db_session,
+        integration=integration,
+        action_keys=action_keys,
+        user_id=user_id,
+        link_settings=link_settings,
+        approval_mode=ApprovalMode.INTERACTIVE,
+        chat_session_id=None,
+    )
+
+
 def resolve_craft_action_policies(
     db_session: Session,
     *,
@@ -145,31 +153,15 @@ def resolve_craft_action_policies(
     user_id: UUID,
     task_id: UUID | None,
 ) -> dict[str, EffectivePolicy]:
-    """The policy of each action for a Craft session. An interactive session
-    has no link settings. A scheduled run uses the settings of its task, and
-    blocks each action of an integration that no plugin of the task holds.
-    Both keep the approval wait of the proxy for Ask."""
+    """A scheduled run uses the settings of its task, and blocks each action
+    of an integration that no plugin of the task holds."""
     if task_id is None:
-        return resolve_action_policies(
-            db_session,
-            integration=integration,
-            action_keys=action_keys,
-            user_id=user_id,
-            link_settings=[],
-            approval_mode=ApprovalMode.INTERACTIVE,
-            chat_session_id=None,
-        )
+        return _interactive_policies(db_session, integration, action_keys, user_id, [])
     settings = task_link_settings(db_session, task_id, user_id, integration.id)
     if not settings:
         return dict.fromkeys(action_keys, EffectivePolicy.BLOCKED)
-    return resolve_action_policies(
-        db_session,
-        integration=integration,
-        action_keys=action_keys,
-        user_id=user_id,
-        link_settings=settings,
-        approval_mode=ApprovalMode.INTERACTIVE,
-        chat_session_id=None,
+    return _interactive_policies(
+        db_session, integration, action_keys, user_id, settings
     )
 
 
@@ -177,12 +169,10 @@ class TaskActionView(BaseModel):
     key: str
     display_name: str
     description: str | None
-    # The setting of the task; Inherit uses the integration setting.
-    value: LinkValue
-    # What a run does with the setting of the task.
-    effective_policy: EffectivePolicy
     # What a run does with Inherit.
     integration_policy: EffectivePolicy
+    # A task Allow keeps the integration policy.
+    locked: bool
 
 
 class TaskIntegrationView(BaseModel):
@@ -204,31 +194,13 @@ class TaskPluginView(BaseModel):
     integrations: list[TaskIntegrationView]
 
 
-def _policies(
-    db_session: Session,
-    integration: Integration,
-    keys: list[str],
-    user_id: UUID,
-    link: ActionSettings | None,
-) -> dict[str, EffectivePolicy]:
-    return resolve_action_policies(
-        db_session,
-        integration=integration,
-        action_keys=keys,
-        user_id=user_id,
-        link_settings=[link],
-        approval_mode=ApprovalMode.INTERACTIVE,
-        chat_session_id=None,
-    )
-
-
 def _integration_view(
-    db_session: Session, integration: Integration, user: User, link: ActionSettings
+    db_session: Session, integration: Integration, user: User
 ) -> TaskIntegrationView:
     actions = list_integration_actions(integration.id, db_session)
-    keys = [action.key for action in actions]
-    with_link = _policies(db_session, integration, keys, user.id, link)
-    inherited = _policies(db_session, integration, keys, user.id, None)
+    inherited = _interactive_policies(
+        db_session, integration, [action.key for action in actions], user.id, []
+    )
     app = (
         get_external_app_for_integration(integration.id, db_session)
         if integration.kind is IntegrationKind.API
@@ -245,9 +217,9 @@ def _integration_view(
                 key=action.key,
                 display_name=action.display_name,
                 description=action.description,
-                value=link.value_for(action.key),
-                effective_policy=with_link[action.key],
                 integration_policy=inherited[action.key],
+                locked=inherited[action.key] is EffectivePolicy.BLOCKED
+                or not integration.users_can_save_always_allow,
             )
             for action in actions
         ],
@@ -285,12 +257,7 @@ def list_task_plugin_views(
             enabled=plugin_id in links,
             action_settings=links.get(plugin_id),
             integrations=[
-                _integration_view(
-                    db_session,
-                    integration,
-                    user,
-                    links.get(plugin_id, ActionSettings()),
-                )
+                _integration_view(db_session, integration, user)
                 for integration in integrations
             ],
         )
