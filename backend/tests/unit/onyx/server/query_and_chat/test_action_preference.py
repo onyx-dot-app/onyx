@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from onyx.context.search.models import BaseFilters
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.tools.models import CapabilityEntry
+from onyx.tools.models import CapabilityEntry, ToolOptions
 
 PREFERENCE = {"type": "capability", "tool_id": 7}
 
@@ -35,6 +35,19 @@ def test_top_level_search_filters_move_into_the_tool_options() -> None:
     )
     assert request.tool_options is not None
     assert request.tool_options.preferred == CapabilityEntry(tool_id=7)
+    assert request.internal_search_filters == BaseFilters(source_type=["web"])
+
+
+def test_top_level_search_filters_merge_into_typed_tool_options() -> None:
+    request = SendMessageRequest.model_validate(
+        {
+            "message": "Question",
+            "tool_options": ToolOptions(allowed=[]),
+            "internal_search_filters": {"source_type": ["web"]},
+        }
+    )
+    assert request.tool_options is not None
+    assert request.tool_options.allowed == []
     assert request.internal_search_filters == BaseFilters(source_type=["web"])
 
 
