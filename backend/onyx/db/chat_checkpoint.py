@@ -12,6 +12,7 @@ from onyx.chat.models import ParkedRun, ResponseCheckpoint, SavedCheckpoint
 from onyx.db.approval_request import close_pending_approval_requests__no_commit
 from onyx.db.chat import (
     configure_response_transaction__no_commit,
+    legacy_tool_options,
     response_invocation_chain,
     session_descendants,
 )
@@ -31,7 +32,7 @@ from onyx.db.models import (
 )
 from onyx.db.question_request import resolve_question_requests__no_commit
 from onyx.llm.override_models import LLMOverride
-from onyx.tools.models import ChatToolSelection
+from onyx.tools.models import LegacyToolSelection, ToolOptions
 from onyx.utils.postgres_sanitization import sanitize_json_like
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
@@ -114,9 +115,25 @@ def publish_checkpoint__no_commit(
     return replaced
 
 
+def _saved_tool_options(
+    session: Session,
+    tool_options: JsonValue | None,
+    tool_selection: JsonValue | None,
+) -> ToolOptions | None:
+    """The tool options of a checkpoint, also of one saved before tool
+    options existed."""
+    if tool_options is not None:
+        return ToolOptions.model_validate(tool_options)
+    if tool_selection is not None:
+        return legacy_tool_options(
+            session, LegacyToolSelection.model_validate(tool_selection)
+        )
+    return None
+
+
 def parked_response_settings(
     session: Session, message_id: int
-) -> tuple[LLMOverride | None, ChatToolSelection | None]:
+) -> tuple[LLMOverride | None, ToolOptions | None]:
     """The model that a parked response ran, by its saved configuration,
     with its display name and temperature, and the tools and search filters
     of its request; each is None when its checkpoint names none."""
@@ -124,6 +141,7 @@ def parked_response_settings(
         select(
             ChatResponseCheckpoint.state["model_configuration_id"].as_integer(),
             ChatResponseCheckpoint.state["temperature"].as_float(),
+            ChatResponseCheckpoint.state["tool_options"],
             ChatResponseCheckpoint.state["tool_selection"],
             ChatMessage.model_display_name,
         )
@@ -132,7 +150,7 @@ def parked_response_settings(
     ).one_or_none()
     if row is None:
         return None, None
-    configuration_id, temperature, tool_selection, display_name = row
+    configuration_id, temperature, tool_options, tool_selection, display_name = row
     return (
         LLMOverride(
             model_configuration_id=configuration_id,
@@ -141,9 +159,7 @@ def parked_response_settings(
         )
         if configuration_id is not None
         else None,
-        ChatToolSelection.model_validate(tool_selection)
-        if tool_selection is not None
-        else None,
+        _saved_tool_options(session, tool_options, tool_selection),
     )
 
 
@@ -293,6 +309,7 @@ def resumable_parked_runs(session: Session, chat_session_id: UUID) -> list[Parke
             ChatMessage.chat_session_id,
             ChatResponseCheckpoint.state["model_configuration_id"].as_integer(),
             ChatResponseCheckpoint.state["temperature"].as_float(),
+            ChatResponseCheckpoint.state["tool_options"],
             ChatResponseCheckpoint.state["tool_selection"],
         )
         .join(
@@ -319,11 +336,16 @@ def resumable_parked_runs(session: Session, chat_session_id: UUID) -> list[Parke
             else response_invocation_chain(session, response_id)[-1].message_id,
             model_configuration_id=configuration_id,
             temperature=temperature,
-            tool_selection=ChatToolSelection.model_validate(tool_selection)
-            if tool_selection is not None
-            else None,
+            tool_options=_saved_tool_options(session, tool_options, tool_selection),
         )
-        for response_id, agent_id, configuration_id, temperature, tool_selection in rows
+        for (
+            response_id,
+            agent_id,
+            configuration_id,
+            temperature,
+            tool_options,
+            tool_selection,
+        ) in rows
     ]
 
 

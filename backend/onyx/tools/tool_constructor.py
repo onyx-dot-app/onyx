@@ -26,6 +26,7 @@ from onyx.tools.models import (
     PersonaToolConfiguration,
     SearchToolUsage,
     ToolConfiguration,
+    ToolOptions,
 )
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
@@ -119,7 +120,7 @@ def _require_chat_session_id(
 
 def should_disable_open_url_web_fetch(
     persona_tools: Sequence[ToolConfiguration],
-    allowed_tool_ids: list[int] | None,
+    tool_options: ToolOptions | None,
 ) -> bool:
     """OpenURLTool is hidden from the chat tool toggles (chat_selectable=False)
     but reaches the live internet on its own via the crawler fallback. Treat an
@@ -127,11 +128,11 @@ def should_disable_open_url_web_fetch(
     fetching, so that turning off web search for a message actually cuts off
     web access — while pasted links can still be served from indexed
     documents."""
-    if allowed_tool_ids is None:
+    if tool_options is None:
         return False
     return any(
         tool.in_code_tool_id == WebSearchTool.__name__
-        and tool.id not in allowed_tool_ids
+        and not tool_options.allows_tool(tool.id)
         for tool in persona_tools
     )
 
@@ -144,7 +145,7 @@ def construct_tools(
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     file_reader_tool_config: FileReaderToolConfig | None = None,
-    allowed_tool_ids: list[int] | None = None,
+    tool_options: ToolOptions | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
     selection_llm_factory: Callable[[], LLM] | None = None,
     approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
@@ -163,7 +164,7 @@ def construct_tools(
             search_tool_config=search_tool_config,
             custom_tool_config=custom_tool_config,
             file_reader_tool_config=file_reader_tool_config,
-            allowed_tool_ids=allowed_tool_ids,
+            tool_options=tool_options,
             search_usage_forcing_setting=search_usage_forcing_setting,
             approval_mode=approval_mode,
         )
@@ -177,7 +178,7 @@ def _construct_tools_impl(
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     file_reader_tool_config: FileReaderToolConfig | None = None,
-    allowed_tool_ids: list[int] | None = None,
+    tool_options: ToolOptions | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
     selection_llm_factory: Callable[[], LLM] | None = None,
     approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
@@ -212,7 +213,7 @@ def _construct_tools_impl(
         )
 
     open_url_web_fetch_disabled = should_disable_open_url_web_fetch(
-        configuration.tools, allowed_tool_ids
+        configuration.tools, tool_options
     )
 
     added_search_tool = False
@@ -220,8 +221,7 @@ def _construct_tools_impl(
         if not db_tool_model.enabled:
             continue
 
-        # If allowed_tool_ids is specified, skip tools not in the allowed list
-        if allowed_tool_ids is not None and db_tool_model.id not in allowed_tool_ids:
+        if tool_options is not None and not tool_options.allows_tool(db_tool_model.id):
             continue
 
         if db_tool_model.in_code_tool_id:
@@ -360,7 +360,7 @@ def _construct_tools_impl(
         tools.append(_build_search_tool(search_tool_db_model.id, search_tool_config))
 
     # Always inject MemoryTool when the user has the memory tool enabled,
-    # bypassing persona tool associations and allowed_tool_ids filtering
+    # bypassing persona tool associations and the tool options
     if user.enable_memory_tool:
         try:
             memory_tool_db_model = get_builtin_tool(db_session, MemoryTool)
@@ -386,6 +386,7 @@ def _construct_tools_impl(
             message_id=custom_tool_config.message_id,
             additional_headers=custom_tool_config.additional_headers or {},
             mcp_headers=custom_tool_config.mcp_headers,
+            allowed_plugins=tool_options.allowed_plugins() if tool_options else None,
         ),
     )
     return tools + integration_tools

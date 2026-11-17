@@ -100,6 +100,7 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
 )
 from onyx.server.utils import get_json_line
+from onyx.tools.models import CapabilityPreference
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import (
     start_thread_future,
@@ -412,7 +413,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     # constructors during model preparation — must be typed correctly for Pydantic.
     setup.new_msg_req.deep_research = False
     setup.new_msg_req.internal_search_filters = None
-    setup.new_msg_req.allowed_tool_ids = None
+    setup.new_msg_req.tool_options = None
     setup.new_msg_req.include_citations = True
     setup.search_params.project_id_filter = None
     setup.search_params.persona_id_filter = None
@@ -422,7 +423,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     setup.user_identity = LLMUserIdentity(
         user_id="test-user", session_id="test-session"
     )
-    setup.preferred_tool_id = None
+    setup.preferred_tool = None
     setup.previous_run_id = None
     setup.checkpoint = None
     setup.messages = []
@@ -3618,7 +3619,7 @@ def test_a_run_that_ends_at_the_deadline_but_saves_past_the_backstop_stops_once(
 
 def test_invalid_preferred_tool_returns_an_actionable_error() -> None:
     setup = _make_setup(n_models=1)
-    setup.preferred_tool_id = 1
+    setup.preferred_tool = CapabilityPreference(tool_id=1)
     setup.preferred_tool_saved = False
     with patch("onyx.chat.execution.construct_tools", return_value={}):
         with pytest.raises(OnyxError) as raised:

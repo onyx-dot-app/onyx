@@ -603,10 +603,11 @@ it.
     decision. So after any release the chat shows processing until the
     resume publishes its stream. A resume turn runs on the model, tools and
     search filters that the response ran with: its checkpoint saves the model
-    configuration and the request's tool selection
-    (`ResponseCheckpoint.model_configuration_id`, `.tool_selection`), and
-    `prepare_chat_turn` uses them instead of the chat's current model and
-    saved selection. It checks document-set access again. An agent host
+    configuration and the request's tool options
+    (`ResponseCheckpoint.model_configuration_id`, `.tool_options`; a
+    checkpoint saved before tool options has `.tool_selection`, read with the
+    same carry-over as the chat column), and `prepare_chat_turn` uses them
+    instead of the chat's current model and saved options. It checks document-set access again. An agent host
     uses those of the first parked agent that it resumes.
     Resumable agent runs resume in the store of their branch, selected or not
     (`ChatRunStore._dispatch_messages`), with no stream; dispatch starts an
@@ -781,10 +782,8 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 - The Slack and Discord bots have no approval buttons, so they get no Ask
   action. An admin sets an action to Allow, or the agent sets it to Allow, to
   let a bot run it.
-- `allowed_tool_ids` narrows only built-in tools, and a preferred tool id
-  cannot name an integration action: integration actions have no tool id. An
-  MCP server or OpenAPI tool made through the admin MCP or tool routes has no
-  integration, so chat offers none of its actions.
+- An MCP server or OpenAPI tool made through the admin MCP or tool routes has
+  no integration, so chat offers none of its actions.
 
 - Schema placeholders are a plain string replace.
   `build_custom_tools_from_openapi_schema_and_headers` replaces

@@ -122,6 +122,9 @@ class IntegrationChatRequest(BaseModel):
     message_id: int | None = None
     additional_headers: dict[str, str] = {}
     mcp_headers: dict[str, str] | None = None
+    # From the tool options: the plugins to use, each with the action keys to
+    # keep (None keeps each). None uses each plugin.
+    allowed_plugins: dict[UUID, frozenset[str] | None] | None = None
 
 
 class PersonaToolConfiguration(BaseModel):
@@ -136,15 +139,128 @@ class PersonaToolConfiguration(BaseModel):
     plugin_links: list[PluginLinkConfiguration] = []
 
 
-class ChatToolSelection(BaseModel):
-    """The tools and search filters the user selected for a chat; every later
-    turn uses them."""
+class CapabilityEntry(BaseModel):
+    """A built-in tool of the agent, by its tool row."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: Literal["capability"] = "capability"
+    tool_id: int
+
+
+class PluginEntry(BaseModel):
+    """A plugin of the agent. ``actions`` names the action keys to keep;
+    None keeps each action."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: Literal["plugin"] = "plugin"
+    plugin_id: UUID
+    actions: list[str] | None = None
+
+
+class CapabilityPreference(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: Literal["capability"] = "capability"
+    tool_id: int
+
+    def __str__(self) -> str:
+        return f"tool {self.tool_id}"
+
+
+class ActionPreference(BaseModel):
+    """One action of a plugin, by its action key."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: Literal["action"] = "action"
+    plugin_id: UUID
+    action: str
+
+    def __str__(self) -> str:
+        return f"action {self.action} of plugin {self.plugin_id}"
+
+
+ToolOptionsEntry = Annotated[CapabilityEntry | PluginEntry, Field(discriminator="type")]
+ToolPreference = Annotated[
+    CapabilityPreference | ActionPreference, Field(discriminator="type")
+]
+
+
+class ToolOptions(BaseModel):
+    """What a user or a caller picked for a turn. ``allowed`` None means
+    each tool and each plugin of the agent. The options only narrow: a
+    Blocked action and the settings of the agent still win. ``preferred`` is
+    a preference that the model can ignore."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    allowed: list[ToolOptionsEntry] | None = None
+    preferred: ToolPreference | None = None
+    internal_search_filters: BaseFilters | None = None
+
+    def allows_tool(self, tool_id: int) -> bool:
+        return self.allowed is None or any(
+            isinstance(entry, CapabilityEntry) and entry.tool_id == tool_id
+            for entry in self.allowed
+        )
+
+    def allowed_plugins(self) -> dict[UUID, frozenset[str] | None] | None:
+        """The allowed plugins, each with the action keys to keep (None
+        keeps each); None allows each plugin."""
+        if self.allowed is None:
+            return None
+        plugins: dict[UUID, frozenset[str] | None] = {}
+        for entry in self.allowed:
+            if not isinstance(entry, PluginEntry):
+                continue
+            kept = plugins.get(entry.plugin_id, frozenset())
+            plugins[entry.plugin_id] = (
+                None
+                if entry.actions is None or kept is None
+                else kept | frozenset(entry.actions)
+            )
+        return plugins
+
+
+class LegacyToolSelection(BaseModel):
+    """The old shape of ``chat_session.tool_selection`` and of the tool
+    selection of a run checkpoint. Read only; ``ToolOptions`` replaces it."""
 
     model_config = ConfigDict(extra="forbid")
 
     allowed_tool_ids: list[int] | None = None
     preferred_tool_id: int | None = None
     internal_search_filters: BaseFilters | None = None
+
+    def to_tool_options(self, built_in_tool_ids: set[int]) -> ToolOptions:
+        """Built-in tool ids carry over; an old MCP or custom tool id is
+        ignored."""
+        return ToolOptions(
+            allowed=None
+            if self.allowed_tool_ids is None
+            else [
+                CapabilityEntry(tool_id=tool_id)
+                for tool_id in self.allowed_tool_ids
+                if tool_id in built_in_tool_ids
+            ],
+            preferred=CapabilityPreference(tool_id=self.preferred_tool_id)
+            if self.preferred_tool_id is not None
+            and self.preferred_tool_id in built_in_tool_ids
+            else None,
+            internal_search_filters=self.internal_search_filters,
+        )
+
+
+class PluginAction(BaseModel):
+    """The integration action that a chat tool calls, with the plugins of
+    the turn that hold its integration."""
+
+    model_config = ConfigDict(frozen=True)
+
+    plugin_ids: frozenset[UUID]
+    action: str
 
 
 class ToolCallException(Exception):

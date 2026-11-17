@@ -96,8 +96,12 @@ tool instances. `construct_tools` returns a flat list. For built-in tools,
 order and applies these gates:
 
 1. A tool with `enabled=False` is skipped.
-2. `allowed_tool_ids`, the per-message list that the web client sends. It
-   narrows only built-in tools: an integration action has no tool id.
+2. `tool_options.allowed` (`tools/models.py:ToolOptions`), the per-message
+   choice that the client sends or the chat saved. A capability entry keeps a
+   built-in tool by its id. A plugin entry keeps the plugin, and its optional
+   `actions` keep only those action keys
+   (`integrations/chat_tools.py:IntegrationChatRequest.allowed_plugins`).
+   NULL keeps every tool and plugin of the agent.
 3. `is_available(db_session)`. An exception counts as "not available" and is
    logged.
 4. A class-specific branch builds the instance, and some branches skip the
@@ -161,7 +165,7 @@ work.
 **Chat skill tools.** `chat/execution.py:create_chat_agent` adds `skills_list`
 and `skills_read` (`tools/tool_implementations/skills/skill_tools.py`) to the
 chat agent's configured tools when the turn's user has a chat skill
-([[skills]]): the agent's tools and the request's `allowed_tool_ids` do not
+([[skills]]): the agent's tools and the request's tool options do not
 remove them. Restored and child agents receive them with the other configured
 tools. The tools hold only the user and read the user's current chat skills
 on each call; `skills_read` checks that the user can still see the skill and
@@ -280,7 +284,7 @@ Their control functions, such as `think_tool`, `generate_report` and
 
 ## Contracts and traps
 
-1. `memory-tool-bypasses-filters` **`MemoryTool` bypasses `allowed_tool_ids`
+1. `memory-tool-bypasses-filters` **`MemoryTool` bypasses the tool options
    and the agent's tools.** `tools/tool_constructor.py:_construct_tools_impl`
    adds it after the agent tool loop whenever `user.enable_memory_tool` is set.
    A user who turns every tool off for a message can still get a memory write.
@@ -537,14 +541,14 @@ Their control functions, such as `think_tool`, `generate_report` and
   | The deployment cannot run it (no provider, no service) | `is_available` |
   | An admin, per agent | persona attachment (`Persona__Tool`) |
   | An admin, for all agents | `Tool.enabled` ([[mcp-and-custom-tools]]); built-in and MCP tools only |
-  | A user, per message | `allowed_tool_ids`; `TOOL_VISIBILITY_CONFIG` decides whether chat offers the toggle |
+  | A user, per message | `tool_options.allowed`; `TOOL_VISIBILITY_CONFIG` decides whether chat offers the toggle |
 
   Do not inject a tool outside the agent tool loop as `MemoryTool` does, unless
   it is a user-level feature. Such a tool escapes every admin and per-message
   control.
 - `investigate-tool-not-called` **Investigate "the model never calls tool X".** Walk the gates in order.
   Check that the tool is attached to the agent and that `Tool.enabled` is true.
-  Check the `allowed_tool_ids` that the client sent. For a built-in tool, run its
+  Check the `tool_options` that the client sent or the chat saved. For a built-in tool, run its
   `is_available` in a shell, or look for "Failed checking availability" in
   `backend/log/api_server_debug.log`; the "Skipping tool" line is at debug
   level. Check the branch skips in gate 4: search usage `DISABLED`, an
@@ -553,7 +557,9 @@ Their control functions, such as `think_tool`, `generate_report` and
   look for the credential warning. Last, check for a name collision (Known
   issues).
 - `force-tool-call` **Prefer an Action for the current request.** Send
-  `preferred_tool_id` with the message. The trailing reminder names that Action's
+  `tool_options.preferred` with the message: a capability (a built-in tool id) or
+  an action (a plugin id and an action key, matched by `Tool.plugin_action`).
+  The trailing reminder names that Action's
   operations on every model step. The model may call another tool or answer directly;
   the preference does not change tool definitions or execution permissions.
   Use a scripted model to test a required call deterministically, as in

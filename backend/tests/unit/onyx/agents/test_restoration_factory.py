@@ -39,6 +39,7 @@ from onyx.llm.models import (
 from onyx.skills.models import ChatSkill
 from onyx.tools.constants import WAIT_CODE_TOOL_NAME
 from onyx.tools.interface import Tool
+from onyx.tools.models import CapabilityPreference
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
@@ -61,7 +62,7 @@ def feature(
         chat = ChatAgent(
             messages=context.messages,
             tools=[EchoTool()],
-            preferred_tool_id=1,
+            preferred_tool=CapabilityPreference(tool_id=1),
             custom_agent_prompt="Hello {{user.name}}",
             additional_context="Use the current request context.",
             base_system_prompt="Base instructions",
@@ -299,7 +300,7 @@ def _chat_agent(
         user_memory_context=None,
         llm=llm,
         token_counter=len,
-        preferred_tool_id=EchoTool().id,
+        preferred_tool=CapabilityPreference(tool_id=EchoTool().id),
         agent_id="retained-agent",
     )
 

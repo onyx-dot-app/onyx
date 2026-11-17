@@ -118,7 +118,7 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolContext
+from onyx.tools.models import ToolContext, ToolOptions
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_implementations.code_mode import cells
 from onyx.tools.tool_implementations.sandbox import sandbox_tools
@@ -347,7 +347,7 @@ class SandboxChat(BaseModel):
                 "Work in the sandbox.",
                 code_mode=code_mode,
                 on_part=on_part,
-                allowed_tool_ids=[],
+                tool_options=ToolOptions(allowed=[]),
             )
         )
 
@@ -817,7 +817,9 @@ def test_incognito_and_multi_model_turns_offer_no_sandbox(
             "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
         )
         request = SendMessageRequest(
-            message="Work.", chat_session_id=chat.chat_session_id, allowed_tool_ids=[]
+            message="Work.",
+            chat_session_id=chat.chat_session_id,
+            tool_options=ToolOptions(allowed=[]),
         )
         parts = (
             handle_multi_model_stream(
@@ -869,7 +871,7 @@ def test_a_bot_turn_offers_no_sandbox(
         new_msg_req=SendMessageRequest(
             message="Work.",
             chat_session_id=chat.chat_session_id,
-            allowed_tool_ids=[],
+            tool_options=ToolOptions(allowed=[]),
             origin=origin,
         ),
         user=chat.user,
@@ -899,7 +901,7 @@ def test_an_anonymous_turn_offers_no_sandbox(
                 new_msg_req=SendMessageRequest(
                     message="Work.",
                     chat_session_id=chat_session_id,
-                    allowed_tool_ids=[],
+                    tool_options=ToolOptions(allowed=[]),
                 ),
                 user=anonymous,
             )
@@ -1786,7 +1788,7 @@ def test_a_subagent_that_ends_during_a_root_call_leaves_the_turn_to_the_root(
         new_msg_req=SendMessageRequest(
             message="Work in the sandbox.",
             chat_session_id=chat.chat_session_id,
-            allowed_tool_ids=[],
+            tool_options=ToolOptions(allowed=[]),
             accepts_follow_ups=True,
         ),
         user=chat.user,

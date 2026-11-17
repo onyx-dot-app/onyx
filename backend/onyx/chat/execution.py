@@ -87,7 +87,6 @@ from onyx.tools.constants import (
     REQUEST_USER_INPUT_TOOL_NAME,
 )
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatToolSelection
 from onyx.tools.tool_constructor import (
     CustomToolConfig,
     FileReaderToolConfig,
@@ -839,11 +838,7 @@ def bind_run_store(
         on_root_parked=on_root_parked,
         model_configuration_id=llm.config.model_configuration_id,
         temperature=llm.config.temperature,
-        tool_selection=ChatToolSelection(
-            allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
-            preferred_tool_id=setup.new_msg_req.preferred_tool_id,
-            internal_search_filters=setup.new_msg_req.internal_search_filters,
-        ),
+        tool_options=setup.new_msg_req.tool_options,
     )
     view = store.bind(
         coordinator,
@@ -999,7 +994,7 @@ def create_chat_agent(
                 user_file_ids=setup.available_files.user_file_ids,
                 chat_file_ids=setup.available_files.chat_file_ids,
             ),
-            allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
+            tool_options=setup.new_msg_req.tool_options,
             search_usage_forcing_setting=setup.search_params.search_usage,
             approval_mode=setup.approval_mode,
         )
@@ -1009,16 +1004,17 @@ def create_chat_agent(
         # the other configured tools.
         if setup.has_chat_skills:
             tools += [SkillsListTool(user), SkillsReadTool(user)]
-        preferred_tool_id = setup.preferred_tool_id
-        if preferred_tool_id is not None and preferred_tool_id not in {
-            tool.id for tool in tools
-        }:
+
+        preferred_tool = setup.preferred_tool
+        if preferred_tool is not None and not any(
+            tool.matches(preferred_tool) for tool in tools
+        ):
             if not setup.preferred_tool_saved:
                 raise OnyxError(
                     OnyxErrorCode.BAD_REQUEST,
-                    f"Preferred tool {preferred_tool_id} not found in tools",
+                    f"Preferred {preferred_tool} not found in tools",
                 )
-            preferred_tool_id = None
+            preferred_tool = None
 
         agent_id = str(setup.chat_session_id)
 
@@ -1083,7 +1079,6 @@ def create_chat_agent(
             inject_memories=user.use_memories,
             with_subagents=with_subagents,
             additional_context=setup.additional_context,
-            preferred_tool_id=preferred_tool_id,
             question_tool=QuestionTool(
                 ASK_USER_QUESTION_TOOL_NAME
                 if is_claude_model(
@@ -1098,4 +1093,5 @@ def create_chat_agent(
             )
             if setup.question_tool
             else None,
+            preferred_tool=preferred_tool,
         )

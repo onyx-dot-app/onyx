@@ -35,16 +35,24 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
+from onyx.tools.models import CapabilityEntry, CapabilityPreference, ToolOptions
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 
-def _preferred_tool_id(db_session: Session, tool_type: str | None) -> int | None:
-    if tool_type is None:
-        return None
-    return get_builtin_tool(db_session, BUILT_IN_TOOL_MAP[tool_type]).id
+def _tool_options(
+    db_session: Session, allowed_tool_ids: list[int], preferred_tool: str | None
+) -> ToolOptions:
+    return ToolOptions(
+        allowed=[CapabilityEntry(tool_id=tool_id) for tool_id in allowed_tool_ids],
+        preferred=None
+        if preferred_tool is None
+        else CapabilityPreference(
+            tool_id=get_builtin_tool(db_session, BUILT_IN_TOOL_MAP[preferred_tool]).id
+        ),
+    )
 
 
 @contextmanager
@@ -214,14 +222,14 @@ def _get_answer_with_tools(
                     f"User not found for email: {configuration.search_permissions_email}"
                 )
 
-            preferred_tool_id = _preferred_tool_id(
-                db_session, eval_input.get("preferred_tool")
-            )
             request = SendMessageRequest(
                 message=eval_input["message"],
                 llm_override=llm_override,
-                allowed_tool_ids=full_configuration.allowed_tool_ids,
-                preferred_tool_id=preferred_tool_id,
+                tool_options=_tool_options(
+                    db_session,
+                    full_configuration.allowed_tool_ids,
+                    eval_input.get("preferred_tool"),
+                ),
                 chat_session_info=ChatSessionCreationRequest(
                     persona_id=DEFAULT_PERSONA_ID,
                     description="Eval session",
@@ -360,14 +368,16 @@ def _get_multi_turn_answer_with_tools(
 
                 # Create request for this turn using SendMessageRequest (same API as run_chat_turn)
                 # Use AUTO_PLACE_AFTER_LATEST_MESSAGE to chain messages
-                preferred_tool_id = _preferred_tool_id(db_session, msg.preferred_tool)
                 request = SendMessageRequest(
                     chat_session_id=chat_session_id,
                     parent_message_id=AUTO_PLACE_AFTER_LATEST_MESSAGE,
                     message=msg.message,
                     llm_override=llm_override,
-                    allowed_tool_ids=full_configuration.allowed_tool_ids,
-                    preferred_tool_id=preferred_tool_id,
+                    tool_options=_tool_options(
+                        db_session,
+                        full_configuration.allowed_tool_ids,
+                        msg.preferred_tool,
+                    ),
                 )
 
                 stream_start_time = time.time()

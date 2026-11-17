@@ -6,6 +6,7 @@ from onyx.configs import app_configs
 from onyx.configs.chat_configs import CODE_MODE_ENABLED
 from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
+from onyx.tools.models import CapabilityPreference, ToolOptions
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -96,7 +97,9 @@ def test_preferred_tool_executes_when_available(
         chat_session_id=chat_session.id,
         message="prefer the search tool",
         user_performing_action=admin_user,
-        preferred_tool_id=search_tool_id,
+        tool_options=ToolOptions(
+            preferred=CapabilityPreference(tool_id=search_tool_id)
+        ),
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
@@ -148,8 +151,10 @@ def test_search_preference_uses_inline_project_files(
         chat_session_id=chat_session.id,
         message="What is the project access code?",
         user_performing_action=admin_user,
-        preferred_tool_id=search_tool_id,
-        allowed_tool_ids=None if allow_search else [],
+        tool_options=ToolOptions(
+            allowed=None if allow_search else [],
+            preferred=CapabilityPreference(tool_id=search_tool_id),
+        ),
     )
 
     if not allow_search:
@@ -188,7 +193,9 @@ def test_preferred_tool_rejected_when_not_in_persona_tools(
         chat_session_id=chat_session.id,
         message="prefer a missing tool",
         user_performing_action=admin_user,
-        preferred_tool_id=search_tool_id,
+        tool_options=ToolOptions(
+            preferred=CapabilityPreference(tool_id=search_tool_id)
+        ),
     )
 
     assert response.error is not None
@@ -196,7 +203,7 @@ def test_preferred_tool_rejected_when_not_in_persona_tools(
     assert response.used_tools == []
 
 
-def test_allowed_tool_ids_excludes_tools_outside_allowlist(
+def test_allowed_tool_options_exclude_tools_outside_allowlist(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     _assert_integration_mode_enabled()
@@ -222,7 +229,7 @@ def test_allowed_tool_ids_excludes_tools_outside_allowlist(
         chat_session_id=chat_session.id,
         message="attempt tool use with empty allowlist",
         user_performing_action=admin_user,
-        allowed_tool_ids=[],
+        tool_options=ToolOptions(allowed=[]),
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
@@ -251,8 +258,9 @@ def test_preferred_and_allowlist_conflict_returns_validation_error(
         chat_session_id=chat_session.id,
         message="prefer a tool blocked by allowlist",
         user_performing_action=admin_user,
-        allowed_tool_ids=[],
-        preferred_tool_id=search_tool_id,
+        tool_options=ToolOptions(
+            allowed=[], preferred=CapabilityPreference(tool_id=search_tool_id)
+        ),
     )
 
     assert response.error is not None
@@ -285,7 +293,9 @@ def test_preference_is_optional_and_does_not_leak_into_followup(
         chat_session_id=chat_session.id,
         message="Hello",
         user_performing_action=admin_user,
-        preferred_tool_id=search_tool_id,
+        tool_options=ToolOptions(
+            preferred=CapabilityPreference(tool_id=search_tool_id)
+        ),
     )
     second = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
@@ -346,7 +356,9 @@ def test_parallel_tool_calls_each_get_a_debug_entry(
         chat_session_id=chat_session.id,
         message="run the search tool twice",
         user_performing_action=admin_user,
-        preferred_tool_id=search_tool_id,
+        tool_options=ToolOptions(
+            preferred=CapabilityPreference(tool_id=search_tool_id)
+        ),
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
@@ -396,7 +408,9 @@ def test_preferred_tool_call_written_as_xml_executes(
         chat_session_id=chat_session.id,
         message="use the search tool",
         user_performing_action=admin_user,
-        preferred_tool_id=search_tool_id,
+        tool_options=ToolOptions(
+            preferred=CapabilityPreference(tool_id=search_tool_id)
+        ),
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"

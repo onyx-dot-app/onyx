@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -97,7 +98,11 @@ class AuthConfigResponse(BaseModel):
 
 
 class UserSpecificAssistantPreference(BaseModel):
+    # Built-in tools the user turned off for the agent.
     disabled_tool_ids: list[int]
+    # Plugins the user turned off for the agent. None on a write keeps the
+    # saved list.
+    disabled_plugin_ids: list[UUID] | None = None
 
 
 UserSpecificAssistantPreferences = dict[int, UserSpecificAssistantPreference]
