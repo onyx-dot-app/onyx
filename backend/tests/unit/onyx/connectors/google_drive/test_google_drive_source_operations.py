@@ -10,6 +10,7 @@ from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.errors import HttpError
+from googleapiclient.http import HttpRequest
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.google_drive import source_operations
@@ -508,10 +509,10 @@ def test_a_download_error_that_is_not_a_rate_limit_is_not_retried() -> None:
 def test_download_retries_outlast_one_minute() -> None:
     waits = [
         min(
-            source_operations._RATE_LIMITED_DOWNLOAD_DELAY_SECONDS * 2**attempt,
-            source_operations._RATE_LIMITED_DOWNLOAD_MAX_DELAY_SECONDS,
+            source_operations._DOWNLOAD_RETRY_DELAY_SECONDS * 2**attempt,
+            source_operations._DOWNLOAD_RETRY_MAX_DELAY_SECONDS,
         )
-        for attempt in range(source_operations._RATE_LIMITED_DOWNLOAD_TRIES - 1)
+        for attempt in range(source_operations._DOWNLOAD_TRIES - 1)
     ]
     assert sum(waits) > 60
 
@@ -606,7 +607,7 @@ def test_a_rate_limit_answer_is_reported_with_its_scope(
         gateway.download_file(user_email="a@co.com", file_id="f", size_threshold=10)
 
     # Each try spends, but the call reports only its first rate-limit answer.
-    tries = source_operations._RATE_LIMITED_DOWNLOAD_TRIES
+    tries = source_operations._DOWNLOAD_TRIES
     assert limiter.spent == [("drive", 200, "a@co.com")] * tries
     assert limiter.reported == [("drive", "a@co.com", user_scope)]
 
@@ -649,6 +650,78 @@ def test_a_download_that_recovers_reports_once_and_spends_each_try(
     assert content == b"content"
     assert limiter.spent == [("drive", 200, "a@co.com")] * 4
     assert limiter.reported == [("drive", "a@co.com", False)]
+
+
+class _ScriptedHttp:
+    """An httplib2-like http object that gives one scripted answer for each
+    request: a (status, body) pair, or an error to raise."""
+
+    def __init__(self, answers: list[tuple[int, bytes] | Exception]) -> None:
+        self.answers = answers
+        self.requests = 0
+
+    def request(self, *_args: object, **_kwargs: object) -> tuple[Any, bytes]:
+        self.requests += 1
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        status, body = answer
+        return (
+            httplib2.Response({"status": status, "content-length": str(len(body))}),
+            body,
+        )
+
+
+def _download_through(http: _ScriptedHttp) -> tuple[bytes, _RecordingLimiter]:
+    """Downloads a file through the real media download over ``http``."""
+    gateway, limiter = _limited_gateway()
+    drive = mock.Mock()
+    drive.files.return_value.get_media.return_value = HttpRequest(
+        http, lambda _resp, content: content, "https://drive.test/files/f?alt=media"
+    )
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive),
+        mock.patch("time.sleep"),
+    ):
+        content = gateway.download_file(
+            user_email="a@co.com", file_id="f", size_threshold=100
+        )
+    return content, limiter
+
+
+@pytest.mark.parametrize(
+    "rate_limit", [(429, b"{}"), (403, _RATE_LIMIT_BODY)], ids=["429", "403"]
+)
+def test_the_media_download_does_not_hide_a_rate_limit_from_the_limiter(
+    rate_limit: tuple[int, bytes],
+) -> None:
+    """googleapiclient's own retry would get past the rate limit unseen. The
+    gateway's retry reports it once and spends for each try."""
+    http = _ScriptedHttp([rate_limit, (200, b"content")])
+
+    content, limiter = _download_through(http)
+
+    assert content == b"content"
+    assert http.requests == 2
+    assert limiter.spent == [("drive", 200, "a@co.com")] * 2
+    assert limiter.reported == [("drive", "a@co.com", rate_limit[0] == 403)]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [ConnectionResetError("reset"), TimeoutError("timed out"), (503, b"{}")],
+    ids=["reset", "timeout", "503"],
+)
+def test_the_media_download_retries_a_lost_connection_or_server_error(
+    failure: tuple[int, bytes] | Exception,
+) -> None:
+    http = _ScriptedHttp([failure, (200, b"content")])
+
+    content, limiter = _download_through(http)
+
+    assert content == b"content"
+    assert http.requests == 2
+    assert limiter.reported == []
 
 
 def test_an_access_error_is_not_reported_as_a_rate_limit() -> None:
