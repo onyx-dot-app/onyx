@@ -69,7 +69,8 @@ corners, and a `background-tint-00` fill while `filled`. Its body starts
 | `children`        | `ReactNode`  | —       | The header, e.g. a title that animates                                                                |
 | `rightChildren`   | `ReactNode`  | —       | Trailing content at the end of the header, e.g. the fold button                                       |
 | `filled`          | `boolean`    | —       | Fills the card, e.g. while its run works or it is open                                                |
-| `onClick`         | `() => void` | —       | The header (a `Collapsible.Header`, no fold button) toggles the card, and a folded card fills on hover. Give the control in `rightChildren` this `onClick` too |
+| `onClick`         | `() => void` | —       | The header (a `Collapsible.Header`) toggles the card, and a folded card fills on hover |
+| `foldLabel`       | `string`     | —       | The header's fold button label, e.g. "3 steps", with `SvgExpand` / `SvgFold`; it lights up while the header is hovered |
 | `expandable`, `expanded`, `expandedContent` | | | As above                                                                                             |
 
 ```tsx
@@ -77,7 +78,7 @@ corners, and a `background-tint-00` fill while `filled`. Its body starts
   flavour="card"
   filled={open}
   onClick={toggle}
-  rightChildren={<Button rightIcon={SvgExpand}>3 steps</Button>}
+  foldLabel="3 steps"
   expandable
   expanded={open}
   expandedContent={steps}

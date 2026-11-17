@@ -28,15 +28,20 @@
 }
 
 /* A step's row (a `Collapsible.Header` with `hover="subtle"`) toggles it:
-   on hover, the title and a default icon darken, with no fill. */
+   on hover, the title and a default icon darken, with no fill. The colours
+   and timing are `Interactive`'s tertiary default: `text-03` at rest,
+   `text-04` on hover, over `--duration-interactive`, together. */
 .opal-line-title {
-  @apply min-w-0 text-text-03 transition-colors;
+  @apply min-w-0 text-text-03;
 }
-.opal-collapsible-header[data-hover="subtle"]:hover .opal-line-title,
+.opal-line-title,
+.opal-line .opal-line-icon {
+  transition: color var(--duration-interactive) ease-in-out;
+}
 .opal-line[data-opal-line-status="default"]
   .opal-collapsible-header[data-hover="subtle"]:hover
-  .opal-line-icon {
-  @apply text-text-05;
+  :is(.opal-line-title, .opal-line-icon) {
+  @apply text-text-04;
 }
 
 /* Inside an interactive line, the body keeps its text selection and an
@@ -65,17 +70,20 @@
 .opal-line .opal-line-icon {
   @apply shrink-0 text-text-03;
 }
-.opal-line[data-opal-line-status="info"] .opal-line-icon {
-  @apply text-status-info-05;
+/* A status other than `default` colours the icon and the title with
+   `CONTENT_STATUS_COLORS` (as `Content`, `Badge` and `Tag` do), at rest and
+   on hover. `LineRoot` sets the colour as `--opal-line-status-fg`. */
+.opal-line:not([data-opal-line-status="default"]) .opal-line-icon,
+.opal-line:not([data-opal-line-status="default"]) .opal-line-title {
+  color: var(--opal-line-status-fg);
 }
-.opal-line[data-opal-line-status="success"] .opal-line-icon {
-  @apply text-status-success-05;
-}
-.opal-line[data-opal-line-status="warning"] .opal-line-icon {
-  @apply text-status-warning-05;
-}
-.opal-line[data-opal-line-status="error"] .opal-line-icon {
-  @apply text-status-error-05;
+
+/* On hover, an error row's red deepens to the strongest danger step. The
+   other statuses have no step above -05, so they keep their colour. */
+.opal-line[data-opal-line-status="error"]
+  .opal-collapsible-header[data-hover="subtle"]:hover
+  :is(.opal-line-title, .opal-line-icon) {
+  color: var(--action-danger-06);
 }
 
 .opal-line[data-opal-line-weight="heavy"][data-opal-line-status="info"] {

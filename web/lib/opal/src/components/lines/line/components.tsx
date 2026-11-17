@@ -36,9 +36,13 @@ type LineCardProps = LineExpandableProps & {
   /** Fills the card with `background-tint-00`, e.g. while it is open. */
   filled: boolean;
   /**
-   * Makes the header toggle the card: a click on it calls this, and a folded
-   * card fills on hover. A button in `rightChildren` is its keyboard target;
-   * give it this `onClick` too, since clicks there do not reach the header.
+   * The fold button's label, e.g. "3 steps": the header's own button, which
+   * lights up while the header is hovered. Needs `onClick`.
+   */
+  foldLabel?: string;
+  /**
+   * Makes the header toggle the card: a click on it, or on its fold button,
+   * calls this, and a folded card fills on hover.
    */
   onClick?: () => void;
 };
@@ -141,6 +145,7 @@ function LineCard({
   children,
   rightChildren,
   filled,
+  foldLabel,
   onClick,
   expandable,
   expanded,
@@ -159,9 +164,14 @@ function LineCard({
         onOpenChange={() => onClick?.()}
       >
         {onClick ? (
-          // The header toggles the card; its control (e.g. "N steps") is
-          // the caller's, in `rightChildren`.
-          <Collapsible.Header rightChildren={rightChildren} foldButton="none">
+          // The header toggles the card; its fold button carries the label
+          // (e.g. "N steps") and lights up while the header is hovered.
+          <Collapsible.Header
+            rightChildren={rightChildren}
+            size="md"
+            foldButton={foldLabel === undefined ? "none" : "icon"}
+            foldLabel={foldLabel}
+          >
             {children}
           </Collapsible.Header>
         ) : (

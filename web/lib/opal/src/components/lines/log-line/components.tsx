@@ -2,8 +2,8 @@
 
 import { Section } from "@opal/layouts/general/components";
 import { Text } from "@opal/components/text/components";
+import { Collapsible } from "@opal/components/collapsible/components";
 import {
-  LineBody,
   LineRoot,
   LineRow,
   LineSurface,
@@ -48,8 +48,10 @@ function LogLine({
   expanded,
   expandedContent,
 }: LogLineProps) {
+  // The open state and the fold are Collapsible's; the hover surface and the
+  // row-only toggle are the line's own, so it looks and behaves as before.
   const content = (
-    <>
+    <Collapsible.Root open={!!expandable && expanded}>
       <LineRow padding={padding} icon={icon} rightChildren={rightChildren}>
         <Section
           flexDirection="row"
@@ -85,8 +87,12 @@ function LogLine({
           </Section>
         </Section>
       </LineRow>
-      {expandable && <LineBody expanded={expanded}>{expandedContent}</LineBody>}
-    </>
+      {expandable && (
+        <Collapsible.Content>
+          <div className="opal-line-body">{expandedContent}</div>
+        </Collapsible.Content>
+      )}
+    </Collapsible.Root>
   );
 
   return (

@@ -252,9 +252,14 @@ interface CollapsibleHeaderProps {
    */
   foldButton?: "icon" | "chevron" | "none";
   /**
-   * What the row's hover shows: `button` lights up the fold button;
-   * `subtle` leaves the button alone and marks the row with
-   * `data-hover="subtle"`, so its content can darken.
+   * A label for the `icon` fold button, e.g. "3 steps": it then shows the
+   * label with `SvgExpand` / `SvgFold` after it, and no tooltip.
+   */
+  foldLabel?: string;
+  /**
+   * What the row's hover shows. The fold button always lights up; `subtle`
+   * also marks the row with `data-hover="subtle"`, so its content can
+   * darken.
    * @default "button"
    */
   hover?: "button" | "subtle";
@@ -273,6 +278,7 @@ function CollapsibleHeader({
   rightChildren,
   size,
   foldButton = "icon",
+  foldLabel,
   hover = "button",
 }: CollapsibleHeaderProps) {
   const strings = useOpalStrings();
@@ -335,12 +341,9 @@ function CollapsibleHeader({
                 <FoldButton
                   open={open}
                   size={size}
+                  prominence="internal"
                   interaction={
-                    !disabled && focusVisible
-                      ? "hover"
-                      : hover === "button" && !disabled && hovered
-                        ? "hover"
-                        : undefined
+                    !disabled && (focusVisible || hovered) ? "hover" : undefined
                   }
                   tooltip={label}
                   aria-label={accessibleLabel}
@@ -351,16 +354,33 @@ function CollapsibleHeader({
                   }
                   onBlur={() => setFocusVisible(false)}
                 />
+              ) : foldLabel !== undefined ? (
+                // A labelled fold button: its label is its name.
+                <Button
+                  rightIcon={open ? SvgFold : SvgExpand}
+                  prominence="internal"
+                  size={size}
+                  interaction={
+                    !disabled && (focusVisible || hovered) ? "hover" : "rest"
+                  }
+                  disabled={disabled}
+                  aria-expanded={open}
+                  aria-controls={contentId}
+                  onClick={toggle}
+                  onFocus={(e) =>
+                    setFocusVisible(e.currentTarget.matches(":focus-visible"))
+                  }
+                  onBlur={() => setFocusVisible(false)}
+                >
+                  {foldLabel}
+                </Button>
               ) : (
                 <Button
                   icon={open ? SvgFold : SvgExpand}
                   prominence="tertiary"
                   size={size}
                   interaction={
-                    !disabled &&
-                    (focusVisible || (hover === "button" && hovered))
-                      ? "hover"
-                      : "rest"
+                    !disabled && (focusVisible || hovered) ? "hover" : "rest"
                   }
                   disabled={disabled}
                   tooltip={label}

@@ -20,6 +20,8 @@ interface FoldButtonProps {
   "aria-hidden"?: boolean;
   /** `-1` keeps it out of the Tab order, for a header that is the control. */
   tabIndex?: number;
+  /** @default "tertiary" */
+  prominence?: ButtonProps["prominence"];
   /** Overrides the interaction state, e.g. to light up with its row. */
   interaction?: ButtonProps["interaction"];
   onFocus?: React.FocusEventHandler<HTMLElement>;
@@ -45,13 +47,18 @@ function FoldChevron({ className, ...props }: IconProps) {
  * while folded and turns down while open. `Divider`'s foldable header, a
  * timeline step and a connector check use it.
  */
-function FoldButton({ open, size = "sm", ...buttonProps }: FoldButtonProps) {
+function FoldButton({
+  open,
+  size = "sm",
+  prominence = "tertiary",
+  ...buttonProps
+}: FoldButtonProps) {
   return (
     <span className="opal-fold-button" data-open={open}>
       <Button
         icon={FoldChevron}
         size={size}
-        prominence="tertiary"
+        prominence={prominence}
         aria-expanded={open}
         {...buttonProps}
       />

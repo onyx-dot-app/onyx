@@ -11,10 +11,11 @@ The parts both lines share:
 | `LineRoot`    | The frame: rounding, the status colour of the icon, the heavy tint over the row and the body, and the card flavour's padding and fill |
 | `LineRow`     | The row, 1.75rem tall plus `padding`: the icon, the content and `rightChildren`                   |
 | `LineSurface` | A `tertiary` `Interactive.Stateless` surface over the row and the body; only a click on the row (not a link, not ending a selection) calls `onClick` |
-| `LineBody`    | The body, in a `Fold`. `inset`: `around` (default) under the icon's column with the line's padding on the end and bottom, `top` only 0.25rem on top (a card) |
 
-`Line` (its step flavour) and `LogLine` wrap `LineRow` and `LineBody` in
-`LineSurface`: one hover surface, toggled only from the row.
+`LogLine` wraps `LineRow` and its body in `LineSurface`: one hover surface,
+toggled only from the row. Both `Line` and `LogLine` open and fold their body
+with `Collapsible.Root` and `Collapsible.Content`; the body is a
+`.opal-line-body`, which these styles indent.
 
 ## Variants
 

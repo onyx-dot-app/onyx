@@ -2,9 +2,9 @@
 
 import "@opal/components/lines/line-base/styles.css";
 import { Section } from "@opal/layouts/general/components";
-import { Fold } from "@opal/components/fold/components";
 import { Interactive } from "@opal/core";
 import type { IconFunctionComponent, StatusColor } from "@opal/types";
+import { CONTENT_STATUS_COLORS } from "@opal/layouts/content/colors";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,12 +100,17 @@ function LineRoot({
   children,
 }: LineRootProps) {
   const { status, weight } = VARIANTS[variant];
+  // The status colour for the icon and the title (see styles.css).
+  const style: React.CSSProperties & Record<"--opal-line-status-fg", string> = {
+    "--opal-line-status-fg": CONTENT_STATUS_COLORS[status].fg,
+  };
   return (
     <div
       className="opal-line"
       data-opal-line-status={status}
       data-opal-line-weight={weight}
       data-opal-line-padding={padding}
+      style={style}
       data-opal-line-flavour={flavour}
       data-opal-line-filled={filled}
       data-opal-line-clickable={clickable}
@@ -166,34 +171,6 @@ function LineRow({
 }
 
 // ---------------------------------------------------------------------------
-// LineBody
-// ---------------------------------------------------------------------------
-
-interface LineBodyProps {
-  expanded: boolean;
-  /**
-   * Where the body is padded. `around`: under the icon's column, and on the
-   * end and bottom by the line's padding. `content`: only under the icon's
-   * column, flush with the row. `top`: only 0.25rem on the top, for a card,
-   * which pads itself.
-   * @default "around"
-   */
-  inset?: "around" | "content" | "top";
-  children: React.ReactNode;
-}
-
-/** The body that opens below the line, indented to start under the content. */
-function LineBody({ expanded, inset = "around", children }: LineBodyProps) {
-  return (
-    <Fold open={expanded}>
-      <div className="opal-line-body" data-opal-line-body-inset={inset}>
-        {children}
-      </div>
-    </Fold>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // LineSurface
 // ---------------------------------------------------------------------------
 
@@ -239,7 +216,6 @@ function LineSurface({ onClick, children }: LineSurfaceProps) {
 }
 
 export {
-  LineBody,
   LineRoot,
   LineRow,
   LineSurface,

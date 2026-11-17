@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Button, Line, Presence, Text } from "@opal/components";
-import { SvgExpand, SvgFold } from "@opal/icons";
+import { Line, Presence, Text } from "@opal/components";
 import { formatDurationSeconds } from "@opal/time";
 import { useTranslations } from "next-intl";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
@@ -141,6 +140,13 @@ export function RunCard<S extends RunCardStep>({
           flavour="card"
           filled={isRunning || isOpen}
           onClick={foldable ? toggle : undefined}
+          // The header's own fold button, in every state, so its step count
+          // animates as it changes and it lights up with the header.
+          foldLabel={
+            foldable
+              ? t("stepsButton.label", { count: steps.length })
+              : undefined
+          }
           rightChildren={
             foldable && (
               <>
@@ -162,17 +168,6 @@ export function RunCard<S extends RunCardStep>({
                     </Text>
                   </div>
                 </Presence>
-                {/* One fold button in every state, so its step count
-                    animates as it changes. */}
-                <Button
-                  prominence="tertiary"
-                  size="md"
-                  rightIcon={isOpen ? SvgFold : SvgExpand}
-                  aria-expanded={isOpen}
-                  onClick={toggle}
-                >
-                  {t("stepsButton.label", { count: steps.length })}
-                </Button>
               </>
             )
           }

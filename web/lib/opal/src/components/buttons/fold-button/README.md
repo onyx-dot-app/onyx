@@ -13,6 +13,7 @@ that points right while folded and turns down while `open` (a 90° turn over
 | ------------- | ----------------------- | ------- | ------------------------------------------------------------------- |
 | `open`        | `boolean`               | —       | Whether the section is open; the chevron turns down                 |
 | `size`        | `ContainerSizeVariants` | `"sm"`  | The button's size                                                    |
+| `prominence`  | `ButtonProminence`      | `"tertiary"` | E.g. `internal` inside a header row that lights it up              |
 | `onClick`     | `MouseEventHandler`     | —       | Toggles the section, when the button is the control                 |
 | `tooltip`     | `string`                | —       | Hover tooltip                                                        |
 | `aria-label`  | `string`                | —       | Accessible name, e.g. "Expand details"                              |
