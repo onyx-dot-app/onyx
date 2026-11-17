@@ -290,13 +290,20 @@ def list_all_query_history_exports(
 ) -> list[QueryHistoryExport]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
     try:
-        pending_tasks = [
-            QueryHistoryExport.from_task(task)
-            for task in get_all_query_history_export_tasks(db_session=db_session)
-        ]
+        tasks = get_all_query_history_export_tasks(db_session=db_session)
+        pending_tasks = [QueryHistoryExport.from_task(task) for task in tasks]
+        # A worker deletes the job row to publish its file. A file whose job
+        # row is still open is not published, for example a late upload.
+        unpublished = {
+            task.task_id for task in tasks if task.status != TaskStatus.SUCCESS
+        }
         generated_files = [
-            QueryHistoryExport.from_file(file)
-            for file in get_query_history_export_files(db_session=db_session)
+            export
+            for export in (
+                QueryHistoryExport.from_file(file)
+                for file in get_query_history_export_files(db_session=db_session)
+            )
+            if export.task_id not in unpublished
         ]
         merged = pending_tasks + generated_files
 
@@ -407,7 +414,12 @@ def download_query_history_csv(
 
     report_name = construct_query_history_report_name(request_id)
     file_store = get_default_file_store()
-    has_file = file_store.has_file(
+    # A worker deletes the job row to publish its file, so an open job row
+    # wins over a file that a late upload left.
+    task = get_task_with_id(db_session=db_session, task_id=request_id)
+    has_file = (
+        task is None or task.status == TaskStatus.SUCCESS
+    ) and file_store.has_file(
         file_id=report_name,
         file_origin=FileOrigin.QUERY_HISTORY_CSV,
         file_type=FileType.CSV,
@@ -430,7 +442,6 @@ def download_query_history_csv(
 
     # If the file doesn't exist yet, it may still be processing.
     # Therefore, we check the task queue to determine its status, if there is any.
-    task = get_task_with_id(db_session=db_session, task_id=request_id)
     if not task:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, f"No task with {request_id=} was found"

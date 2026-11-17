@@ -1,3 +1,4 @@
+import io
 import threading
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
@@ -12,6 +13,8 @@ from ee.onyx.background.celery.tasks.cleanup.tasks import (
 )
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from ee.onyx.db.query_history import get_all_query_history_export_tasks
+from onyx.background.task_utils import construct_query_history_report_name
+from onyx.configs.constants import FileOrigin, FileType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import TaskStatus
 from onyx.db.models import TaskQueueState
@@ -20,9 +23,11 @@ from onyx.db.tasks import (
     get_started_task_for_update,
     get_task_with_id,
     mark_task_as_finished_with_id,
+    register_task,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.file_store import get_default_file_store
 
 
 @pytest.fixture
@@ -215,3 +220,48 @@ def test_failed_send_fails_the_new_export(db_session: Session) -> None:
     assert task is not None and task.status == TaskStatus.FAILURE
     db_session.delete(task)
     db_session.commit()
+
+
+def test_file_of_a_failed_export_is_not_published(db_session: Session) -> None:
+    from fastapi import HTTPException
+
+    from ee.onyx.background.task_name_builders import query_history_task_name
+    from ee.onyx.server.query_history.api import (
+        download_query_history_csv,
+        list_all_query_history_exports,
+    )
+
+    when = datetime.now(timezone.utc)
+    row = register_task(
+        task_name=query_history_task_name(start=when - timedelta(days=1), end=when),
+        db_session=db_session,
+        task_id=str(uuid4()),
+        status=TaskStatus.FAILURE,
+        start_time=when,
+    )
+    report_name = construct_query_history_report_name(row.task_id)
+    now = when.isoformat()
+    file_store = get_default_file_store()
+    # A late upload whose delete has not run yet.
+    file_store.save_file(
+        content=io.BytesIO(b"leaked"),
+        display_name=report_name,
+        file_origin=FileOrigin.QUERY_HISTORY_CSV,
+        file_type=FileType.CSV,
+        file_metadata={"start": now, "end": now, "start_time": now},
+        file_id=report_name,
+    )
+    try:
+        with patch("ee.onyx.server.query_history.api.ensure_query_history_is_enabled"):
+            exports = list_all_query_history_exports(MagicMock(), db_session=db_session)
+            with pytest.raises(HTTPException):
+                download_query_history_csv(
+                    row.task_id, MagicMock(), db_session=db_session
+                )
+        statuses = [e.status for e in exports if e.task_id == row.task_id]
+        assert statuses == [TaskStatus.FAILURE]
+    finally:
+        file_store.delete_file(report_name, error_on_missing=False)
+        db_session.rollback()
+        db_session.delete(row)
+        db_session.commit()
