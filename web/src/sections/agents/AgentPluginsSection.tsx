@@ -76,6 +76,17 @@ function SettingSelect({
   );
 }
 
+/** An agent Ask stays when the integration allows the action, so the hint
+ * names the setting that asks. */
+function askHintKey(
+  fromIntegration: boolean,
+  usersCanSaveAlwaysAllow: boolean
+): "askHint" | "askHintAdminOnly" | "askHintAgent" | "askHintAgentOnly" {
+  if (fromIntegration)
+    return usersCanSaveAlwaysAllow ? "askHint" : "askHintAdminOnly";
+  return usersCanSaveAlwaysAllow ? "askHintAgent" : "askHintAgentOnly";
+}
+
 interface ActionRowProps {
   integration: AgentCatalogIntegration;
   action: IntegrationAction;
@@ -145,11 +156,14 @@ function ActionRow({
           height="auto"
         >
           <Text font="secondary-body" color="text-03">
-            {integration.users_can_save_always_allow
-              ? t("askHint")
-              : t("askHintAdminOnly")}
+            {t(
+              askHintKey(
+                effective.source === "integration",
+                integration.users_can_save_always_allow
+              )
+            )}
           </Text>
-          {canManageIntegrations && (
+          {canManageIntegrations && effective.source === "integration" && (
             <Button
               size="xs"
               prominence="tertiary"
