@@ -158,8 +158,6 @@
   "GET /auth/saml/{provider_name}/authorize": "none",
   "GET /auth/type": "none",
   "GET /build/action-policies": "basic",
-  "GET /build/admin/action-policies": "admin",
-  "GET /build/admin/action-policies/{kind}/{target_id}": "admin",
   "GET /build/admin/apps": "admin",
   "GET /build/admin/apps/built-in/options": "admin",
   "GET /build/admin/base-instructions": "admin",

@@ -46,6 +46,18 @@ class MatchedIntegrationAction(BaseModel):
     default_policy: IntegrationActionPolicyValue
 
 
+class RequestMatch(BaseModel):
+    """What a kind finds in a proxied request for its integration. An empty
+    ``actions`` is an MCP protocol request that calls no action."""
+
+    model_config = ConfigDict(frozen=True)
+
+    actions: list[MatchedIntegrationAction]
+    # The length of the URL path prefix that matched. When two MCP servers
+    # share a host, the longest prefix wins.
+    path_prefix_length: int = 0
+
+
 class McpServerConfig(BaseModel):
     """The settings of an ``mcp_server`` integration, from its ``mcp_server`` row."""
 

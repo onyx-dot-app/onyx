@@ -29,7 +29,7 @@ from pydantic import AnyUrl, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheLockAcquisitionError
-from onyx.cache.locks import async_cache_shared_lock, cache_shared_lock
+from onyx.cache.locks import async_cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     IntegrationConnectionStatus,
@@ -80,7 +80,6 @@ from onyx.server.features.mcp.credentials import (
     mcp_oauth_client_information_fingerprint,
     mcp_oauth_connection_headers_fingerprint,
     mcp_oauth_setup_mode,
-    mcp_token_expired,
 )
 from onyx.server.features.mcp.models import (
     MCPConnectionData,
@@ -94,7 +93,6 @@ from onyx.server.features.mcp.ssrf import (
     mcp_ssrf_httpx_client_factory,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 from onyx.utils.url import SSRFException
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR, get_current_tenant_id
 
@@ -238,60 +236,6 @@ def _absolute_token_expiry(tokens: OAuthToken) -> float | None:
     if tokens.expires_in is None:
         return None
     return time.time() + tokens.expires_in - TOKEN_EXPIRY_BUFFER_SECONDS
-
-
-def refresh_mcp_oauth_token_if_expired(
-    mcp_server: MCPServer | MCPServerConnection,
-    connection_config_id: int,
-) -> str | None:
-    """Refresh an MCP OAuth token, single-flighted per connection config.
-
-    On contention the loser waits out the in-flight refresh (the wait outlasts a
-    refresh POST) and returns the winner's freshly persisted header. Only if the
-    lock still can't be acquired *and* the stored token is expired does it return
-    None; the caller then falls back to its existing header.
-    """
-    lock_name = _refresh_lock_name(connection_config_id)
-    try:
-        with cache_shared_lock(
-            lock_name,
-            max_time_lock_held_s=_REFRESH_LOCK_LEASE_S,
-            wait_for_lock_s=_REFRESH_LOCK_WAIT_S,
-            logger=logger,
-        ):
-            provider = make_oauth_provider(
-                mcp_server,
-                connection_config_id,
-                None,
-            )
-            tokens = run_async_sync_no_cancel(
-                provider.refresh_access_token_if_expired()
-            )
-            if tokens is None:
-                return None
-            return f"{tokens.token_type} {tokens.access_token}"
-    except MCPRefreshSuperseded:
-        logger.info("mcp_token_refresh.superseded config_id=%s", connection_config_id)
-        return _persisted_auth_header(connection_config_id)
-    except CacheLockAcquisitionError:
-        # Couldn't acquire within the wait; return whatever the winner persisted
-        # (None if it hasn't finished and the stored token is still expired).
-        logger.info(
-            "mcp_token_refresh.lock_contended config_id=%s", connection_config_id
-        )
-        return _persisted_auth_header(connection_config_id)
-
-
-def _persisted_auth_header(connection_config_id: int) -> str | None:
-    """The stored ``Authorization`` header when the persisted token is still
-    fresh, else None — used as the fallback when a concurrent refresh wins."""
-    with get_session_with_current_tenant() as db:
-        config_data = extract_connection_data(
-            get_connection_config_by_id(connection_config_id, db)
-        )
-    if mcp_token_expired(config_data):
-        return None
-    return (config_data.get("headers") or {}).get("Authorization")
 
 
 def _known_provider_oauth_metadata(

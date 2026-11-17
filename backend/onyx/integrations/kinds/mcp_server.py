@@ -16,10 +16,16 @@ from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.call_credentials import mcp_oauth_server
 from onyx.integrations.kinds.base import IntegrationKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
-from onyx.integrations.models import MatchedIntegrationAction, McpServerConfig
-from onyx.sandbox_proxy.mcp_jsonrpc import classify_mcp_request
+from onyx.integrations.models import (
+    MatchedIntegrationAction,
+    McpServerConfig,
+    RequestMatch,
+)
+from onyx.sandbox_proxy.mcp_jsonrpc import (
+    MCP_UNCLASSIFIABLE_ACTION_TYPE,
+    classify_mcp_request,
+)
 from onyx.sandbox_proxy.models import McpRpcKind
-from onyx.sandbox_proxy.request_evaluator import MCP_UNCLASSIFIABLE_ACTION_TYPE
 from onyx.sandbox_proxy.resolvers.mcp_matching import match_request, parse_target
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
@@ -38,17 +44,20 @@ def mcp_action_default_policy(read_only: bool | None) -> IntegrationActionPolicy
 
 
 def _blocked_unclassifiable(
-    integration_id: int, description: str
-) -> list[MatchedIntegrationAction]:
-    return [
-        MatchedIntegrationAction(
-            integration_id=integration_id,
-            action_key=MCP_UNCLASSIFIABLE_ACTION_TYPE,
-            display_name="Unrecognized MCP request",
-            description=description,
-            default_policy=IntegrationActionPolicyValue.BLOCKED,
-        )
-    ]
+    integration_id: int, description: str, path_prefix_length: int
+) -> RequestMatch:
+    return RequestMatch(
+        actions=[
+            MatchedIntegrationAction(
+                integration_id=integration_id,
+                action_key=MCP_UNCLASSIFIABLE_ACTION_TYPE,
+                display_name="Unrecognized MCP request",
+                description=description,
+                default_policy=IntegrationActionPolicyValue.BLOCKED,
+            )
+        ],
+        path_prefix_length=path_prefix_length,
+    )
 
 
 class McpServerKindHandler(IntegrationKindHandler):
@@ -112,10 +121,10 @@ class McpServerKindHandler(IntegrationKindHandler):
         integration: Integration,
         request: ProxiedRequest,
         db_session: Session,
-    ) -> list[MatchedIntegrationAction] | None:
-        """Same rules as the sandbox proxy (``McpRequestEvaluator``): the host
-        and the path prefix of the server URL attribute the request, and the
-        JSON-RPC body gives the tools."""
+    ) -> RequestMatch | None:
+        """The host and the path prefix of the server URL attribute the
+        request, and the JSON-RPC body gives the tools. The caller picks the
+        longest prefix when servers share a host."""
         if request.url is None:
             return None
         server = self._server(integration, db_session)
@@ -133,22 +142,24 @@ class McpServerKindHandler(IntegrationKindHandler):
         )
         if match_request((target,), proxied) is None:
             return None
+        prefix_length = len(target.path_prefix)
 
         try:
             classification = classify_mcp_request(proxied)
         except Exception:
             logger.exception("mcp_match_error integration=%s; denying", integration.id)
             return _blocked_unclassifiable(
-                integration.id, "MCP gating failed; blocked."
+                integration.id, "MCP gating failed; blocked.", prefix_length
             )
         if classification.kind is McpRpcKind.PLUMBING:
-            return []
+            return RequestMatch(actions=[], path_prefix_length=prefix_length)
         if classification.kind is McpRpcKind.UNCLASSIFIABLE:
             path = (proxied.path or "").split("?", 1)[0]
             return _blocked_unclassifiable(
                 integration.id,
                 f"{request.method} {path} could not be parsed "
                 "as an MCP tool call or protocol message; blocked.",
+                prefix_length,
             )
 
         defaults = {
@@ -157,7 +168,7 @@ class McpServerKindHandler(IntegrationKindHandler):
             for action in list_integration_actions(integration.id, db_session)
         }
         counts: Counter[str] = Counter(classification.tool_names)
-        return [
+        actions = [
             MatchedIntegrationAction(
                 integration_id=integration.id,
                 action_key=tool_name,
@@ -172,3 +183,4 @@ class McpServerKindHandler(IntegrationKindHandler):
             )
             for tool_name, count in counts.items()
         ]
+        return RequestMatch(actions=actions, path_prefix_length=prefix_length)

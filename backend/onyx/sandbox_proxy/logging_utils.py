@@ -81,7 +81,7 @@ def _egress_action_args(
     return (
         matched_actions.app_name,
         matched_actions.target.kind.value,
-        matched_actions.target.id,
+        matched_actions.target.integration_id,
         matched_actions.governing_action.action_type,
         _policy_label(policy),
     )
@@ -153,7 +153,7 @@ def approval_decided_args(
         short_log_id(approval_id),
         matched_actions.app_name,
         matched_actions.target.kind.value,
-        matched_actions.target.id,
+        matched_actions.target.integration_id,
         matched_actions.governing_action.action_type,
         decision,
         wake,

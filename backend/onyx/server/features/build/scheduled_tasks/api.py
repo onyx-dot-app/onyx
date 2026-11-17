@@ -24,10 +24,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as celery_app
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
-from onyx.db.action_policy import (
-    get_task_action_policies,
-    list_action_policies,
-)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     Permission,
@@ -35,6 +31,7 @@ from onyx.db.enums import (
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
+from onyx.db.integration_policy import list_task_plugin_links
 from onyx.db.models import ScheduledTask, ScheduledTaskRun, User
 from onyx.db.scheduled_task import (
     create_scheduled_task,
@@ -49,7 +46,8 @@ from onyx.db.scheduled_task import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.models import AppActionPoliciesView, TaskAppActionPolicies
+from onyx.integrations.craft import TaskPluginView, list_task_plugin_views
+from onyx.integrations.policy import parse_action_settings
 from onyx.server.features.build.scheduled_tasks.schedule import (
     EDITOR_PAYLOAD_MODELS,
     EditorMode,
@@ -59,6 +57,7 @@ from onyx.server.features.build.scheduled_tasks.schedule import (
     next_n_fires,
 )
 from onyx.server.features.build.timeouts import QUEUE_RESIDENCY_SECONDS
+from onyx.tools.models import PluginLinkConfiguration
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -130,7 +129,7 @@ class ScheduledTaskCreate(_Forbid):
     editor_payload: EditorPayload
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
     run_immediately: bool = False
-    action_policies: list[TaskAppActionPolicies] | None = None
+    plugins: list[PluginLinkConfiguration] | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -147,7 +146,7 @@ class ScheduledTaskPatch(_Forbid):
     editor_mode: EditorMode | None = None
     editor_payload: EditorPayload | None = None
     status: ScheduledTaskStatus | None = None
-    action_policies: list[TaskAppActionPolicies] | None = None
+    plugins: list[PluginLinkConfiguration] | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -223,7 +222,7 @@ class ScheduledTaskDetail(BaseModel):
     next_run_at: datetime | None
     next_runs: list[datetime]
     last_run: RunSummary | None
-    action_policies: list[TaskAppActionPolicies]
+    plugins: list[PluginLinkConfiguration]
     created_at: datetime
     updated_at: datetime
 
@@ -325,7 +324,13 @@ def _detail(
         next_run_at=task.next_run_at,
         next_runs=next_runs,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
-        action_policies=get_task_action_policies(db_session, task.id),
+        plugins=[
+            PluginLinkConfiguration(
+                plugin_id=link.plugin_id,
+                action_settings=parse_action_settings(link.action_settings),
+            )
+            for link in list_task_plugin_links(db_session, task.id)
+        ],
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
@@ -424,7 +429,7 @@ def create_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        action_policies=request.action_policies,
+        plugins=request.plugins,
     )
 
     if request.run_immediately:
@@ -485,7 +490,7 @@ def patch_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        action_policies=request.action_policies,
+        plugins=request.plugins,
     )
     db_session.commit()
     db_session.refresh(task)
@@ -620,6 +625,8 @@ def list_task_action_policies(
     task_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> list[AppActionPoliciesView]:
+) -> list[TaskPluginView]:
+    """The plugins the task can use, each marked when the task uses it, with
+    the setting and the effective policy of each action."""
     get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user.id)
-    return list_action_policies(db_session, user, task_id=task_id)
+    return list_task_plugin_views(db_session, user, task_id)

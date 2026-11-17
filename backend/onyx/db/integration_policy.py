@@ -1,7 +1,7 @@
 from collections.abc import Collection
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecidedVia, IntegrationActionPolicyValue
@@ -11,7 +11,9 @@ from onyx.db.models import (
     Integration,
     IntegrationActionPolicy,
     Persona__Plugin,
+    Plugin,
     Plugin__Integration,
+    ScheduledTask__Plugin,
 )
 from onyx.integrations.models import PolicyRows
 
@@ -87,4 +89,46 @@ def get_chat_session_persona_id(
 ) -> int | None:
     return db_session.scalar(
         select(ChatSession.persona_id).where(ChatSession.id == chat_session_id)
+    )
+
+
+def list_task_plugin_links(
+    db_session: Session, task_id: UUID
+) -> list[ScheduledTask__Plugin]:
+    return list(
+        db_session.scalars(
+            select(ScheduledTask__Plugin)
+            .where(ScheduledTask__Plugin.scheduled_task_id == task_id)
+            .order_by(ScheduledTask__Plugin.plugin_id)
+        ).all()
+    )
+
+
+def replace_task_plugin_links__no_commit(
+    db_session: Session, task_id: UUID, links: dict[UUID, dict[str, object]]
+) -> None:
+    """Replace the plugins of a task, each with its raw ``action_settings``."""
+    db_session.execute(
+        delete(ScheduledTask__Plugin).where(
+            ScheduledTask__Plugin.scheduled_task_id == task_id
+        )
+    )
+    db_session.add_all(
+        ScheduledTask__Plugin(
+            scheduled_task_id=task_id, plugin_id=plugin_id, action_settings=settings
+        )
+        for plugin_id, settings in links.items()
+    )
+    db_session.flush()
+
+
+def get_plugin_names(
+    db_session: Session, plugin_ids: Collection[UUID]
+) -> dict[UUID, str]:
+    if not plugin_ids:
+        return {}
+    return dict(
+        db_session.execute(
+            select(Plugin.id, Plugin.name).where(Plugin.id.in_(plugin_ids))
+        ).tuples()
     )

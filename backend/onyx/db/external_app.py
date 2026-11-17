@@ -15,13 +15,11 @@ from onyx.db.enums import (
     GatedAppKind,
     SkillSharePermission,
 )
-from onyx.db.external_app_readiness import is_user_authenticated_for_app
 from onyx.db.models import (
     ExternalApp,
     ExternalAppUserCredential,
     Integration,
     Skill,
-    User,
 )
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -95,23 +93,6 @@ def get_external_app_by_id(
     return db_session.scalar(
         select(ExternalApp).where(ExternalApp.id == external_app_id)
     )
-
-
-def get_connectable_apps_for_user(
-    db_session: Session,
-    user: User,
-) -> list[ExternalApp]:
-    """Enabled organization apps that still require credentials from ``user``.
-
-    Enabled apps are organization-visible independently of whether they have an
-    associated skill. Org-credentialed apps (no user-required keys) are usable by
-    everyone, so there's nothing to set up."""
-    user_creds_by_app = get_user_credentials_by_app_id(db_session, user.id)
-    return [
-        app
-        for app in get_external_apps(db_session, enabled_only=True)
-        if not is_user_authenticated_for_app(app, user_creds_by_app.get(app.id))
-    ]
 
 
 def get_external_apps(

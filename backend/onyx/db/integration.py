@@ -86,6 +86,18 @@ def get_external_app_for_integration(
     )
 
 
+def list_enabled_mcp_server_urls(db_session: Session) -> list[tuple[int, str]]:
+    """``(integration_id, server_url)`` of each enabled MCP integration."""
+    return list(
+        db_session.execute(
+            select(Integration.id, MCPServer.server_url)
+            .join(MCPServer, MCPServer.integration_id == Integration.id)
+            .where(Integration.enabled.is_(True))
+            .order_by(Integration.id)
+        ).tuples()
+    )
+
+
 def get_openapi_tool_for_integration(
     integration_id: int, db_session: Session
 ) -> Tool | None:

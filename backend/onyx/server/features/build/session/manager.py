@@ -32,7 +32,6 @@ from onyx.db.enums import (
     SandboxStatus,
     SessionOrigin,
 )
-from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.llm import (
     fetch_all_accessible_llm_providers,
     fetch_default_model,
@@ -42,6 +41,7 @@ from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.integrations.craft import list_connectable_apps
 from onyx.server.features.build.configs import (
     MAX_TOTAL_UPLOAD_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_SESSION,
@@ -377,7 +377,7 @@ class SessionManager:
             agent_model=llm_config.model_name,
             nextjs_port=session.nextjs_port,
             connectable_apps_section=build_connectable_apps_list(
-                get_connectable_apps_for_user(self._db_session, user)
+                list_connectable_apps(self._db_session, user)
             ),
             user_name=user.personal_name,
             llm_config=llm_config,
@@ -503,7 +503,7 @@ class SessionManager:
                         agent_model=session.agent_model,
                         nextjs_port=session.nextjs_port,
                         connectable_apps_section=build_connectable_apps_list(
-                            get_connectable_apps_for_user(self._db_session, user)
+                            list_connectable_apps(self._db_session, user)
                         ),
                         user_name=user.personal_name,
                         llm_config=llm_config,
@@ -777,7 +777,7 @@ class SessionManager:
         session_id = session.id
         try:
             connectable_apps_section = build_connectable_apps_list(
-                get_connectable_apps_for_user(self._db_session, user)
+                list_connectable_apps(self._db_session, user)
             )
             mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
             nextjs_port = session.nextjs_port

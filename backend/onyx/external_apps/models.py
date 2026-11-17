@@ -59,10 +59,6 @@ class AppActionPolicies(BaseModel):
     action_policies: dict[str, ActionPolicy]
 
 
-class TaskAppActionPolicies(AppActionPolicies):
-    enabled: bool
-
-
 class ActionPolicySettingView(BaseModel):
     """One editor row: the current result, workspace rule, and saved owner choice."""
 
@@ -77,7 +73,6 @@ class ActionPolicySettingView(BaseModel):
 
 
 class AppActionPoliciesView(BaseModel):
-    enabled: bool | None = None
     app_type: ExternalAppType | None = None
     gated_app_id: int
     kind: Literal["external_app", "mcp_server"]

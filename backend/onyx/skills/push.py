@@ -13,7 +13,6 @@ from onyx.configs.constants import (
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
-from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
     RuntimeSkill,
@@ -23,6 +22,7 @@ from onyx.db.skill import (
     persist_skill_validity,
 )
 from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.integrations.craft import list_connectable_apps
 from onyx.server.features.build.configs import ENABLE_CRAFT
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
@@ -400,7 +400,7 @@ def build_user_skills_payload(user: User, db_session: Session) -> UserSkillsPayl
             break
         invalid |= assembled.found_invalid
     connectable_apps_section = build_connectable_apps_list(
-        get_connectable_apps_for_user(db_session, user)
+        list_connectable_apps(db_session, user)
     )
     return UserSkillsPayload(
         connectable_apps_section=connectable_apps_section,
