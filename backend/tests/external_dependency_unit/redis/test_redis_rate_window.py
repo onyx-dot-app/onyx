@@ -24,7 +24,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.redis import redis_rate_window
 from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_rate_window import CutResult, RateWindow, RedisRateWindows
+from onyx.redis.redis_rate_window import RateWindow, RedisRateWindows, RefusalResult
 from onyx.server.metrics import source_api_metrics
 
 _API = "drive"
@@ -109,35 +109,148 @@ def test_one_request_larger_than_the_limit_fits_an_empty_window(
     assert windows.try_acquire([window], cost=1) > 0
 
 
-def test_a_cut_halves_the_window_once_for_each_burst_and_grows_back(
-    windows: RedisRateWindows, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(redis_rate_window, "CUT_HOLD_SECONDS", 0.3)
-    monkeypatch.setattr(redis_rate_window, "GROW_INTERVAL_SECONDS", 0.1)
-    monkeypatch.setattr(redis_rate_window, "GROW_STEP", 0.25)
-    window = RateWindow(key="w", limit=100, period_seconds=0.2)
+def _send(windows: RedisRateWindows, window: RateWindow, requests: int) -> None:
+    """Counts ``requests`` requests that took no units."""
+    assert (
+        windows.try_acquire_with_shares(
+            [window], cost=0, requests=requests
+        ).wait_seconds
+        == 0
+    )
 
-    assert windows.cut(window) == CutResult(share=0.5, applied=True)
-    # More pushback in the same burst does not cut again.
-    assert windows.cut(window) == CutResult(share=0.5, applied=False)
-    assert windows.try_acquire([window], cost=50) == 0
+
+def test_one_refusal_among_many_requests_does_not_cut(
+    windows: RedisRateWindows,
+) -> None:
+    window = RateWindow(key="w", limit=100, period_seconds=10)
+    _send(windows, window, 1000)
+
+    result = windows.report_refusals(window)
+
+    assert result == RefusalResult(
+        share=1.0, applied=False, hard=False, refused_share=0.001
+    )
+    assert windows.try_acquire([window], cost=100) == 0
+
+
+def test_a_few_refusals_with_no_requests_do_not_cut(
+    windows: RedisRateWindows,
+) -> None:
+    """A share of 100 % needs the minimum count too."""
+    window = RateWindow(key="w", limit=100, period_seconds=10)
+    for _ in range(redis_rate_window.MIN_REFUSALS_TO_CUT - 1):
+        assert not windows.report_refusals(window).applied
+
+
+def test_a_refused_share_over_the_threshold_cuts_gently(
+    windows: RedisRateWindows,
+) -> None:
+    window = RateWindow(key="w", limit=100, period_seconds=10)
+    _send(windows, window, 500)
+
+    # 15 of 500 is 3 %: over the threshold, under a storm.
+    result = windows.report_refusals(window, count=15)
+
+    assert result == RefusalResult(
+        share=0.8, applied=True, hard=False, refused_share=0.03
+    )
+    assert windows.try_acquire([window], cost=80) == 0
     assert windows.try_acquire([window], cost=1) > 0
 
-    # After the hold, the share grows by one step for each interval.
-    time.sleep(0.45)
-    assert windows.try_acquire([window], cost=75) == 0
+
+def test_a_storm_cuts_to_the_accepted_share(windows: RedisRateWindows) -> None:
+    window = RateWindow(key="w", limit=100, period_seconds=10)
+    _send(windows, window, 100)
+
+    # Google refused 70 of 100: the window keeps the 30 % that it accepted.
+    result = windows.report_refusals(window, count=70)
+
+    assert result == RefusalResult(
+        share=0.3, applied=True, hard=True, refused_share=0.7
+    )
+
+
+def test_a_storm_cuts_at_least_by_half(windows: RedisRateWindows) -> None:
+    window = RateWindow(key="w", limit=100, period_seconds=10)
+    _send(windows, window, 100)
+    result = windows.report_refusals(window, count=20)
+    assert (result.share, result.hard) == (0.5, True)
+
+
+def test_no_second_cut_in_the_hold(windows: RedisRateWindows) -> None:
+    window = RateWindow(key="w", limit=100, period_seconds=10)
+    _send(windows, window, 500)
+    assert windows.report_refusals(window, count=15).applied
+
+    # The same burst goes on, at a share under a storm.
+    _send(windows, window, 500)
+    result = windows.report_refusals(window, count=15)
+
+    assert (result.share, result.applied) == (0.8, False)
+
+
+def test_a_storm_cuts_again_in_the_hold_after_the_recut_time(
+    windows: RedisRateWindows, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(redis_rate_window, "STORM_RECUT_SECONDS", 0.2)
+    window = RateWindow(key="w", limit=100, period_seconds=10)
+    _send(windows, window, 100)
+    assert windows.report_refusals(window, count=50).share == 0.5
+
+    # Too soon: the window has not seen the lower rate yet.
+    _send(windows, window, 100)
+    assert not windows.report_refusals(window, count=50).applied
+
     time.sleep(0.25)
-    assert windows.try_acquire([window], cost=100) == 0
-    assert windows.cut(window).share == 0.5
+    _send(windows, window, 100)
+    result = windows.report_refusals(window, count=50)
+    assert (result.share, result.applied, result.hard) == (0.25, True, True)
 
 
 def test_a_cut_stops_at_the_lowest_share(
     windows: RedisRateWindows, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(redis_rate_window, "CUT_HOLD_SECONDS", 0.0)
+    monkeypatch.setattr(redis_rate_window, "STORM_RECUT_SECONDS", 0.0)
     window = RateWindow(key="w", limit=100, period_seconds=10)
-    shares = [windows.cut(window).share for _ in range(6)]
-    assert shares == [0.5, 0.25, 0.125, 0.1, 0.1, 0.1]
+    shares = []
+    for _ in range(3):
+        _send(windows, window, 10)
+        shares.append(windows.report_refusals(window, count=10).share)
+    assert shares == [0.1, 0.1, 0.1]
+
+
+def test_the_share_grows_back_and_slowly_near_the_last_cut(
+    windows: RedisRateWindows, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(redis_rate_window, "CUT_HOLD_SECONDS", 0.3)
+    monkeypatch.setattr(redis_rate_window, "GROW_INTERVAL_SECONDS", 0.1)
+    monkeypatch.setattr(redis_rate_window, "GROW_STEP", 0.1)
+    monkeypatch.setattr(redis_rate_window, "SLOW_GROW_STEP", 0.05)
+    monkeypatch.setattr(redis_rate_window, "SLOW_ZONE", 0.75)
+    window = RateWindow(key="w", limit=100, period_seconds=0.05)
+    _send(windows, window, 20)
+    # A storm cuts from 100 % to 50 %.
+    assert windows.report_refusals(window, count=10).share == 0.5
+
+    def share_after_one_interval() -> float:
+        time.sleep(0.12)
+        return windows.try_acquire_with_shares([window], cost=1).shares[0]
+
+    # No growth in the hold.
+    assert windows.try_acquire_with_shares([window], cost=1).shares[0] == 0.5
+    time.sleep(0.3)
+    grown = [share_after_one_interval() for _ in range(7)]
+    # Fast steps up to 75 % of the share before the cut, then slow steps.
+    assert grown == [0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0]
+
+
+def test_a_cut_resets_the_refused_share(windows: RedisRateWindows) -> None:
+    window = RateWindow(key="w", limit=100, period_seconds=10)
+    _send(windows, window, 500)
+    assert windows.report_refusals(window, count=15).applied
+    # The refusals before the cut do not count after it.
+    _send(windows, window, 1000)
+    assert windows.report_refusals(window).refused_share == 0.001
 
 
 def test_two_processes_share_one_budget(tenant_id: str) -> None:
@@ -176,9 +289,10 @@ def test_concurrent_workers_never_exceed_the_budget(tenant_id: str) -> None:
 
 def test_a_user_cut_does_not_slow_another_user(tenant_id: str) -> None:
     limiter = _limiter(tenant_id, per_credential=10_000, per_user=1000)
+    _send_requests(limiter, "a@x.com", 100)
 
-    # Google answered 403 userRateLimitExceeded for user A.
-    limiter.report_rate_limit(_API, "a@x.com", user_scope=True)
+    # Google answered 403 userRateLimitExceeded to half of user A's requests.
+    limiter.report_rate_limit(_API, "a@x.com", user_scope=True, count=50)
 
     assert limiter.try_acquire(_API, 500, "a@x.com") == 0
     assert limiter.try_acquire(_API, 100, "a@x.com") > 0
@@ -187,12 +301,28 @@ def test_a_user_cut_does_not_slow_another_user(tenant_id: str) -> None:
 
 def test_a_project_cut_slows_every_user(tenant_id: str) -> None:
     limiter = _limiter(tenant_id, per_credential=1000, per_user=1000)
+    _send_requests(limiter, "a@x.com", 100)
 
-    limiter.report_rate_limit(_API, "a@x.com", user_scope=False)
+    limiter.report_rate_limit(_API, "a@x.com", user_scope=False, count=50)
 
     assert limiter.try_acquire(_API, 300, "a@x.com") == 0
     assert limiter.try_acquire(_API, 200, "b@x.com") == 0
     assert limiter.try_acquire(_API, 100, "c@x.com") > 0
+
+
+def _send_requests(limiter: RedisSourceApiLimiter, user: str, count: int) -> None:
+    """Counts ``count`` requests that took no units."""
+    assert limiter.try_acquire(_API, 0, user, request_count=count) == 0
+
+
+def test_a_user_refusal_does_not_count_for_the_project(tenant_id: str) -> None:
+    limiter = _limiter(tenant_id, per_credential=1000, per_user=1000)
+    _send_requests(limiter, "a@x.com", 100)
+    limiter.report_rate_limit(_API, "a@x.com", user_scope=True, count=50)
+
+    # The project's refused share is still 0: one more refusal does not cut.
+    limiter.report_rate_limit(_API, "a@x.com", user_scope=False, count=1)
+    assert limiter.try_acquire(_API, 1000, "b@x.com") == 0
 
 
 def test_the_requests_model_counts_each_call_as_one(tenant_id: str) -> None:
@@ -261,6 +391,7 @@ def test_the_factory_builds_the_drive_limiter_and_wires_the_stop_signal(
     it: off by default, on for Google Drive only, with the budgets from the
     configuration and the caller's stop signal."""
     credential_id = int(uuid4().int % 1_000_000_000)
+    monkeypatch.setattr(source_api_limiter, "ENABLE_SOURCE_API_LIMITER", False)
     assert (
         source_api_limiter.build_source_api_limiter(
             DocumentSource.GOOGLE_DRIVE, credential_id
@@ -273,7 +404,9 @@ def test_the_factory_builds_the_drive_limiter_and_wires_the_stop_signal(
         source_api_limiter.GOOGLE_DRIVE_BUDGETS,
         "drive",
         source_api_limiter.GOOGLE_DRIVE_BUDGETS["drive"].model_copy(
-            update={"per_credential": 300}
+            # 1800 units a minute is 300 in each 10 s window. Units, whatever
+            # quota model the environment sets.
+            update={"per_credential": 1800, "count_requests": False}
         ),
     )
     assert source_api_limiter.build_source_api_limiter(DocumentSource.SLACK, 1) is None
@@ -283,7 +416,7 @@ def test_the_factory_builds_the_drive_limiter_and_wires_the_stop_signal(
     )
     assert isinstance(limiter, RedisSourceApiLimiter)
     try:
-        # Three list pages fill the project budget of 300 units.
+        # Three list pages fill the project window of 300 units.
         for _ in range(3):
             limiter.acquire("drive", 100, "a@x.com")
         assert limiter.try_acquire("drive", 100, "b@x.com") > 0
@@ -317,7 +450,9 @@ def test_an_unreachable_redis_logs_one_warning_and_does_not_limit(
 
     with caplog.at_level("WARNING"):
         assert [down.try_acquire([window]) for _ in range(5)] == [0] * 5
-        assert down.cut(window) == CutResult(share=1.0, applied=False)
+        assert down.report_refusals(window) == RefusalResult(
+            share=1.0, applied=False, hard=False, refused_share=0.0
+        )
 
     warnings = [r for r in caplog.records if "cannot reach Redis" in r.getMessage()]
     assert len(warnings) == 1
@@ -329,6 +464,7 @@ def test_the_limiter_metrics_show_a_cut_and_the_recovery(
     monkeypatch.setattr(redis_rate_window, "CUT_HOLD_SECONDS", 0.3)
     monkeypatch.setattr(redis_rate_window, "GROW_INTERVAL_SECONDS", 0.1)
     monkeypatch.setattr(redis_rate_window, "GROW_STEP", 0.25)
+    monkeypatch.setattr(redis_rate_window, "SLOW_ZONE", 1.0)
     # Only this test's users count toward the user gauges.
     monkeypatch.setattr(
         source_api_metrics, "_user_budgets", source_api_metrics._UserBudgets()
@@ -358,10 +494,12 @@ def test_the_limiter_metrics_show_a_cut_and_the_recovery(
     assert limiter.try_acquire(_API, 1, "a@x.com") == 0
     assert (budget("project"), budget("user")) == (1000, 100)
 
-    limiter.report_rate_limit(_API, "a@x.com", user_scope=False)
+    # A storm: half of 20 requests refused.
+    assert limiter.try_acquire(_API, 0, "a@x.com", request_count=19) == 0
+    limiter.report_rate_limit(_API, "a@x.com", user_scope=False, count=10)
     # More pushback in the same hold does not cut again.
-    limiter.report_rate_limit(_API, "a@x.com", user_scope=False)
-    limiter.report_rate_limit(_API, "a@x.com", user_scope=True)
+    limiter.report_rate_limit(_API, "a@x.com", user_scope=False, count=10)
+    limiter.report_rate_limit(_API, "a@x.com", user_scope=True, count=10)
     assert (budget("project"), budget("user")) == (500, 50)
     assert cuts("project") == project_cuts + 1
     assert cuts("user") == user_cuts + 1
