@@ -31,6 +31,22 @@ def get_slack_channel_config_for_bot_and_channel(
     return slack_bot_config
 
 
+def clean_respond_member_group_list(
+    respond_member_group_list: list[str] | None,
+) -> list[str]:
+    """Drop blank entries from a `respond_member_group_list`.
+
+    The admin UI submits a single empty string when the members field is left
+    blank, which is indistinguishable in intent from "no allowlist". Keeping the
+    blank entry would enforce an allowlist that resolves to nobody, silencing
+    OnyxBot for every sender in the channel.
+    """
+    if not respond_member_group_list:
+        return []
+
+    return [entry.strip() for entry in respond_member_group_list if entry.strip()]
+
+
 def validate_channel_name(
     db_session: Session,
     current_slack_bot_id: int,
