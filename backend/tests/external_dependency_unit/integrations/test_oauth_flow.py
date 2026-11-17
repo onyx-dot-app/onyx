@@ -16,6 +16,7 @@ from pydantic import AnyHttpUrl
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     ExternalAppType,
     IntegrationAuthMethod,
@@ -168,6 +169,52 @@ def test_settings_change_during_sign_in_is_refused(
         complete_integration_oauth("code", state, user, db_session)
     assert "sign-in settings changed" in error.value.detail
     assert manual_token_post.call_count == 0
+    assert get_connection(db_session, integration.id, user.id) is None
+
+
+def _change_client_id(integration_id: int) -> None:
+    with get_session_with_current_tenant() as other_session:
+        oauth_client = get_oauth_client(other_session, integration_id)
+        assert oauth_client is not None
+        oauth_client.client_id = "other-client"  # ty: ignore[invalid-assignment]
+        other_session.commit()
+
+
+@pytest.mark.parametrize("preset", [False, True], ids=["manual", "preset"])
+def test_settings_change_during_the_token_exchange_is_refused(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+    preset: bool,
+) -> None:
+    integration = (
+        make_integration(
+            auth_mode=IntegrationAuthMode.INDIVIDUAL,
+            auth_method=IntegrationAuthMethod.OAUTH2,
+            provider_mode=IntegrationOAuthProviderMode.PRESET,
+            client_id="linear-client",
+            client_secret="linear-secret",
+            app_type=ExternalAppType.LINEAR,
+        )
+        if preset
+        else _manual(make_integration, IntegrationAuthMode.INDIVIDUAL)
+    )
+    user = make_test_user("oauth_changed_during_exchange")
+    state = _query(start_integration_oauth(integration, user, db_session))["state"]
+
+    def post(*_: object, **__: object) -> MagicMock:
+        _change_client_id(integration.id)
+        return token_response({"access_token": "old-grant", "token_type": "Bearer"})
+
+    with (
+        patch.object(requests, "post", post),
+        patch("onyx.auth.oauth_token_manager.validate_oauth_endpoint_url"),
+        pytest.raises(OnyxError) as error,
+    ):
+        complete_integration_oauth("code", state, user, db_session)
+
+    assert "sign-in settings changed" in error.value.detail
+    db_session.rollback()
     assert get_connection(db_session, integration.id, user.id) is None
 
 
