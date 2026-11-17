@@ -190,6 +190,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         result of each observation Stop interrupted, and one
                                         with a CellClosing for each cell whose last saved
                                         observation is running
+  chat/agent.py:_prepare_step (a run's first step) -> CodeCells.reopen
+                                        empty cells for the next run of the same agent (a
+                                        message or results to an idle child) after finish
   chat/agent.py:_suspended_cells (Agent.on_suspend) -> CodeCells.suspend
                                         the same when the run suspends, with
                                         reason="suspended"; later calls can start cells. A

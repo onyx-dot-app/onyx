@@ -337,7 +337,7 @@ def with_code_mode(tools: list[Tool]) -> tuple[list[Tool], CodeCells | None]:
     """Offer each tool as its `code_mode_exposure` declares: DIRECT tools stay
     direct, the others become Python functions inside `execute_code`.
 
-    `execute_code` and `wait_code` share the returned cells of one response; None
+    `execute_code` and `wait_code` share the returned cells of each run; None
     when no tool is a function. Raises ValueError for a tool that waits for child
     runs but is not DIRECT, since a program cannot wait for them.
     """

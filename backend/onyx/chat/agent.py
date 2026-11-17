@@ -146,7 +146,8 @@ class ChatAgent(Agent, RestorableFeature):
             self.configured_tools, llm.config.max_input_tokens
         )
         self.code_mode = code_mode
-        # Each agent instance has its own cells, so a restored run has none open.
+        # Each agent instance has its own cells, so a restored run has none open;
+        # a later run of this instance reopens them at its first step.
         self.application_tools, self.code_cells = (
             with_code_mode(self.configured_tools)
             if code_mode
@@ -332,6 +333,8 @@ class ChatAgent(Agent, RestorableFeature):
     def _prepare_step(self, state: StepInput) -> PreparedStep:
         previous = state.previous
         if previous is None:
+            if self.code_cells is not None:
+                self.code_cells.reopen()
             self.search_context = SearchContext()
             self.started = time.monotonic()
             self.gathered_documents = list(self.initial_citations.values())
