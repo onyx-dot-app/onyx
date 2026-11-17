@@ -1411,7 +1411,7 @@ def reload_craft_sessions(user_ids: set[UUID], db_session: Session) -> None:
     from onyx.server.features.build.session.sandbox_lifecycle import (
         refresh_mcp_config_hashes_for_users,
     )
-    from onyx.skills.push import push_skills_for_users
+    from onyx.skills.push import push_skills_and_commit
 
     refresh_mcp_config_hashes_for_users(user_ids, db_session)
-    push_skills_for_users(user_ids, db_session)
+    push_skills_and_commit(user_ids, db_session)
