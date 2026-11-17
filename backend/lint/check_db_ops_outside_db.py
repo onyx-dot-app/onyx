@@ -18,9 +18,9 @@ lines that hold an operation. The check fails when a count rises above the basel
 below it, so the baseline can only go down.
 
 Usage, from the repo root:
-    python3 backend/scripts/check_db_ops_outside_db.py            # check all files
-    python3 backend/scripts/check_db_ops_outside_db.py <path> ... # check these files
-    python3 backend/scripts/check_db_ops_outside_db.py --write-baseline
+    python3 backend/lint/check_db_ops_outside_db.py            # check all files
+    python3 backend/lint/check_db_ops_outside_db.py <path> ... # check these files
+    python3 backend/lint/check_db_ops_outside_db.py --write-baseline
 """
 
 import argparse
@@ -39,7 +39,7 @@ _BASELINE_HEADER = """\
 # Database operations outside backend/onyx/db and backend/ee/onyx/db.
 # Each line is `<path> <count>`. The count for a file can only go down.
 # Move a query into the db directories, then regenerate:
-#   python3 backend/scripts/check_db_ops_outside_db.py --write-baseline
+#   python3 backend/lint/check_db_ops_outside_db.py --write-baseline
 """
 
 # Application code. Migrations, tests and operational scripts are out of scope.
@@ -412,7 +412,7 @@ def main(argv: list[str] | None = None) -> int:
     if stale:
         print(
             "Fewer database operations than the baseline records. Lower the baseline:\n"
-            "  python3 backend/scripts/check_db_ops_outside_db.py --write-baseline"
+            "  python3 backend/lint/check_db_ops_outside_db.py --write-baseline"
         )
         print("\n".join(f"  {entry}" for entry in stale))
     return 1 if risen or no_reason or stale else 0

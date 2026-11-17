@@ -6,7 +6,7 @@ count of each file against the baseline."""
 from pathlib import Path
 
 import pytest
-from scripts import check_db_ops_outside_db
+from lint import check_db_ops_outside_db
 
 _IMPORTS = """\
 import sqlalchemy as sa
