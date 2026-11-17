@@ -289,7 +289,10 @@ on `task_revoked`, by the same prefixes, because an expired task never reaches
   system-wide cloud task takes none. Add its module to the `autodiscover_tasks`
   list of the worker app that reads its queue, such as
   `background/celery/apps/primary.py`; a module missing there is never
-  registered, and its messages wait until they expire. Add a template with a
+  registered, and its messages wait until they expire. Add a `task` line and a
+  `beat` line, each with a reason, to `backend/lint/celery_task_allowlist.txt`;
+  pre-commit fails a task or beat entry that is not there. A run-once backfill
+  is not a periodic task. Add a template with a
   queue, a priority, `expires` and a `timedelta` schedule
   ([[#beat-interval-stretched]], [[#cloud-timedelta-schedule]]). Decide
   `skip_gated` and `work_gated`. Add it to `_VECTOR_DB_BEAT_TASK_NAMES` if it
