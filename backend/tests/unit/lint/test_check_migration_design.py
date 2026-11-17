@@ -184,8 +184,10 @@ def test_added_column_foreign_key_on_existing_table(tmp_path: Path) -> None:
         tmp_path, "new", "marker", 'op.create_table("index_attempt")\n' + add_column
     )
     assert list(check_migration_design.check_chain(tmp_path, "marker")) == []
-    clean = add_column.replace(
-        'ondelete="SET NULL"', 'ondelete="SET NULL", postgresql_not_valid=True'
-    ).replace("nullable=False", "nullable=True")
+    clean = (
+        'op.add_column("index_attempt", sa.Column("targeted_reindex_job_id", sa.Integer()))\n'
+        'op.create_foreign_key("fk", "index_attempt", "targeted_reindex_job", '
+        '["targeted_reindex_job_id"], ["id"], postgresql_not_valid=True)'
+    )
     _revision(tmp_path, "new", "marker", clean)
     assert list(check_migration_design.check_chain(tmp_path, "marker")) == []

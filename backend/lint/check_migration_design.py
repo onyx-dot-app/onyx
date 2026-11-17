@@ -21,7 +21,12 @@ _MARKERS = {
     _BACKEND / "alembic_tenants" / "versions": "af8d808d89dd",
 }
 _FIXES = {
-    "not-valid": "Use postgresql_not_valid=True and validate after commit. See 9d8f310ac672.",
+    "not-valid": (
+        "Use postgresql_not_valid=True. For a foreign key in add_column, add the "
+        "column without the foreign key, then use "
+        "op.create_foreign_key(..., postgresql_not_valid=True). "
+        "Commit, then validate. See 9d8f310ac672."
+    ),
     "deferrable": "Remove deferrable=True and initially=DEFERRED. Check the constraint immediately.",
     "not-null": "Set a server_default or add a nullable column, backfill it, then set NOT NULL.",
     "blocking-index": "Commit and build the index concurrently on an AUTOCOMMIT connection. See 9d8f310ac672.",
@@ -118,17 +123,8 @@ def _operation_rules(
     if name == "add_column" and _table(call, "table_name", 0) not in created:
         column = _argument(call, "column", 1)
         if isinstance(column, ast.Call):
-            inline_references = _argument(call, "inline_references")
             if any(
-                isinstance(arg, ast.Call)
-                and _call_name(arg) == "ForeignKey"
-                and (
-                    _literal(_argument(arg, "postgresql_not_valid")) is not True
-                    or (
-                        inline_references is not None
-                        and _literal(inline_references) is not False
-                    )
-                )
+                isinstance(arg, ast.Call) and _call_name(arg) == "ForeignKey"
                 for arg in column.args
             ):
                 yield "not-valid"
