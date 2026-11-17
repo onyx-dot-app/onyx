@@ -12,6 +12,7 @@ from onyx.connectors.google_drive.doc_conversion import MAX_RETRIEVER_EMAILS
 from onyx.connectors.google_drive.models import DriveBatchResult, DriveListingPayload
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveHttpError,
+    GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
 )
 from onyx.connectors.models import (
@@ -454,3 +455,73 @@ def test_a_shared_drive_file_skips_the_batch_permission_read() -> None:
     assert shared_reads[0].kwargs["user_email"] == "lister@example.com"
     by_id = {str(f["id"]): f for f in converted}
     assert by_id["file-a"]["permissions"] == _PERMISSIONS
+
+
+def test_a_listing_user_that_cannot_be_impersonated_sends_its_files_to_reindex() -> (
+    None
+):
+    """The batch read of one listing user fails on its credentials. Its files
+    go through reindex, and the other users' files still convert."""
+    connector = _make_connector()
+    ops = cast(MagicMock, connector.ops)
+
+    def batch_get_files(*, user_email: str, **_kwargs: object) -> DriveBatchResult:
+        if user_email == "gone@example.com":
+            raise GoogleDriveRefreshError("cannot impersonate")
+        return _permission_batch(
+            {"file-a": {"id": "file-a", "permissions": [_PERMISSIONS[0]]}}
+        )
+
+    ops.batch_get_files.side_effect = batch_get_files
+    gone = _target("file-b", [])
+    cast(DriveListingPayload, gone.listing_payload).retriever_email = "gone@example.com"
+
+    with (
+        patch(
+            f"{_CONN_MODULE}.convert_drive_item_to_document",
+            return_value=_doc("file-a"),
+        ) as convert,
+        patch.object(connector, "reindex", return_value=iter([])) as reindex,
+    ):
+        results = list(
+            connector.resolve_targets(
+                [_target("file-a", []), gone], include_permissions=True
+            )
+        )
+
+    assert [type(r) for r in results] == [Document]
+    assert convert.call_count == 1
+    (failures, _include_permissions), _ = reindex.call_args
+    assert [f.failed_document.document_id for f in failures] == [
+        "https://docs.google.com/document/d/file-b"
+    ]
+
+
+def test_a_permission_read_again_replaces_the_stored_one() -> None:
+    """The batch read gives p1 shared with discovery on, and only the id of
+    p2. permissions.list gives p1 with discovery now off. The link-only
+    filter uses the newer p1 and drops the file."""
+    connector = _make_connector()
+    connector.exclude_domain_link_only = True
+    ops = cast(MagicMock, connector.ops)
+    ops.batch_get_files.return_value = _permission_batch(
+        {
+            "file-a": {
+                "id": "file-a",
+                "permissions": [
+                    {"id": "p1", "type": "domain", "allowFileDiscovery": True}
+                ],
+                "permissionIds": ["p1", "p2"],
+            }
+        }
+    )
+    ops.list_file_permissions.return_value = [
+        {"id": "p1", "type": "domain", "allowFileDiscovery": False},
+        {"id": "p2", "type": "user"},
+    ]
+
+    with patch(f"{_CONN_MODULE}.convert_drive_item_to_document") as convert:
+        results = list(connector.resolve_targets([_target("file-a", [])]))
+
+    convert.assert_not_called()
+    assert results == []
