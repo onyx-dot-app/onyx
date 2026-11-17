@@ -10,7 +10,9 @@ import {
   InputTypeIn,
   Tooltip,
 } from "@opal/components";
-import PolicyToggle from "@/sections/actions/PolicyToggle";
+import PolicyToggle, {
+  usePolicyOptions,
+} from "@/sections/actions/PolicyToggle";
 import type { PolicyValue } from "@/lib/integrations/types";
 
 export interface PolicyEditorItem {
@@ -50,7 +52,6 @@ export default function PolicyEditor({
 }: PolicyEditorProps) {
   const t = useTranslations("craft.apps.policyEditor");
   const copy = useTranslations("craft.actionPolicies");
-  const policyCopy = useTranslations("actions.policyToggle");
   const toolCopy = useTranslations("actions.mcpTools");
   const detailCopy = useTranslations("actions.memberPlugins.detail");
   const [query, setQuery] = useState("");
@@ -62,11 +63,7 @@ export default function PolicyEditor({
   function accepts(item: PolicyEditorItem, value: PolicyValue): boolean {
     return !item.disabledPolicies?.includes(value);
   }
-  const options: { value: PolicyValue; label: string }[] = [
-    { value: "allow", label: policyCopy("always.label") },
-    { value: "ask", label: policyCopy("ask.label") },
-    { value: "blocked", label: policyCopy("deny.label") },
-  ];
+  const options = usePolicyOptions();
   function reset() {
     if (onReset) onReset();
     else

@@ -15,6 +15,20 @@ interface PolicyToggleProps {
   onChange: (value: PolicyValue) => void;
 }
 
+export interface PolicyOption {
+  value: PolicyValue;
+  label: string;
+}
+
+export function usePolicyOptions(): PolicyOption[] {
+  const t = useTranslations("actions.policyToggle");
+  return [
+    { value: "allow", label: t("always.label") },
+    { value: "ask", label: t("ask.label") },
+    { value: "blocked", label: t("deny.label") },
+  ];
+}
+
 export default function PolicyToggle({
   value,
   onChange,
@@ -22,13 +36,7 @@ export default function PolicyToggle({
   disabledValues = [],
   label,
 }: PolicyToggleProps) {
-  const t = useTranslations("actions");
-
-  const policyOptions: { value: PolicyValue; label: string }[] = [
-    { value: "allow", label: t("policyToggle.always.label") },
-    { value: "ask", label: t("policyToggle.ask.label") },
-    { value: "blocked", label: t("policyToggle.deny.label") },
-  ];
+  const policyOptions = usePolicyOptions();
 
   return (
     <Section
