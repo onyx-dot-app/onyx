@@ -11,10 +11,19 @@ export type AgentRowAction =
 export class AdminAgentsPage {
   readonly page: Page;
   readonly newAgentLink: Locator;
+  readonly searchInput: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.newAgentLink = page.getByRole("link", { name: "New Agent" });
+    this.searchInput = page.getByRole("searchbox", {
+      name: "Search agents...",
+    });
+  }
+
+  /** The table pages its rows, so find an agent by name first. */
+  async search(name: string): Promise<void> {
+    await this.searchInput.fill(name);
   }
 
   async goto(): Promise<void> {

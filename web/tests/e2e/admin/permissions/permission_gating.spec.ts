@@ -133,11 +133,12 @@ test.describe("Permission gating: MANAGE_AGENTS", () => {
       await expect(page.getByRole("link", { name: "New Agent" })).toBeVisible({
         timeout: 10000,
       });
+      const agentsPage = new AdminAgentsPage(page);
+      await agentsPage.search(agentName);
       await expect(page.getByText(agentName)).toBeVisible();
 
       // Row controls come from the server-stamped affordance map; a wrong projection
       // empties the overflow menu instead of erroring, so assert the items.
-      const agentsPage = new AdminAgentsPage(page);
       await expect(agentsPage.editButton(agentId)).toBeVisible({
         timeout: 10000,
       });
@@ -295,8 +296,10 @@ test.describe("Permission gating: MANAGE_CONNECTORS", () => {
       await expect(
         page.getByLabel("admin-page-title").getByText("Indexing Status")
       ).toBeVisible({ timeout: 10000 });
+      const indexingStatusPage = new IndexingStatusPage(page);
+      await indexingStatusPage.search(connectorName);
       await expect(
-        new IndexingStatusPage(page).connectorRow(connectorName)
+        indexingStatusPage.connectorRow(connectorName)
       ).toBeVisible();
 
       // Also verify /admin/connectors is accessible
