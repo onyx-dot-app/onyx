@@ -14,6 +14,7 @@ import {
 import { qualifiedMcpToolName } from "@tests/e2e/mcp/mcpToolInvocation";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { ToolApprovalCard } from "@tests/e2e/pages/ToolApprovalCard";
+import { MemberPluginDetailPage } from "@tests/e2e/pages/MemberPluginDetailPage";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
 // Without it, each server takes a free port.
@@ -41,6 +42,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
 
   let serverProcess: McpServerProcess | null = null;
   let integrationId: number;
+  let pluginId: string;
   let agentId: number;
   let agentName: string;
   let qualifiedToolName: string;
@@ -84,6 +86,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     integrationId = created.id;
     const plugin = created.plugins[0];
     if (!plugin) throw new Error("The integration has no plugin");
+    pluginId = plugin.plugin_id;
     const connect = await adminContext.request.put(
       `/api/admin/integrations/${integrationId}/organization-connection`,
       { data: { fields: { api_key: API_KEY } } }
@@ -459,6 +462,36 @@ test.describe("MCP tool approval in chat @code-mode", () => {
       timeout: 60_000,
     });
     await card.expectApproved(toolDisplayName);
+  });
+
+  test("Always allow on the plugin page runs later calls without a card", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+    const pluginPage = new MemberPluginDetailPage(page);
+    await pluginPage.goto(pluginId, "Integrations");
+    await pluginPage.setAlwaysAllow(toolDisplayName, true);
+
+    try {
+      const { answer, conversation } = await askForToolCall(page);
+      const chat = new ChatPage(page);
+      await chat.expectLatestReplyComplete();
+      await expect(chat.answerText(answer)).toBeVisible();
+      await expect(new ToolApprovalCard(page).cards).toHaveCount(0);
+      const requests = await getMockLlmConversationRequests(conversation);
+      expect(
+        requests
+          .flatMap((request) => request.messages)
+          .some(
+            (message) =>
+              message.role === "tool" && message.content.includes(TOOL_OUTPUT)
+          )
+      ).toBe(true);
+    } finally {
+      await pluginPage.goto(pluginId, "Integrations");
+      await pluginPage.setAlwaysAllow(toolDisplayName, false);
+    }
   });
 
   // Stop shows only while the turn is live. A lone gated call suspends the turn

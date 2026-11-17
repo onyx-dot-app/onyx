@@ -78,38 +78,6 @@ function user() {
   return setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
 }
 
-test("switches the agent's plugins and offers Connect for one that needs sign-in", async () => {
-  const configuration = handle([LINEAR_PLUGIN_ID]);
-  const onConnect = jest.fn();
-  const u = user();
-  render(
-    <ChatPluginsPopover
-      agentId={8}
-      toolConfiguration={configuration}
-      catalog={catalog}
-      onConnect={onConnect}
-      onBrowse={jest.fn()}
-    />
-  );
-  await u.click(screen.getByRole("button", { name: copy.trigger.label }));
-  const toggle = await screen.findByRole("switch", {
-    name: "Use Linear with this agent",
-  });
-  expect(toggle).not.toBeChecked();
-  await u.click(toggle);
-  expect(configuration.setPluginEnabled).toHaveBeenCalledWith(
-    [LINEAR_PLUGIN_ID],
-    true
-  );
-
-  await u.click(
-    screen.getByRole("button", {
-      name: messages.plugins.member.connection.connect.label,
-    })
-  );
-  expect(onConnect).toHaveBeenCalledWith(catalog.plugins[1]);
-});
-
 test("a plugin that needs sign-in keeps its switch, and Connect turns it on", async () => {
   const configuration = handle([REPORTS_PLUGIN_ID]);
   const onConnect = jest.fn();

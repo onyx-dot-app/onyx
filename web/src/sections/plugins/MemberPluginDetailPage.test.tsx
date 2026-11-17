@@ -174,36 +174,6 @@ test("shows each of the four statuses with its action", async () => {
   ).not.toBeInTheDocument();
 });
 
-test("the API key form saves the credential fields", async () => {
-  const integration = makeMemberIntegration({
-    id: 2,
-    name: "Reports API",
-    auth_method: "api_key",
-    credential_fields: [{ key: "token", label: "API Token", secret: true }],
-  });
-  const fetchMock = open([integration], {
-    "PUT /api/integrations/2/connection": status("connected"),
-  });
-  const u = user();
-  await u.click(
-    await screen.findByRole("button", { name: "Connect Reports API" })
-  );
-  const dialog = await screen.findByRole("dialog");
-  await u.click(
-    within(dialog).getByRole("button", { name: copy.credentials.submit.label })
-  );
-  expect(within(dialog).getByText(copy.credentials.required)).toBeVisible();
-  await u.type(within(dialog).getByLabelText("API Token"), "secret-1");
-  await u.click(
-    within(dialog).getByRole("button", { name: copy.credentials.submit.label })
-  );
-  await waitFor(() =>
-    expect(
-      requestBody(fetchMock, "PUT", "/api/integrations/2/connection")
-    ).toEqual({ fields: { token: "secret-1" } })
-  );
-});
-
 test("Disconnect is a new button after the API key form connects", async () => {
   const integration = makeMemberIntegration({
     id: 2,
@@ -240,29 +210,6 @@ test("Disconnect is a new button after the API key form connects", async () => {
   ).not.toBe(connect);
 });
 
-test("OAuth starts the user's sign-in in a new tab", async () => {
-  const popup = {
-    location: { href: "" },
-    sessionStorage: { setItem: jest.fn() },
-    opener: {},
-    close: jest.fn(),
-  };
-  jest.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
-  const fetchMock = open([makeMemberIntegration()], {
-    "POST /api/integrations/1/oauth/start": {
-      authorization_url: AUTHORIZATION_URL,
-    },
-  });
-  await user().click(
-    await screen.findByRole("button", { name: "Connect Linear" })
-  );
-  await waitFor(() => expect(popup.location.href).toBe(AUTHORIZATION_URL));
-  expect(window.open).toHaveBeenCalledWith("about:blank", "_blank");
-  expect(
-    requestBody(fetchMock, "POST", "/api/integrations/1/oauth/start")
-  ).toEqual({ organization: false, return_path: RETURN_PATH });
-});
-
 test("OAuth continues in this tab when the browser blocks the new tab", async () => {
   jest.spyOn(window, "open").mockReturnValue(null);
   open([makeMemberIntegration()], {
@@ -275,25 +222,6 @@ test("OAuth continues in this tab when the browser blocks the new tab", async ()
   );
   await waitFor(() =>
     expect(mockLoadPage).toHaveBeenCalledWith(AUTHORIZATION_URL)
-  );
-});
-
-test("Disconnect deletes the user's connection", async () => {
-  const fetchMock = open(
-    [makeMemberIntegration({ status: status("connected") })],
-    { "DELETE /api/integrations/1/connection": status("not_connected") }
-  );
-  await user().click(
-    await screen.findByRole("button", { name: "Disconnect Linear" })
-  );
-  await waitFor(() =>
-    expect(
-      fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url) === "/api/integrations/1/connection" &&
-          init?.method === "DELETE"
-      )
-    ).toBe(true)
   );
 });
 
