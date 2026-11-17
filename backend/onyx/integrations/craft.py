@@ -156,6 +156,7 @@ def task_link_settings(
 def _interactive_policies(
     db_session: Session,
     integration: Integration,
+    actions: Sequence[IntegrationAction],
     action_keys: Collection[str],
     user_id: UUID | None,
     link_settings: Sequence[ActionSettings | None],
@@ -163,6 +164,7 @@ def _interactive_policies(
     return resolve_action_policies(
         db_session,
         integration=integration,
+        actions=actions,
         action_keys=action_keys,
         user_id=user_id,
         link_settings=link_settings,
@@ -175,19 +177,27 @@ def resolve_craft_action_policies(
     db_session: Session,
     *,
     integration: Integration,
+    actions: Sequence[IntegrationAction],
     action_keys: Collection[str],
     user_id: UUID,
     task: TaskPlugins | None,
 ) -> dict[str, EffectivePolicy]:
-    """A scheduled run uses the settings of its task, not the saved Always
-    allow choices of its owner, and blocks each action of an integration that
-    no plugin of the task holds."""
+    """``actions`` are the stored actions of the integration. A scheduled run
+    uses the settings of its task, not the saved Always allow choices of its
+    owner, and blocks each action of an integration that no plugin of the
+    task holds."""
     if task is None:
-        return _interactive_policies(db_session, integration, action_keys, user_id, [])
-    settings = task.link_settings(integration.id)
-    if not settings:
-        return dict.fromkeys(action_keys, EffectivePolicy.BLOCKED)
-    return _interactive_policies(db_session, integration, action_keys, None, settings)
+        return _interactive_policies(
+            db_session, integration, actions, action_keys, user_id, [None]
+        )
+    return _interactive_policies(
+        db_session,
+        integration,
+        actions,
+        action_keys,
+        None,
+        task.link_settings(integration.id),
+    )
 
 
 def always_asks(kind: IntegrationKind, action_key: str) -> bool:
@@ -215,7 +225,12 @@ def _integration_view(
 ) -> TaskIntegrationView:
     # A scheduled run ignores the owner's Always allow choices.
     inherited = _interactive_policies(
-        db_session, integration, [action.key for action in actions], None, []
+        db_session,
+        integration,
+        actions,
+        [action.key for action in actions],
+        None,
+        [None],
     )
     app = (
         get_external_app_for_integration(integration.id, db_session)

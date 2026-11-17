@@ -556,6 +556,35 @@ def test_a_scheduled_task_ask_ignores_the_owners_always_allow(
     assert resolved.governing_action.policy is ActionPolicy.ASK
 
 
+def test_a_scheduled_task_plugin_that_inherits_does_not_block(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    host = _host()
+    mcp = _mcp(db_session, created, f"https://{host}/mcp")
+    plugin = _run(db_session, [mcp])
+    ctx = _session_ctx(db_session, user)
+    task = _task_run(db_session, user, ctx.session_id, {plugin.id: {}})
+    addon = _addon()
+
+    for action, policy in (
+        ("search", ActionPolicy.ALWAYS),
+        ("update", ActionPolicy.ASK),
+    ):
+        request = _request(f"https://{host}/mcp", _tool_call(action))
+        _, resolved = addon._resolve_request_policies(
+            ctx, _evaluate(request, user, task.id)
+        )
+        assert resolved.governing_action.policy is policy
+    shown = {
+        action.key: action.integration_policy
+        for view in list_task_plugin_views(db_session, user, task.id)
+        for integration in view.integrations
+        if integration.id == mcp.id
+        for action in integration.actions
+    }
+    assert shown == {"search": EffectivePolicy.ALLOW, "update": EffectivePolicy.ASK}
+
+
 def test_an_ask_action_in_a_session_opens_an_approval_with_the_integration(
     db_session: Session, created: list[int], user: User
 ) -> None:

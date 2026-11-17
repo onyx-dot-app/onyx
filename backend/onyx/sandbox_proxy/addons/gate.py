@@ -22,7 +22,7 @@ from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
 )
-from onyx.db.integration import get_integration_by_id
+from onyx.db.integration import get_integration_by_id, list_integration_actions
 from onyx.db.notification import create_notification
 from onyx.db.scheduled_task import (
     get_active_scheduled_task_context,
@@ -128,6 +128,7 @@ def resolve_gate_policies(
     resolved = resolve_craft_action_policies(
         db_session,
         integration=integration,
+        actions=list_integration_actions(integration.id, db_session),
         action_keys={action.action_type for action in recognized_actions.actions},
         user_id=user_id,
         task=(
