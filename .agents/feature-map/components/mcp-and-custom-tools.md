@@ -237,8 +237,10 @@ then picks the integrations:
   with the settings of its persona 0 link when one exists (the bot freeze).
 - An anonymous user (a Slack channel): only Organization library plugins, and
   only integrations with no sign-in or shared sign-in.
-- Only integrations with `enabled = true`. When several links hold one
-  integration, the strictest link setting of each action wins.
+- Only integrations with `enabled = true`. An API integration with no OpenAPI
+  tool (a preset or custom app) gives no chat tool, so it is skipped before its
+  credential resolves. When several links hold one integration, the strictest
+  link setting of each action wins.
 
 For each integration, `integrations/call_credentials.py:resolve_call_credentials`
 calls `resolve_connection` and renders the `header_template`. An OAuth2 or Onyx
@@ -382,11 +384,15 @@ link setting of the agent or task: Blocked blocks; Ask asks unless the admin
 blocks; Allow allows unless locked; Inherit keeps the admin value. (4) The
 user's Always allow turns Ask into Allow unless locked. (5) A chat grant turns
 Ask into Allow. (6) `ApprovalMode.NO_APPROVER` turns Ask into Blocked;
-`RUN_WITHOUT_ASKING` turns Ask into Allow. The approval re-check
+`RUN_WITHOUT_ASKING` turns Ask into Allow. No link that holds the integration
+blocks each action. `integrations/policy.py:decide_action_policy` applies the
+order to loaded values; `resolve_action_policies` loads the rows for the actions
+that its caller passes. The approval re-check
 (`chat/tool_approvals.py:action_now_blocked`, also in the decision route) uses
 no chat grant. It reads the agent links that construction reads
-(`integrations/policy.py:agent_plugin_settings`), so a plugin the user cannot
-see, or a default agent plugin the user turned off, does not change it.
+(`integrations/policy.py:agent_link_settings_by_integration`), so a plugin the
+user cannot see, or a default agent plugin the user turned off, does not change
+it.
 
 ---
 
