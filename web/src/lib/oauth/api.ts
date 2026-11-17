@@ -66,28 +66,3 @@ export async function initiateOAuthFlow(
     );
   }
 }
-
-export async function completeOAuthTest(
-  code: string,
-  state: string
-): Promise<boolean> {
-  const query = new URLSearchParams({ code, state });
-  const response = await fetch(
-    `/api/admin/oauth-config/test/callback?${query}`,
-    {
-      method: "POST",
-      credentials: "include",
-    }
-  );
-  if (!response.ok) throw new Error("OAuth connection test failed");
-  const data: unknown = await response.json();
-  if (
-    !data ||
-    typeof data !== "object" ||
-    !("supports_pkce" in data) ||
-    typeof data.supports_pkce !== "boolean"
-  ) {
-    throw new Error("Invalid OAuth test callback response");
-  }
-  return data.supports_pkce;
-}
