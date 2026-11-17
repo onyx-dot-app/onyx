@@ -88,6 +88,7 @@ class _StubMatcher(RequestEvaluator):
         request: http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
+        scheduled_task_id: UUID | None,  # noqa: ARG002
     ) -> AllMatchedActions | McpProtocolRequest | None:
         self.calls += 1
         if self._exc is not None:
@@ -138,6 +139,7 @@ def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         gate, "get_active_scheduled_task_context", lambda _db, _session: None
     )
+    monkeypatch.setattr(gate, "user_has_running_scheduled_run", lambda *_: False)
     monkeypatch.setattr(
         gate,
         "resolve_gate_policies",

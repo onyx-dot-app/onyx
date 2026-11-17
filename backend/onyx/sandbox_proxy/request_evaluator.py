@@ -21,7 +21,10 @@ from onyx.external_apps.matching.engine import (
     MatchedAction,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
-from onyx.integrations.craft import list_runnable_integrations
+from onyx.integrations.craft import (
+    list_runnable_integrations,
+    list_scheduled_run_integrations,
+)
 from onyx.integrations.models import RequestMatch
 from onyx.integrations.registry import get_kind_handler
 from onyx.sandbox_proxy.models import McpProtocolRequest
@@ -40,7 +43,11 @@ ACTION_POLICY_FOR_VALUE: dict[IntegrationActionPolicyValue, ActionPolicy] = {
 
 class RequestEvaluator(Protocol):
     def evaluate(
-        self, request: http.Request, tenant_id: str, user_id: UUID
+        self,
+        request: http.Request,
+        tenant_id: str,
+        user_id: UUID,
+        scheduled_task_id: UUID | None,
     ) -> AllMatchedActions | McpProtocolRequest | None: ...
 
 
@@ -99,8 +106,10 @@ def _pick(
 
 class IntegrationRequestEvaluator(RequestEvaluator):
     """Matches a request against the integrations that the sandbox owner can
-    use (``list_runnable_integrations``), with ``match_request`` of each
-    kind. The result carries the default policy of each action; the gate
+    use, with ``match_request`` of each kind: in an interactive session those
+    of the plugins the owner turned on (``list_runnable_integrations``), in a
+    scheduled run also those of the task plugins the owner can see
+    (``list_scheduled_run_integrations``). The result carries the default policy of each action; the gate
     applies the stored policies.
 
     * an MCP protocol message gives ``McpProtocolRequest``;
@@ -115,11 +124,17 @@ class IntegrationRequestEvaluator(RequestEvaluator):
         request: http.Request,
         tenant_id: str,
         user_id: UUID,
+        scheduled_task_id: UUID | None,
     ) -> AllMatchedActions | McpProtocolRequest | None:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
+            integrations = (
+                list_runnable_integrations(db, user_id)
+                if scheduled_task_id is None
+                else list_scheduled_run_integrations(db, scheduled_task_id, user_id)
+            )
             picked = _pick(
                 _matches(
-                    list_runnable_integrations(db, user_id),
+                    integrations,
                     _proxied_request(request),
                     db,
                 )

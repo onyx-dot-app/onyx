@@ -95,6 +95,21 @@ def create_scheduled_task(
     return task
 
 
+def user_has_running_scheduled_run(db_session: Session, user_id: UUID) -> bool:
+    return (
+        db_session.scalar(
+            select(ScheduledTaskRun.id)
+            .join(ScheduledTask, ScheduledTask.id == ScheduledTaskRun.task_id)
+            .where(
+                ScheduledTask.user_id == user_id,
+                ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def get_active_scheduled_task_context(
     db_session: Session, session_id: UUID
 ) -> tuple[UUID, UUID] | None:

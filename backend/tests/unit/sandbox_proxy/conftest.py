@@ -263,6 +263,7 @@ class NoMatchedRequest(RequestEvaluator):
         request: http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
+        scheduled_task_id: UUID | None,  # noqa: ARG002
     ) -> AllMatchedActions | None:
         return None
 
