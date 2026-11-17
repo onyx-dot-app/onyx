@@ -1,0 +1,51 @@
+---
+title: "Codex"
+description: "Connect Codex to the Onyx MCP server with OAuth or a personal access token."
+icon: "terminal"
+---
+
+## Add Onyx
+
+```bash
+codex mcp add onyx --url https://onyx.example.com/mcp/
+codex mcp login onyx
+```
+
+Sign in and select **Allow access**. In Codex, enter `/mcp` to check that Onyx is connected,
+then send the [test prompt](/overview/onyx_anywhere/mcp_server#test-the-connection). The Codex CLI, desktop app,
+and IDE extension share this configuration.
+
+### Configure with TOML
+
+Instead of `codex mcp add`, add this to `~/.codex/config.toml`, then run `codex mcp login onyx`:
+
+```toml
+[mcp_servers.onyx]
+url = "https://onyx.example.com/mcp/"
+```
+
+Keep only one `[mcp_servers.onyx]` table in the file.
+
+## Personal access token
+
+To use a token instead of OAuth,
+export a [personal access token](/overview/onyx_anywhere/mcp_server#use-a-personal-access-token-instead)
+as `ONYX_TOKEN` and use this table:
+
+```toml
+[mcp_servers.onyx]
+url = "https://onyx.example.com/mcp/"
+bearer_token_env_var = "ONYX_TOKEN"
+```
+
+Start `codex` from the shell that exports `ONYX_TOKEN`. A desktop app started separately may not see it.
+
+## Disconnect
+
+```bash
+codex mcp logout onyx   # sign out
+codex mcp remove onyx   # remove the server
+```
+
+This does not revoke access.
+Revoke it in Onyx under [Connected apps](/overview/onyx_anywhere/mcp_server#manage-connected-apps).
