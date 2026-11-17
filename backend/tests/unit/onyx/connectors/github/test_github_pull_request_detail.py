@@ -5,6 +5,7 @@ from collections.abc import Callable
 import pytest
 
 from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.github.connector import _convert_pr_to_document
 from onyx.connectors.github.models import GitHubPullRequest
 from onyx.connectors.github.source_operations import GitHubApiError
 
@@ -33,6 +34,37 @@ def test_too_many_files_changed_keeps_the_listing_pull_request(
     )
 
     assert connector._detailed_pull_request(listed) is listed
+
+
+def test_an_undetailable_pull_request_is_requested_only_once(
+    build_github_connector: Callable[..., GithubConnector],
+    create_pr: Callable[..., GitHubPullRequest],
+    mock_source_operations,
+) -> None:
+    # Offset paging details each PR in the batch and again at conversion; a
+    # second failing request is wasted, and a rate limit on it would drop the PR.
+    connector = build_github_connector()
+    listed = create_pr(number=1)
+    mock_source_operations.get_pull_request.side_effect = _api_error(
+        422, "The request could not be processed because too many files changed"
+    )
+
+    first = connector._detailed_pull_request(listed)
+    second = connector._detailed_pull_request(first)
+
+    assert second is listed
+    assert mock_source_operations.get_pull_request.call_count == 1
+
+
+def test_listing_pull_request_has_no_none_counts_in_metadata(
+    create_pr: Callable[..., GitHubPullRequest],
+) -> None:
+    listed = create_pr(number=1)  # commits and changed_files are unknown
+
+    document = _convert_pr_to_document(listed, None, lambda login: None)
+
+    assert "num_commits" not in document.metadata
+    assert "num_files_changed" not in document.metadata
 
 
 @pytest.mark.parametrize(
