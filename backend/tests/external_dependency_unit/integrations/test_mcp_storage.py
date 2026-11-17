@@ -1,8 +1,10 @@
 """The MCP SDK token storage on the integration tables."""
 
 import asyncio
+from unittest.mock import MagicMock
 
 import pytest
+from mcp.client.auth.oauth2 import OAuthContext
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from pydantic import AnyUrl
 from sqlalchemy.orm import Session
@@ -20,6 +22,7 @@ from onyx.integrations.connection_models import (
     read_connection_secret,
 )
 from onyx.server.features.mcp.oauth import (
+    TOKEN_EXPIRY_BUFFER_SECONDS,
     IntegrationTokenStorage,
     MCPClientRegistrationConflict,
 )
@@ -123,3 +126,29 @@ def test_entered_client_id_without_registration(
     assert client.client_id == "own-client"
     assert client.client_secret == "own-secret"
     assert client.token_endpoint_auth_method == "client_secret_post"
+
+
+def test_storage_loads_the_expiry_with_the_refresh_buffer(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = make_integration(
+        kind=IntegrationKind.MCP,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
+    )
+    user = make_test_user("mcp_storage_expiry")
+    storage = IntegrationTokenStorage(integration.id, user.id)
+    asyncio.run(storage.set_tokens(OAuthToken(access_token="a1", expires_in=3600)))
+    context = MagicMock(spec=OAuthContext)
+    storage.bind_oauth_context(context)
+
+    asyncio.run(storage.get_tokens())
+
+    connection = get_connection(db_session, integration.id, user.id)
+    assert connection is not None and connection.expires_at is not None
+    assert context.token_expiry_time == (
+        connection.expires_at.timestamp() - TOKEN_EXPIRY_BUFFER_SECONDS
+    )

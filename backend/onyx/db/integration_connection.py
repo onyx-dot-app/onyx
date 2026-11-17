@@ -70,9 +70,15 @@ def get_connection_by_id(
     return db_session.scalars(stmt).one_or_none()
 
 
-def reload_connection(db_session: Session, connection: IntegrationConnection) -> None:
-    """Re-read the row: another caller may have written it."""
-    db_session.refresh(connection)
+def reload_connection(db_session: Session, connection: IntegrationConnection) -> bool:
+    """Re-read the row: another caller may have written it. False when
+    another caller deleted it."""
+    stmt = (
+        select(IntegrationConnection)
+        .where(IntegrationConnection.id == connection.id)
+        .execution_options(populate_existing=True)
+    )
+    return db_session.scalars(stmt).one_or_none() is not None
 
 
 def _conflict_target(user_id: UUID | None) -> dict[str, Any]:

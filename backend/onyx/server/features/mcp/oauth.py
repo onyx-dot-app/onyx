@@ -1311,8 +1311,9 @@ class IntegrationTokenStorage(PersistentTokenStorage):
             connection = get_connection(db_session, self.integration_id, self.user_id)
             record = read_connection(connection) if connection is not None else None
             if self._oauth_context is not None:
+                # The buffer makes the SDK refresh a token that is about to expire.
                 self._oauth_context.token_expiry_time = (
-                    record.expires_at.timestamp()
+                    record.expires_at.timestamp() - TOKEN_EXPIRY_BUFFER_SECONDS
                     if record is not None and record.expires_at is not None
                     else None
                 )
