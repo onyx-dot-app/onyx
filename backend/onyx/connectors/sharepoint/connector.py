@@ -901,9 +901,19 @@ class SharepointConnector(
                 continue
             cache_key = (drive_id, item.parent_id)
             if cache_key not in self._folder_path_cache:
-                parent = self.ops.get_drive_item(
-                    drive_id=drive_id, item_id=item.parent_id
-                )
+                try:
+                    parent = self.ops.get_drive_item(
+                        drive_id=drive_id, item_id=item.parent_id
+                    )
+                except Exception as e:
+                    # The path is optional metadata, so a failed lookup must
+                    # not stop the walk. Failures are not cached.
+                    _raise_if_throttled(e)
+                    logger.warning(
+                        "Could not resolve folder path for item %s: %s", item.id, e
+                    )
+                    yield item
+                    continue
                 self._folder_path_cache[cache_key] = (
                     self._folder_path_of(parent) if parent else None
                 )

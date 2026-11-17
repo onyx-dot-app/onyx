@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
+from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.sharepoint.connector import (
     SharepointConnector,
     SiteDrive,
@@ -99,3 +100,29 @@ def test_delta_items_get_folder_path_from_parent_lookup() -> None:
     assert out[3].parent_reference_path is None
     assert out[4].parent_reference_path == "/drives/d/root:/Kept"
     assert ops.get_drive_item.call_count == 3
+
+
+def test_failed_parent_lookup_keeps_item_and_is_not_cached() -> None:
+    folder = _delta_item("f1", "Eng", "root", "/drives/d/root:")
+    ops = MagicMock()
+    ops.get_drive_item.side_effect = [RuntimeError("boom"), folder]
+    connector = SharepointConnector()
+    connector._ops = ops
+
+    items = [_delta_item("a", "a.docx", "f1"), _delta_item("b", "b.docx", "f1")]
+    out = list(connector._resolve_delta_item_paths("d", items))
+
+    assert [i.id for i in out] == ["a", "b"]
+    assert out[0].parent_reference_path is None
+    assert out[1].parent_reference_path == "/drives/d/root:/Eng"
+
+
+def test_throttled_parent_lookup_propagates() -> None:
+    error = MicrosoftGraphError(429, "tooManyRequests", "slow down")
+    ops = MagicMock()
+    ops.get_drive_item.side_effect = error
+    connector = SharepointConnector()
+    connector._ops = ops
+
+    with pytest.raises(MicrosoftGraphError):
+        list(connector._resolve_delta_item_paths("d", [_delta_item("a", "a", "f1")]))
