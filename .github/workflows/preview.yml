@@ -126,24 +126,19 @@ jobs:
             ${{ runner.os }}-nextjs-
 
       # The fork's CLI waits out a busy server instead of failing the upload.
-      - name: Check out the preview CLI
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
-        with:
-          repository: rohoswagger/local-preview
-          ref: 77b2593fd0eb4eee938819401bdae279c6abec5a
-          path: .preview-cli
-          persist-credentials: false
-
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5 # zizmor: ignore[cache-poisoning]
-        with:
-          go-version-file: .preview-cli/go.mod
-          cache-dependency-path: .preview-cli/go.sum
-
+      # The checksum pins the archive, because a release tag can move.
       - name: Install the preview CLI
-        working-directory: .preview-cli
+        env:
+          PREVIEW_CLI_VERSION: "0.32.0"
+          PREVIEW_CLI_SHA256: e105b848b7e28227a7ab3d3b2e50986804cab823a5b1adecbff761050df9598a
         run: |
-          go build -o "$RUNNER_TEMP/bin/preview" .
+          set -euo pipefail
+          archive="local-preview_${PREVIEW_CLI_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/rohoswagger/local-preview/releases/download/v${PREVIEW_CLI_VERSION}/$archive"
+          echo "$PREVIEW_CLI_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/bin" preview
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       # Must match the frontend build in the server's own manifest for this
