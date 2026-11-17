@@ -68,18 +68,6 @@ def get_connection_by_id(
     return db_session.scalars(stmt).one_or_none()
 
 
-def list_connections_for_integration(
-    db_session: Session, integration_id: int
-) -> list[IntegrationConnection]:
-    return list(
-        db_session.scalars(
-            select(IntegrationConnection)
-            .where(IntegrationConnection.integration_id == integration_id)
-            .order_by(IntegrationConnection.id)
-        )
-    )
-
-
 def _conflict_target(user_id: UUID | None) -> dict[str, Any]:
     if user_id is None:
         return {
@@ -165,8 +153,8 @@ def mark_connection_needs_reconnect__no_commit(
 
 def mark_integration_connections_needs_reconnect__no_commit(
     db_session: Session, integration_id: int, reason: str
-) -> int:
-    result = db_session.execute(
+) -> None:
+    db_session.execute(
         update(IntegrationConnection)
         .where(IntegrationConnection.integration_id == integration_id)
         .values(
@@ -176,7 +164,6 @@ def mark_integration_connections_needs_reconnect__no_commit(
         )
         .execution_options(synchronize_session="fetch")
     )
-    return result.rowcount  # ty: ignore[unresolved-attribute]
 
 
 def delete_connection__no_commit(
@@ -197,13 +184,12 @@ def delete_connection__no_commit(
     return result.rowcount > 0  # ty: ignore[unresolved-attribute]
 
 
-def delete_connections_for_user__no_commit(db_session: Session, user_id: UUID) -> int:
-    result = db_session.execute(
+def delete_connections_for_user__no_commit(db_session: Session, user_id: UUID) -> None:
+    db_session.execute(
         delete(IntegrationConnection)
         .where(IntegrationConnection.user_id == user_id)
         .execution_options(synchronize_session="fetch")
     )
-    return result.rowcount  # ty: ignore[unresolved-attribute]
 
 
 def get_oauth_client(

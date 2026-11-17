@@ -13,6 +13,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.oauth import (
+    IntegrationOAuthCallbackResult,
     complete_integration_oauth,
     start_integration_oauth,
 )
@@ -32,11 +33,6 @@ class IntegrationOAuthStartResponse(BaseModel):
 class IntegrationOAuthCallbackRequest(BaseModel):
     code: str
     state: str
-
-
-class IntegrationOAuthCallbackResponse(BaseModel):
-    integration_id: int
-    return_path: str | None
 
 
 @router.post("/{integration_id}/oauth/start")
@@ -64,8 +60,5 @@ def oauth_callback(
     request: IntegrationOAuthCallbackRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> IntegrationOAuthCallbackResponse:
-    result = complete_integration_oauth(request.code, request.state, user, db_session)
-    return IntegrationOAuthCallbackResponse(
-        integration_id=result.integration_id, return_path=result.return_path
-    )
+) -> IntegrationOAuthCallbackResult:
+    return complete_integration_oauth(request.code, request.state, user, db_session)

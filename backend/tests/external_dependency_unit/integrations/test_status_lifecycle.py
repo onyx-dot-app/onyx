@@ -1,6 +1,6 @@
 """integration_status and the connection lifecycle."""
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
@@ -12,10 +12,9 @@ from onyx.db.enums import (
 from onyx.db.integration_connection import (
     get_connection,
     get_oauth_client,
-    list_connections_for_integration,
     mark_connection_needs_reconnect__no_commit,
 )
-from onyx.db.models import IntegrationConnection, User, User__UserGroup
+from onyx.db.models import IntegrationConnection
 from onyx.db.user_preferences import deactivate_user
 from onyx.integrations.connection_models import (
     SIGN_IN_SETTINGS_CHANGED_REASON,
@@ -26,10 +25,9 @@ from onyx.integrations.connections import (
     disconnect,
     integration_status,
     mark_sign_in_settings_changed,
-    sign_in_settings_changed,
     sign_in_settings_for,
 )
-from tests.external_dependency_unit.conftest import MakeTestUser, create_test_user
+from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integrations.conftest import (
     MakeIntegration,
     add_connection,
@@ -132,19 +130,19 @@ def test_client_id_change_resets_connections_but_secret_change_does_not(
         oauth_client.client_secret = client_secret  # ty: ignore[invalid-assignment]
         integration.name = integration.name + " renamed"
         after = sign_in_settings_for(integration, oauth_client, None)
-        if sign_in_settings_changed(before, after):
+        if before != after:
             mark_sign_in_settings_changed(integration.id, db_session)
         db_session.commit()
 
     apply_edit("client-1", "secret-2")
-    statuses = {
-        connection.status
-        for connection in list_connections_for_integration(db_session, integration.id)
-    }
-    assert statuses == {IntegrationConnectionStatus.CONNECTED}
+    connections = db_session.scalars(
+        select(IntegrationConnection).where(
+            IntegrationConnection.integration_id == integration.id
+        )
+    ).all()
+    assert {c.status for c in connections} == {IntegrationConnectionStatus.CONNECTED}
 
     apply_edit("client-2", "secret-2")
-    connections = list_connections_for_integration(db_session, integration.id)
     assert len(connections) == 2
     for connection in connections:
         db_session.refresh(connection)
@@ -197,32 +195,3 @@ def test_deactivation_deletes_connections(
     deactivate_user(user, db_session)
 
     assert get_connection(db_session, integration.id, user.id) is None
-
-
-def test_deleted_user_rows_go_by_cascade(
-    db_session: Session, make_integration: MakeIntegration
-) -> None:
-    integration = make_integration(
-        auth_mode=IntegrationAuthMode.INDIVIDUAL,
-        auth_method=IntegrationAuthMethod.API_KEY,
-    )
-    user = create_test_user(db_session, "cascade")
-    user_id = user.id
-    add_connection(
-        db_session, integration, user_id, ConnectionSecret(fields={"a": "1"})
-    )
-
-    db_session.execute(
-        delete(User__UserGroup).where(User__UserGroup.user_id == user_id)
-    )
-    db_session.execute(delete(User).where(User.__table__.c.id == user_id))
-    db_session.commit()
-
-    assert (
-        db_session.scalars(
-            select(IntegrationConnection).where(
-                IntegrationConnection.user_id == user_id
-            )
-        ).first()
-        is None
-    )

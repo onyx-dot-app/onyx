@@ -1,17 +1,3 @@
-"""One module makes, stores, refreshes and applies every integration
-credential.
-
-- ``resolve_connection`` picks the credential a call uses, by the mode of the
-  integration. It never falls back from one mode to the other.
-- ``render_headers`` puts a credential on a request through the
-  ``header_template`` of the integration.
-- ``ensure_fresh_connection`` is the one refresh function.
-- ``integration_status`` gives the one status for the plugin page, the admin
-  page and the agent error.
-- The lifecycle helpers disconnect a user and reset connections when an
-  admin changes the sign-in settings.
-"""
-
 import re
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
@@ -64,7 +50,6 @@ from onyx.external_apps.providers.registry import get_provider_for_app
 from onyx.integrations.connection_models import (
     SIGN_IN_EXPIRED_REASON,
     SIGN_IN_SETTINGS_CHANGED_REASON,
-    ConnectionProblemCode,
     ConnectionRecord,
     ConnectionSecret,
     ConnectionState,
@@ -72,6 +57,7 @@ from onyx.integrations.connection_models import (
     expiry_from_expires_in,
     legacy_organization_defaults,
     merge_legacy_defaults,
+    preset_credentials_to_secret,
     read_connection,
     read_oauth_client,
 )
@@ -100,22 +86,16 @@ _LOGIN_REFRESH_WINDOW_S = 300
 # "{{" and "}}" are literal braces; "{name}" is a placeholder.
 _TEMPLATE_TOKEN_RE = re.compile(r"\{\{|\}\}|\{([^{}]+)\}")
 _PERMANENT_REFRESH_STATUSES = frozenset({400, 401})
-_TOKEN_KEYS = frozenset(
-    {"access_token", "refresh_token", "token_type", "expires_in", "expires_at"}
-)
 
 
 class ResolvedConnection(BaseModel):
-    """The credential a call uses. ``secret`` is None for an integration with
-    no sign-in."""
-
     integration_id: int
     connection_id: int | None
     secret: ConnectionSecret | None
 
 
 class ConnectionProblem(BaseModel):
-    code: ConnectionProblemCode
+    code: ConnectionState
     reason: str
 
 
@@ -125,8 +105,7 @@ class IntegrationStatus(BaseModel):
 
 
 class SignInSettings(BaseModel):
-    """The settings whose change resets every connection of an integration.
-    A change of only the client secret or a label keeps the connections."""
+    """A change of only the client secret or a label keeps the connections."""
 
     auth_method: IntegrationAuthMethod | None
     client_id: str | None
@@ -156,17 +135,11 @@ class _RefreshTemporaryError(Exception):
 
 
 class _RefreshedGrant(BaseModel):
-    access_token: str
-    refresh_token: str | None
-    token_type: str | None
+    secret: ConnectionSecret
     expires_in: float | None
-    fields: dict[str, str] = {}
 
 
-# Messages
-
-
-def _not_set_up_reason(integration: Integration) -> str:
+def not_set_up_reason(integration: Integration) -> str:
     return f"{integration.name} is not set up for your organization. Ask your admin."
 
 
@@ -180,11 +153,8 @@ def _needs_reconnect_reason(integration: Integration, record: ConnectionRecord) 
     )
 
 
-# Resolve
-
-
-def _is_signed_out(user: User | None) -> bool:
-    return user is None or user.is_anonymous
+def _signed_in(user: User | None) -> User | None:
+    return None if user is None or user.is_anonymous else user
 
 
 def _connection_or_problem(
@@ -192,16 +162,25 @@ def _connection_or_problem(
     connection: IntegrationConnection | None,
     missing: ConnectionProblem,
     db_session: Session,
+    refresh: bool,
 ) -> ResolvedConnection | ConnectionProblem:
     if connection is None:
         return missing
-    record = read_connection(
-        ensure_fresh_connection(connection, integration, db_session)
-    )
+    if refresh:
+        connection = ensure_fresh_connection(connection, integration, db_session)
+    record = read_connection(connection)
     if record.status is IntegrationConnectionStatus.NEEDS_RECONNECT:
         return ConnectionProblem(
-            code=ConnectionProblemCode.NEEDS_RECONNECT,
+            code=ConnectionState.NEEDS_RECONNECT,
             reason=_needs_reconnect_reason(integration, record),
+        )
+    if (
+        record.expires_at is not None
+        and record.expires_at <= datetime.now(timezone.utc)
+        and not record.secret.refresh_token
+    ):
+        return ConnectionProblem(
+            code=ConnectionState.NEEDS_RECONNECT, reason=SIGN_IN_EXPIRED_REASON
         )
     return ResolvedConnection(
         integration_id=integration.id,
@@ -211,15 +190,20 @@ def _connection_or_problem(
 
 
 def resolve_connection(
-    integration: Integration, acting_user: User | None, db_session: Session
+    integration: Integration,
+    acting_user: User | None,
+    db_session: Session,
+    *,
+    refresh: bool = True,
 ) -> ResolvedConnection | ConnectionProblem:
     """The credential for one call by ``acting_user``, or why there is none.
     The caller always gives the acting user: the chat user, the sandbox
-    owner, the owner of a scheduled task, or the user a bot resolves."""
+    owner, the owner of a scheduled task, or the user a bot resolves. With
+    ``refresh=False`` it only reads and never calls the service."""
     return _with_legacy_defaults(
         integration,
         acting_user,
-        _resolve_by_mode(integration, acting_user, db_session),
+        _resolve_by_mode(integration, acting_user, db_session, refresh),
         db_session,
     )
 
@@ -264,7 +248,7 @@ def _with_legacy_defaults(
     needs the values a user saved for its template."""
     if not _may_have_legacy_defaults(integration) or (
         isinstance(resolved, ConnectionProblem)
-        and resolved.code is not ConnectionProblemCode.NOT_CONNECTED
+        and resolved.code is not ConnectionState.NOT_CONNECTED
     ):
         return resolved
     organization = get_connection(db_session, integration.id, None)
@@ -279,11 +263,7 @@ def _with_legacy_defaults(
     )
     if organization is None or defaults is None:
         return resolved
-    signed_in_user = (
-        acting_user
-        if acting_user is not None and not _is_signed_out(acting_user)
-        else None
-    )
+    signed_in_user = _signed_in(acting_user)
     if isinstance(resolved, ConnectionProblem):
         if (
             signed_in_user is not None
@@ -321,7 +301,7 @@ def _with_legacy_defaults(
         merged = merge_legacy_defaults(saved, defaults)
         if not _fills_template(integration, merged, signed_in_user):
             return ConnectionProblem(
-                code=ConnectionProblemCode.NOT_CONNECTED,
+                code=ConnectionState.NOT_CONNECTED,
                 reason=_not_connected_reason(integration),
             )
         return resolved.model_copy(update={"secret": merged})
@@ -333,7 +313,10 @@ def _with_legacy_defaults(
 
 
 def _resolve_by_mode(
-    integration: Integration, acting_user: User | None, db_session: Session
+    integration: Integration,
+    acting_user: User | None,
+    db_session: Session,
+    refresh: bool,
 ) -> ResolvedConnection | ConnectionProblem:
     if integration.auth_mode is IntegrationAuthMode.NONE:
         return ResolvedConnection(
@@ -345,27 +328,30 @@ def _resolve_by_mode(
             integration,
             get_connection(db_session, integration.id, None),
             ConnectionProblem(
-                code=ConnectionProblemCode.NOT_SET_UP,
-                reason=_not_set_up_reason(integration),
+                code=ConnectionState.NOT_SET_UP,
+                reason=not_set_up_reason(integration),
             ),
             db_session,
+            refresh,
         )
 
     not_connected = ConnectionProblem(
-        code=ConnectionProblemCode.NOT_CONNECTED,
+        code=ConnectionState.NOT_CONNECTED,
         reason=_not_connected_reason(integration),
     )
-    if acting_user is None or _is_signed_out(acting_user):
+    user = _signed_in(acting_user)
+    if user is None:
         return not_connected
 
     if integration.auth_method is IntegrationAuthMethod.ONYX_LOGIN:
-        return _resolve_onyx_login(integration, acting_user, db_session)
+        return _resolve_onyx_login(integration, user, db_session, refresh)
 
     return _connection_or_problem(
         integration,
-        get_connection(db_session, integration.id, acting_user.id),
+        get_connection(db_session, integration.id, user.id),
         not_connected,
         db_session,
+        refresh,
     )
 
 
@@ -392,12 +378,11 @@ def _reload_account(db_session: Session, account: OAuthAccount) -> OAuthAccount:
     return db_account
 
 
-def fresh_onyx_login_token(user: User, db_session: Session) -> str | None:
-    """The user's Onyx login token, refreshed when it is near expiry. Works
-    with no web request. None when the user has no live login token."""
-    account = _live_login_account(user)
-    if account is None:
-        return None
+def _fresh_onyx_login_token(
+    user: User, account: OAuthAccount, db_session: Session
+) -> str | None:
+    """Refreshes a token near expiry with no web request. None when the
+    token expired and could not be renewed."""
     if not _login_token_stale(account, datetime.now(timezone.utc).timestamp()):
         return account.access_token
     if account.refresh_token:
@@ -429,12 +414,22 @@ def fresh_onyx_login_token(user: User, db_session: Session) -> str | None:
 
 
 def _resolve_onyx_login(
-    integration: Integration, user: User, db_session: Session
+    integration: Integration, user: User, db_session: Session, refresh: bool
 ) -> ResolvedConnection | ConnectionProblem:
-    token = fresh_onyx_login_token(user, db_session)
+    account = _live_login_account(user)
+    if account is None:
+        return ConnectionProblem(
+            code=ConnectionState.NOT_CONNECTED,
+            reason=f"Sign in to Onyx with single sign-on to use {integration.name}.",
+        )
+    token = (
+        _fresh_onyx_login_token(user, account, db_session)
+        if refresh
+        else account.access_token
+    )
     if token is None:
         return ConnectionProblem(
-            code=ConnectionProblemCode.NEEDS_RECONNECT,
+            code=ConnectionState.NEEDS_RECONNECT,
             reason=f"Sign in to Onyx again to use {integration.name}.",
         )
     return ResolvedConnection(
@@ -442,9 +437,6 @@ def _resolve_onyx_login(
         connection_id=None,
         secret=ConnectionSecret(access_token=token, token_type="Bearer"),
     )
-
-
-# Headers
 
 
 def _placeholder_values(
@@ -468,13 +460,8 @@ def render_headers(
     *,
     extra_values: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
-    """Fill each ``{placeholder}`` of the template from the secret: the
-    token values and the typed fields. ``{{`` and ``}}`` are literal braces.
-    The template is the headers of the secret with ``header_template`` on
-    top. ``extra_values`` adds values Onyx fills itself, such as
-    ``user_email``. A placeholder with no value raises
-    ``MissingHeaderValueError``: the call must not go out with a header
-    missing."""
+    """``{{``/``}}`` are literal; a missing placeholder raises
+    ``MissingHeaderValueError``."""
     secret = secret or ConnectionSecret()
     templates = merge_mcp_headers(secret.headers, dict(header_template or {}))
     values = _placeholder_values(secret, extra_values)
@@ -499,9 +486,6 @@ def render_headers(
     }
 
 
-# Refresh
-
-
 def _needs_refresh(record: ConnectionRecord, now: datetime) -> bool:
     return (
         record.status is IntegrationConnectionStatus.CONNECTED
@@ -515,13 +499,8 @@ def ensure_fresh_connection(
     integration: Integration,
     db_session: Session,
 ) -> IntegrationConnection:
-    """Refresh the access token of a connection that expires soon. A fast
-    no-op for a fresh token or a token with no expiry.
-
-    One lock per connection: concurrent callers make one call to the
-    service, and a waiter reads the token the winner stored. A temporary
-    error keeps the current token. A permanent error sets Needs reconnect
-    with a reason and keeps the row. Returns the connection, re-read."""
+    """One lock per connection; a permanent error sets Needs reconnect and
+    keeps the row."""
     if not _needs_refresh(read_connection(connection), datetime.now(timezone.utc)):
         return connection
     try:
@@ -582,10 +561,10 @@ def _refresh_under_lock(
 
     refreshed = secret.model_copy(
         update={
-            "access_token": grant.access_token,
-            "refresh_token": grant.refresh_token or secret.refresh_token,
-            "token_type": grant.token_type or secret.token_type,
-            "fields": {**secret.fields, **grant.fields},
+            "access_token": grant.secret.access_token,
+            "refresh_token": grant.secret.refresh_token or secret.refresh_token,
+            "token_type": grant.secret.token_type or secret.token_type,
+            "fields": {**secret.fields, **grant.secret.fields},
         }
     )
     update_connection_secret__no_commit(
@@ -655,6 +634,15 @@ def _oauth_error_code(response: httpx.Response) -> str | None:
     return None
 
 
+def _expires_in(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
 def _grant_from_token_response(request: httpx.Request, mcp: bool) -> _RefreshedGrant:
     try:
         response = _send_token_request(request, mcp=mcp)
@@ -682,16 +670,13 @@ def _grant_from_token_response(request: httpx.Request, mcp: bool) -> _RefreshedG
         raise _RefreshTemporaryError("token response has no access token")
     refresh_token = body.get("refresh_token")
     token_type = body.get("token_type")
-    expires_in = body.get("expires_in")
     return _RefreshedGrant(
-        access_token=access_token,
-        refresh_token=refresh_token if isinstance(refresh_token, str) else None,
-        token_type=token_type if isinstance(token_type, str) else None,
-        expires_in=(
-            float(expires_in)
-            if isinstance(expires_in, (int, float)) and not isinstance(expires_in, bool)
-            else None
+        secret=ConnectionSecret(
+            access_token=access_token,
+            refresh_token=refresh_token if isinstance(refresh_token, str) else None,
+            token_type=token_type if isinstance(token_type, str) else None,
         ),
+        expires_in=_expires_in(body.get("expires_in")),
     )
 
 
@@ -722,17 +707,9 @@ def preset_host_values(integration: Integration, db_session: Session) -> dict[st
     """The account settings a preset needs to build its endpoints, such as
     the Zendesk subdomain. They are host settings of the kind, not secrets."""
     oauth_client = get_oauth_client(db_session, integration.id)
-    if oauth_client is not None and oauth_client.legacy_format is not None:
-        return read_oauth_client(oauth_client).host_values
-    app = get_external_app_for_integration(integration.id, db_session)
-    if app is None:
+    if oauth_client is None:
         return {}
-    org_credentials = app.organization_credentials.get_value(apply_mask=False)
-    return {
-        key: value
-        for key, value in org_credentials.items()
-        if key not in ("client_id", "client_secret") and isinstance(value, str)
-    }
+    return read_oauth_client(oauth_client).host_values
 
 
 def preset_provider_for(
@@ -779,26 +756,11 @@ def _refresh_with_preset(
         ) from error
     except requests.RequestException as error:
         raise _RefreshTemporaryError(str(error)) from error
-    access_token = refreshed.get("access_token")
-    if not isinstance(access_token, str) or not access_token:
+    refreshed_secret, _ = preset_credentials_to_secret(refreshed)
+    if not refreshed_secret.access_token:
         raise _RefreshTemporaryError("the preset refresh gave no access token")
-    refresh_token = refreshed.get("refresh_token")
-    token_type = refreshed.get("token_type")
-    expires_in = refreshed.get("expires_in")
-    try:
-        expires_in_value = float(expires_in) if expires_in is not None else None
-    except (TypeError, ValueError):
-        expires_in_value = 0.0
     return _RefreshedGrant(
-        access_token=access_token,
-        refresh_token=refresh_token if isinstance(refresh_token, str) else None,
-        token_type=token_type if isinstance(token_type, str) else None,
-        expires_in=expires_in_value,
-        fields={
-            key: value
-            for key, value in refreshed.items()
-            if key not in _TOKEN_KEYS and key != "scope" and isinstance(value, str)
-        },
+        secret=refreshed_secret, expires_in=_expires_in(refreshed.get("expires_in"))
     )
 
 
@@ -827,14 +789,9 @@ def _refresh_with_mcp_sdk(
     return _grant_from_token_response(request, mcp=True)
 
 
-# Status
-
-
 def oauth_client_configured(
     integration: Integration, oauth_client: IntegrationOAuthClient | None
 ) -> bool:
-    """An OAuth integration needs a client id, except with discovery, where
-    registration gives one at the first sign-in."""
     if integration.auth_method is not IntegrationAuthMethod.OAUTH2:
         return True
     if oauth_client is None:
@@ -845,123 +802,24 @@ def oauth_client_configured(
     return client_id is not None
 
 
-def _status_of_row(
-    integration: Integration,
-    connection: IntegrationConnection | None,
-    missing: ConnectionState,
-    missing_reason: str,
-) -> IntegrationStatus:
-    if connection is None:
-        return IntegrationStatus(state=missing, reason=missing_reason)
-    record = read_connection(connection)
-    if record.status is IntegrationConnectionStatus.NEEDS_RECONNECT:
-        return IntegrationStatus(
-            state=ConnectionState.NEEDS_RECONNECT,
-            reason=_needs_reconnect_reason(integration, record),
-        )
-    if (
-        record.expires_at is not None
-        and record.expires_at <= datetime.now(timezone.utc)
-        and not record.secret.refresh_token
-    ):
-        return IntegrationStatus(
-            state=ConnectionState.NEEDS_RECONNECT, reason=SIGN_IN_EXPIRED_REASON
-        )
-    return IntegrationStatus(state=ConnectionState.CONNECTED, reason=None)
-
-
 def integration_status(
     integration: Integration, user: User | None, db_session: Session
 ) -> IntegrationStatus:
-    """Connected, Not connected, Needs reconnect or Not set up, with the
-    reason the user reads. Reads only: it never calls the service."""
-    if integration.auth_mode is IntegrationAuthMode.NONE:
-        return _legacy_status(
-            integration,
-            user,
-            ResolvedConnection(
-                integration_id=integration.id, connection_id=None, secret=None
-            ),
-            db_session,
+    if integration.auth_mode is not IntegrationAuthMode.NONE and (
+        not oauth_client_configured(
+            integration, get_oauth_client(db_session, integration.id)
         )
-    if not oauth_client_configured(
-        integration, get_oauth_client(db_session, integration.id)
     ):
         return IntegrationStatus(
-            state=ConnectionState.NOT_SET_UP,
-            reason=_not_set_up_reason(integration),
+            state=ConnectionState.NOT_SET_UP, reason=not_set_up_reason(integration)
         )
-    if integration.auth_mode is IntegrationAuthMode.SHARED:
-        return _status_of_row(
-            integration,
-            get_connection(db_session, integration.id, None),
-            ConnectionState.NOT_SET_UP,
-            _not_set_up_reason(integration),
-        )
-    if user is None or _is_signed_out(user):
-        return IntegrationStatus(
-            state=ConnectionState.NOT_CONNECTED,
-            reason=_not_connected_reason(integration),
-        )
-    if integration.auth_method is IntegrationAuthMethod.ONYX_LOGIN:
-        account = _live_login_account(user)
-        if account is None:
-            return IntegrationStatus(
-                state=ConnectionState.NOT_CONNECTED,
-                reason=f"Sign in to Onyx with single sign-on to use {integration.name}.",
-            )
-        return _legacy_status(
-            integration,
-            user,
-            ResolvedConnection(
-                integration_id=integration.id,
-                connection_id=None,
-                secret=ConnectionSecret(
-                    access_token=account.access_token, token_type="Bearer"
-                ),
-            ),
-            db_session,
-        )
-    connection = get_connection(db_session, integration.id, user.id)
-    if connection is None:
-        return _legacy_status(
-            integration,
-            user,
-            ConnectionProblem(
-                code=ConnectionProblemCode.NOT_CONNECTED,
-                reason=_not_connected_reason(integration),
-            ),
-            db_session,
-        )
-    return _status_of_row(
-        integration,
-        connection,
-        ConnectionState.NOT_CONNECTED,
-        _not_connected_reason(integration),
-    )
-
-
-def _legacy_status(
-    integration: Integration,
-    user: User | None,
-    base: ResolvedConnection | ConnectionProblem,
-    db_session: Session,
-) -> IntegrationStatus:
-    """The status for a case with no row of the user's own, after the
-    values an old organization row gives."""
-    result = _with_legacy_defaults(integration, user, base, db_session)
+    result = resolve_connection(integration, user, db_session, refresh=False)
     if isinstance(result, ConnectionProblem):
-        return IntegrationStatus(
-            state=ConnectionState.NOT_CONNECTED, reason=result.reason
-        )
+        return IntegrationStatus(state=result.code, reason=result.reason)
     return IntegrationStatus(state=ConnectionState.CONNECTED, reason=None)
 
 
-# Lifecycle
-
-
 def disconnect(integration: Integration, user: User, db_session: Session) -> bool:
-    """Delete the user's connection. Returns whether a row went."""
     deleted = delete_connection__no_commit(db_session, integration.id, user.id)
     db_session.commit()
     return deleted
@@ -972,8 +830,6 @@ def sign_in_settings_for(
     oauth_client: IntegrationOAuthClient | None,
     host: str | None,
 ) -> SignInSettings:
-    """A snapshot to compare before and after an admin edit. ``host`` is the
-    kind's host setting: the MCP server URL or the preset account host."""
     client_id, _ = (
         _client_credentials(oauth_client) if oauth_client is not None else (None, None)
     )
@@ -993,13 +849,8 @@ def sign_in_settings_for(
     )
 
 
-def sign_in_settings_changed(old: SignInSettings, new: SignInSettings) -> bool:
-    return old != new
-
-
-def mark_sign_in_settings_changed(integration_id: int, db_session: Session) -> int:
-    """Set every connection of the integration to Needs reconnect. Does not
-    commit: the caller commits with the settings change."""
-    return mark_integration_connections_needs_reconnect__no_commit(
+def mark_sign_in_settings_changed(integration_id: int, db_session: Session) -> None:
+    """Does not commit: the caller commits with the settings change."""
+    mark_integration_connections_needs_reconnect__no_commit(
         db_session, integration_id, SIGN_IN_SETTINGS_CHANGED_REASON
     )

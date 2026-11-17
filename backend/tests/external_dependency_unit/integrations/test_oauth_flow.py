@@ -10,7 +10,6 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 import requests
-from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -20,15 +19,14 @@ from onyx.db.enums import (
     IntegrationAuthMode,
     IntegrationKind,
     IntegrationOAuthProviderMode,
-    MCPAuthenticationPerformer,
-    MCPAuthenticationType,
-    MCPTransport,
 )
+from onyx.db.integration import get_external_app_for_integration
 from onyx.db.integration_connection import get_connection, get_oauth_client
-from onyx.db.models import ExternalApp, Integration, MCPServer
+from onyx.db.models import Integration
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_connection_secret
+from onyx.integrations.connections import preset_host_values
 from onyx.integrations.oauth import (
     complete_integration_oauth,
     start_integration_oauth,
@@ -41,6 +39,7 @@ from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integrations.conftest import (
     TOKEN_URL,
     MakeIntegration,
+    token_response,
 )
 
 
@@ -48,18 +47,10 @@ def _query(url: str) -> dict[str, str]:
     return {key: values[0] for key, values in parse_qs(urlparse(url).query).items()}
 
 
-def _token_response(body: dict[str, Any]) -> MagicMock:
-    response = MagicMock(spec=requests.Response)
-    response.status_code = 200
-    response.json.return_value = body
-    response.raise_for_status.return_value = None
-    return response
-
-
 @pytest.fixture
 def manual_token_post() -> Generator[MagicMock, None, None]:
     post = MagicMock(
-        return_value=_token_response(
+        return_value=token_response(
             {
                 "access_token": "user-access",
                 "refresh_token": "user-refresh",
@@ -184,39 +175,52 @@ def test_preset_sign_in_uses_provider(
         provider_mode=IntegrationOAuthProviderMode.PRESET,
         client_id="linear-client",
         client_secret="linear-secret",
-    )
-    app = ExternalApp(
-        name=f"Linear {integration.id}",
         app_type=ExternalAppType.LINEAR,
-        upstream_url_patterns=[],
-        auth_template={"Authorization": "Bearer {access_token}"},
-        organization_credentials={},
-        integration_id=integration.id,
     )
-    db_session.add(app)
-    db_session.commit()
     user = make_test_user("oauth_preset")
-    try:
-        url = start_integration_oauth(integration, user, db_session)
-        query = _query(url)
-        assert urlparse(url).netloc == "linear.app"
-        assert query["redirect_uri"] == f"{WEB_DOMAIN}/craft/v1/apps/oauth/callback"
+    url = start_integration_oauth(integration, user, db_session)
+    query = _query(url)
+    assert urlparse(url).netloc == "linear.app"
+    assert query["redirect_uri"] == f"{WEB_DOMAIN}/craft/v1/apps/oauth/callback"
 
-        post = MagicMock(
-            return_value=_token_response(
-                {"access_token": "linear-token", "token_type": "Bearer"}
-            )
+    post = MagicMock(
+        return_value=token_response(
+            {"access_token": "linear-token", "token_type": "Bearer"}
         )
-        with patch.object(requests, "post", post):
-            complete_integration_oauth("code", query["state"], user, db_session)
-        assert post.call_args.kwargs["data"]["client_secret"] == "linear-secret"
-        connection = get_connection(db_session, integration.id, user.id)
-        assert connection is not None
-        assert read_connection_secret(connection).access_token == "linear-token"
-    finally:
-        db_session.rollback()
-        db_session.execute(delete(ExternalApp).where(ExternalApp.id == app.id))
-        db_session.commit()
+    )
+    with patch.object(requests, "post", post):
+        complete_integration_oauth("code", query["state"], user, db_session)
+    assert post.call_args.kwargs["data"]["client_secret"] == "linear-secret"
+    connection = get_connection(db_session, integration.id, user.id)
+    assert connection is not None
+    assert read_connection_secret(connection).access_token == "linear-token"
+
+
+def test_preset_host_values_come_from_the_oauth_client(
+    db_session: Session, make_integration: MakeIntegration
+) -> None:
+    preset = make_integration(
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        provider_mode=IntegrationOAuthProviderMode.PRESET,
+        client_id="zd-client",
+        client_secret="zd-secret",
+        app_type=ExternalAppType.ZENDESK,
+    )
+    manual = _manual(make_integration, IntegrationAuthMode.INDIVIDUAL)
+    for integration, params in ((preset, {"subdomain": "acme"}), (manual, {"a": "b"})):
+        oauth_client = get_oauth_client(db_session, integration.id)
+        assert oauth_client is not None
+        oauth_client.additional_params = params
+        app = get_external_app_for_integration(integration.id, db_session)
+        assert app is not None
+        app.organization_credentials = {  # ty: ignore[invalid-assignment]
+            "subdomain": "stale"
+        }
+    db_session.commit()
+
+    assert preset_host_values(preset, db_session) == {"subdomain": "acme"}
+    assert preset_host_values(manual, db_session) == {}
 
 
 def test_mcp_known_provider_sign_in_uses_sdk_exchange(
@@ -232,17 +236,6 @@ def test_mcp_known_provider_sign_in_uses_sdk_exchange(
         client_id="mcp-client",
     )
     user = make_test_user("oauth_mcp")
-    server = MCPServer(
-        owner=user.email,
-        name=f"mcp-{integration.id}",
-        server_url="https://mcp.example.test/mcp",
-        transport=MCPTransport.STREAMABLE_HTTP,
-        auth_type=MCPAuthenticationType.OAUTH,
-        auth_performer=MCPAuthenticationPerformer.PER_USER,
-        integration_id=integration.id,
-    )
-    db_session.add(server)
-    db_session.commit()
     seen: list[httpx.Request] = []
 
     def token_handler(request: httpx.Request) -> httpx.Response:
@@ -263,34 +256,29 @@ def test_mcp_known_provider_sign_in_uses_sdk_exchange(
     def client_factory(**kwargs: Any) -> httpx.AsyncClient:  # noqa: ARG001
         return httpx.AsyncClient(transport=httpx.MockTransport(token_handler))
 
-    try:
-        url = start_integration_oauth(integration, user, db_session)
-        query = _query(url)
-        assert query["resource"] == "https://mcp.example.test/mcp"
-        assert query["client_id"] == "mcp-client"
+    url = start_integration_oauth(integration, user, db_session)
+    query = _query(url)
+    assert query["resource"] == "https://mcp.example.test/mcp"
+    assert query["client_id"] == "mcp-client"
 
-        with patch(
-            "onyx.server.features.mcp.oauth.mcp_ssrf_httpx_client_factory",
-            client_factory,
-        ):
-            complete_integration_oauth("mcp-code", query["state"], user, db_session)
+    with patch(
+        "onyx.server.features.mcp.oauth.mcp_ssrf_httpx_client_factory",
+        client_factory,
+    ):
+        complete_integration_oauth("mcp-code", query["state"], user, db_session)
 
-        assert len(seen) == 1
-        assert str(seen[0].url) == TOKEN_URL
-        sent = parse_qs(seen[0].content.decode())
-        assert sent["code"] == ["mcp-code"]
-        assert sent["code_verifier"][0]
-        connection = get_connection(db_session, integration.id, user.id)
-        assert connection is not None
-        secret = read_connection_secret(connection)
-        assert (secret.access_token, secret.refresh_token) == (
-            "mcp-access",
-            "mcp-refresh",
-        )
-    finally:
-        db_session.rollback()
-        db_session.execute(delete(MCPServer).where(MCPServer.id == server.id))
-        db_session.commit()
+    assert len(seen) == 1
+    assert str(seen[0].url) == TOKEN_URL
+    sent = parse_qs(seen[0].content.decode())
+    assert sent["code"] == ["mcp-code"]
+    assert sent["code_verifier"][0]
+    connection = get_connection(db_session, integration.id, user.id)
+    assert connection is not None
+    secret = read_connection_secret(connection)
+    assert (secret.access_token, secret.refresh_token) == (
+        "mcp-access",
+        "mcp-refresh",
+    )
 
 
 def test_start_route_hides_integrations_the_user_cannot_see(
