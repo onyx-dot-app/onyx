@@ -247,6 +247,34 @@ def test_the_link_only_filter_applies_at_conversion() -> None:
     assert convert.call_args.args[5]["id"] == "file-b"
 
 
+def test_the_link_only_filter_reads_every_permission_first() -> None:
+    """The listing gives only some permissions. The link-only one is missing
+    from them, so conversion reads every permission before the filter runs,
+    also without permission sync."""
+    connector = _make_connector()
+    connector.exclude_domain_link_only = True
+    ops = cast(MagicMock, connector.ops)
+    ops.batch_get_files.return_value = _permission_batch(
+        {
+            "file-a": {
+                "id": "file-a",
+                "permissions": [{"id": "p1", "type": "user"}],
+                "permissionIds": ["p1", "p2"],
+            }
+        }
+    )
+    ops.list_file_permissions.return_value = [
+        {"id": "p1", "type": "user"},
+        {"id": "p2", "type": "domain", "allowFileDiscovery": False},
+    ]
+
+    with patch(f"{_CONN_MODULE}.convert_drive_item_to_document") as convert:
+        results = list(connector.resolve_targets([_target("file-a", [])]))
+
+    convert.assert_not_called()
+    assert results == []
+
+
 def _denied() -> GoogleDriveHttpError:
     return GoogleDriveHttpError(
         status_code=403,

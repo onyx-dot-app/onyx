@@ -778,6 +778,36 @@ class GoogleDriveConnector(
             external_access=external_access,
         )
 
+    def _listed_folder_node(
+        self,
+        folder: RetrievedDriveFile,
+        permission_sync_context: PermissionSyncContext | None,
+    ) -> HierarchyNode:
+        """The node of a listed folder. A listing without permissions gives no
+        permission ids: they are read as the user who listed the folder. If
+        that read fails, the folder gets no access, not public access."""
+        drive_file = folder.drive_file
+        if permission_sync_context is not None and "permissionIds" not in drive_file:
+            try:
+                fields = self.ops.get_file(
+                    user_email=folder.user_email,
+                    file_id=drive_file["id"],
+                    fields="id, permissionIds",
+                )
+            except Exception as e:
+                logger.warning(
+                    "Could not read the permissions of folder %s: %s",
+                    drive_file.get("id"),
+                    e,
+                )
+                fields = None
+            if fields is not None:
+                drive_file = {
+                    **drive_file,
+                    "permissionIds": fields.get("permissionIds") or [],
+                }
+        return self._folder_node(drive_file, permission_sync_context)
+
     def _get_folder_metadata(
         self,
         folder_id: str,
@@ -1450,8 +1480,6 @@ class GoogleDriveConnector(
                     unlisted.append(target)
                     continue
                 drive_file.update(fields)
-            if self.exclude_domain_link_only and has_link_only_permission(drive_file):
-                continue
             readers = _rotated_readers(drive_file, payload)
             if self.primary_admin_email not in readers:
                 readers.append(self.primary_admin_email)
@@ -1492,9 +1520,11 @@ class GoogleDriveConnector(
         permission_sync_context: PermissionSyncContext | None,
         payload: DriveListingPayload,
     ) -> Document | ConnectorFailure | None:
-        if permission_sync_context is not None and not _has_every_permission(
-            drive_file
-        ):
+        # Permission sync and the link-only filter need every permission. Drive
+        # can give only some of them, or only their ids.
+        if (
+            permission_sync_context is not None or self.exclude_domain_link_only
+        ) and not _has_every_permission(drive_file):
             try:
                 completed = self._read_file_permissions(
                     drive_file, [payload.retriever_email, *readers]
@@ -1504,6 +1534,8 @@ class GoogleDriveConnector(
             if completed is None:
                 return _permission_read_failure(target, drive_file, None)
             drive_file = completed
+        if self.exclude_domain_link_only and has_link_only_permission(drive_file):
+            return None
         folder_path = payload.folder_path
         if folder_path is None:
             # The listing did not have every folder on the way. Build the
@@ -1773,12 +1805,18 @@ class GoogleDriveConnector(
         """Lists the files that indexing would index. With ``stub_failures``,
         the listing is for indexing: it yields ``SlimDocumentStub``s and adds a
         retrieval error to ``stub_failures``. Without it, a retrieval error is
-        raised."""
+        raised.
+
+        The stub listing reads no file permissions: conversion reads them.
+        With ``include_permissions`` it still gives the folder nodes their
+        permissions, so a private folder never becomes a public node."""
         for_indexing = stub_failures is not None
         listing = self._plan_listing(checkpoint, start, end)
         # The stream also holds folders, which become hierarchy nodes.
         drive_files = self._fetch_drive_items(
-            checkpoint, include_permissions=include_permissions
+            checkpoint,
+            include_permissions=include_permissions,
+            permissions_read_later=for_indexing,
         )
         permission_sync_context = (
             PermissionSyncContext(
@@ -1788,6 +1826,7 @@ class GoogleDriveConnector(
             if include_permissions
             else None
         )
+        file_permission_context = None if for_indexing else permission_sync_context
         files_batch: list[RetrievedDriveFile] = []
         folders_batch: list[RetrievedDriveFile] = []
 
@@ -1831,7 +1870,7 @@ class GoogleDriveConnector(
                                 (
                                     self.ops,
                                     file.drive_file,
-                                    permission_sync_context,
+                                    file_permission_context,
                                     file.user_email,
                                     *(
                                         self._stub_listing_facts(
@@ -1947,8 +1986,12 @@ class GoogleDriveConnector(
         folder_id = _get_parent_id_from_file(drive_file)
         # Bounded, so folder metadata with a cycle cannot loop.
         for _ in range(_MAX_FOLDER_PATH_DEPTH):
-            if folder_id is None or folder_id == root_id:
+            if folder_id is not None and folder_id == root_id:
                 return [root_name, *reversed(names)]
+            if folder_id is None:
+                # A shared drive folder chain ends at the drive. One that ends
+                # before it lacks a folder the listing user cannot see.
+                return None if drive_id else [root_name, *reversed(names)]
             folder = listing.folder_names.get(folder_id)
             if folder is None:
                 return None
@@ -1992,8 +2035,8 @@ class GoogleDriveConnector(
             run_functions_tuples_in_parallel(
                 [
                     (
-                        self._folder_node,
-                        (folder.drive_file, permission_sync_context),
+                        self._listed_folder_node,
+                        (folder, permission_sync_context),
                     )
                     for folder in yielded
                 ],
@@ -2472,12 +2515,15 @@ class GoogleDriveConnector(
         checkpoint: GoogleDriveCheckpoint,
         include_permissions: bool = False,
         inline: bool = False,
+        permissions_read_later: bool = False,
     ) -> Generator[RetrievedDriveFile, None, None]:
         """One call of the listing (``ParallelDriveLister``), for a service
         account and for OAuth. ``_plan_listing`` runs first. Counts the files
         that pass the metadata check. The engine asks for permissions only
-        when ``include_permissions`` or the link-only filter needs them. With
-        ``inline``, the caller converts each file in this call."""
+        when ``include_permissions`` or the link-only filter needs them, and
+        never with ``permissions_read_later`` (the stub listing: conversion
+        reads them). With ``inline``, the caller converts each file in this
+        call."""
 
         def choose_drive_principal(
             drive_id: str, busy: Collection[str]
@@ -2575,11 +2621,11 @@ class GoogleDriveConnector(
         lister = ParallelDriveLister(
             ops=self.ops,
             checkpoint=checkpoint,
-            # Without permission sync, pages carry no permissions, so Drive
-            # can serve 1000 files a page.
+            # Without permissions, Drive can serve 1000 files a page.
             field_type=(
                 DriveFileFieldType.WITH_PERMISSIONS
-                if include_permissions
+                if (include_permissions or self.exclude_domain_link_only)
+                and not permissions_read_later
                 else DriveFileFieldType.STANDARD
             ),
             requested_shared_drive_ids=self._requested_shared_drive_ids,

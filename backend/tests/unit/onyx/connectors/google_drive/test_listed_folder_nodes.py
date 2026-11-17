@@ -471,3 +471,41 @@ def test_a_folder_read_with_no_parent_is_read_again_for_a_later_child(
     assert ("C", "P") in nodes
     # The last node yielded for P has its parent.
     assert [node for node in nodes if node[0] == "P"][-1] == ("P", "top")
+
+
+def _shared_drive_file(parent_id: str) -> RetrievedDriveFile:
+    return RetrievedDriveFile(
+        drive_file={"id": "file-1", "driveId": "drive-1", "parents": [parent_id]},
+        user_email=_LISTER,
+    )
+
+
+def test_a_shared_drive_path_that_ends_before_the_drive_is_not_complete() -> None:
+    """The listing user cannot see the parent of `inner`. The path would lack
+    the folders above it, so the stub gets no path and conversion builds
+    it."""
+    connector = _connector()
+    checkpoint = _checkpoint(connector)
+    listing = checkpoint.listing
+    assert listing is not None
+    listing.drive_names["drive-1"] = "Team"
+    listing.folder_names["inner"] = ("Inner", None)
+
+    assert (
+        connector._listed_folder_path(checkpoint, listing, _shared_drive_file("inner"))
+        is None
+    )
+
+
+def test_a_shared_drive_path_that_reaches_the_drive_is_complete() -> None:
+    connector = _connector()
+    checkpoint = _checkpoint(connector)
+    listing = checkpoint.listing
+    assert listing is not None
+    listing.drive_names["drive-1"] = "Team"
+    listing.folder_names["inner"] = ("Inner", "outer")
+    listing.folder_names["outer"] = ("Outer", "drive-1")
+
+    assert connector._listed_folder_path(
+        checkpoint, listing, _shared_drive_file("inner")
+    ) == ["Team", "Outer", "Inner"]
