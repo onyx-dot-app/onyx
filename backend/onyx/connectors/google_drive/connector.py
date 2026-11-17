@@ -12,7 +12,6 @@ from urllib.parse import ParseResult, parse_qs, urlparse
 
 from typing_extensions import override
 
-from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
     GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD,
     GOOGLE_DRIVE_CONVERSION_WORKERS,
@@ -329,14 +328,6 @@ def _drop_listing_state(checkpoint: GoogleDriveCheckpoint) -> None:
 
 def _listing_done(checkpoint: GoogleDriveCheckpoint) -> bool:
     return checkpoint.listing is not None and checkpoint.listing.is_done
-
-
-def _public_access() -> ExternalAccess:
-    return ExternalAccess(
-        external_user_emails=set(),
-        external_user_group_ids=set(),
-        is_public=True,
-    )
 
 
 def _converted(
@@ -666,16 +657,18 @@ class GoogleDriveConnector(
         add_prefix: bool,
         raw_id: str | None = None,
     ) -> HierarchyNode:
-        if permission_sync_context:
-            external_access = get_external_access_for_folder(
+        # None when this run did not read permissions: the stored access stays.
+        external_access = (
+            get_external_access_for_folder(
                 folder,
                 permission_sync_context.google_domain,
                 self.ops,
                 self.primary_admin_email,
                 add_prefix,
             )
-        else:
-            external_access = _public_access()
+            if permission_sync_context
+            else None
+        )
         return HierarchyNode(
             raw_node_id=raw_id or folder["id"],
             raw_parent_id=_get_parent_id_from_file(folder),
