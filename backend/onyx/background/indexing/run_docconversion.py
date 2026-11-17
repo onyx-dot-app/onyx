@@ -77,9 +77,10 @@ DOCCONVERSION_TASK_EXPIRES_SECONDS = 4 * 60 * 60
 # the credential and signs in, so one build for each task is too many.
 _CONNECTOR_CACHE_SECONDS = 10 * 60
 _CONNECTOR_CACHE_MAX_ENTRIES = 16
-# The attempt fails when more than this many stub batches failed as a whole,
-# and they are more than this share of the converted batches. Docprocessing
-# uses the same limits for failed documents.
+# The attempt fails when more than this many stub batches failed, and they are
+# more than this share of the converted batches. A batch failed when it
+# failed as a whole, or when more than this share of its documents failed.
+# Docfetching and docprocessing use the same limits for failed documents.
 _FAILED_BATCH_THRESHOLD = 3
 _FAILED_BATCH_RATIO_THRESHOLD = 0.1
 
@@ -345,6 +346,24 @@ def _unconverted_stub_failures(
     ]
 
 
+def _batch_failure(
+    stubs: list[SlimDocumentStub],
+    failures: list[ConnectorFailure],
+    batch_error: Exception | None,
+) -> Exception | None:
+    """The error that counts the batch as failed, or None. A source that
+    reports a failure for each document, and raises nothing, must also end
+    the attempt."""
+    if batch_error is not None:
+        return batch_error
+    if not failures or len(failures) / max(len(stubs), 1) <= (
+        _FAILED_BATCH_RATIO_THRESHOLD
+    ):
+        return None
+    last_failure = failures[-1]
+    return last_failure.exception or RuntimeError(last_failure.failure_message)
+
+
 def _check_failed_batch_threshold(
     failed_batches: int, converted_batches: int, error: Exception
 ) -> None:
@@ -521,14 +540,15 @@ def convert_stub_batch(
         len(documents),
         len(failures),
     )
-    if batch_error is not None:
+    batch_failure = _batch_failure(stubs, failures, batch_error)
+    if batch_failure is not None:
         with get_session_with_current_tenant() as db_session:
             failed_batches, converted_batches = (
                 IndexingCoordination.record_stub_batch_conversion_failed(
                     db_session, index_attempt_id
                 )
             )
-        _check_failed_batch_threshold(failed_batches, converted_batches, batch_error)
+        _check_failed_batch_threshold(failed_batches, converted_batches, batch_failure)
 
     with time_stage(IndexAttemptStage.CONVERSION_DISPATCH, index_attempt_id):
         dispatch_stub_batches(
