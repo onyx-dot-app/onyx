@@ -22,8 +22,8 @@ from onyx.integrations.models import (
     LinkValue,
     PersonaPluginLink,
     PersonaPluginSnapshot,
+    PolicyRows,
 )
-from onyx.integrations.models import PolicyRows
 
 
 def get_policy_rows(
