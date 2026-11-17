@@ -15,6 +15,16 @@ adds group shares, group ownership and per-agent usage stats.
   sets, single documents, connector folders, or the user's own files), tools,
   starter messages and an icon. CE grants `ADD_AGENTS` to every user. EE grants
   it through groups.
+- **Plugins in the editor.** The agent editor attaches plugins, not single MCP
+  or OpenAPI tools. `web/src/sections/agents/AgentPluginsSection.tsx` offers
+  the plugins of `GET /integrations/agent-catalog`. For each action the owner
+  picks Use the integration setting, Allow, Ask or Blocked, and a "Default for
+  other actions" row covers the rest. Allow is hidden when the admin value is
+  locked (`web/src/lib/agents/plugins.ts:lockReason`), except an Allow that is
+  already stored. Each action shows the value that applies
+  (`effectiveSetting`, the backend policy order without the user's grant).
+  Save sends `plugins` with each inherit key left out, and `tool_ids` holds
+  only built-in tools.
 - **In chat**, picking an agent applies its instructions, scopes search to its
   knowledge, and offers only its tools. An edit applies to the next turn of
   every session that uses the agent. Old messages do not change.

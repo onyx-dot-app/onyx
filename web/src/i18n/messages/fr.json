@@ -10793,16 +10793,37 @@
           "label": "Enregistrer"
         }
       },
-      "mcp": {
-        "noAccess": {
-          "tooltip": "Vous n'avez plus accès à ce serveur MCP. Ses outils existants seront conservés."
-        },
-        "searchTools": {
-          "placeholder": "Rechercher des outils..."
-        }
-      },
       "page": {
         "ariaLabel": "Page de l'éditeur d'agents"
+      },
+      "plugins": {
+        "actionSetting": "Réglage pour {action}",
+        "add": "Ajouter un plugin",
+        "askHint": "Pour l'exécuter sans demande, un administrateur la règle sur Autoriser dans l'intégration, ou chaque utilisateur choisit Toujours autoriser.",
+        "askHintAdminOnly": "Pour l'exécuter sans demande, un administrateur la règle sur Autoriser dans l'intégration.",
+        "choice": {
+          "inherit": "Utiliser le réglage de l'intégration"
+        },
+        "default": {
+          "description": "S'applique à chaque action sans réglage propre, y compris aux actions que l'intégration ajoutera plus tard.",
+          "title": "Par Défaut pour les Autres Actions"
+        },
+        "defaultSetting": "Réglage par défaut pour {plugin}",
+        "description": "Attribuez des plugins à l'agent. Chaque action utilise le réglage de l'intégration, sauf si vous en choisissez un autre.",
+        "effective": "{policy, select, allow {Autorise} ask {Demande} other {Bloquée}} ({source, select, integration {réglage de l'intégration} agentDefault {défaut de l'agent} other {réglage de l'agent}})",
+        "empty": "Aucun plugin avec des intégrations n'est disponible pour vous.",
+        "loadFailed": "Impossible de charger les plugins.",
+        "lock": {
+          "adminBlocked": "Autoriser n'est pas disponible : un administrateur a bloqué cette action.",
+          "adminFinal": "Autoriser n'est pas disponible : le réglage administrateur de cette intégration est définitif.",
+          "defaultFinal": "Autoriser n'est pas disponible : les réglages administrateur de ces intégrations sont définitifs."
+        },
+        "noActions": "Cette intégration n'a pas encore d'actions.",
+        "notVisible": "Vous ne pouvez pas voir les actions de ce plugin. Ses réglages restent inchangés.",
+        "openIntegration": "Ouvrir les actions de {integration}",
+        "remove": "Retirer {plugin}",
+        "retry": "Réessayer",
+        "title": "Plugins"
       },
       "prompts": {
         "instructions": {
@@ -11059,14 +11080,6 @@
         "knowledgeCutoff": {
           "description": "Les documents dont la date de dernière mise à jour est antérieure seront ignorés.",
           "title": "Date limite des connaissances"
-        },
-        "mcpCard": {
-          "expand": {
-            "label": "Déplier"
-          },
-          "fold": {
-            "label": "Replier"
-          }
         },
         "moreInfo": {
           "title": "Plus d'informations"

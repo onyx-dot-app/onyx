@@ -10793,16 +10793,37 @@
           "label": "저장"
         }
       },
-      "mcp": {
-        "noAccess": {
-          "tooltip": "더 이상 이 MCP 서버에 액세스할 수 없습니다. 기존 도구는 유지됩니다."
-        },
-        "searchTools": {
-          "placeholder": "도구 검색..."
-        }
-      },
       "page": {
         "ariaLabel": "에이전트 편집기 페이지"
+      },
+      "plugins": {
+        "actionSetting": "{action} 설정",
+        "add": "플러그인 추가",
+        "askHint": "확인 없이 실행하려면 관리자가 통합에서 허용으로 설정하거나, 각 사용자가 항상 허용을 선택합니다.",
+        "askHintAdminOnly": "확인 없이 실행하려면 관리자가 통합에서 허용으로 설정합니다.",
+        "choice": {
+          "inherit": "통합 설정 사용"
+        },
+        "default": {
+          "description": "자체 설정이 없는 각 작업에 적용되며, 통합이 나중에 추가하는 작업에도 적용됩니다.",
+          "title": "기타 작업의 기본값"
+        },
+        "defaultSetting": "{plugin}의 기본 설정",
+        "description": "에이전트에 플러그인을 제공합니다. 다른 설정을 고르지 않으면 각 작업은 통합 설정을 사용합니다.",
+        "effective": "{policy, select, allow {허용} ask {확인} other {차단}} ({source, select, integration {통합 설정} agentDefault {에이전트 기본값} other {에이전트 설정}})",
+        "empty": "사용할 수 있는 통합 플러그인이 없습니다.",
+        "loadFailed": "플러그인을 불러오지 못했습니다.",
+        "lock": {
+          "adminBlocked": "허용을 사용할 수 없습니다: 관리자가 이 작업을 차단했습니다.",
+          "adminFinal": "허용을 사용할 수 없습니다: 이 통합의 관리자 설정은 확정되어 있습니다.",
+          "defaultFinal": "허용을 사용할 수 없습니다: 이 통합들의 관리자 설정은 확정되어 있습니다."
+        },
+        "noActions": "이 통합에는 아직 작업이 없습니다.",
+        "notVisible": "이 플러그인의 작업을 볼 수 없습니다. 설정은 그대로 유지됩니다.",
+        "openIntegration": "{integration} 작업 열기",
+        "remove": "{plugin} 제거",
+        "retry": "다시 시도",
+        "title": "플러그인"
       },
       "prompts": {
         "instructions": {
@@ -11059,14 +11080,6 @@
         "knowledgeCutoff": {
           "description": "이 날짜 이전에 마지막으로 업데이트된 문서는 무시됩니다.",
           "title": "지식 기준 날짜"
-        },
-        "mcpCard": {
-          "expand": {
-            "label": "펼치기"
-          },
-          "fold": {
-            "label": "접기"
-          }
         },
         "moreInfo": {
           "title": "추가 정보"
