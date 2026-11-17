@@ -1,0 +1,129 @@
+# Import boundaries for backend/. Checked by scripts/check_import_boundaries.py
+# (pre-commit hook `import-boundaries`).
+#
+# A contract:
+#   name     Short id shown in the failure message.
+#   rule     The boundary in one line.
+#   reason   Why the boundary exists, in one line.
+#   instead  Where the code or the import goes instead.
+#   type     "forbidden" (default) or "independence".
+#
+# forbidden: files under `source` (path prefixes relative to backend/, less
+# `source_exclude`) must not import a module under `forbidden`. A module under
+# `allowed` is exempt.
+#
+# independence: each sub-directory of `container` must not import another
+# sub-directory, except those in `shared`.
+#
+# All import statements count: module level, inside functions, and under
+# TYPE_CHECKING. A deliberate import needs an exception with a reason:
+#
+#   [[contract.exception]]
+#   importer = "onyx/path/file.py"
+#   imports = "ee.onyx.module"
+#   reason = "Why this one import is correct."
+#
+# An exception that matches no import fails the check, so the list only shrinks.
+
+[[contract]]
+name = "shared-configs-is-a-leaf"
+rule = "shared_configs must not import another backend package"
+reason = "The API server image and the model server image both ship shared_configs, and each has only part of the other code."
+instead = "Keep shared_configs to settings and context variables. Put the logic in onyx/ and import shared_configs from there."
+source = ["shared_configs/"]
+forbidden = ["onyx", "ee", "model_server", "scripts", "tests", "alembic_tenants"]
+
+[[contract]]
+name = "model-server-image"
+rule = "model_server may import from onyx only the modules that Dockerfile.model_server copies"
+reason = "The model server image has no other onyx, ee, scripts or tests code, so any other import fails at start."
+instead = "Put code that both servers need in shared_configs. To share one more onyx module, add its COPY line to Dockerfile.model_server and its name to `allowed`."
+source = ["model_server/"]
+forbidden = ["onyx", "ee", "scripts", "tests"]
+allowed = [
+    "onyx.__version__",
+    "onyx.configs.sentry",
+    "onyx.utils.logger",
+    "onyx.utils.middleware",
+    "onyx.utils.platform_utils",
+    "onyx.utils.tenant",
+]
+
+[[contract]]
+name = "app-not-model-server-or-scripts"
+rule = "onyx and ee must not import model_server or scripts"
+reason = "The backend image has no model_server package and only a few named scripts. The API server reaches the model server over HTTP."
+instead = "Call the model server through its HTTP client in onyx/natural_language_processing. Move code that a script and the app share into onyx/."
+source = ["onyx/", "ee/"]
+forbidden = ["model_server", "scripts"]
+
+[[contract]]
+name = "no-test-code-in-shipped-packages"
+rule = "ee, model_server, shared_configs, scripts and alembic must not import tests"
+reason = "No image ships tests/, and test helpers are not written for production use."
+instead = "Move the helper into the package that needs it and import it from the test."
+source = ["ee/", "model_server/", "shared_configs/", "scripts/", "alembic/", "alembic_tenants/"]
+forbidden = ["tests"]
+
+[[contract]]
+name = "sandbox-daemon-is-standalone"
+rule = "The sandbox image code must not import a backend package"
+reason = "sandbox_daemon ships alone in the sandbox image as the top-level package `sandbox_daemon`."
+instead = "Keep the code inside sandbox_daemon/. Where the API server needs the same value, define it on both sides and name the twin in a comment."
+source = ["onyx/server/features/build/sandbox/image/"]
+forbidden = ["onyx", "ee", "shared_configs", "model_server", "scripts", "tests"]
+
+[[contract]]
+name = "builtin-skills-are-standalone"
+rule = "A built-in skill script must not import a backend package"
+reason = "Built-in skill scripts run inside the sandbox, which has no backend code."
+instead = "Keep the helper inside the skill directory. Reach Onyx from a skill through its HTTP API."
+source = ["onyx/skills/builtin/"]
+forbidden = ["onyx", "ee", "shared_configs", "model_server", "scripts", "tests"]
+allowed = ["onyx.skills.builtin"]
+
+[[contract]]
+name = "backend-does-not-import-builtin-skills"
+rule = "onyx and ee must not import onyx.skills.builtin"
+reason = "Built-in skill scripts need packages that the backend environment does not have, and the backend ships them as files."
+instead = "Read a skill as files through onyx/skills. Put code that the backend runs outside onyx/skills/builtin."
+source = ["onyx/", "ee/"]
+source_exclude = ["onyx/skills/builtin/"]
+forbidden = ["onyx.skills.builtin"]
+
+[[contract]]
+name = "entry-points-are-not-libraries"
+rule = "onyx and ee must not import a process entry point"
+reason = "An entry point builds its application at import and sits at the top of the graph, so an import of it makes a cycle."
+instead = "Move the shared function into the package that owns it, for example onyx/server or onyx/setup.py, and import it from both places."
+source = ["onyx/", "ee/"]
+# ee/onyx/main.py is the Enterprise entry point. It extends the Community application.
+source_exclude = ["ee/onyx/main.py"]
+forbidden = ["onyx.main", "ee.onyx.main", "onyx.mcp_server_main", "onyx.webhook_server_main"]
+
+[[contract]]
+name = "mcp-server-is-a-separate-process"
+rule = "Only onyx/mcp_server_main.py may import onyx.mcp_server"
+reason = "The MCP server runs as its own process and calls the API server over HTTP."
+instead = "Put code that the API server also needs in the package that owns it. Import it from onyx/mcp_server."
+source = ["onyx/", "ee/"]
+source_exclude = ["onyx/mcp_server/", "onyx/mcp_server_main.py"]
+forbidden = ["onyx.mcp_server"]
+
+[[contract]]
+name = "webhook-server-is-a-separate-process"
+rule = "Only onyx/webhook_server_main.py may import onyx.webhook_server"
+reason = "The webhook server runs as its own process with its own application."
+instead = "Put code that the API server also needs in the package that owns it. Import it from onyx/webhook_server."
+source = ["onyx/", "ee/"]
+source_exclude = ["onyx/webhook_server/", "onyx/webhook_server_main.py"]
+forbidden = ["onyx.webhook_server"]
+
+[[contract]]
+name = "deprecated-db-code-is-for-migrations"
+rule = "Only alembic migrations may import onyx.db._deprecated"
+reason = "The directory holds retired code that old migrations still run. It is not a pattern for new code."
+instead = "Use the current module, for example onyx/file_store for file storage."
+source = ["onyx/", "ee/", "scripts/", "model_server/"]
+source_exclude = ["onyx/db/_deprecated/"]
+forbidden = ["onyx.db._deprecated"]

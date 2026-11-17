@@ -58,6 +58,29 @@ tests. Additive to the root `AGENTS.md`.
   `None` and logs instead of raising, so a bad value disables the feature rather than breaking
   imports. Tests patch the module constant.
 
+## Import Boundaries
+
+`scripts/check_import_boundaries.py` (pre-commit hook `import-boundaries`) fails a commit that
+adds an import across one of these boundaries. The contracts are in `import_boundaries.toml`.
+
+| Code | Must not import |
+| --- | --- |
+| `shared_configs` | Any other backend package |
+| `model_server` | `ee`, `scripts`, `tests`, and `onyx` except the modules that `Dockerfile.model_server` copies |
+| `onyx`, `ee` | `model_server`, `scripts` |
+| `ee`, `model_server`, `shared_configs`, `scripts`, `alembic` | `tests` |
+| `onyx/server/features/build/sandbox/image` (sandbox daemon) | Any backend package |
+| `onyx/skills/builtin` | Any backend package. `onyx` and `ee` must not import it |
+| `onyx`, `ee` | The entry points `onyx.main`, `ee.onyx.main`, `onyx.mcp_server_main`, `onyx.webhook_server_main` |
+| `onyx`, `ee` | `onyx.mcp_server` and `onyx.webhook_server`, except from their entry points |
+| `onyx`, `ee`, `scripts`, `model_server` | `onyx.db._deprecated`. Only `alembic` migrations use it |
+
+- Every `import` statement counts: module level, inside a function, and under `TYPE_CHECKING`.
+- The failure message gives the contract and where the code goes. Move the code. Do not move the
+  import into a function to hide it.
+- A deliberate import needs a `[[contract.exception]]` entry with a reason.
+- Run all contracts with `python3 backend/scripts/check_import_boundaries.py`.
+
 ## Background Workers (Celery)
 
 Onyx uses Celery for asynchronous task processing. Worker apps live in
