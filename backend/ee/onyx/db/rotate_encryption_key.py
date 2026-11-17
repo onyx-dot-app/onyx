@@ -23,10 +23,10 @@ import json
 from collections import Counter
 from collections.abc import Iterator, Sequence
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Column, LargeBinary, Table, bindparam, select, update
+from sqlalchemy import Column, LargeBinary, Table, bindparam, select, text, update
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.tenant_snapshot import (
@@ -109,6 +109,9 @@ class SchemaReport(BaseModel):
     shard_name: str
     schema_name: str
     columns: list[ColumnReport] = []
+    # Encrypted columns this schema does not have: no table or no column, as in
+    # a schema whose provisioning or migration stopped early. They hold nothing.
+    absent_columns: list[str] = []
     # The exception type when the schema could not be processed. Never a message:
     # a database error can quote the statement and its bound ciphertext.
     error: str | None = None
@@ -380,19 +383,42 @@ def rotate_sandbox_daemon_keys(
     return ColumnReport(name=SANDBOX_DAEMON_KEY_COLUMN, counts=dict(counts))
 
 
+def _present_columns(db_session: Session, schema_name: str) -> set[tuple[str, str]]:
+    rows = db_session.execute(
+        text(
+            "SELECT table_name, column_name FROM information_schema.columns "
+            "WHERE table_schema = :schema"
+        ),
+        {"schema": schema_name},
+    )
+    present = {(row[0], row[1]) for row in rows}
+    db_session.rollback()
+    return present
+
+
 def rotate_schema(
     db_session: Session,
+    schema_name: str,
     keyring: Keyring,
     columns: Sequence[EncryptedColumn],
     mode: RotationMode,
     tenant_cache: CacheBackend | None,
-) -> list[ColumnReport]:
-    reports = [rotate_column(db_session, keyring, column, mode) for column in columns]
-    if tenant_cache is not None:
+) -> tuple[list[ColumnReport], list[str]]:
+    """Column reports, and the encrypted columns the schema does not have."""
+    present = _present_columns(db_session, schema_name)
+    reports: list[ColumnReport] = []
+    absent: list[str] = []
+    for column in columns:
+        if (column.table.name, column.column.name) in present:
+            reports.append(rotate_column(db_session, keyring, column, mode))
+        else:
+            absent.append(column.name)
+    sandbox_id = (cast(Table, Sandbox.__table__).name, Sandbox.id.key)
+    if tenant_cache is not None and sandbox_id in present:
         reports.append(
             rotate_sandbox_daemon_keys(db_session, tenant_cache, keyring, mode)
         )
-    return reports
+    return reports, absent
 
 
 def _is_workspace(schema_name: str) -> bool:
@@ -414,8 +440,8 @@ def _run_on_schema(
         with get_session_for_schema_on_shard(
             shard_name=shard_name, schema_name=schema_name
         ) as db_session:
-            report.columns = rotate_schema(
-                db_session, keyring, columns, mode, tenant_cache
+            report.columns, report.absent_columns = rotate_schema(
+                db_session, schema_name, keyring, columns, mode, tenant_cache
             )
     except Exception as e:
         logger.error(
@@ -450,8 +476,8 @@ def _verify_snapshot(
             with get_session_for_schema_on_shard(
                 shard_name=shard_name, schema_name=scratch
             ) as db_session:
-                report.columns = rotate_schema(
-                    db_session, keyring, columns, RotationMode.VERIFY, None
+                report.columns, report.absent_columns = rotate_schema(
+                    db_session, scratch, keyring, columns, RotationMode.VERIFY, None
                 )
     except Exception as e:
         logger.error("Snapshot check failed on %s: %s", shard_name, _cause(e))

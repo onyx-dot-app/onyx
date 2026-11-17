@@ -50,6 +50,11 @@ def format_report(report: RotationReport) -> str:
         lines.append(f"{schema.shard_name}/{schema.schema_name}")
         if schema.error is not None:
             lines.append(f"  ERROR {schema.error}")
+        if schema.absent_columns:
+            lines.append(
+                f"  no table or column for {len(schema.absent_columns)} encrypted "
+                "column(s): nothing stored there"
+            )
         for column in schema.columns:
             counts = " ".join(
                 f"{outcome.value}={count}"

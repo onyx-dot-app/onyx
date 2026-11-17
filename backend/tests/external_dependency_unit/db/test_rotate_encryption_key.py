@@ -27,7 +27,7 @@ from sqlalchemy import LargeBinary, Table, bindparam, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
-from sqlalchemy.schema import CreateSchema, CreateTable, DropSchema
+from sqlalchemy.schema import CreateSchema, CreateTable, DropSchema, DropTable
 
 from ee.onyx.db import rotate_encryption_key as rotation
 from ee.onyx.db.rotate_encryption_key import (
@@ -218,7 +218,11 @@ def run(
     schema_name: str, keyring: Keyring, mode: RotationMode
 ) -> list[rotation.ColumnReport]:
     with session_on(schema_name) as db_session:
-        return rotate_schema(db_session, keyring, SCRATCH_COLUMNS, mode, None)
+        reports, absent = rotate_schema(
+            db_session, schema_name, keyring, SCRATCH_COLUMNS, mode, None
+        )
+    assert absent == []
+    return reports
 
 
 class TestDiscovery:
@@ -431,6 +435,55 @@ def _set_credential(credential_id: int, raw: bytes) -> Callable[[Session], None]
         set_credential_raw(db_session, credential_id, raw)
 
     return write
+
+
+class TestPartialSchemas:
+    def test_a_missing_table_is_reported_and_the_rest_is_converted(
+        self, schema: str
+    ) -> None:
+        with session_on(schema) as db_session:
+            credential_id = insert_credential(
+                db_session, encrypt_with_keyring(OLD, CREDENTIAL_JSON)
+            )
+            # The session's schema map sends the DDL to the scratch schema.
+            db_session.execute(DropTable(PROVIDER_TABLE))
+            db_session.commit()
+            reports, absent = rotate_schema(
+                db_session, schema, NEW, SCRATCH_COLUMNS, RotationMode.EXECUTE, None
+            )
+
+        assert absent == ["internet_search_provider.api_key"]
+        assert counts(reports, "credential.credential_json") == {
+            ValueOutcome.CONVERTED: 1
+        }
+        with session_on(schema) as db_session:
+            raw = raw_credential(db_session, credential_id)
+        assert raw is not None and is_current_ciphertext(NEW, raw)
+
+    def test_an_empty_schema_completes_every_mode(self) -> None:
+        engine = get_engine_for_shard(get_default_shard_name())
+        empty = f"tenant_{uuid.uuid4()}"
+        with engine.begin() as connection:
+            connection.execute(CreateSchema(empty))
+        try:
+            with (
+                patch(
+                    f"{ROTATION_MODULE}.get_tenant_ids_by_shard",
+                    return_value={get_default_shard_name(): [empty]},
+                ),
+                patch(f"{ROTATION_MODULE}.get_keyring", return_value=NEW),
+                patch(f"{ROTATION_MODULE}.get_cache_backend", return_value=None),
+                patch(f"{ROTATION_MODULE}.MULTI_TENANT", False),
+            ):
+                for mode in RotationMode:
+                    report = rotate_encryption_key(mode)
+                    assert report.incomplete_reasons() == [], mode
+                    assert len(report.schemas[0].absent_columns) == len(
+                        discover_encrypted_columns()
+                    )
+        finally:
+            with engine.begin() as connection:
+                connection.execute(DropSchema(empty, cascade=True))
 
 
 class TestConcurrentWriters:
@@ -648,8 +701,13 @@ class TestSandboxDaemonKeys:
             )
 
         with session_on(schema) as db_session:
-            reports = rotate_schema(
-                db_session, NEW, SCRATCH_COLUMNS, RotationMode.EXECUTE, tenant_cache
+            reports, _ = rotate_schema(
+                db_session,
+                schema,
+                NEW,
+                SCRATCH_COLUMNS,
+                RotationMode.EXECUTE,
+                tenant_cache,
             )
 
         assert counts(reports, SANDBOX_DAEMON_KEY_COLUMN) == {ValueOutcome.CONVERTED: 1}
@@ -657,8 +715,13 @@ class TestSandboxDaemonKeys:
             key = get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1)
         assert key is not None and key.get_secret_value() == "daemon-secret"
         with session_on(schema) as db_session:
-            reports = rotate_schema(
-                db_session, RETIRED, SCRATCH_COLUMNS, RotationMode.VERIFY, tenant_cache
+            reports, _ = rotate_schema(
+                db_session,
+                schema,
+                RETIRED,
+                SCRATCH_COLUMNS,
+                RotationMode.VERIFY,
+                tenant_cache,
             )
         assert counts(reports, SANDBOX_DAEMON_KEY_COLUMN) == {ValueOutcome.CURRENT: 1}
 
