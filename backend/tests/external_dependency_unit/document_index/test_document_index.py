@@ -653,3 +653,63 @@ class TestDocumentIndex:
         assert len(retrieved) == 2
         for chunk in retrieved:
             assert chunk.boost == 6
+
+    def test_leading_chunks_retrieval_reads_each_documents_start_in_one_query(
+        self,
+        document_index: DocumentIndex,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that leading_chunks_retrieval returns chunks 0 to max_chunk_index
+        of every requested document, a long document cannot crowd out a short
+        one, and other documents stay out.
+        """
+        # Precondition.
+        long_doc = f"test_leading_chunks_long_{uuid.uuid4().hex[:8]}"
+        short_doc = f"test_leading_chunks_short_{uuid.uuid4().hex[:8]}"
+        other_doc = f"test_leading_chunks_other_{uuid.uuid4().hex[:8]}"
+        chunks = [make_chunk(long_doc, chunk_id=i) for i in range(20)]
+        chunks += [make_chunk(short_doc, chunk_id=0), make_chunk(other_doc)]
+        metadata = make_indexing_metadata(
+            [long_doc, short_doc, other_doc],
+            old_counts=[0, 0, 0],
+            new_counts=[20, 1, 1],
+        )
+        document_index.index(chunks=chunks, indexing_metadata=metadata)
+        filters = IndexFilters(
+            access_control_list=None,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            attached_document_ids=[long_doc, short_doc],
+        )
+
+        # Under test.
+        deadline = time.time() + 10.0
+        retrieved: list[InferenceChunk] = []
+        while time.time() < deadline:
+            retrieved = document_index.leading_chunks_retrieval(
+                filters=filters, max_chunk_index=2
+            )
+            if len(retrieved) == 4:
+                break
+            time.sleep(0.25)
+
+        # Postcondition.
+        assert sorted((chunk.document_id, chunk.chunk_id) for chunk in retrieved) == [
+            (long_doc, 0),
+            (long_doc, 1),
+            (long_doc, 2),
+            (short_doc, 0),
+        ]
+
+    def test_leading_chunks_retrieval_requires_attached_document_ids(
+        self,
+        document_index: DocumentIndex,
+    ) -> None:
+        """
+        Tests that a call without attached_document_ids is refused instead of
+        reading the start of every document in the index.
+        """
+        with pytest.raises(ValueError):
+            document_index.leading_chunks_retrieval(
+                filters=IndexFilters(access_control_list=None), max_chunk_index=2
+            )
