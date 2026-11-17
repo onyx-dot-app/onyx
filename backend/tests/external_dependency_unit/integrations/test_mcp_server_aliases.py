@@ -59,7 +59,7 @@ OPENAPI_SPEC: dict[str, Any] = {
 
 @pytest.fixture(autouse=True)
 def _no_discovery() -> Generator[None, None, None]:
-    with patch("onyx.integrations.service.fetch_mcp_actions", return_value=[]):
+    with patch("onyx.integrations.service.discover_mcp_tools", return_value=[]):
         yield
 
 

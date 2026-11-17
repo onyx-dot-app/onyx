@@ -1,7 +1,8 @@
 """The logic of the integration API: who manages an integration, create,
 update and delete, the views, the action policies and the connections."""
 
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Iterator, Mapping
+from contextlib import contextmanager
 from typing import Any
 from uuid import UUID
 
@@ -65,21 +66,24 @@ from onyx.external_apps.url_glob import UrlGlob
 from onyx.integrations.connection_models import ConnectionState, read_oauth_client
 from onyx.integrations.connections import (
     IntegrationStatus,
+    MissingHeaderValueError,
     credential_field_keys,
     has_placeholder,
     header_field_keys,
     integration_status,
     mark_sign_in_settings_changed,
     oauth_client_configured,
+    render_headers,
     sign_in_host,
     sign_in_settings_for,
 )
 from onyx.integrations.craft import always_asks
-from onyx.integrations.kinds.mcp_server import fetch_mcp_actions
+from onyx.integrations.kinds.mcp_server import fetch_mcp_actions, mcp_action_specs
 from onyx.integrations.models import (
     ApiConfig,
     ApiShape,
     EffectivePolicy,
+    IntegrationActionSpec,
     IntegrationPluginRow,
 )
 from onyx.integrations.policy import (
@@ -122,6 +126,7 @@ from onyx.server.features.integrations.models import (
     PresetConfigView,
     PresetView,
 )
+from onyx.server.features.mcp.client import discover_mcp_tools
 from onyx.server.features.mcp.ssrf import validate_mcp_url
 from onyx.tools.tool_implementations.custom.custom_tool import validate_custom_tool_url
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
@@ -505,6 +510,40 @@ def _mcp_target(
     return None if server is None else (server.server_url, server.transport)
 
 
+@contextmanager
+def _reaching(name: str) -> Iterator[None]:
+    """An error that is not an ``OnyxError`` becomes a 502."""
+    try:
+        yield
+    except OnyxError:
+        raise
+    except Exception as error:
+        logger.exception("Could not reach %s", name)
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, f"Could not reach {name}."
+        ) from error
+
+
+def _discover_new_server(
+    name: str,
+    config: McpServerConfigInput,
+    header_template: Mapping[str, str] | None,
+    user: User,
+) -> list[IntegrationActionSpec]:
+    """The tools of an MCP server with no sign-in, before anything is saved."""
+    try:
+        headers = render_headers(
+            header_template, None, extra_values={"user_email": user.email}
+        )
+    except MissingHeaderValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, error.detail) from error
+    with _reaching(name):
+        tools = discover_mcp_tools(
+            config.server_url, headers, transport=config.transport
+        )
+    return mcp_action_specs(tools)
+
+
 def _discover_and_sync(
     integration: Integration, user: User, db_session: Session
 ) -> None:
@@ -591,6 +630,12 @@ def create_integration__no_commit(
         validate_openapi_definition(config.openapi_spec)
     elif isinstance(config, CustomConfigInput):
         _validate_url_patterns(config.upstream_url_patterns)
+    mcp_actions = (
+        _discover_new_server(name, config, header_template, user)
+        if isinstance(config, McpServerConfigInput)
+        and request.auth_mode is IntegrationAuthMode.NONE
+        else None
+    )
 
     mcp_server_id: int | None = None
     tool_id: int | None = None
@@ -670,19 +715,12 @@ def create_integration__no_commit(
         db_session=db_session,
     )
 
-    if (
-        shape is IntegrationShape.MCP_SERVER
-        and request.auth_mode is IntegrationAuthMode.NONE
-    ):
-        try:
-            _discover_and_sync(integration, user, db_session)
-            return integration
-        except Exception:
-            # The server can be down at create; a refresh asks again.
-            logger.exception(
-                "Could not discover the tools of integration %s", integration.id
-            )
-    sync_integration_actions__no_commit(integration, db_session)
+    if mcp_actions is not None:
+        replace_integration_actions__no_commit(
+            integration.id, IntegrationActionSource.MCP, mcp_actions, db_session
+        )
+    elif shape is not IntegrationShape.MCP_SERVER:
+        sync_integration_actions__no_commit(integration, db_session)
     return integration
 
 
@@ -1210,15 +1248,8 @@ def set_admin_actions__no_commit(
 def refresh_actions__no_commit(
     user: User, integration: Integration, db_session: Session
 ) -> None:
-    try:
+    with _reaching(integration.name):
         _discover_and_sync(integration, user, db_session)
-    except OnyxError:
-        raise
-    except Exception as error:
-        logger.exception("Could not refresh the actions of %s", integration.id)
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY, f"Could not reach {integration.name}."
-        ) from error
 
 
 def _plugin_states(user: User, db_session: Session) -> dict[UUID, UserPluginState]:

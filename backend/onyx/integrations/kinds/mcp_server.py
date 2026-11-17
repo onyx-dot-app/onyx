@@ -117,6 +117,11 @@ def fetch_mcp_actions(
                 f"{integration.name} refused the credential. Reconnect it and try again.",
             ) from error
         raise
+    return mcp_action_specs(tools)
+
+
+def mcp_action_specs(tools: Sequence[MCPLibTool]) -> list[IntegrationActionSpec]:
+    """One spec for each tool name; the first tool of a name wins."""
     specs: dict[str, IntegrationActionSpec] = {}
     for tool in tools:
         if tool.name and tool.name not in specs:
