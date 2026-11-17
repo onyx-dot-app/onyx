@@ -212,11 +212,10 @@ on `task_revoked`, by the same prefixes, because an expired task never reaches
 
 1. `send-expires` **Give each new send `expires=`.** The backend AGENTS file
    requires it, and `backend/lint/check_celery_task_expires.py` fails a
-   commit that omits it. Ten sends carry `# celery-expires: allow (<reason>)`
+   commit that omits it. Nine sends carry `# celery-expires: allow (<reason>)`
    on purpose, because an expiry drops work that nothing sends again: the
-   docfetching and docprocessing sends, the prune generator (a manual prune),
-   and the four jobs a user starts once (targeted reindex, query history
-   export, usage report, eval run). An expired per-document sync task of a
+   docfetching and docprocessing sends, and the four jobs a user starts once
+   (targeted reindex, query history export, usage report, eval run). An expired per-document sync task of a
    document set or user group leaves its taskset through `task_revoked`, so
    the set would count as synced. A worker enforces `expires` when it takes
    the task; nothing removes an expired task from a queue with no worker. Do

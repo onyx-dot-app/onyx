@@ -13,6 +13,10 @@ from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair, SyncRecord
 from onyx.db.sync_record import fail_in_progress_sync_records
 from onyx.redis.redis_connector import RedisConnector
+from onyx.redis.redis_connector_prune import (
+    RedisConnectorPrune,
+    RedisConnectorPrunePayload,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.cc_pair import prune_cc_pair
 from onyx.server.documents.connector import update_connector_files
@@ -222,3 +226,46 @@ def test_failed_index_send_keeps_prune_request_for_removed_files(
     db_session.refresh(pair)
     assert pair.prune_requested_at is not None
     assert tasks._is_pruning_due(pair)
+
+
+def test_validator_resets_lost_generator_when_fence_writes_fail_after_send(
+    db_session: Session, pair: ConnectorCredentialPair
+) -> None:
+    request_prune__no_commit(db_session, pair.id)
+    db_session.commit()
+    sent = False
+
+    def send_task(*_args: object, **kwargs: object) -> MagicMock:
+        nonlocal sent
+        sent = True
+        return MagicMock(id=kwargs["task_id"])
+
+    original_set_fence = RedisConnectorPrune.set_fence
+
+    def set_fence(
+        self: RedisConnectorPrune, payload: RedisConnectorPrunePayload | None
+    ) -> None:
+        if sent:
+            raise ConnectionError("redis down")
+        original_set_fence(self, payload)
+
+    celery_app = MagicMock()
+    celery_app.send_task.side_effect = send_task
+    with patch.object(RedisConnectorPrune, "set_fence", set_fence):
+        tasks.try_creating_prune_generator_task(
+            celery_app, pair, db_session, get_redis_client(), get_current_tenant_id()
+        )
+    assert celery_app.send_task.call_count == 1
+    connector = RedisConnector(get_current_tenant_id(), pair.id)
+    assert connector.prune.fenced
+    get_redis_client().delete(connector.prune.active_key)
+    with patch.object(tasks, "celery_find_task", return_value=False):
+        tasks.validate_pruning_fence(
+            get_current_tenant_id(),
+            connector.prune.fence_key.encode(),
+            reserved_tasks=set(),
+            queued_tasks=set(),
+            r=get_redis_client(),
+            r_celery=MagicMock(),
+        )
+    assert not connector.prune.fenced

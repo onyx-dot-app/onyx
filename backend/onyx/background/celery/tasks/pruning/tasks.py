@@ -516,19 +516,20 @@ def try_creating_prune_generator_task(
             # signal active before the fence is set
             redis_connector.prune.set_active()
 
-            # set a basic fence to start
+            # The task id is in the first fence write, so the validator can
+            # find a lost task even if no later write succeeds.
             payload = RedisConnectorPrunePayload(
                 id=make_short_id(),
                 submitted=datetime.now(timezone.utc),
                 started=None,
-                celery_task_id=None,
+                celery_task_id=custom_task_id,
                 # read after the refresh above, so a prune serves only requests
                 # committed before it was dispatched
                 prune_requested_at=cc_pair.prune_requested_at,
             )
             redis_connector.prune.set_fence(payload)
 
-            result = celery_app.send_task(
+            celery_app.send_task(
                 OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
                 expires=PRUNING_GENERATOR_TASK_EXPIRES,
                 kwargs={
@@ -547,10 +548,6 @@ def try_creating_prune_generator_task(
             delete_sync_record(db_session, sync_record_id)
             redis_connector.prune.reset()
             raise
-
-        # fill in the celery task id
-        payload.celery_task_id = result.id
-        redis_connector.prune.set_fence(payload)
 
         payload_id = payload.id
     except Exception as e:
