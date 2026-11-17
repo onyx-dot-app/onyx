@@ -15,9 +15,10 @@ from onyx.configs.constants import (
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.tasks import (
+    claim_task_with_id,
     delete_task_with_id,
-    mark_task_as_finished_with_id,
-    mark_task_as_started_with_id,
+    fail_started_task,
+    get_started_task_for_update,
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.settings.store import load_settings
@@ -60,12 +61,9 @@ def export_query_history_task(
     writer.writeheader()
 
     with get_session_with_current_tenant() as db_session:
+        if not claim_task_with_id(db_session, task_id):
+            return
         try:
-            mark_task_as_started_with_id(
-                db_session=db_session,
-                task_id=task_id,
-            )
-
             snapshot_generator = fetch_and_process_chat_session_history(
                 db_session=db_session,
                 start=start,
@@ -88,16 +86,15 @@ def export_query_history_task(
 
         except Exception:
             logger.exception("Failed to export query history with task_id=%r", task_id)
-            mark_task_as_finished_with_id(
-                db_session=db_session,
-                task_id=task_id,
-                success=False,
-            )
+            fail_started_task(db_session, task_id)
             raise
 
     report_name = construct_query_history_report_name(task_id)
     with get_session_with_current_tenant() as db_session:
         try:
+            # Serialize publication with the reaper. A failed job cannot publish.
+            if get_started_task_for_update(db_session, task_id) is None:
+                return
             stream.seek(0)
             get_default_file_store().save_file(
                 content=stream,
@@ -120,9 +117,5 @@ def export_query_history_task(
             logger.exception(
                 "Failed to save query history export file; report_name=%r", report_name
             )
-            mark_task_as_finished_with_id(
-                db_session=db_session,
-                task_id=task_id,
-                success=False,
-            )
+            fail_started_task(db_session, task_id)
             raise

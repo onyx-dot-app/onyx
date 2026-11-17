@@ -1,16 +1,14 @@
-from datetime import datetime, timedelta
-
 from celery import shared_task
 
-from ee.onyx.db.query_history import get_all_query_history_export_tasks
+from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import (
+    USER_EXPORT_TASK_EXPIRES,
+    USER_JOB_LOST_TASK_GRACE,
+    OnyxCeleryTask,
+)
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import TaskStatus
-from onyx.db.tasks import delete_task_with_id
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
+from onyx.db.tasks import cleanup_stale_tasks
 
 
 @shared_task(
@@ -20,20 +18,9 @@ logger = setup_logger()
 )
 def export_query_history_cleanup_task(*, tenant_id: str) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-        tasks = get_all_query_history_export_tasks(db_session=db_session)
-
-        for task in tasks:
-            if task.status == TaskStatus.SUCCESS:
-                delete_task_with_id(db_session=db_session, task_id=task.task_id)
-            elif task.status == TaskStatus.FAILURE:
-                if task.start_time:
-                    deadline = task.start_time + timedelta(hours=24)
-                    now = datetime.now()
-                    if now < deadline:
-                        continue
-
-                logger.error(
-                    "Task with task.task_id=%r failed; it is being deleted now",
-                    task.task_id,
-                )
-                delete_task_with_id(db_session=db_session, task_id=task.task_id)
+        cleanup_stale_tasks(
+            db_session,
+            QUERY_HISTORY_TASK_NAME_PREFIX,
+            pending_timeout=USER_EXPORT_TASK_EXPIRES + USER_JOB_LOST_TASK_GRACE,
+            started_timeout=JOB_TIMEOUT + USER_JOB_LOST_TASK_GRACE,
+        )

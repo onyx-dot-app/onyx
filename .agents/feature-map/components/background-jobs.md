@@ -157,6 +157,14 @@ document in the batch and marks them modified, so the metadata sync corrects
 the index. The per-document `document_by_cc_pair_cleanup_task` only drains
 messages queued before an upgrade.
 
+**User exports.** Query-history exports claim their pending task row with a
+conditional update. The hourly cleanup fails pending rows after one hour plus
+five minutes, and started rows after `JOB_TIMEOUT` plus five minutes. It keeps
+failures for 24 hours from the failure transition. Claiming resets the start
+time, so an old queued job that just started is safe. File publication locks
+the started row, so a late worker cannot publish after cleanup fails the job.
+Celery time limits do not stop these thread workers.
+
 **Other periodic flows.** Each owner documents its flow; this list says where
 it runs.
 - Craft scheduled tasks ([[craft-scheduled-tasks]]): the dispatcher and the

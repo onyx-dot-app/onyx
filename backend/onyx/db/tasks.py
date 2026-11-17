@@ -1,12 +1,103 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import and_, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import delete
 
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.models import TaskQueueState, TaskStatus
+
+
+def claim_task_with_id(db_session: Session, task_id: str) -> bool:
+    """Only one worker can claim a pending job. Terminal jobs stay terminal."""
+    claimed = db_session.scalar(
+        update(TaskQueueState)
+        .where(
+            TaskQueueState.task_id == task_id,
+            TaskQueueState.status == TaskStatus.PENDING,
+        )
+        .values(status=TaskStatus.STARTED, start_time=func.now())
+        .returning(TaskQueueState.id)
+    )
+    db_session.commit()
+    return claimed is not None
+
+
+def get_started_task_for_update(
+    db_session: Session, task_id: str
+) -> TaskQueueState | None:
+    return db_session.scalar(
+        select(TaskQueueState)
+        .where(
+            TaskQueueState.task_id == task_id,
+            TaskQueueState.status == TaskStatus.STARTED,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
+def fail_started_task(db_session: Session, task_id: str) -> None:
+    db_session.rollback()
+    db_session.execute(
+        update(TaskQueueState)
+        .where(
+            TaskQueueState.task_id == task_id,
+            TaskQueueState.status == TaskStatus.STARTED,
+        )
+        .values(status=TaskStatus.FAILURE, start_time=func.now())
+    )
+    db_session.commit()
+
+
+def cleanup_stale_tasks(
+    db_session: Session,
+    task_name_prefix: str,
+    pending_timeout: int,
+    started_timeout: int,
+) -> None:
+    """Retain failures for a day, including jobs whose worker never ran."""
+    matching = TaskQueueState.task_name.startswith(
+        f"{task_name_prefix}_", autoescape=True
+    )
+    db_session.execute(
+        delete(TaskQueueState).where(
+            matching,
+            or_(
+                TaskQueueState.status == TaskStatus.SUCCESS,
+                and_(
+                    TaskQueueState.status == TaskStatus.FAILURE,
+                    func.coalesce(
+                        TaskQueueState.start_time, TaskQueueState.register_time
+                    )
+                    < func.now() - timedelta(days=1),
+                ),
+            ),
+        )
+    )
+    db_session.execute(
+        update(TaskQueueState)
+        .where(
+            matching,
+            or_(
+                and_(
+                    TaskQueueState.status == TaskStatus.PENDING,
+                    TaskQueueState.register_time
+                    < func.now() - timedelta(seconds=pending_timeout),
+                ),
+                and_(
+                    TaskQueueState.status == TaskStatus.STARTED,
+                    func.coalesce(
+                        TaskQueueState.start_time, TaskQueueState.register_time
+                    )
+                    < func.now() - timedelta(seconds=started_timeout),
+                ),
+            ),
+        )
+        .values(status=TaskStatus.FAILURE, start_time=func.now())
+    )
+    db_session.commit()
 
 
 def get_latest_task(

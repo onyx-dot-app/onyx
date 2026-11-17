@@ -28,6 +28,7 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.constants import (
     PUBLIC_API_TAGS,
+    USER_EXPORT_TASK_EXPIRES,
     FileOrigin,
     FileType,
     OnyxCeleryPriority,
@@ -337,6 +338,7 @@ def start_query_history_export(
 
     client_app.send_task(  # celery-expires: allow (user-started job, nothing sends it again)
         OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK,
+        expires=USER_EXPORT_TASK_EXPIRES,
         task_id=task_id,
         priority=OnyxCeleryPriority.MEDIUM,
         queue=OnyxCeleryQueues.CSV_GENERATION,
