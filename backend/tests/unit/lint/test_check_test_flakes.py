@@ -72,3 +72,36 @@ def test_sleep_and_skip_counts_ratchet_independently(tmp_path: Path) -> None:
 
     file.write_text("import pytest\npytest.skip()\n")
     assert check(tmp_path, tmp_path) == 1
+
+
+def test_python_format_reasons_need_fixed_text() -> None:
+    source = """
+pytest.skip("Requires {}".format(service))
+pytest.skip("{}".format(reason))
+pytest.skip("{0:>10}".format(reason))
+pytest.skip("missing {".format(reason))
+pytest.skip(get_reason())
+"""
+    assert list(python_findings(source)) == [
+        (2, "skip", True),
+        (3, "skip", False),
+        (4, "skip", False),
+        (5, "skip", False),
+        (6, "skip", False),
+    ]
+
+
+def test_playwright_test_import_aliases() -> None:
+    source = """
+import { test as pwTest } from "@playwright/test";
+import { test as other } from "./unrelated";
+pwTest.skip("Disabled case", async () => {});
+pwTest . describe . fixme("Disabled group", () => {});
+pwTest.fixme(!enabled, "Feature is disabled");
+other.skip();
+"""
+    assert list(playwright_findings(source)) == [
+        (4, "skip", False),
+        (5, "skip", False),
+        (6, "skip", True),
+    ]

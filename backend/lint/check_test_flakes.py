@@ -8,6 +8,7 @@ import re
 import tokenize
 from collections.abc import Iterator
 from pathlib import Path
+from string import Formatter
 from typing import Literal
 
 from tree_sitter import Language, Node, Parser
@@ -41,6 +42,18 @@ def _python_name(node: ast.expr) -> str:
 
 
 def _python_has_reason(value: ast.expr) -> bool:
+    if (
+        isinstance(value, ast.Call)
+        and isinstance(value.func, ast.Attribute)
+        and value.func.attr == "format"
+        and isinstance(value.func.value, ast.Constant)
+        and isinstance(value.func.value.value, str)
+    ):
+        try:
+            fields = list(Formatter().parse(value.func.value.value))
+        except ValueError:
+            return False
+        return any(literal.strip() for literal, *_ in fields)
     parts = value.values if isinstance(value, ast.JoinedStr) else [value]
     return any(
         isinstance(part, ast.Constant)
@@ -107,11 +120,40 @@ def _ts_text(node: Node) -> str:
     return (node.text or b"").decode()
 
 
+def _playwright_test_names(nodes: list[Node]) -> set[str]:
+    names = {"test"}
+    for node in nodes:
+        if node.type != "import_statement":
+            continue
+        source = node.child_by_field_name("source")
+        if source is None or _ts_text(source)[1:-1] != "@playwright/test":
+            continue
+        for entry in _descendants(node):
+            if entry.type != "import_specifier":
+                continue
+            name = entry.child_by_field_name("name")
+            alias = entry.child_by_field_name("alias")
+            if name is not None and _ts_text(name) == "test" and alias is not None:
+                names.add(_ts_text(alias))
+    return names
+
+
+def _is_playwright_test(receiver: Node, test_names: set[str]) -> bool:
+    if receiver.type == "member_expression":
+        prop = receiver.child_by_field_name("property")
+        target = receiver.child_by_field_name("object")
+        if prop is None or _ts_text(prop) != "describe" or target is None:
+            return False
+        receiver = target
+    return receiver.type == "identifier" and _ts_text(receiver) in test_names
+
+
 def playwright_findings(source: str, *, tsx: bool = False) -> Iterator[Finding]:
     grammar = language_tsx() if tsx else language_typescript()
     nodes = list(
         _descendants(Parser(Language(grammar)).parse(source.encode()).root_node)
     )
+    test_names = _playwright_test_names(nodes)
     marked = {
         node.start_point.row + 1
         for node in nodes
@@ -131,9 +173,8 @@ def playwright_findings(source: str, *, tsx: bool = False) -> Iterator[Finding]:
         line = prop.start_point.row + 1
         if method == "waitForTimeout":
             yield line, "sleep", line in marked
-        elif method in {"skip", "fixme"} and re.fullmatch(
-            r"test(?:\.describe)?",
-            _ts_text(callee.child_by_field_name("object") or callee),
+        elif method in {"skip", "fixme"} and _is_playwright_test(
+            callee.child_by_field_name("object") or callee, test_names
         ):
             values = [arg for arg in args.named_children if arg.type != "comment"]
             # A title plus a test body declares a disabled test. Its title
