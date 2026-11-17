@@ -75,6 +75,8 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "import json, os, sys\n"
         "from pathlib import Path\n"
         "Path(os.environ['CHECKED_FILES']).write_text(json.dumps(sys.argv[3:]))\n"
+        "if os.environ.get('PATH_FILE'):\n"
+        "    Path(os.environ['PATH_FILE']).write_text(os.environ['PATH'])\n"
         "if os.environ.get('REWRITE'):\n"
         "    Path(sys.argv[3]).write_text('formatted\\n')\n"
         "sys.exit(int(os.environ.get('CHECK_EXIT', '0')))\n"
@@ -97,6 +99,30 @@ def _start(repo: Path) -> None:
 def _stop(repo: Path) -> None:
     result = _run(repo, "Stop")
     assert result.returncode == 0, result.stderr
+
+
+def test_pre_commit_runs_with_the_repo_venv_first_on_path(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    venv_bin = repo / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    path_file = repo.parent / "path.txt"
+    monkeypatch.setenv("PATH_FILE", str(path_file))
+    _start(repo)
+    (repo / "base.txt").write_text("edit\n")
+    _stop(repo)
+    assert path_file.read_text().split(os.pathsep)[0] == str(venv_bin)
+
+
+def test_pre_commit_path_is_unchanged_without_a_venv(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path_file = repo.parent / "path.txt"
+    monkeypatch.setenv("PATH_FILE", str(path_file))
+    _start(repo)
+    (repo / "base.txt").write_text("edit\n")
+    _stop(repo)
+    assert path_file.read_text() == os.environ["PATH"]
 
 
 @pytest.mark.parametrize("operation", ["checkout", "merge", "rebase"])
