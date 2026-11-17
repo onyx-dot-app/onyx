@@ -95,7 +95,7 @@ def test_two_concurrent_refreshes_make_one_call(
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     results: list[str | None] = []
     errors: list[BaseException] = []
-    start = threading.Barrier(2)
+    start = threading.Barrier(2, timeout=30)
 
     def refresh() -> None:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
@@ -112,6 +112,8 @@ def test_two_concurrent_refreshes_make_one_call(
                 results.append(read_connection_secret(fresh).access_token)
         except BaseException as error:
             errors.append(error)
+            # A blocked peer raises BrokenBarrierError instead of hanging.
+            start.abort()
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
