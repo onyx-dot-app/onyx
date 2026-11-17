@@ -127,7 +127,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
             {memoryText}
           </Text>
           <Button
-            prominence="tertiary"
+            prominence="internal"
             size="sm"
             icon={SvgMaximize2}
             // Pressed while the memories it opened are showing.
