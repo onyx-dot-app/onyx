@@ -546,7 +546,7 @@ export class McpOAuthFlow {
   ): Promise<void> {
     await prompt.open();
     await this.completeFlowInNewTab(() =>
-      prompt.dialog.connectButton(integrationName).click()
+      prompt.dialog.startConnect(integrationName)
     );
     await prompt.dialog.expectConnected(integrationName);
     await prompt.dialog.close();

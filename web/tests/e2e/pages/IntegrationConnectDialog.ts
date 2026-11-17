@@ -37,6 +37,11 @@ export class IntegrationConnectDialog {
     });
   }
 
+  /** Clicks Connect on the row of an integration. */
+  async startConnect(name: string): Promise<void> {
+    await this.connectButton(name).click();
+  }
+
   /** Fills the API key form by field label and connects. */
   async submitCredentials(fields: Record<string, string>): Promise<void> {
     await expect(this.credentialsDialog).toBeVisible();

@@ -169,7 +169,7 @@ test.describe("MCP OAuth flows", () => {
     await member.goto(pluginId, "Integrations");
     await member.expectStatus("Not connected");
     await new McpOAuthFlow(page, oauthConfig()).completeFlowInNewTab(() =>
-      member.connectButton(serverName).click()
+      member.startConnect(serverName)
     );
     await member.expectStatus("Connected");
 
@@ -200,7 +200,7 @@ test.describe("MCP OAuth flows", () => {
     await detail.openTab("Integrations");
     if (await detail.connectButton(serverName).isVisible()) {
       await new McpOAuthFlow(page, oauthConfig()).completeFlowInNewTab(() =>
-        detail.connectButton(serverName).click()
+        detail.startConnect(serverName)
       );
     }
     await detail.expectStatus("Connected");
