@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 from httpx import ConnectError, HTTPStatusError, Request, Response
 from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from starlette.requests import Request as StarletteRequest
 
@@ -60,6 +61,7 @@ from onyx.integrations.connection_models import (
     IntegrationOAuthCallbackResult,
     read_connection_secret,
 )
+from onyx.integrations.connections import connect_with_fields__no_commit
 from onyx.integrations.models import (
     ActionSettings,
     IntegrationActionSpec,
@@ -708,6 +710,32 @@ def test_organization_connection_put_and_delete(
     assert view.organization_status is not None
     assert view.organization_status.reason == "Connect the account of the organization."
     assert view.setup_reason == view.organization_status.reason
+
+
+def test_connection_save_holds_the_integration_row_lock(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    """A settings change takes the same lock, so it cannot commit between
+    the checks of the save and its write."""
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    admin_api.save_organization_connection(
+        detail.id, ConnectionFieldsRequest(fields={"api_key": "k"}), admin, db_session
+    )
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+
+    connect_with_fields__no_commit(integration, None, {"api_key": "k2"}, db_session)
+    try:
+        with get_session_with_current_tenant() as other:
+            with pytest.raises(OperationalError):
+                other.execute(
+                    select(Integration.id)
+                    .where(Integration.id == detail.id)
+                    .with_for_update(nowait=True)
+                )
+    finally:
+        db_session.rollback()
 
 
 # Actions
@@ -1429,7 +1457,15 @@ def test_cloud_protects_onyx_managed_presets(
     detail = admin_api.create_integration(_linear_create(), admin, db_session)
     created.add(detail.id)
 
+    linear = _linear_create().config
+    assert isinstance(linear, PresetConfigInput)
+    assert linear.preset_id in {
+        preset.id for preset in admin_api.list_integration_presets(admin)
+    }
     with patch("onyx.integrations.service.MULTI_TENANT", True):
+        assert linear.preset_id not in {
+            preset.id for preset in admin_api.list_integration_presets(admin)
+        }
         with pytest.raises(OnyxError) as error:
             admin_api.create_integration(_linear_create(), admin, db_session)
         assert error.value.error_code is OnyxErrorCode.INVALID_INPUT

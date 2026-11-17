@@ -29,6 +29,7 @@ from onyx.db.integration import (
     get_external_app_for_integration,
     get_mcp_server_for_integration,
     get_openapi_tool_for_integration,
+    lock_integration__no_commit,
 )
 from onyx.db.integration_connection import (
     delete_connection__no_commit,
@@ -1002,7 +1003,9 @@ def connect_with_fields__no_commit(
 ) -> None:
     """Save an api_key connection for ``user``, or for the organization when
     ``user`` is None. Each credential field needs a value; other keys are
-    refused."""
+    refused. The integration row lock orders the save with a settings
+    change, which sets the connections to Needs reconnect."""
+    lock_integration__no_commit(integration.id, db_session)
     if integration.auth_method is not IntegrationAuthMethod.API_KEY:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
