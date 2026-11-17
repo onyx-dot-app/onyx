@@ -10813,6 +10813,7 @@
         "loadFailed": "Não foi possível carregar os plugins.",
         "lock": {
           "adminBlocked": "Permitir não está disponível: um administrador bloqueou esta ação.",
+          "alwaysAsks": "Permitir não está disponível: o Craft pede aprovação para cada uma dessas solicitações.",
           "adminFinal": "Permitir não está disponível: a configuração do administrador desta integração é definitiva.",
           "defaultFinal": "Permitir não está disponível: as configurações do administrador destas integrações são definitivas."
         },
