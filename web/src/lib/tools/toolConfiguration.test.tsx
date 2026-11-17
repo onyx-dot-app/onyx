@@ -53,10 +53,16 @@ const SIGNED_IN: Pick<User, "id" | "email" | "is_anonymous_user"> = {
 let mockUser: Pick<User, "id" | "email" | "is_anonymous_user"> | null =
   SIGNED_IN;
 // No plugins: these tests cover the built-in tools and the filters.
+let mockCatalogLoading = false;
 jest.mock("@/lib/plugins/member", () => ({
   useMemberPlugins: () => ({
     plugins: [],
-    loading: { apps: false, servers: false, tools: false, oauth: false },
+    loading: {
+      apps: false,
+      servers: mockCatalogLoading,
+      tools: false,
+      oauth: false,
+    },
     errors: {},
   }),
 }));
@@ -67,6 +73,7 @@ jest.mock("@/providers/UserProvider", () => ({
 beforeEach(() => {
   sessionStorage.clear();
   mockChatId = "abc";
+  mockCatalogLoading = false;
   mockIncognitoEnabled = false;
   mockActiveAgent = undefined;
   mockUser = SIGNED_IN;
@@ -266,6 +273,25 @@ describe("useToolConfiguration: an existing chat", () => {
       tags: [{ tag_key: "team", tag_value: "sales" }],
       timeRange: { from: "2026-01-01T00:00:00Z" },
     });
+  });
+
+  test("keeps the saved selection for a send while the plugin catalogs load", () => {
+    mockCatalogLoading = true;
+    const saved: ChatToolOptions = {
+      allowed: [
+        { type: "capability", tool_id: 1 },
+        { type: "plugin", plugin_id: "plugin-1" },
+      ],
+      preferred: null,
+      internal_search_filters: { ...NO_FILTERS, source_type: ["notion"] },
+    };
+    openSavedChats({ abc: saved });
+    const { result } = renderHook(() => useToolConfiguration());
+
+    expect(result.current.ready).toBe(false);
+    expect(result.current.allowed).toEqual(saved.allowed);
+    expect(result.current.disabledToolIds).toEqual([2]);
+    expect(result.current.filters.selectedSources).toEqual(["notion"]);
   });
 
   test("drops writes until its details load", () => {
