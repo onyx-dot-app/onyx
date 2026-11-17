@@ -486,8 +486,9 @@ _CREATE_SOURCES = f"""
                 WHEN a.auth_template = '{{}}'::jsonb THEN 'none'
                 -- The organization credentials are encrypted, so SQL cannot
                 -- see which fields a user must fill. A saved user credential
-                -- shows that users fill some. The credential import (U3)
-                -- reads the fields and sets the final mode.
+                -- shows that users fill some. This mode is final: the
+                -- credential code reads the copied organization values as
+                -- the defaults that a user's values override.
                 WHEN EXISTS (
                     SELECT 1 FROM external_app_user_credential c
                     WHERE c.external_app_id = a.id
