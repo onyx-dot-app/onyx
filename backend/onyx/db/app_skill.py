@@ -14,9 +14,9 @@ def built_in_app_skills(
 ) -> dict[str, int]:
     """The built-in skill id of each preset that one user gets, mapped to the
     external app that renders it. ``states`` are the user's plugin states. The
-    user gets a preset's skill through an enabled plugin that holds an
-    enabled integration of that preset."""
-    running = [state.plugin_id for state in states if state.enabled]
+    user gets a preset's skill through a plugin the user can run that holds
+    an enabled integration of that preset."""
+    running = [state.plugin_id for state in states if state.can_run]
     if not running:
         return {}
     rows = db_session.execute(

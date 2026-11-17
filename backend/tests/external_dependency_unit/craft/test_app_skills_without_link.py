@@ -154,6 +154,25 @@ def test_built_in_app_skill_follows_the_plugin_the_user_runs(
         assert not skill_user_states(user, [built_in.id], session)[built_in.id].enabled
 
 
+def test_invalid_plugin_version_gives_no_built_in_skill(session: Session) -> None:
+    user = make_user(session)
+    slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]
+    reset_built_in_skill_row(session, built_in_skill_id=slack_id)
+    app = make_external_app(
+        session, app_type=ExternalAppType.SLACK, auth_template=_AUTH_TEMPLATE
+    )
+    plugin = make_app_plugin_for_user(session, app=app, user=user)
+    assert _app_skills(user, session) == {slack_id: app.id}
+
+    session.execute(
+        update(PluginVersion)
+        .where(PluginVersion.id == plugin.current_version_id)
+        .values(is_valid=False)
+    )
+
+    assert _app_skills(user, session) == {}
+
+
 def test_turned_off_integration_gives_no_built_in_skill(session: Session) -> None:
     user = make_user(session)
     slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]

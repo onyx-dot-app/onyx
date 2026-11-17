@@ -471,9 +471,9 @@ the app from the same rule
    such check.
 10. `built-in-app-skill-rule` **One rule decides who gets a built-in app
     skill.** `db/app_skill.py:built_in_app_skills` gives a user the
-    built-in skill of a preset when the user runs (visible and enabled in
-    `load_user_plugin_states`) a plugin that holds (`plugin__integration`) an
-    integration whose `external_app` row has an `app_type` in
+    built-in skill of a preset when the user runs (`can_run` in
+    `load_user_plugin_states`: visible, enabled and not invalid) a plugin
+    that holds (`plugin__integration`) an integration whose `external_app` row has an `app_type` in
     `skills/built_in.py:EXTERNAL_APP_BUILT_IN_SKILL_IDS`. The integration must
     be on (`integration.enabled`); `external_app.enabled` is an old copy and is
     not read. The app of that integration renders the skill
