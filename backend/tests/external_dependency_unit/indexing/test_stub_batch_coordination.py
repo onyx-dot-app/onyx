@@ -153,6 +153,50 @@ def test_claim_uses_the_tenant_schema(tenant_schema: str) -> None:
         assert attempt.stub_batches_sent == 2
 
 
+def test_a_claim_of_nothing_records_no_dispatch(
+    db_session: Session, attempt_id: int
+) -> None:
+    assert (
+        IndexingCoordination.claim_stub_batches(db_session, attempt_id, 4, "t1") == []
+    )
+    attempt = db_session.get(IndexAttempt, attempt_id)
+    assert attempt is not None
+    db_session.refresh(attempt)
+    assert (attempt.last_dispatch_task_id, attempt.last_dispatch_at) == (None, None)
+
+    _store(db_session, attempt_id, 1)
+    assert IndexingCoordination.claim_stub_batches(db_session, attempt_id, 4, "t2") == [
+        0
+    ]
+    db_session.refresh(attempt)
+    assert attempt.last_dispatch_task_id == "t2"
+    dispatched_at = attempt.last_dispatch_at
+    assert dispatched_at is not None
+
+    assert (
+        IndexingCoordination.claim_stub_batches(db_session, attempt_id, 4, "t3") == []
+    )
+    db_session.refresh(attempt)
+    assert (attempt.last_dispatch_task_id, attempt.last_dispatch_at) == (
+        "t2",
+        dispatched_at,
+    )
+
+
+def test_settle_uses_the_tenant_schema(tenant_schema: str) -> None:
+    with get_session_with_tenant(tenant_id=tenant_schema) as session:
+        IndexingCoordination.claim_stub_batches(session, _TENANT_ATTEMPT_ID, 2)
+        assert (
+            IndexingCoordination.settle_stub_batches_converted(
+                session, _TENANT_ATTEMPT_ID
+            )
+            == 2
+        )
+        attempt = session.get(IndexAttempt, _TENANT_ATTEMPT_ID)
+        assert attempt is not None
+        assert attempt.stub_batches_converted == 2
+
+
 def test_out_of_order_store_is_refused(db_session: Session, attempt_id: int) -> None:
     IndexingCoordination.record_stub_batch_stored(db_session, attempt_id, 0)
     with pytest.raises(RuntimeError):

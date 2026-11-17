@@ -171,9 +171,10 @@ class _Run:
         self.attempt_ids.append(attempt.id)
         return attempt
 
-    def extract(self, attempt_id: int) -> None:
+    def extract(self, attempt_id: int, include_permissions: bool = False) -> None:
         runner = MagicMock()
         runner.connector = self.connector
+        runner.include_permissions = include_permissions
         runner.run.side_effect = lambda _checkpoint: iter(
             [
                 (
@@ -281,6 +282,7 @@ def test_list_stub_batches_sends_a_folder_before_the_stubs_under_it() -> None:
             datetime.fromtimestamp(0, tz=timezone.utc),
             _WINDOW_END,
             batch_size=2,
+            include_permissions=False,
         )
     )
 
@@ -340,6 +342,19 @@ def test_with_the_switch_on_docfetching_lists_and_conversion_makes_the_documents
     assert converted == doc_ids
     assert run.sent_batch_nums(OnyxCeleryTask.DOCPROCESSING_TASK) == [0, 1, 2]
     assert run.attempt(attempt.id).stub_batches_converted == 3
+
+
+def test_the_listing_takes_the_permission_choice_of_the_attempt(run: _Run) -> None:
+    """With permission sync, an attempt that fetches permissions lists with
+    them too, so its folder nodes carry their permissions and no private
+    folder becomes public."""
+    attempt = run.add_attempt(IndexingStatus.IN_PROGRESS, _WINDOW_END)
+
+    with patch.object(run_docfetching, "ENABLE_CONVERSION_STAGE", True):
+        run.extract(attempt.id, include_permissions=True)
+
+    assert run.connector.listing_permissions
+    assert all(run.connector.listing_permissions)
 
 
 def test_with_the_switch_off_docfetching_fetches_the_documents(run: _Run) -> None:

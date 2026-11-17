@@ -439,11 +439,17 @@ def list_stub_batches(
     start: datetime,
     end: datetime,
     batch_size: int,
+    *,
+    include_permissions: bool,
 ) -> Generator[_ListerYield, None, None]:
     """One call of the connector's slim listing, in the shape of
     ``ConnectorRunner.run``: stub batches, hierarchy node batches and failures,
     then the next checkpoint. A hierarchy batch goes out before the stub batch
     that follows it, so a parent is stored before its documents.
+
+    ``include_permissions`` is the choice the attempt makes for fetching: the
+    hierarchy nodes then carry their permissions, as on the fetching path.
+    The conversion reads the documents' permissions.
 
     A plain ``SlimDocument`` is a document that the indexing filters drop. The
     listing yields it for pruning, and indexing does not use it."""
@@ -451,7 +457,7 @@ def list_stub_batches(
         start=start.timestamp(),
         end=end.timestamp(),
         checkpoint=checkpoint,
-        include_permissions=False,
+        include_permissions=include_permissions,
     )
     stubs: list[SlimDocumentStub] = []
     nodes: list[HierarchyNode] = []
@@ -1366,7 +1372,12 @@ def _fetch_or_list_runs(
     if lister_mode and isinstance(connector, CheckpointedSlimConnector):
         for stubs, nodes, failure, next_checkpoint in _timed_connector_runs(
             list_stub_batches(
-                connector, checkpoint, window_start, window_end, INDEX_BATCH_SIZE
+                connector,
+                checkpoint,
+                window_start,
+                window_end,
+                INDEX_BATCH_SIZE,
+                include_permissions=connector_runner.include_permissions,
             ),
             index_attempt_id,
         ):
