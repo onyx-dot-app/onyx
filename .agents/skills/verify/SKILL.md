@@ -63,7 +63,7 @@ description: Verify a backend change through the running Onyx app before committ
    `ONYX_DEV_LICENSE` if the test needs to reseed it.
 
    ```bash
-   uv run --frozen --env-file .vscode/.env pytest -xv '<test node ID>' > "$scratch/test.log" 2>&1
+   (cd backend && uv run --frozen --env-file ../.vscode/.env pytest -xv '<test node ID relative to backend/>') > "$scratch/test.log" 2>&1
    ```
 
    Save test output to a private file, check the exit code, and add a safe excerpt.
