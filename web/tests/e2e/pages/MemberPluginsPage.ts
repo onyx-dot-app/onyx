@@ -50,8 +50,8 @@ export class MemberPluginsPage {
   async addMcpServer(details: {
     name: string;
     url: string;
-    /** A manual OAuth client, for a server that signs in with OAuth. */
-    oauthClient?: { clientId: string; clientSecret: string };
+    /** For a server that signs in with OAuth; without a client, Onyx registers one. */
+    oauth?: { client: { clientId: string; clientSecret: string } | null };
   }): Promise<{ integrationId: number; pluginId: string }> {
     await this.page
       .getByRole("button", { name: "Add Integration", exact: true })
@@ -69,13 +69,15 @@ export class MemberPluginsPage {
     await expect(
       dialog.getByRole("combobox", { name: "Owner", exact: true })
     ).toHaveCount(0);
-    if (details.oauthClient) {
+    if (details.oauth) {
       const addForm = new AdminIntegrationsPage(this.page);
       await addForm.expectOAuthProbe();
-      await addForm.fillOAuthClient(
-        details.oauthClient.clientId,
-        details.oauthClient.clientSecret
-      );
+      if (details.oauth.client) {
+        await addForm.fillOAuthClient(
+          details.oauth.client.clientId,
+          details.oauth.client.clientSecret
+        );
+      }
     }
     const response = this.page.waitForResponse(
       (candidate) =>
