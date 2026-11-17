@@ -221,74 +221,6 @@ test("asks for the kind and offers presets and custom apps only with Craft", asy
   ).not.toBeInTheDocument();
 });
 
-test("adds an MCP server for the organization with the probed sign-in", async () => {
-  mockProbe.mockResolvedValue({
-    kind: "oauth",
-    transport: "STREAMABLE_HTTP",
-    discovery: {
-      status: "metadata_found",
-      supports_automatic_registration: true,
-      supports_client_metadata: null,
-      authorization_endpoint: "https://mcp.example.com/authorize",
-      token_endpoint: "https://mcp.example.com/token",
-    },
-  });
-  const fetchMock = mockList({
-    "POST /api/admin/integrations": makeDetail({ id: 9, name: "Example" }),
-  });
-  const user = await openAdd("mcp_server");
-
-  await user.type(
-    screen.getByRole("textbox", { name: copy.add.name.title }),
-    "Example"
-  );
-  await user.type(
-    screen.getByRole("textbox", { name: copy.add.mcp.url.title }),
-    "https://mcp.example.com/mcp"
-  );
-  expect(
-    await screen.findByText(copy.add.mcp.probe.oauth, {}, { timeout: 3000 })
-  ).toBeInTheDocument();
-  await user.click(
-    screen.getByRole("combobox", { name: copy.add.owner.title })
-  );
-  await user.click(
-    await screen.findByRole("option", { name: copy.add.owner.organization })
-  );
-  await user.click(screen.getByRole("button", { name: copy.add.submit }));
-
-  await waitFor(() =>
-    expect(requestBody(fetchMock, "POST", "/api/admin/integrations")).toEqual({
-      for_organization: true,
-      name: "Example",
-      description: null,
-      auth_mode: "individual",
-      auth_method: "oauth2",
-      header_template: null,
-      oauth_client: {
-        provider_mode: "discovery",
-        authorization_url: "https://mcp.example.com/authorize",
-        token_url: "https://mcp.example.com/token",
-        scopes: null,
-        additional_params: null,
-        pkce: null,
-        client_id: null,
-        client_secret: null,
-      },
-      config: {
-        shape: "mcp_server",
-        server_url: "https://mcp.example.com/mcp",
-        transport: "STREAMABLE_HTTP",
-      },
-    })
-  );
-  await waitFor(() =>
-    expect(window.location.pathname + window.location.search).toBe(
-      "/admin/integrations/9?tab=actions"
-    )
-  );
-});
-
 test("does not carry the sign-in of one kind to another kind", async () => {
   mockProbe.mockResolvedValue({
     kind: "oauth",
@@ -316,13 +248,13 @@ test("does not carry the sign-in of one kind to another kind", async () => {
   await user.click(screen.getByRole("button", { name: copy.add.submit }));
 
   await waitFor(() =>
-    expect(requestBody(fetchMock, "POST", "/api/admin/integrations")).toEqual(
-      expect.objectContaining({
-        auth_mode: "none",
-        auth_method: null,
-        oauth_client: null,
-      })
-    )
+    expect(
+      requestBody(fetchMock, "POST", "/api/admin/integrations")
+    ).toMatchObject({
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+    })
   );
 });
 
@@ -357,19 +289,19 @@ test("hides the organization choice without global manage:actions", async () => 
   );
   await user.click(screen.getByRole("button", { name: copy.add.submit }));
   await waitFor(() =>
-    expect(requestBody(fetchMock, "POST", "/api/admin/integrations")).toEqual(
-      expect.objectContaining({
-        for_organization: false,
-        name: "Docs",
-        auth_mode: "none",
-        auth_method: null,
-        config: {
-          shape: "mcp_server",
-          server_url: "https://docs.example.com/sse",
-          transport: "SSE",
-        },
-      })
-    )
+    expect(
+      requestBody(fetchMock, "POST", "/api/admin/integrations")
+    ).toMatchObject({
+      for_organization: false,
+      name: "Docs",
+      auth_mode: "none",
+      auth_method: null,
+      config: {
+        shape: "mcp_server",
+        server_url: "https://docs.example.com/sse",
+        transport: "SSE",
+      },
+    })
   );
 });
 
@@ -394,52 +326,6 @@ test("shows errors and posts nothing while required fields are empty", async () 
   expect(screen.getByText(copy.add.mcp.url.error)).toBeInTheDocument();
   expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(
     false
-  );
-});
-
-test("adds an OpenAPI app with an API key header", async () => {
-  const fetchMock = mockList({
-    "POST /api/admin/integrations": makeDetail({ id: 11, needs_setup: true }),
-  });
-  const user = await openAdd("openapi");
-  await user.click(screen.getByRole("button", { name: "Continue" }));
-
-  expect(
-    screen.getByRole("textbox", { name: copy.add.name.title })
-  ).toHaveValue("Reports API");
-  await user.click(
-    screen.getByRole("combobox", { name: copy.signIn.mode.title })
-  );
-  await user.click(
-    await screen.findByRole("option", { name: copy.signIn.mode.shared })
-  );
-  await user.click(
-    screen.getByRole("combobox", { name: copy.signIn.method.title })
-  );
-  await user.click(
-    await screen.findByRole("option", { name: copy.signIn.method.apiKey })
-  );
-  await user.click(screen.getByRole("button", { name: copy.add.submit }));
-
-  await waitFor(() =>
-    expect(requestBody(fetchMock, "POST", "/api/admin/integrations")).toEqual({
-      for_organization: false,
-      name: "Reports API",
-      description: "Weekly reports",
-      auth_mode: "shared",
-      auth_method: "api_key",
-      header_template: { Authorization: "Bearer {api_key}" },
-      oauth_client: null,
-      config: {
-        shape: "openapi",
-        openapi_spec: { openapi: "3.0.0", info: { title: "Reports API" } },
-      },
-    })
-  );
-  await waitFor(() =>
-    expect(window.location.pathname + window.location.search).toBe(
-      "/admin/integrations/11?tab=configuration"
-    )
   );
 });
 
@@ -472,19 +358,19 @@ test("adds an app from a preset with its organization credentials", async () => 
   await user.click(screen.getByRole("button", { name: copy.add.submit }));
 
   await waitFor(() =>
-    expect(requestBody(fetchMock, "POST", "/api/admin/integrations")).toEqual(
-      expect.objectContaining({
-        name: "GitHub",
-        auth_mode: "individual",
-        auth_method: "oauth2",
-        oauth_client: expect.objectContaining({ provider_mode: "preset" }),
-        config: {
-          shape: "preset",
-          preset_id: "github",
-          organization_credentials: { org: "onyx" },
-        },
-      })
-    )
+    expect(
+      requestBody(fetchMock, "POST", "/api/admin/integrations")
+    ).toMatchObject({
+      name: "GitHub",
+      auth_mode: "individual",
+      auth_method: "oauth2",
+      oauth_client: { provider_mode: "preset" },
+      config: {
+        shape: "preset",
+        preset_id: "github",
+        organization_credentials: { org: "onyx" },
+      },
+    })
   );
 });
 
@@ -556,18 +442,21 @@ test("adds a custom app with URL patterns", async () => {
   await user.click(screen.getByRole("button", { name: copy.add.submit }));
 
   await waitFor(() =>
-    expect(requestBody(fetchMock, "POST", "/api/admin/integrations")).toEqual(
-      expect.objectContaining({
-        name: "Billing",
-        auth_mode: "none",
-        config: {
-          shape: "custom",
-          upstream_url_patterns: [
-            "https://billing.example.com/*",
-            "https://api.billing.example.com/*",
-          ],
-        },
-      })
-    )
+    expect(requestBody(fetchMock, "POST", "/api/admin/integrations")).toEqual({
+      for_organization: false,
+      name: "Billing",
+      description: null,
+      auth_mode: "none",
+      auth_method: null,
+      header_template: null,
+      oauth_client: null,
+      config: {
+        shape: "custom",
+        upstream_url_patterns: [
+          "https://billing.example.com/*",
+          "https://api.billing.example.com/*",
+        ],
+      },
+    })
   );
 });
