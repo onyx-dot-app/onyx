@@ -125,6 +125,7 @@ const toolConfiguration: ToolConfigurationHandle = {
   setPluginEnabled: jest.fn(),
   allowed: null,
   ready: true,
+  optionsLoaded: true,
   filters: {
     selectedSources: null,
     documentSets: [],

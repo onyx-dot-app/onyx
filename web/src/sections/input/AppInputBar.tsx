@@ -395,7 +395,11 @@ const AppInputBar = React.memo(
 
     const submitMessage = useCallback(
       (submitted: ComposedMessage) => {
-        if (chatState !== "input" || !submitted.message.trim()) {
+        if (
+          chatState !== "input" ||
+          !submitted.message.trim() ||
+          !toolConfiguration.optionsLoaded
+        ) {
           return;
         }
         // Stop TTS first to prevent overlapping voices.
@@ -403,7 +407,13 @@ const AppInputBar = React.memo(
         onSubmit(submitted);
         clearChatDraft();
       },
-      [chatState, stopTTS, onSubmit, clearChatDraft]
+      [
+        chatState,
+        stopTTS,
+        onSubmit,
+        clearChatDraft,
+        toolConfiguration.optionsLoaded,
+      ]
     );
 
     const { currentMessageFiles, setCurrentMessageFiles } =
