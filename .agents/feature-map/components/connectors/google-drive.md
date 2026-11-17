@@ -170,6 +170,21 @@ budgets live in Redis
 (`redis/redis_rate_window.py`), so every worker that uses the credential shares
 them. Connector code does not import Redis.
 
+**Request and back-off metrics.** The gateway counts each request it sends,
+each try of a retry included, in `onyx_source_api_requests_total{source, api,
+outcome}` (`server/metrics/source_api_metrics.py`). A media download retries in
+googleapiclient, so `_CountingHttp` counts each of its HTTP requests. The
+limiter sets `onyx_source_api_limiter_budget{scope}` from the shares that the
+Redis scripts return, and counts cuts and waits. The listing pool
+(`AdaptiveConcurrency(metrics_name="drive_listing")`) records its limit,
+in-flight tasks, cuts and growth (`server/metrics/adaptive_pool_metrics.py`).
+docfetching runs the connector in a spawned process, so
+`server/metrics/child_process_relay.py` relays these metrics to the worker's
+metrics server. A sampler can also read the shared budget in Redis:
+`<tenant>:source_api_limit:google_drive:<credential id>:<api>:all:meta` (and
+`:user:<email>:meta`) holds `factor`, the share of the limit, as of the last
+request.
+
 **Clients.** `connectors/google_utils/resources.py:get_google_service` builds the Docs,
 Drive, Admin and Gmail clients from a `GoogleService` member, and impersonates
 the given user with a service-account key. The gateway impersonates each user

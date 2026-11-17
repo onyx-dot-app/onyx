@@ -79,6 +79,10 @@ from onyx.connectors.source_operations import (
     SourceOperations,
     source_operation,
 )
+from onyx.server.metrics.source_api_metrics import (
+    RequestOutcome,
+    record_source_api_request,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -109,6 +113,10 @@ _RATE_LIMITED_DOWNLOAD_TRIES = 8
 _RATE_LIMITED_DOWNLOAD_DELAY_SECONDS = 1
 _RATE_LIMITED_DOWNLOAD_MAX_DELAY_SECONDS = 32
 _RATE_LIMIT_REASONS = frozenset({"userRateLimitExceeded", "rateLimitExceeded"})
+# The api label of the request metrics for the APIs that the limiter does not
+# budget. Drive and Docs use the DriveQuotaApi values.
+_ADMIN_API = "admin"
+_FORMS_API = "forms"
 _DISABLED_API_REASONS = frozenset({"accessNotConfigured", "SERVICE_DISABLED"})
 
 # What a requested target probe needs to decide who should crawl it.
@@ -214,6 +222,16 @@ def _from_http_error(error: HttpError) -> GoogleDriveHttpError:
     )
 
 
+def _body_reasons(body: Any) -> tuple[str, ...]:
+    """The reasons in a parsed Google error body."""
+    error_body = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(error_body, dict):
+        return ()
+    return _error_reasons(error_body.get("errors")) + _error_reasons(
+        error_body.get("details")
+    )
+
+
 def _from_requests_error(error: requests.HTTPError) -> GoogleDriveHttpError:
     response = error.response
     status = response.status_code if response is not None else 0
@@ -223,11 +241,7 @@ def _from_requests_error(error: requests.HTTPError) -> GoogleDriveHttpError:
             body = response.json()
         except ValueError:
             body = None
-        if isinstance(body, dict) and isinstance(body.get("error"), dict):
-            error_body = body["error"]
-            reasons = _error_reasons(error_body.get("errors")) + _error_reasons(
-                error_body.get("details")
-            )
+        reasons = _body_reasons(body)
     rate_limited = status == 429 or any(
         reason in _RATE_LIMIT_REASONS for reason in reasons
     )
@@ -326,6 +340,65 @@ _retry_transient_fetch = retry_builder(
 )
 
 
+def _status_outcome(status: int, reasons: tuple[str, ...]) -> RequestOutcome:
+    if status == 429 or any(reason in _RATE_LIMIT_REASONS for reason in reasons):
+        return RequestOutcome.RATE_LIMITED
+    if status >= 500:
+        return RequestOutcome.SERVER_ERROR
+    if status >= 400:
+        return RequestOutcome.DENIED
+    if status == 0:
+        return RequestOutcome.NETWORK_ERROR
+    return RequestOutcome.OK
+
+
+def _request_outcome(error: Exception) -> RequestOutcome:
+    """The outcome of a request that raised ``error``."""
+    if isinstance(error, ExportSizeThresholdExceeded):
+        # Google answered. The gateway stopped reading a large body.
+        return RequestOutcome.OK
+    translated = _translate(error)
+    if isinstance(translated, GoogleDriveHttpError):
+        return _status_outcome(translated.status_code, translated.reasons)
+    if isinstance(translated, GoogleDriveRefreshError):
+        return RequestOutcome.DENIED
+    # A lost connection, a timeout, or a body stream that broke partway.
+    return RequestOutcome.NETWORK_ERROR
+
+
+def _record_request(api: str, outcome: RequestOutcome, count: int = 1) -> None:
+    record_source_api_request(DocumentSource.GOOGLE_DRIVE.value, api, outcome, count)
+
+
+class _CountingHttp:
+    """Wraps the http object of a media request and counts each HTTP request.
+    A media download retries in googleapiclient, with no ``execute`` for
+    each try, so the gateway counts at this level."""
+
+    def __init__(self, http: Any, api: str) -> None:
+        self._http = http
+        self._api = api
+
+    def request(self, *args: Any, **kwargs: Any) -> Any:
+        try:
+            response, content = self._http.request(*args, **kwargs)
+        except Exception as error:
+            _record_request(self._api, _request_outcome(error))
+            raise
+        reasons: tuple[str, ...] = ()
+        if response.status == 403:
+            try:
+                reasons = _body_reasons(json.loads(content))
+            except ValueError:
+                pass
+        _record_request(self._api, _status_outcome(response.status, reasons))
+        return response, content
+
+    def __getattr__(self, name: str) -> Any:
+        # Delegates every other attribute of the wrapped http object.
+        return getattr(self._http, name)  # ods: ignore[getattr]
+
+
 @contextmanager
 def _google_errors() -> Iterator[None]:
     try:
@@ -397,18 +470,23 @@ def _quota_limit_names(body: str | None) -> list[str]:
 
 
 class _LimitedRequest:
-    """A googleapiclient request that spends from the limiter before each
-    ``execute`` and reports a rate-limit answer. The retry helpers call
-    ``execute`` again for each try, so each try spends."""
+    """A googleapiclient request that counts each ``execute`` by its outcome.
+    With a limiter, it also spends before each ``execute`` and reports a
+    rate-limit answer. The retry helpers call ``execute`` again for each try,
+    so each try counts and spends.
+
+    ``answers_counted`` is for a batch: its callback counts the answer of each
+    request in it, so a batch that Google answers is not counted here."""
 
     def __init__(
         self,
         request: Any,
-        limiter: SourceApiLimiter,
-        api: DriveQuotaApi,
-        units: int,
-        user_email: str,
+        limiter: SourceApiLimiter | None,
+        api: str,
+        units: int = 0,
+        user_email: str | None = None,
         request_count: int = 1,
+        answers_counted: bool = False,
     ) -> None:
         self._request = request
         self._limiter = limiter
@@ -416,20 +494,27 @@ class _LimitedRequest:
         self._units = units
         self._user_email = user_email
         self._request_count = request_count
+        self._answers_counted = answers_counted
 
     def execute(self) -> Any:
-        self._limiter.acquire(
-            self._api.value, self._units, self._user_email, self._request_count
-        )
+        if self._limiter is not None:
+            self._limiter.acquire(
+                self._api, self._units, self._user_email, self._request_count
+            )
         try:
-            return self._request.execute()
-        except HttpError as error:
-            translated = _from_http_error(error)
-            if translated.rate_limited:
-                self._limiter.report_rate_limit(
-                    self._api.value, self._user_email, _is_user_rate_limit(translated)
-                )
+            result = self._request.execute()
+        except Exception as error:
+            _record_request(self._api, _request_outcome(error), self._request_count)
+            if self._limiter is not None and isinstance(error, HttpError):
+                translated = _from_http_error(error)
+                if translated.rate_limited:
+                    self._limiter.report_rate_limit(
+                        self._api, self._user_email, _is_user_rate_limit(translated)
+                    )
             raise
+        if not self._answers_counted:
+            _record_request(self._api, RequestOutcome.OK, self._request_count)
+        return result
 
 
 def _add_resource_key_header(
@@ -440,6 +525,9 @@ def _add_resource_key_header(
 
 
 def _download(request: Any, file_id: str, size_threshold: int) -> bytes:
+    # A retry of the download passes the same request again.
+    if not isinstance(request.http, _CountingHttp):
+        request.http = _CountingHttp(request.http, DriveQuotaApi.DRIVE.value)
     response_bytes = io.BytesIO()
     downloader = MediaIoBaseDownload(
         response_bytes, request, chunksize=size_threshold + _CHUNK_SIZE_BUFFER
@@ -631,28 +719,45 @@ class GoogleDriveSourceOperations(SourceOperations):
         return vars(self).get(_LIMITER_ATTRIBUTE)
 
     def _limited(
-        self, request: Any, units: int, user_email: str, request_count: int = 1
-    ) -> Any:
-        """``request``, or a wrapper that spends Drive quota units when a
-        limiter is attached. ``request_count`` is the number of calls in a batch."""
-        limiter = self._limiter()
-        if limiter is None:
-            return request
+        self,
+        request: Any,
+        units: int,
+        user_email: str,
+        request_count: int = 1,
+        answers_counted: bool = False,
+    ) -> _LimitedRequest:
+        """A Drive request that is counted, and spends Drive quota units when
+        a limiter is attached. ``request_count`` is the number of calls in a
+        batch."""
         return _LimitedRequest(
-            request, limiter, DriveQuotaApi.DRIVE, units, user_email, request_count
+            request,
+            self._limiter(),
+            DriveQuotaApi.DRIVE.value,
+            units,
+            user_email,
+            request_count,
+            answers_counted,
         )
 
     def _limited_list(
         self, list_function: Callable[..., Any], user_email: str
     ) -> Callable[..., Any]:
-        """A files.list or permissions.list function whose every page spends."""
-        if self._limiter() is None:
-            return list_function
+        """A files.list or permissions.list function whose every page is
+        counted and spends."""
 
         def limited(**kwargs: Any) -> Any:
             return self._limited(list_function(**kwargs), DRIVE_LIST_UNITS, user_email)
 
         return limited
+
+    @staticmethod
+    def _counted_list(list_function: Callable[..., Any]) -> Callable[..., Any]:
+        """A directory list function whose every page is counted."""
+
+        def counted(**kwargs: Any) -> Any:
+            return _LimitedRequest(list_function(**kwargs), None, _ADMIN_API)
+
+        return counted
 
     def _limited_download(
         self,
@@ -893,6 +998,9 @@ class GoogleDriveSourceOperations(SourceOperations):
                     logger.warning(
                         "Error retrieving file %s: %s", request_id, exception
                     )
+                    _record_request(
+                        DriveQuotaApi.DRIVE.value, _request_outcome(exception)
+                    )
                     translated = _translate(exception)
                     result.errors[request_id] = translated
                     if (
@@ -901,6 +1009,7 @@ class GoogleDriveSourceOperations(SourceOperations):
                     ):
                         rate_limit_errors.append(exception)
                 else:
+                    _record_request(DriveQuotaApi.DRIVE.value, RequestOutcome.OK)
                     result.files[request_id] = response
 
             batch = cast(
@@ -922,6 +1031,7 @@ class GoogleDriveSourceOperations(SourceOperations):
                 DRIVE_READ_UNITS * len(batch_keys),
                 user_email,
                 request_count=len(batch_keys),
+                answers_counted=True,
             ).execute()
             # One report for the batch: each report halves the budget.
             if rate_limit_errors:
@@ -1185,6 +1295,7 @@ class GoogleDriveSourceOperations(SourceOperations):
         ``max_response_bytes``. A rate limit or a server error is retried with
         backoff; the last one raises."""
         return _retry_transient_fetch(self._get_capped_json)(
+            api=_FORMS_API,
             user_email=user_email,
             url=_FORMS_API_FORM_URL.format(form_id=form_id),
             params={},
@@ -1201,6 +1312,7 @@ class GoogleDriveSourceOperations(SourceOperations):
     ) -> dict[str, Any] | None:
         self._spend(DriveQuotaApi.DOCS, DOCS_READ_UNITS, user_email)
         return self._get_capped_json(
+            api=DriveQuotaApi.DOCS.value,
             user_email=user_email,
             url=_DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
             params={"includeTabsContent": "true"},
@@ -1211,6 +1323,7 @@ class GoogleDriveSourceOperations(SourceOperations):
     def _get_capped_json(
         self,
         *,
+        api: str,
         user_email: str,
         url: str,
         params: dict[str, str],
@@ -1219,7 +1332,30 @@ class GoogleDriveSourceOperations(SourceOperations):
     ) -> dict[str, Any] | None:
         """The JSON body of a GET, streamed so an oversized one is never held
         whole. None when it exceeds ``max_response_bytes``. An error answer
-        goes to ``report_rate_limit``."""
+        goes to ``report_rate_limit``. ``api`` labels the request metric."""
+        try:
+            body = self._read_capped(
+                user_email=user_email,
+                url=url,
+                params=params,
+                max_response_bytes=max_response_bytes,
+                report_rate_limit=report_rate_limit,
+            )
+        except Exception as error:
+            _record_request(api, _request_outcome(error))
+            raise
+        _record_request(api, RequestOutcome.OK)
+        return None if body is None else json.loads(body)
+
+    def _read_capped(
+        self,
+        *,
+        user_email: str,
+        url: str,
+        params: dict[str, str],
+        max_response_bytes: int,
+        report_rate_limit: Callable[[Exception], None] | None,
+    ) -> bytearray | None:
         with self._docs_session(user_email).get(
             url, params=params, stream=True, timeout=_DOCS_FETCH_TIMEOUT_SECONDS
         ) as response:
@@ -1236,7 +1372,7 @@ class GoogleDriveSourceOperations(SourceOperations):
                 if len(buffer) + len(chunk) > max_response_bytes:
                     return None
                 buffer.extend(chunk)
-        return json.loads(buffer)
+        return buffer
 
     @source_operation(
         capabilities={
@@ -1253,7 +1389,7 @@ class GoogleDriveSourceOperations(SourceOperations):
         if query is not None:
             kwargs["query"] = query
         for user in execute_paginated_retrieval(
-            retrieval_function=self._directory().users().list,
+            retrieval_function=self._counted_list(self._directory().users().list),
             list_key="users",
             **kwargs,
         ):
@@ -1268,12 +1404,11 @@ class GoogleDriveSourceOperations(SourceOperations):
     def get_admin_user(self) -> GoogleDirectoryUser:
         """The primary admin's directory entry. Fails when the primary admin
         cannot use the Workspace directory API."""
-        user = (
-            self._directory()
-            .users()
-            .get(userKey=self._auth().primary_admin_email)
-            .execute()
-        )
+        user = _LimitedRequest(
+            self._directory().users().get(userKey=self._auth().primary_admin_email),
+            None,
+            _ADMIN_API,
+        ).execute()
         return GoogleDirectoryUser(
             is_admin=bool(user.get("isAdmin", False)),
             is_delegated_admin=bool(user.get("isDelegatedAdmin", False)),
@@ -1287,7 +1422,7 @@ class GoogleDriveSourceOperations(SourceOperations):
     def list_groups(self) -> Iterator[str]:
         """The emails of the Workspace domain's groups."""
         for group in execute_paginated_retrieval(
-            retrieval_function=self._directory().groups().list,
+            retrieval_function=self._counted_list(self._directory().groups().list),
             list_key="groups",
             domain=self._domain(),
             fields=_GROUP_FIELDS,
@@ -1305,7 +1440,7 @@ class GoogleDriveSourceOperations(SourceOperations):
     def list_group_members(self, *, group_email: str) -> Iterator[GoogleGroupMember]:
         """The direct members of a group. Nested groups are not expanded."""
         for member in execute_paginated_retrieval(
-            retrieval_function=self._directory().members().list,
+            retrieval_function=self._counted_list(self._directory().members().list),
             list_key="members",
             groupKey=group_email,
             fields=_GROUP_MEMBER_FIELDS,

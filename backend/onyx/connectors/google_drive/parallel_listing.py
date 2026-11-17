@@ -92,6 +92,8 @@ logger = setup_logger()
 
 # The largest page files.list serves.
 LISTING_PAGE_SIZE = 1000
+# The pool label of the listing pool's metrics.
+LISTING_POOL_METRICS_NAME = "drive_listing"
 # The split thresholds count files, not pages: Drive serves about 460 lean
 # files a page, but only about 100 with permission fields.
 # Files a shard should hold after a split. A shard's last page is seldom
@@ -440,6 +442,7 @@ class ParallelDriveLister:
                 self._observer,
                 initial=self._state.concurrency_limit or ADAPTIVE_INITIAL_WORKERS,
                 maximum=1 if inline else ADAPTIVE_MAX_WORKERS,
+                metrics_name=LISTING_POOL_METRICS_NAME,
             )
         )
 
