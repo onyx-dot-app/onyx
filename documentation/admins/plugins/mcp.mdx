@@ -31,8 +31,10 @@ or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the appli
 
     <img className="rounded-image" src="/assets/admins/plugins/integrations_add_mcp.webp" alt="The Add an MCP Server dialog after Onyx found 3 tools on a server with no sign-in"/>
 
-    The Onyx API server must be able to reach the URL. Onyx blocks private, loopback,
-    and link-local addresses during setup checks. **Transport** is **Streamable HTTP** by default.
+    The Onyx API server must be able to reach the URL.
+    Setup checks follow the [SSRF Protection](/admins/advanced_configs/security_hardening#ssrf-protection) level:
+    by default Onyx blocks private, loopback, and link-local addresses.
+    Cloud metadata addresses stay blocked at every level. **Transport** is **Streamable HTTP** by default.
     Select **Server-sent events (SSE)** only if the server supports SSE alone.
   </Step>
 
