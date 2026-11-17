@@ -2,7 +2,15 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
 from onyx.connectors.interfaces import ConnectorCheckpoint, SecondsSinceUnixEpoch
@@ -282,7 +290,10 @@ class ListingPartition(BaseModel):
 
 
 class ListingShardKind(str, Enum):
+    # Files other than folders, in the shard's modifiedTime range.
     FILES = "files"
+    # All folders of the partition. It has no time range and does not split.
+    FOLDERS = "folders"
 
 
 class ListingShard(BaseModel):
@@ -333,6 +344,20 @@ class ListingShard(BaseModel):
     open_end: bool = False
 
 
+class UnlistedParent(BaseModel):
+    """A parent folder that no folder listing yielded, and who can try to
+    read it. The first read is as the user who listed the child's shared
+    drive, or as the owner of a My Drive child: that user can usually read
+    the folder. Then each user who saw a child, in turn."""
+
+    # The shared drive of a child. Shared drive folders are in the same drive.
+    drive_id: str | None = None
+    # The owner of a My Drive child, who usually owns the folder too.
+    owner: str | None = None
+    # Users who saw a child, as indexes into DriveListingState.reader_emails.
+    readers: list[int] = []
+
+
 class DriveListingState(BaseModel):
     """Checkpoint of the parallel sharded listing (the service account flow).
     Its size follows the drives, the users and the open shards, not the
@@ -363,6 +388,71 @@ class DriveListingState(BaseModel):
     # True after open_window_end: shards that start from now on have no
     # upper bound.
     open_end: bool = False
+    # Each user who saw a child of an unlisted parent, once. UnlistedParent
+    # keeps indexes into this list, so a folder that many users see costs a
+    # few bytes for each of them.
+    reader_emails: list[str] = []
+    # Parent folder id -> who can try to read it, for parents that no folder
+    # listing has yielded yet. After the listing, only the ones still missing
+    # are read with files.get. Its size follows the folders.
+    unresolved_parents: dict[str, UnlistedParent] = {}
+    _reader_ids: dict[str, int] = PrivateAttr(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _readers_from_old_checkpoint(cls, data: Any) -> Any:
+        """A checkpoint from before ``unresolved_parents`` kept the readers of
+        each parent as emails, or as one email."""
+        if not isinstance(data, dict) or "unresolved_parent_emails" not in data:
+            return data
+        data = dict(data)
+        old: dict[str, str | list[str]] = data.pop("unresolved_parent_emails") or {}
+        reader_emails: list[str] = list(data.get("reader_emails") or [])
+        parents: dict[str, Any] = dict(data.get("unresolved_parents") or {})
+        for parent_id, emails in old.items():
+            readers: list[int] = []
+            for email in [emails] if isinstance(emails, str) else emails:
+                if email not in reader_emails:
+                    reader_emails.append(email)
+                readers.append(reader_emails.index(email))
+            parents[parent_id] = UnlistedParent(readers=readers)
+        data["reader_emails"] = reader_emails
+        data["unresolved_parents"] = parents
+        return data
+
+    def add_parent_reader(
+        self,
+        parent_id: str,
+        email: str,
+        drive_id: str | None = None,
+        owner: str | None = None,
+    ) -> None:
+        """Records ``email`` as a user who saw a child of the parent. The
+        first child that names a drive or an owner sets the hint for the
+        first read."""
+        if len(self._reader_ids) != len(self.reader_emails):
+            self._reader_ids = {
+                reader: index for index, reader in enumerate(self.reader_emails)
+            }
+        reader_id = self._reader_ids.get(email)
+        if reader_id is None:
+            reader_id = len(self.reader_emails)
+            self.reader_emails.append(email)
+            self._reader_ids[email] = reader_id
+        parent = self.unresolved_parents.setdefault(parent_id, UnlistedParent())
+        if reader_id not in parent.readers:
+            parent.readers.append(reader_id)
+        if parent.drive_id is None and parent.owner is None:
+            parent.drive_id = drive_id
+            parent.owner = None if drive_id else owner
+
+    def parent_reader_emails(self, parent: UnlistedParent) -> list[str]:
+        return [self.reader_emails[reader_id] for reader_id in parent.readers]
+
+    # Folder id -> the user who listed it, for folders yielded with no parent
+    # because that user cannot see the parent. A later copy with the parent,
+    # or a read after the listing, yields the folder again with it.
+    parentless_folder_emails: dict[str, str] = {}
 
     @property
     def is_done(self) -> bool:

@@ -174,6 +174,24 @@ def count_error_rows_for_index_attempt(
     )
 
 
+def index_attempt_has_errors_without_document(
+    index_attempt_id: int, db_session: Session
+) -> bool:
+    """Whether the attempt recorded a failure that names no document: a
+    listing, a partition or a batch that failed as a whole."""
+    return (
+        db_session.query(
+            db_session.query(IndexAttemptError)
+            .filter(
+                IndexAttemptError.index_attempt_id == index_attempt_id,
+                IndexAttemptError.document_id.is_(None),
+            )
+            .exists()
+        ).scalar()
+        is True
+    )
+
+
 def get_connector_config_hash_for_cc_pair(
     db_session: Session, cc_pair_id: int
 ) -> str | None:
