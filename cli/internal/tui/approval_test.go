@@ -19,6 +19,7 @@ import (
 type decidingClient struct {
 	api.ClientAPI
 	decisions []models.ApprovalDecision
+	answers   []models.QuestionAnswers
 	// The decision the server saves; by default, the one sent.
 	result *models.ApprovalDecisionResult
 	// The continuation that the default result names.
@@ -73,7 +74,7 @@ func press(t *testing.T, m Model, key tea.KeyPressMsg) (Model, tea.Cmd) {
 func approvalEntry(t *testing.T, m Model, id string) string {
 	t.Helper()
 	for _, e := range m.viewport.entries {
-		if e.kind == entryApproval && e.approvalID == id {
+		if e.kind == entryCard && e.cardID == id {
 			return stripANSI(e.rendered)
 		}
 	}
@@ -351,7 +352,7 @@ func TestApprovalCardStripsHostileContent(t *testing.T) {
 	m = receive(t, m, ch, request)
 	var rendered string
 	for _, e := range m.viewport.entries {
-		if e.kind == entryApproval {
+		if e.kind == entryCard {
 			rendered = e.rendered
 		}
 	}
@@ -497,7 +498,7 @@ func approvalPendingShowsTheWaitingRequest(t *testing.T, rejection models.Stream
 			warning = e.content
 		}
 	}
-	if !strings.Contains(warning, "waits for approval") || strings.Contains(warning, "409") {
+	if !strings.Contains(warning, "waits for an approval or an answer") || strings.Contains(warning, "409") {
 		t.Fatalf("message = %q", warning)
 	}
 
@@ -519,7 +520,7 @@ func approvalPendingShowsTheWaitingRequest(t *testing.T, rejection models.Stream
 			t.Fatalf("the unsent message shows: %q", e.content)
 		}
 		shown += strings.Count(e.content, "Filing the ticket.")
-		if e.kind == entryApproval {
+		if e.kind == entryCard {
 			cards++
 		}
 	}
@@ -842,7 +843,7 @@ func TestApprovalCardShowsAllArgumentsOnRequest(t *testing.T) {
 	m, _ = press(t, m, tea.KeyPressMsg{Code: 'd', Text: "d"})
 	var full string
 	for _, e := range m.viewport.entries {
-		if e.kind == entryApproval {
+		if e.kind == entryCard {
 			full = e.rendered
 		}
 	}

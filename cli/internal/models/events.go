@@ -28,6 +28,8 @@ const (
 	EventIntermediateReportDt = "intermediate_report_delta"
 	EventToolApprovalRequest  = "tool_approval_request"
 	EventToolApprovalResolved = "tool_approval_resolved"
+	EventToolQuestionRequest  = "tool_question_request"
+	EventToolQuestionResolved = "tool_question_resolved"
 	EventStreamCursor         = "stream_cursor"
 	EventStreamUnavailable    = "stream_unavailable"
 	EventReplayEnd            = "replay_end"
@@ -234,6 +236,55 @@ type ToolApprovalResolvedEvent struct {
 }
 
 func (e ToolApprovalResolvedEvent) EventType() string { return EventToolApprovalResolved }
+
+// ToolQuestionOption is one choice of a question.
+type ToolQuestionOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+// ToolQuestion is one question that the agent asks the user.
+type ToolQuestion struct {
+	ID       string               `json:"id"`
+	Header   string               `json:"header"`
+	Question string               `json:"question"`
+	Options  []ToolQuestionOption `json:"options"`
+}
+
+// ToolQuestionRequestEvent asks the user the agent's questions. The response
+// waits until the user answers or stops it. The questions come from the model
+// and are untrusted.
+type ToolQuestionRequestEvent struct {
+	Placement         *Placement     `json:"placement,omitempty"`
+	QuestionRequestID string         `json:"question_request_id"`
+	ToolCallID        string         `json:"tool_call_id"`
+	Questions         []ToolQuestion `json:"questions"`
+}
+
+func (e ToolQuestionRequestEvent) EventType() string { return EventToolQuestionRequest }
+
+// Outcomes of a question request, and how the user answered.
+const (
+	QuestionOutcomeAnswered = "answered"
+	// QuestionOutcomeCancelled: the response stopped before the answer.
+	QuestionOutcomeCancelled   = "cancelled"
+	QuestionAnsweredViaCard    = "card"
+	QuestionAnsweredViaMessage = "message"
+)
+
+// ToolQuestionResolvedEvent reports how a question request ended: answered
+// on its card (Answers) or by a message that the user typed (Message), or
+// cancelled.
+type ToolQuestionResolvedEvent struct {
+	Placement         *Placement           `json:"placement,omitempty"`
+	QuestionRequestID string               `json:"question_request_id"`
+	Outcome           string               `json:"outcome"`
+	AnsweredVia       string               `json:"answered_via,omitempty"`
+	Answers           []ToolQuestionAnswer `json:"answers,omitempty"`
+	Message           string               `json:"message,omitempty"`
+}
+
+func (e ToolQuestionResolvedEvent) EventType() string { return EventToolQuestionResolved }
 
 // StreamCursorEvent ends a complete batch of a replayed response. A request
 // for the same stream from NextCursor continues after the batch.
