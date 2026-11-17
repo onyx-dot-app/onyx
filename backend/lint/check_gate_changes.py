@@ -17,6 +17,8 @@ COUNT_BASELINES = {
     "backend/lint/no_http_exception_baseline.txt": False,
     "backend/lint/no_direct_redis_baseline.txt": True,
     "backend/lint/no_response_model_baseline.txt": True,
+    "backend/lint/test_skip_baseline.txt": True,
+    "backend/lint/test_sleep_baseline.txt": True,
 }
 SET_BASELINES = {
     "backend/lint/celery_task_allowlist.txt",
@@ -35,7 +37,11 @@ MARKERS = (
     "db-ops-outside-db: allow",
     "http-exception: allow",
     "no-response-model: allow",
+    "migration-design: allow",
+    "test-flakes: allow",
 )
+PLAYWRIGHT_MARKER = re.compile(r"(?://|/\*)\s*test-flakes: allow\s+.*\w")
+IMPORT_BOUNDARIES = "backend/lint/import_boundaries.toml"
 NOQA = re.compile(
     r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\b(?:\s*:\s*([A-Z]+\d+(?:[ ,]+[A-Z]+\d+)*))?",
     re.IGNORECASE,
@@ -87,8 +93,17 @@ def ruff_additions(before: str, after: str) -> bool:
     return old != new
 
 
-def suppression_data(source: str) -> tuple[list[str], dict[int, set[str]]]:
+def suppression_data(
+    source: str, *, playwright: bool
+) -> tuple[list[str], dict[int, set[str]]]:
     lines = source.splitlines()
+    if playwright:
+        # Scan candidate lines without loading a TypeScript parser in the gate.
+        return lines, {
+            index: {"marker"}
+            for index, line in enumerate(lines)
+            if PLAYWRIGHT_MARKER.search(line)
+        }
     suppressions: dict[int, set[str]] = {
         index: {"marker"}
         for index, line in enumerate(lines)
@@ -139,13 +154,13 @@ def suppression_data(source: str) -> tuple[list[str], dict[int, set[str]]]:
     return lines, suppressions
 
 
-def adds_suppression(before: str, after: str) -> bool:
+def adds_suppression(before: str, after: str, *, playwright: bool = False) -> bool:
     if not any(marker in after for marker in (*MARKERS, *RAW_MARKERS)) and not (
         NOQA.search(after) or RUFF_DIRECTIVE.search(after)
     ):
         return False
-    old_lines, old = suppression_data(before)
-    new_lines, new = suppression_data(after)
+    old_lines, old = suppression_data(before, playwright=playwright)
+    new_lines, new = suppression_data(after, playwright=playwright)
     diff = difflib.SequenceMatcher(None, old_lines, new_lines, autojunk=False)
     for tag, old_start, _, start, stop in diff.get_opcodes():
         for index in range(start, stop):
@@ -159,6 +174,24 @@ def adds_suppression(before: str, after: str) -> bool:
             if added and ("all" not in previous or "marker" in added):
                 return True
     return False
+
+
+def changes_import_boundaries(before: str, after: str) -> bool:
+    old, new = tomllib.loads(before), tomllib.loads(after)
+    old_contracts, new_contracts = old.get("contract", []), new.get("contract", [])
+    if len(old_contracts) != len(new_contracts):
+        return True
+    for old_contract, new_contract in zip(old_contracts, new_contracts, strict=True):
+        old_exceptions = old_contract.pop("exception", [])
+        for exception in new_contract.pop("exception", []):
+            if exception not in old_exceptions:
+                return True
+            old_exceptions.remove(exception)
+    return old != new
+
+
+def is_playwright_source(path: str) -> bool:
+    return path.startswith("web/tests/") and path.endswith((".ts", ".tsx"))
 
 
 def check_change(path: str, before: str, after: str) -> str | None:
@@ -176,12 +209,19 @@ def check_change(path: str, before: str, after: str) -> str | None:
             old_keys, new_keys = set(rows(before)), set(rows(after))
         if new_keys - old_keys:
             return "allowlist or baseline entry added"
+    elif path == IMPORT_BOUNDARIES:
+        if changes_import_boundaries(before, after):
+            return "import boundary policy changed"
     elif path in PROTECTED or path.startswith("backend/lint/"):
         return "gate definition changed"
     elif (name := Path(path).name) in {".ruff.toml", "ruff.toml", "pyproject.toml"}:
         if name != "pyproject.toml" or ruff_additions(before, after):
             return "Ruff configuration changed"
     elif path.endswith((".py", ".pyi", ".pyw")) and adds_suppression(before, after):
+        return "suppression added or edited"
+    elif is_playwright_source(path) and adds_suppression(
+        before, after, playwright=True
+    ):
         return "suppression added or edited"
     return None
 
@@ -204,12 +244,18 @@ def violations(base: str, head: str) -> list[tuple[str, str]]:
     for status, raw_path in zip(fields[::2], fields[1::2], strict=True):
         path = os.fsdecode(raw_path)
         protected = path in PROTECTED or path.startswith("backend/lint/")
-        if protected and path not in COUNT_BASELINES and path not in SET_BASELINES:
+        if (
+            protected
+            and path not in COUNT_BASELINES
+            and path not in SET_BASELINES
+            and path != IMPORT_BOUNDARIES
+        ):
             failures.append((path, "gate definition changed"))
             continue
         if not (
             protected
             or path in SET_BASELINES
+            or is_playwright_source(path)
             or path.endswith((".py", ".pyi", ".pyw", "pyproject.toml", "ruff.toml"))
         ):
             continue
