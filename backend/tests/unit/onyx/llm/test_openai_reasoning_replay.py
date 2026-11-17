@@ -229,7 +229,12 @@ _TOOLS: list[dict[str, Any]] = [
 ]
 
 
-def _llm(provider: str, model: str, supports_reasoning: bool = False) -> LitellmLLM:
+def _llm(
+    provider: str,
+    model: str,
+    supports_reasoning: bool = False,
+    model_kwargs: dict[str, Any] | None = None,
+) -> LitellmLLM:
     return LitellmLLM(
         api_key="test-key",
         model_provider=provider,
@@ -237,6 +242,7 @@ def _llm(provider: str, model: str, supports_reasoning: bool = False) -> Litellm
         max_input_tokens=100000,
         api_base="https://example.test" if provider == LlmProviderNames.AZURE else None,
         supports_reasoning=supports_reasoning,
+        model_kwargs=model_kwargs,
     )
 
 
@@ -255,6 +261,7 @@ def _complete(llm: LitellmLLM, completion: Any) -> list[dict[str, Any]]:
             stream=False,
             parallel_tool_calls=False,
             reasoning_effort=ReasoningEffort.HIGH,
+            env_injection_enabled=False,
         )
     return [dict(call.kwargs) for call in mocked.call_args_list]
 
@@ -286,6 +293,21 @@ def test_only_responses_routes_request_and_replay_reasoning_items(
         assert "include" not in kwargs
         assert "reasoning_items" not in assistant
         assert assistant["thinking_blocks"][0]["signature"] == "proof"
+
+
+def test_configured_include_is_sent_once_with_encrypted_reasoning() -> None:
+    llm = _llm(
+        LlmProviderNames.OPENAI,
+        "gpt-5",
+        model_kwargs={"include": ["web_search_call.results"]},
+    )
+
+    (kwargs,) = _complete(llm, lambda **_: None)
+
+    assert kwargs["include"] == [
+        "web_search_call.results",
+        "reasoning.encrypted_content",
+    ]
 
 
 @pytest.mark.parametrize(

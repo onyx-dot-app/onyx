@@ -239,16 +239,23 @@ def test_replay_drops_a_reasoning_item_whose_tool_call_was_lost() -> None:
             ToolCall(id="call-2", name="search", arguments={}),
         ]
     )
+    # An interrupted answer can leave text that is empty, which is no
+    # following item either.
+    silent = AssistantMessage(
+        content=[ThinkingContent(text="Plan.", blocks=[item]), TextContent(text="")],
+        stop_reason="aborted",
+    )
     messages: list[Message] = [
         stopped,
         UserMessage(content="Continue"),
         answered,
         ToolResultMessage(content="found", tool_call_id="call-2", tool_name="search"),
+        silent,
     ]
 
     replay = messages_for_model(messages)
 
-    assert replay == messages[1:]
+    assert replay == messages[1:4]
     assert format_provider_message(replay[1]).model_dump(exclude_none=True)[
         "reasoning_items"
     ] == [

@@ -1406,6 +1406,18 @@ class LitellmLLM(LLM):
 
         # Match LiteLLM's api_base-over-base_url precedence, including custom config.
         base_url = passthrough_kwargs.pop("base_url", self._api_base) or None
+        # `include` is sent once: a configured list keeps its entries ahead of
+        # the encrypted-reasoning entry, and joins the retry ladder with it.
+        configured_include = passthrough_kwargs.pop("include", None)
+        if isinstance(configured_include, list) and "include" in optional_kwargs:
+            requested = optional_kwargs["include"]
+            optional_kwargs["include"] = configured_include + [
+                value
+                for value in (requested if isinstance(requested, list) else [])
+                if value not in configured_include
+            ]
+        elif configured_include is not None:
+            passthrough_kwargs["include"] = configured_include
         # OpenRouter: inject session_id and user into extra_body.
         #
         # session_id — sticky routing: pins all turns of a conversation to the

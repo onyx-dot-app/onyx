@@ -62,6 +62,8 @@ def messages_for_model(
             for part in copy.content:
                 if isinstance(part, ToolCall) and part.id not in accepted:
                     continue
+                if isinstance(part, TextContent) and not part.text:
+                    continue
                 if isinstance(part, ThinkingContent):
                     if not part.blocks:
                         continue

@@ -28,11 +28,13 @@ from pydantic import JsonValue
 
 from onyx.agents.execution_records import messages_for_model
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.litellm_singleton import litellm
 from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.models import GenerationOptions, GenerationRequest, ReasoningItemBlock
 from onyx.llm.models import UserMessage as AppUserMessage
 from onyx.llm.multi_llm import LitellmLLM
+from onyx.tracing.flows import LLMFlow
 from tests.common.models import CI_OPENAI_MODEL
 from tests.unit.onyx.agents.fakes import collect_generation
 from tests.utils.secret_names import TestSecret
@@ -323,12 +325,14 @@ def test_reasoning_item_from_one_turn_is_accepted_on_the_next(
             "$2000 budget. Keep the answer under 120 words."
         )
     )
+    context = GenerationContext(flow=LLMFlow.CHAT_RESPONSE)
     first = collect_generation(
         list(
             llm.stream(
                 GenerationRequest(
                     messages=[question], options=GenerationOptions(max_tokens=4000)
-                )
+                ),
+                context,
             )
         )
     )
@@ -356,7 +360,8 @@ def test_reasoning_item_from_one_turn_is_accepted_on_the_next(
         second = llm.invoke(
             GenerationRequest(
                 messages=history, options=GenerationOptions(max_tokens=400)
-            )
+            ),
+            context,
         )
 
     assert "tokyo" in second.text.lower()
