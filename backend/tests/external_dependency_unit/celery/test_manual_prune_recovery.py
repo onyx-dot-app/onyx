@@ -190,3 +190,81 @@ def test_file_removal_keeps_prune_due_when_dispatch_is_deferred(
     db_session.refresh(pair)
     assert pair.prune_requested_at is not None
     assert tasks._is_pruning_due(pair)
+
+
+def test_failed_sends_do_not_use_up_the_request(
+    db_session: Session, pair: ConnectorCredentialPair
+) -> None:
+    from onyx.db.connector_edit_requests import request_prune__no_commit
+
+    request_prune__no_commit(db_session, pair.id)
+    db_session.commit()
+    broken_app = MagicMock()
+    broken_app.send_task.side_effect = ConnectionError("broker down")
+    connector = RedisConnector(get_current_tenant_id(), pair.id)
+    for _ in range(3):
+        assert (
+            tasks.try_creating_prune_generator_task(
+                broken_app,
+                pair,
+                db_session,
+                get_redis_client(),
+                get_current_tenant_id(),
+            )
+            is None
+        )
+        assert not connector.prune.fenced
+    assert (
+        db_session.query(SyncRecord)
+        .filter_by(entity_id=pair.id, sync_type=SyncType.PRUNING)
+        .count()
+        == 0
+    )
+    celery_app = MagicMock()
+    celery_app.send_task.return_value.id = "generator"
+    assert tasks.try_creating_prune_generator_task(
+        celery_app, pair, db_session, get_redis_client(), get_current_tenant_id()
+    )
+    assert celery_app.send_task.call_count == 1
+
+
+def test_failed_index_send_keeps_prune_request_for_removed_files(
+    db_session: Session, pair: ConnectorCredentialPair
+) -> None:
+    from onyx.configs.constants import DocumentSource
+    from onyx.server.documents.connector import update_connector_files
+
+    pair.connector.source = DocumentSource.FILE
+    pair.connector.connector_specific_config = {
+        "file_locations": ["gone", "keep"],
+        "file_names": ["gone.txt", "keep.txt"],
+    }
+    db_session.commit()
+    upload = MagicMock(
+        file_paths=["new"], file_names=["new.txt"], zip_metadata_file_id=None
+    )
+    broken_app = MagicMock()
+    broken_app.send_task.side_effect = ConnectionError("broker down")
+    with (
+        patch(
+            "onyx.server.documents.connector._fetch_and_check_file_connector_cc_pair_permissions",
+            return_value=pair,
+        ),
+        patch(
+            "onyx.server.documents.connector.get_default_file_store",
+            return_value=MagicMock(),
+        ),
+        patch("onyx.server.documents.connector.upload_files", return_value=upload),
+        patch("onyx.server.documents.connector.client_app", broken_app),
+    ):
+        response = update_connector_files(
+            pair.connector_id,
+            files=[MagicMock()],
+            file_ids_to_remove='["gone"]',
+            user=MagicMock(),
+            db_session=db_session,
+        )
+    assert response.file_paths == ["keep", "new"]
+    db_session.refresh(pair)
+    assert pair.prune_requested_at is not None
+    assert tasks._is_pruning_due(pair)

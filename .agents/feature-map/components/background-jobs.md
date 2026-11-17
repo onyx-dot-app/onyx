@@ -126,7 +126,10 @@ The beat retries the request after a lost task or failure, even without
 `prune_freq`. The dispatcher counts durable prune records since the request
 under the pair lock. After three attempts it clears the request and keeps
 the failed records in the run history. A new request starts a new budget.
-Connector edits and file removals use the same request field and limit.
+A dispatch whose fence write or task send fails deletes its record and resets
+the fence, so it is not an attempt.
+Connector edits and file removals use the same request field and limit. A file
+removal commits its request with the new file list, before any task send.
 Request and dispatch timestamps use database wall-clock time, because an open
 beat transaction can predate a new request. Scheduled pruning
 without a request keeps its existing retry behavior.

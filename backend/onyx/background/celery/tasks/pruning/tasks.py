@@ -75,6 +75,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.permission_sync_attempt import get_open_doc_permission_sync_attempt
 from onyx.db.sync_record import (
+    delete_sync_record,
     fail_in_progress_sync_records,
     insert_sync_record,
     record_sync_record_error,
@@ -505,43 +506,47 @@ def try_creating_prune_generator_task(
 
         # create before setting fence to avoid race condition where the monitoring
         # task updates the sync record before it is created
-        insert_sync_record(
+        sync_record_id = insert_sync_record(
             db_session=db_session,
             entity_id=cc_pair.id,
             sync_type=SyncType.PRUNING,
-        )
+        ).id
 
-        # signal active before the fence is set
-        redis_connector.prune.set_active()
+        try:
+            # signal active before the fence is set
+            redis_connector.prune.set_active()
 
-        # set a basic fence to start
-        payload = RedisConnectorPrunePayload(
-            id=make_short_id(),
-            submitted=datetime.now(timezone.utc),
-            started=None,
-            celery_task_id=None,
-            # read after the refresh above, so a prune serves only requests
-            # committed before it was dispatched
-            prune_requested_at=cc_pair.prune_requested_at,
-        )
-        redis_connector.prune.set_fence(payload)
+            # set a basic fence to start
+            payload = RedisConnectorPrunePayload(
+                id=make_short_id(),
+                submitted=datetime.now(timezone.utc),
+                started=None,
+                celery_task_id=None,
+                # read after the refresh above, so a prune serves only requests
+                # committed before it was dispatched
+                prune_requested_at=cc_pair.prune_requested_at,
+            )
+            redis_connector.prune.set_fence(payload)
 
-        # No expires=: the API sends a manual prune through this function and
-        # nothing sends it again. The fence allows one task per pair.
-        result = celery_app.send_task(  # celery-expires: allow (a manual prune is not sent again)
-            OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
-            expires=PRUNING_GENERATOR_TASK_EXPIRES,
-            kwargs={
-                "cc_pair_id": cc_pair.id,
-                "connector_id": cc_pair.connector_id,
-                "credential_id": cc_pair.credential_id,
-                "tenant_id": tenant_id,
-            },
-            queue=OnyxCeleryQueues.CONNECTOR_PRUNING,
-            task_id=custom_task_id,
-            priority=OnyxCeleryPriority.LOW,
-            headers={"enqueued_at": time.time()},
-        )
+            result = celery_app.send_task(
+                OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
+                expires=PRUNING_GENERATOR_TASK_EXPIRES,
+                kwargs={
+                    "cc_pair_id": cc_pair.id,
+                    "connector_id": cc_pair.connector_id,
+                    "credential_id": cc_pair.credential_id,
+                    "tenant_id": tenant_id,
+                },
+                queue=OnyxCeleryQueues.CONNECTOR_PRUNING,
+                task_id=custom_task_id,
+                priority=OnyxCeleryPriority.LOW,
+                headers={"enqueued_at": time.time()},
+            )
+        except Exception:
+            # An unsent dispatch is not an attempt on the prune request.
+            delete_sync_record(db_session, sync_record_id)
+            redis_connector.prune.reset()
+            raise
 
         # fill in the celery task id
         payload.celery_task_id = result.id

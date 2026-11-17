@@ -1,4 +1,4 @@
-from sqlalchemy import and_, desc, func, select, update
+from sqlalchemy import and_, delete, desc, func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SyncStatus, SyncType
@@ -54,6 +54,12 @@ def mark_sync_records_as_cancelled(
         .values(sync_status=SyncStatus.CANCELED, sync_end_time=func.now())
     )
     db_session.execute(stmt)
+    db_session.commit()
+
+
+def delete_sync_record(db_session: Session, sync_record_id: int) -> None:
+    """Removes a record whose task was never sent, so it is not an attempt."""
+    db_session.execute(delete(SyncRecord).where(SyncRecord.id == sync_record_id))
     db_session.commit()
 
 
