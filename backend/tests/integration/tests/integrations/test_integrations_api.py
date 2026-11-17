@@ -303,6 +303,8 @@ TOOL_SNAPSHOT_KEYS = {
     "agent_creation_selectable",
     "default_enabled",
     "default_action_policy",
+    # Added for chat plugin toggles; new fields keep old callers working.
+    "plugin_ids",
 }
 
 
