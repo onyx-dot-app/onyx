@@ -5,6 +5,7 @@ import {
 } from "@/lib/connectors/types/source";
 import { flushToolOptions, useToolConfiguration } from "@/lib/tools/hooks";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
+import { effectiveChatPreference } from "@/lib/plugins/chat";
 import type { MinimalAgent } from "@/lib/agents/types";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import type { ChatToolOptions, ToolSnapshot } from "@/lib/tools/types";
@@ -665,6 +666,33 @@ test("a saved preferred action stays through a plugin switch and a tool pin rele
     { type: "capability", tool_id: 1 }
   );
   expect(result.current.preferredAction).toBeNull();
+});
+
+test("a plugin that is no longer on the agent is off, so its saved action is not sent", () => {
+  mockPluginIds = ["plugin-b"];
+  const action = {
+    type: "action",
+    plugin_id: "plugin-a",
+    action: "create_issue",
+  } as const;
+  openSavedChats({
+    abc: {
+      allowed: null,
+      preferred: action,
+      internal_search_filters: NO_FILTERS,
+    },
+  });
+  const { result } = renderHook(() => useToolConfiguration());
+  expect(result.current.isPluginEnabled("plugin-a")).toBe(false);
+  expect(result.current.isPluginEnabled("plugin-b")).toBe(true);
+  expect(
+    effectiveChatPreference({
+      requestedToolId: result.current.preferredToolId,
+      requestedAction: result.current.preferredAction,
+      agent: mockActiveAgent,
+      isPluginEnabled: result.current.isPluginEnabled,
+    })
+  ).toBeNull();
 });
 
 test("a source change is saved at once, so a reload right after keeps it", async () => {
