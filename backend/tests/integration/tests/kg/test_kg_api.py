@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from http import HTTPStatus
 
 import pytest
@@ -90,7 +90,7 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
         vendor="Test",
         vendor_domains=["test.app", "tester.ai"],
         ignore_domains=[],
-        coverage_start=datetime(1970, 1, 1, 0, 0),
+        coverage_start=datetime(1970, 1, 1, tzinfo=UTC),
     )
 
     # Disable KG
@@ -119,7 +119,7 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
         vendor="Test",
         vendor_domains=["test.app", "tester.ai"],
         ignore_domains=[],
-        coverage_start=datetime(1970, 1, 1, 0, 0),
+        coverage_start=datetime(1970, 1, 1, tzinfo=UTC),
     )
 
 
