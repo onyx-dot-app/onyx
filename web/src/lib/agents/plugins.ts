@@ -1,11 +1,8 @@
-import type {
-  AgentPluginInput,
-  AgentPluginLink,
-  LinkValue,
-} from "@/lib/agents/types";
+import type { AgentPluginInput, AgentPluginLink } from "@/lib/agents/types";
 import type {
   AgentCatalogIntegration,
   IntegrationAction,
+  LinkValue,
   PolicyValue,
 } from "@/lib/integrations/types";
 
@@ -31,21 +28,17 @@ export function draftFromLink(link: AgentPluginLink): AgentPluginDraft {
   };
 }
 
-/** The request shape, with each inherit key left out. */
 export function toPluginInput(draft: AgentPluginDraft): AgentPluginInput {
-  const actions = Object.fromEntries(
-    Object.entries(draft.actions).filter(([, value]) => value !== "inherit")
-  );
   return {
     plugin_id: draft.plugin_id,
     action_settings: {
       ...(draft.default !== "inherit" && { default: draft.default }),
-      ...(Object.keys(actions).length > 0 && { actions }),
+      ...(Object.keys(draft.actions).length > 0 && { actions: draft.actions }),
     },
   };
 }
 
-export type LockReason = "adminBlocked" | "adminFinal";
+type LockReason = "adminBlocked" | "adminFinal";
 
 /** Why the agent cannot set Allow on the action, or null when it can. */
 export function lockReason(
@@ -57,9 +50,9 @@ export function lockReason(
   return null;
 }
 
-export type SettingSource = "integration" | "agentDefault" | "agent";
+type SettingSource = "integration" | "agentDefault" | "agent";
 
-export interface EffectiveSetting {
+interface EffectiveSetting {
   policy: PolicyValue;
   source: SettingSource;
 }

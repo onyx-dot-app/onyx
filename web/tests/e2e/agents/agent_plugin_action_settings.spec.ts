@@ -49,10 +49,17 @@ test.describe("Agent plugin action settings", () => {
     });
     const client = new OnyxApiClient(context.request);
     const name = `PW Reports ${Date.now()}`;
-    const integration = await client.createOpenApiIntegration(
+    const integration = await client.createIntegration({
+      for_organization: true,
       name,
-      openApiSpec(name)
-    );
+      description: null,
+      auth_mode: "none",
+      auth_method: null,
+      credential_fields: null,
+      header_template: null,
+      oauth_client: null,
+      config: { shape: "openapi", openapi_spec: openApiSpec(name) },
+    });
     integrationId = integration.id;
     pluginName = integration.plugins[0]?.plugin_name ?? name;
     await context.close();
@@ -68,7 +75,7 @@ test.describe("Agent plugin action settings", () => {
     await context.close();
   });
 
-  test("an agent with one action set to Blocked does not offer it", async ({
+  test("saves a Blocked action setting and shows it after reload", async ({
     page,
   }) => {
     await page.context().clearCookies();

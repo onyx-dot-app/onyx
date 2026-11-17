@@ -8,6 +8,8 @@ export type ConnectionState =
   | "needs_reconnect"
   | "not_set_up";
 export type PolicyValue = "allow" | "ask" | "blocked";
+
+export type LinkValue = "inherit" | PolicyValue;
 export type InstallationPolicy =
   | "REQUIRED"
   | "DEFAULT"
@@ -91,7 +93,6 @@ export interface AgentCatalogIntegration {
   actions: IntegrationAction[];
 }
 
-/** A plugin that holds integrations, as the agent editor offers it. */
 export interface AgentPluginOption {
   plugin_id: string;
   plugin_name: string;
