@@ -179,12 +179,12 @@ then the chat default.
    a preset change, because the type decides the skill and provider.
    Delete and recreate instead.
 8. `managed-builtins-locked-multi-tenant` **Onyx-managed built-ins are locked
-   only when `MULTI_TENANT`.** The old admin response blanked
-   credentials, auth template and URL patterns. The create and delete routes
-   refuse them. The PATCH route silently ignores those three fields and
-   applies the rest (`enabled`, name, policies and the user-management
-   switch). Self-hosted built-ins of the same type
-   stay editable. A new admin field for apps needs the same `managed` check.
+   only when `MULTI_TENANT`.** `integrations/service.py:_is_onyx_managed`
+   decides it. The admin detail hides the OAuth client and headers. Create and
+   delete refuse them. The PATCH refuses the sign-in and config fields
+   (`_ONYX_MANAGED_FIELDS`) and applies the rest (name, description, `enabled`
+   and Always allow). Self-hosted built-ins of the same type stay editable. A
+   new admin field for integrations needs the same check.
 9. `masked-credentials-round-trip` **Masked credentials round-trip.** The
    admin response masks organization credentials. The write path keeps the
    stored secret when a masked value or no value comes back

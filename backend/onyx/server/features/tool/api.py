@@ -20,7 +20,6 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
 )
 from onyx.db.integration import (
-    IntegrationPluginRow,
     get_openapi_tool_for_integration,
     get_openapi_tool_with_integration,
     list_integration_plugin_rows,
@@ -33,10 +32,11 @@ from onyx.db.integration_connection import (
 from onyx.db.models import Integration, Tool, User
 from onyx.db.plugin import lock_plugin, set_plugin_preferences__no_commit
 from onyx.db.plugin_access import get_visible_plugin_ids, load_user_plugin_states
-from onyx.db.tools import get_tools
+from onyx.db.tools import get_tools, get_tools_by_ids
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import ConnectionSecret, read_connection_secret
+from onyx.integrations.models import IntegrationPluginRow
 from onyx.integrations.service import (
     create_integration__no_commit,
     delete_integration_for_user__no_commit,
@@ -52,6 +52,7 @@ from onyx.server.features.integrations.models import (
     OpenApiConfigInput,
 )
 from onyx.server.features.tool.models import (
+    CustomToolAuthSettings,
     CustomToolCreate,
     CustomToolUpdate,
     Header,
@@ -75,16 +76,9 @@ _DEFAULT_CHAT_POLICIES = frozenset(
 _BEARER_TEMPLATE = "Bearer {access_token}"
 
 
-class _AuthSettings(BaseModel):
-    auth_mode: IntegrationAuthMode
-    auth_method: IntegrationAuthMethod | None
-    header_template: dict[str, str] | None
-    credential_fields: list[CredentialField] | None
-    # The values of the organization connection, by header name.
-    organization_fields: dict[str, str]
-
-
-def _auth_settings(headers: list[Header], passthrough_auth: bool) -> _AuthSettings:
+def _auth_settings(
+    headers: list[Header], passthrough_auth: bool
+) -> CustomToolAuthSettings:
     """The integration sign-in of a custom tool. Passthrough sends the user's
     Onyx login with the static headers; plain headers become an encrypted
     organization connection, as in the credential import."""
@@ -95,7 +89,7 @@ def _auth_settings(headers: list[Header], passthrough_auth: bool) -> _AuthSettin
                 OnyxErrorCode.INVALID_INPUT,
                 "Cannot use passthrough auth with custom authorization headers",
             )
-        return _AuthSettings(
+        return CustomToolAuthSettings(
             auth_mode=IntegrationAuthMode.INDIVIDUAL,
             auth_method=IntegrationAuthMethod.ONYX_LOGIN,
             header_template={**values, "Authorization": _BEARER_TEMPLATE},
@@ -103,7 +97,7 @@ def _auth_settings(headers: list[Header], passthrough_auth: bool) -> _AuthSettin
             organization_fields={},
         )
     if values:
-        return _AuthSettings(
+        return CustomToolAuthSettings(
             auth_mode=IntegrationAuthMode.SHARED,
             auth_method=IntegrationAuthMethod.API_KEY,
             header_template={key: "{" + key + "}" for key in values},
@@ -112,7 +106,7 @@ def _auth_settings(headers: list[Header], passthrough_auth: bool) -> _AuthSettin
             ],
             organization_fields=values,
         )
-    return _AuthSettings(
+    return CustomToolAuthSettings(
         auth_mode=IntegrationAuthMode.NONE,
         auth_method=None,
         header_template=None,
@@ -144,7 +138,7 @@ def _set_default_chat(
     integration: Integration, enabled: bool | None, db_session: Session
 ) -> None:
     """Default Chat availability is the install setting of the plugins that
-    hold the integration: Installed by default, or the marketplace default."""
+    hold the integration: Installed by default, or Available."""
     if enabled is None:
         return
     for row in list_integration_plugin_rows([integration.id], db_session)[
@@ -153,7 +147,9 @@ def _set_default_chat(
         plugin = lock_plugin(row.plugin_id, db_session)
         if plugin is not None:
             plugin.installation_policy = (
-                PluginInstallationPolicy.DEFAULT if enabled else None
+                PluginInstallationPolicy.DEFAULT
+                if enabled
+                else PluginInstallationPolicy.AVAILABLE
             )
     db_session.flush()
 
@@ -449,9 +445,9 @@ def get_custom_tool(
     db_session: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> ToolSnapshot:
-    tool = db_session.get(Tool, tool_id)
-    if tool is not None and tool.in_code_tool_id is not None:
-        return ToolSnapshot.from_model(tool)
+    tools = get_tools_by_ids([tool_id], db_session)
+    if tools and tools[0].in_code_tool_id is not None:
+        return ToolSnapshot.from_model(tools[0])
     snapshots = _openapi_snapshots(
         user,
         [_openapi_tool_or_404(tool_id, db_session)],

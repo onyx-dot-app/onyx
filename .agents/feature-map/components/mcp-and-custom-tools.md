@@ -499,9 +499,12 @@ it.
    (`integrations/chat_tools.py`). Old server grants gate nothing in chat.
 9. `destination-change-deletes-credentials` **A changed URL or sign-in
    setting resets connections.** `integrations/connections.py:sign_in_settings_for`
-   includes the host, and an admin PATCH that changes it sets every connection
-   to Needs reconnect. A new destination must never receive credentials that
-   were given for the old one.
+   includes `sign_in_host`: the MCP server URL, or the OpenAPI server URL, the
+   app URL patterns and the preset host values. An admin PATCH that changes it
+   sets every connection to Needs reconnect. A new destination must never
+   receive credentials that were given for the old one. Only a global action
+   manager can change the destination or headers of an Onyx login
+   integration.
 10. `setup-fingerprint` **A new sign-in setting must join the sign-in
     fingerprint.** An OAuth return can arrive minutes after the start.
     `integrations/oauth.py:_configuration_fingerprint` rejects it only when the
@@ -535,8 +538,8 @@ it.
     to an integration must call
     `backend/onyx/integrations/service.py:reload_craft_sessions`. Take
     `craft_users_of_integration` before a delete; users who lose access are not
-    in the set afterwards. The reload only restamps `mcp_config_hash`; it does not push
-    skill files.
+    in the set afterwards. The reload restamps `mcp_config_hash` and pushes the
+    skill files of the affected users.
 
 14. `cancel-in-flight-request` **Chat cancellation stops an active MCP request.**
     `tools/tool_implementations/mcp/mcp_tool.py:MCPTool._run` passes its

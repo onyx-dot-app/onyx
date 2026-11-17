@@ -6,7 +6,7 @@ from uuid import UUID
 
 import httpx
 import requests
-from pydantic import ValidationError
+from pydantic import JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_refresher import (
@@ -28,6 +28,7 @@ from onyx.db.enums import (
 from onyx.db.integration import (
     get_external_app_for_integration,
     get_mcp_server_for_integration,
+    get_openapi_tool_for_integration,
 )
 from onyx.db.integration_connection import (
     delete_connection__no_commit,
@@ -87,6 +88,7 @@ from onyx.server.features.mcp.oauth import (
     oauth_token_from_response,
 )
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
+from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 
@@ -788,11 +790,25 @@ def _refresh_with_token_url(
 
 
 def sign_in_host(integration: Integration, db_session: Session) -> str | None:
+    """Where the credentials go: the MCP server URL, or the OpenAPI server
+    URL, the app URL patterns and the preset host values."""
     if integration.kind is IntegrationKind.MCP:
         mcp_server = get_mcp_server_for_integration(integration.id, db_session)
         return mcp_server.server_url if mcp_server is not None else None
+    destinations: dict[str, JsonValue] = {}
+    tool = get_openapi_tool_for_integration(integration.id, db_session)
+    if tool is not None and tool.openapi_schema is not None:
+        try:
+            destinations["openapi_url"] = openapi_to_url(tool.openapi_schema)
+        except ValueError:
+            destinations["openapi_url"] = None
+    app = get_external_app_for_integration(integration.id, db_session)
+    if app is not None:
+        destinations["upstream_url_patterns"] = sorted(app.upstream_url_patterns)
     host_values = preset_host_values(integration, db_session)
-    return canonical_json_fingerprint(host_values) if host_values else None
+    if host_values:
+        destinations["host_values"] = host_values
+    return canonical_json_fingerprint(destinations) if destinations else None
 
 
 def preset_organization_values(
