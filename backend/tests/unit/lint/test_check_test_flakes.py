@@ -1,0 +1,66 @@
+from pathlib import Path
+
+from lint.check_test_flakes import check, playwright_findings, python_findings
+
+
+def test_python_calls_and_markers() -> None:
+    source = """
+from time import sleep as pause
+import pytest as p
+pause(1)
+pause(1)  # test-flakes: allow exercise an actual timeout
+@p.mark.skip
+def test_bare(): pass
+@p.mark.skipif(False, reason="Requires another platform")
+def test_reason(): pass
+p.skip(reason=" ")
+p.skip("Service unavailable")
+p.mark.skip(reason="test-flakes: allow")
+"""
+    assert sorted(python_findings(source)) == [
+        (4, "sleep", False),
+        (5, "sleep", True),
+        (6, "skip", False),
+        (8, "skip", True),
+        (10, "skip", False),
+        (11, "skip", True),
+        (12, "skip", True),
+    ]
+
+
+def test_playwright_calls_and_markers() -> None:
+    source = """
+// page.waitForTimeout(100)
+const sample = "test.skip()";
+await page.waitForTimeout(100); // test-flakes: allow exercise a timeout
+await page.waitForTimeout(100); // test-flakes: allow
+test.skip(!enabled, "Feature is disabled");
+test.skip("The title", async () => {});
+test.describe.fixme("Group title", () => {});
+test.fixme(); // test-flakes: allow tracked in issue #1234
+"""
+    assert list(playwright_findings(source)) == [
+        (4, "sleep", True),
+        (5, "sleep", False),
+        (6, "skip", True),
+        (7, "skip", False),
+        (8, "skip", False),
+        (9, "skip", True),
+    ]
+
+
+def test_sleep_and_skip_counts_ratchet_independently(tmp_path: Path) -> None:
+    file = tmp_path / "backend/tests/test_example.py"
+    file.parent.mkdir(parents=True)
+    file.write_text("import time\nimport pytest\ntime.sleep(1)\n")
+    assert check(tmp_path, tmp_path, write=True) == 0
+    assert check(tmp_path, tmp_path) == 0
+
+    file.write_text("import time\nimport pytest\ntime.sleep(1)\ntime.sleep(2)\n")
+    assert check(tmp_path, tmp_path) == 1
+
+    file.write_text("import time\nimport pytest\ntime.sleep(1)\npytest.skip()\n")
+    assert check(tmp_path, tmp_path) == 1
+
+    file.write_text("import pytest\npytest.skip()\n")
+    assert check(tmp_path, tmp_path) == 1

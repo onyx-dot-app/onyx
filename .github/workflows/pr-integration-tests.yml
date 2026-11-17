@@ -503,6 +503,7 @@ jobs:
           save-cache: ${{ strategy.job-index == 0 }}
 
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
+        id: integration-tests
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
         with:
           timeout_minutes: 20
@@ -584,6 +585,13 @@ jobs:
               $RUN_CMD
 
       # ------------------------------------------------------------
+      - name: Report integration retry pass
+        if: ${{ steps.integration-tests.outcome == 'success' && fromJSON(steps.integration-tests.outputs.total_attempts || '0') > 1 }}
+        env:
+          ATTEMPTS: ${{ steps.integration-tests.outputs.total_attempts }}
+        run: |
+          printf '## Integration tests passed on attempt %s\n' "$ATTEMPTS" >> "$GITHUB_STEP_SUMMARY"
+
       # Always gather logs BEFORE "down". The test-runner container's
       # stdout (in-process api_server logs from pytest) is captured
       # directly in the workflow log for the "Run Integration Tests" step.
@@ -675,6 +683,7 @@ jobs:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Onyx Lite Integration Tests
+        id: integration-tests
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
         with:
           timeout_minutes: 8
@@ -705,6 +714,13 @@ jobs:
               -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }} \
               uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/no_vectordb
+
+      - name: Report integration retry pass
+        if: ${{ steps.integration-tests.outcome == 'success' && fromJSON(steps.integration-tests.outputs.total_attempts || '0') > 1 }}
+        env:
+          ATTEMPTS: ${{ steps.integration-tests.outputs.total_attempts }}
+        run: |
+          printf '## Integration tests passed on attempt %s\n' "$ATTEMPTS" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Dump all-container logs (onyx-lite)
         if: always()
