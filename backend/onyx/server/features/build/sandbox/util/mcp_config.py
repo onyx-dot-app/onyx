@@ -63,20 +63,17 @@ def resolve_craft_mcp_servers(
     db_session: Session, user: User, task_id: UUID | None = None
 ) -> list[CraftMCPServerConfig]:
     """The MCP integrations of the plugins ``user`` runs, as opencode config
-    input. A session of a scheduled run (``task_id``) also gets the task
-    plugins that the owner turned off, and the task settings decide its
-    disabled tools, as in the proxy. Only a connected integration (or one with
+    input. A session of a scheduled run (``task_id``) gets only the task
+    plugins that the owner can see, also one the owner turned off, and the
+    task settings decide its disabled tools, as in the proxy. Only a connected integration (or one with
     no sign-in) is listed: injection blocks the tool discovery of an
     unauthenticated server, so emitting it only buys a permanently failed MCP
     client. A Blocked action is a disabled tool."""
-    integrations = list_runnable_integrations(db_session, user.id)
-    if task_id is not None:
-        listed = {integration.id for integration in integrations}
-        integrations += [
-            integration
-            for integration in list_task_integrations(db_session, task_id, user.id)
-            if integration.id not in listed
-        ]
+    integrations = (
+        list_runnable_integrations(db_session, user.id)
+        if task_id is None
+        else list_task_integrations(db_session, task_id, user.id)
+    )
     configs: list[CraftMCPServerConfig] = []
     for integration in integrations:
         if integration.kind is not IntegrationKind.MCP:

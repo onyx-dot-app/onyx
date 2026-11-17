@@ -107,7 +107,7 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
 **Recognition.** `sandbox_proxy/request_evaluator.py:IntegrationRequestEvaluator`
 loads the integrations the sandbox owner can use. These are the enabled
 integrations of the plugins that the user can see and has turned on. A
-scheduled run also uses the integrations of the task plugins that the owner
+scheduled run uses only the integrations of the task plugins that the owner
 can see, on or off. `GateAddon._running_task_id` finds the task from the
 session tag in one query. `sandbox_proxy/usable_integrations.py:UsableIntegrations`
 caches the integration ids of each user for 30 seconds, and the evaluator and
@@ -172,8 +172,8 @@ permission on the sandbox: allow for connected, reject for declined.
 `server/features/build/sandbox/util/mcp_config.py:resolve_craft_mcp_servers`
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
-disabled tool. A session of a scheduled run also gets the task plugins that
-the owner turned off ([[craft-scheduled-tasks]]). `GET /mcp/servers/craft`
+disabled tool. A session of a scheduled run gets only the task plugins,
+also one that the owner turned off ([[craft-scheduled-tasks]]). `GET /mcp/servers/craft`
 lists the same servers, and
 `integrations/craft.py:list_connectable_apps` lists the external apps the user
 can still connect. No code reads `mcp_server.available_in_craft`.
