@@ -131,3 +131,11 @@ test("follows the backend order for the setting that applies", () => {
     )
   ).toEqual({ policy: "blocked", source: "integration" });
 });
+
+test("an action named like an Object member uses the default", () => {
+  const named = { ...action, key: "constructor" };
+  expect(effectiveSetting(integration, named, draft())).toEqual({
+    policy: "ask",
+    source: "integration",
+  });
+});

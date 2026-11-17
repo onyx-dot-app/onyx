@@ -16,6 +16,7 @@ import type { LinkValue } from "@/lib/integrations/types";
 import {
   effectiveSetting,
   lockReason,
+  ownSetting,
   stricterPlugin,
   type AgentPluginDraft,
 } from "@/lib/agents/plugins";
@@ -111,7 +112,7 @@ function ActionRow({
   const stricter = stricterPlugin(integration, action, draft, others);
   const effective =
     stricter?.setting ?? effectiveSetting(integration, action, draft);
-  const value: SettingChoice = draft.actions[action.key] ?? AGENT_DEFAULT;
+  const value: SettingChoice = ownSetting(draft, action.key) ?? AGENT_DEFAULT;
 
   return (
     <Section gap={0.5} alignItems="stretch" height="auto">
