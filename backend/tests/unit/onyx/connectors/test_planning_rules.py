@@ -273,6 +273,58 @@ def test_every_rule_reads_the_config_class_of_its_source() -> None:
             _JIRA_SITE | {"project_key": "B"},
             {"project_key": ScopeDirection.BOTH},
         ),
+        # Jira Service Management: Everything <-> explicit project changes eligibility.
+        (
+            DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            _JIRA_SITE | {},
+            _JIRA_SITE | {"project_key": "HELP"},
+            {"project_key": ScopeDirection.BOTH},
+        ),
+        (
+            DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            _JIRA_SITE | {"project_key": "HELP"},
+            _JIRA_SITE | {},
+            {"project_key": ScopeDirection.BOTH},
+        ),
+        (
+            DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            _JIRA_SITE | {"project_key": "   "},
+            _JIRA_SITE | {"project_key": "HELP"},
+            {"project_key": ScopeDirection.BOTH},
+        ),
+        (
+            DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            _JIRA_SITE | {"project_key": "A"},
+            _JIRA_SITE | {"project_key": "B"},
+            {"project_key": ScopeDirection.BOTH},
+        ),
+        (
+            DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            _JIRA_SITE | {"jql_query": "q", "project_key": "A"},
+            _JIRA_SITE | {"jql_query": "q", "project_key": "B"},
+            {},
+        ),
+        (
+            DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            _JIRA_SITE | {"jql_query": "   ", "project_key": ""},
+            _JIRA_SITE | {"jql_query": "   ", "project_key": "HELP"},
+            {"project_key": ScopeDirection.BOTH},
+        ),
+        (
+            DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            _JIRA_SITE | {"project_key": "A"},
+            _JIRA_SITE | {"jql_query": "q", "project_key": "A"},
+            {"jql_query": ScopeDirection.UNKNOWN},
+        ),
+        (
+            DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            _JIRA_SITE | {"project_key": "A"},
+            _JIRA_SITE | {"jql_query": "q", "project_key": "B"},
+            {
+                "jql_query": ScopeDirection.UNKNOWN,
+                "project_key": ScopeDirection.UNKNOWN,
+            },
+        ),
         # ClickUp: a workspace connector sends no container filter.
         (
             DocumentSource.CLICKUP,
