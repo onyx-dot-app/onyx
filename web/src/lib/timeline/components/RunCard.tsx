@@ -1,17 +1,13 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Button, Fold, Presence, Text } from "@opal/components";
+import { Button, Line, Presence, Text } from "@opal/components";
 import { SvgExpand, SvgFold } from "@opal/icons";
 import { formatDurationSeconds } from "@opal/time";
 import { useTranslations } from "next-intl";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { Section } from "@opal/layouts";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
-import {
-  RunCardSurface,
-  TimelineHeaderRow,
-} from "@/lib/timeline/components/primitives/TimelineHeaderRow";
 import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
 import {
   CompletedHeader,
@@ -141,86 +137,82 @@ export function RunCard<S extends RunCardStep>({
   return (
     <Presence appear={arrivedLive} grow>
       <TimelineRoot>
-        <RunCardSurface interactive={foldable} tinted={isRunning || isOpen}>
-          {/* Flat: the header, then each step, 0.25rem apart.
-            The gap closes with the folds, so a folded card keeps none. */}
-          <Section
-            alignItems="stretch"
-            gap={isOpen ? 1 : 0}
-            height="auto"
-            className="transition-[row-gap] duration-150"
-          >
-            <TimelineHeaderRow onClick={foldable ? toggle : undefined}>
-              {/* Working, finished and stopped titles swap through one
-                  animation instead of flashing. A new activity in the
-                  working title keeps its key, so it only resizes. */}
-              <div className="flex-1 min-w-0">
-                <Presence.Swap
-                  swapKey={isRunning ? "working" : stopped ? "stopped" : "done"}
+        <Line
+          flavour="card"
+          filled={isRunning || isOpen}
+          onClick={foldable ? toggle : undefined}
+          rightChildren={
+            foldable && (
+              <>
+                {/* The timer is plain text beside the button: a button label
+                    animates its changes, so each tick would flash. */}
+                <Presence
+                  show={isRunning && isOpen && elapsedSeconds > 0}
+                  from="end"
+                  width="fit"
                 >
-                  {isRunning ? (
-                    <StreamingHeader headerText={workingText} />
-                  ) : stopped ? (
-                    <StoppedHeader />
-                  ) : (
-                    <CompletedHeader
-                      isExpanded={isOpen}
-                      processingDurationSeconds={
-                        durationSeconds ?? timedSeconds
-                      }
-                      {...summary}
-                    />
-                  )}
-                </Presence.Swap>
-              </div>
-              {foldable && (
-                <>
-                  {/* The timer is plain text beside the button: a button
-                      label animates its changes, so each tick would flash. */}
-                  <Presence
-                    show={isRunning && isOpen && elapsedSeconds > 0}
-                    from="end"
-                    width="fit"
-                  >
-                    <div className="px-(--padding-text-4)">
-                      <Text
-                        as="p"
-                        font="secondary-body"
-                        color="text-03"
-                        wordWrap="whitespace-nowrap"
-                      >
-                        {formatDurationSeconds(elapsedSeconds)}
-                      </Text>
-                    </div>
-                  </Presence>
-                  {/* One fold button in every state, so its step count
-                      animates as it changes. Its click reaches the row. */}
-                  <Button
-                    prominence="tertiary"
-                    size="md"
-                    rightIcon={isOpen ? SvgFold : SvgExpand}
-                    aria-expanded={isOpen}
-                  >
-                    {t("stepsButton.label", { count: steps.length })}
-                  </Button>
-                </>
-              )}
-            </TimelineHeaderRow>
-            {steps.map((step, index) => (
-              <Fold key={step.id} open={isOpen}>
-                {/* A step that streams in rises in, after the card opens room
-                  for it. Steps already there when the card mounts (a saved
-                  run) appear at once. */}
-                <Presence appear={isRunning} grow>
+                  <div className="px-(--padding-text-4)">
+                    <Text
+                      as="p"
+                      font="secondary-body"
+                      color="text-03"
+                      wordWrap="whitespace-nowrap"
+                    >
+                      {formatDurationSeconds(elapsedSeconds)}
+                    </Text>
+                  </div>
+                </Presence>
+                {/* One fold button in every state, so its step count
+                    animates as it changes. Its click reaches the header. */}
+                <Button
+                  prominence="tertiary"
+                  size="md"
+                  rightIcon={isOpen ? SvgFold : SvgExpand}
+                  aria-expanded={isOpen}
+                >
+                  {t("stepsButton.label", { count: steps.length })}
+                </Button>
+              </>
+            )
+          }
+          expandable
+          expanded={isOpen}
+          expandedContent={
+            // The steps, 0.25rem apart.
+            <Section alignItems="stretch" gap={1} height="auto">
+              {steps.map((step, index) => (
+                // A step that streams in rises in, after the card opens room
+                // for it. Steps already there when the card mounts (a saved
+                // run) appear at once.
+                <Presence key={step.id} appear={isRunning} grow>
                   {renderStep(step, {
                     isFirst: index === 0,
                     isLast: index === steps.length - 1,
                   })}
                 </Presence>
-              </Fold>
-            ))}
-          </Section>
-        </RunCardSurface>
+              ))}
+            </Section>
+          }
+        >
+          {/* Working, finished and stopped titles swap through one
+              animation instead of flashing. A new activity in the working
+              title keeps its key, so it only resizes. */}
+          <Presence.Swap
+            swapKey={isRunning ? "working" : stopped ? "stopped" : "done"}
+          >
+            {isRunning ? (
+              <StreamingHeader headerText={workingText} />
+            ) : stopped ? (
+              <StoppedHeader />
+            ) : (
+              <CompletedHeader
+                isExpanded={isOpen}
+                processingDurationSeconds={durationSeconds ?? timedSeconds}
+                {...summary}
+              />
+            )}
+          </Presence.Swap>
+        </Line>
       </TimelineRoot>
     </Presence>
   );

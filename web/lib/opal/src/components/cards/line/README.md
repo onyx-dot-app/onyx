@@ -2,7 +2,7 @@
 
 **Import:** `import { Line } from "@opal/components";`
 
-One line of a list or a timeline: an icon, a title and trailing content. A
+One line of a list or a timeline, or a run card (the `card` flavour, below): an icon, a title and trailing content. A
 line is plain unless it gets `onClick`, and it can open a body below it with
 `expandable`. Like an expandable [`SelectCard`](../select-card/README.md), only
 the row is interactive: clicks and text selection in the body never reach
@@ -58,6 +58,36 @@ that fits the state (for example a spinner or an alert).
   the body too, and the row's hover fill then squares its bottom corners to
   join the open body: they square as the body opens and round as it closes,
   as in an expandable `SelectCard`.
+
+## Card flavour
+
+`flavour="card"` draws a run card instead of a step: any header with trailing
+controls, and the steps in its body. It has 0.25rem of padding, 0.75rem
+corners, and a `background-tint-00` fill while `filled`. Its body starts
+0.25rem under the header.
+
+| Prop              | Type         | Default | Description                                                                                           |
+| ----------------- | ------------ | ------- | ----------------------------------------------------------------------------------------------------- |
+| `flavour`         | `"card"`     | —       | Selects the card flavour; `"step"` (the default) is the line above                                    |
+| `children`        | `ReactNode`  | —       | The header, e.g. a title that animates                                                                |
+| `rightChildren`   | `ReactNode`  | —       | Trailing content at the end of the header, e.g. the fold button                                       |
+| `filled`          | `boolean`    | —       | Fills the card, e.g. while its run works or it is open                                                |
+| `onClick`         | `() => void` | —       | A click anywhere on the header calls this, and a folded card fills on hover. A button's click reaches it |
+| `expandable`, `expanded`, `expandedContent` | | | As above                                                                                             |
+
+```tsx
+<Line
+  flavour="card"
+  filled={open}
+  onClick={toggle}
+  rightChildren={<Button rightIcon={SvgExpand}>3 steps</Button>}
+  expandable
+  expanded={open}
+  expandedContent={steps}
+>
+  <TextLoader>Working</TextLoader>
+</Line>
+```
 
 ## Usage
 

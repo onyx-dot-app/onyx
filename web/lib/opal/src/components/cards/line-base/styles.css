@@ -27,6 +27,23 @@
   @apply pt-1 pe-0 pb-0;
 }
 
+/* `top` pads only the top, for a card's steps under its header. */
+.opal-line .opal-line-body[data-opal-line-body-inset="top"] {
+  @apply p-0 pt-1;
+}
+
+/* ── Card flavour ────────────────────────────────────────────────────────────
+   A run card: 0.25rem of padding around the header and the body, 0.75rem
+   corners, and a neutral fill while filled. A folded card that its header
+   toggles fills on hover too. */
+.opal-line[data-opal-line-flavour="card"] {
+  @apply rounded-12 p-1 transition-colors duration-300;
+}
+.opal-line[data-opal-line-flavour="card"][data-opal-line-filled="true"],
+.opal-line[data-opal-line-flavour="card"][data-opal-line-clickable="true"]:hover {
+  @apply bg-background-tint-00;
+}
+
 .opal-line .opal-line-icon {
   @apply shrink-0 text-text-03;
 }

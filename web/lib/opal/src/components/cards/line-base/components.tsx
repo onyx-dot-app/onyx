@@ -81,11 +81,24 @@ const VARIANTS: Record<
 interface LineRootProps {
   variant: LineVariant;
   padding: 0 | 1;
+  /** `card`: rounded and padded as a card, with a neutral fill. */
+  flavour?: "step" | "card";
+  /** Card only: fills it with `background-tint-00`. */
+  filled?: boolean;
+  /** Card only: a folded card fills on hover, since its header toggles it. */
+  clickable?: boolean;
   children: React.ReactNode;
 }
 
 /** The line's frame: its rounding, status colours and heavy tint. */
-function LineRoot({ variant, padding, children }: LineRootProps) {
+function LineRoot({
+  variant,
+  padding,
+  flavour = "step",
+  filled = false,
+  clickable = false,
+  children,
+}: LineRootProps) {
   const { status, weight } = VARIANTS[variant];
   return (
     <div
@@ -93,6 +106,9 @@ function LineRoot({ variant, padding, children }: LineRootProps) {
       data-opal-line-status={status}
       data-opal-line-weight={weight}
       data-opal-line-padding={padding}
+      data-opal-line-flavour={flavour}
+      data-opal-line-filled={filled}
+      data-opal-line-clickable={clickable}
     >
       {children}
     </div>
@@ -159,9 +175,10 @@ interface LineBodyProps {
    * Where the body is padded. `around`: on the start, end and bottom, the
    * line's padding. `start`: only on the start, to sit under the content,
    * and 0.25rem on the top, inside the fold, to space it from the row.
+   * `top`: only 0.25rem on the top, for a card, which pads itself.
    * @default "around"
    */
-  inset?: "around" | "start";
+  inset?: "around" | "start" | "top";
   children: React.ReactNode;
 }
 
