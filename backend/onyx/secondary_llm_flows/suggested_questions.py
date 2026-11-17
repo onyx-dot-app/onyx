@@ -13,6 +13,7 @@ from collections import Counter
 import httpx
 
 from onyx.context.search.models import InferenceChunk
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.decisions.models import (
     ChoiceAnswer,
@@ -73,6 +74,10 @@ _SENSITIVE_WORDS = re.compile(
 )
 
 
+class _RefusedEverything(Exception):
+    """The decision model refused every question in a request."""
+
+
 def build_triage_clients() -> list[DecisionClient]:
     """OpenAI first, then Zoom. A provider the tenant has not set up is
     skipped.
@@ -86,7 +91,16 @@ def build_triage_clients() -> list[DecisionClient]:
         (DecisionProvider.OPENAI, SQ_TRIAGE_OPENAI_MODEL),
         (DecisionProvider.ZOOM_AI, SQ_TRIAGE_ZOOM_MODEL),
     ):
-        client = get_decision_client_for_provider(provider, model)
+        try:
+            client = get_decision_client_for_provider(provider, model)
+        except (OnyxError, ValueError):
+            # Over the cost limit, or set up wrong: try the next provider.
+            logger.warning(
+                "Suggested questions: cannot use %s for triage",
+                provider.value,
+                exc_info=True,
+            )
+            continue
         if client is not None:
             clients.append(client)
     return clients
@@ -109,9 +123,13 @@ def triage_chunks(
     useful = [item for item in scored if item.usable >= SQ_TRIAGE_MIN_SCORE]
     kept = [item for item in useful if item.sensitive < SQ_TRIAGE_SENSITIVE_MAX]
     sources = Counter(source for source, _ in results)
-    # A warning when the rules had to answer or nothing was kept.
+    # A warning when no provider answered for a batch, or nothing was kept.
     logger.log(
-        logging.WARNING if sources["rules"] or (scored and not kept) else logging.INFO,
+        (
+            logging.WARNING
+            if sources["rules"] or sources["refused"] or (scored and not kept)
+            else logging.INFO
+        ),
         "Suggested questions: triaged %d chunks in %d requests (answered by %s), "
         "kept %d, dropped %d not useful and %d sensitive",
         len(scored),
@@ -127,16 +145,24 @@ def triage_chunks(
 def _triage_batch(
     batch: list[InferenceChunk], clients: list[DecisionClient]
 ) -> tuple[str, list[TriagedChunk]]:
-    """The scored batch, and which provider answered: its name, or "rules"."""
+    """The scored batch, and which provider answered: its name, "refused" or
+    "rules"."""
+    refused = False
     for client in clients:
         try:
             return client.provider.value, _decide(batch, client)
+        except _RefusedEverything:
+            refused = True
         except (httpx.HTTPError, ValueError):
             logger.warning(
                 "Suggested-questions triage failed on %s",
                 client.provider,
                 exc_info=True,
             )
+    # The model would not say whether these excerpts are private, and the
+    # rules cannot tell, so keep none of them.
+    if refused:
+        return "refused", []
     return "rules", [_triage_by_rules(chunk) for chunk in batch]
 
 
@@ -173,7 +199,7 @@ def _decide(batch: list[InferenceChunk], client: DecisionClient) -> list[Triaged
         flow=LLMFlow.SUGGESTED_QUESTIONS_TRIAGE,
     )
     if all(isinstance(answer, RefusalAnswer) for answer in response.answers):
-        raise ValueError("Decision model refused every triage question")
+        raise _RefusedEverything()
     answers = {answer.name: answer for answer in response.answers}
     return [
         TriagedChunk(
