@@ -38,5 +38,6 @@ export function toCraftToolCall(toolCall: AcpToolCall): ToolCallState {
     ...(onyx?.cancelled &&
       toolCall.status !== "completed" && { status: "cancelled" }),
     ...(onyx?.search && { onyxSearch: onyx.search }),
+    ...(onyx?.exitCode !== undefined && { exitCode: onyx.exitCode }),
   };
 }

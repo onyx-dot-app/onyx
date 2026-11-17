@@ -109,6 +109,7 @@ function decodeMeta(raw: unknown): AcpMeta | undefined {
     if (sent.cancelled === true) onyx.cancelled = true;
     const search = decodeSearch(sent.search);
     if (search) onyx.search = search;
+    if (typeof sent.exitCode === "number") onyx.exitCode = sent.exitCode;
   }
   const part = asString(partId);
   const snapshot = asString(snapshotText);
