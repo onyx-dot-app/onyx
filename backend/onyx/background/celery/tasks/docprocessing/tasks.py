@@ -539,7 +539,8 @@ def _remove_unfilled_stub_nodes(
     remove it, so nothing stays hidden from the tree. A failed or canceled
     attempt, or one with a listing failure, keeps its STUBs, because the
     next attempt can still fill them. A STUB that a failed cleanup keeps is
-    removed by the next attempt that completes its listing."""
+    removed by the next attempt that completes its listing. So is a STUB that
+    the cleanup keeps because another attempt of the pair is not finished."""
     source = cc_pair.connector.source
     # The attempt is complete. A cleanup error must not undo that.
     try:

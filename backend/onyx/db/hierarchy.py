@@ -27,12 +27,14 @@ from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
-from onyx.db.enums import HierarchyNodeType
+from onyx.db.enums import HierarchyNodeType, IndexingStatus
 from onyx.db.models import (
+    ConnectorCredentialPair,
     Document,
     DocumentByConnectorCredentialPair,
     HierarchyNode,
     HierarchyNodeByConnectorCredentialPair,
+    IndexAttempt,
 )
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
@@ -895,43 +897,59 @@ def persist_stub_hierarchy_nodes_for_cc_pair(
     stored yet. A document whose parent arrives later points at the STUB, and
     the STUB becomes the real node when the parent is upserted. One insert
     for the missing STUBs, one read, and one insert for the cc_pair links,
-    committed together."""
+    committed together. A node that a concurrent cleanup removes before the
+    read gets a second insert and read."""
     raw_ids = sorted(set(raw_node_ids))
     if not raw_ids:
         return []
-    # Sorted, so concurrent workers insert in the same order. A node that
-    # another worker inserted first is kept as it is.
-    db_session.execute(
-        pg_insert(HierarchyNode)
-        .values(
-            [
-                {
-                    "raw_node_id": raw_id,
-                    "display_name": "__stub__",
-                    "link": None,
-                    "source": source,
-                    "node_type": HierarchyNodeType.STUB,
-                    "parent_id": source_node_id,
-                    "is_public": False,
-                }
-                for raw_id in raw_ids
-            ]
-        )
-        .on_conflict_do_nothing(index_elements=["raw_node_id", "source"])
-    )
-    # The key-share lock makes a concurrent STUB cleanup wait for this commit,
-    # so it cannot delete a node between this read and the link insert.
-    nodes = list(
+    nodes_by_raw_id: dict[str, HierarchyNode] = {}
+    missing = raw_ids
+    # The insert does not lock a node that is already stored. A concurrent
+    # STUB cleanup can delete that node before the read below, so the read
+    # does not find it. Insert and read the missing ids again until each one
+    # maps, or the document would fall back to the source root.
+    while missing:
+        # Sorted, so concurrent workers insert in the same order. A node that
+        # another worker inserted first is kept as it is.
         db_session.execute(
+            pg_insert(HierarchyNode)
+            .values(
+                [
+                    {
+                        "raw_node_id": raw_id,
+                        "display_name": "__stub__",
+                        "link": None,
+                        "source": source,
+                        "node_type": HierarchyNodeType.STUB,
+                        "parent_id": source_node_id,
+                        "is_public": False,
+                    }
+                    for raw_id in missing
+                ]
+            )
+            .on_conflict_do_nothing(index_elements=["raw_node_id", "source"])
+        )
+        # The key-share lock makes a concurrent STUB cleanup wait for this
+        # commit, so it cannot delete a node between this read and the link
+        # insert.
+        for node in db_session.execute(
             select(HierarchyNode)
             .where(
                 HierarchyNode.source == source,
-                HierarchyNode.raw_node_id.in_(raw_ids),
+                HierarchyNode.raw_node_id.in_(missing),
             )
             .order_by(HierarchyNode.id)
             .with_for_update(read=True, key_share=True)
-        ).scalars()
-    )
+        ).scalars():
+            nodes_by_raw_id[node.raw_node_id] = node
+        missing = [raw_id for raw_id in missing if raw_id not in nodes_by_raw_id]
+        if missing:
+            logger.info(
+                "A STUB cleanup removed %s hierarchy nodes during their read; "
+                "inserting them again",
+                len(missing),
+            )
+    nodes = sorted(nodes_by_raw_id.values(), key=lambda node: node.id)
     upsert_hierarchy_node_cc_pair_entries(
         db_session=db_session,
         hierarchy_node_ids=[node.id for node in nodes],
@@ -997,10 +1015,24 @@ def remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
     locks its STUBs and then checks them again in a new statement, so a STUB
     that a concurrent attempt fills or links keeps its children. Commits in
     batches. Returns the raw ids of the removed STUBs, for the hierarchy
-    cache."""
+    cache.
+
+    Attempts of one cc_pair for different search settings can run at the
+    same time, and they share the pair's STUBs and links. While another
+    attempt of the pair is not finished, the cleanup stops: that attempt can
+    still give a document a STUB parent and fill it. The next attempt that
+    completes its listing removes the STUBs that stay."""
     source_node = get_source_hierarchy_node(db_session, source)
     if source_node is None:
         return []
+    other_attempt_runs = exists().where(
+        IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
+        ConnectorCredentialPair.connector_id == connector_id,
+        ConnectorCredentialPair.credential_id == credential_id,
+        IndexAttempt.status.in_(
+            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+        ),
+    )
     link = HierarchyNodeByConnectorCredentialPair
     other_link = aliased(HierarchyNodeByConnectorCredentialPair)
     only_this_pair = ~exists().where(
@@ -1038,6 +1070,18 @@ def remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
                 .with_for_update(of=HierarchyNode)
             ).scalars()
         )
+        # Checked after the locks: an attempt that starts later must wait for
+        # this commit to link one of these STUBs. It then finds the STUB gone
+        # and makes a new one.
+        if db_session.execute(select(other_attempt_runs)).scalar():
+            logger.info(
+                "Another index attempt of cc_pair %s/%s is not finished; "
+                "keeping its unfilled STUB hierarchy nodes",
+                connector_id,
+                credential_id,
+            )
+            db_session.commit()
+            break
         still_stub_ids = list(
             db_session.execute(
                 select(HierarchyNode.id).where(

@@ -10,8 +10,8 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, select, text, update
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, delete, event, select, text, update
+from sqlalchemy.orm import ORMExecuteState, Session
 
 from onyx.background.celery.tasks.docprocessing.tasks import check_indexing_completion
 from onyx.configs.constants import DocumentSource
@@ -759,3 +759,151 @@ def test_two_pairs_that_link_the_same_stub_do_not_wait_for_each_other(
     finally:
         _remove_stub(db_session, redis_client, raw_id)
         cleanup_cc_pair(db_session, other)
+
+
+def test_a_stub_that_a_cleanup_removes_during_its_read_is_made_again(
+    db_session: Session, pair: ConnectorCredentialPair
+) -> None:
+    """The other pair misses the cache for a stored STUB, so its insert does
+    nothing and takes no lock. The pair's cleanup removes the STUB before the
+    other pair's locking read. The other pair must still map the parent, not
+    leave its document to fall back to the source root."""
+    redis_client = get_redis_client()
+    raw_id = f"vanished_{uuid4().hex[:8]}"
+    other = make_cc_pair(db_session, source=_SOURCE)
+    source_node = ensure_source_node_exists(db_session, _SOURCE)
+    pair_ids = (pair.connector_id, pair.credential_id)
+    removed: list[list[str]] = []
+
+    def cleanup_before_the_locking_read(state: ORMExecuteState) -> None:
+        statement = state.statement
+        if (
+            removed
+            or not isinstance(statement, Select)
+            or statement._for_update_arg is None
+        ):
+            return
+        with get_session_with_current_tenant() as cleanup_session:
+            removed.append(
+                remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+                    cleanup_session, _SOURCE, *pair_ids
+                )
+            )
+
+    try:
+        first = resolve_parent_node_ids(
+            redis_client=redis_client,
+            db_session=db_session,
+            source=_SOURCE,
+            source_node_id=source_node.id,
+            raw_parent_ids=[raw_id],
+            connector_id=pair.connector_id,
+            credential_id=pair.credential_id,
+        )[raw_id]
+        db_session.commit()
+        evict_hierarchy_nodes_from_cache(redis_client, _SOURCE, [raw_id])
+
+        with get_session_with_current_tenant() as second:
+            event.listen(second, "do_orm_execute", cleanup_before_the_locking_read)
+            resolved = resolve_parent_node_ids(
+                redis_client=redis_client,
+                db_session=second,
+                source=_SOURCE,
+                source_node_id=source_node.id,
+                raw_parent_ids=[raw_id],
+                connector_id=other.connector_id,
+                credential_id=other.credential_id,
+            )
+
+        assert removed == [[raw_id]]
+        assert raw_id in resolved
+        assert resolved[raw_id] != first
+        db_session.expire_all()
+        stub = get_hierarchy_node_by_raw_id(db_session, raw_id, _SOURCE)
+        assert stub is not None
+        assert stub.id == resolved[raw_id]
+        links = db_session.execute(
+            select(HierarchyNodeByConnectorCredentialPair.connector_id).where(
+                HierarchyNodeByConnectorCredentialPair.hierarchy_node_id == stub.id
+            )
+        ).scalars()
+        assert set(links) == {other.connector_id}
+    finally:
+        _remove_stub(db_session, redis_client, raw_id)
+        cleanup_cc_pair(db_session, other)
+
+
+def test_cleanup_keeps_the_stubs_while_another_attempt_of_the_pair_runs(
+    db_session: Session, pair: ConnectorCredentialPair
+) -> None:
+    """Attempts of one pair for the PRESENT and the FUTURE search settings
+    can run at the same time and share the pair's STUBs. When one finishes,
+    the other can still give a document a STUB parent and fill it, so the
+    cleanup keeps the STUBs. The cleanup after the last attempt removes
+    them."""
+    redis_client = get_redis_client()
+    tag = uuid4().hex[:8]
+    raw_id = f"overlap_{tag}"
+    source_node = ensure_source_node_exists(db_session, _SOURCE)
+    (doc_id,) = seed_cc_pair_documents(db_session, pair, 1, prefix=f"overlap-{tag}-")
+    other_attempt = make_index_attempt(
+        db_session,
+        pair,
+        IndexingStatus.IN_PROGRESS,
+        started=datetime.now(timezone.utc),
+        finished=None,
+    )
+    try:
+        resolved = resolve_parent_node_ids(
+            redis_client=redis_client,
+            db_session=db_session,
+            source=_SOURCE,
+            source_node_id=source_node.id,
+            raw_parent_ids=[raw_id],
+            connector_id=pair.connector_id,
+            credential_id=pair.credential_id,
+        )
+        db_session.execute(
+            update(Document)
+            .where(Document.id == doc_id)
+            .values(parent_hierarchy_node_id=resolved[raw_id])
+        )
+        db_session.commit()
+
+        assert (
+            remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+                db_session, _SOURCE, pair.connector_id, pair.credential_id
+            )
+            == []
+        )
+        db_session.expire_all()
+        stub = get_hierarchy_node_by_raw_id(db_session, raw_id, _SOURCE)
+        assert stub is not None
+        assert stub.id == resolved[raw_id]
+        parent = db_session.execute(
+            select(Document.parent_hierarchy_node_id).where(Document.id == doc_id)
+        ).scalar_one()
+        assert parent == stub.id
+
+        other_attempt.status = IndexingStatus.SUCCESS
+        db_session.commit()
+        assert remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+            db_session, _SOURCE, pair.connector_id, pair.credential_id
+        ) == [raw_id]
+        db_session.expire_all()
+        parent = db_session.execute(
+            select(Document.parent_hierarchy_node_id).where(Document.id == doc_id)
+        ).scalar_one()
+        assert parent == source_node.id
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            update(Document)
+            .where(Document.id == doc_id)
+            .values(parent_hierarchy_node_id=None)
+        )
+        db_session.execute(
+            delete(IndexAttempt).where(IndexAttempt.id == other_attempt.id)
+        )
+        db_session.commit()
+        _remove_stub(db_session, redis_client, raw_id)
