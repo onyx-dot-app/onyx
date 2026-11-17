@@ -27,7 +27,7 @@ from onyx.background.celery.tasks.docprocessing.batch_counters import (
 from onyx.background.celery.tasks.docprocessing.tasks import (
     validate_active_indexing_attempts,
 )
-from onyx.background.indexing import conversion_recovery
+from onyx.background.indexing import conversion_recovery, run_docconversion
 from onyx.background.indexing.conversion_recovery import (
     ConversionChainState,
     check_conversion_chain,
@@ -460,3 +460,73 @@ def test_a_task_that_stopped_after_it_deleted_its_stub_batch_is_recovered(
     assert run.attempt().stub_batches_converted == 1
     # The window has room again, so batch 1 goes to conversion.
     assert run.sent_batch_nums(OnyxCeleryTask.DOCCONVERSION_TASK) == [1]
+
+
+def test_a_stored_document_batch_is_sent_when_every_stub_batch_is_converted(
+    run: _Run,
+) -> None:
+    """The last conversion task counted its batch converted and stopped before
+    it sent the document batch on. No stub batch waits, so only the stored
+    document batch shows the lost work."""
+    run.store_stub_batch(0)
+    assert run.claim("a conversion task that is gone") == [0]
+    run.docs.store_batch(0, [make_doc(f"doc_{run.attempt_id}_0")])
+    run.stubs.delete_batch_by_num(0)
+    IndexingCoordination.record_stub_batch_converted(run.db_session, run.attempt_id)
+
+    assert run.chain_state() == ConversionChainState.RECOVERED
+
+    assert run.sent_batch_nums(OnyxCeleryTask.DOCPROCESSING_TASK) == [0]
+    assert run.sent_batch_nums(OnyxCeleryTask.DOCCONVERSION_TASK) == []
+    assert run.attempt().heartbeat_counter == 6
+
+
+def test_a_docprocessing_task_keeps_the_watchdog_away_from_converted_batches(
+    run: _Run,
+) -> None:
+    run.store_stub_batch(0)
+    assert run.claim("a conversion task") == [0]
+    run.docs.store_batch(0, [make_doc(f"doc_{run.attempt_id}_0")])
+    run.stubs.delete_batch_by_num(0)
+    IndexingCoordination.record_stub_batch_converted(run.db_session, run.attempt_id)
+    counters = RedisDocprocessing(
+        run.attempt_id, get_redis_client(), BatchStage.DOCPROCESSING
+    )
+    # A worker picked up the docprocessing task.
+    counters.incr_pending()
+    counters.decr_pending_incr_in_flight()
+
+    assert run.chain_state() == ConversionChainState.BUSY
+
+    assert run.app.send_task.call_count == 0
+
+
+def test_converted_batches_with_nothing_stored_are_not_a_dead_chain(
+    run: _Run,
+) -> None:
+    run.store_stub_batch(0)
+    assert run.claim("a conversion task") == [0]
+    run.stubs.delete_batch_by_num(0)
+    IndexingCoordination.record_stub_batch_converted(run.db_session, run.attempt_id)
+
+    assert run.chain_state() == ConversionChainState.IDLE
+
+
+def test_restarts_that_send_nothing_still_fail_the_attempt(
+    run: _Run, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A restart claims nothing, so it must not move the dispatch time: the
+    next run would read the chain as healthy and forget the first miss."""
+    monkeypatch.setattr(run_docconversion, "DOCCONVERSION_WINDOW_BATCHES", 0)
+    run.store_stub_batch(0)
+    attempt = run.attempt()
+    attempt.last_dispatch_at = _LONG_AGO
+    run.db_session.commit()
+
+    run.watchdog()
+    row = run.attempt()
+    assert row.status == IndexingStatus.IN_PROGRESS
+    assert row.last_dispatch_at == _LONG_AGO
+    run.watchdog()
+
+    assert run.attempt().status == IndexingStatus.FAILED
