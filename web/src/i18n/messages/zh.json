@@ -1767,7 +1767,6 @@
           "title": "加载使用报告失败。"
         },
         "pendingRow": {
-          "description": "{range} · 通常在一分钟内完成",
           "slowDescription": "仍在处理。您可以离开此页面，报告完成后会显示在这里。",
           "title": "正在准备报告…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "使用报告已就绪。",
           "startFailed": "启动报告生成失败：{message}",
-          "timedOut": "报告生成用时过长。请重试，或稍后再来查看。",
           "unknownError": "未知错误"
+        },
+        "failedRow": {
+          "title": "报告生成失败",
+          "description": "请求时间：{time}。请生成新报告以重试。"
         }
       },
       "slackChannelChart": {

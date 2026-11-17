@@ -1767,7 +1767,6 @@
           "title": "Failed to load usage reports."
         },
         "pendingRow": {
-          "description": "{range} · usually ready in under a minute",
           "slowDescription": "Still working. You can leave this page; the report will appear here.",
           "title": "Preparing report…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "Usage report ready.",
           "startFailed": "Failed to start report generation: {message}",
-          "timedOut": "Report generation is taking too long. Try again or check back later.",
           "unknownError": "unknown error"
+        },
+        "failedRow": {
+          "title": "Report generation failed",
+          "description": "Requested {time}. Generate a new report to try again."
         }
       },
       "slackChannelChart": {

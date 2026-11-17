@@ -37,3 +37,13 @@ def export_query_history_cleanup_task(*, tenant_id: str) -> None:
             started_timeout=JOB_TIMEOUT + USER_JOB_LOST_TASK_GRACE,
             expired_failed_task_ids=expired,
         )
+        # Usage reports list report rows, not files, so no file can leak.
+        cleanup_stale_tasks(
+            db_session,
+            OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
+            pending_timeout=USER_EXPORT_TASK_EXPIRES + USER_JOB_LOST_TASK_GRACE,
+            started_timeout=JOB_TIMEOUT + USER_JOB_LOST_TASK_GRACE,
+            expired_failed_task_ids=get_expired_failed_task_ids(
+                db_session, OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK
+            ),
+        )

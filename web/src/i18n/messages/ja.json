@@ -1767,7 +1767,6 @@
           "title": "利用状況レポートの読み込みに失敗しました。"
         },
         "pendingRow": {
-          "description": "{range} · 通常は 1 分以内に完了します",
           "slowDescription": "処理中です。このページを離れても、レポートはここに表示されます。",
           "title": "レポートを準備中…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "利用状況レポートが完成しました。",
           "startFailed": "レポート作成の開始に失敗しました: {message}",
-          "timedOut": "レポートの作成に時間がかかっています。もう一度実行するか、後で確認してください。",
           "unknownError": "不明なエラー"
+        },
+        "failedRow": {
+          "title": "レポートの生成に失敗しました",
+          "description": "リクエスト日時: {time}。再試行するには、新しいレポートを生成してください。"
         }
       },
       "slackChannelChart": {

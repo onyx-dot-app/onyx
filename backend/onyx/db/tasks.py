@@ -266,3 +266,11 @@ def check_task_is_live_and_not_timed_out(
 
     time_elapsed = current_db_time - last_update_time
     return time_elapsed.total_seconds() < timeout
+
+
+def complete_started_task__no_commit(db_session: Session, task_id: str) -> bool:
+    task = get_started_task_for_update(db_session, task_id)
+    if task is None:
+        return False
+    db_session.delete(task)
+    return True

@@ -1,8 +1,9 @@
 /** API helpers for the Workspace Analytics page. */
 
-import type { ErrorResponseBody } from "@/lib/fetcher";
+import { errorHandlingFetcher, type ErrorResponseBody } from "@/lib/fetcher";
+import * as yup from "yup";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { ReportPeriod } from "@/views/admin/WorkspaceAnalyticsPage/interfaces";
+import { ReportPeriod } from "@/views/admin/WorkspaceAnalyticsPage/types";
 
 const USAGE_REPORT_URL = SWR_KEYS.usageReport;
 
@@ -39,4 +40,29 @@ export async function generateUsageReport(
     );
   }
   return reportId;
+}
+
+const usageReportJobsSchema = yup
+  .array(
+    yup
+      .object({
+        report_id: yup.string().uuid().required(),
+        status: yup
+          .mixed<"PENDING" | "STARTED" | "FAILURE" | "SUCCESS">()
+          .oneOf(["PENDING", "STARTED", "FAILURE", "SUCCESS"])
+          .required(),
+        time_created: yup.string().required(),
+      })
+      .required()
+  )
+  .required();
+
+export type UsageReportJob = yup.InferType<
+  typeof usageReportJobsSchema
+>[number];
+
+export async function fetchUsageReportJobs(
+  url: string
+): Promise<UsageReportJob[]> {
+  return usageReportJobsSchema.validate(await errorHandlingFetcher(url));
 }

@@ -1767,7 +1767,6 @@
           "title": "Nutzungsberichte konnten nicht geladen werden."
         },
         "pendingRow": {
-          "description": "{range} · normalerweise in weniger als einer Minute fertig",
           "slowDescription": "Wird noch bearbeitet. Sie können diese Seite verlassen; der Bericht erscheint hier.",
           "title": "Bericht wird vorbereitet…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "Nutzungsbericht ist fertig.",
           "startFailed": "Die Berichterstellung konnte nicht gestartet werden: {message}",
-          "timedOut": "Die Berichterstellung dauert zu lange. Versuchen Sie es erneut oder schauen Sie später nach.",
           "unknownError": "unbekannter Fehler"
+        },
+        "failedRow": {
+          "title": "Berichterstellung fehlgeschlagen",
+          "description": "Angefordert am {time}. Erstellen Sie einen neuen Bericht, um es erneut zu versuchen."
         }
       },
       "slackChannelChart": {

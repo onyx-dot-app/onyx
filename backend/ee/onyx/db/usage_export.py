@@ -1,10 +1,12 @@
+import hashlib
+import struct
 import uuid
 from collections.abc import Generator
 from datetime import datetime
 from typing import IO, Optional
 
 from fastapi_users_db_sqlalchemy import UUID_ID
-from sqlalchemy import cast
+from sqlalchemy import cast, func, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
@@ -15,9 +17,13 @@ from ee.onyx.server.reporting.usage_export_models import (
     FlowType,
     UsageReportMetadata,
 )
-from onyx.configs.constants import FileOrigin, MessageType
+from onyx.configs.constants import FileOrigin, MessageType, OnyxCeleryTask
 from onyx.db.models import ChatMessage, UsageReport, User
+from onyx.db.tasks import get_task_with_id, register_task
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from shared_configs.contextvars import get_current_tenant_id
 
 
 # Gets skeletons of all messages in the given range
@@ -215,3 +221,21 @@ def write_usage_report(
     db_session.add(new_report)
     db_session.commit()
     return new_report
+
+
+def register_usage_report_job(db_session: Session, report_id: uuid.UUID) -> None:
+    key = f"usage-report:{get_current_tenant_id()}:{report_id}"
+    lock_id = struct.unpack("q", hashlib.sha256(key.encode()).digest()[:8])[0]
+    db_session.execute(select(func.pg_advisory_xact_lock(lock_id)))
+    if (
+        usage_report_id_in_use(db_session, report_id)
+        or get_task_with_id(db_session, str(report_id)) is not None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE, f"report_id {report_id} is already in use"
+        )
+    register_task(
+        task_name=f"{OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK}_{report_id}",
+        db_session=db_session,
+        task_id=str(report_id),
+    )

@@ -29,12 +29,10 @@ import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UsageReport } from "@/app/ee/admin/performance/usage/types";
-import {
-  PendingReport,
-  ReportPeriod,
-} from "@/views/admin/WorkspaceAnalyticsPage/interfaces";
+import { ReportPeriod } from "@/views/admin/WorkspaceAnalyticsPage/types";
 import {
   generateUsageReport,
+  fetchUsageReportJobs,
   usageReportDownloadUrl,
 } from "@/views/admin/WorkspaceAnalyticsPage/svc";
 
@@ -45,8 +43,6 @@ function presetPeriod(label: string, days: number): ReportPeriod {
 
 const PAGE_SIZE = 8;
 const POLL_INTERVAL_MS = 3_000;
-const SLOW_REPORT_AFTER_MS = 20_000;
-const REPORT_TIMEOUT_MS = 5 * 60_000;
 
 function periodLabel(
   report: UsageReport,
@@ -61,27 +57,18 @@ function periodLabel(
     : allTimeLabel;
 }
 
-interface PendingReportRowProps {
-  rangeLabel: string;
-  slow: boolean;
-}
-
-function PendingReportRow({ rangeLabel, slow }: PendingReportRowProps) {
+function PendingReportRow() {
   const t = useTranslations("admin.analytics");
   return (
     <div
-      className="rounded-12 border border-border-01 bg-background-tint-01 motion-safe:animate-pulse"
+      className="rounded-12 border border-border-01 bg-background-tint-01"
       data-testid="pending-report-row"
     >
       <ContentAction
         font="main-ui-action"
         icon={SvgSpreadsheetFile}
         title={t("reports.pendingRow.title")}
-        description={
-          slow
-            ? t("reports.pendingRow.slowDescription")
-            : t("reports.pendingRow.description", { range: rangeLabel })
-        }
+        description={t("reports.pendingRow.slowDescription")}
         padding={1}
         center
         rightChildren={
@@ -300,65 +287,63 @@ function GenerateReportMenu({
 }
 
 export default function UsageReports() {
+  const locale = useLocale();
   const t = useTranslations("admin.analytics");
   const [page, setPage] = useState(1);
   const [requesting, setRequesting] = useState(false);
-  const [pendingReport, setPendingReport] = useState<PendingReport | null>(
+  const [requestedReportId, setRequestedReportId] = useState<string | null>(
     null
   );
   const [arrivedReportName, setArrivedReportName] = useState<string | null>(
     null
   );
-  const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reportTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const pending = pendingReport !== null;
+  const {
+    data: jobs,
+    error: jobsError,
+    isLoading: jobsLoading,
+    mutate: mutateJobs,
+  } = useSWR(SWR_KEYS.usageReportJobs, fetchUsageReportJobs, {
+    refreshInterval: POLL_INTERVAL_MS,
+  });
+  const pending = (jobs ?? []).some(
+    (job) => job.status === "PENDING" || job.status === "STARTED"
+  );
   const {
     data: reports,
     error: listError,
     isLoading: listLoading,
     mutate,
   } = useSWR<UsageReport[]>(SWR_KEYS.usageReport, errorHandlingFetcher, {
-    refreshInterval: pending ? POLL_INTERVAL_MS : 0,
+    refreshInterval: POLL_INTERVAL_MS,
   });
 
   useEffect(() => {
     if (listError) console.error("Failed to load usage reports:", listError);
   }, [listError]);
 
-  function clearPendingTimers() {
-    if (slowTimerRef.current) {
-      clearTimeout(slowTimerRef.current);
-      slowTimerRef.current = null;
-    }
-    if (reportTimeoutRef.current) {
-      clearTimeout(reportTimeoutRef.current);
-      reportTimeoutRef.current = null;
-    }
-  }
-
   useEffect(() => {
-    if (!reports || !pendingReport) return;
-    const completed = reports.find((report) =>
-      report.report_name.includes(pendingReport.id)
+    if (!requestedReportId) return;
+    const completed = reports?.find((report) =>
+      report.report_name.includes(requestedReportId)
     );
     if (completed) {
-      setPendingReport(null);
+      setRequestedReportId(null);
       setArrivedReportName(completed.report_name);
       setPage(1);
       toast.success(t("reports.toasts.ready"));
-      clearPendingTimers();
+    } else if (
+      jobs?.some(
+        (job) => job.report_id === requestedReportId && job.status === "FAILURE"
+      )
+    ) {
+      setRequestedReportId(null);
+      toast.error(t("reports.failedRow.title"));
     }
-  }, [reports, pendingReport, t]);
+  }, [reports, jobs, requestedReportId, t]);
 
-  useEffect(
-    () => () => {
-      clearPendingTimers();
-      abortRef.current?.abort();
-    },
-    []
-  );
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   async function requestReport(period: ReportPeriod): Promise<void> {
     setRequesting(true);
@@ -366,20 +351,8 @@ export default function UsageReports() {
     abortRef.current = abort;
     try {
       const reportId = await generateUsageReport(period, abort.signal);
-      setPendingReport({ id: reportId, label: period.label, slow: false });
+      setRequestedReportId(reportId);
       setArrivedReportName(null);
-      slowTimerRef.current = setTimeout(
-        () =>
-          setPendingReport((current) =>
-            current ? { ...current, slow: true } : current
-          ),
-        SLOW_REPORT_AFTER_MS
-      );
-      reportTimeoutRef.current = setTimeout(() => {
-        setPendingReport(null);
-        toast.error(t("reports.toasts.timedOut"));
-        reportTimeoutRef.current = null;
-      }, REPORT_TIMEOUT_MS);
     } catch (error) {
       if (abort.signal.aborted) return;
       console.error("Failed to start usage report generation:", error);
@@ -395,7 +368,7 @@ export default function UsageReports() {
 
     // Generation already succeeded, so a failed revalidation must not surface
     // as "failed to start report generation".
-    void mutate().catch((error: unknown) => {
+    void Promise.all([mutate(), mutateJobs()]).catch((error: unknown) => {
       console.error("Failed to refresh the usage report list:", error);
     });
   }
@@ -446,9 +419,9 @@ export default function UsageReports() {
         />
       </div>
 
-      {listLoading ? (
+      {listLoading || jobsLoading ? (
         <PageLoader />
-      ) : listError ? (
+      ) : listError || jobsError ? (
         <MessageCard
           variant="error"
           icon={SvgX}
@@ -463,13 +436,23 @@ export default function UsageReports() {
           width="full"
           height="fit"
         >
-          {pending && page === 1 && (
-            <PendingReportRow
-              rangeLabel={pendingReport.label}
-              slow={pendingReport.slow}
-            />
-          )}
-          {orderedReports.length === 0 && !pending ? (
+          {page === 1 &&
+            (jobs ?? []).map((job) =>
+              job.status === "FAILURE" ? (
+                <MessageCard
+                  key={job.report_id}
+                  variant="error"
+                  icon={SvgX}
+                  title={t("reports.failedRow.title")}
+                  description={t("reports.failedRow.description", {
+                    time: humanReadableFormatWithTime(job.time_created, locale),
+                  })}
+                />
+              ) : job.status === "PENDING" || job.status === "STARTED" ? (
+                <PendingReportRow key={job.report_id} />
+              ) : null
+            )}
+          {orderedReports.length === 0 && !jobs?.length ? (
             <div className="rounded-12 border border-dashed border-border-02 p-4">
               <Text font="secondary-body" color="text-03" as="p">
                 {t("reports.empty.description")}

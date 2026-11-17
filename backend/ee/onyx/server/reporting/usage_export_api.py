@@ -1,6 +1,6 @@
 from collections.abc import Generator
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import StreamingResponse
@@ -11,21 +11,49 @@ from ee.onyx.db.usage_export import (
     UsageReportMetadata,
     get_all_usage_reports,
     get_usage_report_data,
-    usage_report_id_in_use,
+    register_usage_report_job,
 )
 from ee.onyx.server.reporting.usage_export_models import USAGE_REPORT_MEDIA_TYPE
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import (
+    USER_EXPORT_TASK_EXPIRES,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, TaskStatus
 from onyx.db.models import User
+from onyx.db.tasks import get_all_tasks_with_prefix
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
+
+
+class UsageReportJob(BaseModel):
+    report_id: UUID
+    status: TaskStatus
+    time_created: datetime
+
+
+@router.get("/admin/usage-report-jobs")
+def fetch_usage_report_jobs(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[UsageReportJob]:
+    return [
+        UsageReportJob(
+            report_id=UUID(task.task_id),
+            status=task.status,
+            time_created=task.register_time,
+        )
+        for task in get_all_tasks_with_prefix(
+            db_session, OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK
+        )
+    ]
 
 
 class GenerateUsageReportParams(BaseModel):
@@ -48,21 +76,21 @@ def generate_report(
         except ValueError as e:
             raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
-    if params.report_id and usage_report_id_in_use(db_session, params.report_id):
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"report_id {params.report_id} is already in use",
-        )
-
+    report_id = params.report_id or uuid4()
+    register_usage_report_job(db_session, report_id)
     tenant_id = get_current_tenant_id()
     client_app.send_task(  # celery-expires: allow (user-started job, nothing sends it again)
         OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
+        expires=USER_EXPORT_TASK_EXPIRES,
+        queue=OnyxCeleryQueues.PRIMARY,
+        task_id=str(report_id),
         kwargs={
             "tenant_id": tenant_id,
             "user_id": str(user.id) if user else None,
             "period_from": params.period_from,
             "period_to": params.period_to,
-            "report_id": str(params.report_id) if params.report_id else None,
+            "report_id": str(report_id),
+            "track_job": True,
         },
     )
 

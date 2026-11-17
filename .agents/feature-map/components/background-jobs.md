@@ -157,7 +157,7 @@ document in the batch and marks them modified, so the metadata sync corrects
 the index. The per-document `document_by_cc_pair_cleanup_task` only drains
 messages queued before an upgrade.
 
-**User exports.** Query-history exports claim their pending task row with a
+**User exports.** Query-history and manual usage exports claim their pending task row with a
 conditional update. The hourly cleanup fails pending rows after one hour plus
 five minutes, and started rows after `JOB_TIMEOUT` plus five minutes. It keeps
 failures for 24 hours from the failure transition. Claiming resets the start
@@ -166,7 +166,11 @@ file without a row lock, then locks the started row to publish. A late worker
 whose job cleanup failed deletes its file. Before cleanup purges an expired
 failure, it deletes that job's file, because without the row the file looks
 published. Cleanup skips rows that a worker locks. The start route fails its
-new row when the broker send fails.
+new row when the broker send fails. Manual usage exports follow the same rules,
+and delete the job row in the same transaction that records the report. Scheduled usage exports do
+not create job rows. Usage generation runs on the primary worker, which
+registers that task; query-history generation and the shared hourly cleanup run
+on the heavy worker.
 Celery time limits do not stop these thread workers.
 
 **Other periodic flows.** Each owner documents its flow; this list says where

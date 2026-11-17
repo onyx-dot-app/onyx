@@ -27,6 +27,7 @@ from ee.onyx.server.reporting.usage_report_pdf import render_usage_report_pdf
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import User
 from onyx.db.system_usage import SystemUsageExportRow, iter_system_usage_export
+from onyx.db.tasks import complete_started_task__no_commit
 from onyx.db.user_usage import UsageExportRow, iter_usage_export
 from onyx.db.users import get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
@@ -277,6 +278,7 @@ def create_new_usage_report(
     user_id: UUID_ID | None,  # None = auto-generated
     period: tuple[datetime, datetime] | None,
     report_id: str | None = None,
+    task_id: str | None = None,
 ) -> UsageReportMetadata:
     report_id = report_id or str(uuid.uuid4())
     file_store = get_default_file_store()
@@ -363,6 +365,12 @@ def create_new_usage_report(
                     zip_file.writestr("usage_report.pdf", pdf_tmpfile.read())
 
             zip_buffer.seek(0)
+
+            # Lock the job through publication and the report-row commit.
+            if task_id is not None and not complete_started_task__no_commit(
+                db_session, task_id
+            ):
+                raise RuntimeError("Usage report job has already ended")
 
             # store zip blob to file_store
             report_name = f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')}_{report_id}_usage_report.zip"

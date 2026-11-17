@@ -1767,7 +1767,6 @@
           "title": "No se pudieron cargar los informes de uso."
         },
         "pendingRow": {
-          "description": "{range} · normalmente está listo en menos de un minuto",
           "slowDescription": "Sigue en curso. Puedes salir de esta página; el informe aparecerá aquí.",
           "title": "Preparando el informe…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "Informe de uso listo.",
           "startFailed": "No se pudo iniciar la generación del informe: {message}",
-          "timedOut": "La generación del informe está tardando demasiado. Inténtalo de nuevo o vuelve más tarde.",
           "unknownError": "error desconocido"
+        },
+        "failedRow": {
+          "title": "No se pudo generar el informe",
+          "description": "Solicitado el {time}. Genere un nuevo informe para volver a intentarlo."
         }
       },
       "slackChannelChart": {
