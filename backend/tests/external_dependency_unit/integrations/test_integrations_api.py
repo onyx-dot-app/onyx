@@ -38,6 +38,7 @@ from onyx.db.integration_policy import list_persona_plugin_links
 from onyx.db.models import (
     ExternalApp,
     Integration,
+    IntegrationOAuthClient,
     Marketplace,
     MCPServer,
     Plugin,
@@ -1582,6 +1583,71 @@ def test_custom_tool_alias_reads_and_keeps_migrated_headers(
     connection = get_connection(db_session, integration.id, None)
     assert connection is not None
     assert read_connection_secret(connection).fields == {"X-Api-Key": "abc{1}-secret"}
+
+
+def test_custom_tool_alias_save_keeps_oauth_sign_in(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    snapshot = tool_api.create_custom_tool(
+        CustomToolCreate(
+            name=f"oauth-{uuid4().hex[:8]}",
+            description="OAuth",
+            definition=OPENAPI_SPEC,
+            custom_headers=[Header(key="X-Team", value="blue")],
+            passthrough_auth=False,
+        ),
+        db_session,
+        admin,
+    )
+    integration = get_integration_by_kind_row(
+        Integration.tool_id, snapshot.id, db_session
+    )
+    assert integration is not None
+    created.add(integration.id)
+    integration.auth_mode = IntegrationAuthMode.SHARED
+    integration.auth_method = IntegrationAuthMethod.OAUTH2
+    integration.header_template = {
+        "Authorization": "Bearer {access_token}",
+        "X-Team": "blue",
+    }
+    db_session.add(
+        IntegrationOAuthClient(
+            integration_id=integration.id,
+            provider_mode=IntegrationOAuthProviderMode.MANUAL,
+            authorization_url="https://auth.example.com/authorize",
+            token_url="https://auth.example.com/token",
+            client_id="client-id",
+        )
+    )
+    db_session.commit()
+
+    fetched = tool_api.get_custom_tool(snapshot.id, db_session, admin)
+    assert fetched.custom_headers is not None
+    tool_api.update_custom_tool(
+        snapshot.id,
+        CustomToolUpdate(
+            name="Renamed",
+            custom_headers=[Header(**header) for header in fetched.custom_headers],
+            passthrough_auth=fetched.passthrough_auth,
+        ),
+        db_session,
+        admin,
+    )
+    db_session.expire_all()
+    kept = db_session.get(Integration, integration.id)
+    assert kept is not None
+    assert kept.name == "Renamed"
+    assert kept.auth_method is IntegrationAuthMethod.OAUTH2
+    assert get_oauth_client(db_session, integration.id) is not None
+
+    with pytest.raises(OnyxError) as exc:
+        tool_api.update_custom_tool(
+            snapshot.id,
+            CustomToolUpdate(custom_headers=[Header(key="X-Team", value="red")]),
+            db_session,
+            admin,
+        )
+    assert exc.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
 @pytest.mark.parametrize("for_organization", [True, False])

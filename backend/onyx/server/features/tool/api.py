@@ -337,12 +337,22 @@ def update_custom_tool(
             if tool_data.passthrough_auth is not None
             else integration.auth_method is IntegrationAuthMethod.ONYX_LOGIN
         )
-        auth = _auth_settings(headers, passthrough)
-        update.auth_mode = auth.auth_mode
-        update.auth_method = auth.auth_method
-        update.header_template = auth.header_template
-        update.credential_fields = auth.credential_fields
-        organization_fields = auth.organization_fields
+        if integration.auth_method is IntegrationAuthMethod.OAUTH2:
+            # The old fields cannot express OAuth sign-in, so the values that
+            # the read returned keep it, and any other value is refused.
+            if passthrough or {h.key: h.value for h in headers} != stored:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "This tool signs in with OAuth. Change its sign-in on the "
+                    "integration (/admin/integrations).",
+                )
+        else:
+            auth = _auth_settings(headers, passthrough)
+            update.auth_mode = auth.auth_mode
+            update.auth_method = auth.auth_method
+            update.header_template = auth.header_template
+            update.credential_fields = auth.credential_fields
+            organization_fields = auth.organization_fields
 
     integration = update_integration__no_commit(
         user, integration.id, update, db_session
