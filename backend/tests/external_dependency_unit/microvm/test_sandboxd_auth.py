@@ -219,7 +219,7 @@ def test_init_carries_the_key_and_scratch_size(
     assert result.attached and result.relay_reset
     [(request, routed_to)] = node.agent.init_requests
     assert routed_to == str(sandbox_id)
-    assert request.scratch_bytes == placed.vm.scratch_gib << 30 == 4 << 30
+    assert request.scratch_bytes == placed.vm.scratch_gib << 30 == 32 << 30
     assert request.generation == placed.vm.generation
     assert request.sandbox_id == str(sandbox_id)
     assert dict(request.env) == {"A": "1"} and list(request.session_ids) == ["s1"]

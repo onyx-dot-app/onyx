@@ -196,8 +196,8 @@ class VmRequest(BaseModel):
     attempt: int
     # Template version; vcpus and mem_mib come from the node's template.
     template: str
-    # None = the template's scratch size.
-    scratch_gib: int | None = None
+    # Sparse growth keeps the template small. None uses the template's size.
+    scratch_gib: int | None = 32
 
 
 class PlacedVm(BaseModel):
