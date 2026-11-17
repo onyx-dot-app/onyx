@@ -82,11 +82,14 @@ function renderMessage(packets: Packet[]) {
   );
 }
 
+// A run that works or has one step is already open; only a folded run has
+// the expand button.
 async function expandTimeline() {
   await screen.findByText("Done.");
-  await act(async () => {
-    screen.getByRole("button", { name: "Expand timeline" }).click();
-  });
+  const expand = screen.queryByRole("button", { name: "Expand timeline" });
+  if (expand) {
+    await act(async () => expand.click());
+  }
 }
 
 const PATCH = [
@@ -520,7 +523,6 @@ test("a call that spans two code mode observations shows all its output", async 
   );
   try {
     await screen.findByText("Done.");
-    expect(screen.getByText("1 step")).toBeInTheDocument();
     await expandTimeline();
     expect(screen.getByText(/step 1\s+step 2/)).toBeInTheDocument();
   } finally {
@@ -607,7 +609,7 @@ test("a call the user stopped shows as stopped, not as a result", async () => {
   );
   try {
     await act(async () => {
-      (await screen.findByRole("button", { name: "Expand timeline" })).click();
+      screen.queryByRole("button", { name: "Expand timeline" })?.click();
     });
     // Both calls, and the timeline's own stopped step
     expect(await screen.findAllByText("Stopped")).toHaveLength(3);
@@ -646,7 +648,7 @@ test("a code mode call that its cell's end cut off shows as stopped", async () =
   try {
     // Stopped as soon as the cell ends, while the turn goes on
     await act(async () => {
-      (await screen.findByRole("button", { name: "Expand timeline" })).click();
+      screen.queryByRole("button", { name: "Expand timeline" })?.click();
     });
     expect(await screen.findByText("Stopped")).toBeInTheDocument();
     expect(screen.getByText("waiting")).toBeInTheDocument();

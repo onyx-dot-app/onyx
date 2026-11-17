@@ -114,6 +114,16 @@ function seedSessionAwaitingAnswer() {
   store.setCurrentSession(SESSION_ID);
 }
 
+// A run that works or has one step is already open; only a folded run has
+// the expand button.
+async function openRun() {
+  await act(async () => {});
+  const expand = screen.queryByRole("button", { name: "Expand timeline" });
+  if (expand) {
+    await act(async () => expand.click());
+  }
+}
+
 afterEach(() => {
   useChatSessionStore.setState({ currentSessionId: null, sessions: new Map() });
   jest.useRealTimers();
@@ -151,10 +161,7 @@ test("parallel searches render as separate steps in order", async () => {
     />
   );
   try {
-    const expand = await screen.findByRole("button", {
-      name: "Expand timeline",
-    });
-    act(() => expand.click());
+    await openRun();
     const internal = await screen.findByText("Searching internal documents");
     const web = screen.getAllByText("Searching the web").at(-1);
     expect(web).toBeDefined();
@@ -209,9 +216,7 @@ test.each([undefined, 0])(
       />
     );
     try {
-      act(() =>
-        screen.getByRole("button", { name: "Expand timeline" }).click()
-      );
+      // The run works, so it is open.
       expect(
         screen.getByText("Searching internal documents")
       ).toBeInTheDocument();
@@ -558,10 +563,7 @@ test("code mode reads as the tool calls it makes", async () => {
   try {
     expect(await screen.findByText("You have 3 orders.")).toBeInTheDocument();
     // One cell, observed twice, made one call.
-    expect(screen.getByText("1 step")).toBeInTheDocument();
-    await act(async () => {
-      screen.getByRole("button", { name: "Expand timeline" }).click();
-    });
+    await openRun();
     const timeline = view.container;
     await waitFor(() =>
       expect(screen.getAllByText(/lookup_orders/)).toHaveLength(1)
@@ -640,9 +642,7 @@ test("a later report of a code mode call replaces what the step shows", async ()
   );
   const view = render(renderMessage(yielded));
   try {
-    await act(async () => {
-      (await screen.findByRole("button", { name: "Expand timeline" })).click();
-    });
+    await openRun();
     expect(await screen.findByText("checking more")).toBeInTheDocument();
 
     view.rerender(renderMessage(completed));
@@ -949,9 +949,7 @@ test("an expanded step keeps its state when a call is inserted before it", async
   );
   const view = render(renderMessage(packets));
   try {
-    await act(async () => {
-      (await screen.findByRole("button", { name: "Expand timeline" })).click();
-    });
+    await openRun();
     const weather = await screen.findByText("sunny");
 
     // The new call takes the turn index that the direct step had.
@@ -1297,9 +1295,7 @@ test("a research step shows each of its nested calls once", async () => {
     />
   );
   try {
-    await act(async () => {
-      (await screen.findByRole("button", { name: "Expand timeline" })).click();
-    });
+    await openRun();
     expect(await screen.findByText("Compare vendor pricing")).toBeVisible();
     const first = screen.getAllByText("first query");
     const second = screen.getAllByText("second query");
@@ -1359,17 +1355,14 @@ test("a tool step after an accepted user message follows that message", async ()
     const bubble = await screen.findByText("Use the latest report");
     // Each search gets its own timeline, on its side of the user message.
     expect(screen.queryByText("2 steps")).not.toBeInTheDocument();
-    const timelines = screen.getAllByRole("button", {
-      name: "Toggle timeline",
-    });
-    expect(timelines).toHaveLength(2);
+    // A single-step run is open, so its query shows.
+    const first = screen.getByText("first query");
+    const second = screen.getByText("second query");
     expect(
-      timelines[0]!.compareDocumentPosition(bubble) &
-        Node.DOCUMENT_POSITION_FOLLOWING
+      first.compareDocumentPosition(bubble) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
-      bubble.compareDocumentPosition(timelines[1]!) &
-        Node.DOCUMENT_POSITION_FOLLOWING
+      bubble.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   } finally {
     view.unmount();
