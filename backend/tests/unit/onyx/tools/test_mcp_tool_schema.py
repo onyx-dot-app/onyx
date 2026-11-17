@@ -132,6 +132,13 @@ def _make_tool(
         tool_description="List AWS regions",
         tool_definition=input_schema,
         acting_user_id=None,
+        credentials=CallCredentials(
+            integration_id=server_id,
+            auth_method=None,
+            connection_id=None,
+            connection_user_id=None,
+            headers={},
+        ),
     )
 
 
@@ -256,19 +263,6 @@ class TestMCPToolLLMNames:
                     content=[TextContent(type="text", text='{"ok": true}')]
                 ),
             ) as mock_call_mcp_tool,
-            patch(
-                "onyx.tools.tool_implementations.mcp.mcp_tool.resolve_mcp_call_auth",
-                return_value=(
-                    CallCredentials(
-                        integration_id=1,
-                        auth_method=None,
-                        connection_id=None,
-                        connection_user_id=None,
-                        headers={},
-                    ),
-                    None,
-                ),
-            ),
         ):
             mcp_tool.run(
                 ToolInvocation(

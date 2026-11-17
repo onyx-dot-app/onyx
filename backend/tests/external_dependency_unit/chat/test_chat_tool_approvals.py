@@ -72,6 +72,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.gcs_file_store import GCSBackedFileStore
+from onyx.integrations.models import CallCredentials
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -162,6 +163,13 @@ class ApprovalChat(BaseModel):
             tool_description="",
             tool_definition={"displayName": "Send email"},
             acting_user_id=self.user.id,
+            credentials=CallCredentials(
+                integration_id=self.integration_id,
+                auth_method=None,
+                connection_id=None,
+                connection_user_id=None,
+                headers={},
+            ),
             approval=self.scope(),
         )
 

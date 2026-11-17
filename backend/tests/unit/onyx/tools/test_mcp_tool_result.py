@@ -4,7 +4,6 @@ reports is a tool error."""
 
 import json
 import logging
-from collections.abc import Iterator
 from unittest.mock import patch
 
 import httpx
@@ -41,14 +40,6 @@ _CREDENTIALS = CallCredentials(
 )
 
 
-@pytest.fixture(autouse=True)
-def _resolved_credentials() -> Iterator[None]:
-    with (
-        patch(f"{MODULE}.resolve_mcp_call_auth", return_value=(_CREDENTIALS, None)),
-    ):
-        yield
-
-
 def _github_tool() -> MCPTool:
     return MCPTool(
         integration_id=1,
@@ -59,6 +50,7 @@ def _github_tool() -> MCPTool:
         tool_description="List issues",
         tool_definition={"type": "object", "properties": {}},
         acting_user_id=None,
+        credentials=_CREDENTIALS,
     )
 
 

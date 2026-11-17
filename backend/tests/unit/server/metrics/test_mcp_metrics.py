@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Iterator
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from mcp.types import CallToolResult, TextContent
 
 from onyx.agents.tools import ToolInvocation, ToolResult, ToolUpdate
+from onyx.db.enums import IntegrationAuthMethod
 from onyx.integrations.call_credentials import CallCredentials
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import ConnectionProblem
@@ -25,25 +26,16 @@ from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 _MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
 
 
-@pytest.fixture(autouse=True)
-def _resolved_credentials() -> Iterator[None]:
-    with patch(
-        f"{_MODULE}.resolve_mcp_call_auth",
-        return_value=(
-            CallCredentials(
-                integration_id=1,
-                auth_method=None,
-                connection_id=None,
-                connection_user_id=None,
-                headers={},
-            ),
-            None,
-        ),
-    ):
-        yield
+_NO_AUTH = CallCredentials(
+    integration_id=1,
+    auth_method=None,
+    connection_id=None,
+    connection_user_id=None,
+    headers={},
+)
 
 
-def _mcp_tool() -> MCPTool:
+def _mcp_tool(credentials: CallCredentials = _NO_AUTH) -> MCPTool:
     return MCPTool(
         integration_id=1,
         integration_name="Customer MCP",
@@ -53,6 +45,7 @@ def _mcp_tool() -> MCPTool:
         tool_description="Lookup",
         tool_definition={"type": "object", "properties": {}},
         acting_user_id=None,
+        credentials=credentials,
     )
 
 
@@ -88,10 +81,19 @@ def test_client_records_success_once() -> None:
 
 
 def test_client_records_missing_credentials_as_auth_error() -> None:
-    tool = _mcp_tool()
+    tool = _mcp_tool(
+        CallCredentials(
+            integration_id=1,
+            auth_method=IntegrationAuthMethod.OAUTH2,
+            connection_id=7,
+            connection_user_id=None,
+            headers={},
+            expires_at=datetime.now(timezone.utc),
+        )
+    )
     with (
         patch(
-            f"{_MODULE}.resolve_mcp_call_auth",
+            f"{_MODULE}.resolve_fresh_call_credentials",
             return_value=ConnectionProblem(
                 code=ConnectionState.NOT_CONNECTED, reason="Connect it."
             ),

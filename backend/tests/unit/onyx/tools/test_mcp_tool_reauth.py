@@ -1,6 +1,8 @@
-"""An MCP call checks its credential again when it runs, and a service that
-rejects an API key sets that connection to Needs reconnect."""
+"""An MCP call sends the credential that construction resolved, resolves it
+again only when its token is near expiry, and a service that rejects an API
+key sets that connection to Needs reconnect."""
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -35,7 +37,7 @@ def _wrapped_unauthorized() -> Exception:
     return error
 
 
-def _tool() -> MCPTool:
+def _tool(credentials: CallCredentials) -> MCPTool:
     return MCPTool(
         integration_id=5,
         integration_name="test",
@@ -45,17 +47,26 @@ def _tool() -> MCPTool:
         tool_description="test",
         tool_definition={},
         acting_user_id=uuid4(),
+        credentials=credentials,
         additional_headers={"X-Request": "1", "Host": "evil"},
     )
 
 
-def _credentials(method: IntegrationAuthMethod | None) -> CallCredentials:
+def _credentials(
+    method: IntegrationAuthMethod | None,
+    *,
+    expires_in: timedelta | None = None,
+    token: str = "stored",
+) -> CallCredentials:
     return CallCredentials(
         integration_id=5,
         auth_method=method,
         connection_id=7 if method is not None else None,
         connection_user_id=None,
-        headers={"Authorization": "Bearer stored"},
+        headers={"Authorization": f"Bearer {token}"},
+        expires_at=(
+            datetime.now(timezone.utc) + expires_in if expires_in is not None else None
+        ),
     )
 
 
@@ -98,12 +109,11 @@ def test_only_a_rejected_call_reports_the_credential(
 ) -> None:
     credentials = _credentials(method)
     with (
-        patch(f"{MODULE}.resolve_mcp_call_auth", return_value=(credentials, None)),
         patch(f"{MODULE}.call_mcp_tool", side_effect=error),
         patch(f"{MODULE}.mark_api_key_rejected") as mark,
         patch(f"{MODULE}.record_mcp_client_tool_outcome") as record_outcome,
     ):
-        response = _run(_tool())
+        response = _run(_tool(credentials))
 
     assert "error" in response.text
     if unauthorized:
@@ -114,30 +124,74 @@ def test_only_a_rejected_call_reports_the_credential(
         mark.assert_not_called()
 
 
-def test_a_call_sends_the_stored_headers_after_the_request_headers() -> None:
+def test_a_call_sends_the_construction_credential_with_no_new_resolve() -> None:
     call = MagicMock()
+    tool = _tool(
+        _credentials(IntegrationAuthMethod.OAUTH2, expires_in=timedelta(hours=1))
+    )
     with (
-        patch(
-            f"{MODULE}.resolve_mcp_call_auth",
-            return_value=(_credentials(IntegrationAuthMethod.API_KEY), None),
-        ) as resolve,
+        patch(f"{MODULE}.resolve_fresh_call_credentials") as resolve,
         patch(f"{MODULE}.call_mcp_tool", call),
         patch(f"{MODULE}.record_mcp_client_tool_outcome"),
     ):
-        _run(_tool())
+        _run(tool)
+        _run(tool)
 
-    resolve.assert_called_once()
-    assert resolve.call_args.args[0] == 5
+    resolve.assert_not_called()
+    assert call.call_count == 2
     assert call.call_args.kwargs["connection_headers"] == {
         "X-Request": "1",
         "Authorization": "Bearer stored",
     }
 
 
-def test_a_call_whose_credential_no_longer_resolves_does_not_run() -> None:
+@pytest.mark.parametrize(
+    "method", [IntegrationAuthMethod.OAUTH2, IntegrationAuthMethod.ONYX_LOGIN]
+)
+def test_a_token_near_expiry_resolves_again_once(
+    method: IntegrationAuthMethod,
+) -> None:
+    call = MagicMock()
+    tool = _tool(_credentials(method, expires_in=timedelta(seconds=30)))
+    fresh = _credentials(method, expires_in=timedelta(hours=1), token="fresh")
     with (
         patch(
-            f"{MODULE}.resolve_mcp_call_auth",
+            f"{MODULE}.resolve_fresh_call_credentials", return_value=fresh
+        ) as resolve,
+        patch(f"{MODULE}.call_mcp_tool", call),
+        patch(f"{MODULE}.record_mcp_client_tool_outcome"),
+    ):
+        _run(tool)
+        _run(tool)
+
+    resolve.assert_called_once()
+    assert resolve.call_args.args[0] == 5
+    assert call.call_args.kwargs["connection_headers"]["Authorization"] == (
+        "Bearer fresh"
+    )
+
+
+def test_an_api_key_with_an_expiry_does_not_resolve_again() -> None:
+    tool = _tool(
+        _credentials(IntegrationAuthMethod.API_KEY, expires_in=timedelta(seconds=-5))
+    )
+    with (
+        patch(f"{MODULE}.resolve_fresh_call_credentials") as resolve,
+        patch(f"{MODULE}.call_mcp_tool"),
+        patch(f"{MODULE}.record_mcp_client_tool_outcome"),
+    ):
+        _run(tool)
+
+    resolve.assert_not_called()
+
+
+def test_a_call_whose_credential_no_longer_resolves_does_not_run() -> None:
+    tool = _tool(
+        _credentials(IntegrationAuthMethod.OAUTH2, expires_in=timedelta(seconds=30))
+    )
+    with (
+        patch(
+            f"{MODULE}.resolve_fresh_call_credentials",
             return_value=ConnectionProblem(
                 code=ConnectionState.NOT_CONNECTED,
                 reason="Connect your test account to use it.",
@@ -146,7 +200,7 @@ def test_a_call_whose_credential_no_longer_resolves_does_not_run() -> None:
         patch(f"{MODULE}.call_mcp_tool") as call,
         patch(f"{MODULE}.record_mcp_client_tool_outcome") as record_outcome,
     ):
-        response = _run(_tool())
+        response = _run(tool)
 
     call.assert_not_called()
     assert response.is_error

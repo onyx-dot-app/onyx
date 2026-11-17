@@ -396,6 +396,8 @@ class ResolvedConnection(BaseModel):
     secret: ConnectionSecret | None
     # The fingerprint of the stored secret of the connection row.
     secret_fingerprint: str | None = None
+    # When the access token expires; None when unknown.
+    expires_at: datetime.datetime | None = None
 
 
 class ConnectionProblem(BaseModel):

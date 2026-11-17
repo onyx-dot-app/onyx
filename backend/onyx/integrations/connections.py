@@ -175,6 +175,7 @@ def _connection_or_problem(
         connection_id=connection.id,
         secret=record.secret,
         secret_fingerprint=secret_fingerprint(record.secret),
+        expires_at=record.expires_at,
     )
 
 
@@ -449,6 +450,11 @@ def _resolve_onyx_login(
         integration_id=integration.id,
         connection_id=None,
         secret=ConnectionSecret(access_token=token, token_type="Bearer"),
+        expires_at=(
+            datetime.fromtimestamp(account.expires_at, timezone.utc)
+            if account.expires_at is not None
+            else None
+        ),
     )
 
 

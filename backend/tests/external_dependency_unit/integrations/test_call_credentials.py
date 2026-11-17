@@ -10,14 +10,13 @@ from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
     IntegrationConnectionStatus,
-    MCPTransport,
 )
 from onyx.db.integration_connection import get_connection_by_id
 from onyx.db.models import Integration, User
 from onyx.integrations.call_credentials import (
     mark_api_key_rejected,
     resolve_call_credentials,
-    resolve_mcp_call_auth,
+    resolve_fresh_call_credentials,
 )
 from onyx.integrations.connection_models import ConnectionSecret, ConnectionState
 from onyx.integrations.connections import ConnectionProblem
@@ -95,25 +94,20 @@ def test_a_rejected_key_needs_reconnect_but_its_replacement_stays(
     assert _status(db_session, replacement.id) is IntegrationConnectionStatus.CONNECTED
 
 
-def test_an_mcp_call_sends_no_credential_to_a_server_that_moved(
+def test_a_call_that_resolves_again_reads_the_current_rows(
     db_session: Session, integration: Integration, make_test_user: MakeTestUser
 ) -> None:
-    user = make_test_user("moved_server")
+    user = make_test_user("fresh_call")
     add_connection(
         db_session, integration, user.id, ConnectionSecret(fields={"api_key": "a"})
     )
 
-    same = resolve_mcp_call_auth(
-        integration.id, user.id, MCPTransport.STREAMABLE_HTTP, SERVER_URL
-    )
-    moved = resolve_mcp_call_auth(
-        integration.id,
-        user.id,
-        MCPTransport.STREAMABLE_HTTP,
-        "https://old.example.com/mcp",
-    )
+    fresh = resolve_fresh_call_credentials(integration.id, user.id)
+    integration.enabled = False
+    db_session.commit()
+    disabled = resolve_fresh_call_credentials(integration.id, user.id)
 
-    assert not isinstance(same, ConnectionProblem)
-    assert same[0].headers == {"Authorization": "Bearer a"}
-    assert isinstance(moved, ConnectionProblem)
-    assert moved.code is ConnectionState.NOT_SET_UP
+    assert not isinstance(fresh, ConnectionProblem)
+    assert fresh.headers == {"Authorization": "Bearer a"}
+    assert isinstance(disabled, ConnectionProblem)
+    assert disabled.code is ConnectionState.NOT_SET_UP

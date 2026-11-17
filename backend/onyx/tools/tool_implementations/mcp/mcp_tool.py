@@ -8,8 +8,10 @@ from pydantic import JsonValue
 from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import MCPTransport
 from onyx.integrations.call_credentials import (
+    credentials_near_expiry,
     mark_api_key_rejected,
-    resolve_mcp_call_auth,
+    mcp_oauth_provider,
+    resolve_fresh_call_credentials,
 )
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.models import CallCredentials
@@ -22,6 +24,7 @@ from onyx.server.features.mcp.client import (
 )
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
+    MCPServerConnection,
     merge_mcp_headers,
 )
 from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
@@ -91,9 +94,10 @@ def _normalize_parameters_schema(schema: dict[str, Any] | None) -> dict[str, Any
 
 
 class MCPTool(Tool):
-    """One tool of an MCP server integration. Each call resolves the
-    credential of the acting user again, with the same check as
-    construction (``resolve_call_credentials``)."""
+    """One tool of an MCP server integration. A call sends the credential
+    that construction resolved, and resolves it again only when its token
+    is near expiry. ``oauth_server`` lets the MCP SDK refresh an OAuth2
+    token during the call."""
 
     def __init__(
         self,
@@ -106,6 +110,8 @@ class MCPTool(Tool):
         tool_description: str,
         tool_definition: dict[str, Any],
         acting_user_id: UUID | None,
+        credentials: CallCredentials,
+        oauth_server: MCPServerConnection | None = None,
         output_schema: dict[str, JsonValue] | None = None,
         additional_headers: dict[str, str] | None = None,
         approval: ToolApprovalScope | None = None,
@@ -116,6 +122,8 @@ class MCPTool(Tool):
         self._server_url = server_url
         self._transport = transport
         self._acting_user_id = acting_user_id
+        self._credentials = credentials
+        self._oauth_server = oauth_server
         self._additional_headers = additional_headers or {}
 
         self._mcp_tool_name = tool_name
@@ -204,25 +212,29 @@ class MCPTool(Tool):
                     self._name,
                     denylisted,
                 )
-            resolved = resolve_mcp_call_auth(
-                self._integration_id,
-                self._acting_user_id,
-                self._transport,
-                self._server_url,
-            )
-            if isinstance(resolved, ConnectionProblem):
-                logger.warning(
-                    "MCP tool '%s' cannot authenticate: %s",
-                    self._name,
-                    resolved.code.value,
+            if credentials_near_expiry(self._credentials):
+                resolved = resolve_fresh_call_credentials(
+                    self._integration_id, self._acting_user_id
                 )
-                outcome = MCPToolCallStatus.AUTH_ERROR
-                return self._error_result(
-                    f"The {self._name} tool from {self._integration_name} cannot "
-                    f"run: {resolved.reason}"
-                )
-            credentials, auth = resolved
+                if isinstance(resolved, ConnectionProblem):
+                    logger.warning(
+                        "MCP tool '%s' cannot authenticate: %s",
+                        self._name,
+                        resolved.code.value,
+                    )
+                    outcome = MCPToolCallStatus.AUTH_ERROR
+                    return self._error_result(
+                        f"The {self._name} tool from {self._integration_name} "
+                        f"cannot run: {resolved.reason}"
+                    )
+                self._credentials = resolved
+            credentials = self._credentials
             headers = merge_mcp_headers(request_headers, credentials.headers)
+            auth = (
+                mcp_oauth_provider(self._oauth_server, credentials)
+                if self._oauth_server is not None
+                else None
+            )
 
             tool_result = call_mcp_tool(
                 self._server_url,

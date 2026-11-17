@@ -250,11 +250,13 @@ header of a migrated OpenAPI tool) loses to the token. A problem means
 no action of the integration is offered. The migration writes the actions of
 each MCP server, OpenAPI tool, preset and custom app, so chat reads the stored
 actions and never discovers them.
-`MCPTool._run` calls the same check again through `resolve_mcp_call_auth`,
-which sends nothing when the server URL changed since construction, and for
-OAuth2 on a non-SSE transport passes `make_integration_oauth_provider` with
-`IntegrationTokenStorage`. A 401 on an API key connection sets it to Needs
-reconnect (`mark_api_key_rejected`).
+`MCPTool._run` sends the credential that construction resolved and opens no
+database session for it. Only an OAuth2 or Onyx login token that expires within
+`REFRESH_SKEW` resolves again (`integrations/call_credentials.py:resolve_fresh_call_credentials`).
+For OAuth2 on a non-SSE transport, construction reads the server settings
+(`mcp_oauth_server`), and each call passes `make_integration_oauth_provider` with
+`IntegrationTokenStorage`, so the MCP SDK can refresh during the call. A 401 on
+an API key connection sets it to Needs reconnect (`mark_api_key_rejected`).
 Request MCP headers do not stand in for a missing connection. The kind handler (`build_chat_tools`) builds the tools:
 `MCPTool` for an MCP server, one `CustomTool` per operation for an OpenAPI spec,
 and none for a preset or custom app. Tool names use the integration id

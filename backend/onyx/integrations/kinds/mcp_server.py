@@ -13,6 +13,7 @@ from onyx.db.models import Integration, IntegrationAction, MCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.integrations.call_credentials import mcp_oauth_server
 from onyx.integrations.kinds.base import IntegrationKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import MatchedIntegrationAction, McpServerConfig
@@ -83,6 +84,9 @@ class McpServerKindHandler(IntegrationKindHandler):
         if not actions:
             return []
         server = self._server(integration, db_session)
+        oauth_server = mcp_oauth_server(
+            integration, ctx.credentials, server.transport, db_session
+        )
         return [
             MCPTool(
                 integration_id=integration.id,
@@ -94,6 +98,8 @@ class McpServerKindHandler(IntegrationKindHandler):
                 tool_definition=action.input_schema or {},
                 output_schema=action.output_schema,
                 acting_user_id=ctx.user_id,
+                credentials=ctx.credentials,
+                oauth_server=oauth_server,
                 additional_headers=ctx.mcp_headers,
                 approval=ctx.approval_for(action.key),
             )
