@@ -196,6 +196,21 @@ def test_create_openapi_makes_integration_tool_plugin_and_actions(
     assert detail.action_count == 2
 
 
+def test_a_spec_with_no_server_url_does_not_break_the_admin_list(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    tool = get_openapi_tool_for_integration(detail.id, db_session)
+    assert tool is not None
+    tool.openapi_schema = {**OPENAPI_SPEC, "servers": []}
+    db_session.commit()
+
+    listed = admin_api.list_integrations_admin(admin, db_session)
+
+    assert detail.id in {view.id for view in listed}
+
+
 def test_create_mcp_discovers_tools_of_a_public_server(
     db_session: Session, scoped: User, created: Created
 ) -> None:
