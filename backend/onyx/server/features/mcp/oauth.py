@@ -1407,7 +1407,9 @@ class IntegrationTokenStorage(PersistentTokenStorage):
         record = read_connection(existing) if existing is not None else None
         previous = record.secret if record is not None else None
         if expected_refresh_token is not None and (
-            previous is None or previous.refresh_token != expected_refresh_token
+            record is None
+            or record.status is not IntegrationConnectionStatus.CONNECTED
+            or record.secret.refresh_token != expected_refresh_token
         ):
             return False
         secret = _secret_from_oauth_token(tokens, previous, keep_refresh=keep_refresh)

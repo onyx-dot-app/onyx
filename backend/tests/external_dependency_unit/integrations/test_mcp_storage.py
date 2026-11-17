@@ -20,11 +20,13 @@ from onyx.db.enums import (
 from onyx.db.integration_connection import (
     get_connection,
     get_oauth_client,
+    mark_connection_needs_reconnect__no_commit,
     set_oauth_client_credentials__no_commit,
 )
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import (
     SIGN_IN_REJECTED_REASON,
+    SIGN_IN_SETTINGS_CHANGED_REASON,
     read_connection_secret,
     read_oauth_client,
 )
@@ -117,6 +119,36 @@ def test_storage_round_trip(
     org_row = get_connection(db_session, integration.id, None)
     assert org_row is not None
     assert read_connection_secret(org_row).access_token == "org"
+
+
+def test_refreshed_tokens_do_not_revive_a_row_that_needs_reconnect(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = make_integration(
+        kind=IntegrationKind.MCP,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
+    )
+    user = make_test_user("mcp_storage_revive")
+    storage = IntegrationTokenStorage(integration.id, user.id)
+    asyncio.run(storage.set_tokens(OAuthToken(access_token="a1", refresh_token="r1")))
+    connection = get_connection(db_session, integration.id, user.id)
+    assert connection is not None
+    mark_connection_needs_reconnect__no_commit(
+        db_session, connection, SIGN_IN_SETTINGS_CHANGED_REASON
+    )
+    db_session.commit()
+
+    rotated = OAuthToken(access_token="a2", refresh_token="r2")
+    assert asyncio.run(storage.set_refreshed_tokens(rotated, "r1")) is False
+
+    db_session.refresh(connection)
+    assert connection.status is IntegrationConnectionStatus.NEEDS_RECONNECT
+    assert connection.status_reason == SIGN_IN_SETTINGS_CHANGED_REASON
+    assert read_connection_secret(connection).access_token == "a1"
 
 
 def test_entered_client_id_without_registration(
