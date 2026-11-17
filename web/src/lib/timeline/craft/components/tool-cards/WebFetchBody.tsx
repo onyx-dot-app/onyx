@@ -1,16 +1,15 @@
 "use client";
 
-import { Text } from "@opal/components";
+import { CodePanel } from "@opal/components";
+import { Section } from "@opal/layouts";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { RetrievalBody } from "@/lib/timeline/components/bodies/RetrievalBody";
-import ToolCardSurface, {
-  ToolCardSection,
-} from "@/lib/timeline/components/bodies/ToolCardSurface";
 import type { ToolCardBodyProps } from "@/lib/timeline/craft/components/tool-cards/interfaces";
 
 /**
  * WebFetchBody - The fetched URL in the shared retrieval layout, then the
- * response body. The URL is in `toolCall.description`.
+ * response body in an Opal `CodePanel` with a copy button. The URL is in
+ * `toolCall.description`.
  */
 export default function WebFetchBody({ toolCall }: ToolCardBodyProps) {
   const url = toolCall.description;
@@ -18,7 +17,7 @@ export default function WebFetchBody({ toolCall }: ToolCardBodyProps) {
     toolCall.status !== "pending" && toolCall.status !== "in_progress";
 
   return (
-    <>
+    <Section alignItems="stretch" gap={1} height="auto">
       <RetrievalBody
         queries={[]}
         results={
@@ -36,14 +35,14 @@ export default function WebFetchBody({ toolCall }: ToolCardBodyProps) {
         isComplete={isComplete}
       />
       {toolCall.rawOutput && (
-        <ToolCardSurface>
-          <ToolCardSection className="whitespace-pre-wrap wrap-break-word">
-            <Text as="p" font="secondary-mono" color="text-03">
-              {toolCall.rawOutput}
-            </Text>
-          </ToolCardSection>
-        </ToolCardSurface>
+        <CodePanel>
+          <CodePanel.Header
+            title={toolCall.toolName ?? toolCall.title}
+            copyText={toolCall.rawOutput}
+          />
+          <CodePanel.Output>{toolCall.rawOutput}</CodePanel.Output>
+        </CodePanel>
       )}
-    </>
+    </Section>
   );
 }

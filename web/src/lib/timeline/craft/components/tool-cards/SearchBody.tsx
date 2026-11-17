@@ -14,7 +14,7 @@ export default function SearchBody({ toolCall }: ToolCardBodyProps) {
   return (
     <CommandBody
       command={toolCall.description}
-      title={toolCall.toolName}
+      title={toolCall.toolName ?? toolCall.title}
       // A search that found nothing says so under its pattern.
       output={toolCall.rawOutput?.trim() || t("noMatches.label")}
       emptyLabel={t("noMatches.label")}
