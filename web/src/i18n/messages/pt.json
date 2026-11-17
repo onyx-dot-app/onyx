@@ -12500,6 +12500,9 @@
           "reading": {
             "status": "Lendo"
           },
+          "read": {
+            "label": "Lido"
+          },
           "header": {
             "default": "Pesquisando documentos internos",
             "doneDefault": "Documentos internos pesquisados",

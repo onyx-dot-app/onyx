@@ -12500,6 +12500,9 @@
           "reading": {
             "status": "읽는 중"
           },
+          "read": {
+            "label": "읽었습니다"
+          },
           "header": {
             "default": "내부 문서 검색 중",
             "doneDefault": "내부 문서를 검색했습니다",

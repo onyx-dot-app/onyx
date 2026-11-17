@@ -12500,6 +12500,9 @@
           "reading": {
             "status": "Leyendo"
           },
+          "read": {
+            "label": "Leído"
+          },
           "header": {
             "default": "Buscando en documentos internos",
             "doneDefault": "Documentos internos buscados",

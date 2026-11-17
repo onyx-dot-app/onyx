@@ -12500,6 +12500,9 @@
           "reading": {
             "status": "正在读取"
           },
+          "read": {
+            "label": "已读取"
+          },
           "header": {
             "default": "正在搜索内部文档",
             "doneDefault": "已搜索内部文档",

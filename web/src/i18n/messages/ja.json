@@ -12500,6 +12500,9 @@
           "reading": {
             "status": "読み取り中"
           },
+          "read": {
+            "label": "読み込みました"
+          },
           "header": {
             "default": "社内ドキュメントを検索中",
             "doneDefault": "社内ドキュメントを検索しました",

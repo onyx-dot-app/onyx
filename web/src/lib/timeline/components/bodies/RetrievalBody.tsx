@@ -35,13 +35,13 @@ interface RetrievalBodyProps {
   /** What the step searched for, shown as query chips. */
   queries: string[];
   /**
-   * What the step read, shown as source chips under "Reading". `null` for a
+   * What the step read, shown as source chips under "Read". `null` for a
    * step that only searches; another step reads its results.
    */
   results: SourceInfo[] | null;
   /** A finished step with no results says so; a running one shows a cursor. */
   isComplete: boolean;
-  /** Show only the results, without queries or the "Reading" label. */
+  /** Show only the results, without queries or the "Read" label. */
   compact?: boolean;
 }
 
@@ -64,7 +64,7 @@ export function RetrievalBody({
   const hiddenResults = Math.max(0, resultList.length - visibleResults);
 
   return (
-    // 0.25rem between the queries, "Reading" and the results, and between
+    // 0.25rem between the queries, "Read" and the results, and between
     // the labels in each row.
     <Section alignItems="stretch" gap={1} height="auto">
       {!compact &&
@@ -85,8 +85,8 @@ export function RetrievalBody({
         ))}
 
       {showResults && !compact && (
-        <Text as="p" font="secondary-body" color="text-03">
-          {t("internalSearch.reading.status")}
+        <Text as="p" font="secondary-action" color="text-03">
+          {t("internalSearch.read.label")}
         </Text>
       )}
 

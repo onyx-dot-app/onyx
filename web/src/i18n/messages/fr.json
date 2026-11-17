@@ -12500,6 +12500,9 @@
           "reading": {
             "status": "Lecture"
           },
+          "read": {
+            "label": "Lu"
+          },
           "header": {
             "default": "Recherche dans les documents internes",
             "doneDefault": "Documents internes recherchés",
