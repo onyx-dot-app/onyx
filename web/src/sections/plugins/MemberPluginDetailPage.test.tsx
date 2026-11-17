@@ -421,6 +421,19 @@ test("the owner shares a private integration plugin", async () => {
       requestBody(fetchMock, "PUT", `/api/plugins/${LINEAR_PLUGIN_ID}/access`)
     ).toEqual({ user_shares: [], group_shares: [] })
   );
+
+  // A reopened dialog shows the saved shares, not the list it loaded first.
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  );
+  await u.click(screen.getByRole("button", { name: copy.detail.share.label }));
+  const reopened = await screen.findByRole("dialog");
+  expect(
+    await within(reopened).findByText(copy.share.empty)
+  ).toBeInTheDocument();
+  expect(
+    within(reopened).queryByRole("button", { name: "Remove ana@example.com" })
+  ).not.toBeInTheDocument();
 });
 
 test("only an organization-wide action manager publishes", async () => {
