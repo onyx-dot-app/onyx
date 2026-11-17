@@ -358,6 +358,83 @@ test("connects the organization account with an API key", async () => {
   );
 });
 
+function patchBodies(fetchMock: jest.SpyInstance): unknown[] {
+  return fetchMock.mock.calls
+    .filter(
+      ([input, init]) =>
+        String(input) === URL_DETAIL && init?.method === "PATCH"
+    )
+    .map(([, init]) => JSON.parse(String(init?.body)));
+}
+
+test("clears a saved client secret from the draft", async () => {
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail(),
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+    [URL_ACTIONS]: NO_ACTIONS,
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const secret = await view.findByLabelText(copy.signIn.oauth.clientSecret);
+  await u.type(secret, "secret-2");
+  const save = view.getByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  await u.click(save);
+  await waitFor(() => expect(secret).toHaveValue(""));
+
+  await u.click(save);
+  await waitFor(() => expect(patchBodies(fetchMock)).toHaveLength(2));
+  expect(patchBodies(fetchMock)[1]).toEqual({
+    users_can_save_always_allow: true,
+  });
+});
+
+test("shows a saved schema as the server returns it", async () => {
+  const saved = { openapi: "3.1.0" };
+  let detail = makeDetail({
+    kind: "api",
+    shape: "openapi",
+    auth_mode: "none",
+    auth_method: null,
+    oauth_client: null,
+    config: { shape: "openapi", openapi_spec: { openapi: "3.0.0" } },
+  });
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: () => detail,
+    [`PATCH ${URL_DETAIL}`]: () => {
+      detail = { ...detail, config: { shape: "openapi", openapi_spec: saved } };
+      return detail;
+    },
+    [URL_ACTIONS]: NO_ACTIONS,
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const schema = await view.findByRole("textbox", {
+    name: detailCopy.configuration.connection.schema,
+  });
+  await u.clear(schema);
+  await u.click(schema);
+  await u.paste(JSON.stringify(saved));
+  const save = view.getByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  await u.click(save);
+  await waitFor(() =>
+    expect(schema).toHaveValue(JSON.stringify(saved, null, 2))
+  );
+
+  await u.click(save);
+  await waitFor(() => expect(patchBodies(fetchMock)).toHaveLength(2));
+  expect(patchBodies(fetchMock)[1]).toEqual({
+    users_can_save_always_allow: true,
+  });
+});
+
 test("sends only Always allow when the sign-in did not change", async () => {
   const fetchMock = mockFetch({
     [URL_DETAIL]: makeDetail({
