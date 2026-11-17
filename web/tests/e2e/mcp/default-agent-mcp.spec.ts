@@ -6,7 +6,8 @@ import {
   startMcpApiKeyServer,
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
-import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
+import { AdminIntegrationDetailPage } from "@tests/e2e/pages/AdminIntegrationDetailPage";
 import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
 import { MemberPluginsPage } from "@tests/e2e/pages/MemberPluginsPage";
 import { MemberPluginDetailPage } from "@tests/e2e/pages/MemberPluginDetailPage";
@@ -121,20 +122,22 @@ test.describe("Default Agent MCP Integration", () => {
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
-    const adminMcp = new AdminMcpServersPage(page);
+    const integrations = new AdminIntegrationsPage(page);
+    const detail = new AdminIntegrationDetailPage(page);
     const uiName = `${serverName} (UI)`;
-    await adminMcp.goto();
-    await adminMcp.openAddServerModal();
-    await adminMcp.integrations.fillMcpServer({ name: uiName, url: serverUrl });
-    await adminMcp.integrations.selectSignIn(
+    await integrations.goto();
+    await integrations.openAdd("MCP server");
+    await integrations.fillMcpServer({ name: uiName, url: serverUrl });
+    await integrations.selectSignIn(
       "One account for the organization",
       "API key"
     );
-    await adminMcp.integrations.chooseOwner("For the organization");
-    uiIntegrationId = await adminMcp.integrations.submit();
-    await adminMcp.detail.connectOrganization({ "api key": API_KEY });
-    await adminMcp.expectServerDetail(uiName);
-    await adminMcp.refreshTools();
+    await integrations.chooseOwner("For the organization");
+    uiIntegrationId = await integrations.submit();
+    await detail.connectOrganization({ "api key": API_KEY });
+    await detail.expectLoaded(uiName);
+    await detail.openTab("Actions");
+    await detail.refreshActions();
   });
 
   test("A member sees the plugin as connected on the Plugins page", async ({

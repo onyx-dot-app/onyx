@@ -6,7 +6,7 @@ import {
   startMcpOauthServer,
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
-import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
 import { IntegrationConnectPrompt } from "@tests/e2e/pages/IntegrationConnectPrompt";
@@ -135,24 +135,21 @@ test.describe("MCP OAuth flows", () => {
     await loginAs(page, "admin");
 
     serverName = `PW MCP OAuth ${Date.now()}`;
-    const adminMcp = new AdminMcpServersPage(page);
-    await adminMcp.goto();
-    await adminMcp.openAddServerModal();
-    await adminMcp.integrations.fillMcpServer({
+    const integrations = new AdminIntegrationsPage(page);
+    await integrations.goto();
+    await integrations.openAdd("MCP server");
+    await integrations.fillMcpServer({
       name: serverName,
       url: serverUrl,
     });
-    await adminMcp.integrations.expectOAuthProbe();
-    await adminMcp.integrations.selectSignIn("Each user signs in", "OAuth");
+    await integrations.expectOAuthProbe();
+    await integrations.selectSignIn("Each user signs in", "OAuth");
     const client = manualOAuthClient();
     if (client) {
-      await adminMcp.integrations.fillOAuthClient(
-        client.clientId,
-        client.clientSecret
-      );
+      await integrations.fillOAuthClient(client.clientId, client.clientSecret);
     }
-    await adminMcp.integrations.chooseOwner("For the organization");
-    integrationId = await adminMcp.integrations.submit();
+    await integrations.chooseOwner("For the organization");
+    integrationId = await integrations.submit();
     createdIntegrationIds.push(integrationId);
 
     const adminClient = new OnyxApiClient(page.request);
@@ -267,7 +264,7 @@ test.describe("MCP OAuth flows", () => {
     const otherContext = await browser.newContext();
     const otherPage = await otherContext.newPage();
     await apiLogin(otherPage, other!.email, other!.password);
-    const otherIntegrations = new AdminMcpServersPage(otherPage).integrations;
+    const otherIntegrations = new AdminIntegrationsPage(otherPage);
     await otherIntegrations.goto();
     await otherIntegrations.expectIntegrationAbsent(personalName);
     const read = await otherPage.request.get(
