@@ -138,8 +138,10 @@ name.
 
 **Policy precedence.** `integrations/craft.py:resolve_craft_action_policies`
 calls the one policy function (`integrations/policy.py:resolve_action_policies`)
-with the interactive approval mode, so Ask keeps the approval wait. An
-interactive session has no link settings. A scheduled run uses the
+with the interactive approval mode and the stored actions, so Ask keeps the
+approval wait. An interactive session and the task catalog pass one `None`
+link, which inherits each action; an empty list would block each action. A
+scheduled run uses the
 `action_settings` of each `scheduled_task__plugin` row whose plugin holds the
 integration, and the strictest result wins; an integration that no plugin of
 the task holds is Blocked. `integrations/craft.py:load_task_plugins` reads the
