@@ -1962,6 +1962,44 @@ def test_post_index_keeps_the_old_modified_time_for_a_failed_write() -> None:
     }
 
 
+def test_post_index_keeps_the_modified_time_for_a_future_write() -> None:
+    """A FUTURE write goes to the secondary index. The stored modified time
+    marks the version in PRESENT, so the write must not move it: a FUTURE
+    attempt that fails before the swap would make PRESENT skip the change."""
+    new_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    context = MagicMock()
+    context.updatable_docs = [
+        MagicMock(id="written", doc_updated_at=new_time, doc_created_at=None)
+    ]
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.update_docs_chunk_count__no_commit"),
+        patch(f"{module}.update_docs_updated_at__no_commit") as update_updated_at,
+        patch(f"{module}.update_docs_created_at__no_commit"),
+        patch(f"{module}.update_docs_last_modified__no_commit"),
+        patch(f"{module}.mark_document_as_indexed_for_cc_pair__no_commit"),
+        patch(f"{module}.update_chunk_boost_components__no_commit"),
+    ):
+        adapter.post_index(
+            context=context,
+            updatable_chunk_data=[],
+            filtered_documents=[],
+            enrichment=MagicMock(doc_id_to_new_chunk_cnt={}),
+            db_session=MagicMock(),
+            index_to_secondary=True,
+            failed_document_ids=set(),
+        )
+
+    assert update_updated_at.call_args.kwargs["ids_to_new_updated_at"] == {}
+
+
 def test_ancestors_come_from_the_raw_id_whenever_the_document_has_one() -> None:
     """Docfetching resolves every connector document's node id, falling back to
     the SOURCE node when the cache misses, and that fallback is indistinguishable
