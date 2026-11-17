@@ -8,6 +8,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from googleapiclient.discovery import build
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive import source_operations
 from onyx.connectors.google_utils import google_auth
@@ -17,6 +19,7 @@ from tests.integration.mock_services.mock_google_drive_server.mock_gdrive.patch_
 )
 
 _MOCK_URL = "http://127.0.0.1:9650"
+_OTHER_MOCK_URL = "http://127.0.0.1:9651"
 _MOCK_DIR = (
     Path(__file__).resolve().parents[4]
     / "tests"
@@ -65,6 +68,47 @@ def test_the_patches_end_with_the_block() -> None:
     assert source_operations._DOCS_API_DOCUMENT_URL == docs_url
 
 
+def test_the_inner_block_selects_the_url() -> None:
+    """A nested block sends clients to its own URL, and the outer URL comes
+    back when the nested block ends."""
+    with point_onyx_at_mock(_MOCK_URL):
+        with point_onyx_at_mock(_OTHER_MOCK_URL):
+            inner = build("drive", "v3", developerKey="unused")
+        outer = build("drive", "v3", developerKey="unused")
+    assert inner._baseUrl == f"{_OTHER_MOCK_URL}/drive/v3/"
+    assert outer._baseUrl == f"{_MOCK_URL}/drive/v3/"
+
+
+def _run_with_sitecustomize(script: str) -> dict[str, str]:
+    backend_dir = _MOCK_DIR.parents[3]
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(_MOCK_DIR), str(backend_dir)])
+    env["MOCK_GDRIVE_URL"] = _MOCK_URL
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env=env,
+        cwd=backend_dir,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=True,
+    )
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+def test_a_spec_probe_keeps_the_pending_patch() -> None:
+    """A find_spec probe before the import does not use up the patch."""
+    script = (
+        "import importlib.util, json\n"
+        "assert importlib.util.find_spec('googleapiclient.discovery')\n"
+        "from googleapiclient.discovery import build\n"
+        "client = build('drive', 'v3', developerKey='unused')\n"
+        "print(json.dumps({'client': client._baseUrl}))\n"
+    )
+    seen = _run_with_sitecustomize(script)
+    assert seen["client"] == f"{_MOCK_URL}/drive/v3/"
+
+
 def test_sitecustomize_patches_a_new_process() -> None:
     """With the mock folder on PYTHONPATH and MOCK_GDRIVE_URL set, Onyx's
     modules are patched when they are imported."""
@@ -80,21 +124,7 @@ def test_sitecustomize_patches_a_new_process() -> None:
         "    'client': client._baseUrl,\n"
         "}))\n"
     )
-    backend_dir = _MOCK_DIR.parents[3]
-    env = dict(os.environ)
-    env["PYTHONPATH"] = os.pathsep.join([str(_MOCK_DIR), str(backend_dir)])
-    env["MOCK_GDRIVE_URL"] = _MOCK_URL
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        env=env,
-        cwd=backend_dir,
-        capture_output=True,
-        text=True,
-        timeout=300,
-        check=True,
-    )
-
-    seen = json.loads(result.stdout.strip().splitlines()[-1])
+    seen = _run_with_sitecustomize(script)
     assert seen["token"] == f"{_MOCK_URL}/token"
     assert seen["docs"] == f"{_MOCK_URL}/v1/documents/{{doc_id}}"
     assert seen["client"] == f"{_MOCK_URL}/drive/v3/"

@@ -37,20 +37,26 @@ def _base(url: str) -> str:
     return url if url.endswith("/") else f"{url}/"
 
 
-def _redirected_build_from_document(
-    original: Callable[..., Any], base: str
-) -> Callable[..., Any]:
-    def build_from_document(service: Any, *args: Any, **kwargs: Any) -> Any:
+class _RedirectedBuilder:
+    """Google's ``build_from_document`` with the mock as the root URL."""
+
+    def __init__(self, current: Callable[..., Any], base: str) -> None:
+        # Wrap Google's builder, not an earlier redirect, so the newest patch
+        # selects the URL.
+        self.original: Callable[..., Any] = (
+            current.original if isinstance(current, _RedirectedBuilder) else current
+        )
+        self.base = base
+
+    def __call__(self, service: Any, *args: Any, **kwargs: Any) -> Any:
         if isinstance(service, bytes):
             service = service.decode("utf-8")
         doc = json.loads(service) if isinstance(service, str) else dict(service)
         # Batch requests read the root URL from the document, so an
         # api_endpoint client option would not move them.
-        doc["rootUrl"] = base
-        doc["mtlsRootUrl"] = base
-        return original(doc, *args, **kwargs)
-
-    return build_from_document
+        doc["rootUrl"] = self.base
+        doc["mtlsRootUrl"] = self.base
+        return self.original(doc, *args, **kwargs)
 
 
 def _module_patches(base: str) -> dict[str, _ModulePatch]:
@@ -58,9 +64,7 @@ def _module_patches(base: str) -> dict[str, _ModulePatch]:
 
     def client_builder(module: ModuleType) -> dict[str, object]:
         return {
-            "build_from_document": _redirected_build_from_document(
-                module.build_from_document, base
-            )
+            "build_from_document": _RedirectedBuilder(module.build_from_document, base)
         }
 
     def oauth_token_endpoint(_module: ModuleType) -> dict[str, object]:
@@ -107,7 +111,9 @@ class _PatchOnImport(importlib.abc.MetaPathFinder):
         path: Sequence[str] | None,
         target: ModuleType | None = None,
     ) -> importlib.machinery.ModuleSpec | None:
-        patch = self._patches.pop(fullname, None)
+        # Keep the patch until the module runs: a find_spec probe does not
+        # always import the module.
+        patch = self._patches.get(fullname)
         if patch is None:
             return None
         spec = None
@@ -126,6 +132,7 @@ class _PatchOnImport(importlib.abc.MetaPathFinder):
             exec_module(module)
             for name, value in patch(module).items():
                 setattr(module, name, value)
+            self._patches.pop(fullname, None)
 
         loader.exec_module = exec_and_patch  # ty: ignore[invalid-assignment]
         return spec
