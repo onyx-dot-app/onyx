@@ -686,8 +686,9 @@ def test_the_snapshot_reports_the_progress_of_a_conversion_attempt(run: _Run) ->
     row.total_docs_indexed = 2
     run.db_session.commit()
 
+    # Three error rows, one of them an open failure of a document.
     progress = IndexAttemptSnapshot.from_index_attempt_db_model(
-        run.attempt(attempt.id), 1, 0, 0
+        run.attempt(attempt.id), 3, 3, 1
     ).progress
 
     assert progress is not None
