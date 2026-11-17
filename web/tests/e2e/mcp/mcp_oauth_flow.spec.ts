@@ -128,6 +128,7 @@ test.describe("MCP OAuth flows", () => {
       name: serverName,
       url: serverUrl,
     });
+    await adminMcp.integrations.expectOAuthProbe();
     await adminMcp.integrations.selectSignIn("Each user signs in", "OAuth");
     await adminMcp.integrations.fillOAuthClient(
       oauthConfig().clientId,

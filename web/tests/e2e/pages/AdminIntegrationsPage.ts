@@ -94,8 +94,27 @@ export class AdminIntegrationsPage {
     await this.page.getByRole("option", { name: method, exact: true }).click();
   }
 
-  /** Fills the client of a manual OAuth sign-in. */
+  /**
+   * Waits for the server check of an OAuth MCP server. The check fills the
+   * sign-in fields only while they are untouched, so call this before any
+   * sign-in change.
+   */
+  async expectOAuthProbe(): Promise<void> {
+    await expect(
+      this.addDialog.getByText("The server uses OAuth sign-in.", {
+        exact: true,
+      })
+    ).toBeVisible();
+  }
+
+  /** Fills a manual OAuth client and keeps the discovered endpoint URLs. */
   async fillOAuthClient(clientId: string, clientSecret: string): Promise<void> {
+    await this.addDialog
+      .getByRole("combobox", { name: "OAuth Client", exact: true })
+      .click();
+    await this.page
+      .getByRole("option", { name: "Enter the client details", exact: true })
+      .click();
     await this.addDialog
       .getByRole("textbox", { name: "Client ID", exact: true })
       .fill(clientId);
