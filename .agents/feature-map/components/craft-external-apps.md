@@ -92,8 +92,9 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
                     client connection; else IdentityResolver.resolve_sandbox
                     (source IP) -> sandbox, user, tenant; failure -> 403
  4 body cap         raw_content None or > PARSER_MAX_BODY_BYTES -> 403
- 5 recognition      IntegrationRequestEvaluator: match_request of each kind
-                    for the integrations the user runs; API before MCP
+ 5 recognition      IntegrationRequestEvaluator: cached match targets pick
+                    candidates by host or URL pattern, then match_request of
+                    each candidate the user runs; API before MCP
                     None -> no gate; host-claiming resolvers may still inject
  6 session          verified session tag required for any matched request
  7 policy           resolve_craft_action_policies; strictest action governs
@@ -111,10 +112,18 @@ scheduled run uses only the integrations of the task plugins that the owner
 can see, on or off. `GateAddon._running_task_id` finds the task from the
 session tag in one query. `sandbox_proxy/usable_integrations.py:UsableIntegrations`
 caches the integration ids of each user for 30 seconds, and the evaluator and
-the resolver share it. The evaluator then calls `match_request` of each kind
-(`integrations/kinds/`). An API integration wins
+the resolver share it. It also caches, for 30 seconds per tenant, one
+`IntegrationMatchTarget` (`sandbox_proxy/resolvers/mcp_matching.py`) for each
+enabled integration: the MCP server URL, the OpenAPI base URL or the app URL
+patterns. `load_match_targets` reads them with one query for each kind table.
+`may_match` keeps the targets on the request host or URL, so a request to an
+unrelated host runs no query. The evaluator calls `match_request` of each kind
+(`integrations/kinds/`) only for these candidates that the user runs, and
+reads the enabled integrations of the candidates for each request. A target
+whose stored settings do not parse has a `load_error`, which blocks each
+request of a user who runs it. An API integration wins
 over an MCP server on a shared host, and the lowest id wins between API
-integrations. For an external app, `external_apps/matching/engine.py:resolve_app_for_url`
+integrations. For an external app, `external_apps/matching/engine.py:url_matches_patterns`
 full-matches the URL against the app's patterns and `recognize_actions` maps
 the request to catalog actions. A request that matches no catalog action gets
 one synthetic `unspecified` action. An MCP server attributes by host and path
@@ -295,8 +304,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     provider.** `db/external_app.py:create_external_app` stores the patterns
     that the create request submits; the admin form sends the provider's
     descriptor patterns.
-    `external_apps/matching/engine.py:resolve_app_for_url` matches against
-    the row. A pattern change in provider code reaches new apps only. Existing
+    `sandbox_proxy/usable_integrations.py:load_match_targets` reads the
+    patterns from the row. A pattern change in provider code reaches new apps only. Existing
     apps get no credential and no policy gate on the new host until a data
     migration updates their rows. A plain append works only for literal
     patterns. A provider that overrides `resolve_upstream_url_patterns`

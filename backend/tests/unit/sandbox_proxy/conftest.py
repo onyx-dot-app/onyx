@@ -37,6 +37,10 @@ from onyx.integrations.models import UsableIntegrationIds
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.models import InjectionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
+from onyx.sandbox_proxy.resolvers.mcp_matching import (
+    CraftMCPTarget,
+    IntegrationMatchTarget,
+)
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SandboxIdentity
 from onyx.sandbox_proxy.sandbox_identity.resolution import (
     SandboxIdentityResolver,
@@ -88,6 +92,17 @@ class StaticLookup(SandboxIPLookup):
 
     def stop(self) -> None:
         return None
+
+
+def mcp_targets(*endpoints: CraftMCPTarget) -> tuple[IntegrationMatchTarget, ...]:
+    return tuple(
+        IntegrationMatchTarget(
+            integration_id=endpoint.server_id,
+            kind=IntegrationKind.MCP,
+            endpoint=endpoint,
+        )
+        for endpoint in endpoints
+    )
 
 
 def make_resolved_sandbox(

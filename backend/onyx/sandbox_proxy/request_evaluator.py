@@ -17,6 +17,8 @@ from onyx.db.enums import ActionPolicy, IntegrationActionPolicyValue, Integratio
 from onyx.db.integration import list_enabled_integrations_by_id
 from onyx.db.integration_policy import list_task_plugin_links
 from onyx.db.models import Integration
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
@@ -26,6 +28,7 @@ from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.models import RequestMatch
 from onyx.integrations.registry import get_kind_handler
 from onyx.sandbox_proxy.models import McpProtocolRequest
+from onyx.sandbox_proxy.resolvers.mcp_matching import IntegrationMatchTarget, may_match
 from onyx.sandbox_proxy.usable_integrations import UsableIntegrations
 from onyx.utils.logger import setup_logger
 
@@ -60,14 +63,18 @@ def _proxied_request(request: http.Request) -> ProxiedRequest:
 
 
 def _matches(
-    integrations: list[Integration], request: ProxiedRequest, db_session: Session
+    candidates: list[tuple[Integration, IntegrationMatchTarget]],
+    request: ProxiedRequest,
+    db_session: Session,
 ) -> list[tuple[Integration, RequestMatch]]:
     matches: list[tuple[Integration, RequestMatch]] = []
-    for integration in integrations:
+    for integration, target in candidates:
         # An error blocks the request: skipping the integration could let a
         # broader one claim it with its own credential.
+        if target.load_error is not None:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, target.load_error)
         match = get_kind_handler(integration.kind).match_request(
-            integration, request, db_session
+            integration, target, request, db_session
         )
         if match is not None:
             matches.append((integration, match))
@@ -120,6 +127,13 @@ class IntegrationRequestEvaluator(RequestEvaluator):
         user_id: UUID,
         scheduled_task_id: UUID | None,
     ) -> AllMatchedActions | McpProtocolRequest | None:
+        candidates = [
+            target
+            for target in self._usable.targets(tenant_id)
+            if may_match(target, request)
+        ]
+        if not candidates:
+            return None
         usable = self._usable.get(tenant_id, user_id)
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             if scheduled_task_id is None:
@@ -128,9 +142,22 @@ class IntegrationRequestEvaluator(RequestEvaluator):
                 ids = set()
                 for link in list_task_plugin_links(db, scheduled_task_id):
                     ids |= usable.by_visible_plugin.get(link.plugin_id, frozenset())
+            candidates = [c for c in candidates if c.integration_id in ids]
+            if not candidates:
+                return None
+            integrations = {
+                integration.id: integration
+                for integration in list_enabled_integrations_by_id(
+                    db, [c.integration_id for c in candidates]
+                )
+            }
             picked = _pick(
                 _matches(
-                    list_enabled_integrations_by_id(db, ids),
+                    [
+                        (integrations[c.integration_id], c)
+                        for c in candidates
+                        if c.integration_id in integrations
+                    ],
                     _proxied_request(request),
                     db,
                 )

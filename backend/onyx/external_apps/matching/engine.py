@@ -6,8 +6,12 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from onyx.db.enums import POLICY_SEVERITY, ActionPolicy, IntegrationKind
-from onyx.db.models import ExternalApp
+from onyx.db.enums import (
+    POLICY_SEVERITY,
+    ActionPolicy,
+    ExternalAppType,
+    IntegrationKind,
+)
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.providers.registry import get_endpoint_catalog
@@ -111,34 +115,26 @@ def actions_requiring_approval(actions: Iterable[ActionLike]) -> list[str]:
     return sorted(action_types)
 
 
-def resolve_app_for_url(
-    url: str,
-    apps: Iterable[ExternalApp],
-) -> ExternalApp | None:
-    """The first app with an ``upstream_url_patterns`` entry that matches
-    ``url``. A malformed built-in regex is skipped."""
-    for app in apps:
-        for regex in app.upstream_url_regexes:
-            try:
-                if re.fullmatch(regex, url):
-                    return app
-            except re.error:
-                logger.warning(
-                    "skipping malformed upstream_url_pattern app_id=%s pattern=%r",
-                    app.id,
-                    regex,
-                )
-    return None
+def url_matches_patterns(url: str, regexes: Iterable[str]) -> bool:
+    """True when ``url`` fully matches one of ``regexes``. A malformed
+    built-in regex is skipped."""
+    for regex in regexes:
+        try:
+            if re.fullmatch(regex, url):
+                return True
+        except re.error:
+            logger.warning("skipping malformed upstream_url_pattern %r", regex)
+    return False
 
 
 def recognize_actions(
-    app: ExternalApp,
+    app_type: ExternalAppType,
     request: ProxiedRequest,
 ) -> tuple[MatchedAction, ...]:
     """Identify actions with catalog defaults, strictest first. The proxy
     resolves saved policies."""
     context = MatchContext(request)
-    catalog = get_endpoint_catalog(app.app_type)
+    catalog = get_endpoint_catalog(app_type)
     matched = [
         MatchedAction(
             action_type=endpoint.id,

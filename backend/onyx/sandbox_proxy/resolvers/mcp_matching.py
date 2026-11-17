@@ -13,8 +13,10 @@ import posixpath
 from urllib.parse import unquote, urlparse
 
 from mitmproxy import http
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
+from onyx.db.enums import ExternalAppType, IntegrationKind
+from onyx.external_apps.matching.engine import url_matches_patterns
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -45,6 +47,35 @@ class CraftMCPTarget(BaseModel):
     host: str
     port: int
     path_prefix: str  # no trailing slash; "" claims the whole host
+
+
+class IntegrationMatchTarget(BaseModel):
+    """What the proxy needs to find the integrations a request can be for,
+    with no query. ``endpoint`` is the server URL of an MCP server or the base
+    URL of an OpenAPI spec. ``url_regexes`` are the URL patterns of a preset or
+    custom app. ``load_error`` tells that the stored settings could not be
+    read; such a target blocks each request of a user who can use it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    integration_id: int
+    kind: IntegrationKind
+    endpoint: CraftMCPTarget | None = None
+    app_type: ExternalAppType | None = None
+    url_regexes: tuple[str, ...] = ()
+    load_error: str | None = None
+
+
+def may_match(target: IntegrationMatchTarget, request: http.Request) -> bool:
+    """The host of an endpoint or the URL patterns of an app. The kind
+    handler then checks the path and finds the actions."""
+    if target.load_error is not None:
+        return True
+    if target.endpoint is not None:
+        return bool(
+            host_targets((target.endpoint,), request.scheme, request.host, request.port)
+        )
+    return url_matches_patterns(request.url, target.url_regexes)
 
 
 def parse_target(server_id: int, server_url: str) -> CraftMCPTarget | None:
