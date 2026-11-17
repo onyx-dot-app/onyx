@@ -253,7 +253,11 @@ class ApiKindHandler(IntegrationKindHandler):
             approval_for=ctx.approval_for,
             plugin_ids=ctx.plugin_ids,
         )
-        return [tool for tool in tools if tool.plugin_action.action in keys]
+        return [
+            tool
+            for tool in tools
+            if tool.plugin_action is not None and tool.plugin_action.action in keys
+        ]
 
     def match_request(
         self,
