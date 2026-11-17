@@ -655,13 +655,18 @@ class GoogleDriveSourceOperations(SourceOperations):
         return limited
 
     def _limited_download(
-        self, request: Any, file_id: str, size_threshold: int, user_email: str
+        self,
+        request: Any,
+        file_id: str,
+        size_threshold: int,
+        user_email: str,
+        report_rate_limit: Callable[[Exception], None],
     ) -> bytes:
         self._spend(DriveQuotaApi.DRIVE, DRIVE_CONTENT_UNITS, user_email)
         try:
             return _download(request, file_id, size_threshold)
         except HttpError as error:
-            self._report_rate_limit(DriveQuotaApi.DRIVE, user_email, error)
+            report_rate_limit(error)
             raise
 
     def _spend(self, api: DriveQuotaApi, units: int, user_email: str) -> None:
@@ -681,6 +686,25 @@ class GoogleDriveSourceOperations(SourceOperations):
             limiter.report_rate_limit(
                 api.value, user_email, _is_user_rate_limit(translated)
             )
+
+    def _report_once_per_call(
+        self, api: DriveQuotaApi, user_email: str
+    ) -> Callable[[Exception], None]:
+        """A reporter for one call that retries a rate limit. Each try still
+        spends, but only the first rate-limit answer reports: each report
+        halves the budget, and the retry waits outlast the cut's hold."""
+        reported = False
+
+        def report(error: Exception) -> None:
+            nonlocal reported
+            if reported:
+                return
+            translated = _translate(error)
+            if isinstance(translated, GoogleDriveHttpError) and translated.rate_limited:
+                reported = True
+                self._report_rate_limit(api, user_email, error)
+
+        return report
 
     def _domain(self) -> str:
         return self._auth().primary_admin_email.split("@")[-1]
@@ -1086,7 +1110,11 @@ class GoogleDriveSourceOperations(SourceOperations):
         request = self._drive(user_email).files().get_media(fileId=file_id)
         _add_resource_key_header(request, file_id, resource_key)
         return _retry_rate_limited_download(self._limited_download)(
-            request, file_id, size_threshold, user_email
+            request,
+            file_id,
+            size_threshold,
+            user_email,
+            self._report_once_per_call(DriveQuotaApi.DRIVE, user_email),
         )
 
     @source_operation(
@@ -1112,7 +1140,11 @@ class GoogleDriveSourceOperations(SourceOperations):
         )
         _add_resource_key_header(request, file_id, resource_key)
         return _retry_rate_limited_download(self._limited_download)(
-            request, file_id, size_threshold, user_email
+            request,
+            file_id,
+            size_threshold,
+            user_email,
+            self._report_once_per_call(DriveQuotaApi.DRIVE, user_email),
         )
 
     @source_operation(
@@ -1131,6 +1163,9 @@ class GoogleDriveSourceOperations(SourceOperations):
             user_email=user_email,
             doc_id=doc_id,
             max_response_bytes=max_response_bytes,
+            report_rate_limit=self._report_once_per_call(
+                DriveQuotaApi.DOCS, user_email
+            ),
         )
 
     @source_operation(
@@ -1157,7 +1192,12 @@ class GoogleDriveSourceOperations(SourceOperations):
         )
 
     def _fetch_google_doc_once(
-        self, *, user_email: str, doc_id: str, max_response_bytes: int
+        self,
+        *,
+        user_email: str,
+        doc_id: str,
+        max_response_bytes: int,
+        report_rate_limit: Callable[[Exception], None],
     ) -> dict[str, Any] | None:
         self._spend(DriveQuotaApi.DOCS, DOCS_READ_UNITS, user_email)
         return self._get_capped_json(
@@ -1165,7 +1205,7 @@ class GoogleDriveSourceOperations(SourceOperations):
             url=_DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
             params={"includeTabsContent": "true"},
             max_response_bytes=max_response_bytes,
-            quota_api=DriveQuotaApi.DOCS,
+            report_rate_limit=report_rate_limit,
         )
 
     def _get_capped_json(
@@ -1175,19 +1215,19 @@ class GoogleDriveSourceOperations(SourceOperations):
         url: str,
         params: dict[str, str],
         max_response_bytes: int,
-        quota_api: DriveQuotaApi | None = None,
+        report_rate_limit: Callable[[Exception], None] | None = None,
     ) -> dict[str, Any] | None:
         """The JSON body of a GET, streamed so an oversized one is never held
-        whole. None when it exceeds ``max_response_bytes``. A rate-limit
-        answer is reported to the shared budget of ``quota_api``."""
+        whole. None when it exceeds ``max_response_bytes``. An error answer
+        goes to ``report_rate_limit``."""
         with self._docs_session(user_email).get(
             url, params=params, stream=True, timeout=_DOCS_FETCH_TIMEOUT_SECONDS
         ) as response:
             try:
                 response.raise_for_status()
             except requests.HTTPError as error:
-                if quota_api is not None:
-                    self._report_rate_limit(quota_api, user_email, error)
+                if report_rate_limit is not None:
+                    report_rate_limit(error)
                 raise
             buffer = bytearray()
             for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
