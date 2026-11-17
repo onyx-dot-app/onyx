@@ -17,7 +17,8 @@ from onyx.db.tools import get_tools_by_mcp_server_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.request import ProxiedRequest
-from onyx.integrations.kinds.base import ChatToolContext, IntegrationKindHandler
+from onyx.integrations.kinds.base import IntegrationKindHandler
+from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import (
     IntegrationActionSpec,
     MatchedIntegrationAction,

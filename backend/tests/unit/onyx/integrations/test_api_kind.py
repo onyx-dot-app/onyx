@@ -20,7 +20,7 @@ from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.kinds import api as api_kind
 from onyx.integrations.kinds.api import ApiKindHandler
-from onyx.integrations.kinds.base import ChatToolContext
+from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import ApiShape
 from onyx.tools.models import ToolApprovalScope
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
@@ -242,6 +242,35 @@ def test_openapi_build_chat_tools_keeps_names_placeholders_and_approval(
     assert isinstance(get_order, CustomTool)
     assert get_order.headers == {"X-Key": "secret"}
     assert get_order.bind(MagicMock()).approval_required == frozenset({get_order.name})
+
+
+def test_openapi_build_chat_tools_keys_actions_by_the_unsubstituted_operation_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec: dict[str, Any] = {
+        "openapi": "3.0.0",
+        "info": {"title": "Me", "description": "Me API", "version": "1"},
+        "servers": [{"url": "https://api.me.example.com"}],
+        "paths": {"/me": {"get": {"operationId": "get_USER_ID", "summary": "Me"}}},
+    }
+    tool = Tool(id=6, name="me", openapi_schema=spec)
+    monkeypatch.setattr(api_kind, "get_openapi_tool_for_integration", lambda *_: tool)
+    integration = _integration(tool_id=tool.id, external_app_id=None)
+    scope = ToolApprovalScope(
+        app_kind=GatedAppKind.MCP_SERVER, target_id=21, action_id="get_USER_ID"
+    )
+    ctx = ChatToolContext(
+        user_id=uuid4(),
+        approval_for=lambda key: scope if key == "get_USER_ID" else None,
+    )
+
+    tools = HANDLER.build_chat_tools(
+        integration, [IntegrationAction(key="get_USER_ID")], ctx, DB
+    )
+
+    assert len(tools) == 1
+    assert isinstance(tools[0], CustomTool)
+    assert tools[0].approval == scope
 
 
 def test_openapi_build_chat_tools_with_no_actions_is_empty(

@@ -366,8 +366,10 @@ def build_custom_tools_from_openapi_schema_and_headers(
     Placeholders whose value is ``None`` (e.g. an anonymous user's identity)
     are left untouched in the schema rather than substituted with an empty
     string. Substitution only happens inside the OpenAPI schema; static
-    ``custom_headers`` are not templated.
+    ``custom_headers`` are not templated. ``approval_for`` gets the
+    operationId from before the substitution.
     """
+    action_keys = [spec.raw_name for spec in openapi_to_method_specs(openapi_schema)]
     if dynamic_schema_info:
         schema_str = json.dumps(openapi_schema)
         placeholders = {
@@ -393,7 +395,7 @@ def build_custom_tools_from_openapi_schema_and_headers(
             base_url=url,
             custom_headers=custom_headers,
             user_oauth_token=user_oauth_token,
-            approval=approval_for(method_spec.raw_name) if approval_for else None,
+            approval=approval_for(action_key) if approval_for else None,
         )
-        for method_spec in method_specs
+        for method_spec, action_key in zip(method_specs, action_keys, strict=True)
     ]
