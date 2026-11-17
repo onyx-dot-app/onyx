@@ -11,6 +11,11 @@
             "type": "command",
             "command": "d=\"$CLAUDE_PROJECT_DIR/.venv/bin\"; case \"$PATH\" in \"$d:\"*|\"$d\") ;; *) [ -n \"$CLAUDE_ENV_FILE\" ] && printf 'IFS= read -r PATH <<%s__ONYX_PATH_EOF__\\n%s\\n__ONYX_PATH_EOF__\\nexport PATH\\n' '\\' \"$d${PATH:+:$PATH}\" >> \"$CLAUDE_ENV_FILE\" || true ;; esac",
             "statusMessage": "Add the repo .venv to PATH"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/verification_trailer.py\" --claude-session",
+            "statusMessage": "Set the commit gate session"
           }
         ]
       },

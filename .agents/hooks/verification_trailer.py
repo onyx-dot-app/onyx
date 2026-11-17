@@ -1,9 +1,13 @@
 """Check commit trailers and record unstamped commits."""
 
+import json
+import os
 import re
+import shlex
 import subprocess
 import sys
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 
 VALID_STAMP = re.compile(r"(?:e2e|integration|unit|none \([^()\n]*[^()\s][^()\n]*\))")
@@ -14,7 +18,6 @@ def git(*args: str, message: str | None = None) -> str:
 
 
 def has_stamp(message: str) -> bool:
-    message = git("stripspace", "--strip-comments", message=message)
     trailers = git("interpret-trailers", "--parse", message=message)
     values = [
         value.strip()
@@ -25,7 +28,19 @@ def has_stamp(message: str) -> bool:
     return len(values) == 1 and VALID_STAMP.fullmatch(values[0]) is not None
 
 
+def export_claude_session() -> int:
+    env_file = os.environ.get("CLAUDE_ENV_FILE")
+    session = json.load(sys.stdin).get("session_id")
+    if env_file and isinstance(session, str) and session:
+        with Path(env_file).open("a", encoding="utf-8") as output:
+            output.write(f"export ONYX_VERIFICATION_SESSION={shlex.quote(session)}\n")
+    return 0
+
+
 def main() -> int:
+    if sys.argv[1:] == ["--claude-session"]:
+        return export_claude_session()
+
     mode = subprocess.run(
         ["git", "config", "--get", "onyx.verificationMode"],
         capture_output=True,
@@ -35,7 +50,13 @@ def main() -> int:
     if mode == "off":
         return 0
 
-    counter = Path(git("rev-parse", "--git-path", "onyx-verification-blocks"))
+    session = os.environ.get("ONYX_VERIFICATION_SESSION") or os.environ.get(
+        "CODEX_SESSION_ID"
+    )
+    counter_name = "onyx-verification-blocks"
+    if session:
+        counter_name += f"-{sha256(session.encode()).hexdigest()}"
+    counter = Path(git("rev-parse", "--git-path", counter_name))
     if len(sys.argv) == 1:
         counter.unlink(missing_ok=True)
         if not has_stamp(git("log", "-1", "--format=%B")):

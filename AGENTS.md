@@ -175,8 +175,9 @@ Install the Git hooks with `pre-commit install` to enable the gate in Claude Cod
 The default mode is `observe`. Set `onyx.verificationMode` with `git config --local`
 to `off`, `observe`, or `enforce`. Observe mode logs missing or invalid trailers in
 `$(git rev-parse --git-path onyx-verification.log)`. Enforce mode permits a reason in
-`Verified-by: none (short reason)`. After two consecutive blocks in the worktree,
-it allows the next attempt. A commit resets the count.
+`Verified-by: none (short reason)`. After two blocks in the same agent session,
+it allows the next attempt. A commit in that session resets the count. Git uses the
+worktree count if it has no agent session ID.
 
 ## Logs
 
