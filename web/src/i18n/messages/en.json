@@ -10815,6 +10815,7 @@
         "loadFailed": "Could not load the plugins.",
         "lock": {
           "adminBlocked": "Allow is not available: an admin blocked this action.",
+          "alwaysAsks": "Allow is not available: Craft asks for approval for each of these requests.",
           "adminFinal": "Allow is not available: the admin setting of this integration is final.",
           "defaultFinal": "Allow is not available: the admin settings of these integrations are final."
         },

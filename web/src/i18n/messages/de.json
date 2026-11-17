@@ -10815,6 +10815,7 @@
         "loadFailed": "Die Plugins konnten nicht geladen werden.",
         "lock": {
           "adminBlocked": "Erlauben ist nicht verfügbar: Ein Administrator hat diese Aktion blockiert.",
+          "alwaysAsks": "Erlauben ist nicht verfügbar: Craft fragt bei jeder dieser Anfragen nach einer Freigabe.",
           "adminFinal": "Erlauben ist nicht verfügbar: Die Administratoreinstellung dieser Integration ist endgültig.",
           "defaultFinal": "Erlauben ist nicht verfügbar: Die Administratoreinstellungen dieser Integrationen sind endgültig."
         },
