@@ -1,7 +1,7 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTasks
 
@@ -20,6 +20,8 @@ from onyx.db.projects import (
     check_project_ownership,
     create_user_files,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -37,7 +39,7 @@ def upload_files_to_user_files_with_indexing(
 ) -> CategorizedFilesResult:
     if project_id is not None and user is not None:
         if not check_project_ownership(project_id, user.id, db_session):
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
 
     categorized_files_result = create_user_files(
         files,
