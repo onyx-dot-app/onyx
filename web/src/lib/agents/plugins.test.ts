@@ -33,7 +33,7 @@ const action: IntegrationAction = {
 const integration: AgentCatalogIntegration = {
   id: 1,
   name: "Linear",
-  kind: "mcp_server",
+  kind: "mcp",
   shape: "mcp_server",
   users_can_save_always_allow: true,
   actions: [action],

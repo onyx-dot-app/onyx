@@ -32,7 +32,7 @@ function linear(
   return {
     id: 7,
     name: "Linear",
-    kind: "mcp_server",
+    kind: "mcp",
     shape: "mcp_server",
     users_can_save_always_allow: true,
     actions: [
