@@ -3,6 +3,7 @@
 from collections.abc import Collection, Sequence
 from uuid import UUID
 
+from pydantic import BaseModel, ConfigDict, InstanceOf
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IntegrationKind
@@ -16,7 +17,13 @@ from onyx.db.integration_policy import (
     list_task_plugin_links,
     replace_task_plugin_links__no_commit,
 )
-from onyx.db.models import ExternalApp, Integration, User
+from onyx.db.models import (
+    ExternalApp,
+    Integration,
+    IntegrationAction,
+    ScheduledTask__Plugin,
+    User,
+)
 from onyx.db.plugin_access import load_user_plugin_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -41,11 +48,9 @@ from onyx.server.features.build.models import (
 from onyx.tools.models import PluginLinkConfiguration
 
 
-def _enabled_integrations(
-    db_session: Session, plugin_ids: Collection[UUID]
-) -> list[Integration]:
+def _enabled(holdings: Sequence[tuple[UUID, Integration]]) -> list[Integration]:
     integrations: dict[int, Integration] = {}
-    for _, integration in list_plugin_integrations(db_session, plugin_ids):
+    for _, integration in holdings:
         if integration.enabled:
             integrations[integration.id] = integration
     return list(integrations.values())
@@ -54,30 +59,55 @@ def _enabled_integrations(
 def list_runnable_integrations(db_session: Session, user_id: UUID) -> list[Integration]:
     """The enabled integrations of the plugins that the user can see and has
     turned on, in integration order."""
-    return _enabled_integrations(
-        db_session,
-        [
-            state.plugin_id
-            for state in load_user_plugin_states([user_id], db_session)
-            if state.enabled
-        ],
+    return _enabled(
+        list_plugin_integrations(
+            db_session,
+            [
+                state.plugin_id
+                for state in load_user_plugin_states([user_id], db_session)
+                if state.enabled
+            ],
+        )
     )
 
 
-def list_task_integrations(
-    db_session: Session, task_id: UUID, user_id: UUID
-) -> list[Integration]:
-    """The enabled integrations of each plugin of the task that the owner can
-    still see, also one the owner turned off."""
+class TaskPlugins(BaseModel):
+    """The plugins of a task that the owner can still see, also one the owner
+    turned off, with the integrations that each one holds."""
+
+    model_config = ConfigDict(frozen=True)
+
+    links: list[InstanceOf[ScheduledTask__Plugin]]
+    holdings: list[tuple[UUID, InstanceOf[Integration]]]
+
+    def integrations(self) -> list[Integration]:
+        """The enabled integrations, in integration order."""
+        return _enabled(self.holdings)
+
+    def link_settings(self, integration_id: int) -> list[ActionSettings]:
+        """The settings of each plugin that holds the integration."""
+        holders = {
+            plugin_id
+            for plugin_id, integration in self.holdings
+            if integration.id == integration_id
+        }
+        return [
+            parse_action_settings(link.action_settings)
+            for link in self.links
+            if link.plugin_id in holders
+        ]
+
+
+def load_task_plugins(db_session: Session, task_id: UUID, user_id: UUID) -> TaskPlugins:
     links = list_task_plugin_links(db_session, task_id)
-    return _enabled_integrations(
-        db_session,
-        [
-            state.plugin_id
-            for state in load_user_plugin_states(
-                [user_id], db_session, [link.plugin_id for link in links]
-            )
-        ],
+    visible = [
+        state.plugin_id
+        for state in load_user_plugin_states(
+            [user_id], db_session, [link.plugin_id for link in links]
+        )
+    ]
+    return TaskPlugins(
+        links=links, holdings=list_plugin_integrations(db_session, visible)
     )
 
 
@@ -120,25 +150,7 @@ def list_connectable_apps(db_session: Session, user: User) -> list[ExternalApp]:
 def task_link_settings(
     db_session: Session, task_id: UUID, user_id: UUID, integration_id: int
 ) -> list[ActionSettings]:
-    """The settings of each plugin of the task that holds the integration and
-    that the task owner can still see."""
-    links = list_task_plugin_links(db_session, task_id)
-    visible = [
-        state.plugin_id
-        for state in load_user_plugin_states(
-            [user_id], db_session, [link.plugin_id for link in links]
-        )
-    ]
-    holders = {
-        plugin_id
-        for plugin_id, integration in list_plugin_integrations(db_session, visible)
-        if integration.id == integration_id
-    }
-    return [
-        parse_action_settings(link.action_settings)
-        for link in links
-        if link.plugin_id in holders
-    ]
+    return load_task_plugins(db_session, task_id, user_id).link_settings(integration_id)
 
 
 def _interactive_policies(
@@ -165,14 +177,14 @@ def resolve_craft_action_policies(
     integration: Integration,
     action_keys: Collection[str],
     user_id: UUID,
-    task_id: UUID | None,
+    task: TaskPlugins | None,
 ) -> dict[str, EffectivePolicy]:
     """A scheduled run uses the settings of its task, not the saved Always
     allow choices of its owner, and blocks each action of an integration that
     no plugin of the task holds."""
-    if task_id is None:
+    if task is None:
         return _interactive_policies(db_session, integration, action_keys, user_id, [])
-    settings = task_link_settings(db_session, task_id, user_id, integration.id)
+    settings = task.link_settings(integration.id)
     if not settings:
         return dict.fromkeys(action_keys, EffectivePolicy.BLOCKED)
     return _interactive_policies(db_session, integration, action_keys, None, settings)
@@ -196,9 +208,11 @@ def _shown_policy(
 
 
 def _integration_view(
-    db_session: Session, integration: Integration, user: User
+    db_session: Session,
+    integration: Integration,
+    actions: Sequence[IntegrationAction],
+    user: User,
 ) -> TaskIntegrationView:
-    actions = list_integration_actions(integration.id, db_session)
     # A scheduled run ignores the owner's Always allow choices.
     inherited = _interactive_policies(
         db_session, integration, [action.key for action in actions], None, []
@@ -267,11 +281,17 @@ def list_task_plugin_views(
         plugin_id: [] for plugin_id in plugin_ids if plugin_id in links
     }
     action_keys: dict[UUID, set[str]] = {}
+    actions: dict[int, list[IntegrationAction]] = {}
     for plugin_id, integration in list_plugin_integrations(db_session, plugin_ids):
+        if plugin_id not in links and not integration.enabled:
+            continue
+        if integration.id not in actions:
+            actions[integration.id] = list_integration_actions(
+                integration.id, db_session
+            )
         if plugin_id in links:
             action_keys.setdefault(plugin_id, set()).update(
-                action.key
-                for action in list_integration_actions(integration.id, db_session)
+                action.key for action in actions[integration.id]
             )
         if integration.enabled:
             integrations_by_plugin.setdefault(plugin_id, []).append(integration)
@@ -287,7 +307,9 @@ def list_task_plugin_views(
                 else None
             ),
             integrations=[
-                _integration_view(db_session, integration, user)
+                _integration_view(
+                    db_session, integration, actions[integration.id], user
+                )
                 for integration in integrations
             ],
         )
