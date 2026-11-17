@@ -911,7 +911,6 @@ const AppInputBar = React.memo(
             {!isSearchMode && !controlsLoading && activeAgent && (
               <IntegrationConnectPrompt
                 key={`integration-auth-${activeAgent.id}`}
-                isStreaming={chatState === "streaming"}
                 agentId={activeAgent.id}
                 toolConfiguration={toolConfiguration}
                 disabled={disabled}
