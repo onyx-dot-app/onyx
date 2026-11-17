@@ -17,7 +17,8 @@ from onyx.integrations.connections import (
     preset_host_values,
     preset_organization_values,
 )
-from tests.external_dependency_unit.integrations.conftest import MakeIntegration
+from tests.external_dependency_unit.integration_helpers import make_app_integration
+from tests.external_dependency_unit.integrations.conftest import new_oauth_client
 
 _STALE = {"subdomain": "stale", "client_id": "stale-client"}
 
@@ -32,14 +33,16 @@ def _with_stale_app(db_session: Session, integration: Integration) -> None:
 
 def test_new_format_preset_reads_additional_params(
     db_session: Session,
-    make_integration: MakeIntegration,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.PRESET,
-        client_id="zd-client",
-        client_secret="zd-secret",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.PRESET,
+            client_id="zd-client",
+            client_secret="zd-secret",
+        ),
     )
     oauth_client = get_oauth_client(db_session, integration.id)
     assert oauth_client is not None
@@ -56,17 +59,19 @@ def test_new_format_preset_reads_additional_params(
 
 def test_legacy_preset_reads_the_tagged_registration(
     db_session: Session,
-    make_integration: MakeIntegration,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.PRESET,
-        registration={
-            "client_id": "zd-client",
-            "client_secret": "zd-secret",
-            "subdomain": "acme",
-        },
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.PRESET,
+            registration={
+                "client_id": "zd-client",
+                "client_secret": "zd-secret",
+                "subdomain": "acme",
+            },
+        ),
     )
     oauth_client = get_oauth_client(db_session, integration.id)
     assert oauth_client is not None
@@ -83,9 +88,9 @@ def test_legacy_preset_reads_the_tagged_registration(
 
 def test_the_old_app_copy_is_not_read(
     db_session: Session,
-    make_integration: MakeIntegration,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
     )
@@ -96,13 +101,15 @@ def test_the_old_app_copy_is_not_read(
 
 
 def test_authorize_params_of_a_manual_client_are_no_host_values(
-    db_session: Session, make_integration: MakeIntegration
+    db_session: Session,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="c",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL, client_id="c"
+        ),
     )
     oauth_client = get_oauth_client(db_session, integration.id)
     assert oauth_client is not None
