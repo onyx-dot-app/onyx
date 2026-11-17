@@ -18,12 +18,17 @@ from concurrent.futures import (
     wait,
 )
 from contextlib import AbstractContextManager
-from typing import Any, Generic, Protocol, TypeVar, cast, overload
+from typing import Any, Generic, Literal, Protocol, TypeVar, cast, overload
 
 from pydantic import GetCoreSchemaHandler
 from pydantic.types import T
 from pydantic_core import core_schema
 
+from onyx.server.metrics.adaptive_pool_metrics import (
+    record_pool_cut,
+    record_pool_grow,
+    record_pool_state,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -901,8 +906,12 @@ class AdaptiveConcurrency:
         initial: int = ADAPTIVE_INITIAL_WORKERS,
         maximum: int = ADAPTIVE_MAX_WORKERS,
         clock: Callable[[], float] = time.monotonic,
+        metrics_name: str | None = None,
     ) -> None:
+        """``metrics_name`` is the ``pool`` label of the limit, in-flight,
+        cut and growth metrics. With None, the pool records no metrics."""
         self._observer = observer
+        self._metrics_name = metrics_name
         self._maximum = max(1, maximum)
         self._limit = max(1, min(initial, self._maximum))
         self._clock = clock
@@ -927,27 +936,41 @@ class AdaptiveConcurrency:
         hits = self._observer.take_hits()
         now = self._clock()
         with self._lock:
-            if hits and now < self._cooldown_until:
-                # The burst that caused the last cut. The cut already covers it.
-                return
-            if hits:
-                self._limit = max(1, self._limit // 2)
-                self._cooldown_until = now + ADAPTIVE_COOLDOWN_SECONDS
-                self._next_growth = self._cooldown_until
-                logger.info(
-                    "Adaptive concurrency: %s pushback hits, workers down to %s",
-                    hits,
-                    self._limit,
-                )
-                return
-            if (
-                now < self._next_growth
-                or self._limit >= self._maximum
-                or in_flight < self._limit
-            ):
-                return
-            self._limit += 1
-            self._next_growth = now + ADAPTIVE_GROW_INTERVAL_SECONDS
+            change = self._change(hits, now, in_flight)
+            limit = self._limit
+        if self._metrics_name is not None:
+            if change == "cut":
+                record_pool_cut(self._metrics_name)
+            elif change == "grow":
+                record_pool_grow(self._metrics_name)
+            record_pool_state(self._metrics_name, limit, in_flight)
+
+    def _change(
+        self, hits: int, now: float, in_flight: int
+    ) -> Literal["cut", "grow"] | None:
+        """Applies one observation under the lock, and returns the change."""
+        if hits and now < self._cooldown_until:
+            # The burst that caused the last cut. The cut already covers it.
+            return None
+        if hits:
+            self._limit = max(1, self._limit // 2)
+            self._cooldown_until = now + ADAPTIVE_COOLDOWN_SECONDS
+            self._next_growth = self._cooldown_until
+            logger.info(
+                "Adaptive concurrency: %s pushback hits, workers down to %s",
+                hits,
+                self._limit,
+            )
+            return "cut"
+        if (
+            now < self._next_growth
+            or self._limit >= self._maximum
+            or in_flight < self._limit
+        ):
+            return None
+        self._limit += 1
+        self._next_growth = now + ADAPTIVE_GROW_INTERVAL_SECONDS
+        return "grow"
 
 
 # A unit of work for ``AdaptiveTaskPool``. It may return follow-up tasks,
