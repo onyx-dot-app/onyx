@@ -307,8 +307,12 @@ export default function UsageReports() {
   } = useSWR(SWR_KEYS.usageReportJobs, fetchUsageReportJobs, {
     refreshInterval: POLL_INTERVAL_MS,
   });
+  // Only the admin's own request blocks Generate. Jobs of other admins, or
+  // from before a reload, show as rows but do not block a new request.
   const pending = (jobs ?? []).some(
-    (job) => job.status === "PENDING" || job.status === "STARTED"
+    (job) =>
+      job.report_id === requestedReportId &&
+      (job.status === "PENDING" || job.status === "STARTED")
   );
   const {
     data: reports,
@@ -353,6 +357,12 @@ export default function UsageReports() {
       const reportId = await generateUsageReport(period, abort.signal);
       setRequestedReportId(reportId);
       setArrivedReportName(null);
+      // Generation already started, so a failed refresh must not surface as
+      // "failed to start report generation". Keep the button disabled until
+      // the job list shows the new job.
+      await Promise.all([mutate(), mutateJobs()]).catch((error: unknown) => {
+        console.error("Failed to refresh the usage report list:", error);
+      });
     } catch (error) {
       if (abort.signal.aborted) return;
       console.error("Failed to start usage report generation:", error);
@@ -365,12 +375,6 @@ export default function UsageReports() {
     } finally {
       if (!abort.signal.aborted) setRequesting(false);
     }
-
-    // Generation already succeeded, so a failed revalidation must not surface
-    // as "failed to start report generation".
-    void Promise.all([mutate(), mutateJobs()]).catch((error: unknown) => {
-      console.error("Failed to refresh the usage report list:", error);
-    });
   }
 
   const orderedReports = useMemo(

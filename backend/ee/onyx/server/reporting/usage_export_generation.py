@@ -27,7 +27,7 @@ from ee.onyx.server.reporting.usage_report_pdf import render_usage_report_pdf
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import User
 from onyx.db.system_usage import SystemUsageExportRow, iter_system_usage_export
-from onyx.db.tasks import complete_started_task__no_commit
+from onyx.db.tasks import complete_started_task__no_commit, is_task_started
 from onyx.db.user_usage import UsageExportRow, iter_usage_export
 from onyx.db.users import get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
@@ -366,13 +366,12 @@ def create_new_usage_report(
 
             zip_buffer.seek(0)
 
-            # Lock the job through publication and the report-row commit.
-            if task_id is not None and not complete_started_task__no_commit(
-                db_session, task_id
-            ):
-                raise RuntimeError("Usage report job has already ended")
+            if task_id is not None:
+                if not is_task_started(db_session, task_id):
+                    raise RuntimeError("Usage report job has already ended")
+                # End the transaction, so the upload holds no lock.
+                db_session.commit()
 
-            # store zip blob to file_store
             report_name = f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')}_{report_id}_usage_report.zip"
             file_store.save_file(
                 content=zip_buffer,
@@ -381,6 +380,15 @@ def create_new_usage_report(
                 file_type=USAGE_REPORT_MEDIA_TYPE,
                 file_id=report_name,
             )
+
+            # Lock the job through the report-row commit. A job that cleanup
+            # failed during the upload cannot publish.
+            if task_id is not None and not complete_started_task__no_commit(
+                db_session, task_id
+            ):
+                db_session.rollback()
+                file_store.delete_file(report_name, error_on_missing=False)
+                raise RuntimeError("Usage report job has already ended")
     finally:
         for file_id in intermediate_file_ids:
             try:

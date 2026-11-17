@@ -24,11 +24,14 @@ from onyx.configs.constants import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, TaskStatus
 from onyx.db.models import User
-from onyx.db.tasks import get_all_tasks_with_prefix
+from onyx.db.tasks import fail_pending_task, get_all_tasks_with_prefix
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 router = APIRouter()
 
@@ -79,20 +82,28 @@ def generate_report(
     report_id = params.report_id or uuid4()
     register_usage_report_job(db_session, report_id)
     tenant_id = get_current_tenant_id()
-    client_app.send_task(  # celery-expires: allow (user-started job, nothing sends it again)
-        OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
-        expires=USER_EXPORT_TASK_EXPIRES,
-        queue=OnyxCeleryQueues.PRIMARY,
-        task_id=str(report_id),
-        kwargs={
-            "tenant_id": tenant_id,
-            "user_id": str(user.id) if user else None,
-            "period_from": params.period_from,
-            "period_to": params.period_to,
-            "report_id": str(report_id),
-            "track_job": True,
-        },
-    )
+    try:
+        client_app.send_task(
+            OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
+            expires=USER_EXPORT_TASK_EXPIRES,
+            queue=OnyxCeleryQueues.PRIMARY,
+            task_id=str(report_id),
+            kwargs={
+                "tenant_id": tenant_id,
+                "user_id": str(user.id) if user else None,
+                "period_from": params.period_from,
+                "period_to": params.period_to,
+                "report_id": str(report_id),
+                "track_job": True,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to send usage report task report_id=%s", report_id)
+        fail_pending_task(db_session, str(report_id))
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Failed to start the usage report.",
+        )
 
     return None
 

@@ -11,8 +11,12 @@ export class UsageReportsPage {
     await this.page.reload();
   }
 
-  async expectPending(): Promise<void> {
+  async expectPendingRow(): Promise<void> {
     await expect(this.page.getByTestId("pending-report-row")).toBeVisible();
+  }
+
+  async expectGenerating(): Promise<void> {
+    await this.expectPendingRow();
     await expect(
       this.page.getByRole("button", { name: "Generating…" })
     ).toBeDisabled();

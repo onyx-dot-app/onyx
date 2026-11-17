@@ -16,11 +16,14 @@ for (const status of ["PENDING", "FAILURE"] as const) {
     );
     const reports = new UsageReportsPage(page);
     await reports.goto();
-    if (status === "PENDING") await reports.expectPending();
+    if (status === "PENDING") await reports.expectPendingRow();
     else await reports.expectFailure();
     await reports.reload();
-    if (status === "PENDING") await reports.expectPending();
+    if (status === "PENDING") await reports.expectPendingRow();
     else await reports.expectFailure();
+    // A job this page did not request, such as another admin's, does not
+    // block a new request.
+    await reports.expectCanGenerate();
   });
 }
 
@@ -53,7 +56,7 @@ test("a report removed after retention does not block new requests", async ({
   const reports = new UsageReportsPage(page);
   await reports.goto();
   await reports.generateReport();
-  await reports.expectPending();
+  await reports.expectGenerating();
   showJob = false;
   await reports.expectCanGenerate();
 });
