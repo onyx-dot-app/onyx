@@ -374,14 +374,15 @@ def update_assistant_preferences(
     config = result.scalar_one_or_none()
 
     if config:
-        config.disabled_tool_ids = new_assistant_preference.disabled_tool_ids
+        if new_assistant_preference.disabled_tool_ids is not None:
+            config.disabled_tool_ids = new_assistant_preference.disabled_tool_ids
         if new_assistant_preference.disabled_plugin_ids is not None:
             config.disabled_plugin_ids = new_assistant_preference.disabled_plugin_ids
     else:
         config = Assistant__UserSpecificConfig(
             assistant_id=assistant_id,
             user_id=user_id,
-            disabled_tool_ids=new_assistant_preference.disabled_tool_ids,
+            disabled_tool_ids=new_assistant_preference.disabled_tool_ids or [],
             disabled_plugin_ids=new_assistant_preference.disabled_plugin_ids or [],
         )
         db_session.add(config)

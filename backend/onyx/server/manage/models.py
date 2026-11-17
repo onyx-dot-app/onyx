@@ -98,10 +98,9 @@ class AuthConfigResponse(BaseModel):
 
 
 class UserSpecificAssistantPreference(BaseModel):
-    # Built-in tools the user turned off for the agent.
-    disabled_tool_ids: list[int]
-    # Plugins the user turned off for the agent. None on a write keeps the
-    # saved list.
+    # The built-in tools and the plugins that the user turned off for the
+    # agent. None on a write keeps the saved list.
+    disabled_tool_ids: list[int] | None = None
     disabled_plugin_ids: list[UUID] | None = None
 
 
