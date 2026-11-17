@@ -170,7 +170,7 @@ covers new files that match it.
 | `backend/ee/onyx/server/middleware/tenant_tracking.py` | multi-tenancy, billing |
 | `backend/onyx/server/middleware/rate_limiting.py` | rate-and-usage-limits |
 | `backend/onyx/server/middleware/latency_logging.py` | observability |
-| `backend/onyx/background/celery/`, `backend/onyx/background/periodic_poller.py`, `backend/onyx/background/task_utils.py`, `backend/onyx/background/error_logging.py`, `backend/onyx/background/README.md`, `backend/ee/onyx/background/`, `backend/onyx/db/tasks.py`, `backend/onyx/db/sync_record.py`, `backend/onyx/db/background_error.py` | background-jobs |
+| `backend/onyx/background/celery/`, `backend/onyx/background/periodic_poller.py`, `backend/onyx/background/task_utils.py`, `backend/onyx/background/README.md`, `backend/ee/onyx/background/`, `backend/onyx/db/tasks.py`, `backend/onyx/db/sync_record.py`, `backend/onyx/db/background_error.py` | background-jobs |
 | `backend/onyx/redis/redis_connector_prune.py`, `backend/onyx/redis/redis_connector_delete.py`, `backend/onyx/redis/redis_connector_stop.py` | background-jobs |
 | `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/utils/variable_functionality.py`, `backend/scripts/make_foss_repo.sh` | editions-and-gating |
 | `backend/ee/onyx/server/middleware/tier_gate.py`, `backend/ee/onyx/configs/license_enforcement_config.py`, `backend/onyx/server/settings/tier_order.py`, `web/src/lib/tiers/` | editions-and-gating |

@@ -26,11 +26,11 @@ import os
 import sys
 from typing import Any
 
+from onyx.configs.constants import OpenSearchAuthMethod
 from onyx.document_index.opensearch.client import (
     OpenSearchClient,
     OpenSearchIndexClient,
 )
-from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from shared_configs.configs import MULTI_TENANT
 
 

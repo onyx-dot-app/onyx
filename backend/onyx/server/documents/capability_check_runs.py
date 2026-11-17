@@ -8,9 +8,6 @@ from uuid import UUID, uuid4
 from pydantic_core import to_jsonable_python
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.capability_checks.enqueue import (
-    send_capability_check_run_task,
-)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import (
     DocumentSource,
@@ -43,6 +40,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     stop_blocked_draft_checks,
     wait_for_dependencies,
 )
+from onyx.connectors.capability_checks.enqueue import send_capability_check_run_task
 from onyx.connectors.capability_checks.form_state import (
     FormState,
     validate_form_state,

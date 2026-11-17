@@ -461,7 +461,7 @@ if __name__ == "__main__":
     import time
 
     from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-    from tests.daily.connectors.utils import load_all_from_connector
+    from onyx.connectors.load_all import load_all_from_connector
 
     host = os.environ.get("IMAP_HOST")
     mailboxes_str = os.environ.get("IMAP_MAILBOXES")

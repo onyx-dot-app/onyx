@@ -35,6 +35,7 @@ instead = "Move shared code to common/."
 type = "independence"
 container = "onyx/connectors"
 shared = ["common"]
+hubs = ["checks"]
 """
 
 
@@ -46,6 +47,7 @@ def _backend(tmp_path: Path, config: str) -> list[Contract]:
         "onyx/connectors/jira/connector.py",
         "onyx/connectors/slack/connector.py",
         "onyx/connectors/common/utils.py",
+        "onyx/connectors/checks/registry.py",
         "onyx/connectors/factory.py",
         "ee/onyx/tier.py",
         "ee/onyx/allowed.py",
@@ -146,6 +148,17 @@ def test_exception_that_matches_nothing_is_reported(tmp_path: Path) -> None:
             [],
         ),
         ("onyx/connectors/factory.py", "import onyx.connectors.slack.connector", []),
+        # A hub may import a sibling, and a sibling may import a hub.
+        (
+            "onyx/connectors/checks/registry.py",
+            "import onyx.connectors.jira.connector",
+            [],
+        ),
+        (
+            "onyx/connectors/jira/connector.py",
+            "from onyx.connectors.checks.registry import x",
+            [],
+        ),
         # A shared sibling is held to the same rule.
         (
             "onyx/connectors/common/utils.py",

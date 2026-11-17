@@ -16,7 +16,7 @@ import pytest
 from redis.exceptions import RedisError
 
 from onyx.cache import factory
-from onyx.cache.interface import CacheBackendType
+from onyx.configs.constants import CacheBackendType
 from onyx.server.features.build.sandbox import serve_transport
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,

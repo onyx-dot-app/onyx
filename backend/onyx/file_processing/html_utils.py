@@ -12,7 +12,7 @@ from onyx.configs.app_configs import (
     WEB_CONNECTOR_IGNORED_CLASSES,
     WEB_CONNECTOR_IGNORED_ELEMENTS,
 )
-from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
+from onyx.configs.constants import HtmlBasedConnectorTransformLinksStrategy
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

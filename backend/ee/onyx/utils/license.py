@@ -25,9 +25,13 @@ from ee.onyx.utils.license_expiry import (
 )
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import CACHE_BACKEND
-from onyx.configs.constants import NotificationType, OnyxCeleryPriority, OnyxCeleryTask
+from onyx.configs.constants import (
+    CacheBackendType,
+    NotificationType,
+    OnyxCeleryPriority,
+    OnyxCeleryTask,
+)
 from onyx.db.notification import dismiss_notifications_with_other_value
 from onyx.server.settings.models import ApplicationStatus
 from onyx.utils.logger import setup_logger
