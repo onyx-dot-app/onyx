@@ -4252,7 +4252,7 @@
             },
             "exclude_internal_comments": {
               "label": "Exclude Internal Comments",
-              "description": "For Jira Service Management projects: skip agent-only (internal) comments and index only comments visible to the customer."
+              "description": "For Jira Service Management projects: skip agent-only (internal) comments and index only comments visible to the customer. Turning this on for an existing connector requires a full re-index to remove internal comments that were already indexed."
             }
           }
         },

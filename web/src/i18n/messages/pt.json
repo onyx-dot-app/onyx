@@ -4252,7 +4252,7 @@
             },
             "exclude_internal_comments": {
               "label": "Excluir comentários internos",
-              "description": "Para projetos do Jira Service Management: ignore comentários internos (somente para agentes) e indexe apenas os comentários visíveis para o cliente."
+              "description": "Para projetos do Jira Service Management: ignore comentários internos (somente para agentes) e indexe apenas os comentários visíveis para o cliente. Ativar esta opção em um conector existente exige uma reindexação completa para remover os comentários internos que já foram indexados."
             }
           }
         },

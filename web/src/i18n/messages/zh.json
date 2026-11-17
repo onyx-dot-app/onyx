@@ -4252,7 +4252,7 @@
             },
             "exclude_internal_comments": {
               "label": "排除内部评论",
-              "description": "针对 Jira Service Management 项目：跳过仅供客服人员查看的内部评论，仅索引客户可见的评论。"
+              "description": "针对 Jira Service Management 项目：跳过仅供客服人员查看的内部评论，仅索引客户可见的评论。 对现有连接器启用此选项后,需要执行完整重新索引才能移除已被索引的内部评论。"
             }
           }
         },
