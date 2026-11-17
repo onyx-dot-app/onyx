@@ -12620,9 +12620,6 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "النص الكامل"
-          },
           "thinking": {
             "status": "جارٍ التفكير"
           },

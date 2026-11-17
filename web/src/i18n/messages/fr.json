@@ -12620,9 +12620,6 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "Texte intégral"
-          },
           "thinking": {
             "status": "Réflexion"
           },

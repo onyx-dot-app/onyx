@@ -12620,9 +12620,6 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "Texto completo"
-          },
           "thinking": {
             "status": "Pensando"
           },

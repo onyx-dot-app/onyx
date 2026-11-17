@@ -10,8 +10,8 @@ import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { constructCurrentMemoryState } from "./memoryStateUtils";
 import { SvgMaximize2 } from "@opal/icons";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import { cn } from "@opal/utils";
 import { Button, Text } from "@opal/components";
+import { Section } from "@opal/layouts";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@opal/components";
 
@@ -59,7 +59,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
   // No access case
   if (noAccess) {
     const content = (
-      <Text as="p" color="text-03">
+      <Text as="p" font="secondary-body" color="text-03">
         {t("memory.disabled.text")}
       </Text>
     );
@@ -110,26 +110,35 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
         />
       </memoriesModal.Provider>
       {memoryText ? (
-        <div className={cn("w-full flex")}>
-          <div className="flex-1 min-w-0">
-            <Text as="p" color="text-02" wordWrap="wrap-break-word">
-              {memoryText}
-            </Text>
-          </div>
-          {/* Expand button */}
-          <div className="flex justify-end items-end mt-1 w-8">
-            <Button
-              prominence="tertiary"
-              size="md"
-              icon={SvgMaximize2}
-              tooltip={t("memory.viewMemoriesButton.tooltip")}
-              onClick={(e) => {
-                e.stopPropagation();
-                memoriesModal.toggle(true);
-              }}
-            />
-          </div>
-        </div>
+        // The memory, then a button that opens it among all memories.
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          alignItems="start"
+          gap={1}
+          height="fit"
+        >
+          <Text
+            as="p"
+            font="secondary-body"
+            color="text-03"
+            wordWrap="wrap-break-word"
+          >
+            {memoryText}
+          </Text>
+          <Button
+            prominence="tertiary"
+            size="sm"
+            icon={SvgMaximize2}
+            // Pressed while the memories it opened are showing.
+            interaction={memoriesModal.isOpen ? "active" : undefined}
+            tooltip={t("memory.viewMemoriesButton.tooltip")}
+            onClick={(e) => {
+              e.stopPropagation();
+              memoriesModal.toggle(true);
+            }}
+          />
+        </Section>
       ) : (
         !stopPacketSeen && <BlinkingBar />
       )}
