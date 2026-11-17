@@ -222,6 +222,37 @@ def test_refresh_result_does_not_undo_a_sign_in_settings_change(
     assert read_connection_secret(kept).access_token == "old-access"
 
 
+@pytest.mark.parametrize("status_code", [200, 400], ids=["refreshed", "refused"])
+def test_refresh_does_not_commit_or_discard_the_work_of_the_caller(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+    token_endpoint: FakeTokenEndpoint,
+    status_code: int,
+) -> None:
+    integration = _manual_integration(make_integration)
+    name = integration.name
+    user = make_test_user("refresh_caller_session")
+    connection = add_connection(
+        db_session, integration, user.id, _stale_secret(), expires_at=expired()
+    )
+    token_endpoint.status_code = status_code
+    if status_code != 200:
+        token_endpoint.body = {"error": "invalid_grant"}
+    integration.name = f"{name} renamed"
+
+    fresh = ensure_fresh_connection(connection, integration, db_session)
+
+    assert fresh is not None
+    if status_code == 200:
+        assert read_connection_secret(fresh).access_token == "new-access"
+    else:
+        assert fresh.status is IntegrationConnectionStatus.NEEDS_RECONNECT
+    assert integration.name == f"{name} renamed"
+    db_session.rollback()
+    assert integration.name == name
+
+
 def test_fresh_token_makes_no_call(
     db_session: Session,
     make_integration: MakeIntegration,
