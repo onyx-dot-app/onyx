@@ -145,20 +145,23 @@ def make_app_integration(
     *,
     name: str | None = None,
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
+    upstream_url_patterns: list[str] | None = None,
     auth_template: dict[str, Any] | None = None,
     organization_credentials: dict[str, Any] | None = None,
-    auth_mode: IntegrationAuthMode = IntegrationAuthMode.INDIVIDUAL,
+    auth_mode: IntegrationAuthMode = IntegrationAuthMode.NONE,
     auth_method: IntegrationAuthMethod | None = None,
     header_template: dict[str, str] | None = None,
     oauth_client: IntegrationOAuthClient | None = None,
 ) -> tuple[Integration, ExternalApp]:
-    """An external app integration. ``oauth_client`` is an unsaved row; this
-    function links and saves it."""
+    """An external app integration: a preset (``app_type``) or a CUSTOM app,
+    with the actions that its kind finds. ``oauth_client`` is an unsaved row;
+    this function links and saves it."""
     app_name = name or f"app-{uuid4().hex[:8]}"
     app = ExternalApp(
         name=app_name,
         app_type=app_type,
-        upstream_url_patterns=[],
+        enabled=True,
+        upstream_url_patterns=upstream_url_patterns or [],
         auth_template=auth_template or {},
         organization_credentials=organization_credentials or {},
     )
@@ -174,6 +177,7 @@ def make_app_integration(
         oauth_client=oauth_client,
         external_app_id=app.id,
     )
+    sync_integration_actions__no_commit(integration, db_session)
     db_session.commit()
     return integration, app
 
@@ -208,41 +212,6 @@ def make_openapi_integration(
     sync_integration_actions__no_commit(integration, db_session)
     db_session.commit()
     return integration, tool
-
-
-def make_app_integration(
-    db_session: Session,
-    *,
-    app_type: ExternalAppType,
-    upstream_url_patterns: list[str],
-    name: str | None = None,
-    auth_mode: IntegrationAuthMode = IntegrationAuthMode.NONE,
-    auth_method: IntegrationAuthMethod | None = None,
-    header_template: dict[str, str] | None = None,
-) -> tuple[Integration, ExternalApp]:
-    """An external app integration: a preset (``app_type``) or a CUSTOM app."""
-    name = name or f"integration-{uuid4().hex[:8]}"
-    app = ExternalApp(
-        name=name,
-        app_type=app_type,
-        enabled=True,
-        upstream_url_patterns=upstream_url_patterns,
-        auth_template={},
-        organization_credentials={},
-    )
-    db_session.add(app)
-    db_session.flush()
-    integration = _add_integration(
-        db_session,
-        name=name,
-        auth_mode=auth_mode,
-        auth_method=auth_method,
-        header_template=header_template,
-        external_app_id=app.id,
-    )
-    sync_integration_actions__no_commit(integration, db_session)
-    db_session.commit()
-    return integration, app
 
 
 def hold_in_plugin(
