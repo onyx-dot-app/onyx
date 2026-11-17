@@ -5,12 +5,14 @@ Firecracker sandbox nodes with the host access it needs, and its pods may reach
 sandbox-proxy. A wrong render here fails only at runtime on a KVM node."""
 
 import json
+import re
 from typing import Any
 
 import pytest
 import yaml
 
 from tests.external_dependency_unit.craft_helm.rendering import (
+    CHART_DIR,
     render_chart,
     skip_or_fail,
 )
@@ -36,6 +38,7 @@ _CLIENT_TEMPLATES = [
 ]
 _CLIENT_DIR = "/etc/onyx/craft-fc-agent-client"
 _AGENT_NS = "onyx-sandbox-runtime"
+_REG_VALUE = "reg-test-0123456789abcdef0123456789"
 _FIRECRACKER = [
     "--set",
     "craft.sandboxRuntime=firecracker",
@@ -50,7 +53,7 @@ _FIRECRACKER = [
     "--set",
     "auth.sandboxNodeRegistration.enabled=true",
     "--set-string",
-    "auth.sandboxNodeRegistration.values.sandbox_node_registration_secret=reg-test",
+    f"auth.sandboxNodeRegistration.values.sandbox_node_registration_secret={_REG_VALUE}",
 ]
 
 
@@ -159,8 +162,10 @@ def test_agent_pod_spec() -> None:
     assert "--uid-count=65536" in args
     assert "--dial-ports=3010" in args
     assert "--relay-max-conns=256" in args
+    assert "--relay-max-conns-node=2048" in args
     assert "--dial-max-streams=64" in args
     assert "--max-vms=60" in args
+    assert "--slice-memory-percent=85" in args
     assert not [a for a in args if a.startswith("--client-allowed-sans")]
     # The agent joins $POD_IP and the listen port itself (it brackets IPv6).
     assert not [a for a in args if a.startswith("--advertise-address")]
@@ -238,6 +243,71 @@ def test_scale_down_guard_grace_and_off() -> None:
     }
     assert not [a for a in args if "scale-down" in a]
     assert "--watch-node-drain" in args
+
+
+_VAP_API = [
+    "--api-versions",
+    "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy",
+]
+
+
+def _guard_annotation_keys() -> set[str]:
+    guard = (CHART_DIR.parents[3] / "microvm/internal/nodewatch/guard.go").read_text()
+    keys = dict(
+        re.findall(r'(ScaleDownDisabledKey|GuardOwnerKey)\s*=\s*"([^"]+)"', guard)
+    )
+    assert len(keys) == 2
+    return set(keys.values())
+
+
+def test_node_patch_policy_allows_only_guard_annotations() -> None:
+    """RBAC grants cluster-wide "patch" on nodes; the admission policy limits
+    the agent to the annotations that nodewatch.ScaleDownGuard sets."""
+    docs = _render([*_FIRECRACKER, *_VAP_API])
+    policy = _by_kind(docs, "ValidatingAdmissionPolicy")
+    binding = _by_kind(docs, "ValidatingAdmissionPolicyBinding")
+    account = _by_kind(docs, "ServiceAccount")["metadata"]["name"]
+    spec = policy["spec"]
+    variables = {v["name"]: v["expression"] for v in spec["variables"]}
+    validations = " ".join(v["expression"] for v in spec["validations"])
+
+    assert binding["spec"] == {
+        "policyName": policy["metadata"]["name"],
+        "validationActions": ["Deny"],
+    }
+    assert spec["failurePolicy"] == "Fail"
+    assert spec["matchConstraints"]["resourceRules"] == [
+        {
+            "apiGroups": [""],
+            "apiVersions": ["*"],
+            "operations": ["UPDATE"],
+            "resources": ["nodes"],
+        }
+    ]
+    assert spec["matchConditions"][0]["expression"] == (
+        f"request.userInfo.username == 'system:serviceaccount:{_AGENT_NS}:{account}'"
+    )
+    assert set(re.findall(r"'([^']+)'", variables["allowed"])) == (
+        _guard_annotation_keys()
+    )
+    for field in ("spec", "labels", "finalizers", "ownerReferences"):
+        assert field in validations
+    assert "authentication.kubernetes.io/node-name" in variables["nodeName"]
+
+
+@pytest.mark.parametrize(
+    "extra_args",
+    [
+        [],
+        [*_VAP_API, "--set", "craft.hostAgent.scaleDownGuard.enabled=false"],
+    ],
+)
+def test_node_patch_policy_needs_api_and_guard(extra_args: list[str]) -> None:
+    kinds = {d["kind"] for d in _render([*_FIRECRACKER, *extra_args])}
+    assert not kinds & {
+        "ValidatingAdmissionPolicy",
+        "ValidatingAdmissionPolicyBinding",
+    }
 
 
 def test_scale_down_guard_without_drain_watch_can_read_nodes() -> None:
@@ -430,7 +500,7 @@ def test_registration_secret_is_copied_into_agent_namespace() -> None:
     )
 
     assert secret["metadata"]["namespace"] == _AGENT_NS
-    assert secret["stringData"] == {"sandbox_node_registration_secret": "reg-test"}
+    assert secret["stringData"] == {"sandbox_node_registration_secret": _REG_VALUE}
     assert ref["valueFrom"]["secretKeyRef"] == {
         "name": secret["metadata"]["name"],
         "key": "sandbox_node_registration_secret",
@@ -489,14 +559,18 @@ def test_agent_overrides() -> None:
     assert "--advertise-address=agent.example:7443" in args
 
 
-@pytest.mark.parametrize("max_vms", ["0", "120"])
-def test_max_vms_override_keeps_zero(max_vms: str) -> None:
-    docs = _render([*_FIRECRACKER, "--set", f"craft.hostAgent.maxVms={max_vms}"])
+@pytest.mark.parametrize(
+    ("key", "flag"),
+    [("maxVms", "max-vms"), ("sliceMemoryPercent", "slice-memory-percent")],
+)
+@pytest.mark.parametrize("value", ["0", "90"])
+def test_override_keeps_zero(key: str, flag: str, value: str) -> None:
+    docs = _render([*_FIRECRACKER, "--set", f"craft.hostAgent.{key}={value}"])
     args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
         "args"
     ]
 
-    assert f"--max-vms={max_vms}" in args
+    assert f"--{flag}={value}" in args
 
 
 def test_headless_service_targets_agent_pods() -> None:
@@ -584,6 +658,25 @@ def test_only_agent_clients_reach_agent_listener() -> None:
             ["--set-string", "auth.sandboxNodeRegistration.existingSecret=reg"],
             "craft.hostAgent.registrationExistingSecret",
         ),
+        (
+            [
+                "--set-string",
+                "auth.sandboxNodeRegistration.values.sandbox_node_registration_secret="
+                + "x" * 31,
+            ],
+            "must be at least 32 characters",
+        ),
+        (
+            ["--set-string", "craft.hostAgent.sliceMemoryPercent=85%"],
+            "sliceMemoryPercent",
+        ),
+        (["--set", "craft.hostAgent.sliceMemoryPercent=0.85"], "sliceMemoryPercent"),
+        (["--set", "craft.hostAgent.sliceMemoryPercent=5"], "sliceMemoryPercent"),
+        (["--set", "craft.hostAgent.sliceMemoryPercent=101"], "sliceMemoryPercent"),
+        (
+            ["--set-string", "craft.hostAgent.sliceMemoryPercent=0100"],
+            "sliceMemoryPercent",
+        ),
         (["--set-string", "configMap.ENABLE_CRAFT=false"], "ENABLE_CRAFT"),
         (
             ["--set-string", "craft.hostAgent.namespace=onyx"],
@@ -611,7 +704,7 @@ def test_registration_key_follows_secret_keys() -> None:
             "--set-string",
             "auth.sandboxNodeRegistration.secretKeys.SANDBOX_NODE_REGISTRATION_SECRET=custom_key",
             "--set-string",
-            "auth.sandboxNodeRegistration.values.custom_key=reg-custom",
+            f"auth.sandboxNodeRegistration.values.custom_key={_REG_VALUE}",
         ]
     )
     secret = _by_kind(docs, "Secret")
@@ -620,7 +713,7 @@ def test_registration_key_follows_secret_keys() -> None:
         e for e in container["env"] if e["name"] == "SANDBOX_NODE_REGISTRATION_SECRET"
     )
 
-    assert secret["stringData"] == {"custom_key": "reg-custom"}
+    assert secret["stringData"] == {"custom_key": _REG_VALUE}
     assert ref["valueFrom"]["secretKeyRef"]["key"] == "custom_key"
 
 

@@ -18,6 +18,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import (
     IMPORTABLE_MODULES,
+    TOOLS_NAMESPACE,
 )
 from onyx.tools.tool_implementations.code_mode.store import (
     JSON_TYPES_TEXT,
@@ -53,7 +54,8 @@ def _deferred_note(stubs: ToolStubs) -> str:
         f"\n- More functions are available than the ones listed below: those of "
         f"{', '.join(groups)}. Find them with `await tool_search(query)`; each match has "
         "the function's name, description and stub. Read the stub before you call "
-        "a function, then call it like a listed one, in this program or a later one."
+        f"a function, then call it like a listed one, as `await {TOOLS_NAMESPACE}.<name>(...)`, "
+        "in this program or a later one."
     )
 
 
@@ -62,15 +64,15 @@ def code_mode_description(stubs: ToolStubs, limits: SandboxLimits) -> str:
     deferred_note = _deferred_note(stubs) if stubs.tool_index is not None else ""
     return f"""Run a Python program that calls the tools listed below. Use it to combine tool calls in one step, run independent calls in parallel, and filter large results before you read them.
 
-- The program runs in Monty, a sandboxed Python interpreter, not CPython. It has no file system, network, environment, or subprocess access. Get outside data only through the tool functions.
-- Each tool is an async Python function. Call it with keyword arguments only and `await` the result, for example `result = await tool_name(argument=value)`. Top-level `await` works; do not call `asyncio.run()`.
+- The program runs in Monty, a sandboxed Python interpreter, not CPython. The program is for calling and combining the tools below. It has no files, processes or network of its own; anything outside the program comes from a tool.
+- Each tool is an async Python function of the `{TOOLS_NAMESPACE}` namespace, which every program has. Call it as `{TOOLS_NAMESPACE}.<name>` with keyword arguments only and `await` the result, for example `result = await {TOOLS_NAMESPACE}.tool_name(argument=value)`. These functions exist only inside programs: you cannot call them as tools yourself. Top-level `await` works; do not call `asyncio.run()`.
 - Await every call; calls that are not awaited are cancelled when the program ends.
-- Run independent calls in parallel with `asyncio.gather`, for example `a, b = await asyncio.gather(f(x=1), g(y=2))`. Make a call that needs an earlier result after that result is available.
+- Run independent calls in parallel with `asyncio.gather`, for example `a, b = await asyncio.gather({TOOLS_NAMESPACE}.f(x=1), {TOOLS_NAMESPACE}.g(y=2))`. Make a call that needs an earlier result after that result is available.
 - `asyncio.gather` takes no keyword arguments, so `return_exceptions=True` is not available, and one failed call fails the whole gather. To keep the other results, wrap each call:
   `async def attempt(call):`
   `    try: return await call`
   `    except Exception as e: return {{"error": str(e)}}`
-  `results = await asyncio.gather(*(attempt(f(x=v)) for v in values))`
+  `results = await asyncio.gather(*(attempt({TOOLS_NAMESPACE}.f(x=v)) for v in values))`
 - Only text that the program prints and the value of the last expression come back to you; that value must be JSON data ({JSON_TYPES_TEXT}). Tool results stay inside the program until you print them. Print only the fields you need, such as titles, document numbers, URLs, and short excerpts. Do not print whole results.
 - A tool error raises an exception in the program. To continue after an error, use `try:` / `except Exception as e:`. An uncaught exception stops the program and returns its traceback with the output printed before it.
 - Each `execute_code` call starts a fresh interpreter: variables, functions, and imports from earlier calls are gone. To keep a value for a later call, `store(key, value)` it, then `load(key)` it in the later call. `load` returns None for a missing key. `store`, `load` and `yield_control` are plain functions: do not `await` them.
@@ -82,7 +84,7 @@ def code_mode_description(stubs: ToolStubs, limits: SandboxLimits) -> str:
 - The program is type-checked before it runs. A wrong argument name or type in a tool call stops the program before any tool runs.
 - Search results have a `document` number. To cite a result in your answer, print its `document` number and write [n] in the answer, where n is that number.{deferred_note}
 
-Functions (already defined in every program; call them directly, no import needed):
+Functions (already defined in every program, no import needed; call the tool functions as `await {TOOLS_NAMESPACE}.<name>(...)`):
 ```python
 {stubs.listed_text.rstrip()}
 ```"""
@@ -95,10 +97,17 @@ WAIT_CODE_DESCRIPTION = """Waits on a running `execute_code` cell and returns ne
 - If the cell has already finished, `wait_code` returns the completed result and closes the cell."""
 
 
-def program_function_operation(name: str, *, deferred: bool) -> str:
+# The result of a call of a code mode function as a tool of its own.
+INNER_CALL_MESSAGE = (
+    "`{name}` is available only inside `execute_code` programs. Call it there: "
+    "`await {called_name}({arguments})`."
+)
+
+
+def program_function_operation(called_name: str, *, deferred: bool) -> str:
     """How a tool preference names a function of `execute_code` programs."""
     found = "; find its stub with `await tool_search(query)`" if deferred else ""
-    return f"{name} (a function in `execute_code` programs{found})"
+    return f"{called_name} (a function in `execute_code` programs{found})"
 
 
 # How each status reads in a sentence about the cell.

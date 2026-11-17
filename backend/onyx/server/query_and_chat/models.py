@@ -26,7 +26,8 @@ AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
 
 
 class MessageOrigin(str, Enum):
-    """Origin of a chat message for telemetry tracking."""
+    """Origin of a chat message, for telemetry. The Slack and Discord bot
+    origins also keep the sandbox tools out of the turn."""
 
     WEBAPP = "webapp"
     CHROME_EXTENSION = "chrome_extension"

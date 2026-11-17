@@ -84,6 +84,13 @@ one pass with a finished checkpoint, so a failure restarts the window.
 `connectors/factory.py:_validate_connector_supports_input_type` accepts a
 checkpointed connector for `InputType.POLL` and rejects `InputType.EVENT`.
 
+**Checkpointed slim listing.** `CheckpointedSlimConnector` is optional. It lists
+ids with the contract of `CheckpointedConnector`, so a long listing resumes. A
+connector can yield `SlimDocumentStub` (`connectors/models.py`): a slim document
+with the modified time, mime type, size and a `ListingPayload` that a later
+conversion step reads. No worker calls this interface yet. Google Drive is the
+only implementer ([[google-drive]]).
+
 **Permission fetching.** Two interfaces return `external_access` for EE
 permission sync ([[permission-sync]]). `SlimConnectorWithPermSync` lists every
 id with its access. Doc sync needs it

@@ -289,6 +289,11 @@ At boot, init:
 1. Mounts `/proc`, `/sys`, `/dev`, `/dev/pts`, `/dev/shm`, cgroup2 on
    `/sys/fs/cgroup` (all controllers on in `cgroup.subtree_control`), and
    tmpfs on `/run` and `/tmp`.
+   Then it sets kernel sysctls: `io_uring_disabled=2`, `kptr_restrict=2`,
+   `dmesg_restrict=1`, `sysrq=0`, `kexec_load_disabled=1` and
+   `modules_disabled=1`. Guest root cannot set the last two back before a
+   reboot. The guest has no kernel modules and no program in it needs
+   io_uring.
 2. Sets the host name to `sandbox` and starts the loopback interface.
 3. Stops here, without services, if `/craft-fc` is on a writable mount. Only
    then does it read `init.conf`.

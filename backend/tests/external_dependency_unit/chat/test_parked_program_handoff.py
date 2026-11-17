@@ -55,7 +55,7 @@ from tests.unit.onyx.tools.code_mode.fakes import FakeTool
 
 __all__ = ["branch", "user_message"]
 
-PROGRAM = 'print("before")\nr = await send(value="x")\nprint("sent", r)'
+PROGRAM = 'print("before")\nr = await tools.send(value="x")\nprint("sent", r)'
 REQUEST_ID = "send-approval"
 
 

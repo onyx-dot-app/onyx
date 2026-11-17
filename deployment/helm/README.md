@@ -330,6 +330,7 @@ auth:
       sandbox_node_registration_secret: "<random value>"
 ```
 
+The value must be at least 32 characters (for example `openssl rand -hex 32`).
 The chart copies `sandbox_node_registration_secret` into the agent namespace.
 If you change `auth.sandboxNodeRegistration.secretKeys`, the copy uses the same
 key. If `auth.sandboxNodeRegistration` uses `existingSecret`, create the same

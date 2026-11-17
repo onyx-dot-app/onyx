@@ -24,6 +24,12 @@ So memory limits how many microVMs start at the same time more than how many run
 
 Kubelet does not count microVM memory. Do not run other workloads on KVM nodes.
 
+All microVMs of a node run in one host cgroup slice.
+At start the host agent limits the slice to 85% of the node memory (`craft.hostAgent.sliceMemoryPercent`).
+The rest stays free for kubelet, the container runtime, the host agent, and the system.
+If the microVMs use more memory than the limit, the kernel stops one microVM. Set the value to `0` to remove the limit.
+The host agent removes it when it starts again.
+
 ## Measured limits
 
 Onyx measured these numbers on Amazon EKS with `m8i.4xlarge` nodes (16 vCPUs, 64 GiB, nested virtualization)
@@ -51,6 +57,12 @@ Use these numbers as a start. Watch the host agent dashboard and add nodes befor
 
 Size the sandbox proxy on the egress call rate, not on the number of sandboxes. Add proxy replicas,
 or raise its CPU limit under `sandboxProxy.resources`, when its pods reach their CPU limit.
+
+The host agent relays the egress of all microVMs on its node.
+It keeps at most 2048 relay connections open on a node (`craft.hostAgent.relayMaxConnsNode`)
+and 256 for one microVM (`craft.hostAgent.relayMaxConns`). It closes new connections over a cap.
+Each connection uses up to about 100 KiB of agent memory. If you raise `relayMaxConnsNode`,
+keep `craft.hostAgent.resources.limits.memory` above 256 MiB plus 100 KiB for each connection.
 
 Keep at least 50 GiB free in the data directory. The host agent refuses new microVMs below 10 GiB free.
 

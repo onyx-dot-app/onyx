@@ -192,6 +192,8 @@ class Tool(abc.ABC):
     interrupted_result: ToolResult | None = None
     merge_list_argument: str | None = None
     merge_list_limit: int | None = None
+    # SEQUENTIAL tools of one group take turns, as calls of one tool do.
+    sequence_group: str | None = None
     # Set on tools whose calls follow an action policy; see onyx/chat/tool_approvals.py.
     approval: ToolApprovalScope | None = None
 
@@ -207,6 +209,11 @@ class Tool(abc.ABC):
     def operation_names(self, tool_id: int) -> list[str]:
         """How the model calls the configured tool `tool_id` through this tool."""
         return [self.name] if self.id == tool_id else []
+
+    def inner_call_hint(self, name: str) -> str | None:  # noqa: ARG002
+        """For a call of `name` as a tool of its own: how to call it through
+        this tool instead; None when `name` is none of its inner tools."""
+        return None
 
     @property
     @abc.abstractmethod
@@ -307,6 +314,7 @@ class Tool(abc.ABC):
             definition=self.tool_definition(),
             execute=lambda invocation: self.run(invocation, get_context()),
             execution_mode=self.execution_mode,
+            sequence_group=self.sequence_group,
             merge_arguments=partial(
                 merge_tool_arguments,
                 field=self.merge_list_argument,
@@ -323,6 +331,7 @@ class Tool(abc.ABC):
                 for tool in (self, *self.inner_tools)
                 if tool.approval is not None
             ],
+            inner_call_hint=self.inner_call_hint,
         )
 
 

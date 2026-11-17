@@ -21,7 +21,12 @@ const (
 	DefaultDialTimeout = 10 * time.Second
 	// DefaultMaxConns is the default per-VM connection cap.
 	DefaultMaxConns = 256
-	bufSize         = 64 << 10
+	// DefaultMaxConnsNode is the default cap of all VMs together. One
+	// connection holds up to about 100 KiB (head buffer or copy buffers,
+	// TLS buffers, goroutines), so the cap bounds relay memory.
+	DefaultMaxConnsNode = 2048
+	// copyBufSize matches the largest TLS record.
+	copyBufSize = 16 << 10
 	// Accept errors back off from minBackoff, doubling up to maxBackoff.
 	minBackoff = 5 * time.Millisecond
 	maxBackoff = time.Second
@@ -59,11 +64,17 @@ type Relay struct {
 	// MaxConns caps the open connections of one VM. A connection over the
 	// cap is closed at once. 0 means DefaultMaxConns.
 	MaxConns int
-	Log      *slog.Logger
+	// MaxConnsNode caps the open connections of all VMs together, the same
+	// way. 0 means DefaultMaxConnsNode.
+	MaxConnsNode int
+	Log          *slog.Logger
 	// Events, if set, gets one Event* value per VM connection.
 	Events func(event string)
 	// dial replaces the upstream dial in tests.
 	dial func(ctx context.Context, network, addr string) (net.Conn, error)
+
+	// nodeConns counts the connections under MaxConnsNode.
+	nodeConns atomic.Int64
 
 	mu    sync.Mutex
 	conns map[string]map[*pair]struct{}
@@ -121,6 +132,22 @@ func (r *Relay) maxConns() int {
 	return r.MaxConns
 }
 
+func (r *Relay) maxConnsNode() int64 {
+	if r.MaxConnsNode <= 0 {
+		return DefaultMaxConnsNode
+	}
+	return int64(r.MaxConnsNode)
+}
+
+// takeNodeSlot reserves one connection under MaxConnsNode.
+func (r *Relay) takeNodeSlot() bool {
+	if r.nodeConns.Add(1) > r.maxConnsNode() {
+		r.nodeConns.Add(-1)
+		return false
+	}
+	return true
+}
+
 // Serve accepts the connections of one VM on ln until ln is closed or Detach
 // is called. It does not return before all accepts stop.
 func (r *Relay) Serve(ln net.Listener, vm VM) {
@@ -155,7 +182,7 @@ func (r *Relay) register(ln net.Listener, id string) {
 func (r *Relay) accept(ln net.Listener, vm VM) {
 	sem := make(chan struct{}, r.maxConns())
 	var backoff time.Duration
-	full := false
+	full, nodeFull := false, false
 	for {
 		c, err := ln.Accept()
 		if errors.Is(err, net.ErrClosed) {
@@ -172,9 +199,20 @@ func (r *Relay) accept(ln net.Listener, vm VM) {
 		select {
 		case sem <- struct{}{}:
 			full = false
+			if !r.takeNodeSlot() {
+				<-sem
+				r.event(EventOverCap)
+				_ = c.Close()
+				if !nodeFull {
+					nodeFull = true
+					r.Log.Warn("relay node connection cap reached; closing new connections", "sandbox_id", vm.SandboxID, "max", r.maxConnsNode())
+				}
+				continue
+			}
+			nodeFull = false
 			r.event(EventAccepted)
 			go func() {
-				defer func() { <-sem }()
+				defer func() { <-sem; r.nodeConns.Add(-1) }()
 				r.handle(c, vm)
 			}()
 		default:
@@ -266,7 +304,7 @@ func (r *Relay) handle(vmConn net.Conn, vm VM) {
 		headTimeout = DefaultHeadTimeout
 	}
 	_ = vmConn.SetReadDeadline(time.Now().Add(headTimeout))
-	br := bufio.NewReaderSize(vmConn, bufSize)
+	br := bufio.NewReaderSize(vmConn, MaxHeadBytes)
 	head, err := ReadHead(br)
 	if err != nil {
 		if errors.Is(err, ErrBadHead) {
@@ -365,7 +403,7 @@ func (r *Relay) splice(p *pair, up net.Conn, vm VM) {
 	done := make(chan end, 2)
 	cp := func(dst, src net.Conn) {
 		fromVM := src == p.vm
-		buf := make([]byte, bufSize)
+		buf := make([]byte, copyBufSize)
 		for {
 			_ = src.SetReadDeadline(time.Now().Add(idle))
 			n, err := src.Read(buf)

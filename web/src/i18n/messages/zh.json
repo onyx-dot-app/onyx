@@ -10163,6 +10163,8 @@
         },
         "title": "删除用户",
         "toasts": {
+          "blockedBySkills": "无法删除此用户",
+          "openSkills": "打开技能以转移",
           "success": "用户已删除"
         }
       },
@@ -11800,9 +11802,17 @@
         "loginBadCredentials": "此账户无法登录，可能已被停用。请联系您的工作区管理员。",
         "loginRequired": "您需要先通过身份提供方登录。",
         "oauthUserAlreadyExists": "使用此邮箱的账户已通过其他登录方式存在。请使用您首次使用的方式登录，或请管理员关联此提供方。",
+        "playgroundActiveTenant": "您公司的团队已经在试用 Onyx。加入您的团队，还是创建新团队？",
+        "playgroundAskAdmin": "请让您的管理员邀请您。",
+        "playgroundCheckFailed": "我们无法核验您的注册。请稍后重试。",
+        "playgroundEmailUsed": "您已使用过 playground 访问权限。",
+        "playgroundLimitReached": "贵公司已使用过 playground 访问权限。",
         "serverError": "您的身份提供方遇到错误。请重试。",
         "staleSignIn": "此登录链接已过期或已失效。请重新登录。",
         "temporarilyUnavailable": "您的身份提供方暂时不可用。请稍后重试。"
+      },
+      "contactSalesButton": {
+        "label": "联系销售"
       },
       "credentialsIssue": {
         "description": "登录凭据不正确或已过期"
@@ -11810,6 +11820,12 @@
       "heading": {
         "description": "您的登录尝试出现问题。",
         "title": "身份验证错误"
+      },
+      "joinTeamButton": {
+        "label": "加入我的团队"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "可能的原因："
@@ -11819,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "如果问题持续存在，请联系您的系统管理员寻求帮助。"
+      },
+      "startNewTeamButton": {
+        "label": "创建新团队"
       },
       "systemDisruptionIssue": {
         "description": "身份验证系统临时中断"
@@ -13117,6 +13136,12 @@
           },
           "waitingForApproval": {
             "label": "正在等待你的批准"
+          },
+          "runningCommand": {
+            "label": "正在运行命令"
+          },
+          "editingFiles": {
+            "label": "正在编辑文件"
           }
         },
         "internalSearch": {
@@ -13246,11 +13271,56 @@
           "researchAgent": "研究智能体",
           "thinking": "思考",
           "tool": "工具",
-          "webSearch": "网页搜索"
+          "webSearch": "网页搜索",
+          "terminal": "终端",
+          "applyPatch": "应用补丁",
+          "editFile": "编辑文件",
+          "writeFile": "写入文件"
         },
         "webSearch": {
           "searching": {
             "status": "正在搜索网页"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {正在运行命令} started {已启动命令} failed {命令失败} canceled {已取消} done {已运行命令} other {已运行命令}}",
+            "workdir": {
+              "label": "位于 {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {正在向会话 {sessionId} 发送输入} failed {无法向会话 {sessionId} 发送输入} canceled {已取消} done {已向会话 {sessionId} 发送输入} other {已向会话 {sessionId} 发送输入}}} check {{phase, select, running {正在检查会话 {sessionId}} failed {无法检查会话 {sessionId}} canceled {已取消} done {已检查会话 {sessionId}} other {已检查会话 {sessionId}}}} other {会话 {sessionId}}}"
+          },
+          "output": {
+            "title": "输出"
+          },
+          "exitCode": {
+            "label": "退出代码 {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {已被信号停止} canceled {已取消} deadline_exceeded {已达到时间限制而停止} other {已结束}}"
+          },
+          "stillRunning": {
+            "label": "仍在运行（会话 {sessionId}）"
+          },
+          "truncated": {
+            "label": "输出已截断"
+          },
+          "noOutput": {
+            "text": "无输出"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {已编辑 # 个文件} other {已编辑 # 个文件}}"
+            },
+            "failed": {
+              "status": "编辑失败"
+            },
+            "title": "补丁"
+          },
+          "stopped": {
+            "status": "已停止"
           }
         }
       },

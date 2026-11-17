@@ -218,7 +218,23 @@ an amendment added (`_amendment_packets`) after the section end, and
 `ToolResultAmendedEvent` after the answer, before the stop. The client adds
 packets of an ended tab to that tab. When the observation was recorded
 before a restore, the live stream has no tab for it, so the closing record
-follows the observation's packets and section end in a new tab. Other tools show their
+follows the observation's packets and section end in a new tab. The sandbox
+tools ([[code-execution]]) start with `exec_command_start`, `write_stdin_start`
+or `apply_patch_start`, stream the command output in `exec_output_delta`, and
+end with `exec_end` or `apply_patch_end`. An `edit` or `write` call also
+renders as a patch card: `chat/renderer.py` builds `apply_patch_start.patch`
+from its arguments (`patch.display_patch`: an update of the old lines to the
+new ones, or an added file), live and on replay, and its `apply_patch_end`
+says whether `write` added or updated the file. `apply_patch_start.tool_name`
+names the file tool, which titles the call (`toolDisplayHelpers.getToolName`, as in parallel tabs). `exec_end.output` is the output
+that the model got (cut to its token budget), which replaces the streamed
+preview; `session_id` is set while the command runs, and `error` (with no
+output) when the call failed. A replayed call sends the start and `exec_end`
+only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A sandbox call that
+a Stop ended has no end packet; the client shows it as stopped. So does any
+nested call that its program left unfinished (state `unfinished`,
+`CodeModeRenderer._complete_child`). An `exec_end` with `completion`
+`canceled` comes from a Ctrl-C (`write_stdin` with "\x03"). Other tools show their
 arguments when they start. `chat/renderer.py:ToolRenderer.start` emits
 `ToolCallDebug` before the start packet, only with `INTEGRATION_TESTS_MODE`.
 

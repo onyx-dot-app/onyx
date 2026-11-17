@@ -304,7 +304,12 @@ A group closes on its own parent-level `SECTION_END` or `ERROR`
 (`app/app/message/messageComponents/timeline/packetHelpers.ts:isGroupEndPacket`,
 shared by `isToolComplete` and the packet processor); a new `turn_index` or a
 stop packet adds a parent-level `SECTION_END` to each open group. A stop
-packet also ends each open nested call, because no packet follows it. Parallel
+packet also ends each open nested call, because no packet follows it. A code
+mode final delta with any status but `running` ends the open nested calls of
+its group the same way: the backend sends no end packet for a call that the
+cell's end cut off, so the call renders as stopped. A command whose
+`exec_end` has `completion` `canceled` (Ctrl-C through `write_stdin`)
+renders as Canceled. Parallel
 tools share a `turn_index` and differ by `tab_index`. The child packets of a
 subagent, a coding agent (its bash calls and thinking) or a code mode program
 carry the parent's key plus `sub_turn_index`, so they join the parent group,

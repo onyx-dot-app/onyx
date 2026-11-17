@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -1206,5 +1207,126 @@ func TestRestoreCountsParentDirectories(t *testing.T) {
 		{h: tar.Header{Typeflag: tar.TypeReg, Name: "work/a/b"}, data: "y"}}
 	if _, err := restore(s, other, makeArchive(t, ms), RestoreSpec{}); !errors.Is(err, ErrArchive) {
 		t.Fatalf("file as a parent: %v", err)
+	}
+}
+
+func TestStat(t *testing.T) {
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	managed := filepath.Join(dir, "managed")
+	put(t, managed, "lib.txt", "lib")
+	outsideFile := filepath.Join(dir, "elsewhere.txt")
+	if err := os.WriteFile(outsideFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, base := newStore(t, Config{ReadLinkRoots: []string{managed}})
+	put(t, base, "a.txt", "a")
+	if err := os.Chmod(filepath.Join(base, "a.txt"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	put(t, base, "dir/b.txt", "b")
+	put(t, base, "new\nline", "n")
+	links := map[string]string{
+		"l2":      "a.txt",
+		"l1":      "l2",
+		"dirlink": "dir",
+		"broken":  "gone",
+		"loop":    "loop",
+		"absout":  outsideFile,
+		"absroot": base,
+		"library": managed,
+		"escape":  "../" + sid + "/a.txt",
+		"badname": "bad\xffname",
+	}
+	// os.Root follows at most 8 links on one path: hop0 -> ... -> hop8 ->
+	// a.txt takes 9.
+	for i := range 9 {
+		links[fmt.Sprintf("hop%d", i)] = fmt.Sprintf("hop%d", i+1)
+	}
+	links["hop9"] = "a.txt"
+	for name, target := range links {
+		if err := os.Symlink(target, filepath.Join(base, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	aStat, err := os.Stat(filepath.Join(base, "a.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	aSys := aStat.Sys().(*syscall.Stat_t)
+	aDev, aIno := uint64(aSys.Dev), uint64(aSys.Ino) //nolint:unconvert // Dev is int32 on darwin
+
+	cases := []struct {
+		name string
+		path string
+		want PathStat
+	}{
+		{"file", "a.txt", PathStat{Path: "a.txt", Exists: true, Type: TypeRegular, Mode: 0o750, TargetType: TypeRegular, TargetMode: 0o750, Device: aDev, Inode: aIno}},
+		{"missing", "missing", PathStat{Path: "missing", TargetErr: StatMissing}},
+		{"missing parent", "nodir/x", PathStat{Path: "nodir/x", TargetErr: StatMissing}},
+		{"file as a directory", "a.txt/x", PathStat{Path: "a.txt/x", TargetErr: StatOther}},
+		{"link chain", "l1", PathStat{Path: "l1", Exists: true, Type: TypeSymlink, LinkTarget: "l2", TargetType: TypeRegular, TargetMode: 0o750, Device: aDev, Inode: aIno}},
+		{"through a directory link", "dirlink/b.txt", PathStat{Path: "dirlink/b.txt", Exists: true, Type: TypeRegular, Mode: 0o644, TargetType: TypeRegular, TargetMode: 0o644}},
+		{"broken link", "broken", PathStat{Path: "broken", Exists: true, Type: TypeSymlink, LinkTarget: "gone", TargetErr: StatMissing}},
+		{"loop", "loop", PathStat{Path: "loop", Exists: true, Type: TypeSymlink, LinkTarget: "loop", TargetErr: StatLoop}},
+		{"too many links", "hop0", PathStat{Path: "hop0", Exists: true, Type: TypeSymlink, LinkTarget: "hop1", TargetErr: StatLoop}},
+		{"absolute link out", "absout", PathStat{Path: "absout", Exists: true, Type: TypeSymlink, LinkTarget: outsideFile, TargetErr: StatEscapes}},
+		{"absolute link to the session", "absroot", PathStat{Path: "absroot", Exists: true, Type: TypeSymlink, LinkTarget: base, TargetErr: StatEscapes}},
+		{"read-only root", "library/lib.txt", PathStat{Path: "library/lib.txt", TargetErr: StatEscapes}},
+		{"relative escape", "escape", PathStat{Path: "escape", Exists: true, Type: TypeSymlink, LinkTarget: "../" + sid + "/a.txt", TargetErr: StatEscapes}},
+		{"invalid UTF-8 target", "badname", PathStat{Path: "badname", Exists: true, Type: TypeSymlink, LinkTarget: "bad\uFFFDname", TargetErr: StatMissing}},
+		{"session directory", "", PathStat{Path: ".", Exists: true, Type: TypeDirectory, Mode: 0o755, TargetType: TypeDirectory, TargetMode: 0o755}},
+		{"newline name", "new\nline", PathStat{Path: "new\nline", Exists: true, Type: TypeRegular, Mode: 0o644, TargetType: TypeRegular, TargetMode: 0o644}},
+	}
+	paths := make([]string, len(cases))
+	for i, c := range cases {
+		paths[i] = c.path
+	}
+	stats, err := s.Stat(context.Background(), sid, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, c := range cases {
+		got := stats[i]
+		if c.want.Device == 0 && got.TargetErr == StatOK {
+			// Identity is checked where the case names it.
+			got.Device, got.Inode = 0, 0
+		}
+		if got.Type == TypeSymlink {
+			// A link's own mode differs by OS (0777 on Linux, 0755 on macOS).
+			got.Mode = 0
+		}
+		if got != c.want {
+			t.Errorf("%s:\n got %+v\nwant %+v", c.name, got, c.want)
+		}
+	}
+
+	fresh, err := s.Stat(context.Background(), "0a1b2c3d-no-directory-yet", []string{"new.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh[0] != (PathStat{Path: "new.txt", TargetErr: StatMissing}) {
+		t.Errorf("missing session directory: %+v", fresh[0])
+	}
+	if _, err := s.Stat(context.Background(), "", []string{"a.txt"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("no session: %v", err)
+	}
+	if _, err := s.Stat(context.Background(), sid, make([]string, MaxStatPaths+1)); !errors.Is(err, ErrLimit) {
+		t.Errorf("too many paths: %v", err)
+	}
+	long := []string{strings.Repeat("a", 4000)}
+	if _, err := s.Stat(context.Background(), sid, slices.Repeat(long, 300)); !errors.Is(err, ErrLimit) {
+		t.Errorf("too many path bytes: %v", err)
+	}
+	if _, err := s.Stat(context.Background(), sid, []string{"../x"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("dot-dot: %v", err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := s.Stat(cancelled, sid, []string{"a.txt"}); !errors.Is(err, context.Canceled) {
+		t.Errorf("cancelled: %v", err)
 	}
 }

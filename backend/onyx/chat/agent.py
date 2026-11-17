@@ -121,7 +121,10 @@ class ChatAgent(Agent, RestorableFeature):
         is_subagent: bool = False,
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
+        on_drained: Callable[[], None] | None = None,
     ) -> None:
+        """`on_drained`: see Agent; a root agent's runs end per-run tool state
+        there (subagents share the root's tools and pass none)."""
         # The fixed system block for the agent's role: a subagent, or a root
         # that can start agents.
         self.agent_instructions = (
@@ -236,6 +239,7 @@ class ChatAgent(Agent, RestorableFeature):
             after_tool_call=self._finalize_tool,
             on_finish=None if self.code_cells is None else self._finished_cells,
             on_suspend=None if self.code_cells is None else self._suspended_cells,
+            on_drained=on_drained,
         )
 
     def capture_state(self) -> ChatFeatureState:
@@ -515,6 +519,7 @@ def build_chat_agent(
     additional_context: str | None = None,
     is_subagent: bool = False,
     depth: int = 0,
+    on_drained: Callable[[], None] | None = None,
 ) -> ChatAgent:
     """Build a chat conversation independently of the current root's feature.
 
@@ -555,6 +560,7 @@ def build_chat_agent(
         include_citations=setup.new_msg_req.include_citations,
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
+        on_drained=on_drained,
     )
 
 

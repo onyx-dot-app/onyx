@@ -70,7 +70,7 @@ RUN ln -sf "$(which fdfind)" /usr/local/bin/fd
 # daily dev uses their own .venv. The apt block above includes the
 # system libraries `uv sync` needs to compile native extensions
 # (cmake, libxmlsec1-dev, pkg-config, postgresql-client).
-COPY --from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 /uv /uvx /usr/local/bin/
 
 # Install prek (https://github.com/j178/prek) — a fast Rust reimplementation of
 # pre-commit and a drop-in replacement for it. Symlinked to `pre-commit` so the

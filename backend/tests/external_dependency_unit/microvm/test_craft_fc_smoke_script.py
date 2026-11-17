@@ -59,7 +59,7 @@ class FakeProbe:
 def _result(output: str, exit_code: int = 0) -> ExecCommandResult:
     return ExecCommandResult(
         output=output,
-        exec_session_id=None,
+        session_id=None,
         exit_code=exit_code,
         completion="exited",
         wall_time_seconds=0.0,

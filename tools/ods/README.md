@@ -1047,6 +1047,12 @@ ods audit --format=sarif,text > audit.sarif
 ods audit --all-lockfiles --web --python
 ```
 
+#### Rust-built PyPI tools in images
+
+The image scanner records the `uv` binary as the crates.io crate `uv`, but uv advisories are
+filed on PyPI. `ods audit image` also matches each such crate as the PyPI package of the same
+version. Add other tools of this kind to `pypiToolsFromCrates` in `internal/audit/image.go`.
+
 #### Audit software installed outside package managers
 
 Use `ods audit image IMAGE --sbom /path/in/image.cdx.json` for a required CycloneDX inventory.

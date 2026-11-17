@@ -10163,6 +10163,8 @@
         },
         "title": "Benutzer löschen",
         "toasts": {
+          "blockedBySkills": "Dieser Benutzer kann nicht gelöscht werden",
+          "openSkills": "Skills zum Übertragen öffnen",
           "success": "Benutzer gelöscht"
         }
       },
@@ -11800,9 +11802,17 @@
         "loginBadCredentials": "Dieses Konto kann sich nicht anmelden. Es ist möglicherweise deaktiviert. Wenden Sie sich an den Administrator Ihres Arbeitsbereichs.",
         "loginRequired": "Sie müssen sich zuerst bei Ihrem Identitätsanbieter anmelden.",
         "oauthUserAlreadyExists": "Ein Konto mit dieser E-Mail-Adresse existiert bereits mit einer anderen Anmeldemethode. Melden Sie sich wie beim ersten Mal an, oder bitten Sie Ihren Administrator, diesen Anbieter zu verknüpfen.",
+        "playgroundActiveTenant": "Ein Team aus Ihrem Unternehmen testet Onyx bereits. Ihrem Team beitreten oder ein neues Team starten?",
+        "playgroundAskAdmin": "Bitten Sie Ihren Admin, Sie einzuladen.",
+        "playgroundCheckFailed": "Wir konnten Ihre Registrierung nicht prüfen. Versuchen Sie es später erneut.",
+        "playgroundEmailUsed": "Sie haben Ihren Playground-Zugang bereits genutzt.",
+        "playgroundLimitReached": "Ihr Unternehmen hat seinen Playground-Zugang bereits genutzt.",
         "serverError": "Bei Ihrem Identitätsanbieter ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
         "staleSignIn": "Dieser Anmeldelink ist abgelaufen oder nicht mehr gültig. Bitte melden Sie sich erneut an.",
         "temporarilyUnavailable": "Ihr Identitätsanbieter ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut."
+      },
+      "contactSalesButton": {
+        "label": "Vertrieb kontaktieren"
       },
       "credentialsIssue": {
         "description": "Falsche oder abgelaufene Anmeldedaten"
@@ -11810,6 +11820,12 @@
       "heading": {
         "description": "Bei Ihrem Anmeldeversuch ist ein Problem aufgetreten.",
         "title": "Authentifizierungsfehler"
+      },
+      "joinTeamButton": {
+        "label": "Ihrem Team beitreten"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "Mögliche Ursachen:"
@@ -11819,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "Wenn das Problem weiterhin besteht, wenden Sie sich an Ihren Systemadministrator."
+      },
+      "startNewTeamButton": {
+        "label": "Neues Team starten"
       },
       "systemDisruptionIssue": {
         "description": "Vorübergehende Störung des Authentifizierungssystems"
@@ -13117,6 +13136,12 @@
           },
           "waitingForApproval": {
             "label": "Wartet auf Ihre Freigabe"
+          },
+          "runningCommand": {
+            "label": "Befehl wird ausgeführt"
+          },
+          "editingFiles": {
+            "label": "Dateien werden bearbeitet"
           }
         },
         "internalSearch": {
@@ -13246,11 +13271,56 @@
           "researchAgent": "Recherche-Agent",
           "thinking": "Nachdenken",
           "tool": "Werkzeug",
-          "webSearch": "Websuche"
+          "webSearch": "Websuche",
+          "terminal": "Terminal",
+          "applyPatch": "Patch anwenden",
+          "editFile": "Datei bearbeiten",
+          "writeFile": "Datei schreiben"
         },
         "webSearch": {
           "searching": {
             "status": "Durchsucht das Web"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {Befehl wird ausgeführt} started {Befehl gestartet} failed {Befehl fehlgeschlagen} canceled {Abgebrochen} done {Befehl ausgeführt} other {Befehl ausgeführt}}",
+            "workdir": {
+              "label": "In {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {Eingabe wird an Sitzung {sessionId} gesendet} failed {Eingabe an Sitzung {sessionId} konnte nicht gesendet werden} canceled {Abgebrochen} done {Eingabe an Sitzung {sessionId} gesendet} other {Eingabe an Sitzung {sessionId} gesendet}}} check {{phase, select, running {Sitzung {sessionId} wird geprüft} failed {Sitzung {sessionId} konnte nicht geprüft werden} canceled {Abgebrochen} done {Sitzung {sessionId} geprüft} other {Sitzung {sessionId} geprüft}}} other {Sitzung {sessionId}}}"
+          },
+          "output": {
+            "title": "Ausgabe"
+          },
+          "exitCode": {
+            "label": "Exit-Code {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {Durch ein Signal beendet} canceled {Abgebrochen} deadline_exceeded {Am Zeitlimit beendet} other {Beendet}}"
+          },
+          "stillRunning": {
+            "label": "Läuft noch (Sitzung {sessionId})"
+          },
+          "truncated": {
+            "label": "Ausgabe gekürzt"
+          },
+          "noOutput": {
+            "text": "Keine Ausgabe"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {# Datei bearbeitet} other {# Dateien bearbeitet}}"
+            },
+            "failed": {
+              "status": "Bearbeitung fehlgeschlagen"
+            },
+            "title": "Patch"
+          },
+          "stopped": {
+            "status": "Gestoppt"
           }
         }
       },

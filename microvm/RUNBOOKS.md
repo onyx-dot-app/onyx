@@ -278,7 +278,8 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --since=1h \
 
 **Meaning.** More than 10% (and at least 10) of egress relay connections on one node failed in
 10 minutes, for 10 minutes. `upstream_failed`: sandbox-proxy did not answer an accepted
-connection. `over_cap`: a VM opened more than `--relay-max-conns` connections.
+connection. `over_cap`: a VM opened more than `--relay-max-conns` connections, or all VMs on the node
+together opened more than `--relay-max-conns-node`. The agent log says which cap.
 
 **Check.**
 
@@ -435,8 +436,9 @@ sandbox ID, the tenant ID and the time.
 `ods audit craft-fc` matches the guest kernel and Firecracker pins in
 `deployment/craft-fc/Dockerfile.artifacts` with the Amazon Linux 2023 advisories and the
 Firecracker GitHub advisories. CVE Alerts runs it every day with `--fail-on=high` and opens a
-`cve-alert` issue for each finding. Each release runs it with `--fail-on=critical` before it
-publishes the host agent.
+`cve-alert` issue for each finding. Each release runs it with `--fail-on=high` before it
+publishes the host agent, because Amazon rates kernel advisories "important" (high). If a
+bump must wait for the KVM tests, suppress the advisory with an expiry (step 2) to release.
 
 1. Read the advisory. A guest escape (Firecracker, the jailer, or KVM in the host kernel) is
    urgent: ship a patch release. A guest kernel issue goes in the next monthly bump, because

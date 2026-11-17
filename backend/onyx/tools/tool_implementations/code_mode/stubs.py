@@ -1,4 +1,5 @@
-"""Python stubs that expose Onyx tools to code mode programs as async functions."""
+"""Python stubs that expose Onyx tools to code mode programs as async functions
+of the `tools` namespace."""
 
 import builtins
 import json
@@ -29,6 +30,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
 from onyx.tools.tool_implementations.code_mode.sandbox import (
     PRELUDE_STUBS,
     SANDBOX_NAMES,
+    TOOLS_NAMESPACE,
     YIELD_CONTROL_STUB,
     HostFunction,
 )
@@ -44,6 +46,7 @@ from onyx.tools.tool_implementations.code_mode.tool_search import (
     TOOL_SEARCH_STUBS,
     ToolIndex,
 )
+from onyx.utils.pydantic_util import as_base
 
 # Bounds on each rendered function, so one tool with a large schema cannot fill
 # the tool description that the model reads on every step.
@@ -66,26 +69,34 @@ _STUB_HEADER = (
     f"{YIELD_CONTROL_STUB}"
 )
 
+# The stub of the `tools` module: a class, so the type checker checks
+# `tools.f(...)` against the method `f`, and the model reads the functions as
+# members of `tools`.
+_TOOLS_CLASS = (
+    f"class {TOOLS_NAMESPACE}:\n"
+    f'    """The tool functions. Call each one as `await {TOOLS_NAMESPACE}.<name>(...)`."""'
+)
+
 _DECLARED_TYPE = re.compile(r"^class (\w+)", re.MULTILINE)
 _NAME = re.compile(r"\w+")
 # Argument and field names can be soft keywords such as `type`; only hard
 # keywords are invalid there.
 _KEYWORDS: frozenset[str] = frozenset(keyword.kwlist)
-# Names a tool function must not shadow: Python keywords, builtins, the names
-# the sandbox, the store and the tool search give programs, and the typing names
-# of the stub header. The result types that the tools declare are added per stub
-# module.
+# Names a tool function must not take: Python keywords, and the builtins and
+# typing names that annotations use; in the `class tools` body a method of such
+# a name would shadow the name in the annotations after it. The result types
+# that the tools declare are added per stub module.
 _RESERVED_FUNCTION_NAMES: frozenset[str] = frozenset(
-    {
-        *keyword.kwlist,
-        *keyword.softkwlist,
-        *dir(builtins),
-        *_TYPING_NAMES,
-        *SANDBOX_NAMES,
-        *STORE_FUNCTIONS,
-        *TOOL_SEARCH_NAMES,
-    }
+    {*keyword.kwlist, *keyword.softkwlist, *dir(builtins), *_TYPING_NAMES}
 )
+# Names a declared result type must not take: it is a global of the stub
+# module, as are the names that the sandbox, the store and the tool search
+# give programs.
+_RESERVED_TYPE_NAMES: frozenset[str] = _RESERVED_FUNCTION_NAMES | {
+    *SANDBOX_NAMES,
+    *STORE_FUNCTIONS,
+    *TOOL_SEARCH_NAMES,
+}
 
 
 class ToolFunction(BaseModel):
@@ -104,6 +115,7 @@ class ToolFunction(BaseModel):
     required_arguments: frozenset[str]
     nullable_arguments: frozenset[str]
     description: str
+    # The function as a method of the `tools` class.
     stub: str
     # Declarations of the types that the stub names.
     declarations: tuple[str, ...]
@@ -111,6 +123,11 @@ class ToolFunction(BaseModel):
     @property
     def deferred(self) -> bool:
         return self.tool.code_mode_exposure is CodeModeExposure.DEFERRED
+
+    @property
+    def called_name(self) -> str:
+        """The name that programs call the function by."""
+        return f"{TOOLS_NAMESPACE}.{self.function_name}"
 
 
 class ToolStubs(BaseModel):
@@ -488,8 +505,8 @@ def _render_function(
     usage: str | None = None,
     extra: str | None = None,
 ) -> str:
-    """`extra` annotates the keyword arguments beyond `parameters`; None admits
-    none."""
+    """The function as a method of the `tools` class. `extra` annotates the
+    keyword arguments beyond `parameters`; None admits none."""
     rendered = [
         f"{p.python_name}: {_union([p.annotation, 'None'])} = None"
         if p.has_default
@@ -519,12 +536,12 @@ def _render_function(
         doc_lines.extend(["", "Returns:", f"    {returns}"])
     # Escaped once here, so no part can end the docstring.
     body = "\n".join(
-        f"    {_docstring_text(line)}" if line else "" for line in doc_lines
+        f"        {_docstring_text(line)}" if line else "" for line in doc_lines
     )
     return (
-        f"async def {function_name}({signature}) -> {result_annotation}:\n"
-        f'    """\n{body}\n    """\n'
-        "    ..."
+        f"    async def {function_name}({signature}) -> {result_annotation}:\n"
+        f'        """\n{body}\n        """\n'
+        "        ..."
     )
 
 
@@ -697,7 +714,7 @@ def tool_function(
 
 def _searchable(function: ToolFunction) -> SearchableFunction:
     namespace = function.tool.code_mode_function_name.namespace or ""
-    stub = "\n\n\n".join([*function.declarations, function.stub])
+    stub = "\n\n\n".join([*function.declarations, f"{_TOOLS_CLASS}\n\n{function.stub}"])
     return SearchableFunction(
         name=function.function_name,
         description=function.description,
@@ -713,8 +730,8 @@ def _module(header: str, functions: Iterable[ToolFunction]) -> str:
     declarations = sorted(
         {declaration for function in listed for declaration in function.declarations}
     )
-    blocks = [header, *declarations, *(function.stub for function in listed)]
-    return "\n\n\n".join(blocks) + "\n"
+    tools_class = "\n\n".join([_TOOLS_CLASS, *(function.stub for function in listed)])
+    return "\n\n\n".join([header, *declarations, tools_class]) + "\n"
 
 
 def build_tool_stubs(tools: Sequence[Tool]) -> ToolStubs:
@@ -737,7 +754,7 @@ def build_tool_stubs(tools: Sequence[Tool]) -> ToolStubs:
         lambda tool: tool.code_mode_function_name.qualified,
         lambda name: function_name(name, declared_types),
     )
-    taken = {*declared_types, *named, *_RESERVED_FUNCTION_NAMES}
+    taken = {*declared_types, *named, *_RESERVED_TYPE_NAMES}
     functions: dict[str, ToolFunction] = {}
     for name, tool in named.items():
         schema = tool.code_mode_result.output_schema
@@ -782,7 +799,7 @@ def tool_arguments(function: ToolFunction, kwargs: Mapping[str, object]) -> Json
     # One copy for all arguments: they can share one large value.
     return json_value(
         arguments,
-        f"The argument dict of {function.function_name}()",
+        f"The argument dict of {TOOLS_NAMESPACE}.{function.function_name}()",
         MAX_TOOL_ARGUMENT_BYTES,
     )
 
@@ -792,6 +809,13 @@ def program_value(function: ToolFunction, result: ToolResult) -> object:
     kind = function.result.kind
     if kind is CodeModeResultKind.TEXT and not result.is_error:
         return result.content
+    if kind is CodeModeResultKind.DETAILS and not result.is_error:
+        model = function.result.model
+        if model is None or not isinstance(result.details, model):
+            raise RuntimeError(
+                result.content or f"{function.function_name} returned no details"
+            )
+        return as_base(result.details, model).model_dump(mode="json")
     try:
         value: object = json.loads(result.content)
         parsed = True

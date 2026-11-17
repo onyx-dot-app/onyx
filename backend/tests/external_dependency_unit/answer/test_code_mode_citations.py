@@ -111,16 +111,16 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         [
             code_step(
                 "search",
-                "r = await internal_search(queries=['Q2 revenue'])\n"
+                "r = await tools.internal_search(queries=['Q2 revenue'])\n"
                 "for doc in r['results']:\n"
                 "    print(doc['document'], doc['title'])\n"
                 "store('k', 1)\n",
             ),
             code_step(
                 "python",
-                "out = await run_python(code=\"import os\\nprint(os.listdir('.'))\")\n"
+                "out = await tools.run_python(code=\"import os\\nprint(os.listdir('.'))\")\n"
                 "print(out)\n"
-                "await internal_search(queries=['Q2 costs'])\n",
+                "await tools.internal_search(queries=['Q2 costs'])\n",
             ),
             Delta(content="Revenue grew [1]."),
         ]
@@ -162,7 +162,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         if isinstance(message, SystemMessage)
     )
     assert CODE_MODE_GUIDANCE in system
-    assert INTERNAL_SEARCH_GUIDANCE in system
+    assert INTERNAL_SEARCH_GUIDANCE.format(name="tools.internal_search") in system
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in system
     # The real search tool's stub asks for one call per information need.
     [description] = [
@@ -219,7 +219,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         [
             code_step(
                 "web",
-                "r = await web_search(queries=['beta topic'])\n"
+                "r = await tools.web_search(queries=['beta topic'])\n"
                 "print(r['results'][0]['document'])\n",
             ),
             cite_both,

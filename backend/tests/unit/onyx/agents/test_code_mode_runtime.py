@@ -62,7 +62,7 @@ WRITE = ToolCall(
 READ = ToolCall(
     id="read",
     name=CodeModeTool.NAME,
-    arguments={"code": "await echo(value='x')\nprint(load('n') + 1)"},
+    arguments={"code": "await tools.echo(value='x')\nprint(load('n') + 1)"},
 )
 
 
@@ -139,6 +139,47 @@ def test_a_program_reads_an_earlier_program_of_the_same_step(restored: bool) -> 
     assert run.wait_for_idle(5)
     assert "Execution completed" in output
     assert "Output:\n2" in output
+
+
+@pytest.mark.parametrize(
+    ("called", "expected"),
+    [
+        (
+            called,
+            f"`{called}` is available only inside `execute_code` programs. Call "
+            "it there: `await tools.echo(value=...)`.",
+        )
+        for called in ("echo", "tools.echo", "tools_echo")
+    ],
+)
+def test_a_direct_call_of_a_program_function_says_where_it_runs(
+    called: str, expected: str
+) -> None:
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if any(isinstance(message, ToolResultMessage) for message in request.messages):
+            return _answer_with_last_result(request, _signal)
+        return AssistantMessage(
+            content=[ToolCall(id="direct", name=called, arguments={"value": "x"})]
+        )
+
+    echo_calls: list[str] = []
+
+    def echo(invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+        echo_calls.append(invocation.call_id)
+        return ToolResult(content="echoed")
+
+    tool = CodeModeTool([FakeTool("echo", echo)], cells=CodeCells(), limits=LIMITS)
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[tool.bind(ToolContext)],
+    )
+    run = agent.start(max_steps=2, messages=[UserMessage(content="Echo")])
+    assert run.result(timeout=10).output.text == expected
+    assert run.wait_for_idle(5)
+    assert echo_calls == []
 
 
 def test_a_program_saved_while_running_is_not_run_again_on_restore() -> None:
@@ -340,9 +381,9 @@ def test_before_tool_call_denies_direct_and_program_calls_alike() -> None:
         id="program",
         name=CodeModeTool.NAME,
         arguments={
-            "code": "print(await echo(value='x'))\n"
+            "code": "print(await tools.echo(value='x'))\n"
             "try:\n"
-            "    await secret(value='y')\n"
+            "    await tools.secret(value='y')\n"
             "except RuntimeError as error:\n"
             "    print('denied:', error)\n"
         },
@@ -397,7 +438,7 @@ def test_a_raising_before_tool_call_fails_direct_and_program_calls_alike(
             name=CodeModeTool.NAME,
             arguments={
                 "code": "try:\n"
-                "    await secret(value='y')\n"
+                "    await tools.secret(value='y')\n"
                 "except BaseException as error:\n"
                 "    print('caught:', error)\n"
                 "store('k', 'v')\n"
@@ -449,7 +490,7 @@ def test_a_raising_before_tool_call_fails_the_run_when_no_one_watches_the_cell()
     call = ToolCall(
         id="call",
         name=CodeModeTool.NAME,
-        arguments={"code": "yield_control()\nawait secret(value='y')\n"},
+        arguments={"code": "yield_control()\nawait tools.secret(value='y')\n"},
     )
 
     def respond(
