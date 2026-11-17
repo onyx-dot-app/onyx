@@ -520,16 +520,18 @@ def rotate_encryption_key(
         require_pg_dump()
 
     report = RotationReport(mode=mode)
-    # A tenant mid-move has a schema on two shards but one cache; sweep it once.
-    swept_caches: set[str] = set()
     for shard_name, schema_names in get_tenant_ids_by_shard().items():
         for schema_name in _template_first(schema_names):
             if only_schema is not None and schema_name != only_schema:
                 continue
-            tenant_cache = None
-            if _is_workspace(schema_name) and schema_name not in swept_caches:
-                swept_caches.add(schema_name)
-                tenant_cache = get_cache_backend(tenant_id=schema_name)
+            # A tenant mid-move has a schema on two shards but one cache. Each
+            # copy sweeps it with its own sandbox ids, since a sandbox can exist
+            # on one copy only; a second pass finds an entry already current.
+            tenant_cache = (
+                get_cache_backend(tenant_id=schema_name)
+                if _is_workspace(schema_name)
+                else None
+            )
             schema_report = _run_on_schema(
                 shard_name, schema_name, keyring, columns, mode, tenant_cache
             )

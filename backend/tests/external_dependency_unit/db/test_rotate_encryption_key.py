@@ -974,6 +974,38 @@ class TestPhysicalCoverage:
                 raw = raw_credential(db_session, credential_id)
             assert raw is not None and not is_current_ciphertext(NEW, raw)
 
+    def test_a_sandbox_on_only_one_copy_of_a_moved_tenant_is_converted(
+        self, two_shards: dict[str, Any]
+    ) -> None:
+        """The first copy visited lacks the sandbox; the second copy has it."""
+        tenant = two_shards["tenant"]
+        cache = get_cache_backend(tenant_id=tenant)
+        sandbox_id = uuid.uuid4()
+        with session_on(tenant, SECOND_SHARD) as db_session:
+            db_session.execute(
+                SANDBOX_TABLE.insert().values(
+                    id=sandbox_id, user_id=uuid.uuid4(), status=SandboxStatus.RUNNING
+                )
+            )
+            db_session.commit()
+        with patch(f"{EE_MODULE}.get_keyring", return_value=OLD):
+            set_sandbox_daemon_key(
+                cache, sandbox_id, attempt=1, key=SecretStr("daemon-secret")
+            )
+        try:
+            with (
+                patch(f"{ROTATION_MODULE}.get_keyring", return_value=NEW),
+                patch(f"{ROTATION_MODULE}.get_cache_backend", return_value=cache),
+            ):
+                report = rotate_encryption_key(RotationMode.EXECUTE)
+
+            assert report.incomplete_reasons() == []
+            with patch(f"{EE_MODULE}.get_keyring", return_value=RETIRED):
+                key = get_sandbox_daemon_key(cache, sandbox_id, attempt=1)
+            assert key is not None and key.get_secret_value() == "daemon-secret"
+        finally:
+            cache.delete_prefix("sandbox_fc:")
+
     @pytest.mark.usefixtures("two_shards")
     def test_a_missing_snapshot_fails_verification(self) -> None:
         with patch(f"{ROTATION_MODULE}.get_keyring", return_value=NEW):
