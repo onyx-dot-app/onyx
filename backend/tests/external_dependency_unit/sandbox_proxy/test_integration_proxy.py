@@ -597,3 +597,7 @@ def test_a_scheduled_run_matches_a_task_plugin_that_the_owner_turned_off(
     run_matched = gate._evaluate(flow, ctx.without_session())
     assert isinstance(run_matched, AllMatchedActions)
     assert run_matched.target.integration_id == mcp.id
+    # The resolver injects for the matched integration of the run, and lets
+    # the run reach the server host.
+    assert _headers(request, user, run_matched) == {}
+    assert IntegrationResolver().allows_destination(_sandbox(user), "https", host, 443)
