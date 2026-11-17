@@ -1,7 +1,5 @@
 import secrets
-from datetime import datetime, timezone
 
-import requests
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 from sqlalchemy.orm import Session
@@ -19,9 +17,9 @@ from onyx.db.external_app import (
 from onyx.db.models import ExternalApp, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.oauth_exchange import exchange_preset_code
 from onyx.external_apps.providers.base import OAuthExternalAppProvider, OAuthFlowSpec
 from onyx.external_apps.providers.registry import get_provider_or_raise
-from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.oauth.authorization_attempt import (
     AuthorizationAttemptStore,
     canonical_json_fingerprint,
@@ -213,87 +211,18 @@ def handle_external_app_oauth_callback(
             "External app OAuth configuration changed while authorization was pending.",
         )
 
-    token_request = provider.build_token_exchange_request(
-        request.code,
-        client_id,
-        client_secret,
-        _FRONTEND_CALLBACK_URL,
+    grant = exchange_preset_code(
+        provider,
+        oauth,
+        app_name=app.name,
+        code=request.code,
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=_FRONTEND_CALLBACK_URL,
         code_verifier=payload.code_verifier,
     )
-    try:
-        response = requests.post(
-            oauth.token_url,
-            headers=token_request.headers,
-            data=None if token_request.json_encoded else token_request.body,
-            json=token_request.body if token_request.json_encoded else None,
-            timeout=30,
-            allow_redirects=False,
-        )
-    except requests.RequestException as exc:
-        logger.warning(
-            "%s OAuth token exchange network error for app %d: %s",
-            app.name,
-            app.id,
-            exc,
-        )
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"Could not reach {app.name} to complete OAuth.",
-        )
-
-    if 300 <= response.status_code < 400:
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"{app.name} redirected its OAuth token request.",
-        )
-
-    try:
-        response_data = response.json()
-    except ValueError:
-        logger.warning(
-            "%s OAuth token response was not JSON (status=%d)",
-            app.name,
-            response.status_code,
-        )
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"{app.name} returned a non-JSON response during OAuth.",
-        )
-
-    if not isinstance(response_data, dict):
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"{app.name} returned an invalid token response during OAuth.",
-        )
-
-    error = provider.classify_token_response(response, response_data)
-    if error:
-        logger.warning(
-            "%s OAuth token exchange failed for user %s, app %d: %s",
-            app.name,
-            user.id,
-            app.id,
-            error,
-        )
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"{app.name} OAuth failed: {error}",
-        )
-
-    # Stamp an absolute `expires_at` now so the lazy-refresh path can later
-    # decide staleness without "when was this written" bookkeeping.
-    credentials = provider.extract_credentials(response_data)
-    access_token = credentials.get("access_token")
-    if not isinstance(access_token, str) or not access_token:
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"{app.name} returned an invalid access token during OAuth.",
-        )
-    stored_credentials = stamp_expires_at(credentials, datetime.now(timezone.utc))
-
-    # The grant is authoritative and captured only here (a refresh can't change
-    # it); None when the provider gives no signal.
-    granted_scopes = provider.extract_granted_scopes(response_data)
+    stored_credentials = grant.credentials
+    granted_scopes = grant.granted_scopes
 
     upsert_external_app_user_credential(
         db_session,

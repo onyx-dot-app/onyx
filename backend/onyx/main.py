@@ -105,6 +105,9 @@ from onyx.server.features.input_prompt.api import (
     admin_router as admin_input_prompt_router,
 )
 from onyx.server.features.input_prompt.api import basic_router as input_prompt_router
+from onyx.server.features.integrations.connections_api import (
+    router as integration_connections_router,
+)
 from onyx.server.features.mcp.api import admin_router as mcp_admin_router
 from onyx.server.features.mcp.api import router as mcp_router
 from onyx.server.features.microvm.api import router as microvm_router
@@ -669,6 +672,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, federated_router)
     include_router_with_global_prefix_prepended(application, mcp_router)
     include_router_with_global_prefix_prepended(application, mcp_admin_router)
+    include_router_with_global_prefix_prepended(
+        application, integration_connections_router
+    )
     include_router_with_global_prefix_prepended(application, action_policies_router)
     include_router_with_global_prefix_prepended(application, skill_router)
 
