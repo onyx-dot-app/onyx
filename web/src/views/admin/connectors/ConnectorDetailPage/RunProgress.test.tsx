@@ -105,6 +105,19 @@ describe("RunProgress", () => {
     expect(screen.getByText("25%")).toBeVisible();
   });
 
+  it("stacks the bars by the width of its own card, not the page", () => {
+    render(<RunProgress progress={progress()} />);
+
+    const bars = screen
+      .getByRole("progressbar", { name: "Listed" })
+      .closest('[class~="@max-[38.75rem]:flex-col"]');
+    expect(bars).not.toBeNull();
+    // The nearest query root is the progress section, inside the run card.
+    expect(bars?.parentElement?.closest('[class~="@container"]')).toBe(
+      screen.getByTestId("run-progress")
+    );
+  });
+
   it("shows the ETA and the skipped documents when there are any", () => {
     render(
       <RunProgress progress={progress({ eta_seconds: 252, docs_skipped: 3 })} />
