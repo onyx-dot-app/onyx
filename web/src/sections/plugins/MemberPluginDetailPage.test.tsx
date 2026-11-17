@@ -190,6 +190,42 @@ test("the API key form saves the credential fields", async () => {
   );
 });
 
+test("Disconnect is a new button after the API key form connects", async () => {
+  const integration = makeMemberIntegration({
+    id: 2,
+    name: "Reports API",
+    auth_method: "api_key",
+    credential_fields: [{ key: "token", label: "API Token", secret: true }],
+  });
+  let state: MemberIntegration["status"]["state"] = "not_connected";
+  open([], {
+    "/api/integrations": () => [{ ...integration, status: status(state) }],
+    "PUT /api/integrations/2/connection": () => {
+      state = "connected";
+      return status(state);
+    },
+    "/api/action-policies/integration/2": {
+      users_can_save_always_allow: false,
+      actions: [],
+    },
+  });
+  const u = user();
+  const connect = await screen.findByRole("button", {
+    name: "Connect Reports API",
+  });
+  await u.click(connect);
+  const dialog = await screen.findByRole("dialog");
+  await u.type(within(dialog).getByLabelText("API Token"), "secret-1");
+  await u.click(
+    within(dialog).getByRole("button", { name: copy.credentials.submit.label })
+  );
+  // A reused button animates its label and ignores clicks until it shows
+  // the new label.
+  expect(
+    await screen.findByRole("button", { name: "Disconnect Reports API" })
+  ).not.toBe(connect);
+});
+
 test("OAuth starts the user's sign-in in a new tab", async () => {
   const popup = {
     location: { href: "" },
