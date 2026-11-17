@@ -1143,7 +1143,6 @@ def test_child_notification_remaps_citations() -> None:
     ]
     completions = [
         AgentCompletion(
-            agent_id=agent_id,
             agent_path="/root/research",
             run_id=run_id,
             status=RunStatus.COMPLETE,
@@ -1152,9 +1151,9 @@ def test_child_notification_remaps_citations() -> None:
                 metadata=ChatMessageMetadata(sources={1: document}),
             ),
         )
-        for agent_id, run_id, document in (
-            ("child", "123", child_document),
-            ("other-child", "456", other_child_document),
+        for run_id, document in (
+            ("123", child_document),
+            ("456", other_child_document),
         )
     ]
 
