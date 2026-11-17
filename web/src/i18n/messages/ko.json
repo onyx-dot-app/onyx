@@ -553,7 +553,7 @@
           "tooltip": "이미지 생성 구성"
         },
         "openapi": {
-          "tooltip": "OpenAPI 플러그인 관리"
+          "tooltip": "연동 관리"
         },
         "webSearch": {
           "tooltip": "웹 검색 구성"

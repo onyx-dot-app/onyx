@@ -553,7 +553,7 @@
           "tooltip": "配置图像生成"
         },
         "openapi": {
-          "tooltip": "管理 OpenAPI 插件"
+          "tooltip": "管理集成"
         },
         "webSearch": {
           "tooltip": "配置网络搜索"

@@ -553,7 +553,7 @@
           "tooltip": "تهيئة توليد الصور"
         },
         "openapi": {
-          "tooltip": "إدارة إضافات OpenAPI"
+          "tooltip": "إدارة التكاملات"
         },
         "webSearch": {
           "tooltip": "تهيئة البحث في الويب"

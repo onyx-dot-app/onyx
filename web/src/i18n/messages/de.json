@@ -553,7 +553,7 @@
           "tooltip": "Bilderzeugung konfigurieren"
         },
         "openapi": {
-          "tooltip": "OpenAPI-Plugins verwalten"
+          "tooltip": "Integrationen verwalten"
         },
         "webSearch": {
           "tooltip": "Websuche konfigurieren"
