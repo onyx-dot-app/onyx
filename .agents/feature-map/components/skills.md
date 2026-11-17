@@ -819,7 +819,7 @@ the app from the same rule
   the new files of a Skill. The previous tree stays readable until the next
   push to that mount or for 60 seconds.
 - **App lifecycle keeps skill settings.** Disconnecting an app deletes only
-  the user's credentials (`db/external_app.py:disconnect_external_app_for_user`).
+  the user's connection (`backend/onyx/integrations/connections.py:disconnect`).
   Deleting an app keeps the skills of its plugins with their settings and
   choices (`db/external_app.py:delete_external_app`). It deletes the built-in
   skill row of the app's preset.
@@ -860,8 +860,9 @@ the app from the same rule
   live runtime.
 - [[craft-external-apps]]: the app rows behind built-in app skills, the
   connectable-apps list and action policy views. GitHub
-  import and preview authenticate with the user's GitHub app credential
-  (`server/features/skill/api.py:_github_authorization_header`).
+  import and preview authenticate with the user's connection of the GitHub
+  integration (`server/features/skill/api.py:_github_authorization_header`,
+  through `resolve_call_credentials`).
 - [[authorization]]: `MANAGE_PLUGINS` and the scoped-manager group check
   (`assert_within_scope`).
 - [[file-store-and-user-files]]: bundle blobs.

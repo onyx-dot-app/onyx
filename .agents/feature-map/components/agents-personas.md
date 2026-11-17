@@ -145,7 +145,8 @@ read. `seed_pinned_personas_from_featured` runs once, at account creation.
    caller without global `MANAGE_AGENTS`, `upsert_persona` checks that each
    added document set and folder is readable by the caller, and that each
    added file is the caller's own. For every signed-in caller, each added
-   MCP-backed tool needs `backend/onyx/db/mcp.py:user_can_access_mcp_server`. Attached items stay when
+   plugin link (also one that an old MCP or custom tool id maps to) needs a
+   plugin the caller can see (`backend/onyx/db/persona.py:_write_persona_plugins`). Attached items stay when
    the editor loses access. Single documents are filtered for every caller:
    unreadable ids are dropped, and the call fails only when none remain.
 6. `sharing-not-document-access` **Sharing an agent does not share its

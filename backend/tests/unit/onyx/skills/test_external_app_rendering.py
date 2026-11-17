@@ -33,7 +33,7 @@ def test_app_values_are_substituted() -> None:
     rendered = render_external_app_skill(
         _TEMPLATE,
         ExternalAppType.ZENDESK,
-        {},
+        set(),
         {"base_url": "https://acme.zendesk.com"},
     )
     assert "base: https://acme.zendesk.com" in rendered
@@ -41,14 +41,14 @@ def test_app_values_are_substituted() -> None:
 
 def test_unknown_key_renders_as_unconfigured_rather_than_failing() -> None:
     """A half-configured app still pushes, saying it needs setting up."""
-    rendered = render_external_app_skill(_TEMPLATE, ExternalAppType.ZENDESK, {}, {})
+    rendered = render_external_app_skill(_TEMPLATE, ExternalAppType.ZENDESK, set(), {})
     assert "{{" not in rendered
     assert "not configured" in rendered
 
 
 def test_blank_value_is_treated_as_unconfigured() -> None:
     rendered = render_external_app_skill(
-        _TEMPLATE, ExternalAppType.ZENDESK, {}, {"base_url": ""}
+        _TEMPLATE, ExternalAppType.ZENDESK, set(), {"base_url": ""}
     )
     assert "not configured" in rendered
 
@@ -59,7 +59,7 @@ def test_zendesk_skill_renders_with_the_configured_account() -> None:
     rendered = render_external_app_skill(
         template,
         ExternalAppType.ZENDESK,
-        {},
+        set(),
         {"base_url": "https://acme.zendesk.com"},
     )
     assert "https://acme.zendesk.com" in rendered
@@ -73,15 +73,15 @@ def test_file_renderer_substitutes_the_configured_account(
     class _App:
         id = 1
         app_type = ExternalAppType.ZENDESK
-        organization_credentials = SimpleNamespace(
-            get_value=lambda **_: {"subdomain": "acme"}
-        )
+        integration_id = 1
 
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_id", lambda *_: _App()
     )
+    monkeypatch.setattr("onyx.skills.rendering.admin_blocked_actions", lambda *_: set())
     monkeypatch.setattr(
-        "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
+        "onyx.skills.rendering.preset_organization_values",
+        lambda *_: {"subdomain": "acme"},
     )
 
     rendered = render_external_app_files(
@@ -103,15 +103,15 @@ def test_an_unresolvable_app_config_still_renders(
     class _BrokenApp:
         id = 1
         app_type = ExternalAppType.ZENDESK
-        organization_credentials = SimpleNamespace(
-            get_value=lambda **_: {"subdomain": "not a subdomain"}
-        )
+        integration_id = 1
 
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_id", lambda *_: _BrokenApp()
     )
+    monkeypatch.setattr("onyx.skills.rendering.admin_blocked_actions", lambda *_: set())
     monkeypatch.setattr(
-        "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
+        "onyx.skills.rendering.preset_organization_values",
+        lambda *_: {"subdomain": "not a subdomain"},
     )
 
     rendered = render_external_app_files(
@@ -133,15 +133,15 @@ def test_a_helper_template_is_rendered_beside_the_skill(
     class _App:
         id = 1
         app_type = ExternalAppType.ZENDESK
-        organization_credentials = SimpleNamespace(
-            get_value=lambda **_: {"subdomain": "acme"}
-        )
+        integration_id = 1
 
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_id", lambda *_: _App()
     )
+    monkeypatch.setattr("onyx.skills.rendering.admin_blocked_actions", lambda *_: set())
     monkeypatch.setattr(
-        "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
+        "onyx.skills.rendering.preset_organization_values",
+        lambda *_: {"subdomain": "acme"},
     )
 
     rendered = render_external_app_files(
@@ -210,17 +210,17 @@ def test_rendered_files_withhold_secret_credential_fields(
     app = SimpleNamespace(
         id=1,
         app_type=ExternalAppType.ZENDESK,
-        organization_credentials=SimpleNamespace(
-            get_value=lambda **_: {
-                "subdomain": "acme",
-                "client_id": "cid",
-                "client_secret": "test-client-secret-do-not-render",
-            }
-        ),
+        integration_id=1,
     )
     monkeypatch.setattr("onyx.skills.rendering.get_external_app_by_id", lambda *_: app)
+    monkeypatch.setattr("onyx.skills.rendering.admin_blocked_actions", lambda *_: set())
     monkeypatch.setattr(
-        "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
+        "onyx.skills.rendering.preset_organization_values",
+        lambda *_: {
+            "subdomain": "acme",
+            "client_id": "cid",
+            "client_secret": "test-client-secret-do-not-render",
+        },
     )
     monkeypatch.setattr(ZendeskProvider, "skill_template_values", capture_values)
     rendered = render_external_app_files(

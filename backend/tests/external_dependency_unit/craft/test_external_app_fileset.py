@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ActionPolicy, ExternalAppType
+from onyx.db.enums import ExternalAppType, IntegrationActionPolicyValue
 from onyx.db.models import Skill, User
 from onyx.external_apps.providers.slack import SlackAction
 from onyx.external_apps.providers.zendesk import ZendeskAction
@@ -28,13 +28,11 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_app_plugin_for_user,
     make_external_app,
     make_user,
-    make_user_credential,
     reset_built_in_skill_row,
 )
 
 # Slack ships on-disk skill content; require a single user-supplied key.
 _AUTH_TEMPLATE = {"Authorization": "Bearer {token}"}
-_FULL_CREDS = {"token": "xoxp-test"}
 _SLACK_ID = SLACK.built_in_skill_id  # Also the skill name and on-disk directory.
 
 
@@ -61,7 +59,6 @@ def test_authenticated_provider_delivers_content_under_stable_dir(
         app_type=ExternalAppType.SLACK,
         auth_template=_AUTH_TEMPLATE,
     )
-    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
     make_app_plugin_for_user(db_session, app=app, user=user)
     db_session.commit()
 
@@ -76,7 +73,7 @@ def test_denied_action_listed_as_unavailable(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    """A ``DENY`` policy override surfaces the action in the unavailable warning;
+    """A Blocked admin policy surfaces the action in the unavailable warning;
     available actions are not listed, and the raw template is never shipped."""
     user = make_user(db_session)
     skill = _slack_skill(db_session)
@@ -85,9 +82,10 @@ def test_denied_action_listed_as_unavailable(
         skill=skill,
         app_type=ExternalAppType.SLACK,
         auth_template=_AUTH_TEMPLATE,
-        action_policies={SlackAction.MESSAGES_WRITE.value: ActionPolicy.DENY},
+        action_policies={
+            SlackAction.MESSAGES_WRITE.value: IntegrationActionPolicyValue.BLOCKED
+        },
     )
-    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
     make_app_plugin_for_user(db_session, app=app, user=user)
     db_session.commit()
 
@@ -108,7 +106,7 @@ def test_no_disabled_actions_omits_section(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    """With no ``DENY`` overrides nothing is unavailable, so the warning section
+    """With no Blocked admin policy nothing is unavailable, so the warning section
     is omitted entirely — available actions are never enumerated."""
     user = make_user(db_session)
     skill = _slack_skill(db_session)
@@ -118,14 +116,13 @@ def test_no_disabled_actions_omits_section(
         app_type=ExternalAppType.SLACK,
         auth_template=_AUTH_TEMPLATE,
     )
-    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
     make_app_plugin_for_user(db_session, app=app, user=user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
 
     rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
-    # No DENY policies -> the unavailable-actions warning is omitted entirely.
+    # No Blocked policies -> the unavailable-actions warning is omitted entirely.
     assert "unavailable and should not be attempted" not in rendered
 
 
@@ -142,13 +139,9 @@ def test_zendesk_push_and_preview_share_account_and_action_policy(
         app_type=ExternalAppType.ZENDESK,
         auth_template={"Authorization": "Bearer {access_token}"},
         organization_credentials={"subdomain": "acme"},
-        action_policies={ZendeskAction.TICKETS_UPDATE.value: ActionPolicy.DENY},
-    )
-    make_user_credential(
-        db_session,
-        app=app,
-        user=test_user,
-        user_credentials={"access_token": "test-token"},
+        action_policies={
+            ZendeskAction.TICKETS_UPDATE.value: IntegrationActionPolicyValue.BLOCKED
+        },
     )
     make_app_plugin_for_user(db_session, app=app, user=test_user)
     db_session.commit()

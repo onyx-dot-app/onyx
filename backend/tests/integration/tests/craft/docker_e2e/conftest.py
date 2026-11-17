@@ -22,9 +22,9 @@ from onyx.db.enums import (
 )
 from onyx.db.external_app import (
     associate_built_in_skill__no_commit,
-    create_external_app,
     get_built_in_external_app,
 )
+from onyx.db.integration import create_external_app_row__no_commit
 from onyx.db.integration_connection import upsert_connection__no_commit
 from onyx.db.models import (
     Integration,
@@ -230,8 +230,8 @@ def _hold_in_default_plugin(db: Session, integration_id: int) -> None:
 @pytest.fixture(scope="module")
 def slack_external_app() -> None:
     """
-    Seeds Slack directly so the gate matcher claims ``chat.postMessage``
-    (``slack.messages.write``, which asks by the catalog default).
+    Seeds Slack directly with an ``ASK`` row on ``slack.messages.write`` so
+    the gate matcher claims ``chat.postMessage``.
 
     Unlike the cloud migration that seeds built-in apps per tenant (when
     ``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS=true``), this skips real credentials
@@ -241,24 +241,22 @@ def slack_external_app() -> None:
     with get_session_with_tenant(tenant_id="public") as db:
         existing = get_built_in_external_app(db, ExternalAppType.SLACK)
         if existing is None:
-            app = create_external_app(
-                db_session=db,
-                name="Slack",
-                app_type=ExternalAppType.SLACK,
-                upstream_url_patterns=["https://slack\\.com/api/.*"],
-                auth_template={"Authorization": "Bearer {access_token}"},
-                organization_credentials={"access_token": "fake-test-token"},
-            )
             integration = Integration(
                 kind=IntegrationKind.API,
                 name="Slack",
                 auth_mode=IntegrationAuthMode.SHARED,
                 auth_method=IntegrationAuthMethod.API_KEY,
                 header_template={"Authorization": "Bearer {access_token}"},
-                external_app_id=app.id,
             )
             db.add(integration)
             db.flush()
+            app = create_external_app_row__no_commit(
+                integration=integration,
+                app_type=ExternalAppType.SLACK,
+                upstream_url_patterns=["https://slack\\.com/api/.*"],
+                auth_template={"Authorization": "Bearer {access_token}"},
+                db_session=db,
+            )
             upsert_connection__no_commit(
                 db,
                 integration_id=integration.id,

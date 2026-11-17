@@ -77,6 +77,7 @@ from onyx.integrations.connection_models import (
     read_oauth_client,
     secret_fingerprint,
 )
+from onyx.oauth.authorization_attempt import canonical_json_fingerprint
 from onyx.server.features.mcp.models import merge_mcp_headers
 from onyx.server.features.mcp.oauth import (
     IntegrationTokenStorage,
@@ -782,6 +783,29 @@ def _refresh_with_token_url(
         headers={"Accept": "application/json"},
     )
     return _grant_from_token_response(request, mcp=False)
+
+
+def sign_in_host(integration: Integration, db_session: Session) -> str | None:
+    if integration.kind is IntegrationKind.MCP:
+        mcp_server = get_mcp_server_for_integration(integration.id, db_session)
+        return mcp_server.server_url if mcp_server is not None else None
+    host_values = preset_host_values(integration, db_session)
+    return canonical_json_fingerprint(host_values) if host_values else None
+
+
+def preset_organization_values(
+    integration_id: int, db_session: Session
+) -> dict[str, str]:
+    """The organization settings of a preset that are not secret: the host
+    values and the client id."""
+    oauth_client = get_oauth_client(db_session, integration_id)
+    if oauth_client is None:
+        return {}
+    credentials = read_oauth_client(oauth_client)
+    values = dict(credentials.host_values)
+    if credentials.client_id:
+        values["client_id"] = credentials.client_id
+    return values
 
 
 def preset_host_values(integration: Integration, db_session: Session) -> dict[str, str]:

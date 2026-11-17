@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import PluginInstallationPolicy, SkillSharePermission
 from onyx.db.external_app import (
     delete_external_app,
-    disconnect_external_app_for_user,
 )
 from onyx.db.models import (
     Plugin,
@@ -330,12 +329,12 @@ def test_only_a_global_manager_deletes_a_group_required_skill(
         assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
 
-def test_external_app_delete_and_disconnect(
+def test_external_app_delete(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    """The app has no link to the skill: disconnect and delete keep the
-    plugin's company setting, group settings and every choice."""
+    """The app has no link to the skill: a delete keeps the plugin's company
+    setting, group settings and every choice."""
     user = make_user(db_session, standard_account=True)
     other = make_user(db_session, standard_account=True)
     group = make_group(db_session)
@@ -353,12 +352,6 @@ def test_external_app_delete_and_disconnect(
     )
     set_plugin_preferences__no_commit(user.id, [skill.id], True, db_session)
     set_plugin_preferences__no_commit(other.id, [skill.id], False, db_session)
-
-    disconnect_external_app_for_user(
-        db_session, external_app_id=app.id, user_id=user.id
-    )
-    assert db_session.get(UserPluginPreference, (user.id, skill.id)) is not None
-    assert db_session.get(UserPluginPreference, (other.id, skill.id)) is not None
 
     delete_external_app(db_session, app.id)
     db_session.expire_all()

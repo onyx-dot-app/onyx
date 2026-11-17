@@ -19,6 +19,7 @@ from onyx.db.enums import (
 from onyx.db.external_app import (
     get_built_in_external_app,
 )
+from onyx.db.integration import get_integration_by_id
 from onyx.db.models import Skill, User
 from onyx.db.plugin import (
     check_sharing_allowed,
@@ -58,10 +59,10 @@ from onyx.db.skill_limit import users_past_write_limit
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.credentials import resolve_injection_headers
-from onyx.external_apps.token_refresh import ensure_fresh_credentials
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
+from onyx.integrations.call_credentials import resolve_call_credentials
+from onyx.integrations.connections import ConnectionProblem
 from onyx.server.features.skill.models import (
     GitHubImportedSkill,
     GitHubSkillNotImported,
@@ -225,20 +226,26 @@ def _import_response(
 
 
 def _github_authorization_header(user: User) -> str | None:
+    """The Authorization header of the user's GitHub connection, or None."""
     tenant_id = get_current_tenant_id()
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         github_app = get_built_in_external_app(db_session, ExternalAppType.GITHUB)
-        if github_app is None or not github_app.enabled:
+        if github_app is None or github_app.integration_id is None:
             return None
-        github_app_id = github_app.id
-
-    ensure_fresh_credentials(tenant_id, github_app_id, user.id)
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-        return resolve_injection_headers(
-            db_session,
-            github_app_id,
-            user.id,
-        ).get("Authorization")
+        integration = get_integration_by_id(github_app.integration_id, db_session)
+        if integration is None or not integration.enabled:
+            return None
+        credentials = resolve_call_credentials(integration, user, db_session)
+        if isinstance(credentials, ConnectionProblem):
+            return None
+        return next(
+            (
+                value
+                for name, value in credentials.headers.items()
+                if name.lower() == "authorization"
+            ),
+            None,
+        )
 
 
 def _bundle_to_edit(skill: Skill, user: User, db_session: Session) -> bytes:

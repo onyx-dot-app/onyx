@@ -268,8 +268,7 @@ def _restore_masked_embedding_api_key(
     """Restore the stored key when the caller submits the masked placeholder.
 
     Reads mask the key, so a read-modify-write cycle would otherwise persist the
-    mask itself as the real credential. Mirrors resolve_masked_credentials in
-    onyx/db/external_app.py.
+    mask itself as the real credential.
     """
     if incoming is None:
         return incoming

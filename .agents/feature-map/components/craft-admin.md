@@ -107,25 +107,15 @@ clears `User.craft_enabled` and writes an audit event. The Access table sends
 `null` when a toggle matches the workspace default, so the user follows later
 default changes (`web/src/views/admin/CraftPage/AccessCell.tsx`).
 
-**Policy writes.** Every workspace policy write goes through
-`db/action_policy.py:replace_workspace_action_policies`, keyed by a `GatedApp`
-row for `(kind, target_id)`:
-
-```
-External app (FULL_ADMIN_PANEL_ACCESS)        MCP server (MANAGE_ACTIONS, scoped allowed)
-  PATCH /build/admin/apps/{id}                  PATCH /admin/mcp/server/{id}
-    update_external_app                           update_mcp_server_simple
-    -> _write_policies__no_commit               POST setup flows
-    -> replace_workspace_action_policies          _publish_mcp_setup
-  commit, then push_skills_for_users            -> replace_workspace_action_policies
-  (SKILL.md lists DENY actions as unavailable)  commit, then _hot_reload_craft_sessions
-                                                (restamps mcp_config_hash only)
-```
-
-`replace_workspace_action_policies` validates action ids against the catalog
-and stores only the entries that differ from the catalog default
-(`external_apps/providers/registry.py:normalize_action_policies`). A submitted
-map replaces the old rows. It does not merge.
+**Policy writes.** Every admin policy write goes through
+`PUT /admin/integrations/{id}/actions`
+(`backend/onyx/integrations/service.py:set_admin_actions__no_commit`), which
+writes the admin rows of `integration_action_policy`. After the commit,
+`backend/onyx/integrations/service.py:reload_craft_sessions` restamps
+`mcp_config_hash` and pushes the skills of the users who can see a plugin that
+holds the integration. A built-in app skill lists the actions the admin
+blocked as unavailable (`skills/rendering.py:build_action_availability_section`,
+from `backend/onyx/integrations/policy.py:admin_blocked_actions`).
 
 **Instructions.** A sandbox manager reads `Settings.craft_instructions` with
 `load_settings()` when it builds a session's `AGENTS.md`
@@ -179,8 +169,8 @@ then the chat default.
 6. `unset-action-is-catalog-default` **An unset action is not "no policy".**
    It resolves to the catalog `default_policy` at read time, and an override
    equal to the default is not stored. An MCP tool defaults to `ASK`, or to
-   `ALWAYS` when the last sync stored `Tool.mcp_read_only` true
-   (`db/action_policy.py:mcp_tool_default_policy`). A change to a catalog default changes
+   `ALWAYS` when the tool is read-only
+   (`backend/onyx/integrations/kinds/mcp_server.py:mcp_action_default_policy`). A change to a catalog default changes
    behaviour for every app that kept the default, with no migration and no
    row change.
 7. `app-type-immutable` **`app_type` cannot change on update.** The PATCH
@@ -196,9 +186,9 @@ then the chat default.
    switch). Self-hosted built-ins of the same type
    stay editable. A new admin field for apps needs the same `managed` check.
 9. `masked-credentials-round-trip` **Masked credentials round-trip.** The
-   admin response masks organization credentials. The write path restores
-   masked values that come back unchanged
-   (`db/external_app.py:resolve_masked_credentials`). A per-account provider
+   admin response masks organization credentials. The write path keeps the
+   stored secret when a masked value or no value comes back
+   (`backend/onyx/integrations/service.py:update_integration__no_commit`). A per-account provider
    (Zendesk) then derives its URL patterns from the restored credentials. Do
    not compare a masked value with the stored value.
 10. `preferences-picker-no-fallback` **`fallbackToDefault={false}` and
@@ -265,8 +255,8 @@ then the chat default.
   Read the value with `load_settings()` at the point of use. If a sandbox
   needs it, read it where `AGENTS.md` or the opencode config is built, not at
   image build time.
-- `external-app-admin-field` **A new admin field for an external app.** Copy `users_can_manage_policies`
-  on the create and PATCH requests in `server/features/build/external_apps/api.py`.
+- `external-app-admin-field` **A new admin field for an external app.** Copy `users_can_save_always_allow`
+  on `IntegrationCreate` and `IntegrationUpdate` in `server/features/integrations/models.py`.
   Add the `managed` check ([[#managed-builtins-locked-multi-tenant]]) and pick
   a refresh path ([[#save-paths-refresh-differently]]).
 - `investigate-craft-off` **Investigate "Craft is off for me".** Read `GET /api/settings` as that user
