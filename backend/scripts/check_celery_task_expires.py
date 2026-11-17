@@ -23,8 +23,10 @@ With no files it checks backend/onyx, backend/ee and backend/scripts.
 """
 
 import ast
+import io
 import re
 import sys
+import tokenize
 from pathlib import Path
 
 # A deliberate exception opts out per statement and must say why:
@@ -57,8 +59,8 @@ _FIX_REASON = (
 
 
 class _Finder(ast.NodeVisitor):
-    def __init__(self, lines: list[str]) -> None:
-        self._lines = lines
+    def __init__(self, comments: dict[int, str]) -> None:
+        self._comments = comments
         self._statement: ast.stmt | None = None
         self.found: dict[int, str] = {}
 
@@ -70,9 +72,10 @@ class _Finder(ast.NodeVisitor):
     def _flag(self, node: ast.expr, message: str) -> None:
         """The marker exempts one node: on its own lines or its statement's first."""
         end = node.end_lineno or node.lineno
-        marked = self._lines[node.lineno - 1 : end]
+        lines = {*range(node.lineno, end + 1)}
         if self._statement is not None:
-            marked = [self._lines[self._statement.lineno - 1], *marked]
+            lines.add(self._statement.lineno)
+        marked = [self._comments[line] for line in lines if line in self._comments]
         if any(_ALLOW_WITH_REASON.search(line) for line in marked):
             return
         if any(ALLOW_MARKER in line for line in marked):
@@ -112,7 +115,13 @@ def _literal_keys(node: ast.Dict) -> dict[str, ast.expr]:
 
 def find_missing_expires(source: str) -> dict[int, str]:
     """One-based line number of each enqueue without an expiry, with its fix."""
-    finder = _Finder(source.splitlines())
+    # Comments only, so marker text in a string does not exempt a send.
+    comments = {
+        token.start[0]: token.string
+        for token in tokenize.generate_tokens(io.StringIO(source).readline)
+        if token.type == tokenize.COMMENT
+    }
+    finder = _Finder(comments)
     finder.visit(ast.parse(source))
     return dict(sorted(finder.found.items()))
 

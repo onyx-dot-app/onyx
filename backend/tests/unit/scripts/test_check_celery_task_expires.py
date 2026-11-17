@@ -176,6 +176,11 @@ def test_allow_marker_without_reason_is_flagged(marker: str) -> None:
     assert "needs a reason" in found[1]
 
 
+def test_allow_marker_in_a_string_does_not_exempt() -> None:
+    source = 'app.send_task("celery-expires: allow (not a comment)")\n'
+    assert list(check_celery_task_expires.find_missing_expires(source)) == [1]
+
+
 def test_allow_marker_exempts_one_statement_only() -> None:
     source = (
         "app.send_task(name)  # celery-expires: allow (may wait hours)\n"
