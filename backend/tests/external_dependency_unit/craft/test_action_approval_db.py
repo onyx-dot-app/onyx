@@ -27,7 +27,6 @@ from onyx.db.models import (
     ActionApproval,
     BuildSession,
     ExternalApp,
-    GatedApp,
     Integration,
 )
 from onyx.server.features.build.db.action_approval import (
@@ -234,9 +233,6 @@ def test_deleting_app_preserves_action_approval(
     )
     db_session.add(integration)
     db_session.flush()
-    # The upgrade keeps the id of an old identity row as the integration id.
-    db_session.add(GatedApp(id=integration.id, external_app_id=app.id))
-    db_session.flush()
     row = insert_action_approval(
         db_session,
         session_id=session.id,
@@ -249,7 +245,6 @@ def test_deleting_app_preserves_action_approval(
     )
     db_session.commit()
     assert row.integration_id == integration.id
-    assert row.gated_app_id == integration.id
     if pre_decided:
         assert row.decision == ApprovalDecision.APPROVED
         assert row.decided_via == ApprovalDecidedVia.SESSION_GRANT
@@ -263,5 +258,4 @@ def test_deleting_app_preserves_action_approval(
     db_session.commit()
     db_session.refresh(row)
     assert row.integration_id is None
-    assert row.gated_app_id is None
     assert row.app_name == "Audit test"
