@@ -97,8 +97,9 @@ def export_query_history_task(
         # Cleanup can fail the job while history is read. Do not upload then.
         if not is_task_started(db_session, task_id):
             return
+        # End the transaction, so the upload holds no lock or open transaction.
+        db_session.commit()
         try:
-            # Upload without the row lock, so a slow upload blocks no one.
             stream.seek(0)
             file_store.save_file(
                 content=stream,
