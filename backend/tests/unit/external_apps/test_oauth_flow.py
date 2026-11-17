@@ -90,7 +90,7 @@ def _configure_route(
         oauth_route._AUTHORIZATION_ATTEMPTS, "_cache_backend_provider", lambda: cache
     )
     monkeypatch.setattr(oauth_route, "get_external_app_by_id", lambda *_: app)
-    monkeypatch.setattr(oauth_route.requests, "post", token_post)
+    monkeypatch.setattr(requests, "post", token_post)
     monkeypatch.setattr(
         oauth_route,
         "upsert_external_app_user_credential",
@@ -286,9 +286,7 @@ def test_callback_preserves_provider_exchange_and_grant(
     monkeypatch.setattr(oauth_route, "push_skills_and_commit", push)
     info_response = MagicMock(spec=requests.Response)
     info_response.json.return_value = {"scopes": expected_scopes}
-    monkeypatch.setattr(
-        oauth_route.requests, "get", MagicMock(return_value=info_response)
-    )
+    monkeypatch.setattr(requests, "get", MagicMock(return_value=info_response))
     token_post.return_value.json.return_value = token_body
 
     start = oauth_route.start_external_app_oauth(

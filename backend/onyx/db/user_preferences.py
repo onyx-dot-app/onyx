@@ -5,6 +5,7 @@ from sqlalchemy import Column, delete, desc, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import AccountType, DefaultAppMode, ThemePreference
+from onyx.db.integration_connection import delete_connections_for_user__no_commit
 from onyx.db.models import (
     AccessToken,
     Assistant__UserSpecificConfig,
@@ -28,9 +29,11 @@ def deactivate_user(
     user: User,
     db_session: Session,
 ) -> None:
-    """Deactivate a user and release the personas they own."""
+    """Deactivate a user, release the personas they own and delete their
+    integration connections."""
     user.is_active = False
     release_personas_owned_by_user__no_commit(db_session, user.id)
+    delete_connections_for_user__no_commit(db_session, user.id)
     db_session.add(user)
     db_session.commit()
 

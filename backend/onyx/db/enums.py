@@ -1097,6 +1097,22 @@ class IntegrationConnectionStatus(str, PyEnum):
     NEEDS_RECONNECT = "needs_reconnect"
 
 
+class IntegrationLegacyFormat(str, PyEnum):
+    """The old secret format that the integration tables migration copied
+    as it was (``legacy_format``)."""
+
+    # mcp_connection_config.config
+    MCP_CONFIG = "mcp_config"
+    # external_app.organization_credentials
+    EXTERNAL_APP_ORG = "external_app_org"
+    # external_app_user_credential.user_credentials
+    EXTERNAL_APP_USER = "external_app_user"
+    # oauth_user_token.token_data
+    OAUTH_USER_TOKEN = "oauth_user_token"
+    # tool.custom_headers, plain JSON
+    TOOL_HEADERS = "tool_headers"
+
+
 class IntegrationActionPolicyValue(str, PyEnum):
     ALLOW = "allow"
     AUTO = "auto"
