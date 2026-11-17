@@ -36,16 +36,21 @@ impl ConfigStore {
             .clone()
     }
 
+    /// Applies `change` and saves it. If saving fails, the settings in memory
+    /// stay as they were, so they never differ from the file.
     pub fn update(&self, change: impl FnOnce(&mut Config)) -> Result<(), String> {
         let mut guard = self
             .inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        change(&mut guard);
+        let mut next = guard.clone();
+        change(&mut next);
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("Could not create config dir: {e}"))?;
         }
-        let raw = serde_json::to_string_pretty(&*guard).map_err(|e| e.to_string())?;
-        fs::write(&self.path, raw).map_err(|e| format!("Could not save config: {e}"))
+        let raw = serde_json::to_string_pretty(&next).map_err(|e| e.to_string())?;
+        fs::write(&self.path, raw).map_err(|e| format!("Could not save config: {e}"))?;
+        *guard = next;
+        Ok(())
     }
 }
