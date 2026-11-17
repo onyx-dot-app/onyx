@@ -147,6 +147,30 @@ def test_other_calls_are_clean(body: str) -> None:
     assert _found(body) == 0
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import sqlalchemy.orm as orm\n"
+        "with orm.Session(engine) as session:\n"
+        "    session.add(user)\n",
+        "from sqlalchemy import orm\n"
+        "with orm.Session(engine) as session:\n"
+        "    session.add(user)\n",
+        "import sqlalchemy.orm\n"
+        "with sqlalchemy.orm.Session(engine) as session:\n"
+        "    session.add(user)\n",
+        "from onyx.db.engine import sql_engine\n"
+        "with sql_engine.get_session_with_current_tenant() as session:\n"
+        "    session.add(user)\n",
+        "import onyx.db.engine.sql_engine as sql_engine\n"
+        "with sql_engine.get_session_with_current_tenant() as session:\n"
+        "    session.add(user)\n",
+    ],
+)
+def test_qualified_session_constructors_are_found(source: str) -> None:
+    assert check_db_ops_outside_db.find_db_operations(source) == ([3], [])
+
+
 def test_dotted_import_binds_the_root_module() -> None:
     source = "import sqlalchemy.sql\nstmt = sqlalchemy.select(1)\n"
     assert check_db_ops_outside_db.find_db_operations(source) == ([2], [])

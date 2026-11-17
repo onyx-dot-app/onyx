@@ -77,6 +77,8 @@ _SESSION_TYPES = frozenset(
 )
 # `engine.connect()` and `session.begin_nested()` give another such object.
 _SESSION_DERIVING_METHODS = frozenset({"connect", "begin", "begin_nested"})
+# Submodules a file may import by name and then qualify a session type with.
+_SQLALCHEMY_SUBMODULES = frozenset({"orm", "engine", "ext", "asyncio"})
 _SESSION_FACTORY_MODULE = re.compile(r"^(ee\.)?onyx\.db\.engine(\.|$)")
 # Other imports from the engine package do not return a session.
 _SESSION_FACTORY_NAME = re.compile(r"session|engine", re.IGNORECASE)
@@ -104,12 +106,21 @@ class _Imports:
         self.builders: set[str] = set()
         self.session_types: set[str] = set()
         self.session_factories: set[str] = set()
+        # Modules whose functions return sessions, such as `sql_engine`.
+        self.factory_modules: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if _is_sqlalchemy(alias.name):
                         # `import sqlalchemy.sql` binds the name `sqlalchemy`.
                         self.modules.add(alias.asname or alias.name.split(".")[0])
+                        if alias.asname is None:
+                            # `sqlalchemy.orm.Session` ends in the submodule name.
+                            self.modules.add(alias.name.split(".")[-1])
+                    elif _SESSION_FACTORY_MODULE.match(alias.name):
+                        self.factory_modules.add(
+                            alias.asname or alias.name.split(".")[-1]
+                        )
             elif isinstance(node, ast.ImportFrom):
                 for alias in node.names:
                     self._add(node.module, alias.name, alias.asname or alias.name)
@@ -120,9 +131,35 @@ class _Imports:
                 self.builders.add(local)
             elif name in _SESSION_TYPES:
                 self.session_types.add(local)
+            elif name in _SQLALCHEMY_SUBMODULES:
+                self.modules.add(local)
         elif module and _SESSION_FACTORY_MODULE.match(module):
+            # The name may be a factory function or a module of factories.
+            self.factory_modules.add(local)
             if _SESSION_FACTORY_NAME.search(name):
                 self.session_factories.add(local)
+
+    def is_qualified_session_type(self, node: ast.expr) -> bool:
+        """`orm.Session` or `sqlalchemy.orm.Session`."""
+        return (
+            isinstance(node, ast.Attribute)
+            and node.attr in _SESSION_TYPES
+            and _terminal_name(node.value) in self.modules | {"orm", "asyncio"}
+        )
+
+    def creates_session(self, func: ast.expr) -> bool:
+        """A call of `func` returns a new session, connection or engine."""
+        if isinstance(func, ast.Name):
+            return func.id in self.session_factories | self.session_types
+        return self.is_qualified_session_type(func) or self.is_qualified_factory(func)
+
+    def is_qualified_factory(self, node: ast.expr) -> bool:
+        """`sql_engine.get_session_with_tenant`."""
+        return (
+            isinstance(node, ast.Attribute)
+            and bool(_SESSION_FACTORY_NAME.search(node.attr))
+            and _terminal_name(node.value) in self.factory_modules
+        )
 
     def is_builder(self, func: ast.expr) -> bool:
         if isinstance(func, ast.Name):
@@ -147,9 +184,7 @@ class _Imports:
         if isinstance(annotation, ast.Name):
             return annotation.id in self.session_types
         if isinstance(annotation, ast.Attribute):
-            return annotation.attr in _SESSION_TYPES and _terminal_name(
-                annotation.value
-            ) in self.modules | {"orm", "asyncio"}
+            return self.is_qualified_session_type(annotation)
         if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
             return self.is_session_type(annotation.left) or self.is_session_type(
                 annotation.right
@@ -178,8 +213,8 @@ def _session_names(tree: ast.AST, imports: _Imports) -> set[str]:
         if not isinstance(value, ast.Call):
             return False
         func = value.func
-        if isinstance(func, ast.Name):
-            return func.id in imports.session_factories | imports.session_types
+        if imports.creates_session(func):
+            return True
         return (
             isinstance(func, ast.Attribute)
             and func.attr in _SESSION_DERIVING_METHODS
