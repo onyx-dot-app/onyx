@@ -277,7 +277,12 @@ the error type on purpose in auth code.
    crawl run at the same time. The per-document row lock in
    `backend/onyx/db/document.py:prepare_to_modify_documents` keeps their writes
    apart. The heartbeat check skips these attempts too; the targeted-reindex
-   job owns their lifecycle. Each pair's attempt ends FAILED when every target
+   job owns their lifecycle. The indexing validator fails a job and its open
+   attempts if it waits over 10 minutes or runs over 30 minutes, plus a
+   five-minute grace period. It uses the attempts' actual start time. The task
+   locks the job at claim and completion, so duplicate or late workers cannot
+   revive a failed job. Celery time limits do not stop thread workers.
+   Each pair's attempt ends FAILED when every target
    of the pair failed again and SUCCESS otherwise. Each document that failed
    again gets a new error row on the attempt, and its first error stays open.
    A document that lands closes every open error it has on the pair.

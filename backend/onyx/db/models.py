@@ -2638,7 +2638,7 @@ class TargetedReindexJob(Base):
         index=True,
     )
     # Pre-allocated celery task UUID. Written before `apply_async` so the
-    # orphan-detector can clean up if enqueue fails after INSERT, and so
+    # stale-job validator can clean up if enqueue fails after INSERT, and so
     # cancellation has a handle to revoke.
     celery_task_id: Mapped[str | None] = mapped_column(Text, nullable=True)
 

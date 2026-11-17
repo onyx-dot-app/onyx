@@ -18,7 +18,7 @@ from celery import Task, shared_task
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import TARGETED_REINDEX_TIMEOUT, OnyxCeleryTask
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexAttemptErrorResolvedReason, IndexingStatus
@@ -40,7 +40,7 @@ from shared_configs.contextvars import get_current_tenant_id
 if TYPE_CHECKING:
     from onyx.background.indexing.run_targeted_reindex import CCPairReindexResult
 
-_TARGETED_REINDEX_SOFT_TIME_LIMIT = 60 * 30  # 30 minutes
+_TARGETED_REINDEX_SOFT_TIME_LIMIT = TARGETED_REINDEX_TIMEOUT
 _TARGETED_REINDEX_TIME_LIMIT = _TARGETED_REINDEX_SOFT_TIME_LIMIT + 60
 _CANCELED_MSG = "Canceled by a user."
 
@@ -151,11 +151,13 @@ def run_targeted_reindex(
     )
 
     with get_session_with_current_tenant() as db_session:
-        job = get_targeted_reindex_job(db_session, targeted_reindex_job_id)
+        job = get_targeted_reindex_job(
+            db_session, targeted_reindex_job_id, for_update=True
+        )
         if job is None:
             log.warning("Job not found, dropping task")
             return
-        if job.status.is_terminal():
+        if job.status != IndexingStatus.NOT_STARTED:
             log.info("Job already terminal, dropping task")
             return
 
@@ -230,6 +232,14 @@ def run_targeted_reindex(
                         cc_pair_id,
                     )
 
+            # The reaper can fail the job while a connector call is blocked.
+            job = get_targeted_reindex_job(
+                db_session, targeted_reindex_job_id, for_update=True
+            )
+            if job is None or job.status.is_terminal():
+                db_session.rollback()
+                return
+
             # 4. resolution tracking: clear error rows only for the
             #    (cc_pair, doc) pairs that actually landed. Errors
             #    whose target failed to land stay open so the admin can
@@ -294,7 +304,9 @@ def run_targeted_reindex(
             log.exception("Targeted reindex task failed; marking job FAILED")
             try:
                 db_session.rollback()
-                job = get_targeted_reindex_job(db_session, targeted_reindex_job_id)
+                job = get_targeted_reindex_job(
+                    db_session, targeted_reindex_job_id, for_update=True
+                )
                 if job is not None and not job.status.is_terminal():
                     attempts = get_index_attempts_for_targeted_reindex_job(
                         db_session, targeted_reindex_job_id
@@ -311,7 +323,7 @@ def run_targeted_reindex(
             except Exception:
                 log.exception(
                     "Failed to mark job FAILED during error recovery; "
-                    "row may remain IN_PROGRESS until the celery retry"
+                    "row may remain IN_PROGRESS until the stale-job validator"
                 )
             raise
 
