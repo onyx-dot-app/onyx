@@ -24,6 +24,50 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
         self.assertEqual(auth.password, "my-token")
 
     @patch("requests.Session.get")
+    def test_api_route_selection(self, mock_get):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"total": 0, "issues": []}
+        mock_get.return_value = resp
+
+        # Server/DC with Bearer token must route to v2
+        conn_dc = JiraServiceManagementConnector("https://jira.example.com", "my-token")
+        conn_dc.get_tickets("HELP")
+        mock_get.assert_called_with(
+            "https://jira.example.com/rest/api/2/search",
+            params={"jql": "project = 'HELP' ORDER BY created DESC, id DESC", "startAt": 0, "maxResults": 50, "fields": "*all"},
+            headers={"Accept": "application/json", "Content-Type": "application/json", "User-Agent": "Onyx-JSM-Connector/1.0", "Authorization": "Bearer my-token"},
+            auth=None,
+            timeout=(10.0, 30.0),
+        )
+
+        # Cloud with email must route to v3
+        conn_cloud = JiraServiceManagementConnector("https://jira.example.com", "my-token", user_email="admin@example.com")
+        conn_cloud.get_tickets("HELP")
+        self.assertEqual(mock_get.call_args[0][0], "https://jira.example.com/rest/api/3/search")
+
+    @patch("requests.Session.get")
+    def test_jql_combining_and_secondary_sort(self, mock_get):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"total": 0, "issues": []}
+        mock_get.return_value = resp
+
+        conn = JiraServiceManagementConnector("https://jira.example.com", "token", user_email="user@test.com")
+        conn.get_tickets("HELP", jql="status = Open")
+        call_params = mock_get.call_args[1]["params"]
+        self.assertEqual(call_params["jql"], "(project = 'HELP') AND (status = Open) ORDER BY created DESC, id DESC")
+
+    def test_zero_and_negative_limits(self):
+        conn = JiraServiceManagementConnector("https://jira.example.com", "token")
+        # Zero limit must return empty list without network calls
+        self.assertEqual(conn.get_tickets("HELP", max_tickets=0), [])
+
+        # Negative limit must raise ValueError
+        with self.assertRaises(ValueError):
+            conn.get_tickets("HELP", max_tickets=-5)
+
+    @patch("requests.Session.get")
     def test_pagination(self, mock_get):
         resp1 = MagicMock()
         resp1.status_code = 200

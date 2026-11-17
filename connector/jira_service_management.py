@@ -73,21 +73,39 @@ class JiraServiceManagementConnector:
         Returns:
             List of parsed Jira ticket dictionaries.
         """
+        if max_tickets is not None:
+            if max_tickets < 0:
+                raise ValueError("max_tickets cannot be negative")
+            if max_tickets == 0:
+                return []
+
         auth, headers = self._get_auth_and_headers()
-        base_jql = f"project = '{project_key}' ORDER BY created DESC"
-        full_jql = f"({base_jql}) AND ({jql})" if jql else base_jql
+
+        # Combine filter conditions first, then append a single final ORDER BY clause
+        filter_clause = f"project = '{project_key}'"
+        if jql:
+            filter_clause = f"({filter_clause}) AND ({jql})"
+        # Unique secondary sort by id DESC ensures deterministic pagination across nodes
+        full_jql = f"{filter_clause} ORDER BY created DESC, id DESC"
 
         all_issues: List[Dict[str, Any]] = []
         start_at = 0
         limit = min(page_size, 100)
 
-        endpoint = f"{self.jira_url}/rest/api/3/search"
+        # Jira Server/Data Center uses v2 search endpoint; Jira Cloud uses v3
+        search_path = "/rest/api/3/search" if self.user_email else "/rest/api/2/search"
+        endpoint = f"{self.jira_url}{search_path}"
 
         while True:
+            remaining = max_tickets - len(all_issues) if max_tickets is not None else limit
+            page_limit = min(limit, remaining)
+            if page_limit <= 0:
+                break
+
             params: Dict[str, Union[str, int]] = {
                 "jql": full_jql,
                 "startAt": start_at,
-                "maxResults": limit,
+                "maxResults": page_limit,
                 "fields": "*all",
             }
 
@@ -116,7 +134,7 @@ class JiraServiceManagementConnector:
             total = data.get("total", len(all_issues))
             start_at += len(issues)
 
-            if max_tickets and len(all_issues) >= max_tickets:
+            if max_tickets is not None and len(all_issues) >= max_tickets:
                 all_issues = all_issues[:max_tickets]
                 break
 
