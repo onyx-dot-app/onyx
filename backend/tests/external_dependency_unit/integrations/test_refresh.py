@@ -42,6 +42,7 @@ from onyx.integrations.connection_models import (
 from onyx.integrations.connections import (
     ConnectionProblem,
     ensure_fresh_connection,
+    mark_sign_in_settings_changed,
     resolve_connection,
 )
 from onyx.utils.logger import setup_logger
@@ -185,6 +186,35 @@ def test_refresh_result_does_not_replace_a_newer_sign_in(
     assert kept is not None
     assert kept.status is IntegrationConnectionStatus.CONNECTED
     assert read_connection_secret(kept).access_token == "callback-access"
+
+
+def test_refresh_result_does_not_undo_a_sign_in_settings_change(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+    token_endpoint: FakeTokenEndpoint,
+) -> None:
+    integration = _manual_integration(make_integration)
+    user = make_test_user("refresh_settings_change")
+    connection = add_connection(
+        db_session, integration, user.id, _stale_secret(), expires_at=expired()
+    )
+
+    def send(request: httpx.Request, *, mcp: bool) -> httpx.Response:
+        with get_session_with_current_tenant() as session:
+            mark_sign_in_settings_changed(integration.id, session)
+            session.commit()
+        return token_endpoint.send(request, mcp=mcp)
+
+    with patch("onyx.integrations.connections._send_token_request", send):
+        ensure_fresh_connection(connection, integration, db_session)
+
+    assert len(token_endpoint.requests) == 1
+    db_session.expire_all()
+    kept = get_connection_by_id(db_session, connection.id)
+    assert kept is not None
+    assert kept.status is IntegrationConnectionStatus.NEEDS_RECONNECT
+    assert read_connection_secret(kept).access_token == "old-access"
 
 
 def test_fresh_token_makes_no_call(
