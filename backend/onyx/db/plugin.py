@@ -728,6 +728,15 @@ def _holds_only_integrations() -> ColumnElement[bool]:
     )
 
 
+def plugin_holds_only_integrations(plugin_id: UUID, db_session: Session) -> bool:
+    return (
+        db_session.scalar(
+            select(Plugin.id).where(Plugin.id == plugin_id, _holds_only_integrations())
+        )
+        is not None
+    )
+
+
 def _skill_name_is_taken(
     marketplace_id: UUID, skill_name: str, plugin_id: UUID, db_session: Session
 ) -> bool:

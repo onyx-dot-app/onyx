@@ -392,3 +392,84 @@ def test_public_tool_aliases_keep_their_shapes(
         ).status_code
         == 404
     )
+
+
+def _plugin_enabled_for(user: DATestUser, plugin_id: str) -> bool | None:
+    for integration in IntegrationManager.list_member(user):
+        for ref in integration.plugins:
+            if str(ref.plugin_id) == plugin_id:
+                return ref.enabled
+    return None
+
+
+def test_plugin_switch_and_install_setting(
+    admin_user: DATestUser, basic_user: DATestUser, created: list[int]
+) -> None:
+    detail = IntegrationManager.create(_openapi_body(), admin_user)
+    created.append(detail.id)
+    plugin_id = str(detail.plugins[0].plugin_id)
+    assert _plugin_enabled_for(basic_user, plugin_id) is False
+
+    switch = client.put(
+        f"{API_SERVER_URL}/plugins/{plugin_id}/enabled",
+        json={"enabled": True},
+        headers=basic_user.headers,
+    )
+    assert switch.status_code == 200, switch.text
+    assert switch.json()["enabled"] is True
+    assert _plugin_enabled_for(basic_user, plugin_id) is True
+
+    policy_url = f"{API_SERVER_URL}/admin/plugins/{plugin_id}/installation-policy"
+    body = {"installation_policy": "REQUIRED"}
+    assert client.put(
+        policy_url, json=body, headers=basic_user.headers
+    ).status_code == (403)
+    assert client.put(
+        policy_url, json=body, headers=admin_user.headers
+    ).status_code == (200)
+    off = client.put(
+        f"{API_SERVER_URL}/plugins/{plugin_id}/enabled",
+        json={"enabled": False},
+        headers=basic_user.headers,
+    )
+    assert off.status_code == 400
+
+
+def test_owner_shares_and_publishes_a_private_plugin(
+    admin_user: DATestUser, basic_user: DATestUser, created: list[int]
+) -> None:
+    detail = IntegrationManager.create(
+        _openapi_body(for_organization=False), admin_user
+    )
+    created.append(detail.id)
+    plugin_id = str(detail.plugins[0].plugin_id)
+    access_url = f"{API_SERVER_URL}/plugins/{plugin_id}/access"
+    assert client.get(access_url, headers=basic_user.headers).status_code == 404
+
+    shared = client.put(
+        access_url,
+        json={
+            "user_shares": [{"user_id": basic_user.id, "permission": "VIEWER"}],
+            "group_shares": [],
+        },
+        headers=admin_user.headers,
+    )
+    assert shared.status_code == 200, shared.text
+    assert [share["email"] for share in shared.json()["user_shares"]] == [
+        basic_user.email
+    ]
+    assert _plugin_enabled_for(basic_user, plugin_id) is False
+    assert (
+        client.post(
+            f"{API_SERVER_URL}/plugins/{plugin_id}/publish", headers=basic_user.headers
+        ).status_code
+        == 403
+    )
+
+    published = client.post(
+        f"{API_SERVER_URL}/plugins/{plugin_id}/publish", headers=admin_user.headers
+    )
+    assert published.status_code == 204, published.text
+    assert IntegrationManager.get_admin(detail.id, admin_user).plugins[0].scope == (
+        "organization"
+    )
