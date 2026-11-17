@@ -1,7 +1,10 @@
 "use client";
 
 import "@opal/components/buttons/fold-button/styles.css";
-import { Button } from "@opal/components/buttons/button/components";
+import {
+  Button,
+  type ButtonProps,
+} from "@opal/components/buttons/button/components";
 import { SvgChevronRight } from "@opal/icons";
 import type { ContainerSizeVariants, IconProps } from "@opal/types";
 import { cn } from "@opal/utils";
@@ -17,6 +20,11 @@ interface FoldButtonProps {
   "aria-hidden"?: boolean;
   /** `-1` keeps it out of the Tab order, for a header that is the control. */
   tabIndex?: number;
+  /** Overrides the interaction state, e.g. to light up with its row. */
+  interaction?: ButtonProps["interaction"];
+  onFocus?: React.FocusEventHandler<HTMLElement>;
+  onBlur?: React.FocusEventHandler<HTMLElement>;
+  "aria-controls"?: string;
 }
 
 /**

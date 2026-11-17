@@ -39,7 +39,7 @@ The whole header row toggles on click and drives the `Button`'s hover state. The
 
 ## Composable parts
 
-For a collapsible with your own header content (an icon, another title font), use `Collapsible.Header`. It behaves like the section's header: the whole row toggles and shows the pointer, and the fold button lights up while the pointer is on the row.
+For a collapsible with your own header content (an icon, another title font), use `Collapsible.Header`. [`Line`](../lines/line/README.md) builds its steps and its run card this way. It behaves like the section's header: the whole row toggles and shows the pointer, and the fold button lights up while the pointer is on the row.
 
 ```tsx
 <Collapsible.Root open={open} onOpenChange={setOpen}>
@@ -65,5 +65,5 @@ For a header you draw entirely yourself (a card, a custom button), use `Collapsi
 | --------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Collapsible.Root`    | `open`, `onOpenChange`, `defaultOpen` (`false`), `disabled` | Holds the state; renders a `div` with `data-state`.                                                                                                                                       |
 | `Collapsible.Trigger` | `asChild`, plus `<button>` props                            | Toggles the root. Sets `aria-expanded`, `aria-controls` and `data-state` on its element.                                                                                                  |
-| `Collapsible.Header`  | `children`, `name`, `rightChildren`, `size`                 | A ready header row: `children` on the left, then `rightChildren` and the fold `Button` (`size`, default `Button`'s). The row toggles and shows the pointer; the button is the keyboard control, named from `name`. Clicks in `rightChildren` do not toggle. |
+| `Collapsible.Header`  | `children`, `name`, `rightChildren`, `size`, `foldButton`, `hover`| A ready header row: `children` on the left, then `rightChildren` and the fold `Button` (`size`, default `Button`'s). The row toggles and shows the pointer; the button is the keyboard control, named from `name`. Clicks in `rightChildren` do not toggle. `foldButton`: `icon` (default, `SvgExpand`/`SvgFold`), `chevron` (a `FoldButton` that turns down while open) or `none` (the caller's control, in `rightChildren`). `hover`: `button` (default, the fold button lights up) or `subtle` (`data-hover="subtle"`, for content that darkens itself). |
 | `Collapsible.Content` | `paddingTop` (`0`), `keepMounted`                           | Opens and closes with `Fold`'s animation; drops its children once closed unless `keepMounted`. `paddingTop` (a spacing step) sits inside the animation, so it takes no room while closed. |

@@ -1,10 +1,9 @@
 "use client";
 
-import { cn } from "@opal/utils";
 import { Section } from "@opal/layouts/general/components";
 import { Text } from "@opal/components/text/components";
+import { Collapsible } from "@opal/components/collapsible/components";
 import {
-  LineBody,
   LineRoot,
   LineRow,
   type LineBaseProps,
@@ -19,10 +18,10 @@ type LineStepProps = LineBaseProps &
     /** What the line is about. Fills the row, on one line. */
     title: string | RichStr;
     /**
-     * Makes the row toggle the line: a click on it, except on a link, calls
-     * this, and hovering it darkens its title and icon (no fill). The body
-     * never calls this. A button in `rightChildren` (e.g. a chevron) is its
-     * keyboard target; that button's click reaches this too.
+     * Makes the row toggle the line, as a `Collapsible.Header` with a chevron
+     * fold button: a click on the row calls this, and hovering it darkens
+     * its title and icon (no fill). The body never calls this. Controls in
+     * `rightChildren` keep their own clicks.
      */
     onClick?: () => void;
   };
@@ -37,9 +36,9 @@ type LineCardProps = LineExpandableProps & {
   /** Fills the card with `background-tint-00`, e.g. while it is open. */
   filled: boolean;
   /**
-   * Makes the header toggle the card: a click anywhere on it calls this, and
-   * a folded card fills on hover. A button in `rightChildren` is its keyboard
-   * target; that button's click reaches this too.
+   * Makes the header toggle the card: a click on it calls this, and a folded
+   * card fills on hover. A button in `rightChildren` is its keyboard target;
+   * give it this `onClick` too, since clicks there do not reach the header.
    */
   onClick?: () => void;
 };
@@ -67,53 +66,69 @@ function LineStep({
   expanded,
   expandedContent,
 }: LineStepProps) {
-  const row = (
-    <LineRow padding={padding} icon={icon} rightChildren={rightChildren}>
-      <Section
-        flexDirection="row"
-        justifyContent="start"
-        height="fit"
-        className="min-w-0 flex-1"
-      >
-        <span className="opal-line-title">
-          <Text
-            maxLines={1}
-            overflowTooltip
-            font="secondary-action"
-            color="inherit"
-          >
-            {title}
-          </Text>
-        </span>
-      </Section>
-    </LineRow>
+  const content = (
+    <Section
+      flexDirection="row"
+      justifyContent="start"
+      height="fit"
+      className="min-w-0 flex-1"
+    >
+      <span className="opal-line-title">
+        <Text
+          maxLines={1}
+          overflowTooltip
+          font="secondary-action"
+          color="inherit"
+        >
+          {title}
+        </Text>
+      </span>
+    </Section>
   );
+
+  if (!expandable && !onClick) {
+    return (
+      <LineRoot variant={variant} padding={padding}>
+        <LineRow padding={padding} icon={icon} rightChildren={rightChildren}>
+          {content}
+        </LineRow>
+      </LineRoot>
+    );
+  }
 
   return (
     <LineRoot variant={variant} padding={padding}>
-      {onClick ? (
-        // The row toggles the line and hovers subtly: its title and icon
-        // darken, with no fill, so the body needs no gap to keep off it.
-        <div
-          role="presentation"
-          className="opal-line-toggle"
-          onClick={(event: React.MouseEvent) => {
-            if (event.target instanceof Element && event.target.closest("a")) {
-              return;
-            }
-            onClick();
-          }}
-        >
-          {row}
-        </div>
-      ) : (
-        row
-      )}
-      {expandable && (
-        <LineBody expanded={expanded} inset="content">
-          {expandedContent}
-        </LineBody>
-      )}
+      <Collapsible.Root
+        open={!!expandable && expanded}
+        onOpenChange={() => onClick?.()}
+      >
+        {onClick ? (
+          // The row toggles the line and hovers subtly: its title and icon
+          // darken, with no fill. The chevron is the keyboard control.
+          <Collapsible.Header
+            name={title}
+            rightChildren={rightChildren}
+            size="md"
+            foldButton="chevron"
+            hover="subtle"
+          >
+            <LineRow padding={padding} icon={icon}>
+              {content}
+            </LineRow>
+          </Collapsible.Header>
+        ) : (
+          <LineRow padding={padding} icon={icon} rightChildren={rightChildren}>
+            {content}
+          </LineRow>
+        )}
+        {expandable && (
+          <Collapsible.Content>
+            <div className="opal-line-body" data-opal-line-body-inset="content">
+              {expandedContent}
+            </div>
+          </Collapsible.Content>
+        )}
+      </Collapsible.Root>
     </LineRoot>
   );
 }
@@ -139,21 +154,30 @@ function LineCard({
       filled={filled}
       clickable={!!onClick && !filled}
     >
-      <div
-        role="presentation"
-        className={cn(onClick && "cursor-pointer select-none")}
-        onClick={onClick}
+      <Collapsible.Root
+        open={!!expandable && expanded}
+        onOpenChange={() => onClick?.()}
       >
-        <Section flexDirection="row" justifyContent="between" height="fit">
-          <div className="min-w-0 flex-1">{children}</div>
-          {rightChildren}
-        </Section>
-      </div>
-      {expandable && (
-        <LineBody expanded={expanded} inset="top">
-          {expandedContent}
-        </LineBody>
-      )}
+        {onClick ? (
+          // The header toggles the card; its control (e.g. "N steps") is
+          // the caller's, in `rightChildren`.
+          <Collapsible.Header rightChildren={rightChildren} foldButton="none">
+            {children}
+          </Collapsible.Header>
+        ) : (
+          <Section flexDirection="row" justifyContent="between" height="fit">
+            <div className="min-w-0 flex-1">{children}</div>
+            {rightChildren}
+          </Section>
+        )}
+        {expandable && (
+          <Collapsible.Content>
+            <div className="opal-line-body" data-opal-line-body-inset="top">
+              {expandedContent}
+            </div>
+          </Collapsible.Content>
+        )}
+      </Collapsible.Root>
     </LineRoot>
   );
 }

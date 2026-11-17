@@ -1,7 +1,6 @@
 import React, { FunctionComponent } from "react";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
-import { FoldButton, Line, type LineVariant } from "@opal/components";
-import { Section } from "@opal/layouts";
+import { Line, type LineVariant } from "@opal/components";
 import type { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 
@@ -86,13 +85,8 @@ export function StepContainer({
       icon={icon}
       title={title}
       onClick={onToggle}
-      rightChildren={
-        <Section flexDirection="row" width="fit" height="fit" gap={1}>
-          {headerAccessory}
-          {/* Its click reaches the line's, which toggles the step. */}
-          <FoldButton open={isExpanded} size="md" />
-        </Section>
-      }
+      // The line draws the chevron; the accessory sits before it.
+      rightChildren={headerAccessory}
       expandable
       expanded={isExpanded}
       expandedContent={children}

@@ -27,17 +27,14 @@
   @apply pe-0 pb-0;
 }
 
-/* A step's row toggles it with a subtle hover: the title and a default icon
-   darken, with no fill. */
+/* A step's row (a `Collapsible.Header` with `hover="subtle"`) toggles it:
+   on hover, the title and a default icon darken, with no fill. */
 .opal-line-title {
   @apply min-w-0 text-text-03 transition-colors;
 }
-.opal-line-toggle {
-  @apply cursor-pointer select-none;
-}
-.opal-line-toggle:hover .opal-line-title,
+.opal-collapsible-header[data-hover="subtle"]:hover .opal-line-title,
 .opal-line[data-opal-line-status="default"]
-  .opal-line-toggle:hover
+  .opal-collapsible-header[data-hover="subtle"]:hover
   .opal-line-icon {
   @apply text-text-05;
 }

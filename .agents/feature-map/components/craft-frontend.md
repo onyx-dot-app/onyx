@@ -149,17 +149,17 @@ into rail blocks (consecutive tool calls and thinking) and inline items
 (messages, notices), in arrival order. An entry is keyed by tool-call id or
 part id, so a late update changes it in place.
 Both products draw a block with the same components in
-`web/src/lib/timeline/components/` ([[chat-frontend]]): `RunCard` is the card
+`web/src/lib/timeline/components/` ([[chat-frontend]]): `RunCard` is the card (`Line`'s `card` flavour)
 (run header, fold, timer, Done or Stopped row) and `RunStep` is a step (its
 status sets the spinner, the alert icon and red tint of a failed step, or
 the red stop icon of a stopped one; a step that did not finish keeps its
 running title, and a done step shows its finished title). `CraftTimeline`
 and chat's `AgentTimeline` only map their steps onto them. Each step is an
-Opal `Line` (it shares its base row and surface with the connector check
-card's `LogLine`): icon, a full-width title (Craft puts the command or path in
-it as a code span), and trailing content with the chevron; the row and the body
-hover as one surface, but only the row folds the step, so a click or a text
-selection in the body never folds it, and a failed step is an `error-heavy` line. Every block folds, even with one entry, once
+Opal `Line`, built on `Collapsible`'s parts (it shares its base row with the
+connector check card's `LogLine`): icon, a full-width title (Craft puts the
+command or path in it as a code span), trailing content and the chevron; the
+row is a `Collapsible.Header` with a subtle hover and only it folds the step,
+so a click or a text selection in the body never folds it, and a failed step is an `error-heavy` line. Every block folds, even with one entry, once
 a text reply follows. A whole response is laid out by the shared `Response`
 (`web/src/lib/timeline/components/Response.tsx`): `BuildMessageList` and chat's
 `AgentMessage` only build its items (runs, text, cards) in arrival order, and

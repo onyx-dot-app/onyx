@@ -4,9 +4,11 @@
 
 One line of a list or a timeline, or a run card (the `card` flavour, below): an icon, a title and trailing content. A
 line is plain unless it gets `onClick`, and it can open a body below it with
-`expandable`. With `onClick`, the row and the body are one hover surface, but
-only the row toggles it: clicks and text selection in the body never reach
-`onClick`. [`LogLine`](../log-line/README.md) shares the same row and surface
+`expandable`. It is built on [`Collapsible`](../../collapsible/README.md)'s
+parts: with `onClick`, the row is a `Collapsible.Header` (a chevron fold
+button, and a subtle hover that darkens the title and icon, no fill), and the
+body is a `Collapsible.Content`, so clicks and text selection in the body
+never reach `onClick`. [`LogLine`](../log-line/README.md) shares the same row and surface
 (from the internal [`line-base`](../line-base/README.md)) with a log's column
 layout.
 
@@ -19,7 +21,7 @@ layout.
 | `icon`            | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                                                                 |
 | `title`           | `string \| RichStr`     | —           | `secondary-action` in `text-03`. Fills the row, on one line, cut with an ellipsis and shown in full in a tooltip     |
 | `rightChildren`   | `ReactNode`             | —           | Trailing content at the very end (a tag, actions, a fold chevron), outside the line's inner padding; not padded     |
-| `onClick`         | `() => void`            | —           | Makes the row and the body one `tertiary` surface; only a click on the row calls it                     |
+| `onClick`         | `() => void`            | —           | Makes the row a `Collapsible.Header` with a chevron; a click on the row calls it                         |
 | `expandable`      | `true`                  | —           | Enables `expanded` and `expandedContent`                                                                            |
 | `expanded`        | `boolean`               | —           | Whether the body is open; controlled, the caller owns the state                                                     |
 | `expandedContent` | `ReactNode`             | —           | The body, opened in a `Fold` and aligned under the content                                                          |
@@ -46,14 +48,13 @@ that fits the state (for example a spinner or an alert).
 - A row `Section`, 1.75rem tall plus `padding` on each side. Everything but
   `rightChildren` sits in an inner row with another 0.25rem and a 0.25rem gap,
   so tall trailing content cannot stretch the line.
-- With `onClick`, the row and the body hover and press as one `tertiary`
-  stateless surface. A click on the row (not on a link) calls `onClick`; a
-  click or text selection in the body never does, and the body keeps an
-  ordinary cursor. Put a button in `rightChildren` (e.g. a chevron) as its
-  keyboard target: that button's click reaches `onClick` too.
-- With `expandable`, the body opens below the row in a `Fold`, indented to
-  start under the content, with the line's padding on its end and bottom. A
-  heavy variant tints the body too.
+- With `onClick`, the row is a `Collapsible.Header`: a click on it calls
+  `onClick`, and hovering it darkens the title and a default icon, with no
+  fill. Its chevron (`FoldButton`) is the keyboard control. Controls in
+  `rightChildren` sit before the chevron and keep their own clicks.
+- With `expandable`, the body opens below the row in a `Collapsible.Content`,
+  flush with the row and indented to start under the title. A heavy variant
+  tints the body too.
 
 ## Card flavour
 
@@ -68,7 +69,7 @@ corners, and a `background-tint-00` fill while `filled`. Its body starts
 | `children`        | `ReactNode`  | —       | The header, e.g. a title that animates                                                                |
 | `rightChildren`   | `ReactNode`  | —       | Trailing content at the end of the header, e.g. the fold button                                       |
 | `filled`          | `boolean`    | —       | Fills the card, e.g. while its run works or it is open                                                |
-| `onClick`         | `() => void` | —       | A click anywhere on the header calls this, and a folded card fills on hover. A button's click reaches it |
+| `onClick`         | `() => void` | —       | The header (a `Collapsible.Header`, no fold button) toggles the card, and a folded card fills on hover. Give the control in `rightChildren` this `onClick` too |
 | `expandable`, `expanded`, `expandedContent` | | | As above                                                                                             |
 
 ```tsx

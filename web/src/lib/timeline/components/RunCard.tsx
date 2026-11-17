@@ -163,12 +163,13 @@ export function RunCard<S extends RunCardStep>({
                   </div>
                 </Presence>
                 {/* One fold button in every state, so its step count
-                    animates as it changes. Its click reaches the header. */}
+                    animates as it changes. */}
                 <Button
                   prominence="tertiary"
                   size="md"
                   rightIcon={isOpen ? SvgFold : SvgExpand}
                   aria-expanded={isOpen}
+                  onClick={toggle}
                 >
                   {t("stepsButton.label", { count: steps.length })}
                 </Button>
