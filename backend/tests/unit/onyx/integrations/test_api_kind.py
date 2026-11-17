@@ -392,6 +392,7 @@ def test_openapi_build_chat_tools_keys_actions_by_the_unsubstituted_operation_id
     assert len(tools) == 1
     assert isinstance(tools[0], CustomTool)
     assert tools[0].approval == scope
+    assert tools[0].action_key == "get_USER_ID"
 
 
 def test_openapi_build_chat_tools_with_no_actions_is_empty(
