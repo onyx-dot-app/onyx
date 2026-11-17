@@ -219,6 +219,9 @@ class LatencySettings(_Settings):
 class FaultSettings(_Settings):
     # Share of API calls that fail with a 500 or 503.
     server_error_rate: float = Field(default=0.0, ge=0, le=1)
+    # files.list ignores orderBy and answers in a fixed arbitrary order, as
+    # Drive can for a user with very many files.
+    ignore_order_by: bool = False
     # Scopes the service account may use with domain-wide delegation. None
     # grants every scope. A token request for any other scope fails with
     # unauthorized_client, as Google does.

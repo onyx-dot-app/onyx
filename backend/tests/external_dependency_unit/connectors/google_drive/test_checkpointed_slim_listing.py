@@ -6,13 +6,19 @@ the full corpus with no duplicates."""
 
 import re
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import pytest
 
+from onyx.connectors.google_drive import parallel_listing
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.google_drive.models import DriveListingPayload, RetrievedDriveFile
+from onyx.connectors.google_drive.models import (
+    DriveListingPayload,
+    GoogleDriveCheckpoint,
+    RetrievedDriveFile,
+)
+from onyx.connectors.google_drive.source_operations import GoogleDriveHttpError
 from onyx.connectors.models import (
     ConnectorFailure,
     HierarchyNode,
@@ -30,7 +36,10 @@ class _Listing:
         self.stubs: list[SlimDocumentStub] = []
         self.nodes: list[HierarchyNode] = []
         self.failures: list[ConnectorFailure] = []
+        # The checkpoint each call returned, after its trip through JSON.
+        self.checkpoints: list[GoogleDriveCheckpoint] = []
         self.calls = 0
+        self.failed_calls = 0
 
     @property
     def file_ids(self) -> list[str]:
@@ -43,9 +52,18 @@ def _file_id(document_id: str) -> str:
 
 
 def list_with_resume(
-    connector: GoogleDriveConnector, include_permissions: bool = False
+    connector: GoogleDriveConnector,
+    include_permissions: bool = False,
+    after_call: Callable[["_Listing"], None] | None = None,
+    retry_failed_calls: bool = False,
+    start: float = 0,
 ) -> _Listing:
-    """Runs the listing to its end, one call at a time."""
+    """Runs the listing to its end, one call at a time.
+
+    With ``retry_failed_calls``, a call that raises runs again from the
+    checkpoint it started with, as the next index attempt does. The test
+    drops what the failed call yielded: docfetching stores it, and the
+    second run of the call upserts the same document ids."""
     listing = _Listing()
     end = time.time()
     checkpoint = connector.build_dummy_checkpoint()
@@ -54,14 +72,22 @@ def list_with_resume(
         if listing.calls > _MAX_CALLS:
             raise AssertionError("The listing did not finish")
         generator = connector.retrieve_slim_docs_from_checkpoint(
-            0, end, checkpoint, include_permissions
+            start, end, checkpoint, include_permissions
         )
-        while True:
-            try:
-                item = next(generator)
-            except StopIteration as stop:
-                next_checkpoint = stop.value
-                break
+        items: list[SlimDocument | HierarchyNode | ConnectorFailure] = []
+        try:
+            while True:
+                try:
+                    items.append(next(generator))
+                except StopIteration as stop:
+                    next_checkpoint = stop.value
+                    break
+        except GoogleDriveHttpError:
+            if not retry_failed_calls:
+                raise
+            listing.failed_calls += 1
+            continue
+        for item in items:
             if isinstance(item, SlimDocumentStub):
                 listing.stubs.append(item)
             elif isinstance(item, HierarchyNode):
@@ -69,16 +95,37 @@ def list_with_resume(
             elif isinstance(item, ConnectorFailure):
                 listing.failures.append(item)
             else:
-                assert not isinstance(item, SlimDocument), (
-                    "The indexing listing must yield stubs"
-                )
+                raise AssertionError("The indexing listing must yield stubs")
         # Docfetching stores the checkpoint as JSON between connector calls.
         checkpoint = connector.validate_checkpoint_json(
             next_checkpoint.model_dump_json()
         )
+        listing.checkpoints.append(checkpoint)
+        if after_call is not None:
+            after_call(listing)
     return listing
 
 
+@pytest.fixture(params=["parallel", "serial"])
+def listing_mode(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> str:
+    """Runs a test on the parallel sharded listing and on the serial listing
+    that the OAuth flow and requested folders use."""
+    if request.param == "serial":
+        monkeypatch.setattr(
+            GoogleDriveConnector,
+            "_plan_parallel_listing",
+            lambda _self, _checkpoint, _start, _end: False,
+        )
+    else:
+        # Small pages and a small budget, so the small corpus needs many calls.
+        monkeypatch.setattr(parallel_listing, "LISTING_PAGE_SIZE", 5)
+        monkeypatch.setattr(parallel_listing, "CALL_BUDGET_FILES", 10)
+    return request.param
+
+
+@pytest.mark.usefixtures("listing_mode")
 def test_resumed_listing_is_the_full_corpus_with_no_duplicates(
     mock_drive: MockDrive,
 ) -> None:
@@ -122,6 +169,7 @@ def test_stub_goes_through_json_with_its_payload(mock_drive: MockDrive) -> None:
     assert payload.retriever_email == dumped["listing_payload"]["retriever_email"]
 
 
+@pytest.mark.usefixtures("listing_mode")
 def test_listing_applies_the_size_threshold(mock_drive: MockDrive) -> None:
     full = list_with_resume(mock_drive.build_connector())
     sizes = sorted(s.size_bytes for s in full.stubs if s.size_bytes is not None)
