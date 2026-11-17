@@ -70,7 +70,6 @@ from onyx.integrations.connection_models import (
     merge_legacy_defaults,
     preset_credentials_to_secret,
     read_connection,
-    read_connection_secret,
     read_oauth_client,
 )
 from onyx.server.features.mcp.models import merge_mcp_headers
@@ -518,16 +517,16 @@ def ensure_fresh_connection(
 def _still_holds(
     connection: IntegrationConnection, secret: ConnectionSecret, db_session: Session
 ) -> bool:
-    """Lock the row and check that it still holds ``secret``. An OAuth
-    callback does not take the refresh lock, so it can store a new grant
-    while a refresh runs."""
+    """Lock the row and check that it is still connected with ``secret``.
+    An OAuth callback or a sign-in settings change does not take the refresh
+    lock, so it can change the row while a refresh runs."""
     current = get_connection_by_id(db_session, connection.id, for_update=True)
     if current is not None:
-        stored = read_connection_secret(current)
-        if (stored.access_token, stored.refresh_token) == (
-            secret.access_token,
-            secret.refresh_token,
-        ):
+        record = read_connection(current)
+        if record.status is IntegrationConnectionStatus.CONNECTED and (
+            record.secret.access_token,
+            record.secret.refresh_token,
+        ) == (secret.access_token, secret.refresh_token):
             return True
     db_session.rollback()
     logger.info(
