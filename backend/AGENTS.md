@@ -389,3 +389,6 @@ active organization branch ruleset for `main`. Use the workflow from protected
 `main`. Require code owner reviews and dismiss stale approvals on new commits.
 Set `GATE_TEAM_TOKEN` to a token with organization Members read access for
 `onyx-dot-app`. The job uses this token to check active team membership.
+
+If GitHub withholds the team token from a Dependabot run, open a replacement
+PR from a maintainer branch and get core-team approval on that PR.

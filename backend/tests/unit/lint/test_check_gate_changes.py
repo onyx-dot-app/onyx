@@ -155,3 +155,25 @@ def test_migration_marker_in_sql_string() -> None:
 
 def test_empty_nested_ruff_config_requires_approval() -> None:
     assert check_change("backend/onyx/pyproject.toml", "", "[tool.ruff]")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "assert ready  # ruff: ignore[S101]",
+        "# ruff: disable[S101]\nassert ready\n# ruff: enable[S101]",
+    ],
+)
+def test_ruff_bracket_suppressions(source: str) -> None:
+    assert check_change("example.py", "", source)
+    assert check_change("example.py", source, "assert ready") is None
+    assert check_change("example.py", "", repr(source)) is None
+
+
+def test_ruff_range_can_shrink_but_cannot_extend() -> None:
+    start = "# ruff: disable[S101, C901]\nassert ready\n"
+    end = "# ruff: enable[S101, C901]\nassert other\n"
+    narrow = start.replace("S101, C901", "S101")
+    assert check_change("example.py", start + end, narrow + end) is None
+    assert check_change("example.py", start + end, start + "assert other\n")
+    assert check_change("example.py", start + "assert other\n", start + end) is None

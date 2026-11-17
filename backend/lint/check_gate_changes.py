@@ -40,6 +40,9 @@ NOQA = re.compile(
     r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\b(?:\s*:\s*([A-Z]+\d+(?:[ ,]+[A-Z]+\d+)*))?",
     re.IGNORECASE,
 )
+RUFF_DIRECTIVE = re.compile(
+    r"#\s*ruff\s*:\s*(ignore|disable|enable)\s*\[([^]\n]+)\]",
+)
 RAW_MARKERS = ("no-direct-redis: allow", "migration-determinism: allow")
 
 
@@ -91,13 +94,27 @@ def suppression_data(source: str) -> tuple[list[str], dict[int, set[str]]]:
         for index, line in enumerate(lines)
         if any(marker in line for marker in RAW_MARKERS)
     }
+    range_directives: dict[int, tuple[bool, set[str]]] = {}
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         if token.type != tokenize.COMMENT:
             continue
         index = token.start[0] - 1
         if any(marker in token.string for marker in MARKERS):
             suppressions.setdefault(index, set()).add("marker")
-        if match := NOQA.search(token.string):
+        if directive := RUFF_DIRECTIVE.search(token.string):
+            kind, selectors = directive.groups()
+            rules = {rule.strip() for rule in selectors.split(",")}
+            if kind == "ignore":
+                suppressions.setdefault(index, set()).update(rules)
+            else:
+                range_directives[index] = (kind == "disable", rules)
+                if kind == "disable":
+                    suppressions.setdefault(index, set()).update(rules)
+            if "marker" not in suppressions.get(index, set()):
+                start = token.start[1] + directive.start(2)
+                stop = token.start[1] + directive.end(2)
+                lines[index] = lines[index][:start] + lines[index][stop:]
+        elif match := NOQA.search(token.string):
             rules = set(re.findall(r"[A-Z]+[0-9]+", (match[1] or "").upper()))
             suppressions.setdefault(index, set()).update(rules or {"all"})
             if "marker" not in suppressions[index]:
@@ -108,13 +125,24 @@ def suppression_data(source: str) -> tuple[list[str], dict[int, set[str]]]:
                 lines[index] = (
                     lines[index][:start] + directive.rstrip(": ") + lines[index][stop:]
                 )
+    if range_directives:
+        active: set[str] = set()
+        for index in range(len(lines)):
+            if change := range_directives.get(index):
+                disables, rules = change
+                if disables:
+                    active.update(rules)
+                else:
+                    active.difference_update(rules)
+            if active:
+                suppressions.setdefault(index, set()).update(active)
     return lines, suppressions
 
 
 def adds_suppression(before: str, after: str) -> bool:
-    if not any(
-        marker in after for marker in (*MARKERS, *RAW_MARKERS)
-    ) and not NOQA.search(after):
+    if not any(marker in after for marker in (*MARKERS, *RAW_MARKERS)) and not (
+        NOQA.search(after) or RUFF_DIRECTIVE.search(after)
+    ):
         return False
     old_lines, old = suppression_data(before)
     new_lines, new = suppression_data(after)
