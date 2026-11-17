@@ -42,6 +42,7 @@ from onyx.db.models import (
     ScheduledTask,
     ScheduledTask__Plugin,
     ScheduledTaskRun,
+    Skill,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -164,6 +165,8 @@ def test_persist_approval_row_commits_before_announce_and_notifies(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
     announce_fails: bool,
+    skill_ids: list[UUID],
+    integration_ids: list[int],
 ) -> None:
     """The approval is visible before announce, and a Redis failure does not
     undo persistence or prevent the notification side effect."""
@@ -176,6 +179,8 @@ def test_persist_approval_row_commits_before_announce_and_notifies(
     skill = make_skill(db_session, author_user_id=user_id)
     external_app = make_external_app(db_session, skill=skill, auth_template={})
     db_session.commit()
+    skill_ids.append(skill.id)
+    integration_ids.append(app_integration_id(db_session, external_app))
 
     matched_actions = AllMatchedActions(
         actions=(
@@ -355,6 +360,21 @@ def test_claim_arbiter_does_not_overwrite_decided_at(
     db_session.refresh(row)
     assert row.decision == ApprovalDecision.REJECTED
     assert row.decided_at == decided_at_original
+
+
+@pytest.fixture
+def skill_ids(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[list[UUID], None, None]:
+    """Deletes the skills after the integrations that hold them."""
+    created: list[UUID] = []
+    try:
+        yield created
+    finally:
+        db_session.rollback()
+        db_session.execute(delete(Skill).where(Skill.id.in_(created)))
+        db_session.commit()
 
 
 @pytest.fixture
