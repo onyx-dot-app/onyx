@@ -295,10 +295,13 @@ it deletes the old one.
   deployment the migrations leave the old default as PRESENT and the default
   model as FUTURE, and the first swap, often from a Celery worker before the
   API starts, creates the index. A column default cannot do this: the first
-  rows predate quantization. The rule skips on any sign of earlier use: an
-  index for the row, documents, connectors, user files, a FUTURE row,
-  multi-tenant, or a cluster older than 2.16 or not reachable. Quantization is
-  part of the mapping, so it must not change once the index exists.
+  rows predate quantization. If an index for the row already exists (Postgres
+  reset, OpenSearch kept, as the integration-test reset does), the row takes
+  that index's quantization instead, so its mapping update does not fail. The
+  rule skips on any sign of earlier use: documents, connectors, user files, a
+  FUTURE row, multi-tenant, or a cluster not reachable. It sets 7-bit only on
+  OpenSearch 2.16 or later. Quantization is part of the mapping, so it must not
+  change once the index exists.
 
 ## Known issues
 

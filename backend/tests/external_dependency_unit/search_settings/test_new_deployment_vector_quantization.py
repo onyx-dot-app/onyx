@@ -2,7 +2,8 @@
 with.
 
 Startup sets 7-bit only when no index exists for the search settings and the
-deployment shows no earlier use. The deployment checks are patched because the
+deployment shows no earlier use. An existing index sets the quantization it was
+built with. The deployment checks are patched because the
 test database is shared; the OpenSearch checks run against the real cluster.
 """
 
@@ -21,6 +22,7 @@ from onyx.document_index.opensearch.client import (
     OpenSearchIndexClient,
     wait_for_opensearch_with_timeout,
 )
+from onyx.document_index.opensearch.schema import CONTENT_VECTOR_FIELD_NAME
 
 _USE_CHECKS: tuple[str, ...] = (
     "check_docs_exist",
@@ -113,13 +115,35 @@ def test_new_deployment_saves_7_bit(
         db_session.commit()
 
 
-def test_existing_index_keeps_its_quantization(
-    db_session: Session, index_name: str
-) -> None:
+def test_existing_float_index_keeps_none(db_session: Session, index_name: str) -> None:
     with OpenSearchIndexClient(index_name=index_name) as client:
         client.create_index(mappings={}, settings={})
 
     assert _set_default(db_session, index_name) == VectorQuantization.NONE
+
+
+def test_existing_7_bit_index_sets_7_bit(db_session: Session, index_name: str) -> None:
+    # Postgres was reset and OpenSearch kept the 7-bit index.
+    mappings = {
+        "properties": {
+            CONTENT_VECTOR_FIELD_NAME: {
+                "type": "knn_vector",
+                "dimension": 4,
+                "method": {
+                    "name": "hnsw",
+                    "engine": "lucene",
+                    "space_type": "cosinesimil",
+                    "parameters": {
+                        "encoder": {"name": "sq", "parameters": {"bits": 7}}
+                    },
+                },
+            }
+        }
+    }
+    with OpenSearchIndexClient(index_name=index_name) as client:
+        client.create_index(mappings=mappings, settings={"index": {"knn": True}})
+
+    assert _set_default(db_session, index_name) == VectorQuantization.SCALAR_7_BIT
 
 
 @pytest.mark.parametrize("used_by", _USE_CHECKS)
