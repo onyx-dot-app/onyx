@@ -1118,3 +1118,25 @@ def test_a_batch_read_retries_a_server_error() -> None:
         )
 
     assert result.files == {"k1": {"id": "k1"}}
+
+
+def test_a_drive_call_that_recovers_reports_and_spends_each_try() -> None:
+    gateway, limiter = _limited_gateway()
+    drive = mock.MagicMock()
+    # The test retry makes three tries.
+    drive.files.return_value.get.return_value.execute.side_effect = [
+        _http_error(429),
+        _http_error(403, _RATE_LIMIT_BODY),
+        {"id": "f"},
+    ]
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        assert gateway.get_file(user_email="a@co.com", file_id="f", fields="id") == {
+            "id": "f"
+        }
+
+    assert limiter.spent == [("drive", 5, "a@co.com")] * 3
+    assert limiter.reported == [
+        ("drive", "a@co.com", False),
+        ("drive", "a@co.com", True),
+    ]
