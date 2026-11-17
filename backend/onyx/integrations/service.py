@@ -103,6 +103,7 @@ from onyx.server.features.integrations.models import (
     MemberAction,
     MemberIntegration,
     MemberIntegrationDetail,
+    MemberPluginRef,
     OAuthClientInput,
     OAuthClientView,
     OpenApiConfigInput,
@@ -1092,14 +1093,21 @@ def refresh_actions__no_commit(
 # Member
 
 
-def _visible_plugin_rows(
+def _visible_plugin_refs(
     user: User, integration_ids: Collection[int], db_session: Session
-) -> dict[int, list[IntegrationPluginRow]]:
-    visible = {
-        state.plugin_id for state in load_user_plugin_states([user.id], db_session)
+) -> dict[int, list[MemberPluginRef]]:
+    enabled = {
+        state.plugin_id: state.enabled
+        for state in load_user_plugin_states([user.id], db_session)
     }
     return {
-        integration_id: [row for row in rows if row.plugin_id in visible]
+        integration_id: [
+            MemberPluginRef(
+                **_plugin_ref(row).model_dump(), enabled=enabled[row.plugin_id]
+            )
+            for row in rows
+            if row.plugin_id in enabled
+        ]
         for integration_id, rows in list_integration_plugin_rows(
             integration_ids, db_session
         ).items()
@@ -1109,7 +1117,7 @@ def _visible_plugin_rows(
 def _member_view(
     user: User,
     integration: Integration,
-    plugins: list[IntegrationPluginRow],
+    plugins: list[MemberPluginRef],
     db_session: Session,
 ) -> MemberIntegration:
     return MemberIntegration(
@@ -1123,7 +1131,7 @@ def _member_view(
         auth_method=integration.auth_method,
         credential_fields=_credential_fields(integration),
         status=integration_status(integration, user, db_session),
-        plugins=[_plugin_ref(row) for row in plugins],
+        plugins=plugins,
         users_can_save_always_allow=integration.users_can_save_always_allow,
     )
 
@@ -1135,11 +1143,11 @@ def list_member_integrations(
     integration_ids = list_integration_ids_held_by_plugins(
         visible_plugin_ids(user.id), db_session
     )
-    plugin_rows = _visible_plugin_rows(user, integration_ids, db_session)
+    plugin_refs = _visible_plugin_refs(user, integration_ids, db_session)
     return [
-        _member_view(user, integration, plugin_rows[integration.id], db_session)
+        _member_view(user, integration, plugin_refs[integration.id], db_session)
         for integration in list_integrations_by_ids(integration_ids, db_session)
-        if integration.enabled and plugin_rows[integration.id]
+        if integration.enabled and plugin_refs[integration.id]
     ]
 
 
@@ -1176,7 +1184,7 @@ def member_actions(
 def member_detail(
     user: User, integration: Integration, db_session: Session
 ) -> MemberIntegrationDetail:
-    plugins = _visible_plugin_rows(user, [integration.id], db_session)[integration.id]
+    plugins = _visible_plugin_refs(user, [integration.id], db_session)[integration.id]
     return MemberIntegrationDetail(
         **_member_view(user, integration, plugins, db_session).model_dump(),
         actions=member_actions(user, integration, db_session),

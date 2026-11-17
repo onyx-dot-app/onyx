@@ -24,6 +24,8 @@ class ExternalAppUserResponse(BaseModel):
     """
 
     id: int
+    # The member sign-in routes under /integrations/{integration_id} take this id.
+    integration_id: int
     name: str
     app_type: ExternalAppType
     credential_keys: list[str]

@@ -28,7 +28,6 @@ from onyx.db.models import (
     DocumentSet,
     DocumentSet__User,
     Marketplace,
-    MCPConnectionConfig,
     MCPServer,
     OAuthAccount,
     PermissionGrant,
@@ -677,11 +676,6 @@ def reconcile_user_email__no_commit(
         update(MCPServer)
         .where(MCPServer.owner == old_email)
         .values(owner=normalized_new_email)
-    )
-    db_session.execute(
-        update(MCPConnectionConfig)
-        .where(MCPConnectionConfig.user_email == old_email)
-        .values(user_email=normalized_new_email)
     )
     return old_email, prior_emails
 

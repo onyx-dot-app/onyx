@@ -44,6 +44,11 @@ class IntegrationPluginRef(BaseModel):
     installation_policy: PluginInstallationPolicy | None
 
 
+class MemberPluginRef(IntegrationPluginRef):
+    # The user's own on/off choice for the plugin.
+    enabled: bool
+
+
 class IntegrationActionView(BaseModel):
     key: str
     display_name: str
@@ -70,7 +75,7 @@ class MemberIntegration(BaseModel):
     auth_method: IntegrationAuthMethod | None
     credential_fields: list[CredentialField]
     status: IntegrationStatus
-    plugins: list[IntegrationPluginRef]
+    plugins: list[MemberPluginRef]
     users_can_save_always_allow: bool
 
 
