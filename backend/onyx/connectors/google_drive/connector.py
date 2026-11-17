@@ -15,7 +15,6 @@ from google.oauth2.service_account import Credentials as ServiceAccountCredentia
 from googleapiclient.errors import HttpError
 from typing_extensions import override
 
-from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
     GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD,
     INDEX_BATCH_SIZE,
@@ -224,14 +223,6 @@ def _resume_start(
     """Resume from the checkpointed frontier, but never before the configured
     range start (a corrupted frontier must not widen the requested time range)."""
     return max(completed_until, start) if start is not None else completed_until
-
-
-def _public_access() -> ExternalAccess:
-    return ExternalAccess(
-        external_user_emails=set(),
-        external_user_group_ids=set(),
-        is_public=True,
-    )
 
 
 class CredentialedRetrievalMethod(Protocol):
@@ -670,15 +661,17 @@ class GoogleDriveConnector(
                 # By creating first and then atomically checking/marking, we ensure that
                 # if creation fails, another thread can still try. If both succeed,
                 # only one will add to ancestors_to_add (the one that wins check_and_add).
-                if permission_sync_context:
-                    external_access = get_external_access_for_folder(
+                # None when this run did not read permissions: the stored access stays.
+                external_access = (
+                    get_external_access_for_folder(
                         folder,
                         permission_sync_context.google_domain,
                         service,
                         add_prefix,
                     )
-                else:
-                    external_access = _public_access()
+                    if permission_sync_context
+                    else None
+                )
 
                 node = HierarchyNode(
                     raw_node_id=current_id,

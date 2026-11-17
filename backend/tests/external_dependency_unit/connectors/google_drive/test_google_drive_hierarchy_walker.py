@@ -37,6 +37,7 @@ from uuid import uuid4
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
+from onyx.access.models import ExternalAccess
 from onyx.background.indexing.run_docfetching import cache_and_upsert_hierarchy_nodes
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
@@ -544,6 +545,98 @@ def test_cross_yield_walk_heals_misparented_child_via_stub(
             "after a later walk discovered A. Stored parent_id is "
             f"{b_node.parent_id} (A id={a_node.id}, SOURCE id={source_node_id})."
         )
+    finally:
+        _cleanup_nodes(db_session, test_id)
+        _cleanup_cc_pair_triple(db_session, db_connector, db_credential)
+
+
+def test_walk_without_permissions_keeps_stored_folder_access(
+    db_session: Session,
+) -> None:
+    """Incremental runs and pruning walk ancestors without a permission
+    context, so they do not read folder permissions. Their folder and shared
+    drive nodes must carry no access, and the stored private access must stay.
+    """
+    test_id = "noperm_keep_access"
+    folder_id = f"{test_id}_FOLDER"
+    root_id = f"{test_id}_ROOT"
+    folders: dict[str, GoogleDriveFileType | None] = {
+        folder_id: _folder(folder_id, parent_id=root_id, drive_id=root_id),
+        root_id: _shared_drive_root(root_id),
+    }
+    file = _retrieved_file(
+        file_id=f"{test_id}_F", parent_id=folder_id, user_email=USER_X_EMAIL
+    )
+    private = ExternalAccess(
+        external_user_emails={USER_Y_EMAIL},
+        external_user_group_ids=set(),
+        is_public=False,
+    )
+
+    db_connector, db_credential, _cc_pair = _create_test_cc_pair_triple(db_session)
+
+    try:
+        ensure_source_node_exists(db_session, SOURCE, commit=True)
+
+        # A run that read permissions stored both nodes as private.
+        _run_through_runner_and_persist(
+            db_connector,
+            db_credential,
+            [
+                PydanticHierarchyNode(
+                    raw_node_id=root_id,
+                    raw_parent_id=None,
+                    display_name="TestSharedDrive",
+                    node_type=HierarchyNodeType.SHARED_DRIVE,
+                    external_access=private,
+                ),
+                PydanticHierarchyNode(
+                    raw_node_id=folder_id,
+                    raw_parent_id=root_id,
+                    display_name=folder_id,
+                    node_type=HierarchyNodeType.FOLDER,
+                    external_access=private,
+                ),
+            ],
+        )
+
+        connector = _make_connector()
+        with (
+            patch(
+                "onyx.connectors.google_drive.connector.get_drive_service",
+                return_value=Mock(name="drive_service"),
+            ),
+            patch.object(
+                connector,
+                "_get_folder_metadata",
+                side_effect=_stub_metadata_lookup(folders),
+            ),
+            patch.object(
+                connector,
+                "_get_shared_drive_name",
+                return_value="TestSharedDrive",
+            ),
+        ):
+            new_nodes = connector._get_new_ancestors_for_files(
+                files=[file],
+                seen_hierarchy_node_raw_ids=ThreadSafeSet(),
+                fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
+                failed_folder_ids_by_email=None,
+                permission_sync_context=None,
+                add_prefix=True,
+            )
+
+        assert {node.raw_node_id for node in new_nodes} == {folder_id, root_id}
+        assert all(node.external_access is None for node in new_nodes)
+
+        _run_through_runner_and_persist(db_connector, db_credential, new_nodes)
+
+        db_session.expire_all()
+        for raw_id in (folder_id, root_id):
+            stored = get_hierarchy_node_by_raw_id(db_session, raw_id, SOURCE)
+            assert stored is not None
+            assert stored.is_public is False
+            assert stored.external_user_emails == [USER_Y_EMAIL]
     finally:
         _cleanup_nodes(db_session, test_id)
         _cleanup_cc_pair_triple(db_session, db_connector, db_credential)
