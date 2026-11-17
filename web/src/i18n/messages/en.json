@@ -2261,10 +2261,6 @@
       "advanced": {
         "title": "Advanced Options"
       },
-      "anonymousUsers": {
-        "description": "Allow anyone to start chats **without logging in**. They do not see any other chats and cannot create agents or update settings.",
-        "title": "Allow Anonymous Users"
-      },
       "autoDetectFilters": {
         "description": "Automatically apply source and time filters inferred from the search query.",
         "title": "Auto-Detect Search Filters"
@@ -2335,48 +2331,6 @@
       "multiModel": {
         "description": "Allow multiple models to generate responses in parallel in chat.",
         "title": "Multi-Model Generation"
-      },
-      "queryHistory": {
-        "anonymized": {
-          "description": "Queries are visible to admins with user identity removed",
-          "label": "Anonymized"
-        },
-        "description": "Control how your organization's full chat history appears in the Admin Panel.",
-        "disabled": {
-          "description": "Query history reporting is disabled.",
-          "label": "Hidden"
-        },
-        "normal": {
-          "description": "All queries are visible to admins and linked to individual users.",
-          "label": "Show with User Info"
-        },
-        "title": "Query History Visibility"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "Enter a whole number of days between 1 and {max}.",
-          "label": "Custom Retention",
-          "moreTooltip": "More",
-          "placeholder": "In days",
-          "restoreTooltip": "Restore Default"
-        },
-        "description": "Specify how long {appName} should retain chats in your organization.",
-        "forever": {
-          "label": "Forever"
-        },
-        "presets": {
-          "days30": "30 days",
-          "days60": "60 days",
-          "days7": "7 days",
-          "days90": "90 days",
-          "year1": "1 year"
-        },
-        "reduceModal": {
-          "confirmLabel": "Reduce retention",
-          "message": "Chats with no activity for longer than {days, plural, one {# day} other {# days}} will be permanently deleted. This cannot be undone.",
-          "title": "Reduce chat retention?"
-        },
-        "title": "Keep Chat History"
       },
       "searchMode": {
         "description": "UI mode for quick document search across your organization.",
@@ -8651,6 +8605,48 @@
         "section": {
           "title": "Admin Controls"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "Queries are visible to admins with user identity removed",
+            "label": "Anonymized"
+          },
+          "description": "Control how your organization's full chat history appears in the Admin Panel.",
+          "disabled": {
+            "description": "Query history reporting is disabled.",
+            "label": "Hidden"
+          },
+          "normal": {
+            "description": "All queries are visible to admins and linked to individual users.",
+            "label": "Show with User Info"
+          },
+          "title": "Query History Visibility"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "Enter a whole number of days between 1 and {max}.",
+            "label": "Custom Retention",
+            "moreTooltip": "More",
+            "placeholder": "In days",
+            "restoreTooltip": "Restore Default"
+          },
+          "description": "Specify how long {appName} should retain chats in your organization.",
+          "forever": {
+            "label": "Forever"
+          },
+          "presets": {
+            "days30": "30 days",
+            "days60": "60 days",
+            "days7": "7 days",
+            "days90": "90 days",
+            "year1": "1 year"
+          },
+          "reduceModal": {
+            "confirmLabel": "Reduce retention",
+            "message": "Chats with no activity for longer than {days, plural, one {# day} other {# days}} will be permanently deleted. This cannot be undone.",
+            "title": "Reduce chat retention?"
+          },
+          "title": "Keep Chat History"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "Only admins can see the full user list.",
@@ -8669,6 +8665,10 @@
           "placeholder": "Add a domain (e.g. onyx.app)",
           "subDescription": "New users can only register new accounts with emails in this domain list.",
           "title": "Allowed Email Domains"
+        },
+        "anonymousUsers": {
+          "description": "Allow anyone to start chats **without logging in**. They do not see any other chats and cannot create agents or update settings.",
+          "title": "Allow Anonymous Users"
         },
         "emailDomains": {
           "description": "Limit new user registrations to specific email domains.",

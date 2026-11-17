@@ -2261,10 +2261,6 @@
       "advanced": {
         "title": "Opções avançadas"
       },
-      "anonymousUsers": {
-        "description": "Permite que qualquer pessoa inicie chats **sem fazer login**. Ela não vê outros chats e não pode criar agentes nem alterar configurações.",
-        "title": "Permitir usuários anônimos"
-      },
       "autoDetectFilters": {
         "description": "Aplica automaticamente filtros de fonte e de tempo inferidos da consulta de pesquisa.",
         "title": "Detectar filtros de pesquisa automaticamente"
@@ -2335,48 +2331,6 @@
       "multiModel": {
         "description": "Permita que vários modelos gerem respostas em paralelo no chat.",
         "title": "Geração multimodelo"
-      },
-      "queryHistory": {
-        "anonymized": {
-          "description": "As consultas ficam visíveis para os administradores sem a identidade do usuário",
-          "label": "Anonimizado"
-        },
-        "description": "Controle como o histórico completo de chats da sua organização aparece no painel de administração.",
-        "disabled": {
-          "description": "O relatório de histórico de consultas está desativado.",
-          "label": "Oculto"
-        },
-        "normal": {
-          "description": "Todas as consultas ficam visíveis para os administradores e vinculadas a usuários individuais.",
-          "label": "Mostrar com dados do usuário"
-        },
-        "title": "Visibilidade do histórico de consultas"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "Insira um número inteiro de dias entre 1 e {max}.",
-          "label": "Retenção personalizada",
-          "moreTooltip": "Mais",
-          "placeholder": "Em dias",
-          "restoreTooltip": "Restaurar padrão"
-        },
-        "description": "Especifique por quanto tempo o {appName} deve reter os chats na sua organização.",
-        "forever": {
-          "label": "Para sempre"
-        },
-        "presets": {
-          "days30": "30 dias",
-          "days60": "60 dias",
-          "days7": "7 dias",
-          "days90": "90 dias",
-          "year1": "1 ano"
-        },
-        "reduceModal": {
-          "confirmLabel": "Reduzir retenção",
-          "message": "Os chats sem atividade por mais de {days, plural, one {# dia} other {# dias}} serão excluídos permanentemente. Esta ação não pode ser desfeita.",
-          "title": "Reduzir a retenção de chats?"
-        },
-        "title": "Manter o histórico de chats"
       },
       "searchMode": {
         "description": "Modo de interface para pesquisa rápida de documentos em toda a sua organização.",
@@ -8651,6 +8605,48 @@
         "section": {
           "title": "Controles de administrador"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "As consultas ficam visíveis para os administradores sem a identidade do usuário",
+            "label": "Anonimizado"
+          },
+          "description": "Controle como o histórico completo de chats da sua organização aparece no painel de administração.",
+          "disabled": {
+            "description": "O relatório de histórico de consultas está desativado.",
+            "label": "Oculto"
+          },
+          "normal": {
+            "description": "Todas as consultas ficam visíveis para os administradores e vinculadas a usuários individuais.",
+            "label": "Mostrar com dados do usuário"
+          },
+          "title": "Visibilidade do histórico de consultas"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "Insira um número inteiro de dias entre 1 e {max}.",
+            "label": "Retenção personalizada",
+            "moreTooltip": "Mais",
+            "placeholder": "Em dias",
+            "restoreTooltip": "Restaurar padrão"
+          },
+          "description": "Especifique por quanto tempo o {appName} deve reter os chats na sua organização.",
+          "forever": {
+            "label": "Para sempre"
+          },
+          "presets": {
+            "days30": "30 dias",
+            "days60": "60 dias",
+            "days7": "7 dias",
+            "days90": "90 dias",
+            "year1": "1 ano"
+          },
+          "reduceModal": {
+            "confirmLabel": "Reduzir retenção",
+            "message": "Os chats sem atividade por mais de {days, plural, one {# dia} other {# dias}} serão excluídos permanentemente. Esta ação não pode ser desfeita.",
+            "title": "Reduzir a retenção de chats?"
+          },
+          "title": "Manter o histórico de chats"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "Somente administradores podem ver a lista completa de usuários.",
@@ -8669,6 +8665,10 @@
           "placeholder": "Adicione um domínio (ex.: onyx.app)",
           "subDescription": "Novos usuários só podem registrar contas com e-mails desta lista de domínios.",
           "title": "Domínios de e-mail permitidos"
+        },
+        "anonymousUsers": {
+          "description": "Permite que qualquer pessoa inicie chats **sem fazer login**. Ela não vê outros chats e não pode criar agentes nem alterar configurações.",
+          "title": "Permitir usuários anônimos"
         },
         "emailDomains": {
           "description": "Limite os registros de novos usuários a domínios de e-mail específicos.",

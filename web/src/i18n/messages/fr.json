@@ -2261,10 +2261,6 @@
       "advanced": {
         "title": "Options avancées"
       },
-      "anonymousUsers": {
-        "description": "Permettre à tous de démarrer des chats **sans se connecter**. Ils ne voient aucun autre chat et ne peuvent ni créer d'agents ni modifier les paramètres.",
-        "title": "Autoriser les utilisateurs anonymes"
-      },
       "autoDetectFilters": {
         "description": "Appliquez automatiquement les filtres de source et de date déduits de la requête de recherche.",
         "title": "Détection automatique des filtres de recherche"
@@ -2335,48 +2331,6 @@
       "multiModel": {
         "description": "Autorisez plusieurs modèles à générer des réponses en parallèle dans la discussion.",
         "title": "Génération multi-modèle"
-      },
-      "queryHistory": {
-        "anonymized": {
-          "description": "Les requêtes sont visibles par les administrateurs, sans identité de l'utilisateur",
-          "label": "Anonymisé"
-        },
-        "description": "Contrôlez la façon dont l'historique complet des discussions de votre organisation apparaît dans le panneau d'administration.",
-        "disabled": {
-          "description": "Le rapport de l'historique des requêtes est désactivé.",
-          "label": "Masqué"
-        },
-        "normal": {
-          "description": "Toutes les requêtes sont visibles par les administrateurs et liées à chaque utilisateur.",
-          "label": "Afficher avec les informations utilisateur"
-        },
-        "title": "Visibilité de l'historique des requêtes"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "Saisissez un nombre entier de jours entre 1 et {max}.",
-          "label": "Durée personnalisée",
-          "moreTooltip": "Plus",
-          "placeholder": "En jours",
-          "restoreTooltip": "Rétablir la valeur par défaut"
-        },
-        "description": "Indiquez combien de temps {appName} doit conserver les discussions de votre organisation.",
-        "forever": {
-          "label": "Toujours"
-        },
-        "presets": {
-          "days30": "30 jours",
-          "days60": "60 jours",
-          "days7": "7 jours",
-          "days90": "90 jours",
-          "year1": "1 an"
-        },
-        "reduceModal": {
-          "confirmLabel": "Réduire la conservation",
-          "message": "Les discussions sans activité depuis plus de {days, plural, one {# jour} other {# jours}} seront définitivement supprimées. Cette action est irréversible.",
-          "title": "Réduire la conservation des discussions ?"
-        },
-        "title": "Conserver l'historique des discussions"
       },
       "searchMode": {
         "description": "Mode d'interface pour la recherche rapide de documents dans toute votre organisation.",
@@ -8651,6 +8605,48 @@
         "section": {
           "title": "Contrôles administrateur"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "Les requêtes sont visibles par les administrateurs, sans identité de l'utilisateur",
+            "label": "Anonymisé"
+          },
+          "description": "Contrôlez la façon dont l'historique complet des discussions de votre organisation apparaît dans le panneau d'administration.",
+          "disabled": {
+            "description": "Le rapport de l'historique des requêtes est désactivé.",
+            "label": "Masqué"
+          },
+          "normal": {
+            "description": "Toutes les requêtes sont visibles par les administrateurs et liées à chaque utilisateur.",
+            "label": "Afficher avec les informations utilisateur"
+          },
+          "title": "Visibilité de l'historique des requêtes"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "Saisissez un nombre entier de jours entre 1 et {max}.",
+            "label": "Durée personnalisée",
+            "moreTooltip": "Plus",
+            "placeholder": "En jours",
+            "restoreTooltip": "Rétablir la valeur par défaut"
+          },
+          "description": "Indiquez combien de temps {appName} doit conserver les discussions de votre organisation.",
+          "forever": {
+            "label": "Toujours"
+          },
+          "presets": {
+            "days30": "30 jours",
+            "days60": "60 jours",
+            "days7": "7 jours",
+            "days90": "90 jours",
+            "year1": "1 an"
+          },
+          "reduceModal": {
+            "confirmLabel": "Réduire la conservation",
+            "message": "Les discussions sans activité depuis plus de {days, plural, one {# jour} other {# jours}} seront définitivement supprimées. Cette action est irréversible.",
+            "title": "Réduire la conservation des discussions ?"
+          },
+          "title": "Conserver l'historique des discussions"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "Seuls les administrateurs voient la liste complète des utilisateurs.",
@@ -8669,6 +8665,10 @@
           "placeholder": "Ajoutez un domaine (ex. onyx.app)",
           "subDescription": "Les nouveaux utilisateurs peuvent seulement créer un compte avec une adresse e-mail de cette liste de domaines.",
           "title": "Domaines de messagerie autorisés"
+        },
+        "anonymousUsers": {
+          "description": "Permettre à tous de démarrer des chats **sans se connecter**. Ils ne voient aucun autre chat et ne peuvent ni créer d'agents ni modifier les paramètres.",
+          "title": "Autoriser les utilisateurs anonymes"
         },
         "emailDomains": {
           "description": "Limitez les inscriptions de nouveaux utilisateurs à certains domaines de messagerie.",

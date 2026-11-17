@@ -2261,10 +2261,6 @@
       "advanced": {
         "title": "Erweiterte Optionen"
       },
-      "anonymousUsers": {
-        "description": "Erlaubt allen, Chats **ohne Anmeldung** zu starten. Sie sehen keine anderen Chats und können keine Agenten erstellen oder Einstellungen ändern.",
-        "title": "Anonyme Benutzer zulassen"
-      },
       "autoDetectFilters": {
         "description": "Wenden Sie Quellen- und Zeitfilter automatisch an, die aus der Suchanfrage abgeleitet werden.",
         "title": "Suchfilter automatisch erkennen"
@@ -2335,48 +2331,6 @@
       "multiModel": {
         "description": "Erlauben Sie mehreren Modellen, im Chat parallel Antworten zu generieren.",
         "title": "Generierung mit mehreren Modellen"
-      },
-      "queryHistory": {
-        "anonymized": {
-          "description": "Abfragen sind für Administratoren ohne Benutzeridentität sichtbar",
-          "label": "Anonymisiert"
-        },
-        "description": "Legen Sie fest, wie der vollständige Chat-Verlauf Ihrer Organisation im Admin-Bereich erscheint.",
-        "disabled": {
-          "description": "Die Berichte zum Abfrageverlauf sind deaktiviert.",
-          "label": "Ausgeblendet"
-        },
-        "normal": {
-          "description": "Alle Abfragen sind für Administratoren sichtbar und einzelnen Benutzern zugeordnet.",
-          "label": "Mit Benutzerinformationen anzeigen"
-        },
-        "title": "Sichtbarkeit des Abfrageverlaufs"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "Geben Sie eine ganze Anzahl von Tagen zwischen 1 und {max} ein.",
-          "label": "Benutzerdefinierte Aufbewahrung",
-          "moreTooltip": "Mehr",
-          "placeholder": "In Tagen",
-          "restoreTooltip": "Standard wiederherstellen"
-        },
-        "description": "Legen Sie fest, wie lange {appName} Chats in Ihrer Organisation aufbewahren soll.",
-        "forever": {
-          "label": "Unbegrenzt"
-        },
-        "presets": {
-          "days30": "30 Tage",
-          "days60": "60 Tage",
-          "days7": "7 Tage",
-          "days90": "90 Tage",
-          "year1": "1 Jahr"
-        },
-        "reduceModal": {
-          "confirmLabel": "Aufbewahrung verkürzen",
-          "message": "Chats ohne Aktivität über mehr als {days, plural, one {# Tag} other {# Tage}} werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
-          "title": "Chat-Aufbewahrung verkürzen?"
-        },
-        "title": "Chat-Verlauf aufbewahren"
       },
       "searchMode": {
         "description": "Oberflächenmodus für die schnelle Dokumentensuche in Ihrer Organisation.",
@@ -8651,6 +8605,48 @@
         "section": {
           "title": "Administratorsteuerung"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "Abfragen sind für Administratoren ohne Benutzeridentität sichtbar",
+            "label": "Anonymisiert"
+          },
+          "description": "Legen Sie fest, wie der vollständige Chat-Verlauf Ihrer Organisation im Admin-Bereich erscheint.",
+          "disabled": {
+            "description": "Die Berichte zum Abfrageverlauf sind deaktiviert.",
+            "label": "Ausgeblendet"
+          },
+          "normal": {
+            "description": "Alle Abfragen sind für Administratoren sichtbar und einzelnen Benutzern zugeordnet.",
+            "label": "Mit Benutzerinformationen anzeigen"
+          },
+          "title": "Sichtbarkeit des Abfrageverlaufs"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "Geben Sie eine ganze Anzahl von Tagen zwischen 1 und {max} ein.",
+            "label": "Benutzerdefinierte Aufbewahrung",
+            "moreTooltip": "Mehr",
+            "placeholder": "In Tagen",
+            "restoreTooltip": "Standard wiederherstellen"
+          },
+          "description": "Legen Sie fest, wie lange {appName} Chats in Ihrer Organisation aufbewahren soll.",
+          "forever": {
+            "label": "Unbegrenzt"
+          },
+          "presets": {
+            "days30": "30 Tage",
+            "days60": "60 Tage",
+            "days7": "7 Tage",
+            "days90": "90 Tage",
+            "year1": "1 Jahr"
+          },
+          "reduceModal": {
+            "confirmLabel": "Aufbewahrung verkürzen",
+            "message": "Chats ohne Aktivität über mehr als {days, plural, one {# Tag} other {# Tage}} werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
+            "title": "Chat-Aufbewahrung verkürzen?"
+          },
+          "title": "Chat-Verlauf aufbewahren"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "Nur Administratoren können die vollständige Benutzerliste sehen.",
@@ -8669,6 +8665,10 @@
           "placeholder": "Domain hinzufügen (z. B. onyx.app)",
           "subDescription": "Neue Benutzer können neue Konten nur mit E-Mail-Adressen aus dieser Domainliste registrieren.",
           "title": "Zugelassene E-Mail-Domains"
+        },
+        "anonymousUsers": {
+          "description": "Erlaubt allen, Chats **ohne Anmeldung** zu starten. Sie sehen keine anderen Chats und können keine Agenten erstellen oder Einstellungen ändern.",
+          "title": "Anonyme Benutzer zulassen"
         },
         "emailDomains": {
           "description": "Beschränken Sie die Registrierung neuer Benutzer auf bestimmte E-Mail-Domains.",

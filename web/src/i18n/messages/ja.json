@@ -2261,10 +2261,6 @@
       "advanced": {
         "title": "詳細オプション"
       },
-      "anonymousUsers": {
-        "description": "**ログインせずに**誰でもチャットを開始できるようにします。他のチャットは表示されず、エージェントの作成や設定の変更もできません。",
-        "title": "匿名ユーザーを許可"
-      },
       "autoDetectFilters": {
         "description": "検索クエリから推定したソースフィルターと期間フィルターを自動的に適用します。",
         "title": "検索フィルターの自動検出"
@@ -2335,48 +2331,6 @@
       "multiModel": {
         "description": "チャットで複数のモデルが並行して応答を生成できるようにします。",
         "title": "マルチモデル生成"
-      },
-      "queryHistory": {
-        "anonymized": {
-          "description": "クエリは管理者に表示されますが、ユーザーの識別情報は削除されます",
-          "label": "匿名化"
-        },
-        "description": "組織のチャット履歴全体を管理パネルにどのように表示するかを制御します。",
-        "disabled": {
-          "description": "クエリ履歴のレポートは無効です。",
-          "label": "非表示"
-        },
-        "normal": {
-          "description": "すべてのクエリが管理者に表示され、個々のユーザーに紐づけられます。",
-          "label": "ユーザー情報付きで表示"
-        },
-        "title": "クエリ履歴の表示設定"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "1 から {max} までの整数の日数を入力してください。",
-          "label": "カスタム保持期間",
-          "moreTooltip": "その他",
-          "placeholder": "日数",
-          "restoreTooltip": "既定値に戻す"
-        },
-        "description": "組織のチャットを {appName} が保持する期間を指定します。",
-        "forever": {
-          "label": "無期限"
-        },
-        "presets": {
-          "days30": "30 日",
-          "days60": "60 日",
-          "days7": "7 日",
-          "days90": "90 日",
-          "year1": "1 年"
-        },
-        "reduceModal": {
-          "confirmLabel": "保持期間を短縮",
-          "message": "{days, plural, one {# 日} other {# 日}} を超えて操作がないチャットは完全に削除されます。この操作は元に戻せません。",
-          "title": "チャットの保持期間を短縮しますか？"
-        },
-        "title": "チャット履歴の保持"
       },
       "searchMode": {
         "description": "組織全体のドキュメントをすばやく検索するための UI モードです。",
@@ -8651,6 +8605,48 @@
         "section": {
           "title": "管理者コントロール"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "クエリは管理者に表示されますが、ユーザーの識別情報は削除されます",
+            "label": "匿名化"
+          },
+          "description": "組織のチャット履歴全体を管理パネルにどのように表示するかを制御します。",
+          "disabled": {
+            "description": "クエリ履歴のレポートは無効です。",
+            "label": "非表示"
+          },
+          "normal": {
+            "description": "すべてのクエリが管理者に表示され、個々のユーザーに紐づけられます。",
+            "label": "ユーザー情報付きで表示"
+          },
+          "title": "クエリ履歴の表示設定"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "1 から {max} までの整数の日数を入力してください。",
+            "label": "カスタム保持期間",
+            "moreTooltip": "その他",
+            "placeholder": "日数",
+            "restoreTooltip": "既定値に戻す"
+          },
+          "description": "組織のチャットを {appName} が保持する期間を指定します。",
+          "forever": {
+            "label": "無期限"
+          },
+          "presets": {
+            "days30": "30 日",
+            "days60": "60 日",
+            "days7": "7 日",
+            "days90": "90 日",
+            "year1": "1 年"
+          },
+          "reduceModal": {
+            "confirmLabel": "保持期間を短縮",
+            "message": "{days, plural, one {# 日} other {# 日}} を超えて操作がないチャットは完全に削除されます。この操作は元に戻せません。",
+            "title": "チャットの保持期間を短縮しますか？"
+          },
+          "title": "チャット履歴の保持"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "管理者のみが全ユーザー一覧を表示できます。",
@@ -8669,6 +8665,10 @@
           "placeholder": "ドメインを追加（例：onyx.app）",
           "subDescription": "新規ユーザーは、このドメイン一覧に含まれるメールアドレスでのみアカウントを登録できます。",
           "title": "許可するメールドメイン"
+        },
+        "anonymousUsers": {
+          "description": "**ログインせずに**誰でもチャットを開始できるようにします。他のチャットは表示されず、エージェントの作成や設定の変更もできません。",
+          "title": "匿名ユーザーを許可"
         },
         "emailDomains": {
           "description": "新規ユーザーの登録を特定のメールドメインに制限します。",

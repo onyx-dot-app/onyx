@@ -292,8 +292,9 @@ to the no-op when no PostHog client is configured.
   `backend/onyx/server/settings/api.py:admin_patch_settings`: compare the old and
   new values, and raise `FEATURE_NOT_AVAILABLE` when
   `tier_at_least(get_current_tier(), ...)` fails. Lock the admin control with
-  `useTierAtLeast` at the same tier, as
-  `web/src/views/admin/ChatPreferencesPage.tsx` does for both fields. Without it,
+  `useTierAtLeast` at the same tier, as `web/src/views/admin/ChatPreferencesPage.tsx`
+  does for Search Mode and `web/src/views/admin/RetentionField.tsx` does for
+  retention. Without it,
   the UI offers a value that the API refuses with 402. The API check runs only on a
   write, and a stored value keeps its effect after the license lapses. So also
   check the tier where the value is read, or clear it on downgrade, as
