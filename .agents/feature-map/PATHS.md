@@ -400,7 +400,9 @@ the admin routes and check that each has a row above, run
 | `tools/`, `backend/scripts/`, `backend/lint/`, `backend/requirements/` | Developer tooling and dependency files. |
 | `web/src/lib/common/` | App components meant for any feature: the list states `NoResults` and `NoItems`, and `GridSearchInput`. The agents catalog is their only caller so far. Check the callers. |
 | `web/.oxlintrc.json` | Lint config for `web/`, with the design-system, layout and navigation baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
+| `AGENTS.md` | Repository-wide standards for agents. Read it before changing the repository. |
 | `web/AGENTS.md` | Frontend standards for every agent. Read it before you work in `web/`. |
+| `web/playwright.config.ts` | Shared Playwright projects, retry settings, and reporters for end-to-end tests. |
 | `backend/AGENTS.md` | Backend standards for every agent: workers, migrations, tests, errors and tracing. Read it before you work in `backend/`. |
 | `contributing_guides/best_practices.md` | Code standards for contributors across the repository. |
 | `pyproject.toml`, `uv.lock` | Python dependencies and tool config for the repo: uv, ruff and ty. `uv.lock` pins the resolved versions. The ruff per-file ignores hold the C901 ratchet list, which only shrinks. |

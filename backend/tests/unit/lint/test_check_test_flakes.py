@@ -11,7 +11,7 @@ pause(1)
 pause(1)  # test-flakes: allow exercise an actual timeout
 @p.mark.skip
 def test_bare(): pass
-@p.mark.skipif(False, reason="Requires another platform")
+@p.mark.skipif(False, reason=f"Requires {platform} support")
 def test_reason(): pass
 p.skip(reason=" ")
 p.skip("Service unavailable")
