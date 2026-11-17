@@ -74,6 +74,7 @@ export default function IntegrationConfigurationTab({
   onChanged,
 }: IntegrationConfigurationTabProps) {
   const t = useTranslations("admin.integrations.detail.configuration");
+  const stateCopy = useTranslations("integrations");
   const { mutate } = useSWRConfig();
   const readOnly = !integration.can_manage;
   const [signIn, setSignIn] = useState<SignInDraft>(() =>
@@ -388,7 +389,7 @@ export default function IntegrationConfigurationTab({
               />
             )}
             <Text font="secondary-body" color="text-03">
-              {t("organization.state", {
+              {stateCopy("connectionState", {
                 state: organizationState ?? "not_set_up",
               })}
             </Text>

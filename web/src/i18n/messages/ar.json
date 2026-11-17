@@ -242,22 +242,6 @@
         "label": "الأداة غير متاحة"
       }
     },
-    "toolsList": {
-      "disableAllButton": {
-        "tooltip": "تعطيل جميع الأدوات"
-      },
-      "empty": {
-        "message": "لا توجد أدوات متاحة"
-      },
-      "showAllButton": {
-        "ariaLabel": "عرض جميع الأدوات",
-        "tooltip": "عرض جميع الأدوات"
-      },
-      "showEnabledButton": {
-        "ariaLabel": "عرض الأدوات المفعّلة فقط",
-        "tooltip": "عرض المفعّلة فقط"
-      }
-    },
     "toolNames": {
       "internalSearch": {
         "label": "البحث الداخلي"
@@ -375,138 +359,6 @@
     "placeholders": {
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
-    "memberPlugins": {
-      "row": {
-        "connect": "ربط {name}"
-      },
-      "status": {
-        "unavailable": "الاتصال غير متاح"
-      },
-      "state": {
-        "serversError": "تعذر تحميل إضافات MCP.",
-        "appsError": "تعذر تحميل تطبيقات Craft."
-      },
-      "detail": {
-        "toolCount": "{count, plural, zero {لا توجد إجراءات} one {إجراء واحد} two {إجراءان} few {# إجراءات} many {# إجراءً} other {# إجراء}}"
-      },
-      "connection": {
-        "title": "ربط {name}",
-        "description": "أعدّت مساحة عملك هذه الإضافة. اربط حسابك لاستخدامها.",
-        "credentialsDescription": "أدخل بيانات اعتمادك لهذه الإضافة. اتصال حسابك منفصل عن اتصالات الأعضاء الآخرين.",
-        "oauthDescription": "تابع لتسجيل الدخول بحسابك. سيعرض موفّر الخدمة صلاحيات الوصول المطلوبة.",
-        "continue": "المتابعة إلى {name}",
-        "connect": "ربط",
-        "connecting": "جارٍ الربط...",
-        "cancel": "إلغاء",
-        "done": "تم",
-        "workspaceDescription": "توفر مساحة العمل هذا الاتصال. لا تحتاج إلى ربط حساب.",
-        "sessionDescription": "تستخدم هذه الإضافة تسجيل دخولك الحالي.",
-        "noneDescription": "لا تتطلب هذه الإضافة اتصال حساب.",
-        "connectedDescription": "حسابك متصل.",
-        "unconfiguredDescription": "يجب أن يكمل مسؤول مساحة العمل إعداد هذه الإضافة قبل أن تتمكن من ربطها.",
-        "checkingDescription": "لا تزال حالة اتصالك قيد التحميل. حاول مرة أخرى بعد اكتمالها.",
-        "unavailableDescription": "تعذر تحميل حالة اتصالك. أعد المحاولة من صفحة الإضافات.",
-        "errors": {
-          "popup_blocked": "حظر متصفحك نافذة تسجيل الدخول. اسمح بالنوافذ المنبثقة وحاول مرة أخرى.",
-          "cancelled": "أُلغي تسجيل الدخول. يمكنك المحاولة مرة أخرى.",
-          "timed_out": "استغرق تسجيل الدخول وقتًا طويلًا. حاول مرة أخرى.",
-          "credentials_required": "أدخل جميع بيانات الاعتماد المطلوبة.",
-          "unconfigured": "يجب أن يكمل مسؤول مساحة العمل إعداد هذه الإضافة.",
-          "not_connected": "تعذر تأكيد اتصال حسابك. حاول مرة أخرى.",
-          "request_failed": "فشل الاتصال. حاول مرة أخرى."
-        }
-      }
-    },
-    "plugins": {
-      "availability": {
-        "on": "مفعّل",
-        "off": "معطّل",
-        "enabled": "مفعّل",
-        "disabled": "معطّل",
-        "chatEnabled": "الدردشة مفعّلة",
-        "chatDisabled": "الدردشة معطّلة",
-        "chatUnknown": "حالة الدردشة غير معروفة",
-        "craftEnabled": "Craft مفعّل",
-        "craftDisabled": "Craft معطّل"
-      },
-      "controls": {
-        "disconnect": "تفعيل أو تعطيل في مساحة العمل",
-        "disable": "تعطيل في مساحة العمل",
-        "manageAvailability": "إدارة الإتاحة في مساحة العمل",
-        "more": "المزيد من الإجراءات",
-        "disableChat": "تعطيل في الدردشة الرئيسية",
-        "disableCraft": "تعطيل في Craft"
-      },
-      "craftApp": {
-        "tabs": {
-          "configuration": "الإعدادات",
-          "permissions": "الأذونات"
-        }
-      },
-      "disableConfirmation": {
-        "workspaceTitle": "هل تريد تعطيل {name} في مساحة العمل؟",
-        "workspaceDescription": "سيؤدي هذا إلى تعطيل {name} للجميع في مساحة العمل، بما في ذلك الوكلاء المخصصة. ستُحفظ الإعدادات وبيانات الاعتماد. يمكنك تفعيله مجددًا.",
-        "scope": "جميع المستخدمين في مؤسستك",
-        "chatTitle": "هل تريد تعطيل {name} في الدردشة الرئيسية؟",
-        "chatDescription": "سيؤدي هذا إلى إزالة {name} من الدردشة الافتراضية لجميع المستخدمين في مؤسستك. لن تتأثر الوكلاء المخصصة. يمكنك تمكينه مجددًا.",
-        "craftTitle": "هل تريد تعطيل {name} في Craft؟",
-        "craftDescription": "سيؤدي هذا إلى جعل {name} غير متاح في Craft لجميع المستخدمين في مؤسستك. لن تتأثر الدردشة الرئيسية. يمكنك تمكينه مجددًا."
-      },
-      "openapi": {
-        "schemaPreview": {
-          "detected": "{count, plural, one {تم اكتشاف # أداة} other {تم اكتشاف # أدوات}}",
-          "viewTools": "عرض الأدوات",
-          "saveToUpdate": "احفظ التغييرات لتحديث الأدوات."
-        },
-        "schemaTitle": "مخطط OpenAPI"
-      },
-      "title": "الإضافات",
-      "description": "اربط الأدوات والتطبيقات بمساحة عملك.",
-      "search": {
-        "placeholder": "البحث عن إضافات"
-      },
-      "add": {
-        "label": "إضافة",
-        "openapi": "إضافة إضافة OpenAPI"
-      },
-      "catalog": {
-        "linear": {
-          "summary": "إدارة المشكلات والمشاريع والفرق",
-          "description": "إدارة المشكلات والمشاريع والفرق."
-        },
-        "notion": {
-          "summary": "البحث في مساحة عمل Notion وتحديثها",
-          "description": "البحث في مساحة عمل Notion وتحديثها."
-        },
-        "sentry": {
-          "summary": "التحقيق في الأخطاء ومشكلات الأداء",
-          "description": "التحقيق في الأخطاء ومشكلات الأداء."
-        },
-        "atlassian": {
-          "summary": "العمل مع Jira وConfluence",
-          "description": "العمل مع Jira وConfluence."
-        },
-        "add": {
-          "label": "إضافة {name}"
-        }
-      },
-      "filters": {
-        "label": "نوع الإضافة"
-      },
-      "state": {
-        "retry": {
-          "label": "إعادة المحاولة"
-        },
-        "loading": "جارٍ تحميل الإضافات",
-        "empty": {
-          "title": "لا توجد إضافات مثبتة",
-          "description": "أضف إحدى الإضافات إلى مساحة عملك.",
-          "explore": {
-            "label": "استكشاف الإضافات"
-          }
-        }
-      }
-    },
     "mcpSetup": {
       "contactingServer": "جارٍ الاتصال بالخادم",
       "detectingAuthentication": "جارٍ اكتشاف المصادقة",
@@ -523,9 +375,8 @@
       "continue": "متابعة",
       "back": "رجوع"
     },
-    "mcpTools": {
-      "search": "البحث عن أدوات",
-      "enabledCount": "الأدوات المفعّلة: {enabled} من {total}"
+    "policyEditor": {
+      "toolCount": "{count, plural, zero {لا توجد إجراءات} one {إجراء واحد} two {إجراءان} few {# إجراءات} many {# إجراءً} other {# إجراء}}"
     }
   },
   "admin": {
@@ -10777,7 +10628,6 @@
           "organization": {
             "title": "اتصال المؤسسة",
             "description": "يعمل كل مستخدم بهذا الحساب.",
-            "state": "{state, select, connected {متصل} not_connected {غير متصل} needs_reconnect {يحتاج إلى إعادة الاتصال} not_set_up {غير مُعد} other {غير معروف}}",
             "connect": "اتصال",
             "disconnect": "قطع الاتصال",
             "connected": "تم ربط حساب المؤسسة.",
@@ -14081,22 +13931,7 @@
         "ariaLabel": "تبديل الوكيل"
       }
     },
-    "apps": {
-      "policyEditor": {
-        "loading": {
-          "label": "جارٍ التحميل…"
-        },
-        "permissions": {
-          "defaultOption": "الافتراضي",
-          "description": "اختر ما يمكن للوكيل فعله. «سؤال» يطلب الموافقة قبل كل إجراء؛ و«سماح» يشغّله دون سؤال.",
-          "title": "الأذونات"
-        },
-        "advanced": {
-          "description": "عيّن سياسة لكل إجراء على حدة.",
-          "title": "متقدم"
-        }
-      }
-    },
+    "apps": {},
     "artifactsTab": {
       "download": {
         "button": "تنزيل"
@@ -15212,8 +15047,6 @@
       "title": "إعدادات الموافقة",
       "personalDescription": "تحدد هذه الإعدادات ما إذا كانت الإجراءات تُنفّذ تلقائيًا أو تتطلب موافقة في محادثات Craft والمهام الجديدة واستدعاءات أدوات MCP في الدردشة؛ وتحتفظ المهام الحالية بإعداداتها الخاصة.",
       "taskDescription": "اختر الإضافات التي يمكن للمهمة استخدامها، ثم حدّد الإجراءات التي تعمل تلقائيًا. تنطبق التغييرات على هذه المهمة فقط.",
-      "workspace_disabled": "معطل لمساحة العمل",
-      "workspace_managed": "تديره مساحة العمل",
       "userManagement": "السماح للمستخدمين بإدارة إعدادات الموافقة",
       "userManagementDescription": "يمكن للمستخدمين تغيير إعدادات الموافقة للإجراءات المتاحة.",
       "loading": "جارٍ تحميل إعدادات الموافقة…",
@@ -15236,12 +15069,10 @@
       "searchActions": "البحث عن إجراءات",
       "setPermissions": "تعيين الأذونات",
       "applyMatching": "{count} من الإجراءات المطابقة القابلة للتعديل",
-      "noMatchingActions": "لا توجد إجراءات تطابق البحث.",
       "close": "إغلاق",
       "saveChanges": "حفظ التغييرات",
       "resetDefaults": "إعادة تعيين الكل إلى الإعدادات الافتراضية",
       "resetAll": "إعادة تعيين الكل إلى إعدادات مساحة العمل الافتراضية",
-      "workspaceDisabledTooltip": "عطّل مسؤول هذا الإجراء لمساحة العمل.",
       "newTaskPluginsDescription": "شغّل الإضافات التي يمكن لهذه المهمة استخدامها. يستخدم كل إجراء إعداد التكامل الخاص به حتى تغيّره.",
       "emptyPlugins": "لا تتوفر إضافات تحتوي على تكاملات.",
       "needsSignIn": "يتطلب {name} تسجيل الدخول.",
@@ -17224,12 +17055,6 @@
         }
       },
       "connection": {
-        "status": {
-          "connected": "متصل",
-          "notConnected": "غير متصل",
-          "needsReconnect": "يحتاج إلى إعادة الاتصال",
-          "notSetUp": "غير مُعد"
-        },
         "askAdmin": "اسأل المسؤول",
         "connected": "تم اتصال {name}.",
         "disconnected": "تم قطع اتصال {name}.",
@@ -17347,5 +17172,8 @@
         }
       }
     }
+  },
+  "integrations": {
+    "connectionState": "{state, select, connected {متصل} not_connected {غير متصل} needs_reconnect {يحتاج إلى إعادة الاتصال} not_set_up {غير مُعد} other {غير معروف}}"
   }
 }

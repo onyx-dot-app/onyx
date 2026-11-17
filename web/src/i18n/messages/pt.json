@@ -242,22 +242,6 @@
         "label": "Ferramenta indisponível"
       }
     },
-    "toolsList": {
-      "disableAllButton": {
-        "tooltip": "Desativar todas as ferramentas"
-      },
-      "empty": {
-        "message": "Nenhuma ferramenta disponível"
-      },
-      "showAllButton": {
-        "ariaLabel": "Mostrar todas as ferramentas",
-        "tooltip": "Mostrar todas as ferramentas"
-      },
-      "showEnabledButton": {
-        "ariaLabel": "Mostrar apenas as ferramentas ativadas",
-        "tooltip": "Mostrar apenas as ativadas"
-      }
-    },
     "toolNames": {
       "internalSearch": {
         "label": "Pesquisa interna"
@@ -375,138 +359,6 @@
     "placeholders": {
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
-    "memberPlugins": {
-      "row": {
-        "connect": "Conectar {name}"
-      },
-      "status": {
-        "unavailable": "Conexão indisponível"
-      },
-      "state": {
-        "serversError": "Não foi possível carregar os plugins MCP.",
-        "appsError": "Não foi possível carregar os apps do Craft."
-      },
-      "detail": {
-        "toolCount": "{count, plural, one {# ação} other {# ações}}"
-      },
-      "connection": {
-        "title": "Conectar {name}",
-        "description": "Seu espaço de trabalho configurou este plugin. Conecte sua conta para usá-lo.",
-        "credentialsDescription": "Insira suas credenciais para este plugin. A conexão da sua conta é separada da conexão de outros membros.",
-        "oauthDescription": "Continue para entrar com sua conta. Seu provedor mostrará o acesso solicitado.",
-        "continue": "Continuar para {name}",
-        "connect": "Conectar",
-        "connecting": "Conectando...",
-        "cancel": "Cancelar",
-        "done": "Concluído",
-        "workspaceDescription": "Seu espaço de trabalho fornece esta conexão. Você não precisa conectar uma conta.",
-        "sessionDescription": "Este plugin usa seu login atual.",
-        "noneDescription": "Este plugin não requer uma conexão de conta.",
-        "connectedDescription": "Sua conta está conectada.",
-        "unconfiguredDescription": "Um administrador do espaço de trabalho precisa concluir a configuração deste plugin antes que você possa conectá-lo.",
-        "checkingDescription": "O status da sua conexão ainda está carregando. Tente novamente quando terminar.",
-        "unavailableDescription": "Não foi possível carregar o status da sua conexão. Tente novamente na página Plugins.",
-        "errors": {
-          "popup_blocked": "Seu navegador bloqueou a janela de login. Permita pop-ups e tente novamente.",
-          "cancelled": "O login foi cancelado. Você pode tentar novamente.",
-          "timed_out": "O login demorou demais. Tente novamente.",
-          "credentials_required": "Insira todas as credenciais necessárias.",
-          "unconfigured": "Um administrador do espaço de trabalho precisa concluir a configuração deste plugin.",
-          "not_connected": "Não foi possível confirmar a conexão da sua conta. Tente novamente.",
-          "request_failed": "A conexão falhou. Tente novamente."
-        }
-      }
-    },
-    "plugins": {
-      "availability": {
-        "on": "Ativado",
-        "off": "Desativado",
-        "enabled": "Ativado",
-        "disabled": "Desativado",
-        "chatEnabled": "Chat ativado",
-        "chatDisabled": "Chat desativado",
-        "chatUnknown": "Estado do Chat desconhecido",
-        "craftEnabled": "Craft ativado",
-        "craftDisabled": "Craft desativado"
-      },
-      "controls": {
-        "disconnect": "Ativar ou desativar para o espaço de trabalho",
-        "disable": "Desativar para o espaço de trabalho",
-        "manageAvailability": "Gerenciar disponibilidade no espaço de trabalho",
-        "more": "Mais ações",
-        "disableChat": "Desativar no chat principal",
-        "disableCraft": "Desativar no Craft"
-      },
-      "craftApp": {
-        "tabs": {
-          "configuration": "Configuração",
-          "permissions": "Permissões"
-        }
-      },
-      "disableConfirmation": {
-        "workspaceTitle": "Desativar {name} para o espaço de trabalho?",
-        "workspaceDescription": "Isso desativa {name} para todos no seu espaço de trabalho, incluindo agentes personalizados. As configurações e credenciais salvas são mantidas. Você pode ativá-lo novamente.",
-        "scope": "Todos os usuários da sua organização",
-        "chatTitle": "Desativar {name} no chat principal?",
-        "chatDescription": "Isso remove {name} do chat padrão para todos os usuários da sua organização. Os agentes personalizados não são afetados. Você pode ativá-lo novamente.",
-        "craftTitle": "Desativar {name} no Craft?",
-        "craftDescription": "Isso torna {name} indisponível no Craft para todos os usuários da sua organização. O chat principal não é afetado. Você pode ativá-lo novamente."
-      },
-      "openapi": {
-        "schemaPreview": {
-          "detected": "{count, plural, one {# ferramenta detectada} other {# ferramentas detectadas}}",
-          "viewTools": "Ver ferramentas",
-          "saveToUpdate": "Salve as alterações para atualizar as ferramentas."
-        },
-        "schemaTitle": "Esquema OpenAPI"
-      },
-      "title": "Plugins",
-      "description": "Conecte ferramentas e aplicativos ao seu espaço de trabalho.",
-      "search": {
-        "placeholder": "Pesquisar plugins"
-      },
-      "add": {
-        "label": "Adicionar",
-        "openapi": "Adicionar plugin OpenAPI"
-      },
-      "catalog": {
-        "linear": {
-          "summary": "Gerencie tarefas, projetos e equipes",
-          "description": "Gerencie tarefas, projetos e equipes."
-        },
-        "notion": {
-          "summary": "Pesquise e atualize seu espaço de trabalho do Notion",
-          "description": "Pesquise e atualize seu espaço de trabalho do Notion."
-        },
-        "sentry": {
-          "summary": "Investigue erros e problemas de desempenho",
-          "description": "Investigue erros e problemas de desempenho."
-        },
-        "atlassian": {
-          "summary": "Trabalhe com Jira e Confluence",
-          "description": "Trabalhe com Jira e Confluence."
-        },
-        "add": {
-          "label": "Adicionar {name}"
-        }
-      },
-      "filters": {
-        "label": "Tipo de plugin"
-      },
-      "state": {
-        "retry": {
-          "label": "Tentar novamente"
-        },
-        "loading": "Carregando plugins",
-        "empty": {
-          "title": "Nenhum plugin instalado",
-          "description": "Adicione um plugin ao seu espaço de trabalho.",
-          "explore": {
-            "label": "Explorar plugins"
-          }
-        }
-      }
-    },
     "mcpSetup": {
       "contactingServer": "Contactando o servidor",
       "detectingAuthentication": "Detectando a autenticação",
@@ -523,9 +375,8 @@
       "continue": "Continuar",
       "back": "Voltar"
     },
-    "mcpTools": {
-      "search": "Buscar ferramentas",
-      "enabledCount": "Ferramentas ativadas: {enabled} de {total}"
+    "policyEditor": {
+      "toolCount": "{count, plural, one {# ação} other {# ações}}"
     }
   },
   "admin": {
@@ -10777,7 +10628,6 @@
           "organization": {
             "title": "Conexão da organização",
             "description": "Cada usuário age com esta conta.",
-            "state": "{state, select, connected {Conectada} not_connected {Não conectada} needs_reconnect {Requer reconexão} not_set_up {Não configurada} other {Desconhecido}}",
             "connect": "Conectar",
             "disconnect": "Desconectar",
             "connected": "A conta da organização foi conectada.",
@@ -14081,22 +13931,7 @@
         "ariaLabel": "Trocar de agente"
       }
     },
-    "apps": {
-      "policyEditor": {
-        "loading": {
-          "label": "Carregando…"
-        },
-        "permissions": {
-          "defaultOption": "Padrão",
-          "description": "Escolha o que o agente pode fazer. “Perguntar” solicita aprovação antes de cada ação; “Permitir” executa sem perguntar.",
-          "title": "Permissões"
-        },
-        "advanced": {
-          "description": "Defina uma política para cada ação individualmente.",
-          "title": "Avançado"
-        }
-      }
-    },
+    "apps": {},
     "artifactsTab": {
       "download": {
         "button": "Baixar"
@@ -15212,8 +15047,6 @@
       "title": "Configurações de aprovação",
       "personalDescription": "Estas configurações definem se as ações são executadas automaticamente ou exigem aprovação nas conversas do Craft, nas novas tarefas e nas chamadas de ferramentas MCP no chat; as tarefas existentes mantêm suas próprias configurações.",
       "taskDescription": "Escolha os plugins que esta tarefa pode usar e quais ações serão executadas automaticamente. As alterações valem apenas para esta tarefa.",
-      "workspace_disabled": "Desativada para o espaço de trabalho",
-      "workspace_managed": "Gerenciado pelo espaço de trabalho",
       "userManagement": "Permitir que usuários gerenciem configurações de aprovação",
       "userManagementDescription": "Usuários podem alterar a aprovação de ações disponíveis.",
       "loading": "Carregando configurações de aprovação…",
@@ -15236,12 +15069,10 @@
       "searchActions": "Buscar ações",
       "setPermissions": "Definir permissões",
       "applyMatching": "{count} ações editáveis correspondentes",
-      "noMatchingActions": "Nenhuma ação corresponde à busca.",
       "close": "Fechar",
       "saveChanges": "Salvar alterações",
       "resetDefaults": "Redefinir tudo para os padrões",
       "resetAll": "Redefinir tudo para os padrões do espaço de trabalho",
-      "workspaceDisabledTooltip": "Um administrador desativou esta ação para o espaço de trabalho.",
       "newTaskPluginsDescription": "Ative os plugins que esta tarefa pode usar. Cada ação usa a configuração da integração até você alterá-la.",
       "emptyPlugins": "Nenhum plugin com integrações está disponível.",
       "needsSignIn": "{name} exige login.",
@@ -17224,12 +17055,6 @@
         }
       },
       "connection": {
-        "status": {
-          "connected": "Conectada",
-          "notConnected": "Não conectada",
-          "needsReconnect": "Precisa reconectar",
-          "notSetUp": "Não configurada"
-        },
         "askAdmin": "Pergunte ao seu administrador",
         "connected": "{name} conectada.",
         "disconnected": "{name} desconectada.",
@@ -17347,5 +17172,8 @@
         }
       }
     }
+  },
+  "integrations": {
+    "connectionState": "{state, select, connected {Conectada} not_connected {Não conectada} needs_reconnect {Requer reconexão} not_set_up {Não configurada} other {Desconhecido}}"
   }
 }

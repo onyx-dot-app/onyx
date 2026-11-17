@@ -242,22 +242,6 @@
         "label": "ツールを利用できません"
       }
     },
-    "toolsList": {
-      "disableAllButton": {
-        "tooltip": "すべてのツールを無効化"
-      },
-      "empty": {
-        "message": "利用できるツールがありません"
-      },
-      "showAllButton": {
-        "ariaLabel": "すべてのツールを表示",
-        "tooltip": "すべてのツールを表示"
-      },
-      "showEnabledButton": {
-        "ariaLabel": "有効なツールのみ表示",
-        "tooltip": "有効なもののみ表示"
-      }
-    },
     "toolNames": {
       "internalSearch": {
         "label": "内部検索"
@@ -375,138 +359,6 @@
     "placeholders": {
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
-    "memberPlugins": {
-      "row": {
-        "connect": "{name}に接続"
-      },
-      "status": {
-        "unavailable": "接続を利用できません"
-      },
-      "state": {
-        "serversError": "MCPプラグインを読み込めませんでした。",
-        "appsError": "Craftアプリを読み込めませんでした。"
-      },
-      "detail": {
-        "toolCount": "{count, plural, other {#個のアクション}}"
-      },
-      "connection": {
-        "title": "{name}に接続",
-        "description": "このプラグインはワークスペースで設定済みです。アカウントを接続して使用してください。",
-        "credentialsDescription": "このプラグインの認証情報を入力してください。アカウントの接続は他のメンバーとは個別に管理されます。",
-        "oauthDescription": "続行してアカウントでログインしてください。プロバイダーが要求されたアクセス権を表示します。",
-        "continue": "{name}に進む",
-        "connect": "接続",
-        "connecting": "接続中...",
-        "cancel": "キャンセル",
-        "done": "完了",
-        "workspaceDescription": "この接続はワークスペースが提供しています。アカウントを接続する必要はありません。",
-        "sessionDescription": "このプラグインは現在のログイン情報を使用します。",
-        "noneDescription": "このプラグインにアカウントの接続は必要ありません。",
-        "connectedDescription": "アカウントは接続済みです。",
-        "unconfiguredDescription": "接続するには、ワークスペース管理者がこのプラグインの設定を完了する必要があります。",
-        "checkingDescription": "接続状態を読み込み中です。読み込みが完了してから再試行してください。",
-        "unavailableDescription": "接続状態を読み込めませんでした。プラグインページから再試行してください。",
-        "errors": {
-          "popup_blocked": "ブラウザーがログインウィンドウをブロックしました。ポップアップを許可して、もう一度お試しください。",
-          "cancelled": "ログインがキャンセルされました。再試行できます。",
-          "timed_out": "ログインがタイムアウトしました。もう一度お試しください。",
-          "credentials_required": "必要な認証情報をすべて入力してください。",
-          "unconfigured": "ワークスペース管理者がこのプラグインの設定を完了する必要があります。",
-          "not_connected": "アカウントの接続を確認できませんでした。もう一度お試しください。",
-          "request_failed": "接続に失敗しました。もう一度お試しください。"
-        }
-      }
-    },
-    "plugins": {
-      "availability": {
-        "on": "有効",
-        "off": "無効",
-        "enabled": "有効",
-        "disabled": "無効",
-        "chatEnabled": "Chat 有効",
-        "chatDisabled": "Chat 無効",
-        "chatUnknown": "Chat 状態不明",
-        "craftEnabled": "Craft 有効",
-        "craftDisabled": "Craft 無効"
-      },
-      "controls": {
-        "disconnect": "ワークスペースで有効化または無効化",
-        "disable": "ワークスペースで無効化",
-        "manageAvailability": "ワークスペースでの利用可否を管理",
-        "more": "その他の操作",
-        "disableChat": "メインチャットで無効にする",
-        "disableCraft": "Craftで無効にする"
-      },
-      "craftApp": {
-        "tabs": {
-          "configuration": "設定",
-          "permissions": "権限"
-        }
-      },
-      "disableConfirmation": {
-        "workspaceTitle": "ワークスペースで{name}を無効にしますか？",
-        "workspaceDescription": "カスタムエージェントを含め、ワークスペースの全員に対して{name}を無効にします。保存済みの設定と認証情報は保持されます。再び有効にできます。",
-        "scope": "組織内のすべてのユーザー",
-        "chatTitle": "メインチャットで {name} を無効にしますか？",
-        "chatDescription": "組織内のすべてのユーザーのデフォルトチャットから {name} が削除されます。カスタムエージェントには影響しません。再度有効にできます。",
-        "craftTitle": "Craft で {name} を無効にしますか？",
-        "craftDescription": "組織内のすべてのユーザーが Craft で {name} を利用できなくなります。メインチャットには影響しません。再度有効にできます。"
-      },
-      "openapi": {
-        "schemaPreview": {
-          "detected": "{count, plural, one {# 件のツールを検出} other {# 件のツールを検出}}",
-          "viewTools": "ツールを表示",
-          "saveToUpdate": "変更を保存してツールを更新してください。"
-        },
-        "schemaTitle": "OpenAPI スキーマ"
-      },
-      "title": "プラグイン",
-      "description": "ツールやアプリをワークスペースに接続します。",
-      "search": {
-        "placeholder": "プラグインを検索"
-      },
-      "add": {
-        "label": "追加",
-        "openapi": "OpenAPI プラグインを追加"
-      },
-      "catalog": {
-        "linear": {
-          "summary": "課題、プロジェクト、チームを管理します",
-          "description": "課題、プロジェクト、チームを管理します。"
-        },
-        "notion": {
-          "summary": "Notion ワークスペースを検索、更新します",
-          "description": "Notion ワークスペースを検索、更新します。"
-        },
-        "sentry": {
-          "summary": "エラーやパフォーマンスの問題を調査します",
-          "description": "エラーやパフォーマンスの問題を調査します。"
-        },
-        "atlassian": {
-          "summary": "Jira と Confluence を使用します",
-          "description": "Jira と Confluence を使用します。"
-        },
-        "add": {
-          "label": "{name} を追加"
-        }
-      },
-      "filters": {
-        "label": "プラグインの種類"
-      },
-      "state": {
-        "retry": {
-          "label": "再試行"
-        },
-        "loading": "プラグインを読み込み中",
-        "empty": {
-          "title": "プラグインがインストールされていません",
-          "description": "ワークスペースにプラグインを追加してください。",
-          "explore": {
-            "label": "プラグインを探す"
-          }
-        }
-      }
-    },
     "mcpSetup": {
       "contactingServer": "サーバーに接続中",
       "detectingAuthentication": "認証方式を検出中",
@@ -523,9 +375,8 @@
       "continue": "続ける",
       "back": "戻る"
     },
-    "mcpTools": {
-      "search": "ツールを検索",
-      "enabledCount": "有効なツール: {total} 個中 {enabled} 個"
+    "policyEditor": {
+      "toolCount": "{count, plural, other {#個のアクション}}"
     }
   },
   "admin": {
@@ -10777,7 +10628,6 @@
           "organization": {
             "title": "組織の接続",
             "description": "各ユーザーはこのアカウントで操作します。",
-            "state": "{state, select, connected {接続済み} not_connected {未接続} needs_reconnect {要再接続} not_set_up {未設定} other {不明}}",
             "connect": "接続",
             "disconnect": "接続を解除",
             "connected": "組織アカウントを接続しました。",
@@ -14081,22 +13931,7 @@
         "ariaLabel": "エージェントを切り替える"
       }
     },
-    "apps": {
-      "policyEditor": {
-        "loading": {
-          "label": "読み込み中…"
-        },
-        "permissions": {
-          "defaultOption": "デフォルト",
-          "description": "エージェントに許可する操作を選択します。「確認」は各アクションの前に承認を求め、「許可」は確認なしで実行します。",
-          "title": "権限"
-        },
-        "advanced": {
-          "description": "アクションごとに個別のポリシーを設定します。",
-          "title": "詳細設定"
-        }
-      }
-    },
+    "apps": {},
     "artifactsTab": {
       "download": {
         "button": "ダウンロード"
@@ -15212,8 +15047,6 @@
       "title": "承認設定",
       "personalDescription": "これらの設定は、Craftの会話、新しいタスク、チャットでのMCPツール呼び出しでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
       "taskDescription": "このタスクが使用できるプラグインを選び、自動実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
-      "workspace_disabled": "ワークスペースで無効",
-      "workspace_managed": "ワークスペースで管理",
       "userManagement": "ユーザーによる承認設定の管理を許可",
       "userManagementDescription": "ユーザーは利用可能なアクションの承認設定を変更できます。",
       "loading": "承認設定を読み込み中…",
@@ -15236,12 +15069,10 @@
       "searchActions": "アクションを検索",
       "setPermissions": "権限を設定",
       "applyMatching": "一致する編集可能なアクション {count} 件",
-      "noMatchingActions": "検索に一致するアクションはありません。",
       "close": "閉じる",
       "saveChanges": "変更を保存",
       "resetDefaults": "すべて既定値に戻す",
       "resetAll": "すべてワークスペースの既定値に戻す",
-      "workspaceDisabledTooltip": "管理者がワークスペースでこのアクションを無効にしました。",
       "newTaskPluginsDescription": "このタスクで使用できるプラグインをオンにします。変更するまで、各アクションは連携の設定を使用します。",
       "emptyPlugins": "連携を含むプラグインはありません。",
       "needsSignIn": "{name} にはサインインが必要です。",
@@ -17224,12 +17055,6 @@
         }
       },
       "connection": {
-        "status": {
-          "connected": "接続済み",
-          "notConnected": "未接続",
-          "needsReconnect": "再接続が必要",
-          "notSetUp": "未設定"
-        },
         "askAdmin": "管理者に問い合わせてください",
         "connected": "{name} を接続しました。",
         "disconnected": "{name} の接続を解除しました。",
@@ -17347,5 +17172,8 @@
         }
       }
     }
+  },
+  "integrations": {
+    "connectionState": "{state, select, connected {接続済み} not_connected {未接続} needs_reconnect {要再接続} not_set_up {未設定} other {不明}}"
   }
 }

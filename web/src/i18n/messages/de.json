@@ -242,22 +242,6 @@
         "label": "Tool nicht verfügbar"
       }
     },
-    "toolsList": {
-      "disableAllButton": {
-        "tooltip": "Alle Tools deaktivieren"
-      },
-      "empty": {
-        "message": "Keine Tools verfügbar"
-      },
-      "showAllButton": {
-        "ariaLabel": "Alle Tools anzeigen",
-        "tooltip": "Alle Tools anzeigen"
-      },
-      "showEnabledButton": {
-        "ariaLabel": "Nur aktivierte Tools anzeigen",
-        "tooltip": "Nur aktivierte anzeigen"
-      }
-    },
     "toolNames": {
       "internalSearch": {
         "label": "Interne Suche"
@@ -375,138 +359,6 @@
     "placeholders": {
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
-    "memberPlugins": {
-      "row": {
-        "connect": "{name} verbinden"
-      },
-      "status": {
-        "unavailable": "Verbindung nicht verfügbar"
-      },
-      "state": {
-        "serversError": "MCP-Plugins konnten nicht geladen werden.",
-        "appsError": "Craft-Apps konnten nicht geladen werden."
-      },
-      "detail": {
-        "toolCount": "{count, plural, one {# Aktion} other {# Aktionen}}"
-      },
-      "connection": {
-        "title": "{name} verbinden",
-        "description": "Ihr Workspace hat dieses Plugin eingerichtet. Verbinden Sie Ihr Konto, um es zu verwenden.",
-        "credentialsDescription": "Geben Sie Ihre Anmeldedaten für dieses Plugin ein. Ihre Kontoverbindung ist von denen anderer Mitglieder getrennt.",
-        "oauthDescription": "Fahren Sie fort, um sich mit Ihrem Konto anzumelden. Ihr Anbieter zeigt die angeforderten Zugriffsrechte an.",
-        "continue": "Weiter zu {name}",
-        "connect": "Verbinden",
-        "connecting": "Verbindung wird hergestellt...",
-        "cancel": "Abbrechen",
-        "done": "Fertig",
-        "workspaceDescription": "Ihr Workspace stellt diese Verbindung bereit. Sie müssen kein Konto verbinden.",
-        "sessionDescription": "Dieses Plugin nutzt Ihre aktuelle Anmeldung.",
-        "noneDescription": "Dieses Plugin benötigt keine Kontoverbindung.",
-        "connectedDescription": "Ihr Konto ist verbunden.",
-        "unconfiguredDescription": "Ein Workspace-Administrator muss die Einrichtung dieses Plugins abschließen, bevor Sie es verbinden können.",
-        "checkingDescription": "Ihr Verbindungsstatus wird noch geladen. Versuchen Sie es danach erneut.",
-        "unavailableDescription": "Ihr Verbindungsstatus konnte nicht geladen werden. Versuchen Sie es auf der Plugins-Seite erneut.",
-        "errors": {
-          "popup_blocked": "Ihr Browser hat das Anmeldefenster blockiert. Erlauben Sie Pop-ups und versuchen Sie es erneut.",
-          "cancelled": "Die Anmeldung wurde abgebrochen. Sie können es erneut versuchen.",
-          "timed_out": "Die Anmeldung hat zu lange gedauert. Versuchen Sie es erneut.",
-          "credentials_required": "Geben Sie alle erforderlichen Anmeldedaten ein.",
-          "unconfigured": "Ein Workspace-Administrator muss die Einrichtung dieses Plugins abschließen.",
-          "not_connected": "Ihre Kontoverbindung konnte nicht bestätigt werden. Versuchen Sie es erneut.",
-          "request_failed": "Die Verbindung ist fehlgeschlagen. Versuchen Sie es erneut."
-        }
-      }
-    },
-    "plugins": {
-      "availability": {
-        "on": "An",
-        "off": "Aus",
-        "enabled": "Aktiviert",
-        "disabled": "Deaktiviert",
-        "chatEnabled": "Chat an",
-        "chatDisabled": "Chat aus",
-        "chatUnknown": "Chatstatus unbekannt",
-        "craftEnabled": "Craft an",
-        "craftDisabled": "Craft aus"
-      },
-      "controls": {
-        "disconnect": "Für den Arbeitsbereich aktivieren oder deaktivieren",
-        "disable": "Für den Arbeitsbereich deaktivieren",
-        "manageAvailability": "Verfügbarkeit im Arbeitsbereich verwalten",
-        "more": "Weitere Aktionen",
-        "disableChat": "Für Hauptchat deaktivieren",
-        "disableCraft": "Für Craft deaktivieren"
-      },
-      "craftApp": {
-        "tabs": {
-          "configuration": "Konfiguration",
-          "permissions": "Berechtigungen"
-        }
-      },
-      "disableConfirmation": {
-        "workspaceTitle": "{name} für den Arbeitsbereich deaktivieren?",
-        "workspaceDescription": "Dadurch wird {name} für alle im Arbeitsbereich deaktiviert, einschließlich benutzerdefinierter Agenten. Gespeicherte Einstellungen und Zugangsdaten bleiben erhalten. Sie können es wieder aktivieren.",
-        "scope": "Alle Benutzer Ihrer Organisation",
-        "chatTitle": "{name} für den Hauptchat deaktivieren?",
-        "chatDescription": "Dadurch wird {name} für alle Benutzer Ihrer Organisation aus dem Standardchat entfernt. Benutzerdefinierte Agenten sind nicht betroffen. Sie können es wieder aktivieren.",
-        "craftTitle": "{name} für Craft deaktivieren?",
-        "craftDescription": "Dadurch ist {name} in Craft für alle Benutzer Ihrer Organisation nicht mehr verfügbar. Der Hauptchat ist nicht betroffen. Sie können es wieder aktivieren."
-      },
-      "openapi": {
-        "schemaPreview": {
-          "detected": "{count, plural, one {# Tool erkannt} other {# Tools erkannt}}",
-          "viewTools": "Tools anzeigen",
-          "saveToUpdate": "Speichern Sie die Änderungen, um die Tools zu aktualisieren."
-        },
-        "schemaTitle": "OpenAPI-Schema"
-      },
-      "title": "Plugins",
-      "description": "Verbinden Sie Tools und Apps mit Ihrem Workspace.",
-      "search": {
-        "placeholder": "Plugins suchen"
-      },
-      "add": {
-        "label": "Hinzufügen",
-        "openapi": "OpenAPI-Plugin hinzufügen"
-      },
-      "catalog": {
-        "linear": {
-          "summary": "Issues, Projekte und Teams verwalten",
-          "description": "Issues, Projekte und Teams verwalten."
-        },
-        "notion": {
-          "summary": "Ihren Notion-Arbeitsbereich durchsuchen und aktualisieren",
-          "description": "Ihren Notion-Arbeitsbereich durchsuchen und aktualisieren."
-        },
-        "sentry": {
-          "summary": "Fehler und Leistungsprobleme untersuchen",
-          "description": "Fehler und Leistungsprobleme untersuchen."
-        },
-        "atlassian": {
-          "summary": "Mit Jira und Confluence arbeiten",
-          "description": "Mit Jira und Confluence arbeiten."
-        },
-        "add": {
-          "label": "{name} hinzufügen"
-        }
-      },
-      "filters": {
-        "label": "Plugin-Typ"
-      },
-      "state": {
-        "retry": {
-          "label": "Erneut versuchen"
-        },
-        "loading": "Plugins werden geladen",
-        "empty": {
-          "title": "Keine Plugins installiert",
-          "description": "Fügen Sie Ihrem Workspace ein Plugin hinzu.",
-          "explore": {
-            "label": "Plugins entdecken"
-          }
-        }
-      }
-    },
     "mcpSetup": {
       "contactingServer": "Server kontaktieren",
       "detectingAuthentication": "Authentifizierung erkennen",
@@ -523,9 +375,8 @@
       "continue": "Weiter",
       "back": "Zurück"
     },
-    "mcpTools": {
-      "search": "Tools suchen",
-      "enabledCount": "Aktivierte Tools: {enabled} von {total}"
+    "policyEditor": {
+      "toolCount": "{count, plural, one {# Aktion} other {# Aktionen}}"
     }
   },
   "admin": {
@@ -10777,7 +10628,6 @@
           "organization": {
             "title": "Organisationsverbindung",
             "description": "Jeder Nutzer handelt mit diesem Konto.",
-            "state": "{state, select, connected {Verbunden} not_connected {Nicht verbunden} needs_reconnect {Neu verbinden} not_set_up {Nicht eingerichtet} other {Unbekannt}}",
             "connect": "Verbinden",
             "disconnect": "Trennen",
             "connected": "Das Organisationskonto wurde verbunden.",
@@ -14081,22 +13931,7 @@
         "ariaLabel": "Agent wechseln"
       }
     },
-    "apps": {
-      "policyEditor": {
-        "loading": {
-          "label": "Wird geladen…"
-        },
-        "permissions": {
-          "defaultOption": "Standard",
-          "description": "Legen Sie fest, was der Agent tun darf. „Nachfragen“ fordert vor jeder Aktion eine Genehmigung an; „Erlauben“ führt sie ohne Rückfrage aus.",
-          "title": "Berechtigungen"
-        },
-        "advanced": {
-          "description": "Legen Sie für jede Aktion einzeln eine Richtlinie fest.",
-          "title": "Erweitert"
-        }
-      }
-    },
+    "apps": {},
     "artifactsTab": {
       "download": {
         "button": "Herunterladen"
@@ -15212,8 +15047,6 @@
       "title": "Genehmigungseinstellungen",
       "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen, neuen Aufgaben und MCP-Toolaufrufen im Chat automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
       "taskDescription": "Wählen Sie die Plugins für diese Aufgabe und legen Sie fest, welche Aktionen automatisch ausgeführt werden. Änderungen gelten nur für diese Aufgabe.",
-      "workspace_disabled": "Für den Arbeitsbereich deaktiviert",
-      "workspace_managed": "Vom Arbeitsbereich verwaltet",
       "userManagement": "Nutzer dürfen Genehmigungseinstellungen verwalten",
       "userManagementDescription": "Benutzer können Genehmigungseinstellungen für verfügbare Aktionen ändern.",
       "loading": "Genehmigungseinstellungen werden geladen…",
@@ -15236,12 +15069,10 @@
       "searchActions": "Aktionen suchen",
       "setPermissions": "Berechtigungen festlegen",
       "applyMatching": "{count} passende bearbeitbare Aktionen",
-      "noMatchingActions": "Keine Aktionen entsprechen Ihrer Suche.",
       "close": "Schließen",
       "saveChanges": "Änderungen speichern",
       "resetDefaults": "Alle auf Standardwerte zurücksetzen",
       "resetAll": "Alle auf Workspace-Standardwerte zurücksetzen",
-      "workspaceDisabledTooltip": "Ein Admin hat diese Aktion für den Workspace deaktiviert.",
       "newTaskPluginsDescription": "Aktivieren Sie die Plugins, die diese Aufgabe verwenden kann. Jede Aktion nutzt die Einstellung ihrer Integration, bis Sie sie ändern.",
       "emptyPlugins": "Es sind keine Plugins mit Integrationen verfügbar.",
       "needsSignIn": "{name} erfordert eine Anmeldung.",
@@ -17224,12 +17055,6 @@
         }
       },
       "connection": {
-        "status": {
-          "connected": "Verbunden",
-          "notConnected": "Nicht verbunden",
-          "needsReconnect": "Neu verbinden nötig",
-          "notSetUp": "Nicht eingerichtet"
-        },
         "askAdmin": "Fragen Sie Ihren Admin",
         "connected": "{name} verbunden.",
         "disconnected": "{name} getrennt.",
@@ -17347,5 +17172,8 @@
         }
       }
     }
+  },
+  "integrations": {
+    "connectionState": "{state, select, connected {Verbunden} not_connected {Nicht verbunden} needs_reconnect {Neu verbinden} not_set_up {Nicht eingerichtet} other {Unbekannt}}"
   }
 }
