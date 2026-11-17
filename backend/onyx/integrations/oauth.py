@@ -43,6 +43,7 @@ from onyx.integrations.connection_models import (
     read_oauth_client,
 )
 from onyx.integrations.connections import (
+    literal_headers,
     not_set_up_reason,
     preset_host_values,
     preset_provider_for,
@@ -419,7 +420,11 @@ def _start_mcp(
         result = await run_oauth_discovery(
             oauth_provider=provider,
             server_url=server.server_url,
-            connection_headers={},
+            connection_headers={
+                name: value
+                for name, value in literal_headers(integration.header_template).items()
+                if name.lower() != "authorization"
+            },
             transport=MCPTransport.STREAMABLE_HTTP,
         )
         if not isinstance(result, OAuthAuthorizationRedirect):

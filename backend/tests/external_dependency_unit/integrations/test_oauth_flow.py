@@ -369,6 +369,37 @@ def test_first_mcp_discovery_sign_in_registers_a_client_and_completes(
     assert read_connection_secret(connection).access_token == "dcr-access"
 
 
+def test_mcp_discovery_sends_the_static_headers_of_the_integration(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = make_integration(
+        kind=IntegrationKind.MCP,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
+        header_template={
+            "Authorization": "Bearer {access_token}",
+            "X-Tenant": "acme",
+            "X-Key": "{api_key}",
+        },
+    )
+    user = make_test_user("oauth_mcp_headers")
+    sent: list[dict[str, str]] = []
+
+    async def discover(
+        connection_headers: dict[str, str], **_: Any
+    ) -> OAuthAuthorizationRedirect:
+        sent.append(connection_headers)
+        return OAuthAuthorizationRedirect(url=AUTHORIZE_URL)
+
+    with patch("onyx.integrations.oauth.run_oauth_discovery", discover):
+        assert start_integration_oauth(integration, user, db_session) == AUTHORIZE_URL
+
+    assert sent == [{"X-Tenant": "acme"}]
+
+
 def test_start_route_hides_integrations_the_user_cannot_see(
     db_session: Session,
     make_integration: MakeIntegration,

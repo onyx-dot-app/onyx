@@ -444,6 +444,12 @@ def _placeholder_values(
     }
 
 
+def has_placeholder(template: str) -> bool:
+    return any(
+        match.group(1) is not None for match in _TEMPLATE_TOKEN_RE.finditer(template)
+    )
+
+
 def render_headers(
     header_template: Mapping[str, str] | None,
     secret: ConnectionSecret | None,
@@ -474,6 +480,18 @@ def render_headers(
         name: _TEMPLATE_TOKEN_RE.sub(fill, template)
         for name, template in templates.items()
     }
+
+
+def literal_headers(header_template: Mapping[str, str] | None) -> dict[str, str]:
+    """The headers of the template that need no connection value."""
+    return render_headers(
+        {
+            name: template
+            for name, template in (header_template or {}).items()
+            if not has_placeholder(template)
+        },
+        None,
+    )
 
 
 def _needs_refresh(record: ConnectionRecord, now: datetime) -> bool:
