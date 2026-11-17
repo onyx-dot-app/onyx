@@ -36,11 +36,13 @@ from onyx.db.tools import get_tools, get_tools_by_ids
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import ConnectionSecret, read_connection_secret
+from onyx.integrations.connections import literal_headers
 from onyx.integrations.models import IntegrationPluginRow
 from onyx.integrations.service import (
     create_integration__no_commit,
     delete_integration_for_user__no_commit,
     get_manageable_integration,
+    keep_masked_values,
     manages_integration,
     update_integration__no_commit,
     validate_openapi_definition,
@@ -65,7 +67,7 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     MethodSpec,
     openapi_to_method_specs,
 )
-from onyx.utils.encryption import is_masked_credential, mask_string
+from onyx.utils.encryption import mask_string
 
 router = APIRouter(prefix="/tool")
 admin_router = APIRouter(prefix="/admin/tool")
@@ -157,16 +159,24 @@ def _set_default_chat(
 def _organization_fields(
     integration: Integration, db_session: Session
 ) -> dict[str, str]:
+    return _organization_secret(integration, db_session).fields
+
+
+def _organization_secret(
+    integration: Integration, db_session: Session
+) -> ConnectionSecret:
     connection = get_connection(db_session, integration.id, None)
     if connection is None:
-        return {}
-    return read_connection_secret(connection).fields
+        return ConnectionSecret()
+    return read_connection_secret(connection)
 
 
 def _stored_headers(integration: Integration, db_session: Session) -> dict[str, str]:
-    """The headers a call sends, with the organization values filled in."""
-    fields = _organization_fields(integration, db_session)
-    headers: dict[str, str] = {}
+    """The headers a call sends, with the organization values filled in. A
+    migrated tool keeps its headers on the organization connection."""
+    secret = _organization_secret(integration, db_session)
+    fields = secret.fields
+    headers = literal_headers(secret.headers)
     for name, template in (integration.header_template or {}).items():
         if template == _BEARER_TEMPLATE and name.lower() == "authorization":
             continue
@@ -182,22 +192,10 @@ def _stored_headers(integration: Integration, db_session: Session) -> dict[str, 
 def _resolve_masked_headers(
     headers: list[Header], stored: dict[str, str]
 ) -> list[Header]:
-    """A masked value means "keep the stored one", as the admin UI echoes
-    what it read."""
-    resolved: list[Header] = []
-    for header in headers:
-        if not is_masked_credential(header.value):
-            resolved.append(header)
-            continue
-        stored_value = stored.get(header.key)
-        if stored_value is None:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"Header '{header.key}' was sent as a masked placeholder but has "
-                "no stored value to keep. Send the actual header value.",
-            )
-        resolved.append(Header(key=header.key, value=stored_value))
-    return resolved
+    values = keep_masked_values(
+        {header.key: header.value for header in headers}, stored
+    )
+    return [Header(key=key, value=value) for key, value in values.items()]
 
 
 def _save_organization_fields(

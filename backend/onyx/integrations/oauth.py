@@ -488,7 +488,9 @@ def complete_integration_oauth(
     else:
         _complete_manual(integration, oauth_client, payload, owner_id, code, db_session)
     return IntegrationOAuthCallbackResult(
-        integration_id=integration.id, return_path=payload.return_path
+        integration_id=integration.id,
+        for_organization=for_organization,
+        return_path=payload.return_path,
     )
 
 

@@ -2,15 +2,17 @@
 database: create of each kind, the permission rules, sign-in changes, the
 actions, the member choices, the agent plugins and the public tool aliases."""
 
+import json
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from httpx import ConnectError, HTTPStatusError, Request, Response
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+from starlette.requests import Request as StarletteRequest
 
 from onyx.db.enums import (
     IntegrationActionPolicyValue,
@@ -50,7 +52,11 @@ from onyx.db.plugin import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.connection_models import ConnectionSecret
+from onyx.integrations.connection_models import (
+    ConnectionSecret,
+    IntegrationOAuthCallbackResult,
+    read_connection_secret,
+)
 from onyx.integrations.models import (
     ActionSettings,
     IntegrationActionSpec,
@@ -58,13 +64,14 @@ from onyx.integrations.models import (
     PersonaPluginLink,
 )
 from onyx.integrations.oauth import start_integration_oauth
-from onyx.server.features.integrations import admin_api, api
+from onyx.server.features.integrations import admin_api, api, connections_api
 from onyx.server.features.integrations.models import (
     ActionGrantsUpdate,
     ConnectionFieldsRequest,
     CustomConfigInput,
     IntegrationActionsUpdate,
     IntegrationCreate,
+    IntegrationOAuthCallbackRequest,
     IntegrationShape,
     IntegrationUpdate,
     McpServerConfigInput,
@@ -1418,3 +1425,142 @@ def test_member_plugin_refs_carry_the_users_install_setting(
     finally:
         db_session.delete(group)
         db_session.commit()
+
+
+# Saved header secrets
+
+
+def test_literal_header_values_are_masked_and_kept_on_save(
+    db_session: Session, scoped: User, created: Created
+) -> None:
+    secret = "static-secret-value-123"
+    request = _openapi_create(for_organization=False)
+    request.header_template = {"X-Api-Key": "{api_key}", "X-Static": secret}
+    detail = admin_api.create_integration(request, scoped, db_session)
+    created.add(detail.id)
+    assert detail.header_template is not None
+    masked = detail.header_template["X-Static"]
+    assert masked != secret
+    assert detail.header_template["X-Api-Key"] == "{api_key}"
+
+    updated = admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            header_template={"X-Api-Key": "{api_key}", "X-Static": masked}
+        ),
+        scoped,
+        db_session,
+    )
+    assert updated.header_template == detail.header_template
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+    db_session.refresh(integration)
+    assert integration.header_template == {"X-Api-Key": "{api_key}", "X-Static": secret}
+
+    with pytest.raises(OnyxError) as error:
+        admin_api.update_integration(
+            detail.id,
+            IntegrationUpdate(header_template={"X-Other": masked}),
+            scoped,
+            db_session,
+        )
+    assert error.value.status_code == 400
+
+    # A reader that cannot manage the integration gets no header values.
+    plugin = _plugin_of(db_session, detail.id)
+    publish_or_request_review__no_commit(
+        plugin, None, plugin.current_version_id, None, "rename", db_session
+    )
+    db_session.commit()
+    view = admin_api.get_integration_admin(detail.id, scoped, db_session)
+    assert view.can_manage is False
+    assert view.header_template is None
+
+
+def test_custom_tool_alias_reads_and_keeps_migrated_headers(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    """A migrated API key tool keeps its headers on the organization
+    connection in the old format and has no header template."""
+    snapshot = tool_api.create_custom_tool(
+        CustomToolCreate(
+            name=f"migrated-{uuid4().hex[:8]}",
+            description="Migrated",
+            definition=OPENAPI_SPEC,
+            custom_headers=[],
+            passthrough_auth=False,
+        ),
+        db_session,
+        admin,
+    )
+    integration = get_integration_by_kind_row(
+        Integration.tool_id, snapshot.id, db_session
+    )
+    assert integration is not None
+    created.add(integration.id)
+    integration.auth_mode = IntegrationAuthMode.SHARED
+    integration.auth_method = IntegrationAuthMethod.API_KEY
+    db_session.execute(
+        text(
+            "INSERT INTO integration_connection "
+            "(integration_id, user_id, secret, legacy_format, status) "
+            "VALUES (:integration_id, NULL, convert_to(:headers, 'UTF8'), "
+            "'tool_headers', 'connected')"
+        ),
+        {
+            "integration_id": integration.id,
+            "headers": json.dumps([{"key": "X-Api-Key", "value": "abc{1}-secret"}]),
+        },
+    )
+    db_session.commit()
+
+    fetched = tool_api.get_custom_tool(snapshot.id, db_session, admin)
+    assert fetched.custom_headers is not None
+    assert [header["key"] for header in fetched.custom_headers] == ["X-Api-Key"]
+    masked = fetched.custom_headers[0]["value"]
+    assert masked != "abc{1}-secret"
+
+    tool_api.update_custom_tool(
+        snapshot.id,
+        CustomToolUpdate(custom_headers=[Header(key="X-Api-Key", value=masked)]),
+        db_session,
+        admin,
+    )
+    db_session.expire_all()
+    connection = get_connection(db_session, integration.id, None)
+    assert connection is not None
+    assert read_connection_secret(connection).fields == {"X-Api-Key": "abc{1}-secret"}
+
+
+@pytest.mark.parametrize("for_organization", [True, False])
+def test_oauth_callback_reloads_the_craft_sessions_of_the_connection(
+    admin: User, for_organization: bool
+) -> None:
+    result = IntegrationOAuthCallbackResult(
+        integration_id=1, for_organization=for_organization, return_path=None
+    )
+    organization_users = {uuid4()}
+    with (
+        patch.object(
+            connections_api, "complete_integration_oauth", return_value=result
+        ),
+        patch.object(
+            connections_api,
+            "craft_users_of_integration",
+            return_value=organization_users,
+        ),
+        patch.object(connections_api, "reload_craft_sessions") as reload,
+    ):
+        assert (
+            connections_api.oauth_callback(
+                StarletteRequest({"type": "http"}),
+                IntegrationOAuthCallbackRequest(code="code", state="state"),
+                admin,
+                MagicMock(),
+            )
+            == result
+        )
+    reload.assert_called_once()
+    assert reload.call_args.args[0] == (
+        organization_users if for_organization else {admin.id}
+    )

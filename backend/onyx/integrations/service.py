@@ -65,6 +65,7 @@ from onyx.integrations.connection_models import ConnectionState, read_oauth_clie
 from onyx.integrations.connections import (
     IntegrationStatus,
     credential_field_keys,
+    has_placeholder,
     header_field_keys,
     integration_status,
     mark_sign_in_settings_changed,
@@ -125,6 +126,7 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_url,
     validate_openapi_schema,
 )
+from onyx.utils.encryption import is_masked_credential, mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException
 from shared_configs.configs import MULTI_TENANT
@@ -779,11 +781,13 @@ def update_integration__no_commit(
     )
     if auth_mode is IntegrationAuthMode.NONE:
         auth_method = None
-    header_template = (
-        request.header_template
-        if "header_template" in fields
-        else integration.header_template
-    )
+    header_template = integration.header_template
+    if "header_template" in fields:
+        header_template = (
+            keep_masked_values(request.header_template, header_template or {})
+            if request.header_template is not None
+            else None
+        )
     if auth_method is not integration.auth_method or fields & {
         "config",
         "header_template",
@@ -1062,6 +1066,39 @@ def _oauth_client_view(
     )
 
 
+def keep_masked_values(
+    values: Mapping[str, str], stored: Mapping[str, str]
+) -> dict[str, str]:
+    """A masked value means "keep the stored one", as a client sends back
+    what it read."""
+    resolved: dict[str, str] = {}
+    for key, value in values.items():
+        if not is_masked_credential(value):
+            resolved[key] = value
+            continue
+        kept = stored.get(key)
+        if kept is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"'{key}' was sent as a masked value but has no stored value to "
+                "keep. Send the actual value.",
+            )
+        resolved[key] = kept
+    return resolved
+
+
+def _masked_header_template(
+    header_template: Mapping[str, str] | None,
+) -> dict[str, str] | None:
+    """A value with no placeholder is a stored secret, so it is masked."""
+    if header_template is None:
+        return None
+    return {
+        name: value if has_placeholder(value) else mask_string(value)
+        for name, value in header_template.items()
+    }
+
+
 def admin_detail(
     user: User, integration: Integration, db_session: Session
 ) -> AdminIntegrationDetail:
@@ -1080,7 +1117,11 @@ def admin_detail(
         **view.model_dump(),
         config=_config_view(integration, view.shape, db_session),
         credential_fields=_credential_fields(integration),
-        header_template=None if managed else integration.header_template,
+        header_template=(
+            None
+            if managed or not view.can_manage
+            else _masked_header_template(integration.header_template)
+        ),
         users_can_save_always_allow=integration.users_can_save_always_allow,
         oauth_client=(
             None

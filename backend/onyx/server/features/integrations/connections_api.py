@@ -13,7 +13,11 @@ from onyx.integrations.oauth import (
     complete_integration_oauth,
     start_integration_oauth,
 )
-from onyx.integrations.service import get_viewable_integration
+from onyx.integrations.service import (
+    craft_users_of_integration,
+    get_viewable_integration,
+    reload_craft_sessions,
+)
 from onyx.server.features.integrations.models import (
     IntegrationOAuthCallbackRequest,
     IntegrationOAuthStartRequest,
@@ -51,10 +55,19 @@ def oauth_callback(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> IntegrationOAuthCallbackResult:
-    return complete_integration_oauth(
+    result = complete_integration_oauth(
         request.code,
         request.state,
         user,
         db_session,
         token_may_manage=token_allows(http_request, Permission.MANAGE_ACTIONS),
     )
+    reload_craft_sessions(
+        (
+            craft_users_of_integration(result.integration_id, db_session)
+            if result.for_organization
+            else {user.id}
+        ),
+        db_session,
+    )
+    return result

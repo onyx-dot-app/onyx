@@ -478,7 +478,11 @@ it.
 7. `mcp-tool-user-id-none` **`Tool.user_id` is not the owner.** The plugins
    that hold the integration decide who manages it. Check rights with
    `integrations/service.py:manages_integration`, never with
-   `tool.user_id == user.id`.
+   `tool.user_id == user.id`. `integrations/service.py:admin_detail` returns
+   `header_template` only to a manager, and masks each value with no
+   placeholder, because the migration put static header secrets there.
+   `keep_masked_values` keeps the stored value when a client sends a masked
+   value back.
 8. `access-grants-default-chat-only` **Plugin visibility gates chat, not server
    grants.** Chat offers an integration's actions to each user who can use the
    agent and can see a plugin of the agent that holds the integration
@@ -521,7 +525,8 @@ it.
     (`CallCredentials.secret_fingerprint`). A key saved during the call stays
     connected. OAuth2 connections are left to the refresh.
 13. `craft-sessions-bake-mcp-config` **Craft sessions bake MCP config.** A change
-    to an integration must call
+    to an integration or a new connection (also the OAuth callback,
+    `server/features/integrations/connections_api.py:oauth_callback`) must call
     `backend/onyx/integrations/service.py:reload_craft_sessions`. Take
     `craft_users_of_integration` before a delete; users who lose access are not
     in the set afterwards. The reload restamps `mcp_config_hash` and pushes the
