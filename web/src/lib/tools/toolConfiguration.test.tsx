@@ -55,7 +55,7 @@ let mockUser: Pick<User, "id" | "email" | "is_anonymous_user"> | null =
   SIGNED_IN;
 // The agent's plugins and the plugins the user turned off for it.
 let mockPluginIds: string[] | null = [];
-let mockDisabledPluginIds: string[] = [];
+let mockDisabledPluginIds: string[] | null = [];
 // The agents whose plugins and preferences the composer read.
 let mockReadAgentIds: (number | undefined)[] = [];
 const mockSetPluginsDisabled = jest.fn(() => Promise.resolve());
@@ -71,7 +71,7 @@ jest.mock("@/lib/plugins/hooks", () => ({
     };
   },
   useAgentPluginPreferences: () => ({
-    loaded: true,
+    loaded: mockDisabledPluginIds !== null,
     disabledPluginIds: (agentId: number) => {
       mockReadAgentIds.push(agentId);
       return mockDisabledPluginIds;
@@ -957,6 +957,20 @@ describe("useToolConfiguration: plugins of the agent", () => {
       { type: "capability", tool_id: 2 },
       { type: "plugin", plugin_id: "plugin-a" },
     ]);
+  });
+
+  test("a new chat holds a send until the saved plugin switches load", () => {
+    mockChatId = null;
+    mockActiveAgent = AGENT;
+    mockPluginIds = ["plugin-a"];
+    mockDisabledPluginIds = null;
+    const { result, rerender } = renderHook(() => useToolConfiguration(7));
+    expect(result.current.optionsLoaded).toBe(false);
+
+    mockDisabledPluginIds = ["plugin-a"];
+    rerender();
+    expect(result.current.optionsLoaded).toBe(true);
+    expect(result.current.isPluginEnabled("plugin-a")).toBe(false);
   });
 
   test("an agent preview reads and saves the plugins of the previewed agent", () => {
