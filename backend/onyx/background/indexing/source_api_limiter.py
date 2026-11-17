@@ -49,8 +49,8 @@ class SourceApiBudget(BaseModel):
     per_credential: int | None = None
     per_user: int | None = None
     period_seconds: float = 60.0
-    # True when the source counts requests, so each call costs 1 whatever
-    # cost the connector gives.
+    # True when the source counts requests, so a call costs its number of
+    # requests whatever cost the connector gives.
     count_requests: bool = False
 
 
@@ -91,20 +91,25 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         windows = [self.credential_window(api), self.user_window(api, user)]
         return [window for window in windows if window is not None]
 
-    def try_acquire(self, api: str, cost: int, user: str | None = None) -> float:
+    def try_acquire(
+        self, api: str, cost: int, user: str | None = None, request_count: int = 1
+    ) -> float:
         """Takes the call's units and returns 0, or returns the seconds until
         a full window has room."""
         budget = self._budgets.get(api)
         if budget is None:
             return 0
         return self._windows.try_acquire(
-            self._windows_for(api, user), 1 if budget.count_requests else cost
+            self._windows_for(api, user),
+            request_count if budget.count_requests else cost,
         )
 
     @override
-    def acquire(self, api: str, cost: int, user: str | None = None) -> None:
+    def acquire(
+        self, api: str, cost: int, user: str | None = None, request_count: int = 1
+    ) -> None:
         started = time.monotonic()
-        while (wait := self.try_acquire(api, cost, user)) > 0:
+        while (wait := self.try_acquire(api, cost, user, request_count)) > 0:
             waited = time.monotonic() - started
             if waited >= MAX_WAIT_SECONDS:
                 logger.warning(
@@ -140,19 +145,18 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         )
 
 
-def google_drive_budgets() -> dict[str, SourceApiBudget]:
-    """The budgets of Google's Drive and Docs quotas, from the configuration."""
-    return {
-        DriveQuotaApi.DRIVE.value: SourceApiBudget(
-            per_credential=GOOGLE_DRIVE_QUOTA_PER_PROJECT,
-            per_user=GOOGLE_DRIVE_QUOTA_PER_USER,
-            count_requests=GOOGLE_DRIVE_QUOTA_MODEL == "requests",
-        ),
-        DriveQuotaApi.DOCS.value: SourceApiBudget(
-            per_credential=GOOGLE_DOCS_READS_PER_PROJECT,
-            per_user=GOOGLE_DOCS_READS_PER_USER,
-        ),
-    }
+# The budgets of Google's Drive and Docs quotas, from the configuration.
+GOOGLE_DRIVE_BUDGETS: dict[str, SourceApiBudget] = {
+    DriveQuotaApi.DRIVE.value: SourceApiBudget(
+        per_credential=GOOGLE_DRIVE_QUOTA_PER_PROJECT,
+        per_user=GOOGLE_DRIVE_QUOTA_PER_USER,
+        count_requests=GOOGLE_DRIVE_QUOTA_MODEL == "requests",
+    ),
+    DriveQuotaApi.DOCS.value: SourceApiBudget(
+        per_credential=GOOGLE_DOCS_READS_PER_PROJECT,
+        per_user=GOOGLE_DOCS_READS_PER_USER,
+    ),
+}
 
 
 def build_source_api_limiter(
@@ -170,6 +174,6 @@ def build_source_api_limiter(
     return RedisSourceApiLimiter(
         tenant_id=get_current_tenant_id(),
         credential_key=f"{source.value}:{credential_id}",
-        budgets=google_drive_budgets(),
+        budgets=GOOGLE_DRIVE_BUDGETS,
         should_stop=should_stop,
     )
