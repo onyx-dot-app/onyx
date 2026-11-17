@@ -197,7 +197,8 @@ at and before `ff11c4042c42` in `alembic/versions` and `af8d808d89dd` in
 `alembic_tenants/versions`.
 
 - `not-valid` requires `postgresql_not_valid=True` on direct CHECK and FK
-  operations on existing tables. Review the commit and validation sequence.
+  operations on existing tables. It also checks foreign keys in added columns.
+  Review the commit and validation sequence.
 - `deferrable` prohibits literal `deferrable=True` and `initially="DEFERRED"`
   on constraint declarations in upgrades and their helpers.
 - `not-null` requires a server default for a direct NOT NULL column addition

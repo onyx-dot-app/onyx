@@ -165,3 +165,27 @@ def test_table_that_may_already_exist_is_not_exempt(tmp_path: Path, setup: str) 
     failures = list(check_migration_design.check_chain(tmp_path, "marker"))
     assert len(failures) == 1
     assert "blocking-index:" in failures[0]
+
+
+def test_added_column_foreign_key_on_existing_table(tmp_path: Path) -> None:
+    _revision(tmp_path, "marker", None, "pass")
+    add_column = (
+        'op.add_column("index_attempt", sa.Column("targeted_reindex_job_id", '
+        'sa.Integer(), sa.ForeignKey("targeted_reindex_job.id", ondelete="SET NULL"), '
+        "nullable=False))"
+    )
+    _revision(tmp_path, "new", "marker", add_column)
+    failures = list(check_migration_design.check_chain(tmp_path, "marker"))
+    assert sorted(error.split(": ")[1] for error in failures) == [
+        "not-null",
+        "not-valid",
+    ]
+    _revision(
+        tmp_path, "new", "marker", 'op.create_table("index_attempt")\n' + add_column
+    )
+    assert list(check_migration_design.check_chain(tmp_path, "marker")) == []
+    clean = add_column.replace(
+        'ondelete="SET NULL"', 'ondelete="SET NULL", postgresql_not_valid=True'
+    ).replace("nullable=False", "nullable=True")
+    _revision(tmp_path, "new", "marker", clean)
+    assert list(check_migration_design.check_chain(tmp_path, "marker")) == []

@@ -69,12 +69,17 @@ def _op_name(call: ast.Call) -> str:
     return ""
 
 
-def _is_deferrable(call: ast.Call) -> bool:
+def _call_name(call: ast.Call) -> str:
     func = call.func
-    name = func.attr if isinstance(func, ast.Attribute) else ""
     if isinstance(func, ast.Name):
-        name = func.id
-    return (name in _SA_CONSTRAINTS or _op_name(call).startswith("create_")) and (
+        return func.id
+    return func.attr if isinstance(func, ast.Attribute) else ""
+
+
+def _is_deferrable(call: ast.Call) -> bool:
+    return (
+        _call_name(call) in _SA_CONSTRAINTS or _op_name(call).startswith("create_")
+    ) and (
         _literal(_argument(call, "deferrable")) is True
         or str(_literal(_argument(call, "initially"))).upper() == "DEFERRED"
     )
@@ -97,7 +102,11 @@ def _table(
     return None
 
 
-def _operation_rule(call: ast.Call, created: set[tuple[str, str | None]]) -> str | None:
+def _operation_rules(
+    call: ast.Call, created: set[tuple[str, str | None]]
+) -> Iterator[str]:
+    if _is_deferrable(call):
+        yield "deferrable"
     name = _op_name(call)
     if name in _CONSTRAINTS:
         table_name, schema_name = _CONSTRAINTS[name]
@@ -105,19 +114,32 @@ def _operation_rule(call: ast.Call, created: set[tuple[str, str | None]]) -> str
             _table(call, table_name, 1, schema_name) not in created
             and _literal(_argument(call, "postgresql_not_valid")) is not True
         ):
-            return "not-valid"
+            yield "not-valid"
     if name == "add_column" and _table(call, "table_name", 0) not in created:
         column = _argument(call, "column", 1)
         if isinstance(column, ast.Call):
+            inline_references = _argument(call, "inline_references")
+            if any(
+                isinstance(arg, ast.Call)
+                and _call_name(arg) == "ForeignKey"
+                and (
+                    _literal(_argument(arg, "postgresql_not_valid")) is not True
+                    or (
+                        inline_references is not None
+                        and _literal(inline_references) is not False
+                    )
+                )
+                for arg in column.args
+            ):
+                yield "not-valid"
             default = _argument(column, "server_default")
             if _literal(_argument(column, "nullable")) is False and (
                 default is None
                 or (isinstance(default, ast.Constant) and default.value is None)
             ):
-                return "not-null"
+                yield "not-null"
     if name == "create_index" and _table(call, "table_name", 1) not in created:
-        return "blocking-index"
-    return None
+        yield "blocking-index"
 
 
 def find_violations(tree: ast.Module, source: str) -> list[tuple[int, str]]:
@@ -147,11 +169,8 @@ def find_violations(tree: ast.Module, source: str) -> list[tuple[int, str]]:
                     else:
                         created.clear()
             for call in calls:
-                for rule in (
-                    _operation_rule(call, created),
-                    "deferrable" if _is_deferrable(call) else None,
-                ):
-                    if rule and not any(
+                for rule in _operation_rules(call, created):
+                    if not any(
                         comments.get(line) == rule
                         for line in range(
                             call.lineno, (call.end_lineno or call.lineno) + 1
