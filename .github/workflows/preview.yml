@@ -71,7 +71,9 @@ jobs:
       && github.event.pull_request.user.login != 'dependabot[bot]'
       && github.event.pull_request.user.login != 'onyx-cherry-pick[bot]')) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Covers the build and the deploy step's own limit below, with room left
+    # for the report step.
+    timeout-minutes: 45
     permissions:
       contents: read
       id-token: write
@@ -179,6 +181,10 @@ jobs:
       # fresh one for each request (the server accepts OIDC on exactly these).
       - name: Upload the frontend and deploy
         id: deploy
+        # A step that times out fails instead of cancelling the job, so the
+        # report step still runs. Covers the 10-minute upload wait and the
+        # 20-minute deploy wait.
+        timeout-minutes: 32
         run: |
           # Without pipefail the tee below would mask a failed upload.
           set -euo pipefail
