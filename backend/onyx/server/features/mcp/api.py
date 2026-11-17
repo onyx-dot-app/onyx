@@ -1418,6 +1418,7 @@ def _db_mcp_server_to_api_mcp_server(
         is_public=db_server.is_public,
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
+        available_in_craft=db_server.available_in_craft,
         users_can_manage_policies=users_can_manage_policies(
             db, GatedAppKind.MCP_SERVER, db_server.id
         ),
@@ -1461,6 +1462,10 @@ def update_mcp_user_preferences(
 ) -> MCPUserPreferencesResponse:
     if not user_can_access_mcp_server(user, server_id, db):
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "MCP server is not accessible")
+    try:
+        get_mcp_server_by_id(server_id, db)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found") from error
     if (
         request.enabled_in_chat is True
         and server_id not in get_default_chat_mcp_server_ids([server_id], db)
@@ -1468,7 +1473,6 @@ def update_mcp_user_preferences(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, "MCP server is not available in default Chat"
         )
-
     preference = upsert_mcp_server_user_preferences__no_commit(
         server_id,
         user.id,
@@ -3430,6 +3434,7 @@ def create_mcp_server_simple(
         is_public=mcp_server.is_public,
         groups=[group.id for group in mcp_server.user_groups],
         users=[user.id for user in mcp_server.users],
+        available_in_craft=mcp_server.available_in_craft,
         tool_count=0,  # New server, no tools yet
         auth_template=None,
         user_credentials=None,
