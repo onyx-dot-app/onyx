@@ -5,11 +5,17 @@ same keys, so they share one budget for each API: a window for the whole
 credential (for Google, the GCP project) and a window for each user the
 connector acts as. A call waits until it fits both.
 
-The budgets adapt. When the source refuses a call for its rate, the window
-that the source named allows half as much for a time, and then grows back.
-A cut of one user's window does not slow other users.
+The budgets adapt. When the source refuses enough of the recent calls for
+its rate, the window that the source named allows less for a time, and then
+grows back. A cut of one user's window does not slow other users.
+
+Each budget is for a period (a minute for Google), but the window that
+enforces it is shorter, with the same rate. A window of the whole period lets
+the full budget go in one burst, and then lets requests in only as the burst
+leaves the window. The source then sees bursts and stops, not a steady rate.
 """
 
+import math
 import time
 from collections.abc import Callable
 
@@ -57,6 +63,9 @@ class SourceApiBudget(BaseModel):
     per_credential: int | None = None
     per_user: int | None = None
     period_seconds: float = 60.0
+    # The window that enforces the limits, at the same rate. None is the whole
+    # period.
+    window_seconds: float | None = None
     # True when the source counts requests, so a call costs its number of
     # requests whatever cost the connector gives.
     count_requests: bool = False
@@ -82,20 +91,14 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         budget = self._budgets.get(api)
         if budget is None or budget.per_credential is None:
             return None
-        return RateWindow(
-            key=f"{self._prefix}:{api}:all",
-            limit=budget.per_credential,
-            period_seconds=budget.period_seconds,
-        )
+        return _window(f"{self._prefix}:{api}:all", budget.per_credential, budget)
 
     def user_window(self, api: str, user: str | None) -> RateWindow | None:
         budget = self._budgets.get(api)
         if budget is None or budget.per_user is None or user is None:
             return None
-        return RateWindow(
-            key=f"{self._prefix}:{api}:user:{user.lower()}",
-            limit=budget.per_user,
-            period_seconds=budget.period_seconds,
+        return _window(
+            f"{self._prefix}:{api}:user:{user.lower()}", budget.per_user, budget
         )
 
     def try_acquire(
@@ -110,7 +113,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         user_window = self.user_window(api, user)
         windows = [w for w in (credential_window, user_window) if w is not None]
         result = self._windows.try_acquire_with_shares(
-            windows, request_count if budget.count_requests else cost
+            windows, request_count if budget.count_requests else cost, request_count
         )
         # No shares when Redis cannot be reached.
         if result.shares:
@@ -121,9 +124,14 @@ class RedisSourceApiLimiter(SourceApiLimiter):
     def _record_budget(
         self, api: str, window: RateWindow, share: float, user_scope: bool
     ) -> None:
-        allowed = allowed_units(window.limit, share)
+        # The metrics show the budget of the whole period, as configured.
+        budget = self._budgets[api]
+        limit = budget.per_user if user_scope else budget.per_credential
+        if limit is None:
+            return
+        allowed = allowed_units(limit, share)
         if user_scope:
-            observe_user_budget(self._source, api, window.key, allowed, window.limit)
+            observe_user_budget(self._source, api, window.key, allowed, limit)
         else:
             set_project_budget(self._source, api, allowed)
 
@@ -135,6 +143,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         slept = 0.0
         try:
             while (wait := self.try_acquire(api, cost, user, request_count)) > 0:
+                self._check_stop()
                 waited = time.monotonic() - started
                 if waited >= MAX_WAIT_SECONDS:
                     logger.warning(
@@ -144,42 +153,65 @@ class RedisSourceApiLimiter(SourceApiLimiter):
                         waited,
                     )
                     return
-                if self._should_stop is not None and self._should_stop():
-                    raise ConnectorStopSignal(
-                        "Stop signal while waiting for the API budget"
-                    )
                 sleep = min(
                     wait, _STOP_CHECK_INTERVAL_SECONDS, MAX_WAIT_SECONDS - waited
                 )
                 time.sleep(sleep)
                 slept += sleep
+            # A stop during the last sleep ends the call before its request.
+            if slept > 0:
+                self._check_stop()
         finally:
             record_limiter_wait(self._source, api, slept)
 
+    def _check_stop(self) -> None:
+        if self._should_stop is not None and self._should_stop():
+            raise ConnectorStopSignal("Stop signal while waiting for the API budget")
+
     @override
-    def report_rate_limit(self, api: str, user: str | None, user_scope: bool) -> None:
+    def report_rate_limit(
+        self, api: str, user: str | None, user_scope: bool, count: int = 1
+    ) -> None:
         window = (
             self.user_window(api, user) if user_scope else self.credential_window(api)
         )
         if window is None:
             return
-        cut = self._windows.cut(window)
-        if cut.applied:
-            record_limiter_cut(
-                self._source,
-                api,
-                LimiterScope.USER if user_scope else LimiterScope.PROJECT,
-            )
-        self._record_budget(api, window, cut.share, user_scope)
-        logger.info(
-            "%s refused a call for its rate (%s); the shared budget %s is at "
-            "%.0f%% of its limit.",
+        result = self._windows.report_refusals(window, count)
+        if not result.applied:
+            return
+        record_limiter_cut(
+            self._source,
             api,
+            LimiterScope.USER if user_scope else LimiterScope.PROJECT,
+        )
+        self._record_budget(api, window, result.share, user_scope)
+        logger.info(
+            "%s refused %.1f%% of the recent calls for its rate (%s); the shared "
+            "budget %s is cut%s to %.0f%% of its limit.",
+            api,
+            result.refused_share * 100,
             "user" if user_scope else "credential",
             window.key,
-            cut.share * 100,
+            " hard" if result.hard else "",
+            result.share * 100,
         )
 
+
+def _window(key: str, limit: int, budget: SourceApiBudget) -> RateWindow:
+    """The window that enforces ``limit`` for the budget's period."""
+    if budget.window_seconds is None or budget.window_seconds >= budget.period_seconds:
+        return RateWindow(key=key, limit=limit, period_seconds=budget.period_seconds)
+    return RateWindow(
+        key=key,
+        limit=max(1, math.floor(limit * budget.window_seconds / budget.period_seconds)),
+        period_seconds=budget.window_seconds,
+    )
+
+
+# Google's quotas are for one minute. A window of 10 seconds keeps the rate
+# steady; see the module docstring.
+_GOOGLE_WINDOW_SECONDS = 10.0
 
 # The budgets of Google's Drive and Docs quotas, from the configuration.
 GOOGLE_DRIVE_BUDGETS: dict[str, SourceApiBudget] = {
@@ -187,10 +219,12 @@ GOOGLE_DRIVE_BUDGETS: dict[str, SourceApiBudget] = {
         per_credential=GOOGLE_DRIVE_QUOTA_PER_PROJECT,
         per_user=GOOGLE_DRIVE_QUOTA_PER_USER,
         count_requests=GOOGLE_DRIVE_QUOTA_MODEL == "requests",
+        window_seconds=_GOOGLE_WINDOW_SECONDS,
     ),
     DriveQuotaApi.DOCS.value: SourceApiBudget(
         per_credential=GOOGLE_DOCS_READS_PER_PROJECT,
         per_user=GOOGLE_DOCS_READS_PER_USER,
+        window_seconds=_GOOGLE_WINDOW_SECONDS,
     ),
 }
 
