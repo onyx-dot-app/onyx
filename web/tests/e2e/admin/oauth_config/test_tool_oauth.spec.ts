@@ -1,7 +1,8 @@
 import { test } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
-import { AdminOpenApiPluginPage } from "@tests/e2e/pages/AdminOpenApiPluginPage";
+import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
+import { AdminIntegrationDetailPage } from "@tests/e2e/pages/AdminIntegrationDetailPage";
 
 const SIMPLE_OPENAPI_SCHEMA = `{
   "openapi": "3.0.0",
@@ -50,9 +51,13 @@ test("OpenAPI app OAuth sign-in settings persist", async ({ page }) => {
     `"title": "${toolName}"`
   );
 
-  const plugin = new AdminOpenApiPluginPage(page);
-  createdIntegrationId = await plugin.createFromSchema(schema, toolName);
-  await plugin.configureOAuth(oauth);
-  await plugin.expectDetail(toolName);
-  await plugin.expectOAuthPersisted(oauth);
+  const detail = new AdminIntegrationDetailPage(page);
+  createdIntegrationId = await new AdminIntegrationsPage(page).addOpenApiApp(
+    schema,
+    toolName
+  );
+  await detail.expectLoaded(toolName);
+  await detail.configureOAuth(oauth);
+  await detail.expectLoaded(toolName);
+  await detail.expectOAuthPersisted(oauth);
 });
