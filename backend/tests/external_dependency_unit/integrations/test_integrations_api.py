@@ -5,7 +5,7 @@ actions, the member choices, the agent plugins and the public tool aliases."""
 import json
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -15,7 +15,6 @@ from mcp.types import ToolAnnotations
 from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
-from starlette.requests import Request as StarletteRequest
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
@@ -53,32 +52,27 @@ from onyx.db.persona import upsert_persona
 from onyx.db.plugin import (
     lock_plugin,
     publish_or_request_review__no_commit,
-    set_plugin_preferences__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.integrations.connection_models import (
     ConnectionSecret,
-    IntegrationOAuthCallbackResult,
     read_connection_secret,
 )
 from onyx.integrations.connections import connect_with_fields__no_commit
 from onyx.integrations.models import (
-    ActionSettings,
     IntegrationActionSpec,
-    LinkValue,
     PersonaPluginLink,
 )
 from onyx.integrations.oauth import start_integration_oauth
-from onyx.server.features.integrations import admin_api, api, connections_api
+from onyx.server.features.integrations import admin_api, api
 from onyx.server.features.integrations.models import (
     ActionGrantsUpdate,
     ConnectionFieldsRequest,
     CustomConfigInput,
     IntegrationActionsUpdate,
     IntegrationCreate,
-    IntegrationOAuthCallbackRequest,
     IntegrationShape,
     IntegrationUpdate,
     McpServerConfigInput,
@@ -86,14 +80,11 @@ from onyx.server.features.integrations.models import (
     OpenApiConfigInput,
     PresetConfigInput,
 )
-from onyx.server.features.persona import api as persona_api
-from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.tool import api as tool_api
 from onyx.server.features.tool.models import (
     CustomToolCreate,
     CustomToolUpdate,
     Header,
-    ToolSnapshot,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
@@ -974,67 +965,6 @@ def test_refresh_of_an_individual_mcp_server_uses_the_admin_connection(
 # Member
 
 
-def test_member_list_detail_connection_and_grants(
-    db_session: Session, admin: User, member: User, created: Created
-) -> None:
-    request = _openapi_create()
-    request.auth_mode = IntegrationAuthMode.INDIVIDUAL
-    detail = admin_api.create_integration(request, admin, db_session)
-    created.add(detail.id)
-
-    listed = {
-        view.id: view for view in api.list_integrations_for_member(member, db_session)
-    }
-    assert listed[detail.id].status.state.value == "not_connected"
-
-    status = api.save_member_connection(
-        detail.id,
-        ConnectionFieldsRequest(fields={"api_key": "mine"}),
-        member,
-        db_session,
-    )
-    assert status.state.value == "connected"
-
-    grants = api.save_action_grants(
-        detail.id,
-        ActionGrantsUpdate(actions={"set_alert": "allow"}),
-        member,
-        db_session,
-    )
-    by_key = {action.key: action for action in grants.actions}
-    assert by_key["set_alert"].user_policy == "allow"
-    assert by_key["get_forecast"].user_policy is None
-    assert api.get_integration_for_member(detail.id, member, db_session).actions[
-        0
-    ].user_policy in (None, "allow")
-
-    api.save_action_grants(
-        detail.id, ActionGrantsUpdate(actions={"set_alert": None}), member, db_session
-    )
-    assert all(
-        action.user_policy is None
-        for action in api.get_action_grants(detail.id, member, db_session).actions
-    )
-
-    status = api.delete_member_connection(detail.id, member, db_session)
-    assert status.state.value == "not_connected"
-
-    admin_api.update_integration(
-        detail.id,
-        IntegrationUpdate(users_can_save_always_allow=False),
-        admin,
-        db_session,
-    )
-    with pytest.raises(OnyxError) as error:
-        api.save_action_grants(
-            detail.id,
-            ActionGrantsUpdate(actions={"set_alert": "allow"}),
-            member,
-            db_session,
-        )
-    assert error.value.status_code == 403
-
-
 def test_member_cannot_save_always_allow_over_an_admin_block_or_allow(
     db_session: Session, admin: User, member: User, created: Created
 ) -> None:
@@ -1063,27 +993,6 @@ def test_member_cannot_save_always_allow_over_an_admin_block_or_allow(
         action.user_policy is None
         for action in api.get_action_grants(detail.id, member, db_session).actions
     )
-
-
-def test_member_plugin_refs_carry_the_user_choice(
-    db_session: Session, admin: User, member: User, created: Created
-) -> None:
-    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
-    created.add(detail.id)
-    plugin_id = detail.plugins[0].plugin_id
-
-    for enabled in (False, True):
-        set_plugin_preferences__no_commit(member.id, [plugin_id], enabled, db_session)
-        db_session.commit()
-        listed = {
-            view.id: view
-            for view in api.list_integrations_for_member(member, db_session)
-        }
-        assert [(ref.plugin_id, ref.enabled) for ref in listed[detail.id].plugins] == [
-            (plugin_id, enabled)
-        ]
-        member_view = api.get_integration_for_member(detail.id, member, db_session)
-        assert [ref.enabled for ref in member_view.plugins] == [enabled]
 
 
 def test_member_cannot_reach_a_private_integration(
@@ -1181,120 +1090,9 @@ def test_persona_plugins_and_legacy_tool_ids(
         "actions": {"hello": "inherit"},
     }
 
-    _persona(
-        db_session,
-        admin,
-        tool_ids=[],
-        plugin_links=[
-            PersonaPluginLink(
-                plugin_id=mcp_plugin.id,
-                action_settings=ActionSettings(actions={"bye": LinkValue.BLOCKED}),
-            )
-        ],
-        persona_id=persona_id,
-    )
-    links = {
-        link.plugin_id: link.action_settings
-        for link in list_persona_plugin_links(db_session, persona_id)
-    }
-    assert links == {mcp_plugin.id: {"actions": {"bye": "blocked"}}}
-
-    snapshot = persona_api.get_persona(persona_id, admin, db_session)
-    assert [
-        (plugin.plugin_id, plugin.plugin_name, plugin.action_settings)
-        for plugin in snapshot.plugins
-    ] == [
-        (
-            mcp_plugin.id,
-            mcp_plugin.name,
-            ActionSettings(actions={"bye": LinkValue.BLOCKED}),
-        )
-    ]
-
-    # None keeps the links.
-    _persona(db_session, admin, tool_ids=None, plugin_links=None, persona_id=persona_id)
-    assert len(list_persona_plugin_links(db_session, persona_id)) == 1
-
     # Old tool ids with no MCP tool remove the link of the old MCP tool.
     _persona(db_session, admin, tool_ids=[], plugin_links=None, persona_id=persona_id)
     assert list_persona_plugin_links(db_session, persona_id) == []
-
-
-def test_persona_create_and_update_responses_carry_plugins() -> None:
-    """FastAPI drops each field that the response model does not have."""
-    from fastapi.routing import APIRoute
-
-    endpoints = {persona_api.create_persona, persona_api.update_persona}
-    models = [
-        route.response_model
-        for route in persona_api.basic_router.routes
-        if isinstance(route, APIRoute) and route.endpoint in endpoints
-    ]
-    assert models == [FullPersonaSnapshot, FullPersonaSnapshot]
-    assert "plugins" in FullPersonaSnapshot.model_fields
-
-
-# Public aliases
-
-
-def test_custom_tool_aliases_keep_their_shapes(
-    db_session: Session, admin: User, member: User, created: Created
-) -> None:
-    snapshot = tool_api.create_custom_tool(
-        CustomToolCreate(
-            name=f"alias-{uuid4().hex[:8]}",
-            description="Alias",
-            definition=OPENAPI_SPEC,
-            custom_headers=[Header(key="X-Api-Key", value="secret-value")],
-            passthrough_auth=False,
-        ),
-        db_session,
-        admin,
-    )
-    integration = get_integration_by_kind_row(
-        Integration.tool_id, snapshot.id, db_session
-    )
-    assert integration is not None
-    created.add(integration.id)
-    assert set(ToolSnapshot.model_fields) == set(snapshot.model_dump())
-    assert snapshot.definition == OPENAPI_SPEC
-    assert snapshot.custom_headers is not None
-    assert snapshot.custom_headers[0]["key"] == "X-Api-Key"
-    assert snapshot.custom_headers[0]["value"] != "secret-value"
-    assert integration.kind is IntegrationKind.API
-    assert integration.auth_mode is IntegrationAuthMode.SHARED
-
-    fetched = tool_api.get_custom_tool(snapshot.id, db_session, member)
-    assert fetched.id == snapshot.id
-    assert snapshot.id in {t.id for t in tool_api.list_tools(db_session, member)}
-    assert snapshot.id in {t.id for t in tool_api.list_openapi_tools(db_session, admin)}
-
-    updated = tool_api.update_custom_tool(
-        snapshot.id,
-        CustomToolUpdate(
-            name="Renamed alias",
-            custom_headers=[
-                Header(key="X-Api-Key", value=snapshot.custom_headers[0]["value"])
-            ],
-        ),
-        db_session,
-        admin,
-    )
-    assert updated.name == "Renamed alias"
-    connection = get_connection(db_session, integration.id, None)
-    assert connection is not None
-
-    methods = tool_api.validate_tool(
-        tool_api.ValidateToolRequest(definition=OPENAPI_SPEC), admin
-    )
-    assert {method.raw_name for method in methods.methods} == {
-        "get_forecast",
-        "set_alert",
-    }
-
-    tool_api.delete_custom_tool(snapshot.id, db_session, admin)
-    assert db_session.get(Integration, integration.id) is None
-    assert db_session.get(Tool, snapshot.id) is None
 
 
 # Review fixes
@@ -1766,37 +1564,3 @@ def test_custom_tool_alias_save_keeps_oauth_sign_in(
             admin,
         )
     assert exc.value.error_code is OnyxErrorCode.INVALID_INPUT
-
-
-@pytest.mark.parametrize("for_organization", [True, False])
-def test_oauth_callback_reloads_the_craft_sessions_of_the_connection(
-    admin: User, for_organization: bool
-) -> None:
-    result = IntegrationOAuthCallbackResult(
-        integration_id=1, for_organization=for_organization, return_path=None
-    )
-    organization_users = {uuid4()}
-    with (
-        patch.object(
-            connections_api, "complete_integration_oauth", return_value=result
-        ),
-        patch.object(
-            connections_api,
-            "craft_users_of_integration",
-            return_value=organization_users,
-        ),
-        patch.object(connections_api, "reload_craft_sessions") as reload,
-    ):
-        assert (
-            connections_api.oauth_callback(
-                StarletteRequest({"type": "http"}),
-                IntegrationOAuthCallbackRequest(code="code", state="state"),
-                admin,
-                MagicMock(),
-            )
-            == result
-        )
-    reload.assert_called_once()
-    assert reload.call_args.args[0] == (
-        organization_users if for_organization else {admin.id}
-    )

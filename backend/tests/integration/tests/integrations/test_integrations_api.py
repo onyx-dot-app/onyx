@@ -188,6 +188,13 @@ def test_member_routes(
         "set_alert": "allow",
     }
     assert IntegrationManager.get_member(detail.id, basic_user).id == detail.id
+    IntegrationManager.set_grants_raw(
+        detail.id, {"set_alert": None}, basic_user
+    ).raise_for_status()
+    assert all(
+        action.user_policy is None
+        for action in IntegrationManager.get_grants(detail.id, basic_user).actions
+    )
     assert IntegrationManager.disconnect(detail.id, basic_user)["state"] == (
         "not_connected"
     )
