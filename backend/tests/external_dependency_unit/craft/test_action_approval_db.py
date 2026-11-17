@@ -216,13 +216,6 @@ def test_deleting_app_preserves_action_approval(
 ) -> None:
     user = make_user(db_session)
     session = build_session_with_user(user=user)
-    integration = Integration(
-        kind=IntegrationKind.API,
-        name="Audit test",
-        auth_mode=IntegrationAuthMode.NONE,
-    )
-    db_session.add(integration)
-    db_session.flush()
     app = ExternalApp(
         name="Audit test",
         app_type=ExternalAppType.CUSTOM,
@@ -230,9 +223,16 @@ def test_deleting_app_preserves_action_approval(
         upstream_url_patterns=[],
         auth_template={},
         organization_credentials={},
-        integration_id=integration.id,
     )
     db_session.add(app)
+    db_session.flush()
+    integration = Integration(
+        kind=IntegrationKind.API,
+        name="Audit test",
+        auth_mode=IntegrationAuthMode.NONE,
+        external_app_id=app.id,
+    )
+    db_session.add(integration)
     db_session.flush()
     # The upgrade keeps the id of an old identity row as the integration id.
     db_session.add(GatedApp(id=integration.id, external_app_id=app.id))
@@ -258,8 +258,8 @@ def test_deleting_app_preserves_action_approval(
         assert row.decision is None
         assert row.decided_via is None
         assert row.decided_at is None
+    # Deleting the app deletes its integration.
     db_session.execute(delete(ExternalApp).where(ExternalApp.id == app.id))
-    db_session.execute(delete(Integration).where(Integration.id == integration.id))
     db_session.commit()
     db_session.refresh(row)
     assert row.integration_id is None
