@@ -182,7 +182,7 @@ function LineCard({
         )}
         {expandable && (
           <Collapsible.Content>
-            <div className="opal-line-body" data-opal-line-body-inset="top">
+            <div className="opal-line-body" data-opal-line-body-inset="flush">
               {expandedContent}
             </div>
           </Collapsible.Content>

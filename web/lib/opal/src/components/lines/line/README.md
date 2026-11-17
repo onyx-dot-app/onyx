@@ -61,7 +61,7 @@ that fits the state (for example a spinner or an alert).
 `flavour="card"` draws a run card instead of a step: any header with trailing
 controls, and the steps in its body. It has 0.25rem of padding, 0.75rem
 corners, and a `background-tint-00` fill while `filled`. Its body starts
-0.25rem under the header.
+right under the header.
 
 | Prop              | Type         | Default | Description                                                                                           |
 | ----------------- | ------------ | ------- | ----------------------------------------------------------------------------------------------------- |
