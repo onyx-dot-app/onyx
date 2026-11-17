@@ -1,5 +1,6 @@
-import { render, screen } from "@tests/setup/test-utils";
+import { render, screen, waitFor } from "@tests/setup/test-utils";
 import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
+import { useMemberIntegrations } from "@/lib/integrations/hooks";
 import type { ToolSnapshot } from "@/lib/tools/types";
 
 const mockTools: { current: ToolSnapshot[] } = { current: [] };
@@ -39,4 +40,30 @@ test("shows nothing for a tool with no plugin", () => {
     <CustomToolAuthCard toolName="Example" toolId={1} />
   );
   expect(container).toBeEmptyDOMElement();
+});
+
+function Statuses() {
+  useMemberIntegrations();
+  return null;
+}
+
+test("reads the integration statuses again", async () => {
+  mockTools.current = [tool];
+  const fetchMock = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async () => new Response(JSON.stringify([])));
+  const reads = () =>
+    fetchMock.mock.calls.filter(
+      ([input]) => String(input) === "/api/integrations"
+    ).length;
+  const { rerender } = render(<Statuses />);
+  await waitFor(() => expect(reads()).toBe(1));
+  rerender(
+    <>
+      <Statuses />
+      <CustomToolAuthCard toolName="Example" toolId={1} />
+    </>
+  );
+  await waitFor(() => expect(reads()).toBe(2));
+  fetchMock.mockRestore();
 });

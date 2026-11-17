@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -18,7 +18,6 @@ interface IntegrationConnectPromptProps {
   agentId: number;
   toolConfiguration: Pick<ToolConfigurationHandle, "isPluginEnabled" | "ready">;
   disabled?: boolean;
-  isStreaming?: boolean;
   onConnectionsClosed?: () => void;
 }
 
@@ -43,7 +42,6 @@ export default function IntegrationConnectPrompt({
   agentId,
   toolConfiguration,
   disabled = false,
-  isStreaming = false,
   onConnectionsClosed,
 }: IntegrationConnectPromptProps) {
   const t = useTranslations("plugins.chat.connectPrompt");
@@ -51,13 +49,7 @@ export default function IntegrationConnectPrompt({
   const searchParams = useSearchParams();
   const { plugins, refresh } = useAgentChatPlugins(agentId);
   const [openedIds, setOpenedIds] = useState<number[] | null>(null);
-  const wasStreaming = useRef(isStreaming);
   const triggerRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (wasStreaming.current && !isStreaming) void refresh();
-    wasStreaming.current = isStreaming;
-  }, [isStreaming, refresh]);
 
   const integrations = [
     ...new Map(
@@ -88,14 +80,15 @@ export default function IntegrationConnectPrompt({
             aria-label={t("trigger.label", { count: pending.length })}
             aria-haspopup="dialog"
             disabled={disabled}
-            onClick={() =>
+            onClick={() => {
+              void refresh();
               // Let open popovers close on this click first.
               window.setTimeout(
                 () =>
                   setOpenedIds(pending.map((integration) => integration.id)),
                 0
-              )
-            }
+              );
+            }}
           >
             {t("trigger.label", { count: pending.length })}
           </Button>

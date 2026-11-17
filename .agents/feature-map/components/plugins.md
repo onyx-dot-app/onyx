@@ -150,7 +150,9 @@ the composer reads and saves that agent's plugins. A switch in
 starts from them. When something is off, `allowed` names each built-in tool
 that is on and each plugin of the agent that is on, because the server leaves
 out each plugin that the list does not name.
-`sections/plugins/IntegrationConnectPrompt.tsx` is the chat connect prompt.
+`sections/plugins/IntegrationConnectPrompt.tsx` is the chat connect prompt. It
+reads the integration statuses again when the user opens it. A tool sign-in
+card (`web/src/app/app/message/messageComponents/CustomToolAuthCard.tsx`) also reads them again; a turn does not.
 
 When a signed-in user changes tools or filters in an existing chat, the store
 keeps the change as an unconfirmed edit, and the chat's save loop PATCHes
