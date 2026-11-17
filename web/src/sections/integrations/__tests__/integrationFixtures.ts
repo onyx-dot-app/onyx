@@ -59,6 +59,7 @@ export function makeDetail(
       client_id: "client-1",
       has_client_secret: true,
     },
+    can_delete: true,
     ...overrides,
   };
 }

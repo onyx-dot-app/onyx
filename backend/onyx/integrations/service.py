@@ -1243,6 +1243,7 @@ def admin_detail(
             if managed
             else _oauth_client_view(get_oauth_client(db_session, integration.id))
         ),
+        can_delete=view.can_manage and not managed,
     )
 
 
