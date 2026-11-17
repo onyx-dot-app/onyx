@@ -1,6 +1,5 @@
 import { loadPage } from "@opal/navigation";
 import { launchOAuth, OAuthLaunchError } from "@/lib/oauth/launch";
-import { startUserOAuth } from "@/lib/integrations/svc";
 import type { MemberIntegration } from "@/lib/integrations/types";
 
 /** What a member does to fix the connection, or null when there is nothing to do. */
@@ -28,17 +27,17 @@ export function needsAdmin(integration: MemberIntegration): boolean {
 }
 
 /**
- * Runs the user's OAuth sign-in in a new tab and resolves when the callback
- * page reports. When the browser blocks the tab, the sign-in continues in
- * this tab and the callback returns to `returnPath`; the result is then
- * "redirected".
+ * Runs an OAuth sign-in in a new tab and resolves when the callback page
+ * reports. `start` returns the authorization URL for a return path. When the
+ * browser blocks the tab, the sign-in continues in this tab and the callback
+ * returns to `returnPath`; the result is then "redirected".
  */
 export async function connectWithOAuth(
-  integrationId: number,
+  start: (returnPath: string) => Promise<string>,
   returnPath: string
 ): Promise<"connected" | "redirected"> {
   try {
-    await launchOAuth(() => startUserOAuth(integrationId, returnPath));
+    await launchOAuth(() => start(returnPath));
     return "connected";
   } catch (error) {
     if (
@@ -46,7 +45,7 @@ export async function connectWithOAuth(
       error.reason !== "popup_blocked"
     )
       throw error;
-    loadPage(await startUserOAuth(integrationId, returnPath));
+    loadPage(await start(returnPath));
     return "redirected";
   }
 }

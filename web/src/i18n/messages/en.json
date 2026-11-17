@@ -14095,16 +14095,6 @@
           "description": "Set a policy for each action individually.",
           "title": "Advanced"
         }
-      },
-      "userCredentials": {
-        "cancelButton": "Cancel",
-        "connectButton": "Connect",
-        "connectingButton": "Connecting…",
-        "description": "Enter your credentials to authorize this app for your account.",
-        "errors": {
-          "connectFailedTitle": "Couldn't connect"
-        },
-        "title": "Connect {name}"
       }
     },
     "artifactsTab": {

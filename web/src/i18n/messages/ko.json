@@ -14095,16 +14095,6 @@
           "description": "각 작업에 대해 개별적으로 정책을 설정합니다.",
           "title": "고급"
         }
-      },
-      "userCredentials": {
-        "cancelButton": "취소",
-        "connectButton": "연결",
-        "connectingButton": "연결 중…",
-        "description": "계정에서 이 앱을 승인하려면 자격 증명을 입력하세요.",
-        "errors": {
-          "connectFailedTitle": "연결할 수 없습니다"
-        },
-        "title": "{name} 연결"
       }
     },
     "artifactsTab": {
