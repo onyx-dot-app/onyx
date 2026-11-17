@@ -7,7 +7,11 @@ from onyx.background.celery.tasks.docprocessing.heartbeat import (
 from onyx.background.indexing.run_docconversion import convert_stub_batch
 from onyx.background.indexing.run_docfetching import mark_attempt_failed_unless_terminal
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.redis.redis_docprocessing import BatchStage, RedisDocprocessing
+from onyx.redis.redis_docprocessing import (
+    BatchStage,
+    RedisDocprocessing,
+    refresh_conversion_batch_claim,
+)
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
@@ -37,16 +41,19 @@ def docconversion_task(
     listed documents, stores them as a document batch, and sends that batch
     to docprocessing. Then it sends the next stub batches of the attempt."""
     task_id = self.request.id
+    redis_client = get_redis_client(tenant_id=tenant_id)
     counters = RedisDocprocessing(
-        index_attempt_id,
-        get_redis_client(tenant_id=tenant_id),
-        BatchStage.DOCCONVERSION,
+        index_attempt_id, redis_client, BatchStage.DOCCONVERSION
     )
 
     def refresh_live_entry() -> None:
         # The prerun signal adds the entry and the postrun signal removes it.
+        # The batch claim is the conversion's own, so only it is refreshed.
         if task_id is not None:
             counters.mark_task_live(task_id)
+            refresh_conversion_batch_claim(
+                redis_client, index_attempt_id, batch_num, task_id
+            )
 
     heartbeat_thread, stop_event = start_heartbeat(
         index_attempt_id, on_beat=refresh_live_entry

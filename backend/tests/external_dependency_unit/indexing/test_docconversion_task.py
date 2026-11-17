@@ -56,7 +56,13 @@ from onyx.file_store.document_batch_storage import (
     get_stub_batch_storage,
 )
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_docprocessing import BatchStage, RedisDocprocessing
+from onyx.redis.redis_docprocessing import (
+    BatchStage,
+    RedisDocprocessing,
+    claim_conversion_batch,
+    conversion_batch_is_claimed,
+    release_conversion_batch_claim,
+)
 from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.contextvars import get_current_tenant_id
@@ -560,3 +566,26 @@ def test_a_task_whose_batch_raises_leaves_the_attempt_running(run: _Run) -> None
         )
     ).all()
     assert [error.document_id for error in errors] == doc_ids
+
+
+def test_a_batch_that_another_run_converts_is_not_converted_again(run: _Run) -> None:
+    """A recovery resend can overlap a run that still converts the batch.
+    The run that does not hold the claim converts nothing."""
+    run.store_stub_batch(0, ["document"])
+    run.dispatch()
+    r = get_redis_client()
+    assert claim_conversion_batch(r, run.attempt_id, 0, "another run")
+    try:
+        run.convert(0)
+
+        assert run.connector.calls == []
+        assert run.stubs.get_batch(0, _Payload) is not None
+        assert run.sends(OnyxCeleryTask.DOCPROCESSING_TASK) == []
+        assert run.attempt().stub_batches_converted == 0
+    finally:
+        release_conversion_batch_claim(r, run.attempt_id, 0, "another run")
+
+    # With the claim gone, the batch converts, and the run releases its claim.
+    run.convert(0)
+    assert len(run.sends(OnyxCeleryTask.DOCPROCESSING_TASK)) == 1
+    assert not conversion_batch_is_claimed(r, run.attempt_id, 0)

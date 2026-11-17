@@ -185,3 +185,47 @@ def reset_conversion_recovery_misses(
     r: TenantRedisClient, index_attempt_id: int
 ) -> None:
     r.delete(_recovery_misses_key(index_attempt_id))
+
+
+def _conversion_batch_claim_key(index_attempt_id: int, batch_num: int) -> str:
+    return f"docconversion:batch_claim:{index_attempt_id}:{batch_num}"
+
+
+def claim_conversion_batch(
+    r: TenantRedisClient, index_attempt_id: int, batch_num: int, owner: str
+) -> bool:
+    """Claims one stub batch for conversion. A recovery resend can overlap a
+    run that still converts the batch, and only one run may convert it. The
+    claim of a killed worker expires like its live entry."""
+    return bool(
+        r.set(
+            _conversion_batch_claim_key(index_attempt_id, batch_num),
+            owner,
+            nx=True,
+            ex=LIVE_TASK_TTL_SECONDS,
+        )
+    )
+
+
+def refresh_conversion_batch_claim(
+    r: TenantRedisClient, index_attempt_id: int, batch_num: int, owner: str
+) -> None:
+    r.renew_if_value(
+        _conversion_batch_claim_key(index_attempt_id, batch_num),
+        owner.encode(),
+        LIVE_TASK_TTL_SECONDS,
+    )
+
+
+def release_conversion_batch_claim(
+    r: TenantRedisClient, index_attempt_id: int, batch_num: int, owner: str
+) -> None:
+    r.delete_if_value(
+        _conversion_batch_claim_key(index_attempt_id, batch_num), owner.encode()
+    )
+
+
+def conversion_batch_is_claimed(
+    r: TenantRedisClient, index_attempt_id: int, batch_num: int
+) -> bool:
+    return r.exists(_conversion_batch_claim_key(index_attempt_id, batch_num)) > 0
