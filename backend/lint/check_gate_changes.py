@@ -75,6 +75,9 @@ def ruff_additions(before: str, after: str) -> bool:
             for pattern, rules in right.pop(key, {}).items():
                 if pattern not in previous or set(rules) - set(previous[pattern]):
                     return True
+    for config in (old, new):
+        if config.get("lint") == {}:
+            del config["lint"]
     return old != new
 
 
