@@ -142,3 +142,26 @@ def test_nested_helper_uses_its_own_table_creations(tmp_path: Path) -> None:
         "helper()",
     )
     assert list(check_migration_design.check_chain(tmp_path, "marker")) == []
+
+
+@pytest.mark.parametrize(
+    "setup",
+    [
+        'op.create_table("events", if_not_exists=True)',
+        'op.create_table("events")\n'
+        "if replace_table:\n"
+        '    op.drop_table("events")\n'
+        '    op.rename_table("existing", "events")',
+    ],
+)
+def test_table_that_may_already_exist_is_not_exempt(tmp_path: Path, setup: str) -> None:
+    _revision(tmp_path, "marker", None, "pass")
+    _revision(
+        tmp_path,
+        "new",
+        "marker",
+        setup + '\nop.create_index("ix", "events", ["created_at"])',
+    )
+    failures = list(check_migration_design.check_chain(tmp_path, "marker"))
+    assert len(failures) == 1
+    assert "blocking-index:" in failures[0]

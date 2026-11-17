@@ -134,9 +134,19 @@ def find_violations(tree: ast.Module, source: str) -> list[tuple[int, str]]:
             continue
         created: set[tuple[str, str | None]] = set()
         for statement in function.body:
-            for call in _walk_upgrade(statement, enter_functions=False):
-                if not isinstance(call, ast.Call):
-                    continue
+            calls = [
+                node
+                for node in _walk_upgrade(statement, enter_functions=False)
+                if isinstance(node, ast.Call)
+            ]
+            for call in calls:
+                if _op_name(call) in {"drop_table", "rename_table"}:
+                    table = _table(call, "table_name", 0)
+                    if table is not None:
+                        created.discard(table)
+                    else:
+                        created.clear()
+            for call in calls:
                 for rule in (
                     _operation_rule(call, created),
                     "deferrable" if _is_deferrable(call) else None,
@@ -153,15 +163,18 @@ def find_violations(tree: ast.Module, source: str) -> list[tuple[int, str]]:
                 if isinstance(statement, (ast.Expr, ast.Assign, ast.AnnAssign))
                 else None
             )
-            if isinstance(value, ast.Call):
-                if _op_name(value) == "create_table":
-                    table = _table(value, "table_name", 0)
-                    if table is not None:
-                        created.add(table)
-                if _op_name(value) in {"drop_table", "rename_table"}:
-                    table = _table(value, "table_name", 0)
-                    if table is not None:
-                        created.discard(table)
+            if isinstance(value, ast.Call) and _op_name(value) == "create_table":
+                create_if_absent = _argument(value, "if_not_exists")
+                if (
+                    create_if_absent is not None
+                    and _literal(create_if_absent) is not False
+                ):
+                    continue
+                if any(keyword.arg is None for keyword in value.keywords):
+                    continue
+                table = _table(value, "table_name", 0)
+                if table is not None:
+                    created.add(table)
     return sorted(violations)
 
 
