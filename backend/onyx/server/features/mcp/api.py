@@ -408,7 +408,9 @@ def _admin_view(
         available_in_craft=server.available_in_craft,
         plugin_ids=[row.plugin_id for row in rows],
         last_refreshed_at=server.last_refreshed_at,
-        tool_count=count_integration_actions(integration.id, db_session),
+        tool_count=count_integration_actions([integration.id], db_session)[
+            integration.id
+        ],
         auth_template=(
             MCPAuthTemplate(
                 headers=template,

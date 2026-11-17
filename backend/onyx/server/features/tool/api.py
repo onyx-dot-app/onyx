@@ -29,7 +29,7 @@ from onyx.db.integration_connection import (
     get_connection,
     upsert_connection__no_commit,
 )
-from onyx.db.models import Integration, Tool, User
+from onyx.db.models import Integration, IntegrationConnection, Tool, User
 from onyx.db.plugin import lock_plugin, set_plugin_preferences__no_commit
 from onyx.db.plugin_access import get_visible_plugin_ids, load_user_plugin_states
 from onyx.db.tools import get_tools, get_tools_by_ids
@@ -163,25 +163,18 @@ def _set_default_chat(
     db_session.flush()
 
 
-def _organization_fields(
-    integration: Integration, db_session: Session
-) -> dict[str, str]:
-    return _organization_secret(integration, db_session).fields
-
-
-def _organization_secret(
-    integration: Integration, db_session: Session
-) -> ConnectionSecret:
-    connection = get_connection(db_session, integration.id, None)
+def _organization_secret(connection: IntegrationConnection | None) -> ConnectionSecret:
     if connection is None:
         return ConnectionSecret()
     return read_connection_secret(connection)
 
 
-def _stored_headers(integration: Integration, db_session: Session) -> dict[str, str]:
+def _stored_headers(
+    integration: Integration, organization: IntegrationConnection | None
+) -> dict[str, str]:
     """The headers a call sends, with the organization values filled in. A
     migrated tool keeps its headers on the organization connection."""
-    secret = _organization_secret(integration, db_session)
+    secret = _organization_secret(organization)
     fields = secret.fields
     headers = literal_headers(secret.headers)
     for name, template in (integration.header_template or {}).items():
@@ -223,8 +216,8 @@ def _save_organization_fields(
 def _alias_snapshot(
     tool: Tool,
     integration: Integration,
+    organization: IntegrationConnection | None,
     plugins: list[IntegrationPluginRow],
-    db_session: Session,
     *,
     user_enabled: bool = True,
     permissions: dict[str, bool] | None = None,
@@ -238,7 +231,7 @@ def _alias_snapshot(
         in_code_tool_id=None,
         custom_headers=[
             {"key": name, "value": mask_string(value)}
-            for name, value in _stored_headers(integration, db_session).items()
+            for name, value in _stored_headers(integration, organization).items()
         ],
         passthrough_auth=integration.auth_method is IntegrationAuthMethod.ONYX_LOGIN,
         mcp_server_id=None,
@@ -259,18 +252,22 @@ def _alias_snapshot(
     )
 
 
-def _openapi_tool_or_404(tool_id: int, db_session: Session) -> tuple[Tool, Integration]:
-    pair = get_openapi_tool_with_integration(tool_id, db_session)
-    if pair is None:
+def _openapi_tool_or_404(
+    tool_id: int, db_session: Session
+) -> tuple[Tool, Integration, IntegrationConnection | None]:
+    row = get_openapi_tool_with_integration(tool_id, db_session)
+    if row is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, f"Tool with ID {tool_id} not found")
-    return pair
+    return row
 
 
 def openapi_tool_snapshot(
     tool: Tool, integration: Integration, db_session: Session
 ) -> ToolSnapshot:
     plugins = list_integration_plugin_rows([integration.id], db_session)[integration.id]
-    return _alias_snapshot(tool, integration, plugins, db_session)
+    return _alias_snapshot(
+        tool, integration, get_connection(db_session, integration.id, None), plugins
+    )
 
 
 @admin_router.post("/custom", tags=PUBLIC_API_TAGS)
@@ -319,7 +316,7 @@ def update_custom_tool(
     _check_default_chat_permission(tool_data.default_chat_enabled, user)
     if "oauth_config_id" in tool_data.model_fields_set:
         _refuse_oauth_config(tool_data.oauth_config_id)
-    tool, integration = _openapi_tool_or_404(tool_id, db_session)
+    tool, integration, organization = _openapi_tool_or_404(tool_id, db_session)
     # Check before the stored headers are read; the update locks the row.
     get_manageable_integration(user, integration.id, db_session)
 
@@ -333,7 +330,7 @@ def update_custom_tool(
 
     organization_fields: dict[str, str] = {}
     if tool_data.custom_headers is not None or tool_data.passthrough_auth is not None:
-        stored = _stored_headers(integration, db_session)
+        stored = _stored_headers(integration, organization)
         headers = (
             _resolve_masked_headers(tool_data.custom_headers, stored)
             if tool_data.custom_headers is not None
@@ -364,7 +361,10 @@ def update_custom_tool(
     integration = update_integration__no_commit(
         user, integration.id, update, db_session
     )
-    if organization_fields != _organization_fields(integration, db_session):
+    if (
+        organization_fields
+        != _organization_secret(get_connection(db_session, integration.id, None)).fields
+    ):
         _save_organization_fields(integration, organization_fields, db_session)
     _set_default_chat(integration, tool_data.default_chat_enabled, db_session)
     db_session.commit()
@@ -379,7 +379,7 @@ def delete_custom_tool(
         require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
     ),
 ) -> None:
-    _, integration = _openapi_tool_or_404(tool_id, db_session)
+    _, integration, _ = _openapi_tool_or_404(tool_id, db_session)
     delete_integration_for_user__no_commit(user, integration.id, db_session)
     db_session.commit()
 
@@ -403,20 +403,20 @@ def validate_tool(
 
 def _openapi_snapshots(
     user: User,
-    tools: Sequence[tuple[Tool, Integration]],
+    tools: Sequence[tuple[Tool, Integration, IntegrationConnection | None]],
     db_session: Session,
     *,
     include_managed: bool,
 ) -> list[ToolSnapshot]:
     plugin_rows = list_integration_plugin_rows(
-        [integration.id for _, integration in tools], db_session
+        [integration.id for _, integration, _ in tools], db_session
     )
     states = {
         state.plugin_id: state
         for state in load_user_plugin_states([user.id], db_session)
     }
     snapshots: list[ToolSnapshot] = []
-    for tool, integration in tools:
+    for tool, integration, organization in tools:
         plugins = plugin_rows[integration.id]
         visible = [plugin for plugin in plugins if plugin.plugin_id in states]
         can_manage = manages_integration(user, plugins)
@@ -428,8 +428,8 @@ def _openapi_snapshots(
             _alias_snapshot(
                 tool,
                 integration,
+                organization,
                 plugins,
-                db_session,
                 user_enabled=any(states[p.plugin_id].enabled for p in visible)
                 if visible
                 else True,
@@ -486,7 +486,7 @@ def update_tool_user_preferences(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> ToolUserPreferences:
     """Turn the plugins that hold the custom tool on or off for the user."""
-    _, integration = _openapi_tool_or_404(tool_id, db_session)
+    _, integration, _ = _openapi_tool_or_404(tool_id, db_session)
     visible = get_visible_plugin_ids(user.id, db_session)
     plugin_ids = [
         row.plugin_id

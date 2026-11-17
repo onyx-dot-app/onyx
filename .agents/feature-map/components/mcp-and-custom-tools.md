@@ -284,6 +284,14 @@ admin value is not Ask.
   and the actions. A public MCP server (`auth_mode` none) is asked for its
   tools before the first insert (`_discover_new_server`); a failure gives a
   502 and saves nothing. An MCP server with a sign-in starts with no actions.
+- The admin list, the member list, the agent catalog and `GET /tool` read
+  each kind of row (OAuth clients, connections, action counts or actions,
+  admin policy rows, external app types) in one query for all integrations
+  (`backend/onyx/integrations/connections.py:integration_statuses`,
+  `backend/onyx/integrations/service.py:_shapes`). `GET /tool` reads the
+  organization connection with the tool row. A test keeps the query count
+  constant
+  (`backend/tests/external_dependency_unit/integrations/test_list_query_counts.py`).
 - Delete (`db/integration.py:delete_integration__no_commit`) deletes the
   integration and then its kind row. A plugin left with no skill and no
   integration goes too. A deleted kind row deletes its integration by cascade.
