@@ -39,6 +39,7 @@ from onyx.db.integration import (
     list_integrations,
     list_integrations_by_ids,
     lock_integration,
+    lock_integration__no_commit,
     replace_integration_actions__no_commit,
     set_policy_rows__no_commit,
     upsert_oauth_client__no_commit,
@@ -494,15 +495,31 @@ def _host_values(org_credentials: Mapping[str, str]) -> dict[str, str]:
     }
 
 
+def _mcp_target(
+    integration_id: int, db_session: Session
+) -> tuple[str, MCPTransport | None] | None:
+    server = get_mcp_server_for_integration(integration_id, db_session)
+    return None if server is None else (server.server_url, server.transport)
+
+
 def _discover_and_sync(
     integration: Integration, user: User, db_session: Session
 ) -> None:
     if integration.kind is IntegrationKind.MCP:
+        # Discovery calls the server, so it runs before the lock. Under the
+        # lock, an update that changed the server meanwhile refuses the result.
+        integration_id = integration.id
+        target = _mcp_target(integration_id, db_session)
+        actions = fetch_mcp_actions(integration, user, db_session)
+        lock_integration__no_commit(integration_id, db_session)
+        if _mcp_target(integration_id, db_session) != target:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "The server settings changed while Onyx loaded the actions. "
+                "Refresh the actions again.",
+            )
         replace_integration_actions__no_commit(
-            integration.id,
-            IntegrationActionSource.MCP,
-            fetch_mcp_actions(integration, user, db_session),
-            db_session,
+            integration_id, IntegrationActionSource.MCP, actions, db_session
         )
         return
     sync_integration_actions__no_commit(integration, db_session)

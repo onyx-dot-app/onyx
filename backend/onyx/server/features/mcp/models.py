@@ -1,9 +1,10 @@
 import datetime
+import re
 from enum import Enum
 from typing import Annotated, Any, Literal, NotRequired, TypedDict
 from uuid import UUID
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, AnyUrl, BaseModel, ConfigDict, Field
 
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
@@ -22,6 +23,25 @@ from onyx.oauth.models import (
 DENYLISTED_MCP_HEADERS = {
     "host",
 }
+_HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+
+
+def _check_header_names(headers: dict[str, str]) -> dict[str, str]:
+    seen: set[str] = set()
+    for name in headers:
+        lowered = name.lower()
+        if _HTTP_FIELD_NAME_RE.fullmatch(name) is None:
+            raise ValueError(f"Invalid header name: {name!r}")
+        if lowered in DENYLISTED_MCP_HEADERS:
+            raise ValueError(f"Header {name!r} is not allowed")
+        if lowered in seen:
+            raise ValueError(f"Duplicate header name: {name!r}")
+        seen.add(lowered)
+    return headers
+
+
+# A header template that an admin saves.
+HeaderTemplate = Annotated[dict[str, str], AfterValidator(_check_header_names)]
 
 
 def merge_mcp_headers(*sources: dict[str, str]) -> dict[str, str]:
@@ -197,7 +217,7 @@ class MCPServersResponse(BaseModel):
 
 
 class MCPAuthTemplate(BaseModel):
-    headers: dict[str, str] = Field(default_factory=dict)
+    headers: HeaderTemplate = Field(default_factory=dict)
     # Derived from the placeholders of ``headers``.
     required_fields: list[str] = Field(default_factory=list)
 
