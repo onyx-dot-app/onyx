@@ -133,3 +133,17 @@ def test_playwright_extended_objects_and_fixture_imports(tmp_path: Path) -> None
         ("web/tests/e2e/menu.spec.ts", (7, "skip", False)),
         ("web/tests/e2e/menu.spec.ts", (8, "skip", True)),
     ]
+
+
+def test_scan_flags_unresolved_plain_playwright_test(tmp_path: Path) -> None:
+    tests = tmp_path / "web/tests/e2e"
+    tests.mkdir(parents=True)
+    (tests / "fixtures.ts").write_text('export { test } from "@playwright/test";\n')
+    (tests / "example.spec.ts").write_text(
+        'import { test } from "./fixtures";\ntest.skip();\ntest.fixme();\n'
+    )
+
+    assert list(scan(tmp_path)) == [
+        ("web/tests/e2e/example.spec.ts", (2, "skip", False)),
+        ("web/tests/e2e/example.spec.ts", (3, "skip", False)),
+    ]

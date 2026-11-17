@@ -209,7 +209,10 @@ def _is_playwright_test(receiver: Node, test_names: set[str]) -> bool:
         if prop is None or _ts_text(prop) != "describe" or target is None:
             return False
         receiver = target
-    return receiver.type == "identifier" and _ts_text(receiver) in test_names
+    if receiver.type != "identifier":
+        return False
+    name = _ts_text(receiver)
+    return name == "test" or name in test_names
 
 
 def _parse_typescript(source: str, *, tsx: bool) -> list[Node]:
@@ -223,7 +226,7 @@ def playwright_findings(source: str, *, tsx: bool = False) -> Iterator[Finding]:
     nodes = _parse_typescript(source, tsx=tsx)
     path = Path("test.ts")
     names = _playwright_test_names({path: nodes}, Path())
-    yield from _playwright_findings(nodes, names[path] | {"test"})
+    yield from _playwright_findings(nodes, names[path])
 
 
 def _playwright_findings(nodes: list[Node], test_names: set[str]) -> Iterator[Finding]:
