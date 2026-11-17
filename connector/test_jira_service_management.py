@@ -107,5 +107,33 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 401)
 
 
+    @patch("requests.Session.get")
+    def test_pagination_without_total(self, mock_get):
+        resp1 = MagicMock()
+        resp1.status_code = 200
+        resp1.json.return_value = {
+            "issues": [{"id": "1", "key": "JSM-1"}, {"id": "2", "key": "JSM-2"}],
+        }
+
+        resp2 = MagicMock()
+        resp2.status_code = 200
+        resp2.json.return_value = {
+            "issues": [{"id": "3", "key": "JSM-3"}],
+        }
+
+        resp3 = MagicMock()
+        resp3.status_code = 200
+        resp3.json.return_value = {
+            "issues": [],
+        }
+
+        mock_get.side_effect = [resp1, resp2, resp3]
+
+        conn = JiraServiceManagementConnector("https://jira.example.com", "token")
+        tickets = conn.get_tickets("HELP", page_size=2)
+
+        self.assertEqual(len(tickets), 3)
+        self.assertEqual(mock_get.call_count, 3)
+
 if __name__ == "__main__":
     unittest.main()

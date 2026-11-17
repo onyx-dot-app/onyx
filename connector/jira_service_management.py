@@ -131,14 +131,14 @@ class JiraServiceManagementConnector:
 
             all_issues.extend(issues)
 
-            total = data.get("total", len(all_issues))
+            total = data.get("total")
             start_at += len(issues)
 
             if max_tickets is not None and len(all_issues) >= max_tickets:
                 all_issues = all_issues[:max_tickets]
                 break
 
-            if start_at >= total:
+            if total is not None and start_at >= total:
                 break
 
         return all_issues
