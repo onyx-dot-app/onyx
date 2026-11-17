@@ -1767,7 +1767,6 @@
           "title": "사용량 보고서를 불러오지 못했습니다."
         },
         "pendingRow": {
-          "description": "{range} · 보통 1분 이내에 준비됩니다",
           "slowDescription": "아직 작업 중입니다. 이 페이지를 벗어나도 되며, 보고서는 여기에 표시됩니다.",
           "title": "보고서를 준비하는 중…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "사용량 보고서가 준비되었습니다.",
           "startFailed": "보고서 생성을 시작하지 못했습니다: {message}",
-          "timedOut": "보고서 생성에 시간이 너무 오래 걸립니다. 다시 시도하거나 나중에 확인하세요.",
           "unknownError": "알 수 없는 오류"
+        },
+        "failedRow": {
+          "title": "보고서 생성 실패",
+          "description": "요청 시간: {time}. 다시 시도하려면 새 보고서를 생성하세요."
         }
       },
       "slackChannelChart": {

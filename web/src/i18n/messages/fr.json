@@ -1767,7 +1767,6 @@
           "title": "Échec du chargement des rapports d'utilisation."
         },
         "pendingRow": {
-          "description": "{range} · généralement prêt en moins d'une minute",
           "slowDescription": "Toujours en cours. Vous pouvez quitter cette page ; le rapport apparaîtra ici.",
           "title": "Préparation du rapport…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "Rapport d'utilisation prêt.",
           "startFailed": "Échec du lancement de la génération du rapport : {message}",
-          "timedOut": "La génération du rapport prend trop de temps. Réessayez ou revenez plus tard.",
           "unknownError": "erreur inconnue"
+        },
+        "failedRow": {
+          "title": "La génération du rapport a échoué",
+          "description": "Demandé le {time}. Générez un nouveau rapport pour réessayer."
         }
       },
       "slackChannelChart": {

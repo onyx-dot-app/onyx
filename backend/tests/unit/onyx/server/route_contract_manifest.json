@@ -131,6 +131,7 @@
   "GET /admin/sso/provider/{provider_id}/handoff": "admin",
   "GET /admin/tracing/providers": "admin",
   "GET /admin/usage-report": "admin",
+  "GET /admin/usage-report-jobs": "admin",
   "GET /admin/usage-report/{report_name}": "admin",
   "GET /admin/usage/export": "admin",
   "GET /admin/usage/system": "admin",

@@ -28,7 +28,10 @@ for the usage report, log export, query history and workspace analytics.
 - **A user** sees their own token and cost usage, and their budget, in
   Settings > Usage. **An admin** sees usage per user and for system work such
   as contextual RAG, resets a user's usage, and sets per-model prices. On EE,
-  an admin downloads a usage report ZIP with CSVs and a PDF.
+  an admin downloads a usage report ZIP with CSVs and a PDF. Pending and
+  failed manual report jobs remain visible after a reload. The hourly export
+  cleanup fails lost or stalled jobs and keeps failures for 24 hours. An admin
+  starts a new report to retry.
 - **A security team** reads audit events (logins, permission changes,
   credential access, denied scoped writes) as JSON lines on the `onyx.audit`
   logger and ships them to a SIEM. Onyx has no page or API to read them

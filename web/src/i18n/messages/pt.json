@@ -1767,7 +1767,6 @@
           "title": "Falha ao carregar os relatórios de uso."
         },
         "pendingRow": {
-          "description": "{range} · geralmente pronto em menos de um minuto",
           "slowDescription": "Ainda em processamento. Você pode sair desta página; o relatório vai aparecer aqui.",
           "title": "Preparando relatório…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "Relatório de uso pronto.",
           "startFailed": "Falha ao iniciar a geração do relatório: {message}",
-          "timedOut": "A geração do relatório está demorando muito. Tente novamente ou volte mais tarde.",
           "unknownError": "erro desconhecido"
+        },
+        "failedRow": {
+          "title": "Falha ao gerar o relatório",
+          "description": "Solicitado em {time}. Gere um novo relatório para tentar novamente."
         }
       },
       "slackChannelChart": {
