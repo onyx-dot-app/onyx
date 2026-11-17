@@ -10,11 +10,6 @@ export type PluginReference =
   | { kind: "openapi"; id: ToolSnapshot["id"] }
   | { kind: "external-app"; id: number };
 
-export type ChatPluginReference = Exclude<
-  PluginReference,
-  { kind: "external-app" }
->;
-
 export interface ActionPolicySettingView {
   action_id: string;
   normalised_name: string;

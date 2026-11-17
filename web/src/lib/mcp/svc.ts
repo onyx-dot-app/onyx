@@ -185,14 +185,6 @@ export type MCPUserOAuthStartResponse =
       redirect_url: string;
     };
 
-export function getMCPUserOAuthNavigationUrl(
-  response: MCPUserOAuthStartResponse
-): string {
-  return response.status === "authorization_required"
-    ? response.authorization_url
-    : response.redirect_url;
-}
-
 export type MCPOAuthFailureReason =
   | "client_registration_failed"
   | "client_metadata_rejected"
@@ -259,36 +251,6 @@ export async function startMCPUserOAuth(
   });
   if (!res.ok) {
     throw await readMCPOAuthError(res);
-  }
-  return res.json();
-}
-
-export interface MCPOAuthCallbackResponse {
-  success: boolean;
-  server_id: number;
-  server_name: string;
-  message: string;
-  redirect_url: string;
-}
-
-/** Complete the OAuth flow started by `startMCPUserOAuth`: exchange the
- * provider's authorization code for tokens and store them for the current
- * user. The code + state are single-use — call at most once per callback. */
-export async function completeMCPUserOAuth(
-  code: string | null,
-  state: string,
-  error?: string
-): Promise<MCPOAuthCallbackResponse> {
-  const params = new URLSearchParams({ state });
-  if (code) params.set("code", code);
-  if (error) params.set("error", error);
-  const res = await fetch(`/api/mcp/oauth/callback?${params.toString()}`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    throw new Error(
-      await parseErrorDetail(res, "Failed to complete authorization")
-    );
   }
   return res.json();
 }

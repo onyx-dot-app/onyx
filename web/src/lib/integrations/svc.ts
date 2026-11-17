@@ -6,8 +6,10 @@ import type {
   IntegrationActionsResponse,
   IntegrationActionsUpdate,
   IntegrationCreate,
+  IntegrationOAuthCallbackResult,
   IntegrationStatus,
   IntegrationUpdate,
+  MemberActionPolicies,
 } from "@/lib/integrations/types";
 
 type RequestBody =
@@ -16,7 +18,9 @@ type RequestBody =
   | IntegrationActionsUpdate
   | { fields: Record<string, string> }
   | { organization: boolean; return_path: string }
-  | { installation_policy: InstallationPolicy };
+  | { installation_policy: InstallationPolicy }
+  | { code: string; state: string }
+  | { actions: Record<string, "allow" | null> };
 
 async function request(
   url: string,
@@ -96,12 +100,13 @@ export async function deleteOrganizationConnection(
   return res.json();
 }
 
-export async function startOrganizationOAuth(
+async function startOAuth(
   id: number,
+  organization: boolean,
   returnPath: string
 ): Promise<string> {
   const res = await request(`/api/integrations/${id}/oauth/start`, "POST", {
-    organization: true,
+    organization,
     return_path: returnPath,
   });
   const body: { authorization_url: string } = await res.json();
@@ -115,4 +120,68 @@ export async function setPluginInstallationPolicy(
   await request(SWR_KEYS.adminPluginInstallationPolicy(pluginId), "PUT", {
     installation_policy: installationPolicy,
   });
+}
+
+/** Starts the OAuth sign-in of the organization connection. */
+export function startOrganizationOAuth(
+  id: number,
+  returnPath: string
+): Promise<string> {
+  return startOAuth(id, true, returnPath);
+}
+
+/** Starts the OAuth sign-in of the user's own connection. */
+export function startUserOAuth(
+  id: number,
+  returnPath: string
+): Promise<string> {
+  return startOAuth(id, false, returnPath);
+}
+
+/** Saves the user's own API key fields. */
+export async function saveUserConnection(
+  id: number,
+  fields: Record<string, string>
+): Promise<IntegrationStatus> {
+  const res = await request(
+    `${SWR_KEYS.integrations}/${id}/connection`,
+    "PUT",
+    {
+      fields,
+    }
+  );
+  return res.json();
+}
+
+export async function deleteUserConnection(
+  id: number
+): Promise<IntegrationStatus> {
+  const res = await request(
+    `${SWR_KEYS.integrations}/${id}/connection`,
+    "DELETE"
+  );
+  return res.json();
+}
+
+/** Exchanges the code of an OAuth callback. The code is single-use. */
+export async function completeIntegrationOAuth(
+  code: string,
+  state: string
+): Promise<IntegrationOAuthCallbackResult> {
+  const res = await request(`${SWR_KEYS.integrations}/oauth/callback`, "POST", {
+    code,
+    state,
+  });
+  return res.json();
+}
+
+/** Saves the user's "Always allow" choices: "allow" saves one, null clears it. */
+export async function saveAlwaysAllow(
+  id: number,
+  actions: Record<string, "allow" | null>
+): Promise<MemberActionPolicies> {
+  const res = await request(SWR_KEYS.integrationActionPolicies(id), "PUT", {
+    actions,
+  });
+  return res.json();
 }

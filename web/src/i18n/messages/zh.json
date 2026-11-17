@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "添加连接器"
       },
-      "authenticate": {
-        "label": "身份验证"
-      },
       "codingAgentIncognito": {
         "tooltip": "无痕模式下无法使用编码智能体"
       },
@@ -221,53 +218,6 @@
         "title": "断开 *{name}* 的连接"
       }
     },
-    "mcpOauthCallback": {
-      "autoRedirect": {
-        "text": "正在自动返回…"
-      },
-      "backToChatButton": {
-        "label": "返回聊天"
-      },
-      "cancelled": {
-        "description": "授权已被取消或拒绝，因此未建立连接。要重试，请从 MCP 服务器的身份验证设置中重新发起连接。",
-        "title": "授权已取消"
-      },
-      "continueButton": {
-        "label": "继续"
-      },
-      "genericError": {
-        "fallbackDetail": "无法完成授权",
-        "title": "出了点问题"
-      },
-      "invalidLink": {
-        "description": "此链接缺少必需的授权参数。请从 MCP 服务器的身份验证设置中重新发起连接。",
-        "title": "授权链接无效"
-      },
-      "processing": {
-        "description": "正在完成与您的 MCP 服务器的连接。这可能需要片刻…",
-        "title": "正在完成授权"
-      },
-      "serverNotFound": {
-        "description": "此授权所属的 MCP 服务器已不存在或不再配置。请重新创建或重新配置该服务器，然后重新连接。",
-        "title": "未找到 MCP 服务器"
-      },
-      "sessionExpired": {
-        "description": "此授权链接无效、已过期或已被使用。请从 MCP 服务器的身份验证设置中重新发起连接。",
-        "title": "授权会话已过期"
-      },
-      "success": {
-        "description": "授权已成功完成。您现在可以在聊天中使用此服务器的工具。",
-        "title": "已连接到 {serverName}"
-      },
-      "timedOut": {
-        "description": "MCP 服务器未及时确认授权。请重新尝试连接。如果问题持续出现，请检查服务器的 OAuth 配置。",
-        "title": "授权超时"
-      },
-      "tokenExchangeFailed": {
-        "description": "提供方已批准授权，但未能获取有效的访问令牌。请检查服务器的 OAuth 客户端凭据和端点，然后重新尝试连接。",
-        "title": "令牌交换失败"
-      }
-    },
     "policyToggle": {
       "always": {
         "label": "允许"
@@ -297,8 +247,7 @@
         "tooltip": "禁用所有工具"
       },
       "empty": {
-        "message": "没有可用的工具",
-        "searchMessage": "未找到工具"
+        "message": "没有可用的工具"
       },
       "showAllButton": {
         "ariaLabel": "显示所有工具",
@@ -427,134 +376,18 @@
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
     "memberPlugins": {
-      "chat": {
-        "trigger": {
-          "label": "插件"
-        },
-        "search": {
-          "placeholder": "搜索插件"
-        },
-        "empty": {
-          "text": "此聊天中没有可用的插件。",
-          "searchText": "没有与搜索条件匹配的插件。"
-        },
-        "loading": {
-          "label": "正在加载插件"
-        },
-        "loadError": {
-          "text": "部分插件无法加载。请重试。"
-        },
-        "retry": {
-          "label": "重试"
-        },
-        "browse": {
-          "label": "浏览插件"
-        },
-        "toggle": {
-          "ariaLabel": "在此聊天中使用{name}"
-        },
-        "connect": {
-          "label": "连接"
-        },
-        "connection": {
-          "connected": "已连接",
-          "workspace": "工作区连接",
-          "session": "会话连接",
-          "none": "无需连接",
-          "oauth": "连接您的账户",
-          "credentials": "添加您的凭据",
-          "checking": "正在检查连接",
-          "unconfigured": "需要设置工作区",
-          "unavailable": "连接不可用"
-        },
-        "intent": {
-          "unavailable": "此聊天的智能体无法使用此插件。",
-          "invalid": "此插件链接无效。"
-        }
-      },
-      "oauthComplete": {
-        "success": {
-          "title": "插件已连接",
-          "description": "返回上一个标签页以继续。"
-        },
-        "error": {
-          "title": "连接未确认",
-          "description": "返回上一个标签页并重新尝试连接。"
-        },
-        "return": {
-          "label": "返回插件"
-        },
-        "close": {
-          "label": "关闭标签页"
-        }
-      },
-      "title": "插件",
-      "description": "连接你的账户以使用工作区插件。",
-      "manageWorkspace": "管理工作区插件",
-      "search": "搜索插件",
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "Craft 应用程序"
-      },
       "row": {
-        "view": "查看{name}",
         "connect": "连接{name}"
       },
       "status": {
-        "connected": "已连接",
-        "workspace": "工作区连接",
-        "session": "使用您已连接的账户",
-        "none": "可直接使用",
-        "oauth": "连接您的账户",
-        "credentials": "添加您的凭据",
-        "unconfigured": "需要设置工作区",
-        "checking": "正在检查连接",
         "unavailable": "连接不可用"
       },
-      "availability": {
-        "label": "{name} 的连接状态",
-        "chat": "主聊天",
-        "craft": "Craft",
-        "on": "开启",
-        "off": "关闭",
-        "unknown": "未知",
-        "disabledByAdmin": "已被管理员禁用",
-        "disabledByYou": "已被你禁用",
-        "agents": "自定义智能体",
-        "notAvailable": "不可用"
-      },
       "state": {
-        "loading": "正在加载插件",
         "serversError": "无法加载MCP插件。",
-        "toolsError": "无法加载插件工具。",
-        "oauthError": "无法加载账户连接。",
-        "retry": "重试",
-        "noResultsTitle": "没有匹配的插件",
-        "noResultsDescription": "请尝试其他名称或描述。",
-        "clearSearch": "查看所有插件",
-        "appsError": "无法加载 Craft 应用。",
-        "appsLoading": "正在加载 Craft 应用",
-        "emptyTitle": "未找到插件",
-        "emptyDescription": "请尝试其他连接筛选条件，或请工作区管理员添加插件。"
+        "appsError": "无法加载 Craft 应用。"
       },
       "detail": {
-        "noAuthentication": "无需身份验证",
-        "connection": "连接",
-        "tools": "工具",
-        "toolCount": "{count, plural, other {#个操作}}",
-        "noTools": "此插件尚未保存可见的工具。",
-        "connect": "连接账户",
-        "useInChat": "在聊天中使用",
-        "disconnect": "断开连接",
-        "disconnectTitle": "断开{name}的连接？",
-        "disconnectDescription": "此操作将移除您的账户连接。工作区可用性保持不变。",
-        "oauthDisconnectWarning": "使用相同OAuth配置的所有插件和应用会共享此账户连接。断开连接将移除您与所有这些插件和应用的连接。",
-        "disconnecting": "正在断开连接...",
-        "disconnectFailed": "无法断开您的账户连接。请重试。",
-        "cancel": "取消",
-        "close": "完成",
-        "openInCraft": "在 Craft 中打开"
+        "toolCount": "{count, plural, other {#个操作}}"
       },
       "connection": {
         "title": "连接{name}",
@@ -582,41 +415,12 @@
           "not_connected": "无法确认您的账户连接。请重试。",
           "request_failed": "连接失败。请重试。"
         }
-      },
-      "filters": {
-        "label": "连接状态",
-        "all": "全部",
-        "connected": "已连接",
-        "needsSignIn": "需要登录",
-        "showAll": "查看所有插件"
-      },
-      "defaults": {
-        "chat": "在默认聊天中启用",
-        "craft": "在 Craft 中启用",
-        "chatDescription": "在您未使用自定义智能体的聊天中提供此插件。",
-        "craftDescription": "在您的 Craft 会话和计划任务中提供此插件。您组织的工具权限仍然适用。",
-        "unavailable": "管理员已在 {surface} 中禁用此插件。",
-        "saveFailed": "无法保存你的插件默认设置。请重试。",
-        "chatUnavailable": "管理员已在 {surface} 中禁用此插件。配置了此插件的自定义智能体仍可能使用它。"
-      },
-      "openapi": {
-        "chatOnly": "仅限 Chat",
-        "chatOnlyDescription": "此插件可用于 Chat，不能用于 Craft。"
-      },
-      "externalApp": {
-        "description": "在 Craft 中使用你的账号。",
-        "craftOnly": "仅限 Craft",
-        "craftOnlyDescription": "此应用可在 Craft 中使用。主聊天暂不支持。",
-        "craftDisabledDescription": "此应用在 Craft 中已禁用。主聊天不支持此应用。"
       }
     },
     "plugins": {
       "availability": {
-        "mainChat": "主聊天",
-        "craft": "Craft",
         "on": "开启",
         "off": "关闭",
-        "unknown": "未知",
         "enabled": "已启用",
         "disabled": "已禁用",
         "chatEnabled": "Chat 已开启",
@@ -720,8 +524,6 @@
       "back": "返回"
     },
     "mcpTools": {
-      "enabledTab": "可用工具",
-      "policiesTab": "审批设置",
       "search": "搜索工具",
       "enabledCount": "已启用工具：{enabled} / {total}"
     }
@@ -11014,7 +10816,8 @@
             "title": "请先连接服务器",
             "description": "MCP 服务器连接后，Onyx 才会加载其操作。",
             "open": "打开配置",
-            "individualDescription": "每位用户都需登录此服务器。请在插件页面连接你自己的账户，然后点击刷新。"
+            "individualDescription": "每位用户都需登录此服务器。请在插件页面连接你自己的账户，然后点击刷新。",
+            "openPlugins": "打开插件"
           }
         }
       }
@@ -11966,40 +11769,6 @@
     }
   },
   "chat": {
-    "mcpConnections": {
-      "trigger": {
-        "label": "工具需要凭据（{count}）",
-        "tooltip": "连接你的账户或添加凭据后，才能使用某些工具。"
-      },
-      "modal": {
-        "title": "连接工具",
-        "description": "添加你的凭据，即可在 Onyx 中使用这些工具。",
-        "hint": "你可以在不连接这些工具的情况下继续聊天，但智能体的功能可能会受到限制。"
-      },
-      "connect": {
-        "label": "连接",
-        "accessibleLabel": "连接 {server}"
-      },
-      "reconnect": {
-        "label": "重新连接",
-        "accessibleLabel": "重新连接 {server}"
-      },
-      "connecting": {
-        "label": "正在连接…"
-      },
-      "connected": {
-        "label": "已连接"
-      },
-      "required": {
-        "label": "需要凭据"
-      },
-      "done": {
-        "label": "完成"
-      },
-      "error": {
-        "description": "无法连接。请重试。"
-      }
-    },
     "app": {
       "createSessionFailed": {
         "toast": "无法开始新聊天。请重试。"
@@ -12426,91 +12195,6 @@
       },
       "pendingToolApproval": {
         "toast": "请先批准或拒绝待处理的工具调用。"
-      }
-    },
-    "mcpApiKey": {
-      "apiKeyField": {
-        "label": "API 密钥",
-        "placeholder": "输入您的 API 密钥"
-      },
-      "apiKeyVisibilityButton": {
-        "hideAriaLabel": "隐藏 API 密钥",
-        "showAriaLabel": "显示 API 密钥"
-      },
-      "cancelButton": {
-        "label": "取消"
-      },
-      "credentialField": {
-        "placeholder": "输入您的 {field}"
-      },
-      "credentialVisibilityButton": {
-        "hideAriaLabel": "隐藏凭据",
-        "showAriaLabel": "显示凭据"
-      },
-      "header": {
-        "enterApiKey": {
-          "title": "输入 API 密钥"
-        },
-        "enterCredentials": {
-          "title": "输入凭据"
-        },
-        "manageApiKey": {
-          "title": "管理 API 密钥"
-        },
-        "manageCredentials": {
-          "title": "管理凭据"
-        }
-      },
-      "intro": {
-        "enterApiKey": {
-          "text": "输入 {server} 的 API 密钥以启用身份验证。"
-        },
-        "enterCredentials": {
-          "text": "输入 {server} 的凭据以启用身份验证。"
-        },
-        "updateApiKey": {
-          "text": "更新 {server} 的 API 密钥。"
-        },
-        "updateCredentials": {
-          "text": "更新 {server} 的凭据。"
-        }
-      },
-      "saveApiKeyError": {
-        "message": "保存 API 密钥失败"
-      },
-      "saveCredentialsError": {
-        "message": "保存凭据失败"
-      },
-      "submitButton": {
-        "saveApiKey": {
-          "label": "保存 API 密钥"
-        },
-        "saveCredentials": {
-          "label": "保存凭据"
-        },
-        "saving": {
-          "label": "正在保存..."
-        },
-        "updateApiKey": {
-          "label": "更新 API 密钥"
-        },
-        "updateCredentials": {
-          "label": "更新凭据"
-        }
-      },
-      "validationNote": {
-        "apiKey": {
-          "text": "您的 API 密钥将由服务器验证，并安全存储。"
-        },
-        "authenticated": {
-          "text": "更改在保存前将由服务器验证。"
-        },
-        "credentials": {
-          "text": "您的凭据将由服务器验证，并安全存储。"
-        }
-      },
-      "backButton": {
-        "label": "返回工具列表"
       }
     },
     "messages": {
@@ -14296,22 +13980,6 @@
       }
     },
     "apps": {
-      "oauthCallback": {
-        "backButton": "返回我的应用",
-        "description": "正在完成 OAuth 握手…",
-        "errors": {
-          "cancelled": "OAuth 已被取消或拒绝：{reason}",
-          "failed": "连接失败。",
-          "missingParams": "回调 URL 中缺少 code 或 state。"
-        },
-        "exchanging": {
-          "label": "正在交换授权码…"
-        },
-        "success": {
-          "label": "已连接。正在返回您的应用…"
-        },
-        "title": "正在连接您的应用"
-      },
       "policyEditor": {
         "loading": {
           "label": "正在加载…"
@@ -14858,7 +14526,6 @@
       "error": {
         "generic": "出了点问题。请重试。",
         "notConfigurable": "无法从此处设置该应用。",
-        "popupBlocked": "无法打开设置窗口。请允许弹出窗口后重试。",
         "startFailed": "无法开始设置"
       },
       "loading": {
@@ -15460,10 +15127,8 @@
       "loading": "正在加载审批设置…",
       "loadError": "无法加载审批设置。",
       "retry": "重试",
-      "save": "保存",
       "saving": "正在保存…",
       "cancel": "取消",
-      "saveError": "无法保存审批设置。",
       "emptyActions": "没有已知操作。未知操作需要审批。",
       "agentPermissionRequired": "某项操作需要审批，因此本次运行已停止。请检查权限，然后重新运行任务。",
       "enableForTask": "为此任务启用",
@@ -17377,5 +17042,218 @@
     "jvmMemoryTitle": "JVM 内存",
     "vectorMemoryTitle": "向量内存",
     "viewDetails": "查看详情"
+  },
+  "plugins": {
+    "member": {
+      "title": "插件",
+      "description": "可在聊天和智能体中使用的技能和集成。",
+      "filters": {
+        "label": "插件类型",
+        "all": {
+          "label": "全部"
+        },
+        "skills": {
+          "label": "技能"
+        },
+        "integrations": {
+          "label": "集成"
+        }
+      },
+      "sections": {
+        "organization": "组织库",
+        "mine": "我的上传",
+        "shared": "与你共享"
+      },
+      "row": {
+        "skillCount": "{count, plural, other {# 个技能}}",
+        "integrationCount": "{count, plural, other {# 个集成}}",
+        "needsConnection": "{count, plural, other {# 个需要登录}}",
+        "open": {
+          "label": "打开 {name}"
+        }
+      },
+      "state": {
+        "loading": "正在加载插件",
+        "loadFailed": "部分插件无法加载。",
+        "emptyTitle": "暂无插件",
+        "emptyDescription": "请让管理员添加插件。",
+        "noResultsTitle": "没有匹配的插件",
+        "noResultsDescription": "请尝试其他名称或筛选条件。",
+        "retry": {
+          "label": "重试"
+        },
+        "clear": {
+          "label": "显示所有插件"
+        }
+      },
+      "detail": {
+        "title": "插件",
+        "notFound": "你无法使用此插件。",
+        "loadFailed": "无法加载插件。",
+        "tabs": {
+          "overview": "概览",
+          "skills": "技能",
+          "integrations": "集成",
+          "versions": "版本"
+        },
+        "overview": {
+          "noDescription": "无描述。",
+          "location": "位置",
+          "owner": "所有者",
+          "skills": "技能",
+          "integrations": "集成"
+        },
+        "skills": {
+          "off": "已关闭",
+          "invalid": "无效"
+        },
+        "back": {
+          "label": "插件"
+        },
+        "switch": {
+          "title": "使用此插件",
+          "description": "开启后，默认智能体可以使用此插件。",
+          "label": "使用 {name}",
+          "required": "管理员已将此插件设为必需。你无法将其关闭。",
+          "notAvailable": "管理员已将此插件设为不可用。",
+          "unavailable": "你无法开启或关闭此插件。",
+          "failed": "无法更改插件。"
+        },
+        "share": {
+          "label": "共享"
+        },
+        "publish": {
+          "label": "发布",
+          "blocked": "只有拥有组织范围“管理操作”权限的用户才能发布包含集成的插件。",
+          "confirmTitle": "发布 {name}？",
+          "confirmMessage": "插件将移至组织库。此操作无法撤消。之后由管理员设置其安装设置。",
+          "done": "{name} 现已在组织库中。",
+          "failed": "无法发布插件。"
+        }
+      },
+      "connection": {
+        "status": {
+          "connected": "已连接",
+          "notConnected": "未连接",
+          "needsReconnect": "需要重新连接",
+          "notSetUp": "未设置"
+        },
+        "askAdmin": "请询问管理员",
+        "connected": "已连接 {name}。",
+        "disconnected": "已断开 {name}。",
+        "failed": "无法连接。请重试。",
+        "disconnectFailed": "无法断开连接。请重试。",
+        "connect": {
+          "label": "连接",
+          "ariaLabel": "连接 {name}"
+        },
+        "reconnect": {
+          "label": "重新连接",
+          "ariaLabel": "重新连接 {name}"
+        },
+        "disconnect": {
+          "label": "断开连接",
+          "ariaLabel": "断开 {name}"
+        }
+      },
+      "credentials": {
+        "title": "连接 {name}",
+        "description": "输入你的凭据。只有你会使用它们。",
+        "required": "请填写此值。",
+        "failed": "无法保存你的凭据。请重试。",
+        "submit": {
+          "label": "连接",
+          "pendingLabel": "正在连接…"
+        },
+        "cancel": {
+          "label": "取消"
+        }
+      },
+      "alwaysAllow": {
+        "title": "始终允许",
+        "description": "无需确认即可运行需要审批的操作。",
+        "loadFailed": "无法加载操作。",
+        "saveFailed": "无法保存。请重试。",
+        "alwaysAsks": "Craft 会为每个此类请求请求批准。",
+        "switch": {
+          "label": "始终允许 {name}"
+        },
+        "retry": {
+          "label": "重试"
+        }
+      },
+      "oauthCallback": {
+        "processing": "正在连接你的账户…",
+        "successTitle": "账户已连接",
+        "successDescription": "Onyx 正在带你返回。",
+        "errorTitle": "无法连接",
+        "cancelled": "登录已取消。",
+        "invalidLink": "此登录链接无效。请重新开始登录。",
+        "failed": "登录未完成。请重试。",
+        "back": {
+          "label": "返回插件"
+        }
+      },
+      "search": {
+        "placeholder": "搜索插件"
+      },
+      "addIntegration": {
+        "label": "添加集成"
+      },
+      "manage": {
+        "label": "管理插件"
+      },
+      "share": {
+        "title": "共享 {name}",
+        "description": "授予用户和群组访问此插件的权限。",
+        "sharedSignIn": "{names} 使用一个账户。有访问权限的用户使用你连接的账户。",
+        "loadFailed": "无法加载有访问权限的用户。",
+        "empty": "只有你有访问权限。",
+        "remove": {
+          "label": "移除 {name}"
+        },
+        "cancel": {
+          "label": "取消"
+        },
+        "submit": {
+          "label": "保存",
+          "pendingLabel": "正在保存..."
+        },
+        "saved": "已保存 {name} 的访问权限。",
+        "failed": "无法保存访问权限。"
+      }
+    },
+    "chat": {
+      "popover": {
+        "empty": "此智能体没有包含集成的插件。",
+        "searchEmpty": "没有与搜索匹配的插件。",
+        "loading": "正在加载插件",
+        "loadError": "部分插件无法加载。请重试。",
+        "trigger": {
+          "label": "插件"
+        },
+        "retry": {
+          "label": "重试"
+        },
+        "browse": {
+          "label": "浏览插件"
+        },
+        "toggle": {
+          "label": "在此智能体中使用 {name}"
+        }
+      },
+      "connectPrompt": {
+        "tooltip": "在你连接账户之前，智能体无法使用这些集成。",
+        "title": "连接集成",
+        "description": "登录后即可在此聊天中使用这些集成。",
+        "hint": "你可以继续聊天。在你连接集成之前，智能体不会使用它。",
+        "trigger": {
+          "label": "{count, plural, other {# 个集成需要登录}}"
+        },
+        "done": {
+          "label": "完成"
+        }
+      }
+    }
   }
 }

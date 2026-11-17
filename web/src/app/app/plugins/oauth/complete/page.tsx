@@ -1,92 +1,39 @@
 "use client";
 
-import { useNavigation, useSearchParams } from "@opal/navigation";
-import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Card, OnyxLoader } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
-import { SvgConnected, SvgPlugBroken } from "@opal/illustrations";
-import { verifyMemberPluginConnection } from "@/lib/plugins/member";
-import { parsePositiveId } from "@/lib/integrations/utils";
-import { CRAFT_PLUGINS_PATH } from "@/app/craft/v1/constants";
+import { Button, Card } from "@opal/components";
+import { IllustrationContent, Section } from "@opal/layouts";
+import { SvgConnected } from "@opal/illustrations";
+import { useNavigation } from "@opal/navigation";
 
+/** The page a sign-in returns to when it started with no other page. */
 export default function MemberPluginOAuthCompletePage() {
-  const t = useTranslations("actions.memberPlugins.oauthComplete");
-  const searchParams = useSearchParams();
+  const t = useTranslations("plugins.member.oauthComplete");
   const navigation = useNavigation();
-  const processed = useRef(false);
-  const [status, setStatus] = useState<"checking" | "success" | "error">(
-    "checking"
-  );
-
-  useEffect(() => {
-    if (processed.current) return;
-    processed.current = true;
-    const kind = searchParams?.get("pluginKind");
-    const id = parsePositiveId(searchParams?.get("pluginId") ?? undefined);
-    const agentIdParam = searchParams?.get("agentId");
-    const agentId = agentIdParam == null ? undefined : Number(agentIdParam);
-    const surfaceParam = searchParams?.get("surface");
-    const surface =
-      surfaceParam === "all" ||
-      surfaceParam === "chat" ||
-      surfaceParam === "craft"
-        ? surfaceParam
-        : undefined;
-    if (
-      (kind !== "mcp" && kind !== "openapi" && kind !== "external-app") ||
-      id === null ||
-      searchParams?.get("message") !== "oauth_connected" ||
-      (agentIdParam != null &&
-        (!/^\d+$/.test(agentIdParam) || !Number.isSafeInteger(agentId))) ||
-      (surfaceParam != null && surface === undefined)
-    ) {
-      setStatus("error");
-      return;
-    }
-    verifyMemberPluginConnection({ kind, id }, { agentId, surface }).then(
-      () => setStatus("success"),
-      () => setStatus("error")
-    );
-  }, [searchParams]);
-
   return (
-    <div className="flex h-full min-h-0 flex-1 items-center justify-center p-6">
-      <div className="w-full max-w-sm">
+    <Section justifyContent="center" padding={6}>
+      <Section width={24} height="auto">
         <Card
           padding={6}
           rounding={4}
           color="background-tint-00"
           border="solid"
         >
-          <div className="flex flex-col items-center gap-4">
-            {status === "checking" ? (
-              <OnyxLoader />
-            ) : (
-              <IllustrationContent
-                illustration={
-                  status === "success" ? SvgConnected : SvgPlugBroken
-                }
-                title={t(`${status}.title`)}
-                description={t(`${status}.description`)}
-              />
-            )}
-            <Button
-              {...navigation.linkTo(
-                searchParams.get("surface") === "craft"
-                  ? CRAFT_PLUGINS_PATH
-                  : "/app/plugins"
-              )}
-              width="full"
-            >
-              {t("return.label")}
+          <Section alignItems="stretch" gap={4} height="auto">
+            <IllustrationContent
+              illustration={SvgConnected}
+              title={t("title")}
+              description={t("description")}
+            />
+            <Button {...navigation.linkTo("/app/plugins")} width="full">
+              {t("back")}
             </Button>
             <Button prominence="tertiary" onClick={() => window.close()}>
-              {t("close.label")}
+              {t("close")}
             </Button>
-          </div>
+          </Section>
         </Card>
-      </div>
-    </div>
+      </Section>
+    </Section>
   );
 }

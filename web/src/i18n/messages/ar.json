@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "إضافة موصّلات"
       },
-      "authenticate": {
-        "label": "مصادقة"
-      },
       "codingAgentIncognito": {
         "tooltip": "وكيل البرمجة غير متاح في وضع التخفي"
       },
@@ -221,53 +218,6 @@
         "title": "قطع الاتصال بـ *{name}*"
       }
     },
-    "mcpOauthCallback": {
-      "autoRedirect": {
-        "text": "ستتم إعادتك تلقائيًا…"
-      },
-      "backToChatButton": {
-        "label": "العودة إلى الدردشة"
-      },
-      "cancelled": {
-        "description": "تم إلغاء التفويض أو رفضه، لذا لم يتم إنشاء أي اتصال. للمحاولة مرة أخرى، أعد بدء الاتصال من إعدادات المصادقة الخاصة بخادم MCP.",
-        "title": "تم إلغاء التفويض"
-      },
-      "continueButton": {
-        "label": "متابعة"
-      },
-      "genericError": {
-        "fallbackDetail": "تعذر إكمال التفويض",
-        "title": "حدث خطأ ما"
-      },
-      "invalidLink": {
-        "description": "يفتقد هذا الرابط معلمات التفويض المطلوبة. أعد بدء الاتصال من إعدادات المصادقة الخاصة بخادم MCP.",
-        "title": "رابط تفويض غير صالح"
-      },
-      "processing": {
-        "description": "جارٍ إنهاء الاتصال بخادم MCP الخاص بك. قد يستغرق ذلك بضع لحظات…",
-        "title": "جارٍ إكمال التفويض"
-      },
-      "serverNotFound": {
-        "description": "خادم MCP الذي ينتمي إليه هذا التفويض لم يعد موجودًا أو لم يعد مكونًا. أعد إنشاء الخادم أو إعادة تكوينه، ثم اتصل مرة أخرى.",
-        "title": "لم يتم العثور على خادم MCP"
-      },
-      "sessionExpired": {
-        "description": "رابط التفويض هذا غير صالح أو انتهت صلاحيته أو تم استخدامه من قبل. أعد بدء الاتصال من إعدادات المصادقة الخاصة بخادم MCP.",
-        "title": "انتهت صلاحية جلسة التفويض"
-      },
-      "success": {
-        "description": "اكتمل التفويض بنجاح. يمكنك الآن استخدام أدوات هذا الخادم في الدردشة.",
-        "title": "تم الاتصال بـ {serverName}"
-      },
-      "timedOut": {
-        "description": "لم يؤكد خادم MCP التفويض في الوقت المحدد. حاول الاتصال مرة أخرى، وإذا استمرت المشكلة، فتحقق من إعدادات OAuth للخادم.",
-        "title": "انتهت مهلة التفويض"
-      },
-      "tokenExchangeFailed": {
-        "description": "وافق المزود على التفويض ولكن تعذر الحصول على رمز وصول صالح. تحقق من بيانات اعتماد عميل OAuth ونقاط النهاية الخاصة بالخادم، ثم حاول الاتصال مرة أخرى.",
-        "title": "فشل تبادل الرمز المميز"
-      }
-    },
     "policyToggle": {
       "always": {
         "label": "سماح"
@@ -297,8 +247,7 @@
         "tooltip": "تعطيل جميع الأدوات"
       },
       "empty": {
-        "message": "لا توجد أدوات متاحة",
-        "searchMessage": "لم يتم العثور على أدوات"
+        "message": "لا توجد أدوات متاحة"
       },
       "showAllButton": {
         "ariaLabel": "عرض جميع الأدوات",
@@ -427,134 +376,18 @@
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
     "memberPlugins": {
-      "chat": {
-        "trigger": {
-          "label": "الإضافات"
-        },
-        "search": {
-          "placeholder": "البحث عن إضافات"
-        },
-        "empty": {
-          "text": "لا توجد إضافات متاحة في هذه المحادثة.",
-          "searchText": "لا توجد إضافات تطابق بحثك."
-        },
-        "loading": {
-          "label": "جارٍ تحميل الإضافات"
-        },
-        "loadError": {
-          "text": "تعذر تحميل بعض الإضافات. حاول مرة أخرى."
-        },
-        "retry": {
-          "label": "حاول مرة أخرى"
-        },
-        "browse": {
-          "label": "تصفح الإضافات"
-        },
-        "toggle": {
-          "ariaLabel": "استخدام {name} في هذه المحادثة"
-        },
-        "connect": {
-          "label": "ربط"
-        },
-        "connection": {
-          "connected": "متصل",
-          "workspace": "اتصال مساحة العمل",
-          "session": "اتصال الجلسة",
-          "none": "لا يلزم الاتصال",
-          "oauth": "اربط حسابك",
-          "credentials": "أضف بيانات اعتمادك",
-          "checking": "جارٍ التحقق من الاتصال",
-          "unconfigured": "يلزم إعداد مساحة العمل",
-          "unavailable": "الاتصال غير متاح"
-        },
-        "intent": {
-          "unavailable": "هذه الإضافة غير متاحة لوكيل هذه المحادثة.",
-          "invalid": "رابط هذه الإضافة غير صالح."
-        }
-      },
-      "oauthComplete": {
-        "success": {
-          "title": "تم ربط الإضافة",
-          "description": "عُد إلى علامة التبويب السابقة للمتابعة."
-        },
-        "error": {
-          "title": "لم يتم تأكيد الاتصال",
-          "description": "عُد إلى علامة التبويب السابقة وحاول الربط مرة أخرى."
-        },
-        "return": {
-          "label": "العودة إلى الإضافات"
-        },
-        "close": {
-          "label": "إغلاق علامة التبويب"
-        }
-      },
-      "title": "الإضافات",
-      "description": "اربط حساباتك لاستخدام إضافات مساحة العمل.",
-      "manageWorkspace": "إدارة إضافات مساحة العمل",
-      "search": "البحث عن إضافات",
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "تطبيق Craft"
-      },
       "row": {
-        "view": "عرض {name}",
         "connect": "ربط {name}"
       },
       "status": {
-        "connected": "متصل",
-        "workspace": "اتصال مساحة العمل",
-        "session": "يستخدم حسابك المتصل",
-        "none": "جاهز للاستخدام",
-        "oauth": "اربط حسابك",
-        "credentials": "أضف بيانات اعتمادك",
-        "unconfigured": "يلزم إعداد مساحة العمل",
-        "checking": "جارٍ التحقق من الاتصال",
         "unavailable": "الاتصال غير متاح"
       },
-      "availability": {
-        "label": "حالة الاتصال لـ {name}",
-        "chat": "المحادثة الرئيسية",
-        "craft": "Craft",
-        "on": "مفعّل",
-        "off": "معطّل",
-        "unknown": "غير معروف",
-        "disabledByAdmin": "عطّله المسؤول",
-        "disabledByYou": "عطّلته أنت",
-        "agents": "الوكلاء المخصصون",
-        "notAvailable": "غير متاح"
-      },
       "state": {
-        "loading": "جارٍ تحميل الإضافات",
         "serversError": "تعذر تحميل إضافات MCP.",
-        "toolsError": "تعذر تحميل أدوات الإضافات.",
-        "oauthError": "تعذر تحميل اتصالات الحسابات.",
-        "retry": "إعادة المحاولة",
-        "noResultsTitle": "لا توجد إضافات مطابقة",
-        "noResultsDescription": "جرّب اسمًا أو وصفًا آخر.",
-        "clearSearch": "عرض جميع الإضافات",
-        "appsError": "تعذر تحميل تطبيقات Craft.",
-        "appsLoading": "جارٍ تحميل تطبيقات Craft",
-        "emptyTitle": "لم يتم العثور على إضافات",
-        "emptyDescription": "جرّب عامل تصفية اتصال آخر أو اطلب من مسؤول مساحة العمل إضافة إحدى الإضافات."
+        "appsError": "تعذر تحميل تطبيقات Craft."
       },
       "detail": {
-        "noAuthentication": "لا يلزم المصادقة",
-        "connection": "الاتصال",
-        "tools": "الأدوات",
-        "toolCount": "{count, plural, zero {لا توجد إجراءات} one {إجراء واحد} two {إجراءان} few {# إجراءات} many {# إجراءً} other {# إجراء}}",
-        "noTools": "لا توجد أدوات مرئية محفوظة لهذه الإضافة.",
-        "connect": "ربط الحساب",
-        "useInChat": "استخدام في المحادثة",
-        "disconnect": "قطع الاتصال",
-        "disconnectTitle": "قطع اتصال {name}؟",
-        "disconnectDescription": "سيؤدي هذا إلى إزالة اتصال حسابك. لن تتغير الإتاحة في مساحة العمل.",
-        "oauthDisconnectWarning": "تشترك جميع الإضافات والتطبيقات التي تستخدم إعداد OAuth نفسه في اتصال هذا الحساب. يؤدي قطع الاتصال إلى إزالة اتصالك منها جميعًا.",
-        "disconnecting": "جارٍ قطع الاتصال...",
-        "disconnectFailed": "تعذر قطع اتصال حسابك. حاول مرة أخرى.",
-        "cancel": "إلغاء",
-        "close": "تم",
-        "openInCraft": "فتح في Craft"
+        "toolCount": "{count, plural, zero {لا توجد إجراءات} one {إجراء واحد} two {إجراءان} few {# إجراءات} many {# إجراءً} other {# إجراء}}"
       },
       "connection": {
         "title": "ربط {name}",
@@ -582,41 +415,12 @@
           "not_connected": "تعذر تأكيد اتصال حسابك. حاول مرة أخرى.",
           "request_failed": "فشل الاتصال. حاول مرة أخرى."
         }
-      },
-      "filters": {
-        "label": "حالة الاتصال",
-        "all": "الكل",
-        "connected": "متصل",
-        "needsSignIn": "يلزم تسجيل الدخول",
-        "showAll": "عرض جميع الإضافات"
-      },
-      "defaults": {
-        "chat": "تفعيل في الدردشة الافتراضية",
-        "craft": "تفعيل في Craft",
-        "chatDescription": "اجعل هذا الملحق متاحًا في محادثاتك التي لا تستخدم وكيلًا مخصصًا.",
-        "craftDescription": "اجعل هذا الملحق متاحًا في جلسات Craft والمهام المجدولة الخاصة بك. تظل أذونات الأدوات في مؤسستك سارية.",
-        "unavailable": "عطّل المسؤول هذه الإضافة في {surface}.",
-        "saveFailed": "تعذر حفظ إعدادات الإضافات الافتراضية. حاول مجددًا.",
-        "chatUnavailable": "عطّل المسؤول هذه الإضافة في {surface}. قد تظل الوكلاء المخصصة التي تم إعدادها باستخدام هذه الإضافة قادرة على استخدامها."
-      },
-      "openapi": {
-        "chatOnly": "الدردشة فقط",
-        "chatOnlyDescription": "هذه الإضافة متاحة في الدردشة، وليس في Craft."
-      },
-      "externalApp": {
-        "description": "استخدم حسابك في Craft.",
-        "craftOnly": "Craft فقط",
-        "craftOnlyDescription": "هذا التطبيق متاح في Craft. لا تدعمه المحادثة الرئيسية.",
-        "craftDisabledDescription": "هذا التطبيق معطّل في Craft. الدردشة الرئيسية لا تدعمه."
       }
     },
     "plugins": {
       "availability": {
-        "mainChat": "الدردشة الرئيسية",
-        "craft": "Craft",
         "on": "مفعّل",
         "off": "معطّل",
-        "unknown": "غير معروف",
         "enabled": "مفعّل",
         "disabled": "معطّل",
         "chatEnabled": "الدردشة مفعّلة",
@@ -720,8 +524,6 @@
       "back": "رجوع"
     },
     "mcpTools": {
-      "enabledTab": "الأدوات المتاحة",
-      "policiesTab": "إعدادات الموافقة",
       "search": "البحث عن أدوات",
       "enabledCount": "الأدوات المفعّلة: {enabled} من {total}"
     }
@@ -11014,7 +10816,8 @@
             "title": "اتصل بالخادم أولًا",
             "description": "يحمّل Onyx إجراءات خادم MCP بعد اتصال الخادم.",
             "open": "فتح التكوين",
-            "individualDescription": "يسجّل كل مستخدم الدخول إلى هذا الخادم. اربط حسابك الخاص في صفحة الإضافات، ثم انقر على تحديث."
+            "individualDescription": "يسجّل كل مستخدم الدخول إلى هذا الخادم. اربط حسابك الخاص في صفحة الإضافات، ثم انقر على تحديث.",
+            "openPlugins": "فتح الإضافات"
           }
         }
       }
@@ -11966,40 +11769,6 @@
     }
   },
   "chat": {
-    "mcpConnections": {
-      "trigger": {
-        "label": "تحتاج الأدوات إلى بيانات اعتماد ({count})",
-        "tooltip": "بعض الأدوات غير متاحة حتى تربط حسابك أو تضيف بيانات الاعتماد."
-      },
-      "modal": {
-        "title": "ربط الأدوات",
-        "description": "أضف بيانات اعتمادك لاستخدام هذه الأدوات في Onyx.",
-        "hint": "يمكنك متابعة المحادثة دون ربط هذه الأدوات، لكن قد تكون قدرات وكيلك محدودة."
-      },
-      "connect": {
-        "label": "ربط",
-        "accessibleLabel": "ربط {server}"
-      },
-      "reconnect": {
-        "label": "إعادة الاتصال",
-        "accessibleLabel": "إعادة الاتصال بـ {server}"
-      },
-      "connecting": {
-        "label": "جارٍ الربط…"
-      },
-      "connected": {
-        "label": "متصل"
-      },
-      "required": {
-        "label": "بيانات الاعتماد مطلوبة"
-      },
-      "done": {
-        "label": "تم"
-      },
-      "error": {
-        "description": "تعذر الاتصال. حاول مرة أخرى."
-      }
-    },
     "app": {
       "createSessionFailed": {
         "toast": "تعذّر بدء محادثة جديدة. حاول مرة أخرى."
@@ -12426,91 +12195,6 @@
       },
       "pendingToolApproval": {
         "toast": "وافق على استدعاءات الأدوات المعلقة أو ارفضها أولاً."
-      }
-    },
-    "mcpApiKey": {
-      "apiKeyField": {
-        "label": "مفتاح API",
-        "placeholder": "أدخل مفتاح API الخاص بك"
-      },
-      "apiKeyVisibilityButton": {
-        "hideAriaLabel": "إخفاء مفتاح API",
-        "showAriaLabel": "إظهار مفتاح API"
-      },
-      "cancelButton": {
-        "label": "إلغاء"
-      },
-      "credentialField": {
-        "placeholder": "أدخل {field}"
-      },
-      "credentialVisibilityButton": {
-        "hideAriaLabel": "إخفاء بيانات الاعتماد",
-        "showAriaLabel": "إظهار بيانات الاعتماد"
-      },
-      "header": {
-        "enterApiKey": {
-          "title": "إدخال مفتاح API"
-        },
-        "enterCredentials": {
-          "title": "إدخال بيانات الاعتماد"
-        },
-        "manageApiKey": {
-          "title": "إدارة مفتاح API"
-        },
-        "manageCredentials": {
-          "title": "إدارة بيانات الاعتماد"
-        }
-      },
-      "intro": {
-        "enterApiKey": {
-          "text": "أدخل مفتاح API الخاص بك لـ {server} لتفعيل المصادقة."
-        },
-        "enterCredentials": {
-          "text": "أدخل بيانات الاعتماد الخاصة بك لـ {server} لتفعيل المصادقة."
-        },
-        "updateApiKey": {
-          "text": "حدّث مفتاح API الخاص بك لـ {server}."
-        },
-        "updateCredentials": {
-          "text": "حدّث بيانات الاعتماد الخاصة بك لـ {server}."
-        }
-      },
-      "saveApiKeyError": {
-        "message": "فشل حفظ مفتاح API"
-      },
-      "saveCredentialsError": {
-        "message": "فشل حفظ بيانات الاعتماد"
-      },
-      "submitButton": {
-        "saveApiKey": {
-          "label": "حفظ مفتاح API"
-        },
-        "saveCredentials": {
-          "label": "حفظ بيانات الاعتماد"
-        },
-        "saving": {
-          "label": "جارٍ الحفظ..."
-        },
-        "updateApiKey": {
-          "label": "تحديث مفتاح API"
-        },
-        "updateCredentials": {
-          "label": "تحديث بيانات الاعتماد"
-        }
-      },
-      "validationNote": {
-        "apiKey": {
-          "text": "سيتم التحقق من مفتاح API لدى الخادم وتخزينه بأمان."
-        },
-        "authenticated": {
-          "text": "سيتم التحقق من التغييرات لدى الخادم قبل حفظها."
-        },
-        "credentials": {
-          "text": "سيتم التحقق من بيانات الاعتماد لدى الخادم وتخزينها بأمان."
-        }
-      },
-      "backButton": {
-        "label": "العودة إلى الأدوات"
       }
     },
     "messages": {
@@ -14296,22 +13980,6 @@
       }
     },
     "apps": {
-      "oauthCallback": {
-        "backButton": "العودة إلى تطبيقاتي",
-        "description": "جارٍ إتمام مصافحة OAuth…",
-        "errors": {
-          "cancelled": "تم إلغاء OAuth أو رفضه: {reason}",
-          "failed": "فشل الاتصال.",
-          "missingParams": "الرمز (code) أو الحالة (state) مفقودان في عنوان URL للاستدعاء."
-        },
-        "exchanging": {
-          "label": "جارٍ تبادل رمز التفويض…"
-        },
-        "success": {
-          "label": "تم الاتصال. جارٍ إعادة التوجيه إلى تطبيقاتك…"
-        },
-        "title": "جارٍ توصيل تطبيقك"
-      },
       "policyEditor": {
         "loading": {
           "label": "جارٍ التحميل…"
@@ -14858,7 +14526,6 @@
       "error": {
         "generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
         "notConfigurable": "لا يمكن إعداد هذا التطبيق من هنا.",
-        "popupBlocked": "تعذّر فتح نافذة الإعداد. اسمح بالنوافذ المنبثقة وحاول مرة أخرى.",
         "startFailed": "فشل بدء الإعداد"
       },
       "loading": {
@@ -15460,10 +15127,8 @@
       "loading": "جارٍ تحميل إعدادات الموافقة…",
       "loadError": "تعذّر تحميل إعدادات الموافقة.",
       "retry": "إعادة المحاولة",
-      "save": "حفظ",
       "saving": "جارٍ الحفظ…",
       "cancel": "إلغاء",
-      "saveError": "تعذّر حفظ إعدادات الموافقة.",
       "emptyActions": "لا توجد إجراءات معروفة. تتطلب الإجراءات غير المعروفة الموافقة.",
       "agentPermissionRequired": "توقف هذا التشغيل لأن إجراءً احتاج إلى موافقة. راجع الأذونات ثم شغّل المهمة مجددًا.",
       "enableForTask": "تفعيل لهذه المهمة",
@@ -17377,5 +17042,218 @@
     "jvmMemoryTitle": "ذاكرة JVM",
     "vectorMemoryTitle": "ذاكرة المتجهات",
     "viewDetails": "عرض التفاصيل"
+  },
+  "plugins": {
+    "member": {
+      "title": "الإضافات",
+      "description": "المهارات والتكاملات التي يمكنك استخدامها في المحادثات والوكلاء.",
+      "filters": {
+        "label": "نوع الإضافة",
+        "all": {
+          "label": "الكل"
+        },
+        "skills": {
+          "label": "المهارات"
+        },
+        "integrations": {
+          "label": "التكاملات"
+        }
+      },
+      "sections": {
+        "organization": "مكتبة المؤسسة",
+        "mine": "ملفاتي المرفوعة",
+        "shared": "تمت مشاركتها معك"
+      },
+      "row": {
+        "skillCount": "{count, plural, one {مهارة واحدة} other {# مهارات}}",
+        "integrationCount": "{count, plural, one {تكامل واحد} other {# تكاملات}}",
+        "needsConnection": "{count, plural, one {واحد يحتاج إلى تسجيل الدخول} other {# تحتاج إلى تسجيل الدخول}}",
+        "open": {
+          "label": "فتح {name}"
+        }
+      },
+      "state": {
+        "loading": "جارٍ تحميل الإضافات",
+        "loadFailed": "تعذر تحميل بعض الإضافات.",
+        "emptyTitle": "لا توجد إضافات بعد",
+        "emptyDescription": "اطلب من المسؤول إضافة إضافة.",
+        "noResultsTitle": "لا توجد إضافات مطابقة",
+        "noResultsDescription": "جرّب اسمًا أو عامل تصفية آخر.",
+        "retry": {
+          "label": "حاول مرة أخرى"
+        },
+        "clear": {
+          "label": "عرض كل الإضافات"
+        }
+      },
+      "detail": {
+        "title": "إضافة",
+        "notFound": "هذه الإضافة غير متاحة لك.",
+        "loadFailed": "تعذر تحميل الإضافة.",
+        "tabs": {
+          "overview": "نظرة عامة",
+          "skills": "المهارات",
+          "integrations": "التكاملات",
+          "versions": "الإصدارات"
+        },
+        "overview": {
+          "noDescription": "لا يوجد وصف.",
+          "location": "الموقع",
+          "owner": "المالك",
+          "skills": "المهارات",
+          "integrations": "التكاملات"
+        },
+        "skills": {
+          "off": "متوقفة",
+          "invalid": "غير صالحة"
+        },
+        "back": {
+          "label": "الإضافات"
+        },
+        "switch": {
+          "title": "استخدام هذا المكوّن الإضافي",
+          "description": "عند تشغيل هذا الخيار، يمكن للوكيل الافتراضي استخدام هذا المكوّن الإضافي.",
+          "label": "استخدام {name}",
+          "required": "جعل المسؤول هذا المكوّن الإضافي مطلوبًا. لا يمكنك إيقافه.",
+          "notAvailable": "جعل المسؤول هذا المكوّن الإضافي غير متاح.",
+          "unavailable": "لا يمكنك تشغيل هذا المكوّن الإضافي أو إيقافه.",
+          "failed": "تعذّر تغيير المكوّن الإضافي."
+        },
+        "share": {
+          "label": "مشاركة"
+        },
+        "publish": {
+          "label": "نشر",
+          "blocked": "لا يمكن نشر مكوّن إضافي يحتوي على تكامل إلا لمستخدم لديه إذن إدارة الإجراءات على مستوى المؤسسة.",
+          "confirmTitle": "نشر {name}؟",
+          "confirmMessage": "ينتقل المكوّن الإضافي إلى مكتبة المؤسسة. لا يمكنك التراجع عن ذلك. يضبط المسؤولون بعد ذلك إعداد التثبيت.",
+          "done": "أصبح {name} الآن في مكتبة المؤسسة.",
+          "failed": "تعذّر نشر المكوّن الإضافي."
+        }
+      },
+      "connection": {
+        "status": {
+          "connected": "متصل",
+          "notConnected": "غير متصل",
+          "needsReconnect": "يحتاج إلى إعادة الاتصال",
+          "notSetUp": "غير مُعد"
+        },
+        "askAdmin": "اسأل المسؤول",
+        "connected": "تم اتصال {name}.",
+        "disconnected": "تم قطع اتصال {name}.",
+        "failed": "تعذر الاتصال. حاول مرة أخرى.",
+        "disconnectFailed": "تعذر قطع الاتصال. حاول مرة أخرى.",
+        "connect": {
+          "label": "اتصال",
+          "ariaLabel": "اتصال {name}"
+        },
+        "reconnect": {
+          "label": "إعادة الاتصال",
+          "ariaLabel": "إعادة اتصال {name}"
+        },
+        "disconnect": {
+          "label": "قطع الاتصال",
+          "ariaLabel": "قطع اتصال {name}"
+        }
+      },
+      "credentials": {
+        "title": "اتصال {name}",
+        "description": "أدخل بيانات الاعتماد الخاصة بك. أنت وحدك تستخدمها.",
+        "required": "أضف هذه القيمة.",
+        "failed": "تعذر حفظ بيانات الاعتماد. حاول مرة أخرى.",
+        "submit": {
+          "label": "اتصال",
+          "pendingLabel": "جارٍ الاتصال…"
+        },
+        "cancel": {
+          "label": "إلغاء"
+        }
+      },
+      "alwaysAllow": {
+        "title": "السماح دائمًا",
+        "description": "تشغيل إجراء يطلب الموافقة دون مطالبة.",
+        "loadFailed": "تعذر تحميل الإجراءات.",
+        "saveFailed": "تعذر الحفظ. حاول مرة أخرى.",
+        "alwaysAsks": "يطلب Craft الموافقة على كل طلب من هذه الطلبات.",
+        "switch": {
+          "label": "السماح دائمًا بـ {name}"
+        },
+        "retry": {
+          "label": "حاول مرة أخرى"
+        }
+      },
+      "oauthCallback": {
+        "processing": "جارٍ ربط حسابك…",
+        "successTitle": "تم ربط الحساب",
+        "successDescription": "يعيدك Onyx الآن.",
+        "errorTitle": "تعذر الاتصال",
+        "cancelled": "تم إلغاء تسجيل الدخول.",
+        "invalidLink": "رابط تسجيل الدخول هذا غير صالح. ابدأ تسجيل الدخول من جديد.",
+        "failed": "لم يكتمل تسجيل الدخول. حاول مرة أخرى.",
+        "back": {
+          "label": "العودة إلى الإضافات"
+        }
+      },
+      "search": {
+        "placeholder": "البحث في الإضافات"
+      },
+      "addIntegration": {
+        "label": "إضافة تكامل"
+      },
+      "manage": {
+        "label": "إدارة الإضافات"
+      },
+      "share": {
+        "title": "مشاركة {name}",
+        "description": "امنح الأشخاص والمجموعات حق الوصول إلى هذا المكوّن الإضافي.",
+        "sharedSignIn": "يستخدم {names} حسابًا واحدًا. يستخدم الأشخاص الذين لديهم حق الوصول الحساب الذي ربطته.",
+        "loadFailed": "تعذّر تحميل الأشخاص الذين لديهم حق الوصول.",
+        "empty": "أنت وحدك لديك حق الوصول.",
+        "remove": {
+          "label": "إزالة {name}"
+        },
+        "cancel": {
+          "label": "إلغاء"
+        },
+        "submit": {
+          "label": "حفظ",
+          "pendingLabel": "جارٍ الحفظ..."
+        },
+        "saved": "تم حفظ حق الوصول إلى {name}.",
+        "failed": "تعذّر حفظ حق الوصول."
+      }
+    },
+    "chat": {
+      "popover": {
+        "empty": "لا يملك هذا الوكيل إضافات بها تكاملات.",
+        "searchEmpty": "لا توجد إضافات تطابق بحثك.",
+        "loading": "جارٍ تحميل الإضافات",
+        "loadError": "تعذر تحميل بعض الإضافات. حاول مرة أخرى.",
+        "trigger": {
+          "label": "الإضافات"
+        },
+        "retry": {
+          "label": "حاول مرة أخرى"
+        },
+        "browse": {
+          "label": "تصفح الإضافات"
+        },
+        "toggle": {
+          "label": "استخدام {name} مع هذا الوكيل"
+        }
+      },
+      "connectPrompt": {
+        "tooltip": "لا يستطيع الوكيل استخدام هذه التكاملات حتى تربط حسابك.",
+        "title": "ربط التكاملات",
+        "description": "سجّل الدخول لاستخدام هذه التكاملات في هذه المحادثة.",
+        "hint": "يمكنك متابعة المحادثة. لا يستخدم الوكيل التكامل حتى تربطه.",
+        "trigger": {
+          "label": "{count, plural, one {تكامل واحد يحتاج إلى تسجيل الدخول} other {# تكاملات تحتاج إلى تسجيل الدخول}}"
+        },
+        "done": {
+          "label": "تم"
+        }
+      }
+    }
   }
 }

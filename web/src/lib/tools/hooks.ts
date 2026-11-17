@@ -18,8 +18,10 @@ import type { MinimalAgent } from "@/lib/agents/types";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { toast } from "@opal/layouts";
-import { chatPluginIds } from "@/lib/plugins/chat";
-import { useMemberPlugins } from "@/lib/plugins/member";
+import {
+  useAgentChatPlugins,
+  useAgentPluginPreferences,
+} from "@/lib/plugins/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
@@ -731,6 +733,7 @@ export function useToolConfiguration(
 ): ToolConfigurationHandle {
   const appPosition = useAppPosition();
   const activeAgent = useActiveAgent();
+  const t = useTranslations("actions");
 
   const key = useMemo(() => {
     // A composer for a chat that the URL does not describe says which agent it
@@ -754,6 +757,23 @@ export function useToolConfiguration(
   }, [newChatWithAgentId, appPosition, activeAgent]);
 
   const { user } = useUser();
+  const signedIn = user !== null && !user.is_anonymous_user;
+  // The plugins the user turned off for this agent. A chat that does not
+  // exist yet starts with them; a switch in any chat saves them.
+  const preferences = useAgentPluginPreferences(signedIn);
+  const preferredOff =
+    activeAgent === undefined
+      ? null
+      : preferences.disabledPluginIds(activeAgent.id);
+  const preferredOffKey = preferredOff === null ? null : preferredOff.join(",");
+  const preferredPlugins = useMemo((): PluginConfiguration | null => {
+    if (preferredOffKey === null) return null;
+    const plugins: Record<string, "disabled"> = {};
+    for (const id of preferredOffKey.split(",")) {
+      if (id !== "") plugins[id] = "disabled";
+    }
+    return plugins;
+  }, [preferredOffKey]);
   const chatSessionId =
     newChatWithAgentId === undefined ? appPosition.chat() : null;
   // The server's copy of an existing chat's options, undefined until its
@@ -771,26 +791,11 @@ export function useToolConfiguration(
       : state.sessions.get(chatSessionId)?.toolOptionsEdits
   );
   const agentTools = activeAgent?.tools;
-  // Every plugin the user can see and every plugin of the agent, null until
-  // both catalogs load. Saved options name plugins in an allow-list, so a
-  // plugin unknown here would be left out.
-  const catalog = useMemberPlugins({ surface: "chat" });
-  const agentCatalog = useMemberPlugins({
-    surface: "chat",
-    agentId: activeAgent?.id,
-  });
-  // A catalog request that failed leaves its plugins out, so the ids stay
-  // unknown and no edit rewrites the allow-list from them.
-  const catalogIncomplete =
-    catalog.loading.servers ||
-    catalog.loading.tools ||
-    agentCatalog.loading.servers ||
-    catalog.errors.servers !== undefined ||
-    catalog.errors.tools !== undefined ||
-    agentCatalog.errors.servers !== undefined;
-  const pluginIdsKey = catalogIncomplete
-    ? null
-    : chatPluginIds([...catalog.plugins, ...agentCatalog.plugins]).join(",");
+  // Every plugin of the agent, null until it loads. Saved options name
+  // plugins in an allow-list, so a plugin unknown here would be left out.
+  const agentPluginIds = useAgentChatPlugins(activeAgent?.id).pluginIds;
+  const pluginIdsKey =
+    agentPluginIds === null ? null : agentPluginIds.join(",");
   const pluginIds = useMemo(
     () =>
       pluginIdsKey === null
@@ -857,14 +862,24 @@ export function useToolConfiguration(
   );
 
   const isChat = key !== null && isChatKey(key);
+  const newChatConfiguration = useMemo(
+    () =>
+      entry.key !== key
+        ? NEUTRAL
+        : signedIn
+          ? { ...entry.configuration, plugins: preferredPlugins ?? {} }
+          : entry.configuration,
+    [entry, key, signedIn, preferredPlugins]
+  );
   const configuration = isChat
     ? (chatConfiguration ?? NEUTRAL)
-    : entry.key === key
-      ? entry.configuration
-      : NEUTRAL;
+    : newChatConfiguration;
   const ready = isChat
     ? chatConfiguration !== null && pluginIds !== null
-    : key !== null && entry.key === key && pluginIds !== null;
+    : key !== null &&
+      entry.key === key &&
+      pluginIds !== null &&
+      preferredPlugins !== null;
   const savedAllowed =
     isChat && pluginIds === null && chatOptions !== undefined
       ? chatOptions.allowed
@@ -937,9 +952,14 @@ export function useToolConfiguration(
     [key, editChat, activeAgent, pluginIds]
   );
 
+  const { setPluginsDisabled } = preferences;
   const setPluginEnabled = useCallback(
     (ids: readonly string[], enabled: boolean) => {
-      if (key === null) return;
+      if (key === null || activeAgent === undefined) return;
+      if (signedIn)
+        setPluginsDisabled(activeAgent.id, ids, !enabled).catch(() =>
+          toast.error(t("toolsPopover.selectionSaveFailed"))
+        );
       const change = (current: PluginConfiguration): PluginConfiguration => {
         if (ids.every((id) => (current[id] === "disabled") !== enabled)) {
           return current;
@@ -962,6 +982,8 @@ export function useToolConfiguration(
         });
         return;
       }
+      // A signed-in user's new chat reads the saved choice instead.
+      if (signedIn) return;
       setEntry((previous) => {
         if (previous.key !== key) return previous;
         const current = previous.configuration;
@@ -970,7 +992,7 @@ export function useToolConfiguration(
         return { key, configuration: { ...current, plugins } };
       });
     },
-    [key, editChat, activeAgent, pluginIds]
+    [key, editChat, activeAgent, pluginIds, signedIn, setPluginsDisabled, t]
   );
 
   const setFilters = useCallback(
@@ -1072,8 +1094,6 @@ export function useToolConfiguration(
 
   // Edits in an existing chat are saved on the server at once, which decides
   // whether the chat keeps them. Only a signed-in user saves.
-  const t = useTranslations("actions");
-  const signedIn = user !== null && !user.is_anonymous_user;
   useEffect(() => {
     if (chatSessionId === null || !signedIn || optionsEdits === undefined) {
       return;

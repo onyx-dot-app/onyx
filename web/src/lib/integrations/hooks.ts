@@ -8,6 +8,8 @@ import type {
   AdminIntegrationDetail,
   IntegrationActionsResponse,
   IntegrationPreset,
+  MemberActionPolicies,
+  MemberIntegration,
 } from "@/lib/integrations/types";
 
 export function useAdminIntegrations() {
@@ -29,6 +31,24 @@ export function useAdminIntegration(id: number) {
 export function useAdminIntegrationActions(id: number) {
   return useSWR<IntegrationActionsResponse, Error>(
     SWR_KEYS.adminIntegrationActions(id),
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
+}
+
+/** The integrations the user can use through a visible plugin, with status. */
+export function useMemberIntegrations() {
+  return useSWR<MemberIntegration[], Error>(
+    SWR_KEYS.integrations,
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
+}
+
+/** The user's "Always allow" choices. Pass `null` to skip the request. */
+export function useMemberActionPolicies(id: number | null) {
+  return useSWR<MemberActionPolicies, Error>(
+    id === null ? null : SWR_KEYS.integrationActionPolicies(id),
     errorHandlingFetcher,
     { onErrorRetry: skipRetryOnAuthError }
   );
