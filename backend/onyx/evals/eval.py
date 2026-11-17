@@ -12,6 +12,7 @@ from onyx.chat.process_message import run_chat_turn
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.chat import create_chat_session
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
+from onyx.db.integration_policy import list_persona_plugin_links
 from onyx.db.tools import get_builtin_tool
 from onyx.db.users import get_user_by_email
 from onyx.evals.models import (
@@ -35,7 +36,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
-from onyx.tools.models import CapabilityEntry, ToolOptions
+from onyx.tools.models import CapabilityEntry, PluginEntry, ToolOptions
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -45,8 +46,17 @@ logger = setup_logger()
 def _tool_options(
     db_session: Session, allowed_tool_ids: list[int], preferred_tool: str | None
 ) -> ToolOptions:
+    """Limits the built-in tools to the configured ones and keeps each plugin
+    of the default agent."""
+    allowed: list[CapabilityEntry | PluginEntry] = [
+        CapabilityEntry(tool_id=tool_id) for tool_id in allowed_tool_ids
+    ]
+    allowed.extend(
+        PluginEntry(plugin_id=link.plugin_id)
+        for link in list_persona_plugin_links(db_session, DEFAULT_PERSONA_ID)
+    )
     return ToolOptions(
-        allowed=[CapabilityEntry(tool_id=tool_id) for tool_id in allowed_tool_ids],
+        allowed=allowed,
         preferred=None
         if preferred_tool is None
         else CapabilityEntry(
