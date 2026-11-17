@@ -21,6 +21,7 @@ from onyx.access.models import (
     NodeExternalAccess,
 )
 from onyx.access.utils import build_domain_group_id, build_ext_group_name_for_onyx
+from onyx.background.indexing.source_api_limiter import build_source_api_limiter
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.factory import build_connector_kwargs
@@ -396,6 +397,12 @@ def build_perm_sync_connector(cc_pair: ConnectorCredentialPair) -> GoogleDriveCo
     )
     # The slim listing must admit the image files that indexing admitted.
     connector.set_allow_images(get_image_extraction_and_analysis_enabled())
+    # Permission sync spends the indexing budget of the credential.
+    limiter = build_source_api_limiter(
+        DocumentSource.GOOGLE_DRIVE, cc_pair.credential_id
+    )
+    if limiter is not None:
+        connector.set_source_api_limiter(limiter)
     connector.load_credentials(credential_json(cc_pair))
     return connector
 

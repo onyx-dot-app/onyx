@@ -20,7 +20,9 @@ from ee.onyx.external_permissions.utils import (
     credential_json,
 )
 from onyx.access.utils import build_domain_group_id
+from onyx.background.indexing.source_api_limiter import build_source_api_limiter
 from onyx.configs.app_configs import PERMISSION_SYNC_TIMEOUT
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.source_operations import (
@@ -384,6 +386,13 @@ def gdrive_group_sync(
             cc_pair.connector.source, cc_pair.connector.connector_specific_config
         )
     )
+    # Group sync spends the indexing budget of the credential, and reports
+    # Google's rate limits to it.
+    limiter = build_source_api_limiter(
+        DocumentSource.GOOGLE_DRIVE, cc_pair.credential_id
+    )
+    if limiter is not None:
+        google_drive_connector.set_source_api_limiter(limiter)
     google_drive_connector.load_credentials(credential_json(cc_pair))
     ops = google_drive_connector.ops
 
