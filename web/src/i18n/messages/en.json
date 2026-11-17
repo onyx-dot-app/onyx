@@ -176,9 +176,6 @@
       }
     },
     "addOpenApiModal": {
-      "addHeader": {
-        "title": "Add OpenAPI plugin"
-      },
       "cancelButton": {
         "label": "Cancel"
       },
@@ -192,9 +189,6 @@
         "subDescription": "Specify an OpenAPI schema that defines the APIs you want to make available as part of this plugin. You can use the placeholders `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, and `USER_EMAIL` anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the current request's values at call time. Learn more about [OpenAPI plugins]({docsUrl}).",
         "title": "OpenAPI Schema Definition"
       },
-      "editHeader": {
-        "title": "Edit OpenAPI plugin"
-      },
       "empty": {
         "description": "Provide OpenAPI schema to preview actions here.",
         "title": "No Actions Found"
@@ -205,16 +199,9 @@
       "method": {
         "noSummary": "No summary provided"
       },
-      "submitButton": {
-        "addLabel": "Add Plugin",
-        "addingLabel": "Adding...",
-        "saveLabel": "Save Changes",
-        "savingLabel": "Saving..."
-      },
       "toasts": {
         "actionCreated": "OpenAPI plugin created successfully",
-        "invalidJson": "Invalid JSON format in OpenAPI schema definition",
-        "updateFailed": "Failed to update OpenAPI plugin"
+        "invalidJson": "Invalid JSON format in OpenAPI schema definition"
       },
       "humanDescription": {
         "title": "Description for Humans",
@@ -846,19 +833,11 @@
       },
       "controls": {
         "disconnect": "Enable or disable for workspace",
-        "enable": "Enable for workspace",
         "disable": "Disable for workspace",
         "manageAvailability": "Manage workspace availability",
         "more": "More actions",
         "disableChat": "Disable for main Chat",
-        "enableChat": "Enable in default Chat",
-        "disableCraft": "Disable for Craft",
-        "enableCraft": "Enable for Craft",
-        "chatDescription": "Make this plugin available in chats without a custom agent. Access controls still apply.",
-        "defaultChatAdminOnly": "Only workspace admins can change default Chat availability.",
-        "mcpCraftDescription": "Make this plugin available in Craft. Access controls and tool permissions still apply.",
-        "craftAppDescription": "Make this app available in Craft. Connection and approval requirements still apply.",
-        "workspaceDescription": "Make this plugin available in Chat and custom agents. Access controls and authentication requirements still apply."
+        "disableCraft": "Disable for Craft"
       },
       "craftApp": {
         "tabs": {

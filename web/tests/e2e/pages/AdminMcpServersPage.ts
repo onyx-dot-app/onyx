@@ -71,9 +71,6 @@ export class AdminMcpServersPage {
     return this.integrations.submit();
   }
 
-  // ---------------------------------------------------------------------------
-  // ---------------------------------------------------------------------------
-
   async openConfiguration(serverName: string): Promise<void> {
     await this.goto();
     await this.integrations.openIntegration(serverName);
@@ -128,13 +125,6 @@ export class AdminMcpServersPage {
     await expect(next).toBeEnabled({ timeout: 45_000 });
     await next.click();
     await expect(this.authMethodSelector).toBeVisible();
-  }
-
-  async discardSetup(): Promise<void> {
-    await this.page
-      .getByRole("button", { name: "Cancel", exact: true })
-      .click();
-    await expect(this.page.getByRole("dialog")).toBeHidden();
   }
 
   async expectAccessControlVisible(): Promise<void> {
@@ -234,16 +224,6 @@ export class AdminMcpServersPage {
   async connectAndWaitForCreation(): Promise<number> {
     await this.connectAndWaitForSetup();
     return this.connectedServerId();
-  }
-
-  // ---------------------------------------------------------------------------
-  // ---------------------------------------------------------------------------
-
-  async backToConnection(): Promise<void> {
-    await this.page
-      .getByRole("button", { name: "Connection", exact: true })
-      .click();
-    await expect(this.authMethodSelector).toBeVisible();
   }
 
   async selectAuthMethod(
@@ -370,9 +350,6 @@ export class AdminMcpServersPage {
       await usernameInput.fill(credentials.username);
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // ---------------------------------------------------------------------------
 
   async expectServerDetail(serverName: string): Promise<void> {
     await expect(this.page).toHaveURL(/\/admin\/integrations\/\d+(?:\?.*)?$/);

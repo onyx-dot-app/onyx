@@ -53,31 +53,6 @@ export function getAppTypeLogo(
 // Mirrors `onyx.db.enums.ActionPolicy` on the backend.
 export type ActionPolicy = "ALWAYS" | "ASK" | "DENY";
 
-export interface ActionPolicyView {
-  action_id: string;
-  normalised_name: string;
-  description: string;
-  state: ActionPolicy;
-}
-
-export interface ExternalAppAdminResponse {
-  users_can_manage_policies: boolean;
-  id: number;
-  name: string;
-  app_type: ExternalAppType;
-  upstream_url_patterns: string[];
-  auth_template: Record<string, string>;
-  organization_credentials: Record<string, string>;
-  // Sorted `{placeholder}` names in the auth-template values; the backend owns
-  // the placeholder grammar.
-  credential_placeholder_keys: string[];
-  enabled: boolean;
-  actions: ActionPolicyView[];
-  // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
-  // admin may only set availability and policies (the UI hides the rest).
-  is_onyx_managed: boolean;
-}
-
 export interface ExternalAppUserResponse {
   id: number;
   name: string;

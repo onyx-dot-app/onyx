@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { render, screen, setupUser, within } from "@tests/setup/test-utils";
 import PolicyEditor from "@/sections/actions/PolicyEditor";
-import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
+import type { PolicyValue } from "@/lib/integrations/types";
 
 function Editor() {
-  const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({});
+  const [policies, setPolicies] = useState<Record<string, PolicyValue>>({});
   return (
     <PolicyEditor
       items={[
@@ -12,7 +12,7 @@ function Editor() {
           id: "search",
           name: "Search messages",
           description: "Find workspace messages.",
-          defaultPolicy: "ASK",
+          defaultPolicy: "ask",
         },
       ]}
       policies={policies}
@@ -50,16 +50,16 @@ test("restores each action's default without changing policies outside the list"
           id: "read",
           name: "Read",
           description: "Read data",
-          defaultPolicy: "ALWAYS",
+          defaultPolicy: "allow",
         },
         {
           id: "write",
           name: "Write",
           description: "Write data",
-          defaultPolicy: "ASK",
+          defaultPolicy: "ask",
         },
       ]}
-      policies={{ read: "DENY", write: "DENY", other: "ASK" }}
+      policies={{ read: "blocked", write: "blocked", other: "ask" }}
       onChange={onChange}
     />
   );
@@ -67,9 +67,9 @@ test("restores each action's default without changing policies outside the list"
   await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
   await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
   expect(onChange).toHaveBeenCalledWith({
-    read: "ALWAYS",
-    write: "ASK",
-    other: "ASK",
+    read: "allow",
+    write: "ask",
+    other: "ask",
   });
 });
 
@@ -83,13 +83,13 @@ test("bulk changes only matching editable actions and reset delegates to the own
           id: "read",
           name: "Read data",
           description: "",
-          defaultPolicy: "ASK",
+          defaultPolicy: "ask",
         },
         {
           id: "blocked",
           name: "Read secrets",
           description: "",
-          defaultPolicy: "DENY",
+          defaultPolicy: "blocked",
           editable: false,
           lockReason: "workspace_disabled",
         },
@@ -97,10 +97,10 @@ test("bulk changes only matching editable actions and reset delegates to the own
           id: "write",
           name: "Write data",
           description: "",
-          defaultPolicy: "ASK",
+          defaultPolicy: "ask",
         },
       ]}
-      policies={{ read: "ASK", blocked: "DENY", write: "ASK" }}
+      policies={{ read: "ask", blocked: "blocked", write: "ask" }}
       onChange={onChange}
       onReset={onReset}
     />
@@ -119,9 +119,9 @@ test("bulk changes only matching editable actions and reset delegates to the own
   await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
   await user.keyboard("{ArrowDown}{Enter}");
   expect(onChange).toHaveBeenCalledWith({
-    read: "ALWAYS",
-    blocked: "DENY",
-    write: "ASK",
+    read: "allow",
+    blocked: "blocked",
+    write: "ask",
   });
   await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
   await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");

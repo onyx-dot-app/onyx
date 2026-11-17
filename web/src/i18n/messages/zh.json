@@ -176,9 +176,6 @@
       }
     },
     "addOpenApiModal": {
-      "addHeader": {
-        "title": "添加 OpenAPI 插件"
-      },
       "cancelButton": {
         "label": "取消"
       },
@@ -192,9 +189,6 @@
         "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此插件一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 插件]({docsUrl})。",
         "title": "OpenAPI 架构定义"
       },
-      "editHeader": {
-        "title": "编辑 OpenAPI 插件"
-      },
       "empty": {
         "description": "提供 OpenAPI 架构后即可在此预览操作。",
         "title": "未找到操作"
@@ -205,16 +199,9 @@
       "method": {
         "noSummary": "未提供摘要"
       },
-      "submitButton": {
-        "addLabel": "添加插件",
-        "addingLabel": "正在添加...",
-        "saveLabel": "保存更改",
-        "savingLabel": "正在保存..."
-      },
       "toasts": {
         "actionCreated": "OpenAPI 插件创建成功",
-        "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效",
-        "updateFailed": "更新 OpenAPI 插件失败"
+        "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效"
       },
       "humanDescription": {
         "title": "面向用户的描述",
@@ -846,19 +833,11 @@
       },
       "controls": {
         "disconnect": "为工作区启用或禁用",
-        "enable": "为工作区启用",
         "disable": "为工作区禁用",
         "manageAvailability": "管理工作区可用性",
         "more": "更多操作",
         "disableChat": "在主聊天中禁用",
-        "enableChat": "在默认聊天中启用",
-        "disableCraft": "在 Craft 中禁用",
-        "enableCraft": "在 Craft 中启用",
-        "chatDescription": "在未选择自定义智能体的聊天中提供此插件。访问控制仍然适用。",
-        "defaultChatAdminOnly": "只有工作区管理员可以更改默认聊天中的可用性。",
-        "mcpCraftDescription": "在 Craft 中提供此插件。访问控制和工具权限仍然适用。",
-        "craftAppDescription": "在 Craft 中提供此应用。连接和审批要求仍然适用。",
-        "workspaceDescription": "允许在 Chat 和自定义智能体中使用此插件。访问控制和身份验证要求仍然适用。"
+        "disableCraft": "在 Craft 中禁用"
       },
       "craftApp": {
         "tabs": {

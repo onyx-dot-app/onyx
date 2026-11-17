@@ -4,26 +4,16 @@ import { useTranslations } from "next-intl";
 import type { BadgeProps } from "@opal/components";
 import type { AdminIntegration } from "@/lib/integrations/types";
 
-export interface IntegrationLabels {
-  shape: (integration: AdminIntegration) => string;
-  signIn: (integration: AdminIntegration) => string;
-  access: (integration: AdminIntegration) => string;
-  status: (
-    integration: AdminIntegration
-  ) => Pick<BadgeProps, "title" | "color" | "tooltip">;
-}
-
-/** Shared text for the list, the plugin page and the Overview tab. */
-export function useIntegrationLabels(): IntegrationLabels {
+export function useIntegrationLabels() {
   const t = useTranslations("admin.integrations");
   return {
-    shape: (integration) => t(`shape.${integration.shape}`),
-    signIn: (integration) =>
+    shape: (integration: AdminIntegration) => t(`shape.${integration.shape}`),
+    signIn: (integration: AdminIntegration) =>
       t("signInSummary", {
         mode: integration.auth_mode,
         method: integration.auth_method ?? "none",
       }),
-    access: (integration) => {
+    access: (integration: AdminIntegration) => {
       const [first] = integration.plugins;
       if (!first) return t("access.none");
       if (integration.plugins.length > 1)
@@ -35,7 +25,9 @@ export function useIntegrationLabels(): IntegrationLabels {
             owner: first.owner_email ?? "",
           });
     },
-    status: (integration) => {
+    status: (
+      integration: AdminIntegration
+    ): Pick<BadgeProps, "title" | "color" | "tooltip"> => {
       if (integration.needs_setup)
         return {
           title: t("status.needsSetup"),

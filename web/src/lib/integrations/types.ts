@@ -1,5 +1,3 @@
-/** Types of the integration API (workstream U contract, ticket U6). */
-
 export type IntegrationKind = "mcp_server" | "api";
 export type IntegrationShape = "mcp_server" | "openapi" | "preset" | "custom";
 export type AuthMode = "none" | "shared" | "individual";
@@ -92,7 +90,6 @@ export type IntegrationConfig =
     }
   | { shape: "custom"; upstream_url_patterns: string[] };
 
-/** The detail `config` has no secrets, so a preset has no credentials. */
 export type IntegrationConfigView =
   | Exclude<IntegrationConfig, { shape: "preset" }>
   | { shape: "preset"; preset_id: string };
@@ -148,7 +145,6 @@ export interface IntegrationActionsUpdate {
   actions: Record<string, PolicyValue | null>;
 }
 
-/** One plugin row of the admin Plugins page, built from integration refs. */
 export interface AdminPluginEntry {
   plugin: IntegrationPluginRef;
   integrations: AdminIntegration[];

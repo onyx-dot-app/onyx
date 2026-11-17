@@ -151,6 +151,37 @@ const nextConfig = {
         destination: "/admin/craft/preferences",
         permanent: true,
       },
+      // Old plugin and action pages. Their ids are not integration ids.
+      {
+        source: "/admin/mcp-actions/:path*",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/openapi-actions",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/craft/apps",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/mcp/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/openapi/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/external-app/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
       {
         source: "/admin/assistants/:path*",
         destination: "/admin/agents/:path*",

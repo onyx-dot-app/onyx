@@ -1,31 +1,9 @@
-import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type {
   AdminIntegration,
   AdminPluginEntry,
   PolicyValue,
 } from "@/lib/integrations/types";
-
-const TO_ACTION_POLICY = {
-  allow: "ALWAYS",
-  ask: "ASK",
-  blocked: "DENY",
-} as const satisfies Record<PolicyValue, ActionPolicy>;
-
-const FROM_ACTION_POLICY = {
-  ALWAYS: "allow",
-  ASK: "ask",
-  DENY: "blocked",
-} as const satisfies Record<ActionPolicy, PolicyValue>;
-
-/** The policy components use the old values; the integration API uses these. */
-export function toActionPolicy(value: PolicyValue): ActionPolicy {
-  return TO_ACTION_POLICY[value];
-}
-
-export function fromActionPolicy(value: ActionPolicy): PolicyValue {
-  return FROM_ACTION_POLICY[value];
-}
 
 export type IntegrationDetailTab = "overview" | "configuration" | "actions";
 
@@ -43,13 +21,12 @@ export function integrationDetailHref(
   return tab && tab !== "overview" ? `${path}?tab=${tab}` : path;
 }
 
-export function parseIntegrationId(value: string | undefined): number | null {
+export function parsePositiveId(value: string | undefined): number | null {
   if (!value || !/^\d+$/.test(value)) return null;
   const id = Number(value);
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-/** The plugins that hold integrations, each with the integrations it holds. */
 export function pluginsFromIntegrations(
   integrations: AdminIntegration[],
   locale: string
@@ -68,7 +45,6 @@ export function pluginsFromIntegrations(
   );
 }
 
-/** Integrations that ask for setup first, then by name. */
 export function sortIntegrations(
   integrations: AdminIntegration[],
   locale: string

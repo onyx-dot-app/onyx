@@ -176,9 +176,6 @@
       }
     },
     "addOpenApiModal": {
-      "addHeader": {
-        "title": "Ajouter un plugin OpenAPI"
-      },
       "cancelButton": {
         "label": "Annuler"
       },
@@ -192,9 +189,6 @@
         "subDescription": "Indiquez un schéma OpenAPI qui définit les API que vous voulez rendre disponibles dans ce plugin. Vous pouvez utiliser les espaces réservés `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` et `USER_EMAIL` partout dans le schéma (par exemple l'URL du serveur, les chemins, les valeurs par défaut des paramètres) : ils seront remplacés par les valeurs de la requête en cours au moment de l'appel. En savoir plus sur les [plugins OpenAPI]({docsUrl}).",
         "title": "Définition du schéma OpenAPI"
       },
-      "editHeader": {
-        "title": "Modifier le plugin OpenAPI"
-      },
       "empty": {
         "description": "Fournissez un schéma OpenAPI pour prévisualiser les actions ici.",
         "title": "Aucune action trouvée"
@@ -205,16 +199,9 @@
       "method": {
         "noSummary": "Aucun résumé fourni"
       },
-      "submitButton": {
-        "addLabel": "Ajouter le plugin",
-        "addingLabel": "Ajout en cours...",
-        "saveLabel": "Enregistrer les modifications",
-        "savingLabel": "Enregistrement..."
-      },
       "toasts": {
         "actionCreated": "Plugin OpenAPI créé avec succès",
-        "invalidJson": "Format JSON non valide dans la définition du schéma OpenAPI",
-        "updateFailed": "Échec de la mise à jour du plugin OpenAPI"
+        "invalidJson": "Format JSON non valide dans la définition du schéma OpenAPI"
       },
       "humanDescription": {
         "title": "Description pour les utilisateurs",
@@ -846,19 +833,11 @@
       },
       "controls": {
         "disconnect": "Activer ou désactiver pour l’espace de travail",
-        "enable": "Activer pour l’espace de travail",
         "disable": "Désactiver pour l’espace de travail",
         "manageAvailability": "Gérer la disponibilité dans l’espace de travail",
         "more": "Plus d’actions",
         "disableChat": "Désactiver pour le chat principal",
-        "enableChat": "Activer dans le Chat par défaut",
-        "disableCraft": "Désactiver pour Craft",
-        "enableCraft": "Activer pour Craft",
-        "chatDescription": "Rendre ce plugin disponible dans les conversations sans agent personnalisé. Les contrôles d’accès restent applicables.",
-        "defaultChatAdminOnly": "Seuls les administrateurs de l’espace de travail peuvent modifier la disponibilité dans le chat par défaut.",
-        "mcpCraftDescription": "Rendre ce plugin disponible dans Craft. Les contrôles d’accès et les autorisations des outils restent applicables.",
-        "craftAppDescription": "Rendre cette application disponible dans Craft. Les exigences de connexion et d’approbation restent applicables.",
-        "workspaceDescription": "Rendez ce plugin disponible dans Chat et les agents personnalisés. Les contrôles d’accès et les exigences d’authentification restent applicables."
+        "disableCraft": "Désactiver pour Craft"
       },
       "craftApp": {
         "tabs": {

@@ -11,31 +11,28 @@ import {
   Tooltip,
 } from "@opal/components";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
-import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
+import type { PolicyValue } from "@/lib/integrations/types";
 
 export interface PolicyEditorItem {
   id: string;
   name: string;
   description: string;
-  defaultPolicy: ActionPolicy;
+  defaultPolicy: PolicyValue;
   editable?: boolean;
   lockReason?: "workspace_disabled" | "workspace_managed" | null;
-  /** A short line under the description, for example where the value comes from. */
   note?: string | RichStr;
 }
 
 interface PolicyEditorProps {
   showTitle?: boolean;
-  /** Replaces the default "Permissions" title. */
   title?: string | RichStr;
-  /** `false` hides the search field, for a parent that filters `items`. */
   searchable?: boolean;
   disabled?: boolean;
   onReset?: () => void;
   resetLabel?: string | RichStr;
   items: PolicyEditorItem[];
-  policies: Record<string, ActionPolicy>;
-  onChange?: (policies: Record<string, ActionPolicy>) => void;
+  policies: Record<string, PolicyValue>;
+  onChange?: (policies: Record<string, PolicyValue>) => void;
 }
 
 export default function PolicyEditor({
@@ -60,10 +57,10 @@ export default function PolicyEditor({
     `${item.name} ${item.description}`.toLocaleLowerCase().includes(search)
   );
   const editableItems = shownItems.filter((item) => item.editable !== false);
-  const options: { value: ActionPolicy; label: string }[] = [
-    { value: "ALWAYS", label: policyCopy("always.label") },
-    { value: "ASK", label: policyCopy("ask.label") },
-    { value: "DENY", label: policyCopy("deny.label") },
+  const options: { value: PolicyValue; label: string }[] = [
+    { value: "allow", label: policyCopy("always.label") },
+    { value: "ask", label: policyCopy("ask.label") },
+    { value: "blocked", label: policyCopy("deny.label") },
   ];
   function reset() {
     if (onReset) onReset();
@@ -125,9 +122,9 @@ export default function PolicyEditor({
               onValueChange={(value) => {
                 if (value === "reset") reset();
                 else if (
-                  value === "ALWAYS" ||
-                  value === "ASK" ||
-                  value === "DENY"
+                  value === "allow" ||
+                  value === "ask" ||
+                  value === "blocked"
                 ) {
                   onChange({
                     ...policies,

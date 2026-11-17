@@ -3,18 +3,16 @@
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { Section } from "@opal/layouts";
-import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
+import type { PolicyValue } from "@/lib/integrations/types";
 
 interface PolicyToggleProps {
   /** `null` presses no button, for a value that is not set. */
-  value: ActionPolicy | null;
+  value: PolicyValue | null;
   disabled?: boolean;
   label?: string;
-  onChange: (value: ActionPolicy) => void;
+  onChange: (value: PolicyValue) => void;
 }
 
-/** Three-state approval policy selector (Allow, Ask, Blocked), shared by
- * per-action and per-tool policy rows. */
 export default function PolicyToggle({
   value,
   onChange,
@@ -23,10 +21,10 @@ export default function PolicyToggle({
 }: PolicyToggleProps) {
   const t = useTranslations("actions");
 
-  const policyOptions: { value: ActionPolicy; label: string }[] = [
-    { value: "ALWAYS", label: t("policyToggle.always.label") },
-    { value: "ASK", label: t("policyToggle.ask.label") },
-    { value: "DENY", label: t("policyToggle.deny.label") },
+  const policyOptions: { value: PolicyValue; label: string }[] = [
+    { value: "allow", label: t("policyToggle.always.label") },
+    { value: "ask", label: t("policyToggle.ask.label") },
+    { value: "blocked", label: t("policyToggle.deny.label") },
   ];
 
   return (

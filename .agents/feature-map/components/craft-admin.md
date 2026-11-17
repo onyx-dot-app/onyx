@@ -222,8 +222,8 @@ then the chat default.
   have no callers in this repository. On multi-tenant the admin API refuses to
   create a managed built-in. The code that seeds managed app rows on Cloud is
   not in this tree, so how Cloud tenants get them is unverified.
-- `web/src/app/admin/craft/apps/page.tsx` only redirects old app links to the
-  Plugins page. It is a false lead for app admin work.
+- `/admin/craft/apps` has no page. `web/next.config.js` redirects it to the
+  integration list. It is a false lead for app admin work.
 
 ---
 

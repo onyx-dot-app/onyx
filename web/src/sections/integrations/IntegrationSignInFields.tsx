@@ -15,40 +15,27 @@ import type {
 import { signInErrors, type SignInDraft } from "@/sections/integrations/signIn";
 
 const AUTH_MODES: readonly AuthMode[] = ["none", "shared", "individual"];
-const PROVIDER_MODES: readonly OAuthProviderMode[] = [
-  "manual",
-  "discovery",
-  "preset",
-];
-
-function isAuthMode(value: string): value is AuthMode {
-  return AUTH_MODES.some((mode) => mode === value);
-}
-
-function isProviderMode(value: string): value is OAuthProviderMode {
-  return PROVIDER_MODES.some((mode) => mode === value);
-}
 
 interface IntegrationSignInFieldsProps {
   draft: SignInDraft;
   onChange: (draft: SignInDraft) => void;
-  /** Sign-in methods this kind of integration supports. */
   methods: readonly AuthMethod[];
-  /** OAuth client modes this kind supports. */
-  providerModes?: readonly OAuthProviderMode[];
-  /** Show field errors, for example after a failed submit. */
-  showErrors?: boolean;
-  disabled?: boolean;
+  preset: boolean;
+  showErrors: boolean;
+  disabled: boolean;
 }
 
 export default function IntegrationSignInFields({
   draft,
   onChange,
   methods,
-  providerModes = ["manual", "discovery"],
-  showErrors = false,
-  disabled = false,
+  preset,
+  showErrors,
+  disabled,
 }: IntegrationSignInFieldsProps) {
+  const providerModes: readonly OAuthProviderMode[] = preset
+    ? ["preset", "manual"]
+    : ["manual", "discovery"];
   const t = useTranslations("admin.integrations.signIn");
   const errors = showErrors ? signInErrors(draft) : [];
   const variant = disabled ? "disabled" : "primary";
@@ -86,11 +73,12 @@ export default function IntegrationSignInFields({
             title: t(`mode.${mode}`),
           }))}
           onValueChange={(value) => {
-            if (!isAuthMode(value)) return;
+            const mode = AUTH_MODES.find((option) => option === value);
+            if (!mode) return;
             update({
-              authMode: value,
+              authMode: mode,
               authMethod:
-                value === "none" ? null : (draft.authMethod ?? methods[0]),
+                mode === "none" ? null : (draft.authMethod ?? methods[0]),
             });
           }}
         />
@@ -161,7 +149,8 @@ export default function IntegrationSignInFields({
                   title: t(`oauth.providerMode.${mode}`),
                 }))}
                 onValueChange={(value) => {
-                  if (isProviderMode(value)) update({ providerMode: value });
+                  const mode = providerModes.find((option) => option === value);
+                  if (mode) update({ providerMode: mode });
                 }}
               />
             </InputVertical>

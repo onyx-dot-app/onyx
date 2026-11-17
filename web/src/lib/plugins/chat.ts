@@ -1,5 +1,5 @@
 import type { MinimalAgent } from "@/lib/agents/types";
-import { parsePluginId } from "@/lib/plugins/routes";
+import { parsePositiveId } from "@/lib/integrations/utils";
 import type { MemberPlugin, useMemberPlugins } from "@/lib/plugins/member";
 import type { ChatPluginReference } from "@/lib/plugins/types";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
@@ -124,7 +124,7 @@ export function parseChatPluginIntent(
   params: Pick<URLSearchParams, "get">
 ): ChatPluginReference | null {
   const kind = params.get("pluginKind");
-  const id = parsePluginId(params.get("pluginId") ?? undefined);
+  const id = parsePositiveId(params.get("pluginId") ?? undefined);
   return (kind === "mcp" || kind === "openapi") && id !== null
     ? { kind, id }
     : null;
@@ -200,7 +200,7 @@ export function safeChatReturnTo(
   const chatId = parsed.searchParams.get("chatId");
   if (chatId && chatId.length <= 256) query.set("chatId", chatId);
   for (const key of ["agentId", "projectId"]) {
-    const id = parsePluginId(parsed.searchParams.get(key) ?? undefined);
+    const id = parsePositiveId(parsed.searchParams.get(key) ?? undefined);
     if (id !== null) query.set(key, String(id));
   }
   const search = query.toString();

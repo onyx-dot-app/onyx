@@ -10,7 +10,6 @@ import type {
   IntegrationPreset,
 } from "@/lib/integrations/types";
 
-/** Every integration the admin can see, with its plugins and status. */
 export function useAdminIntegrations() {
   return useSWR<AdminIntegration[], Error>(
     SWR_KEYS.adminIntegrations,
@@ -27,16 +26,14 @@ export function useAdminIntegration(id: number) {
   );
 }
 
-/** Actions of one integration. Pass `null` to wait, e.g. until it loads. */
-export function useAdminIntegrationActions(id: number | null) {
+export function useAdminIntegrationActions(id: number) {
   return useSWR<IntegrationActionsResponse, Error>(
-    id === null ? null : SWR_KEYS.adminIntegrationActions(id),
+    SWR_KEYS.adminIntegrationActions(id),
     errorHandlingFetcher,
     { onErrorRetry: skipRetryOnAuthError }
   );
 }
 
-/** Built-in app presets. Pass `false` to skip the request. */
 export function useIntegrationPresets(enabled: boolean) {
   return useSWR<IntegrationPreset[], Error>(
     enabled ? SWR_KEYS.adminIntegrationPresets : null,

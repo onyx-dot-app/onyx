@@ -263,7 +263,7 @@ covers new files that match it.
 |---|---|
 | `web/src/app/app/`, `web/src/views/AppPage.tsx` | chat-frontend |
 | `web/src/app/api/[...path]/route.ts` | chat-frontend |
-| `web/next.config.js` | chat-frontend |
+| `web/next.config.js` | chat-frontend, plugins |
 | `web/src/hooks/useChatController.ts`, `web/src/hooks/useChatSessionController.ts`, `web/src/hooks/useFeedbackController.ts`, `web/src/hooks/useMultiModelChat.ts`, `web/src/hooks/useChatSessions.ts`, `web/src/hooks/useQueuedMessageNavigation.ts`, `web/src/hooks/useDeepResearchToggle.ts`, `web/src/hooks/useContentEditable.ts` | chat-frontend |
 | `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/multiModel/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
 | `web/src/lib/navigation/`, `web/lib/opal/src/navigation/`, `web/tools/oxlint/navigation/` | chat-frontend |
@@ -316,7 +316,6 @@ covers new files that match it.
 | Path | Component(s) |
 |---|---|
 | `web/src/sections/modals/NewTeamModal.tsx`, `web/src/sections/modals/NewTenantModal.tsx` | multi-tenancy |
-| `web/src/app/admin/plugins/external-app/` | craft-admin, craft-external-apps |
 | `web/src/app/admin/craft/`, `web/src/views/admin/CraftPage/`, `web/src/views/admin/CraftPreferencesPage/` | craft-admin |
 | `web/src/app/admin/connector/`, `web/src/app/admin/connectors/`, `web/src/app/admin/indexing-status/` | cc-pairs-and-creds |
 | `web/src/app/admin/document-processing/` | file-store-and-user-files |
@@ -345,7 +344,7 @@ covers new files that match it.
 | `web/src/app/admin/decision-models/`, `web/src/views/admin/DecisionModelsPage.tsx`, `web/src/views/admin/DecisionModelSetting.tsx`, `backend/onyx/llm/decisions/` | llm-providers |
 | `web/src/app/admin/llm-gateway/`, `web/src/views/admin/LLMGatewayPage/` | llm-gateway |
 | `web/src/app/admin/voice/`, `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
-| `web/src/app/admin/plugins/`, `web/src/app/admin/mcp-actions/`, `web/src/app/admin/openapi-actions/`, `web/src/app/admin/integrations/` | plugins |
+| `web/src/app/admin/plugins/`, `web/src/app/admin/integrations/` | plugins |
 | `web/src/sections/integrations/`, `web/src/lib/integrations/` | plugins |
 | `web/src/sections/plugins/`, `web/src/lib/plugins/` | plugins |
 | `web/src/sections/actions/`, `web/src/lib/mcp/`, `web/src/app/mcp/oauth/`, `web/src/hooks/useOpenApiTools.ts`, `web/src/lib/hooks/useToolOAuthStatus.ts` | plugins, mcp-and-custom-tools |
