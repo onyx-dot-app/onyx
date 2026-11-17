@@ -352,7 +352,11 @@ def main(argv: list[str] | None = None) -> int:
         file_path = _REPO_ROOT / path
         if not file_path.is_file():
             continue
-        found, unexplained = find_db_operations(file_path.read_text())
+        try:
+            found, unexplained = find_db_operations(file_path.read_text())
+        except SyntaxError as e:
+            print(f"{path}:{e.lineno}: cannot parse, so its operations are not counted")
+            return 1
         operations[path] = found
         no_reason.extend(f"{path}:{line}" for line in unexplained)
 
