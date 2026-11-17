@@ -22,6 +22,7 @@ import type { MemberIntegration } from "@/lib/integrations/types";
 
 const copy = messages.plugins.member;
 const mockLoadPage = jest.fn();
+let mockGlobalHolder = false;
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -36,7 +37,7 @@ jest.mock("@opal/navigation", () => ({
 }));
 jest.mock("@/lib/permissions/hooks", () => ({
   usePermissionAuthority: () => ({
-    isGlobalHolder: false,
+    isGlobalHolder: mockGlobalHolder,
     isScopedManager: false,
   }),
 }));
@@ -72,6 +73,7 @@ function status(
 afterEach(() => {
   jest.restoreAllMocks();
   mockLoadPage.mockClear();
+  mockGlobalHolder = false;
 });
 
 test("shows only the tabs with content", async () => {
@@ -328,4 +330,141 @@ test("an action that asks offers Always allow", async () => {
     ).toEqual({ actions: { create_issue: "allow" } })
   );
   await waitFor(() => expect(toggle).toBeChecked());
+});
+
+function withPlugin(
+  plugin: Partial<MemberIntegration["plugins"][number]>
+): MemberIntegration {
+  const base = makeMemberIntegration();
+  const ref = base.plugins[0];
+  if (!ref) throw new Error("No plugin ref");
+  return { ...base, plugins: [{ ...ref, ...plugin }] };
+}
+
+function overview(integrations: MemberIntegration[], extra = {}) {
+  const fetchMock = open(integrations, extra);
+  window.history.replaceState(null, "", `/app/plugins/${LINEAR_PLUGIN_ID}`);
+  return fetchMock;
+}
+
+test("the member turns an integration plugin on", async () => {
+  const fetchMock = overview([withPlugin({ enabled: false })], {
+    [`PUT /api/plugins/${LINEAR_PLUGIN_ID}/enabled`]: {
+      plugin_id: LINEAR_PLUGIN_ID,
+      enabled: true,
+      installation_policy: "AVAILABLE",
+    },
+  });
+  const u = user();
+  const toggle = await screen.findByRole("switch", { name: "Use Linear" });
+  expect(toggle).toHaveAttribute("aria-checked", "false");
+  await u.click(toggle);
+  await waitFor(() =>
+    expect(
+      requestBody(fetchMock, "PUT", `/api/plugins/${LINEAR_PLUGIN_ID}/enabled`)
+    ).toEqual({ enabled: true })
+  );
+});
+
+test("a required plugin cannot be turned off", async () => {
+  overview([withPlugin({ installation_policy: "REQUIRED" })]);
+  expect(
+    await screen.findByRole("switch", { name: "Use Linear" })
+  ).toHaveAttribute("aria-disabled", "true");
+  expect(screen.getByText(copy.detail.switch.required)).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: copy.detail.share.label })
+  ).not.toBeInTheDocument();
+});
+
+test("the owner shares a private integration plugin", async () => {
+  const fetchMock = overview(
+    [
+      withPlugin({
+        scope: "personal",
+        owner_email: "me@example.com",
+        installation_policy: null,
+      }),
+    ],
+    {
+      [`/api/plugins/${LINEAR_PLUGIN_ID}/access`]: {
+        plugin_id: LINEAR_PLUGIN_ID,
+        user_shares: [
+          { user_id: "u2", email: "ana@example.com", permission: "VIEWER" },
+        ],
+        group_shares: [],
+      },
+      [`PUT /api/plugins/${LINEAR_PLUGIN_ID}/access`]: {
+        plugin_id: LINEAR_PLUGIN_ID,
+        user_shares: [],
+        group_shares: [],
+      },
+      "/api/users/shareable": [],
+      "/api/settings": {},
+    }
+  );
+  const u = user();
+  await u.click(
+    await screen.findByRole("button", { name: copy.detail.share.label })
+  );
+  const dialog = await screen.findByRole("dialog");
+  await u.click(
+    await within(dialog).findByRole("button", {
+      name: "Remove ana@example.com",
+    })
+  );
+  await u.click(
+    within(dialog).getByRole("button", { name: copy.share.submit.label })
+  );
+  await waitFor(() =>
+    expect(
+      requestBody(fetchMock, "PUT", `/api/plugins/${LINEAR_PLUGIN_ID}/access`)
+    ).toEqual({ user_shares: [], group_shares: [] })
+  );
+});
+
+test("only an organization-wide action manager publishes", async () => {
+  const personal = withPlugin({
+    scope: "personal",
+    owner_email: "me@example.com",
+    installation_policy: null,
+  });
+  overview([personal]);
+  expect(
+    await screen.findByRole("button", { name: copy.detail.publish.label })
+  ).toBeDisabled();
+});
+
+test("the owner publishes after the confirmation", async () => {
+  mockGlobalHolder = true;
+  const fetchMock = overview(
+    [
+      withPlugin({
+        scope: "personal",
+        owner_email: "me@example.com",
+        installation_policy: null,
+      }),
+    ],
+    {
+      [`POST /api/plugins/${LINEAR_PLUGIN_ID}/publish`]: () =>
+        new Response(null, { status: 204 }),
+    }
+  );
+  const u = user();
+  await u.click(
+    await screen.findByRole("button", { name: copy.detail.publish.label })
+  );
+  const dialog = await screen.findByRole("dialog");
+  await u.click(
+    within(dialog).getByRole("button", { name: copy.detail.publish.label })
+  );
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input) === `/api/plugins/${LINEAR_PLUGIN_ID}/publish` &&
+          init?.method === "POST"
+      )
+    ).toBe(true)
+  );
 });

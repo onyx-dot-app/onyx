@@ -1,4 +1,8 @@
-import { memberPluginEntries } from "@/lib/plugins/directory";
+import {
+  memberPluginEntries,
+  ownsPrivateIntegrationPlugin,
+  pluginSwitch,
+} from "@/lib/plugins/directory";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import {
   LINEAR_PLUGIN_ID,
@@ -59,4 +63,32 @@ test("a plugin that holds a skill and an integration is one entry", () => {
   expect(entries).toHaveLength(1);
   expect(entries[0]?.skills).toHaveLength(1);
   expect(entries[0]?.integrations).toEqual([linear]);
+});
+
+test("the switch of an integration plugin follows its ref", () => {
+  const [entry] = memberPluginEntries([], [linear], null, "en");
+  if (!entry) throw new Error("No entry");
+  expect(pluginSwitch(entry)).toEqual({ enabled: true, blocked: null });
+  const required = {
+    ...entry,
+    ref: entry.ref && {
+      ...entry.ref,
+      installation_policy: "REQUIRED" as const,
+    },
+  };
+  expect(pluginSwitch(required).blocked).toBe("required");
+});
+
+test("only the owner of a private integration plugin shares it", () => {
+  const entries = memberPluginEntries([], [linear, personal], null, "en");
+  const reports = entries.find((entry) => entry.name === "Reports");
+  const organization = entries.find((entry) => entry.name === "Linear");
+  if (!reports || !organization) throw new Error("No entry");
+  expect(ownsPrivateIntegrationPlugin(reports, "me@example.com")).toBe(true);
+  expect(ownsPrivateIntegrationPlugin(reports, "other@example.com")).toBe(
+    false
+  );
+  expect(ownsPrivateIntegrationPlugin(organization, "me@example.com")).toBe(
+    false
+  );
 });

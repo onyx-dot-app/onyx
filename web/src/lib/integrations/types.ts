@@ -39,6 +39,36 @@ export interface MemberPluginRef extends IntegrationPluginRef {
   enabled: boolean;
 }
 
+/** `PUT /plugins/{id}/enabled`: the user's state of the plugin. */
+export interface MemberPluginState {
+  plugin_id: string;
+  enabled: boolean;
+  installation_policy: InstallationPolicy;
+}
+
+export type PluginSharePermission = "EDITOR" | "VIEWER";
+
+/** The shares of a private plugin that holds only integrations. */
+export interface PluginAccessView {
+  plugin_id: string;
+  user_shares: {
+    user_id: string;
+    email: string;
+    permission: PluginSharePermission;
+  }[];
+  group_shares: {
+    group_id: number;
+    group_name: string;
+    permission: PluginSharePermission;
+  }[];
+}
+
+/** The new set of shares; a share left out is removed. */
+export interface PluginAccessUpdate {
+  user_shares: { user_id: string; permission: PluginSharePermission }[];
+  group_shares: { group_id: number; permission: PluginSharePermission }[];
+}
+
 export interface IntegrationAction {
   key: string;
   display_name: string;

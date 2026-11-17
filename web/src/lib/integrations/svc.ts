@@ -10,6 +10,9 @@ import type {
   IntegrationStatus,
   IntegrationUpdate,
   MemberActionPolicies,
+  MemberPluginState,
+  PluginAccessUpdate,
+  PluginAccessView,
 } from "@/lib/integrations/types";
 
 type RequestBody =
@@ -19,6 +22,8 @@ type RequestBody =
   | { fields: Record<string, string> }
   | { organization: boolean; return_path: string }
   | { installation_policy: InstallationPolicy }
+  | { enabled: boolean }
+  | PluginAccessUpdate
   | { code: string; state: string }
   | { actions: Record<string, "allow" | null> };
 
@@ -181,4 +186,28 @@ export async function saveAlwaysAllow(
     actions,
   });
   return res.json();
+}
+
+/** The user's on/off switch of a plugin that holds only integrations. */
+export async function setPluginEnabled(
+  pluginId: string,
+  enabled: boolean
+): Promise<MemberPluginState> {
+  const res = await request(`${SWR_KEYS.plugin(pluginId)}/enabled`, "PUT", {
+    enabled,
+  });
+  return res.json();
+}
+
+export async function updatePluginAccess(
+  pluginId: string,
+  body: PluginAccessUpdate
+): Promise<PluginAccessView> {
+  const res = await request(SWR_KEYS.pluginAccess(pluginId), "PUT", body);
+  return res.json();
+}
+
+/** Moves a private plugin to the Organization library. */
+export async function publishPlugin(pluginId: string): Promise<void> {
+  await request(`${SWR_KEYS.plugin(pluginId)}/publish`, "POST");
 }

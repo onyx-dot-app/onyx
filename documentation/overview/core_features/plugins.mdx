@@ -60,6 +60,19 @@ Click a plugin to open it. The plugin page has these tabs. A tab with nothing to
 | **Integrations** | Each integration with its status |
 | **Versions** | The versions of a skill that you own or can edit |
 
+### Turn a plugin on or off
+
+The **Overview** tab has the **Use this plugin** switch. The default agent uses only the plugins that you turn on.
+A custom agent uses each of its plugins that you can see, with the switch on or off.
+
+| Install setting | The switch |
+| --- | --- |
+| **Required** | Always on. You cannot turn it off. |
+| **Installed by default** | On until you turn it off. |
+| **Available to install** | Off until you turn it on. |
+
+An admin sets the install setting of each plugin in the Organization library.
+
 ## Connect an integration
 
 Open the plugin and select the **Integrations** tab. Each integration shows one status:
@@ -98,7 +111,17 @@ The plugin stays available to you.
 
 If you have the manage actions permission, click **Add Integration** on the Plugins page. Choose the type,
 then fill in the form. Onyx puts the integration in a new plugin in **My uploads**.
-Only you can use it until you share the plugin. To put an integration in the Organization library, ask an admin.
+Only you can use it until you share the plugin.
+
+### Share or publish your plugin
+
+Open a plugin in **My uploads** that holds only integrations:
+
+- Click **Share** to give people and groups access. If an integration uses one account for everybody,
+  each person with access uses the account that you connected. The dialog tells you so.
+- Click **Publish** to move the plugin to the Organization library. You cannot undo this.
+  Only a user with the organization-wide manage actions permission can publish a plugin that holds an integration.
+  For other users, **Publish** is off. Ask an admin to publish the plugin.
 
 ## Use plugins in Chat
 

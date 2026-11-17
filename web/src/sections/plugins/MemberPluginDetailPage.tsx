@@ -1,72 +1,130 @@
 "use client";
 
+import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Badge, Button, Card, Tabs } from "@opal/components";
-import { Content, Section, SettingsLayouts } from "@opal/layouts";
-import { SvgArrowLeft } from "@opal/icons";
+import { Badge, Button, Card, InputSwitch, Tabs } from "@opal/components";
+import {
+  Content,
+  InputHorizontal,
+  Section,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
+import { SvgArrowLeft, SvgOrganization, SvgShare } from "@opal/icons";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
 import { useMemberIntegrations } from "@/lib/integrations/hooks";
+import { publishPlugin, setPluginEnabled } from "@/lib/integrations/svc";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import {
   memberPluginEntries,
   memberPluginHref,
+  ownsPrivateIntegrationPlugin,
   parseMemberPluginTab,
   pendingIntegrations,
+  pluginSwitch,
   type MemberPluginEntry,
   type MemberPluginTab,
 } from "@/lib/plugins/directory";
+import { setSkillEnabled } from "@/lib/skills/api";
 import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
 import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import AlwaysAllowList from "@/sections/plugins/AlwaysAllowList";
 import IntegrationConnectionRow from "@/sections/plugins/IntegrationConnectionRow";
+import SharePluginModal from "@/sections/plugins/SharePluginModal";
+import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
 
 interface PluginTabProps {
   entry: MemberPluginEntry;
 }
 
-function OverviewTab({ entry }: PluginTabProps) {
+interface OverviewTabProps extends PluginTabProps {
+  onChanged: () => Promise<void>;
+}
+
+function PluginSwitchCard({ entry, onChanged }: OverviewTabProps) {
+  const t = useTranslations("plugins.member.detail.switch");
+  const [busy, setBusy] = useState(false);
+  const { enabled, blocked } = pluginSwitch(entry);
+  const skill = entry.skills[0];
+
+  async function change(next: boolean) {
+    setBusy(true);
+    try {
+      if (skill) await setSkillEnabled(skill.id, next);
+      else await setPluginEnabled(entry.id, next);
+      await onChanged();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card padding={4}>
+      <InputHorizontal
+        withLabel
+        title={t("title")}
+        description={blocked ? t(blocked) : t("description")}
+        disabled={busy || blocked !== null}
+      >
+        <InputSwitch
+          aria-label={t("label", { name: entry.name })}
+          checked={enabled}
+          disabled={busy || blocked !== null}
+          onCheckedChange={(checked) => void change(checked)}
+        />
+      </InputHorizontal>
+    </Card>
+  );
+}
+
+function OverviewTab({ entry, onChanged }: OverviewTabProps) {
   const t = useTranslations("plugins.member.detail.overview");
   const sections = useTranslations("plugins.member.sections");
   return (
-    <Card padding={4}>
-      <Section gap={4} alignItems="stretch" height="auto">
-        <Content
-          title={entry.name}
-          description={entry.description ?? t("noDescription")}
-        />
-        <Content
-          font="secondary-body"
-          title={t("location")}
-          description={sections(entry.section)}
-        />
-        {entry.ownerEmail && (
+    <Section gap={4} alignItems="stretch" height="auto">
+      <PluginSwitchCard entry={entry} onChanged={onChanged} />
+      <Card padding={4}>
+        <Section gap={4} alignItems="stretch" height="auto">
+          <Content
+            title={entry.name}
+            description={entry.description ?? t("noDescription")}
+          />
           <Content
             font="secondary-body"
-            title={t("owner")}
-            description={entry.ownerEmail}
+            title={t("location")}
+            description={sections(entry.section)}
           />
-        )}
-        {entry.skills.length > 0 && (
-          <Content
-            font="secondary-body"
-            title={t("skills")}
-            description={entry.skills.map((skill) => skill.name).join(", ")}
-          />
-        )}
-        {entry.integrations.length > 0 && (
-          <Content
-            font="secondary-body"
-            title={t("integrations")}
-            description={entry.integrations
-              .map((integration) => integration.name)
-              .join(", ")}
-          />
-        )}
-      </Section>
-    </Card>
+          {entry.ownerEmail && (
+            <Content
+              font="secondary-body"
+              title={t("owner")}
+              description={entry.ownerEmail}
+            />
+          )}
+          {entry.skills.length > 0 && (
+            <Content
+              font="secondary-body"
+              title={t("skills")}
+              description={entry.skills.map((skill) => skill.name).join(", ")}
+            />
+          )}
+          {entry.integrations.length > 0 && (
+            <Content
+              font="secondary-body"
+              title={t("integrations")}
+              description={entry.integrations
+                .map((integration) => integration.name)
+                .join(", ")}
+            />
+          )}
+        </Section>
+      </Card>
+    </Section>
   );
 }
 
@@ -132,6 +190,11 @@ export default function MemberPluginDetailPage({
   const searchParams = useSearchParams();
   const { user } = useUser();
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
+  const { isGlobalHolder: isActionManager } = usePermissionAuthority(
+    Permission.MANAGE_ACTIONS
+  );
+  const [sharing, setSharing] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const skills = useUserSkills();
   const integrations = useMemberIntegrations();
   const entry = memberPluginEntries(
@@ -156,6 +219,25 @@ export default function MemberPluginDetailPage({
   const requested = parseMemberPluginTab(searchParams.get("tab"));
   const tab = available.includes(requested) ? requested : "overview";
   const pending = entry ? pendingIntegrations(entry.integrations).length : 0;
+  const owner = entry
+    ? ownsPrivateIntegrationPlugin(entry, user?.email ?? null)
+    : false;
+
+  async function refresh(): Promise<void> {
+    await Promise.all([skills.refresh(), integrations.mutate()]);
+  }
+
+  async function publish() {
+    if (!entry) return;
+    setPublishing(false);
+    try {
+      await publishPlugin(entry.id);
+      toast.success(t("publish.done", { name: entry.name }));
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("publish.failed"));
+    }
+  }
 
   return (
     <SettingsLayouts.Root
@@ -183,6 +265,28 @@ export default function MemberPluginDetailPage({
           >
             {t("back.label")}
           </Button>,
+          ...(owner
+            ? [
+                <Button
+                  key="share"
+                  prominence="secondary"
+                  icon={SvgShare}
+                  onClick={() => setSharing(true)}
+                >
+                  {t("share.label")}
+                </Button>,
+                <Button
+                  key="publish"
+                  prominence="secondary"
+                  icon={SvgOrganization}
+                  disabled={!isActionManager}
+                  tooltip={isActionManager ? undefined : t("publish.blocked")}
+                  onClick={() => setPublishing(true)}
+                >
+                  {t("publish.label")}
+                </Button>,
+              ]
+            : []),
           ...(pending > 0
             ? [
                 <Badge
@@ -216,7 +320,7 @@ export default function MemberPluginDetailPage({
               ))}
             </Tabs.List>
             <Tabs.Content value="overview">
-              <OverviewTab entry={entry} />
+              <OverviewTab entry={entry} onChanged={refresh} />
             </Tabs.Content>
             {available.includes("skills") && (
               <Tabs.Content value="skills">
@@ -243,6 +347,26 @@ export default function MemberPluginDetailPage({
           </Tabs>
         )}
       </SettingsLayouts.Body>
+      {entry && sharing && (
+        <SharePluginModal
+          pluginId={entry.id}
+          pluginName={entry.name}
+          sharedSignIn={entry.integrations
+            .filter((integration) => integration.auth_mode === "shared")
+            .map((integration) => integration.name)}
+          onClose={() => setSharing(false)}
+          onSaved={() => setSharing(false)}
+        />
+      )}
+      {entry && publishing && (
+        <GenericConfirmModal
+          title={t("publish.confirmTitle", { name: entry.name })}
+          message={t("publish.confirmMessage")}
+          confirmText={t("publish.label")}
+          onClose={() => setPublishing(false)}
+          onConfirm={() => void publish()}
+        />
+      )}
     </SettingsLayouts.Root>
   );
 }
