@@ -24,7 +24,8 @@ from onyx.external_apps.matching.engine import (
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.providers.actions import path_matches
 from onyx.external_apps.providers.registry import get_endpoint_catalog
-from onyx.integrations.kinds.base import ChatToolContext, IntegrationKindHandler
+from onyx.integrations.kinds.base import IntegrationKindHandler
+from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import (
     ApiConfig,
     ApiShape,
@@ -210,8 +211,16 @@ class ApiKindHandler(IntegrationKindHandler):
             user_oauth_token=ctx.user_oauth_token,
             approval_for=ctx.approval_for,
         )
-        # A CustomTool shows its operationId, the action key, as its display name.
-        return [tool for tool in tools if tool.display_name in keys]
+        # The schema placeholders can change an operationId, so match the tools
+        # to the action keys of the stored schema by position.
+        action_keys = [
+            spec.raw_name for spec in openapi_to_method_specs(config.openapi_spec)
+        ]
+        return [
+            tool
+            for tool, action_key in zip(tools, action_keys, strict=True)
+            if action_key in keys
+        ]
 
     def match_request(
         self,

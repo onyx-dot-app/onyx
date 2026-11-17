@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, InstanceOf
 
 from onyx.db.enums import (
     ExternalAppType,
@@ -9,6 +9,7 @@ from onyx.db.enums import (
     IntegrationActionSource,
     MCPTransport,
 )
+from onyx.external_apps.providers.base import ExternalAppProvider
 
 
 class IntegrationActionSpec(BaseModel):
@@ -77,3 +78,13 @@ class ApiConfig(BaseModel):
 
 
 IntegrationConfig = McpServerConfig | ApiConfig
+
+
+class Preset(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # The ``ExternalAppType`` value, e.g. "LINEAR".
+    id: str
+    app_type: ExternalAppType
+    name: str
+    provider: InstanceOf[ExternalAppProvider]

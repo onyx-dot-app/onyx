@@ -2,21 +2,9 @@
 provider. A preset fills in the URLs, the sign-in settings and the action
 catalog of an app. Presets stay in code."""
 
-from pydantic import BaseModel, ConfigDict, InstanceOf
-
 from onyx.db.enums import ExternalAppType
-from onyx.external_apps.providers.base import ExternalAppProvider
 from onyx.external_apps.providers.registry import PROVIDERS
-
-
-class Preset(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    # The ``ExternalAppType`` value, e.g. "LINEAR".
-    id: str
-    app_type: ExternalAppType
-    name: str
-    provider: InstanceOf[ExternalAppProvider]
+from onyx.integrations.models import Preset
 
 
 def _build_presets() -> dict[ExternalAppType, Preset]:

@@ -19,8 +19,8 @@ from onyx.db.enums import (
 from onyx.db.models import Integration, IntegrationAction, MCPServer, Tool
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.kinds import mcp_server as mcp_kind
-from onyx.integrations.kinds.base import ChatToolContext
 from onyx.integrations.kinds.mcp_server import McpServerKindHandler
+from onyx.integrations.kinds.models import ChatToolContext
 from onyx.sandbox_proxy.request_evaluator import MCP_UNCLASSIFIABLE_ACTION_TYPE
 from onyx.tools.models import ToolApprovalScope
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
