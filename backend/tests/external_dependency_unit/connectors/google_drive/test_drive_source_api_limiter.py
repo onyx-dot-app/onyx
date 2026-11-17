@@ -16,6 +16,8 @@ from onyx.background.indexing.source_api_limiter import (
 )
 from onyx.connectors.google_drive import parallel_listing
 from onyx.connectors.google_drive.quota import DriveQuotaApi
+from onyx.connectors.google_drive.source_operations import GoogleDriveHttpError
+from onyx.connectors.interfaces import SourceApiLimiter
 from onyx.redis.redis_pool import get_redis_client
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
 from tests.external_dependency_unit.connectors.google_drive.test_checkpointed_slim_listing import (
@@ -96,3 +98,54 @@ def test_the_limiter_keeps_the_listing_under_the_quota(
     assert limited_ids == expected
     assert unlimited_refusals > 10
     assert limited_refusals < unlimited_refusals / 4
+
+
+class _RecordingLimiter(SourceApiLimiter):
+    def __init__(self) -> None:
+        self.acquired: list[tuple[str, int, str | None, int]] = []
+        self.reports: list[tuple[str, str | None, bool]] = []
+
+    def acquire(
+        self, api: str, cost: int, user: str | None = None, request_count: int = 1
+    ) -> None:
+        self.acquired.append((api, cost, user, request_count))
+
+    def report_rate_limit(self, api: str, user: str | None, user_scope: bool) -> None:
+        self.reports.append((api, user, user_scope))
+
+
+def test_a_batch_spends_each_request_and_reports_refused_files(
+    own_mock_drive: MockDrive,
+) -> None:
+    """A batch read spends one request for each file in it. Google refuses
+    some files of the batch for the project's rate, and the gateway reports
+    that once, so later calls slow down."""
+    own_mock_drive.patch_config(
+        {
+            "quota": {
+                "model": "requests",
+                "project_requests_per_minute": 5,
+                "user_requests_per_minute": 1_000,
+            }
+        }
+    )
+    connector = own_mock_drive.build_connector()
+    limiter = _RecordingLimiter()
+    connector.set_source_api_limiter(limiter)
+    admin = own_mock_drive.client.get("/_mock/corpus/summary").json()["admin_email"]
+    file_ids = sorted(own_mock_drive.content_file_ids())[:20]
+
+    result = connector.ops.batch_get_files(
+        user_email=admin,
+        file_ids_by_key={file_id: file_id for file_id in file_ids},
+        fields="id",
+    )
+
+    assert [call[3] for call in limiter.acquired] == [len(file_ids)]
+    refused = [
+        error
+        for error in result.errors.values()
+        if isinstance(error, GoogleDriveHttpError) and error.rate_limited
+    ]
+    assert refused
+    assert limiter.reports == [(DriveQuotaApi.DRIVE.value, admin, False)]

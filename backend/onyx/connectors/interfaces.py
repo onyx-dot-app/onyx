@@ -49,9 +49,14 @@ class SourceApiLimiter(abc.ABC):
     connector code has no cache client."""
 
     @abc.abstractmethod
-    def acquire(self, api: str, cost: int, user: str | None = None) -> None:
+    def acquire(
+        self, api: str, cost: int, user: str | None = None, request_count: int = 1
+    ) -> None:
         """Waits until the call fits the budget of ``api``, and of ``user``
-        when the source also limits each user. Call it before each request."""
+        when the source also limits each user. Call it before each request.
+        ``request_count`` is the number of requests in the call, more than 1 for a
+        batch: a source that counts requests charges that number, not
+        ``cost``."""
         raise NotImplementedError
 
     @abc.abstractmethod
