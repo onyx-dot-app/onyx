@@ -214,17 +214,25 @@ def test_enterprise_names_are_optional_in_a_community_tree(tmp_path: Path) -> No
     assert [violation.module for violation in violations] == ["ee.onyx.tier"]
 
 
-def test_relative_import_inside_a_standalone_package_passes(tmp_path: Path) -> None:
+def test_only_a_relative_import_may_stay_inside_a_standalone_package(
+    tmp_path: Path,
+) -> None:
+    """The package ships under another name, so the absolute form would fail."""
     config = _FORBIDDEN_CONTRACT.replace(
         'source = ["onyx/"]', 'source = ["onyx/connectors/jira/"]'
     ).replace(
         'forbidden = ["ee"]\nallowed = ["ee.onyx.allowed"]',
-        'forbidden = ["onyx", "ee"]\nallowed = ["onyx.connectors.jira"]',
+        'forbidden = ["onyx", "ee"]\nstandalone = true',
     )
     path = "onyx/connectors/jira/connector.py"
     assert _flagged(tmp_path, config, path, "from .utils import x") == ([], [])
+    assert _flagged(tmp_path, config, path, "from . import utils") == ([], [])
     modules, _ = _flagged(tmp_path, config, path, "from ..slack import connector")
     assert modules == ["onyx.connectors.slack.connector"]
+    modules, _ = _flagged(
+        tmp_path, config, path, "from onyx.connectors.jira.utils import x"
+    )
+    assert modules == ["onyx.connectors.jira.utils.x"]
 
 
 def test_exception_needs_a_reason(tmp_path: Path) -> None:

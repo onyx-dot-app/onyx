@@ -43,6 +43,7 @@ _CONTRACT_KEYS = {
     "source_exclude",
     "forbidden",
     "allowed",
+    "standalone",
     "container",
     "shared",
     "exception",
@@ -74,6 +75,9 @@ class Contract:
     # Dotted module prefixes.
     forbidden: tuple[str, ...]
     allowed: tuple[str, ...]
+    # The source ships as its own package, under another name. A relative
+    # import inside it is allowed; the absolute form would not resolve there.
+    standalone: bool
     # Independence only: the directory whose sub-directories are the siblings,
     # and the siblings that every other sibling may import.
     container: str
@@ -85,6 +89,8 @@ class Contract:
 class FoundImport:
     module: str
     line: int
+    # Written with leading dots. `module` is then the resolved name.
+    relative: bool = False
 
 
 @dataclass(frozen=True)
@@ -206,6 +212,7 @@ def _parse_contract(table: Mapping[str, object], backend_dir: Path) -> Contract:
         source_exclude=_strings(table, "source_exclude", where),
         forbidden=_strings(table, "forbidden", where),
         allowed=_strings(table, "allowed", where),
+        standalone=table.get("standalone", False) is True,
         container=str(table.get("container", "")).rstrip("/"),
         shared=_strings(table, "shared", where),
         exceptions=_parse_exceptions(table, where, backend_dir),
@@ -271,7 +278,7 @@ class _ImportCollector(ast.NodeVisitor):
         for alias in node.names:
             # `from a import b` may name the module `a.b`, so report `a.b`.
             module = f"{base}.{alias.name}" if base else alias.name
-            self.found.append(FoundImport(module, node.lineno))
+            self.found.append(FoundImport(module, node.lineno, node.level > 0))
 
 
 def collect_imports(source: str, path: str) -> list[FoundImport]:
@@ -293,7 +300,10 @@ def _applies(contract: Contract, path: str) -> bool:
     return any(_matches_path(path, prefix) for prefix in contract.source)
 
 
-def _breaks(contract: Contract, path: str, module: str, backend_dir: Path) -> bool:
+def _breaks(
+    contract: Contract, path: str, found: FoundImport, backend_dir: Path
+) -> bool:
+    module = found.module
     if contract.kind == _INDEPENDENCE:
         container_module = contract.container.replace("/", ".")
         if not _matches_module(module, container_module) or module == container_module:
@@ -304,6 +314,13 @@ def _breaks(contract: Contract, path: str, module: str, backend_dir: Path) -> bo
             return False
         return (backend_dir / contract.container / other).is_dir()
     if any(_matches_module(module, prefix) for prefix in contract.allowed):
+        return False
+    if (contract.standalone and found.relative) and any(
+        prefix.endswith("/")
+        and _matches_path(path, prefix)
+        and _matches_path(module.replace(".", "/") + "/", prefix)
+        for prefix in contract.source
+    ):
         return False
     return any(_matches_module(module, prefix) for prefix in contract.forbidden)
 
@@ -327,7 +344,7 @@ def check_file(
     used: set[ImportException] = set()
     for contract in applicable:
         for found in imports:
-            if not _breaks(contract, path, found.module, backend_dir):
+            if not _breaks(contract, path, found, backend_dir):
                 continue
             exception = next(
                 (

@@ -10,7 +10,9 @@
 #
 # forbidden: files under `source` (path prefixes relative to backend/, less
 # `source_exclude`) must not import a module under `forbidden`. A module under
-# `allowed` is exempt.
+# `allowed` is exempt. With `standalone = true`, the source ships as its own
+# package, and a relative import that stays inside one `source` directory is
+# also exempt.
 #
 # independence: each sub-directory of `container` must not import another
 # sub-directory, except those in `shared`.
@@ -71,9 +73,8 @@ rule = "The sandbox image code must not import a backend package"
 reason = "sandbox_daemon ships alone in the sandbox image as the top-level package `sandbox_daemon`."
 instead = "Keep the code inside sandbox_daemon/. Where the API server needs the same value, define it on both sides and name the twin in a comment."
 source = ["onyx/server/features/build/sandbox/image/"]
+standalone = true
 forbidden = ["onyx", "ee", "shared_configs", "model_server", "scripts", "tests"]
-# A relative import inside the daemon resolves to this path in the repo.
-allowed = ["onyx.server.features.build.sandbox.image"]
 
 [[contract]]
 name = "builtin-skills-are-standalone"
@@ -81,8 +82,8 @@ rule = "A built-in skill script must not import a backend package"
 reason = "Built-in skill scripts run inside the sandbox, which has no backend code."
 instead = "Keep the helper inside the skill directory. Reach Onyx from a skill through its HTTP API."
 source = ["onyx/skills/builtin/"]
+standalone = true
 forbidden = ["onyx", "ee", "shared_configs", "model_server", "scripts", "tests"]
-allowed = ["onyx.skills.builtin"]
 
 [[contract]]
 name = "backend-does-not-import-builtin-skills"
