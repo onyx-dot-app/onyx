@@ -1,7 +1,7 @@
 """Database-based indexing coordination to replace Redis fencing."""
 
 from pydantic import BaseModel
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -250,31 +250,38 @@ class IndexingCoordination:
         the batches sent but not converted at or under `window`.
 
         One statement: the CTE locks the row and reads `sent` before the
-        update, so concurrent callers never get the same number."""
-        claim = text(
-            """
-            WITH before AS (
-                SELECT stub_batches_sent AS sent
-                FROM index_attempt
-                WHERE id = :index_attempt_id
-                FOR UPDATE
+        update, so concurrent callers never get the same number. It is built
+        from the model, so a tenant session's schema applies to it."""
+        before = (
+            select(
+                IndexAttempt.id.label("id"),
+                IndexAttempt.stub_batches_sent.label("sent"),
             )
-            UPDATE index_attempt
-            SET stub_batches_sent = stub_batches_sent + GREATEST(
-                0,
-                LEAST(
-                    stub_batches_stored - stub_batches_sent,
-                    :window - (stub_batches_sent - stub_batches_converted)
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+            .cte("before")
+        )
+        claim = (
+            update(IndexAttempt)
+            .where(IndexAttempt.id == before.c.id)
+            .values(
+                stub_batches_sent=IndexAttempt.stub_batches_sent
+                + func.greatest(
+                    0,
+                    func.least(
+                        IndexAttempt.stub_batches_stored
+                        - IndexAttempt.stub_batches_sent,
+                        window
+                        - (
+                            IndexAttempt.stub_batches_sent
+                            - IndexAttempt.stub_batches_converted
+                        ),
+                    ),
                 )
             )
-            FROM before
-            WHERE index_attempt.id = :index_attempt_id
-            RETURNING before.sent, index_attempt.stub_batches_sent
-            """
+            .returning(before.c.sent, IndexAttempt.stub_batches_sent)
         )
-        row = db_session.execute(
-            claim, {"index_attempt_id": index_attempt_id, "window": window}
-        ).one_or_none()
+        row = db_session.execute(claim).one_or_none()
         db_session.commit()
         if row is None:
             return []

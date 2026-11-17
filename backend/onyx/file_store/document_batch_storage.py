@@ -196,20 +196,21 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
 
     def store_batch(self, batch_num: int, documents: list[Document]) -> None:
         """Store a batch of documents using FileStore."""
-        self._write_batch_file(
+        self.write_batch_file(
             batch_num,
             lambda: self._serialize_documents(documents),
             len(documents),
             f"Document Batch {batch_num}",
         )
 
-    def _write_batch_file(
+    def write_batch_file(
         self,
         batch_num: int,
         serialize: Callable[[], str],
         item_count: int,
         display_name: str,
     ) -> None:
+        """Writes a batch file of any item type. Refuses to overwrite one."""
         file_name = self._get_batch_file_name(batch_num)
         # An overwrite would repoint a re-issued batch's record at this batch
         # and lose its documents.
@@ -246,11 +247,12 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
 
     def get_batch(self, batch_num: int) -> list[Document] | None:
         """Retrieve a batch of documents from FileStore."""
-        return self._read_batch_file(batch_num, self._deserialize_documents)
+        return self.read_batch_file(batch_num, self._deserialize_documents)
 
-    def _read_batch_file(
+    def read_batch_file(
         self, batch_num: int, deserialize: Callable[[str], list[_ItemT]]
     ) -> list[_ItemT] | None:
+        """Reads a batch file of any item type, or None when it is missing."""
         file_name = self._get_batch_file_name(batch_num)
         try:
             # Check if file exists
@@ -389,7 +391,7 @@ class StubBatchStorage:
         )
 
     def store_batch(self, batch_num: int, stubs: list[SlimDocumentStub]) -> None:
-        self._files._write_batch_file(
+        self._files.write_batch_file(
             batch_num,
             lambda: json.dumps([stub.model_dump(mode="json") for stub in stubs]),
             len(stubs),
@@ -404,7 +406,7 @@ class StubBatchStorage:
         """`payload_type` is the connector's `ListingPayload` subclass.
         Without it, the listing payload loads as the base model and loses
         its fields."""
-        return self._files._read_batch_file(
+        return self._files.read_batch_file(
             batch_num, lambda data: _deserialize_stubs(data, payload_type)
         )
 
