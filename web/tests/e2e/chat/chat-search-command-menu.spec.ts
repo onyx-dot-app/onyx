@@ -1,6 +1,7 @@
 import { test, expect, Page, Locator } from "@playwright/test";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
+import { ChatSearchCommandMenu } from "@tests/e2e/pages/ChatSearchCommandMenu";
 import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
 // Test data storage
@@ -17,43 +18,16 @@ const TIMESTAMP_MASK = '[data-testid="command-menu-timestamp"]';
  * Helper to get the command menu dialog locator (using the content wrapper)
  */
 function getCommandMenuContent(page: Page): Locator {
-  return page.locator('[role="dialog"]:has([data-command-menu-list])');
+  return new ChatSearchCommandMenu(page).dialog;
 }
 
 /**
  * Helper to open the command menu and return a scoped locator
  */
 async function openCommandMenu(page: Page): Promise<Locator> {
-  await page.getByRole("button", { name: "Search Chats" }).click();
-  const dialog = getCommandMenuContent(page);
-  await expect(
-    dialog.getByPlaceholder("Search chat sessions, projects...")
-  ).toBeVisible();
-  return dialog;
-}
-
-async function searchChats(
-  page: Page,
-  dialog: Locator,
-  query: string
-): Promise<void> {
-  const searchResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      url.pathname === "/api/chat/search" &&
-      url.searchParams.get("query") === query &&
-      url.searchParams.get("page") === "1" &&
-      response.request().method() === "GET"
-    );
-  });
-  await dialog
-    .getByPlaceholder("Search chat sessions, projects...")
-    .fill(query);
-  const response = await searchResponse;
-  expect(
-    response.ok(),
-    `Chat search failed with HTTP ${response.status()}`
-  ).toBe(true);
+  const menu = new ChatSearchCommandMenu(page);
+  await menu.open();
+  return menu.dialog;
 }
 
 test.describe("Chat Search Command Menu", () => {
@@ -227,9 +201,10 @@ test.describe("Chat Search Command Menu", () => {
   // -- Search --
 
   test("Search finds matching chat session", async ({ page }) => {
-    const dialog = await openCommandMenu(page);
-
-    await searchChats(page, dialog, `${TEST_PREFIX} Chat 3`);
+    const menu = new ChatSearchCommandMenu(page);
+    await menu.open();
+    await menu.searchChats(`${TEST_PREFIX} Chat 3`);
+    const { dialog } = menu;
     await expect(
       dialog.locator(`[data-command-item="chat-${chatSessionIds[2]}"]`)
     ).toBeVisible();
@@ -264,9 +239,10 @@ test.describe("Chat Search Command Menu", () => {
   });
 
   test("Search with no results shows empty state", async ({ page }) => {
-    const dialog = await openCommandMenu(page);
-
-    await searchChats(page, dialog, "xyz123nonexistent9999");
+    const menu = new ChatSearchCommandMenu(page);
+    await menu.open();
+    await menu.searchChats("xyz123nonexistent9999");
+    const { dialog } = menu;
     const noResults = dialog.getByText("No results found");
     const noMore = dialog.getByText("No more results");
     await expect(noResults.or(noMore)).toBeVisible();
@@ -289,9 +265,10 @@ test.describe("Chat Search Command Menu", () => {
   });
 
   test("Clicking a chat session navigates to its URL", async ({ page }) => {
-    const dialog = await openCommandMenu(page);
-
-    await searchChats(page, dialog, `${TEST_PREFIX} Chat 1`);
+    const menu = new ChatSearchCommandMenu(page);
+    await menu.open();
+    await menu.searchChats(`${TEST_PREFIX} Chat 1`);
+    const { dialog } = menu;
     await dialog
       .locator(`[data-command-item="chat-${chatSessionIds[0]}"]`)
       .click();
