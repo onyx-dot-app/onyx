@@ -1,4 +1,4 @@
-import type { TaskAppActionPolicies } from "@/lib/plugins/types";
+import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
 /**
  * Shared types for the Scheduled Tasks feature.
  *
@@ -82,7 +82,7 @@ export interface ScheduledTaskDetail {
   next_run_at: string | null;
   next_runs: string[];
   last_run: ScheduledRunSummary | null;
-  action_policies: TaskAppActionPolicies[];
+  plugins: TaskPluginLink[];
   created_at: string;
   updated_at: string;
 }
@@ -94,7 +94,7 @@ export interface ScheduledTaskCreateBody {
   editor_payload: EditorPayload;
   status?: ScheduledTaskStatus;
   run_immediately?: boolean;
-  action_policies?: TaskAppActionPolicies[];
+  plugins?: TaskPluginLink[];
 }
 
 export interface ScheduledTaskPatchBody {
@@ -103,7 +103,7 @@ export interface ScheduledTaskPatchBody {
   editor_mode?: EditorMode;
   editor_payload?: EditorPayload;
   status?: ScheduledTaskStatus;
-  action_policies?: TaskAppActionPolicies[];
+  plugins?: TaskPluginLink[];
 }
 
 export interface ScheduledTaskListResponse {
@@ -133,4 +133,51 @@ export interface ScheduledRunContextResponse {
 
 export interface UnviewedTaskCountResponse {
   count: number;
+}
+
+/** The setting of one action on a task; ``inherit`` uses the integration setting. */
+export type TaskLinkValue = "inherit" | "allow" | "ask" | "blocked";
+
+/** What a run does when it calls an action. */
+export type TaskEffectivePolicy = "allow" | "ask" | "blocked";
+
+export interface TaskActionSettings {
+  default: TaskLinkValue;
+  actions: Record<string, TaskLinkValue>;
+}
+
+/** A plugin the task uses, with its action settings. */
+export interface TaskPluginLink {
+  plugin_id: string;
+  action_settings: TaskActionSettings;
+}
+
+export interface TaskActionView {
+  key: string;
+  display_name: string;
+  description: string | null;
+  value: TaskLinkValue;
+  effective_policy: TaskEffectivePolicy;
+  integration_policy: TaskEffectivePolicy;
+}
+
+export interface TaskIntegrationView {
+  id: number;
+  name: string;
+  kind: "mcp" | "api";
+  app_type: ExternalAppType | null;
+  status: {
+    state: "connected" | "not_connected" | "needs_reconnect" | "not_set_up";
+    reason: string | null;
+  };
+  actions: TaskActionView[];
+}
+
+/** A plugin a task can use; mirrors ``TaskPluginView`` in the backend. */
+export interface TaskPluginView {
+  plugin_id: string;
+  plugin_name: string;
+  enabled: boolean;
+  action_settings: TaskActionSettings | null;
+  integrations: TaskIntegrationView[];
 }

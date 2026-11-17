@@ -38,13 +38,6 @@ export interface AppActionPoliciesView {
   target_id: number;
   name: string;
   users_can_manage_policies: boolean;
-  enabled: boolean | null;
   app_type?: ExternalAppType | null;
   actions: ActionPolicySettingView[];
-}
-
-export interface TaskAppActionPolicies {
-  gated_app_id: number;
-  enabled: boolean;
-  action_policies: Record<string, ActionPolicy>;
 }

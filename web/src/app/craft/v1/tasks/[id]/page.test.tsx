@@ -38,7 +38,7 @@ const task: ScheduledTaskDetail = {
   next_run_at: null,
   next_runs: [],
   last_run: null,
-  action_policies: [],
+  plugins: [],
   created_at: "2026-10-19T00:00:00Z",
   updated_at: "2026-10-19T00:00:00Z",
 };
