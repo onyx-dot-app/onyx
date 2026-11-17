@@ -930,13 +930,6 @@ def disconnect(integration: Integration, user: User, db_session: Session) -> boo
     return deleted
 
 
-def disconnect_organization(integration: Integration, db_session: Session) -> bool:
-    """Delete the organization connection. Returns whether a row went."""
-    deleted = delete_connection__no_commit(db_session, integration.id, None)
-    db_session.commit()
-    return deleted
-
-
 def credential_field_keys(integration: Integration) -> list[str]:
     """The keys a person fills for an api_key connection: the stored
     credential fields, else the placeholders of the header template."""
@@ -961,24 +954,8 @@ def header_field_keys(header_template: Mapping[str, str]) -> list[str]:
     return keys
 
 
-def connect_with_fields(
-    integration: Integration,
-    user: User | None,
-    fields: Mapping[str, str],
-    db_session: Session,
-) -> IntegrationConnection:
-    """Save an api_key connection for ``user``, or for the organization when
-    ``user`` is None. Each credential field needs a value; other keys are
-    refused."""
-    if integration.auth_method is not IntegrationAuthMethod.API_KEY:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"{integration.name} does not sign in with an API key.",
-        )
-    expected_mode = (
-        IntegrationAuthMode.SHARED if user is None else IntegrationAuthMode.INDIVIDUAL
-    )
-    if integration.auth_mode is not expected_mode:
+def check_connection_mode(integration: Integration, for_organization: bool) -> None:
+    if for_organization != (integration.auth_mode is IntegrationAuthMode.SHARED):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"{integration.name} uses "
@@ -988,6 +965,23 @@ def connect_with_fields(
                 else "a connection for each user."
             ),
         )
+
+
+def connect_with_fields__no_commit(
+    integration: Integration,
+    user: User | None,
+    fields: Mapping[str, str],
+    db_session: Session,
+) -> None:
+    """Save an api_key connection for ``user``, or for the organization when
+    ``user`` is None. Each credential field needs a value; other keys are
+    refused."""
+    if integration.auth_method is not IntegrationAuthMethod.API_KEY:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{integration.name} does not sign in with an API key.",
+        )
+    check_connection_mode(integration, for_organization=user is None)
     keys = credential_field_keys(integration)
     unknown = sorted(set(fields) - set(keys))
     if unknown:
@@ -997,7 +991,7 @@ def connect_with_fields(
     missing = [key for key in keys if not fields.get(key, "").strip()]
     if missing:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Fill in: " + ", ".join(missing))
-    connection = upsert_connection__no_commit(
+    upsert_connection__no_commit(
         db_session,
         integration_id=integration.id,
         user_id=user.id if user is not None else None,
@@ -1005,8 +999,6 @@ def connect_with_fields(
         expires_at=None,
         granted_scopes=None,
     )
-    db_session.commit()
-    return connection
 
 
 def sign_in_settings_for(

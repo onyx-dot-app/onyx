@@ -11,11 +11,12 @@ from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import IntegrationKind, Permission
 from onyx.db.integration import (
-    get_integration_plugin_ids,
+    get_integration_by_kind_row,
     get_mcp_server_for_integration,
+    list_integration_plugin_rows,
 )
 from onyx.db.mcp import get_mcp_server_by_id
-from onyx.db.models import User
+from onyx.db.models import Integration, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import ConnectionState
@@ -78,9 +79,12 @@ def _get_authorized_discovery_url(server_id: int, user: User) -> str:
             server = get_mcp_server_by_id(server_id, db_session)
         except ValueError as error:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found") from error
-        if server.integration_id is None:
+        integration = get_integration_by_kind_row(
+            Integration.mcp_server_id, server.id, db_session
+        )
+        if integration is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
-        get_manageable_integration(user, server.integration_id, db_session)
+        get_manageable_integration(user, integration.id, db_session)
         return server.server_url
 
 
@@ -106,7 +110,7 @@ def get_craft_mcp_servers_for_user(
         and (server := get_mcp_server_for_integration(integration.id, db_session))
         is not None
     ]
-    plugin_ids = get_integration_plugin_ids(
+    plugin_rows = list_integration_plugin_rows(
         [integration.id for integration, _ in pairs], db_session
     )
     servers: list[MCPServer] = []
@@ -123,7 +127,7 @@ def get_craft_mcp_servers_for_user(
                 connection_status=_CONNECTION_STATUS[state],
                 status=server.status,
                 available_in_craft=True,
-                plugin_ids=plugin_ids.get(integration.id, []),
+                plugin_ids=[row.plugin_id for row in plugin_rows[integration.id]],
                 craft_connected=state is ConnectionState.CONNECTED,
             )
         )

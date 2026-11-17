@@ -66,9 +66,6 @@ GATE2_HELPERS: frozenset[str] = frozenset(
         "onyx.db.credentials:fetch_editable_credential_ids",
         "onyx.db.persona:can_edit_persona",
         "onyx.db.persona:persona_edit_within_scope",
-        "onyx.db.tools:can_manage_mcp_server",
-        "onyx.db.tools:can_manage_tool",
-        "onyx.db.tools:can_manage_own_tool",
         "onyx.integrations.service:manages_integration",
     }
 )

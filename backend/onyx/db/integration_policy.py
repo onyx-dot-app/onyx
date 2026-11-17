@@ -10,7 +10,6 @@ from onyx.db.models import (
     ChatSession,
     Integration,
     IntegrationActionPolicy,
-    MCPServer,
     Persona__Plugin,
     Plugin,
     Plugin__Integration,
@@ -177,29 +176,28 @@ def legacy_tool_plugin_links(
     gives the plugin of its integration with no settings. MCP tools give the
     plugin of their server, with each other action blocked, as the migration
     does. A tool with no integration gives nothing."""
-    custom_integration_ids = {
-        tool.integration_id
-        for tool in tools
-        if tool.integration_id is not None and tool.openapi_schema is not None
-    }
     mcp_tool_names: dict[int, list[str]] = {}
     for tool in tools:
         if tool.mcp_server_id is not None:
             mcp_tool_names.setdefault(tool.mcp_server_id, []).append(tool.name)
-    server_integrations: dict[int, int] = (
-        {
-            server_id: integration_id
-            for server_id, integration_id in db_session.execute(
-                select(MCPServer.id, MCPServer.integration_id).where(
-                    MCPServer.id.in_(mcp_tool_names),
-                    MCPServer.integration_id.is_not(None),
+    custom_tool_ids = [tool.id for tool in tools if tool.openapi_schema is not None]
+    custom_integration_ids: set[int] = set()
+    server_integrations: dict[int, int] = {}
+    if custom_tool_ids or mcp_tool_names:
+        for integration_id, tool_id, server_id in db_session.execute(
+            select(
+                Integration.id, Integration.tool_id, Integration.mcp_server_id
+            ).where(
+                or_(
+                    Integration.tool_id.in_(custom_tool_ids),
+                    Integration.mcp_server_id.in_(mcp_tool_names),
                 )
-            ).tuples()
-            if integration_id is not None
-        }
-        if mcp_tool_names
-        else {}
-    )
+            )
+        ).tuples():
+            if tool_id is not None:
+                custom_integration_ids.add(integration_id)
+            if server_id is not None:
+                server_integrations[server_id] = integration_id
     plugins = plugin_ids_for_integrations(
         custom_integration_ids | set(server_integrations.values()),
         user_id,

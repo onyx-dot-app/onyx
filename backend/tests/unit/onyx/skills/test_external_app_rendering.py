@@ -73,12 +73,15 @@ def test_file_renderer_substitutes_the_configured_account(
     class _App:
         id = 1
         app_type = ExternalAppType.ZENDESK
-        integration_id = 1
 
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_id", lambda *_: _App()
     )
     monkeypatch.setattr("onyx.skills.rendering.admin_blocked_actions", lambda *_: set())
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_integration_by_kind_row",
+        lambda *_: SimpleNamespace(id=1),
+    )
     monkeypatch.setattr(
         "onyx.skills.rendering.preset_organization_values",
         lambda *_: {"subdomain": "acme"},
@@ -103,12 +106,15 @@ def test_an_unresolvable_app_config_still_renders(
     class _BrokenApp:
         id = 1
         app_type = ExternalAppType.ZENDESK
-        integration_id = 1
 
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_id", lambda *_: _BrokenApp()
     )
     monkeypatch.setattr("onyx.skills.rendering.admin_blocked_actions", lambda *_: set())
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_integration_by_kind_row",
+        lambda *_: SimpleNamespace(id=1),
+    )
     monkeypatch.setattr(
         "onyx.skills.rendering.preset_organization_values",
         lambda *_: {"subdomain": "not a subdomain"},
@@ -133,12 +139,15 @@ def test_a_helper_template_is_rendered_beside_the_skill(
     class _App:
         id = 1
         app_type = ExternalAppType.ZENDESK
-        integration_id = 1
 
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_id", lambda *_: _App()
     )
     monkeypatch.setattr("onyx.skills.rendering.admin_blocked_actions", lambda *_: set())
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_integration_by_kind_row",
+        lambda *_: SimpleNamespace(id=1),
+    )
     monkeypatch.setattr(
         "onyx.skills.rendering.preset_organization_values",
         lambda *_: {"subdomain": "acme"},
@@ -210,10 +219,13 @@ def test_rendered_files_withhold_secret_credential_fields(
     app = SimpleNamespace(
         id=1,
         app_type=ExternalAppType.ZENDESK,
-        integration_id=1,
     )
     monkeypatch.setattr("onyx.skills.rendering.get_external_app_by_id", lambda *_: app)
     monkeypatch.setattr("onyx.skills.rendering.admin_blocked_actions", lambda *_: set())
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_integration_by_kind_row",
+        lambda *_: SimpleNamespace(id=1),
+    )
     monkeypatch.setattr(
         "onyx.skills.rendering.preset_organization_values",
         lambda *_: {

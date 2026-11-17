@@ -8,7 +8,6 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from fastapi.routing import APIRoute
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -25,6 +24,7 @@ from onyx.db.enums import (
 )
 from onyx.db.integration import (
     get_external_app_for_integration,
+    get_integration_by_kind_row,
     get_mcp_server_for_integration,
     get_openapi_tool_for_integration,
     list_integration_actions,
@@ -32,8 +32,10 @@ from onyx.db.integration import (
 from onyx.db.integration_connection import get_connection, get_oauth_client
 from onyx.db.integration_policy import list_persona_plugin_links
 from onyx.db.models import (
+    ExternalApp,
     Integration,
     Marketplace,
+    MCPServer,
     Plugin,
     Plugin__Integration,
     Tool,
@@ -312,6 +314,47 @@ def test_create_rolls_back_when_a_step_fails(db_session: Session, admin: User) -
         is None
     )
     assert db_session.scalar(select(Tool.id).where(Tool.name == name)) is None
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
+        CustomConfigInput(upstream_url_patterns=["https://api.custom.example.com/*"]),
+    ],
+)
+def test_delete_removes_the_kind_row_and_the_emptied_plugin(
+    db_session: Session,
+    admin: User,
+    created: Created,
+    config: McpServerConfigInput | CustomConfigInput,
+) -> None:
+    detail = admin_api.create_integration(
+        IntegrationCreate(
+            name=f"delete-{uuid4().hex[:8]}",
+            auth_mode=IntegrationAuthMode.SHARED,
+            auth_method=IntegrationAuthMethod.API_KEY,
+            header_template={"Authorization": "Bearer {token}"},
+            config=config,
+        ),
+        admin,
+        db_session,
+    )
+    created.add(detail.id)
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+    kind_row = (MCPServer, integration.mcp_server_id)
+    if integration.external_app_id is not None:
+        kind_row = (ExternalApp, integration.external_app_id)
+    assert kind_row[1] is not None
+    plugin_id = _plugin_of(db_session, detail.id).id
+
+    admin_api.delete_integration(detail.id, admin, db_session)
+
+    db_session.expire_all()
+    assert db_session.get(Integration, detail.id) is None
+    assert db_session.get(kind_row[0], kind_row[1]) is None
+    assert db_session.get(Plugin, plugin_id) is None
 
 
 # Permissions
@@ -877,16 +920,16 @@ def test_custom_tool_aliases_keep_their_shapes(
         db_session,
         admin,
     )
-    tool = db_session.get(Tool, snapshot.id)
-    assert tool is not None and tool.integration_id is not None
-    created.add(tool.integration_id)
+    integration = get_integration_by_kind_row(
+        Integration.tool_id, snapshot.id, db_session
+    )
+    assert integration is not None
+    created.add(integration.id)
     assert set(ToolSnapshot.model_fields) == set(snapshot.model_dump())
     assert snapshot.definition == OPENAPI_SPEC
     assert snapshot.custom_headers is not None
     assert snapshot.custom_headers[0]["key"] == "X-Api-Key"
     assert snapshot.custom_headers[0]["value"] != "secret-value"
-    integration = db_session.get(Integration, tool.integration_id)
-    assert integration is not None
     assert integration.kind is IntegrationKind.API
     assert integration.auth_mode is IntegrationAuthMode.SHARED
 
@@ -907,7 +950,7 @@ def test_custom_tool_aliases_keep_their_shapes(
         admin,
     )
     assert updated.name == "Renamed alias"
-    connection = get_connection(db_session, tool.integration_id, None)
+    connection = get_connection(db_session, integration.id, None)
     assert connection is not None
 
     methods = tool_api.validate_tool(
@@ -919,42 +962,5 @@ def test_custom_tool_aliases_keep_their_shapes(
     }
 
     tool_api.delete_custom_tool(snapshot.id, db_session, admin)
-    assert db_session.get(Integration, tool.integration_id) is None
-
-
-# Removed routes
-
-
-REMOVED_ROUTES = [
-    ("GET", "/admin/mcp/servers"),
-    ("POST", "/admin/mcp/servers/create"),
-    ("DELETE", "/admin/mcp/server/{server_id}"),
-    ("GET", "/mcp/servers"),
-    ("POST", "/mcp/oauth/callback"),
-    ("GET", "/admin/oauth-config"),
-    ("POST", "/oauth-config/initiate"),
-    ("GET", "/user-oauth-token/status"),
-    ("POST", "/build/admin/apps/custom"),
-    ("POST", "/build/apps/{external_app_id}/credentials"),
-    ("PATCH", "/admin/tool/status"),
-    ("GET", "/action-policies/{kind}/{target_id}"),
-]
-
-
-def test_removed_routes_are_gone() -> None:
-    from onyx.main import get_application
-
-    app = get_application()
-    routes = {
-        (method, route.path)
-        for route in app.routes
-        if isinstance(route, APIRoute)
-        for method in route.methods
-    }
-    for method, path in REMOVED_ROUTES:
-        assert (method, path) not in routes
-        assert (method, f"/api{path}") not in routes
-    assert ("POST", "/admin/integrations") in routes or (
-        "POST",
-        "/api/admin/integrations",
-    ) in routes
+    assert db_session.get(Integration, integration.id) is None
+    assert db_session.get(Tool, snapshot.id) is None

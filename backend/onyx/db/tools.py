@@ -1,22 +1,18 @@
-from typing import Any, Type
-from uuid import UUID
+from typing import Type
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from onyx.auth.permissions import has_permission
 from onyx.context.search.models import PersonaSearchInfo
-from onyx.db.enums import MCPServerStatus, Permission, PermissionAuthority
+from onyx.db.enums import MCPServerStatus
 from onyx.db.integration_policy import list_persona_plugin_links
 from onyx.db.models import (
     MCPServer,
     Persona,
     Tool,
-    User,
 )
 from onyx.integrations.policy import parse_action_settings
-from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.tools.models import (
     PersonaToolConfiguration,
@@ -97,40 +93,6 @@ def get_tools_by_ids(tool_ids: list[int], db_session: Session) -> list[Tool]:
     return list(db_session.scalars(stmt).all())
 
 
-def can_manage_own_tool(user: User, tool: Tool) -> bool:
-    """Owner-or-admin gate for every action on a custom action (edit, delete, toggle, OAuth
-    config), matching the routes' ``allow_scope`` guard: a global actions-admin manages any
-    action, a scoped manager only one they created. No MANAGE_ACTIONS authority — or a built-in
-    tool (no owner) — never passes."""
-    authority = has_permission(user, Permission.MANAGE_ACTIONS)
-    if authority is PermissionAuthority.GLOBAL:
-        return True
-    if authority is PermissionAuthority.SCOPED:
-        return tool.user_id is not None and tool.user_id == user.id
-    return False
-
-
-def can_manage_mcp_server(user: User, server: MCPServer) -> bool:
-    """Owner-or-admin gate for every action on an MCP server (edit, delete, connect, status).
-    Global MANAGE_ACTIONS manages any server — that permission is full-admin-equivalent for
-    actions, so it isn't narrowed to FULL_ADMIN; a scoped manager only one they own."""
-    authority = has_permission(user, Permission.MANAGE_ACTIONS)
-    if authority is PermissionAuthority.GLOBAL:
-        return True
-    if authority is PermissionAuthority.SCOPED:
-        return server.owner == user.email
-    return False
-
-
-def can_manage_tool(user: User, tool: Tool) -> bool:
-    """The gate for every per-tool action (edit, delete, toggle, OAuth config). An MCP tool
-    is created with ``user_id=None``, so its ownership lives on the server — without routing
-    there, a server's owner could delete it but not disable one of its tools."""
-    if tool.mcp_server is not None:
-        return can_manage_mcp_server(user, tool.mcp_server)
-    return can_manage_own_tool(user, tool)
-
-
 def get_builtin_tool(
     db_session: Session,
     tool_type: Type[BUILT_IN_TOOL_TYPES],
@@ -170,35 +132,3 @@ def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:
     if not tool:
         raise ValueError("Tool by specified name does not exist")
     return tool
-
-
-def create_tool__no_commit(
-    name: str,
-    description: str | None,
-    openapi_schema: dict[str, Any] | None,
-    custom_headers: list[Header] | None,
-    user_id: UUID | None,
-    db_session: Session,
-    passthrough_auth: bool,
-    *,
-    mcp_server_id: int | None = None,
-    oauth_config_id: int | None = None,
-    enabled: bool = True,
-) -> Tool:
-    new_tool = Tool(
-        name=name,
-        description=description,
-        in_code_tool_id=None,
-        openapi_schema=openapi_schema,
-        custom_headers=(
-            [header.model_dump() for header in custom_headers] if custom_headers else []
-        ),
-        user_id=user_id,
-        passthrough_auth=passthrough_auth,
-        mcp_server_id=mcp_server_id,
-        oauth_config_id=oauth_config_id,
-        enabled=enabled,
-    )
-    db_session.add(new_tool)
-    db_session.flush()  # Don't commit yet, let caller decide when to commit
-    return new_tool

@@ -390,25 +390,3 @@ def test_public_tool_aliases_keep_their_shapes(
         ).status_code
         == 404
     )
-
-
-@pytest.mark.parametrize(
-    "method,path",
-    [
-        ("GET", "/admin/mcp/servers"),
-        ("POST", "/admin/mcp/servers/create"),
-        ("GET", "/mcp/servers"),
-        ("GET", "/admin/oauth-config"),
-        ("GET", "/user-oauth-token/status"),
-        ("GET", "/build/admin/apps"),
-        ("PATCH", "/admin/tool/status"),
-        ("GET", "/action-policies/mcp_server/1"),
-    ],
-)
-def test_removed_routes_return_404(
-    admin_user: DATestUser, method: str, path: str
-) -> None:
-    response = client.request(
-        method, f"{API_SERVER_URL}{path}", headers=admin_user.headers, json={}
-    )
-    assert response.status_code in (404, 405)

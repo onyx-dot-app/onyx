@@ -7,11 +7,11 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.integration_connection import delete_connection__no_commit
 from onyx.db.models import User
 from onyx.integrations.connections import (
     IntegrationStatus,
-    connect_with_fields,
-    disconnect_organization,
+    connect_with_fields__no_commit,
     integration_status,
 )
 from onyx.integrations.service import (
@@ -165,7 +165,8 @@ def save_organization_connection(
     db_session: Session = Depends(get_session),
 ) -> IntegrationStatus:
     integration = get_manageable_integration(user, integration_id, db_session)
-    connect_with_fields(integration, None, request.fields, db_session)
+    connect_with_fields__no_commit(integration, None, request.fields, db_session)
+    db_session.commit()
     reload_craft_sessions(
         craft_users_of_integration(integration.id, db_session), db_session
     )
@@ -179,7 +180,8 @@ def delete_organization_connection(
     db_session: Session = Depends(get_session),
 ) -> IntegrationStatus:
     integration = get_manageable_integration(user, integration_id, db_session)
-    disconnect_organization(integration, db_session)
+    delete_connection__no_commit(db_session, integration.id, None)
+    db_session.commit()
     reload_craft_sessions(
         craft_users_of_integration(integration.id, db_session), db_session
     )

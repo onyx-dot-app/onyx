@@ -6,7 +6,6 @@ credentials of an `integration_connection` row.
 """
 
 import json
-from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any, TypedDict
@@ -205,36 +204,6 @@ def _known_provider_oauth_metadata(
     )
 
 
-class PersistentTokenStorage(TokenStorage, ABC):
-    """SDK token storage that Onyx persists. The provider single-flights a
-    refresh under ``refresh_lock_name`` and guards rotation through
-    ``set_refreshed_tokens``."""
-
-    refresh_attempt_id: str | None = None
-
-    @property
-    @abstractmethod
-    def refresh_lock_name(self) -> str: ...
-
-    @abstractmethod
-    def bind_oauth_context(self, context: OAuthContext) -> None: ...
-
-    @abstractmethod
-    async def set_refreshed_tokens(
-        self, tokens: OAuthToken, redeemed_refresh_token: str | None
-    ) -> bool: ...
-
-    @abstractmethod
-    async def set_authorization_result(
-        self, tokens: OAuthToken, client_information: OAuthClientInformationFull
-    ) -> None: ...
-
-    @abstractmethod
-    async def discard_persisted_tokens(
-        self, redeemed_refresh_token: str | None
-    ) -> bool: ...
-
-
 AuthorizationRequestHandler = Callable[
     [MCPPendingOAuthAuthorization, OAuthContext], Awaitable[None]
 ]
@@ -347,7 +316,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         storage = self.context.storage
         refresh_lock_name = (
             storage.refresh_lock_name
-            if isinstance(storage, PersistentTokenStorage)
+            if isinstance(storage, IntegrationTokenStorage)
             else None
         )
         if refresh_lock_name is not None:
@@ -512,7 +481,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         self.context.current_tokens = tokens
         self.context.update_token_expiry(tokens)
         storage = self.context.storage
-        if isinstance(storage, PersistentTokenStorage):
+        if isinstance(storage, IntegrationTokenStorage):
             await storage.set_authorization_result(tokens, client_info)
         else:
             await storage.set_tokens(tokens)
@@ -563,7 +532,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
 
     async def _persist_refresh_tokens(self, tokens: OAuthToken) -> bool:
         storage = self.context.storage
-        if not isinstance(storage, PersistentTokenStorage):
+        if not isinstance(storage, IntegrationTokenStorage):
             await storage.set_tokens(tokens)
             return True
 
@@ -599,7 +568,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             # reads as unauthenticated instead of retrying forever.
             storage = self.context.storage
             if oauth_error == "invalid_grant" and isinstance(
-                storage, PersistentTokenStorage
+                storage, IntegrationTokenStorage
             ):
                 if await storage.discard_persisted_tokens(self.redeemed_refresh_token):
                     logger.warning("mcp_oauth.tokens_discarded", extra=response_fields)
@@ -709,7 +678,7 @@ def _secret_from_oauth_token(
     )
 
 
-class IntegrationTokenStorage(PersistentTokenStorage):
+class IntegrationTokenStorage(TokenStorage):
     """MCP SDK storage over the integration tables: the grant lives in the
     ``integration_connection`` row of one user (or of the organization when
     ``user_id`` is None), and the client registration and discovered
@@ -733,7 +702,7 @@ class IntegrationTokenStorage(PersistentTokenStorage):
             expected_client_information_fingerprint
         )
         self.check_settings_unchanged = check_settings_unchanged
-        self.refresh_attempt_id = None
+        self.refresh_attempt_id: str | None = None
         self._oauth_context: OAuthContext | None = None
 
     @property
