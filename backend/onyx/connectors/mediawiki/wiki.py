@@ -181,12 +181,17 @@ class MediaWikiConnector(LoadConnector, PollConnector):
                     pagegenerators.CategorizedPageGenerator(
                         category, recurse=self.recurse_depth
                     ),
+                    # Pywikibot compares against naive UTC revision timestamps.
                     last_edit_start=(
-                        datetime.datetime.fromtimestamp(start, tz=datetime.UTC)
+                        datetime.datetime.fromtimestamp(start, tz=datetime.UTC).replace(
+                            tzinfo=None
+                        )
                         if start
                         else None
                     ),
-                    last_edit_end=datetime.datetime.fromtimestamp(end, tz=datetime.UTC)
+                    last_edit_end=datetime.datetime.fromtimestamp(
+                        end, tz=datetime.UTC
+                    ).replace(tzinfo=None)
                     if end
                     else None,
                 ),

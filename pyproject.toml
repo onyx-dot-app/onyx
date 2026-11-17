@@ -407,6 +407,7 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/ee/onyx/server/scim/patch.py" = ["TID251"] # TID251 × 1
 "backend/onyx/access/models.py" = ["TID251"] # TID251 × 1
 "backend/onyx/auth/jwt.py" = ["TID251"] # TID251 × 1
+"backend/onyx/auth/oauth_refresher.py" = ["TID251"] # TID251 × 1
 "backend/onyx/background/celery/tasks/docprocessing/targeted_reindex_task.py" = ["TID251"] # TID251 × 1
 "backend/onyx/background/indexing/job_client.py" = ["TID251"] # TID251 × 1
 "backend/onyx/connectors/field_policy.py" = ["TID251"] # TID251 × 1
