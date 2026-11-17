@@ -69,7 +69,7 @@ Key facts:
   sending tasks, either from the beat schedule or directly from another task. It
   should never be acceptable to submit code which enqueues tasks without an
   expiration, as doing so can lead to unbounded task queue growth.
-  `scripts/check_celery_task_expires.py` enforces this on commit for `send_task`, `apply_async`,
+  `lint/check_celery_task_expires.py` enforces this on commit for `send_task`, `apply_async`,
   `delay` and beat schedule entries. `# celery-expires: allow (<reason>)` on the line that opens
   the call marks a deliberate exception.
 

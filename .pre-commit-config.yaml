@@ -343,7 +343,7 @@ repos:
         name: celery tasks are enqueued with an expiration
         description: "Fail a task send or beat schedule entry that has no expires"
         language: system
-        entry: python3 backend/scripts/check_celery_task_expires.py
+        entry: python3 backend/lint/check_celery_task_expires.py
         pass_filenames: true
         stages: [pre-commit]
         files: ^backend/(onyx|ee|scripts)/.*\.py$
