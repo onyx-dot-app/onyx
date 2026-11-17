@@ -1116,7 +1116,10 @@ export function useToolConfiguration(
       disabledToolIds: ids.filter(
         (toolId) => configuration.tools[toolId] === "disabled"
       ),
+      // A plugin removed from the agent is off, so a saved action of it is
+      // not sent.
       isPluginEnabled: (pluginId: string) =>
+        (pluginIds === null || pluginIds.includes(pluginId)) &&
         configuration.plugins[pluginId] !== "disabled",
       setPluginEnabled,
       allowed:
