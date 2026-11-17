@@ -173,13 +173,17 @@ export function signInDraftFromDetail(
 ): SignInDraft {
   const [header, ...others] = Object.entries(detail.header_template ?? {});
   const client = detail.oauth_client;
+  const providerModes = PROVIDER_MODES[detail.shape];
   return {
     authMode: detail.auth_mode,
     authMethod: detail.auth_method,
     headerName: header?.[0] ?? DEFAULT_SIGN_IN.headerName,
     headerValue: header?.[1] ?? DEFAULT_SIGN_IN.headerValue,
     otherHeaders: Object.fromEntries(others),
-    providerMode: client?.provider_mode ?? DEFAULT_SIGN_IN.providerMode,
+    providerMode:
+      client && providerModes.includes(client.provider_mode)
+        ? client.provider_mode
+        : (providerModes[0] ?? DEFAULT_SIGN_IN.providerMode),
     authorizationUrl: client?.authorization_url ?? "",
     tokenUrl: client?.token_url ?? "",
     scopes: client?.scopes?.join(" ") ?? "",
