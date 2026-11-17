@@ -86,7 +86,11 @@ jobs:
 
       - name: Run Database Tests
         working-directory: ./backend
-        run: pytest -m "not alembic" tests/integration/tests/migrations/
+        run: >-
+          pytest
+          --ignore=tests/integration/tests/migrations/test_alembic_main.py
+          --ignore=tests/integration/tests/migrations/test_alembic_tenants.py
+          tests/integration/tests/migrations/
 
   # Keeps the pull request in the merge queue while RunsOn reruns database-tests
   # after an EC2 Spot interruption. The gate fails when database-tests fails for
