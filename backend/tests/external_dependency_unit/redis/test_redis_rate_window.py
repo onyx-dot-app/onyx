@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 import pytest
+from prometheus_client import REGISTRY
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 from onyx.background.indexing import source_api_limiter
@@ -23,7 +24,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.redis import redis_rate_window
 from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_rate_window import RateWindow, RedisRateWindows
+from onyx.redis.redis_rate_window import CutResult, RateWindow, RedisRateWindows
+from onyx.server.metrics import source_api_metrics
 
 _API = "drive"
 
@@ -56,6 +58,7 @@ def _limiter(
                 **kwargs,
             )
         },
+        source=DocumentSource.GOOGLE_DRIVE,
     )
 
 
@@ -114,9 +117,9 @@ def test_a_cut_halves_the_window_once_for_each_burst_and_grows_back(
     monkeypatch.setattr(redis_rate_window, "GROW_STEP", 0.25)
     window = RateWindow(key="w", limit=100, period_seconds=0.2)
 
-    assert windows.cut(window) == 0.5
+    assert windows.cut(window) == CutResult(share=0.5, applied=True)
     # More pushback in the same burst does not cut again.
-    assert windows.cut(window) == 0.5
+    assert windows.cut(window) == CutResult(share=0.5, applied=False)
     assert windows.try_acquire([window], cost=50) == 0
     assert windows.try_acquire([window], cost=1) > 0
 
@@ -125,7 +128,7 @@ def test_a_cut_halves_the_window_once_for_each_burst_and_grows_back(
     assert windows.try_acquire([window], cost=75) == 0
     time.sleep(0.25)
     assert windows.try_acquire([window], cost=100) == 0
-    assert windows.cut(window) == 0.5
+    assert windows.cut(window).share == 0.5
 
 
 def test_a_cut_stops_at_the_lowest_share(
@@ -133,7 +136,7 @@ def test_a_cut_stops_at_the_lowest_share(
 ) -> None:
     monkeypatch.setattr(redis_rate_window, "CUT_HOLD_SECONDS", 0.0)
     window = RateWindow(key="w", limit=100, period_seconds=10)
-    shares = [windows.cut(window) for _ in range(6)]
+    shares = [windows.cut(window).share for _ in range(6)]
     assert shares == [0.5, 0.25, 0.125, 0.1, 0.1, 0.1]
 
 
@@ -142,9 +145,10 @@ def test_two_processes_share_one_budget(tenant_id: str) -> None:
     code = (
         "from onyx.background.indexing.source_api_limiter import "
         "RedisSourceApiLimiter, SourceApiBudget\n"
+        "from onyx.configs.constants import DocumentSource\n"
         f"limiter = RedisSourceApiLimiter({tenant_id!r}, 'google_drive:1', "
         "{'drive': SourceApiBudget(per_credential=1000, per_user=None, "
-        "period_seconds=10)})\n"
+        "period_seconds=10)}, source=DocumentSource.GOOGLE_DRIVE)\n"
         "assert all(limiter.try_acquire('drive', 200, 'a@x.com') == 0 "
         "for _ in range(4))\n"
     )
@@ -218,6 +222,7 @@ def test_acquire_waits_for_room(tenant_id: str) -> None:
         tenant_id,
         "google_drive:1",
         {_API: SourceApiBudget(per_credential=100, period_seconds=0.4)},
+        source=DocumentSource.GOOGLE_DRIVE,
     )
     limiter.acquire(_API, 100)
     started = time.monotonic()
@@ -231,6 +236,7 @@ def test_a_stop_signal_ends_the_wait(tenant_id: str) -> None:
         "google_drive:1",
         {_API: SourceApiBudget(per_credential=100, period_seconds=30)},
         should_stop=lambda: True,
+        source=DocumentSource.GOOGLE_DRIVE,
     )
     limiter.acquire(_API, 100)
     with pytest.raises(ConnectorStopSignal):
@@ -311,7 +317,81 @@ def test_an_unreachable_redis_logs_one_warning_and_does_not_limit(
 
     with caplog.at_level("WARNING"):
         assert [down.try_acquire([window]) for _ in range(5)] == [0] * 5
-        assert down.cut(window) == 1.0
+        assert down.cut(window) == CutResult(share=1.0, applied=False)
 
     warnings = [r for r in caplog.records if "cannot reach Redis" in r.getMessage()]
     assert len(warnings) == 1
+
+
+def test_the_limiter_metrics_show_a_cut_and_the_recovery(
+    tenant_id: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(redis_rate_window, "CUT_HOLD_SECONDS", 0.3)
+    monkeypatch.setattr(redis_rate_window, "GROW_INTERVAL_SECONDS", 0.1)
+    monkeypatch.setattr(redis_rate_window, "GROW_STEP", 0.25)
+    # Only this test's users count toward the user gauges.
+    monkeypatch.setattr(
+        source_api_metrics, "_user_budgets", source_api_metrics._UserBudgets()
+    )
+    limiter = RedisSourceApiLimiter(
+        tenant_id,
+        f"google_drive:{uuid4().hex}",
+        {_API: SourceApiBudget(per_credential=1000, per_user=100, period_seconds=10)},
+        source=DocumentSource.GOOGLE_DRIVE,
+    )
+
+    def sample(name: str, **labels: str) -> float:
+        return (
+            REGISTRY.get_sample_value(
+                name, {"source": "google_drive", "api": _API, **labels}
+            )
+            or 0.0
+        )
+
+    def budget(scope: str) -> float:
+        return sample("onyx_source_api_limiter_budget", scope=scope)
+
+    def cuts(scope: str) -> float:
+        return sample("onyx_source_api_limiter_cuts_total", scope=scope)
+
+    project_cuts, user_cuts = cuts("project"), cuts("user")
+    assert limiter.try_acquire(_API, 1, "a@x.com") == 0
+    assert (budget("project"), budget("user")) == (1000, 100)
+
+    limiter.report_rate_limit(_API, "a@x.com", user_scope=False)
+    # More pushback in the same hold does not cut again.
+    limiter.report_rate_limit(_API, "a@x.com", user_scope=False)
+    limiter.report_rate_limit(_API, "a@x.com", user_scope=True)
+    assert (budget("project"), budget("user")) == (500, 50)
+    assert cuts("project") == project_cuts + 1
+    assert cuts("user") == user_cuts + 1
+    assert sample("onyx_source_api_limiter_cut_users") == 1
+
+    # After the hold, each request reads the grown share.
+    time.sleep(0.45)
+    assert limiter.try_acquire(_API, 1, "a@x.com") == 0
+    assert (budget("project"), budget("user")) == (750, 75)
+
+
+def test_the_limiter_counts_the_time_callers_wait(tenant_id: str) -> None:
+    limiter = RedisSourceApiLimiter(
+        tenant_id,
+        "google_drive:1",
+        {_API: SourceApiBudget(per_credential=100, period_seconds=0.4)},
+        source=DocumentSource.GOOGLE_DRIVE,
+    )
+
+    def waited() -> float:
+        return (
+            REGISTRY.get_sample_value(
+                "onyx_source_api_limiter_wait_seconds_total",
+                {"source": "google_drive", "api": _API},
+            )
+            or 0.0
+        )
+
+    before = waited()
+    limiter.acquire(_API, 100)
+    assert waited() == before
+    limiter.acquire(_API, 100)
+    assert 0.2 < waited() - before < 2
