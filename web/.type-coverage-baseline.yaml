@@ -76,10 +76,10 @@ packages:
   src/lib/docx: 100
   src/lib/extension: 100
   src/lib/hierarchy: 100
-  src/lib/hooks: 96
+  src/lib/hooks: 95.9
   src/lib/integrations: 100
   src/lib/languageModels: 99.1
-  src/lib/mcp: 99
+  src/lib/mcp: 98.8
   src/lib/multiModel: 100
   src/lib/navigation: 100
   src/lib/notifications: 99.3

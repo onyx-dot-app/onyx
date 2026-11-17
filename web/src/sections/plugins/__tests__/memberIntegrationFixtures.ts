@@ -24,6 +24,7 @@ export function makeMemberIntegration(
         scope: "organization",
         owner_email: null,
         installation_policy: "AVAILABLE",
+        enabled: true,
       },
     ],
     users_can_save_always_allow: false,

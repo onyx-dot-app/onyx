@@ -293,7 +293,6 @@ export const SWR_KEYS = {
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
   openApiTools: "/api/tool/openapi",
-  oauthTokenStatus: "/api/user-oauth-token/status",
   adminOAuthTestClaims: "/api/admin/oauth-test/claims",
 
   // ── Voice ─────────────────────────────────────────────────────────────────
@@ -530,8 +529,6 @@ export const SWR_KEYS = {
   // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with
   // a prefix predicate so every paginated variant gets refreshed at once.
   personalActionPolicies: "/api/build/action-policies",
-  appActionPolicies: (kind: "external_app" | "mcp_server", targetId: number) =>
-    `/api/action-policies/${kind}/${targetId}`,
   taskActionPolicies: (taskId: string) =>
     `/api/build/scheduled-tasks/${taskId}/action-policies`,
   scheduledTasks: "/api/build/scheduled-tasks",

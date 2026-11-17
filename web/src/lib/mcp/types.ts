@@ -89,15 +89,6 @@ export interface MCPServersResponse {
   mcp_servers: MCPServer[];
 }
 
-export interface MCPUserPreferences {
-  enabled_in_chat: boolean;
-  enabled_in_craft: boolean;
-}
-
-export type MCPUserPreferencesRequest =
-  | { enabled_in_chat: boolean; enabled_in_craft?: boolean }
-  | { enabled_in_chat?: boolean; enabled_in_craft: boolean };
-
 export interface MCPTool {
   id: string;
   name: string;
@@ -149,17 +140,6 @@ export type MCPServersFormValues = Record<
   MCPServerFormValues | undefined
 >;
 
-export type MCPAuthenticationServer = Pick<
-  MCPServer,
-  | "id"
-  | "name"
-  | "auth_type"
-  | "auth_performer"
-  | "auth_template"
-  | "connection_status"
-  | "user_credentials"
-  | "transport"
->;
 export interface MCPOAuthDiscovery {
   status: "metadata_found" | "metadata_missing" | "unreachable";
   supports_automatic_registration: boolean | null;

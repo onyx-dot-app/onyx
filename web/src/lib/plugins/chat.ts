@@ -1,5 +1,9 @@
 import type { MinimalAgent } from "@/lib/agents/types";
-import type { ToolSnapshot } from "@/lib/tools/types";
+import type {
+  ActionPreference,
+  ToolPreference,
+  ToolSnapshot,
+} from "@/lib/tools/types";
 import { CODING_AGENT_TOOL_ID } from "@/lib/tools/constants";
 
 /** Incognito chats run no child agents, so the coding agent is unavailable. */
@@ -10,18 +14,27 @@ export function isBlockedInIncognito(
   return incognito && tool.in_code_tool_id === CODING_AGENT_TOOL_ID;
 }
 
-/** The preferred tool a send names: a built-in tool of the agent, or null. */
-export function effectiveChatPreferredToolId({
+/**
+ * The preference a send names: a built-in tool of the agent, else a saved
+ * plugin action whose plugin is on, or null.
+ */
+export function effectiveChatPreference({
   requestedToolId,
+  requestedAction,
   agent,
   incognito = false,
+  isPluginEnabled,
 }: {
   requestedToolId: number | null;
+  requestedAction: ActionPreference | null;
   agent: Pick<MinimalAgent, "tools"> | undefined;
   incognito?: boolean;
-}): number | null {
+  isPluginEnabled: (pluginId: string) => boolean;
+}): ToolPreference | null {
   const tool = agent?.tools.find((entry) => entry.id === requestedToolId);
-  if (!tool || !tool.in_code_tool_id || isBlockedInIncognito(tool, incognito))
-    return null;
-  return tool.id;
+  if (tool?.in_code_tool_id && !isBlockedInIncognito(tool, incognito))
+    return { type: "capability", tool_id: tool.id };
+  if (requestedAction && isPluginEnabled(requestedAction.plugin_id))
+    return requestedAction;
+  return null;
 }

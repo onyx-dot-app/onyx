@@ -29,6 +29,7 @@ function handle(disabled: string[] = []): ToolConfigurationHandle {
     toggleToolState: jest.fn(),
     clearPreferredTool: jest.fn(),
     preferredToolId: null,
+    preferredAction: null,
     disabledToolIds: [],
     isPluginEnabled: (id) => !disabled.includes(id),
     setPluginEnabled: jest.fn(),
