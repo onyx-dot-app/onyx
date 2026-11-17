@@ -69,6 +69,9 @@ export interface ComposerTools {
   disableAllSources: () => void;
   // Report the agent a send used, once that send is known to have created the session.
   notePendingSend: (agentForSend: MinimalAgent | null) => void;
+  // False while a saved switch-off needs the plugin list to build the allow-list. A send then
+  // waits, because an allow-list without the plugins would turn every plugin off.
+  toolOptionsReady: boolean;
   // Read at send time, never during render.
   resolveToolOptions: () => ChatToolOptions;
 }
@@ -488,6 +491,9 @@ export function useComposerToolsState({
       enableAllSources,
       disableAllSources,
       notePendingSend,
+      toolOptionsReady:
+        availableToolsLoaded ||
+        (disabledToolIds.length === 0 && disabledPluginIds.length === 0),
       // Gated on `showDeepResearch` so a control the admin has since hidden can't send true.
       resolveToolOptions: () => {
         /*
@@ -557,6 +563,7 @@ export function useComposerToolsState({
       enableAllSources,
       disableAllSources,
       notePendingSend,
+      availableToolsLoaded,
     ],
   );
 }

@@ -39,6 +39,7 @@ interface InputBarProps {
   onStop: () => void;
   chatState: ChatState;
   attachments: UseComposerDraft;
+  toolsReady: boolean;
 }
 
 export function InputBar({
@@ -48,6 +49,7 @@ export function InputBar({
   onStop,
   chatState,
   attachments,
+  toolsReady,
 }: InputBarProps) {
   const insets = useSafeAreaInsets();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -56,7 +58,10 @@ export function InputBar({
   const hasFiles = attachments.files.length > 0;
 
   const canSend =
-    value.trim().length > 0 && !isBusy && !attachments.hasBlockingFiles;
+    value.trim().length > 0 &&
+    !isBusy &&
+    !attachments.hasBlockingFiles &&
+    toolsReady;
 
   const { data: recentFiles = [], isLoading: isLoadingRecent } =
     useRecentFiles(pickerOpen);

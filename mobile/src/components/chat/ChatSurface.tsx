@@ -137,7 +137,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   // Gate on hasBlockingFiles so a still-uploading file can't be sent; a starter keeps the text
   // (consumeAttachments), a send clears both.
   const sendWithAttachments = (message?: string) => {
-    if (draft.hasBlockingFiles) return;
+    if (draft.hasBlockingFiles || !composerTools.toolOptionsReady) return;
     const clearDraft =
       message == null ? draft.consume : draft.consumeAttachments;
     // Captured before the create await: picking a different agent while it is in flight must not
@@ -161,6 +161,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
         onStop={stop}
         chatState={chatState}
         attachments={draft}
+        toolsReady={composerTools.toolOptionsReady}
       />
     </Animated.View>
   );
