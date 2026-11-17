@@ -117,7 +117,7 @@ def new_chat(
     def create(tools: list[str] | None = None) -> UUID:
         names = tools or ["hello"]
         persona = PersonaManager.create(
-            tool_ids=[connected_mcp_server.tool_ids[name] for name in names],
+            tool_ids=[],
             user_performing_action=admin_user,
         )
         link_persona(persona.id, connected_mcp_server.plugin_id, only_actions(names))
@@ -615,7 +615,7 @@ def test_a_tool_the_agent_blocks_while_its_call_waits_is_disabled(
         Reply(text="Done.", conditions=RequestConditions(has_results_for=[CALL_ID])),
     )
     persona = PersonaManager.create(
-        tool_ids=[connected_mcp_server.tool_ids["hello"]],
+        tool_ids=[],
         user_performing_action=admin_user,
     )
     link_persona(persona.id, connected_mcp_server.plugin_id, only_actions(["hello"]))
@@ -1239,7 +1239,7 @@ def test_only_bots_that_cannot_show_requests_lose_ask_actions(
             ),
         )
     persona = PersonaManager.create(
-        tool_ids=[connected_mcp_server.tool_ids["hello"]],
+        tool_ids=[],
         user_performing_action=admin_user,
     )
     link_persona(persona.id, connected_mcp_server.plugin_id, only_actions(["hello"]))
@@ -1273,7 +1273,7 @@ def test_a_bot_runs_an_action_its_agent_allows(
         Reply(text="Done.", conditions=RequestConditions(has_results_for=[CALL_ID])),
     )
     persona = PersonaManager.create(
-        tool_ids=[connected_mcp_server.tool_ids["hello"]],
+        tool_ids=[],
         user_performing_action=admin_user,
     )
     link_persona(

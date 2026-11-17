@@ -6,89 +6,19 @@ its actions, a plugin in the Organization library that holds it, agent links
 and policy rows."""
 
 from collections.abc import Mapping, Sequence
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import delete, select
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     IntegrationActionPolicyValue,
-    IntegrationAuthMode,
-    IntegrationKind,
-    PluginInstallationPolicy,
 )
 from onyx.db.models import (
     Integration,
     IntegrationActionPolicy,
     Persona__Plugin,
-    Plugin,
-    Plugin__Integration,
-    PluginVersion,
 )
-from onyx.db.plugin import get_or_create_organization_library__no_commit
-from onyx.integrations.sync import sync_integration_actions__no_commit
-
-
-def _add_integration(
-    name: str, *, mcp_server_id: int | None = None, tool_id: int | None = None
-) -> tuple[int, UUID]:
-    """An integration with no sign-in for the kind row, held by a published
-    plugin that each user gets by default. Returns the integration id and
-    the plugin id."""
-    with get_session_with_current_tenant() as db_session:
-        integration = Integration(
-            kind=IntegrationKind.MCP
-            if mcp_server_id is not None
-            else IntegrationKind.API,
-            name=name,
-            auth_mode=IntegrationAuthMode.NONE,
-            mcp_server_id=mcp_server_id,
-            tool_id=tool_id,
-        )
-        db_session.add(integration)
-        db_session.flush()
-        sync_integration_actions__no_commit(integration, db_session)
-        plugin_id, version_id = uuid4(), uuid4()
-        db_session.add(
-            Plugin(
-                id=plugin_id,
-                name=f"integration-{plugin_id.hex[:8]}",
-                description="",
-                marketplace_id=get_or_create_organization_library__no_commit(
-                    db_session
-                ),
-                installation_policy=PluginInstallationPolicy.DEFAULT,
-                current_version_id=version_id,
-                published_version_id=version_id,
-            )
-        )
-        db_session.flush()
-        db_session.add(
-            PluginVersion(id=version_id, plugin_id=plugin_id, version_number=1)
-        )
-        db_session.add(
-            Plugin__Integration(plugin_id=plugin_id, integration_id=integration.id)
-        )
-        db_session.commit()
-        return integration.id, plugin_id
-
-
-def add_mcp_integration(mcp_server_id: int, name: str) -> tuple[int, UUID]:
-    """The integration of an MCP server made through the old admin routes."""
-    return _add_integration(name, mcp_server_id=mcp_server_id)
-
-
-def add_openapi_integration(tool_id: int, name: str) -> tuple[int, UUID]:
-    """The integration of a custom OpenAPI tool made through the old admin
-    routes."""
-    return _add_integration(name, tool_id=tool_id)
-
-
-def delete_integration(integration_id: int, plugin_id: UUID) -> None:
-    with get_session_with_current_tenant() as db_session:
-        db_session.execute(delete(Plugin).where(Plugin.id == plugin_id))
-        db_session.execute(delete(Integration).where(Integration.id == integration_id))
-        db_session.commit()
 
 
 def link_persona(

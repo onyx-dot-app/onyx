@@ -348,8 +348,6 @@ def _validate_owner_choices(
     return editable
 
 
-
-
 def users_can_manage_policies(
     db_session: Session, kind: GatedAppKind, target_id: int
 ) -> bool:

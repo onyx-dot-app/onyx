@@ -69,9 +69,7 @@ GATE2_HELPERS: frozenset[str] = frozenset(
         "onyx.db.tools:can_manage_mcp_server",
         "onyx.db.tools:can_manage_tool",
         "onyx.db.tools:can_manage_own_tool",
-        "onyx.server.features.mcp.api:_ensure_mcp_server_owner_or_admin",
-        "onyx.server.features.mcp.api:_ensure_mcp_server_viewable",
-        "onyx.server.features.oauth_config.api:_assert_can_manage_oauth_config",
+        "onyx.integrations.service:manages_integration",
     }
 )
 
