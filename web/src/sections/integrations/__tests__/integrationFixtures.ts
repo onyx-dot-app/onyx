@@ -9,7 +9,7 @@ export function makeIntegration(
 ): AdminIntegration {
   return {
     id: 1,
-    kind: "mcp_server",
+    kind: "mcp",
     shape: "mcp_server",
     name: "Linear",
     description: "Manage issues",

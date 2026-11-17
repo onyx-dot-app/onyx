@@ -1,4 +1,4 @@
-export type IntegrationKind = "mcp_server" | "api";
+export type IntegrationKind = "mcp" | "api";
 export type IntegrationShape = "mcp_server" | "openapi" | "preset" | "custom";
 export type AuthMode = "none" | "shared" | "individual";
 export type AuthMethod = "oauth2" | "api_key" | "onyx_login" | "managed";

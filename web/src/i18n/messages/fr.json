@@ -10811,7 +10811,7 @@
       "filters": {
         "label": "Type d’intégration",
         "all": "Toutes",
-        "mcp_server": "Serveurs MCP",
+        "mcp": "Serveurs MCP",
         "api": "Applications"
       },
       "columns": {

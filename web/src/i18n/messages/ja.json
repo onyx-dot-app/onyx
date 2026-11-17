@@ -10811,7 +10811,7 @@
       "filters": {
         "label": "連携の種類",
         "all": "すべて",
-        "mcp_server": "MCP サーバー",
+        "mcp": "MCP サーバー",
         "api": "アプリ"
       },
       "columns": {
