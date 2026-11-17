@@ -518,13 +518,16 @@ def _check_settings_unchanged(
 
 
 def _lock_and_check_settings_unchanged(
-    integration: Integration,
+    integration_id: int,
     payload: IntegrationOAuthAttemptPayload,
     db_session: Session,
 ) -> None:
     """A settings change holds the integration row lock, so a grant from the
     old settings is not saved after the change commits."""
-    lock_integration__no_commit(integration.id, db_session)
+    lock_integration__no_commit(integration_id, db_session)
+    integration = get_integration_by_id(integration_id, db_session)
+    if integration is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "The integration no longer exists.")
     _check_settings_unchanged(integration, payload, db_session)
 
 
@@ -562,7 +565,7 @@ def _complete_manual(
             OnyxErrorCode.BAD_GATEWAY,
             f"{integration.name} did not complete the sign-in.",
         ) from error
-    _lock_and_check_settings_unchanged(integration, payload, db_session)
+    _lock_and_check_settings_unchanged(integration.id, payload, db_session)
     expires_at = token_data.get("expires_at")
     scope = token_data.get("scope")
     refresh_token = token_data.get("refresh_token")
@@ -607,7 +610,7 @@ def _complete_preset(
         redirect_uri=integration_oauth_redirect_uri(integration, oauth_client),
         code_verifier=payload.code_verifier,
     )
-    _lock_and_check_settings_unchanged(integration, payload, db_session)
+    _lock_and_check_settings_unchanged(integration.id, payload, db_session)
     secret, expires_at = preset_credentials_to_secret(grant.credentials)
     upsert_connection__no_commit(
         db_session,
@@ -641,6 +644,9 @@ def _complete_mcp(
         load_stored_tokens=False,
         cimd_enabled=oauth_client.cimd_enabled,
         expected_client_information_fingerprint=mcp.client_information_fingerprint,
+        check_settings_unchanged=lambda session: _lock_and_check_settings_unchanged(
+            integration.id, payload, session
+        ),
     )
     provider: OnyxOAuthClientProvider = make_integration_oauth_provider(server, storage)
     client_information = run_async_sync_no_cancel(storage.get_client_info())

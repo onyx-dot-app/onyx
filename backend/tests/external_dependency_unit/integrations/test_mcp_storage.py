@@ -1,11 +1,12 @@
 """The MCP SDK token storage on the integration tables."""
 
 import asyncio
-from unittest.mock import MagicMock
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 from mcp.client.auth.oauth2 import OAuthContext
-from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from mcp.shared.auth import OAuthClientInformationFull, OAuthMetadata, OAuthToken
 from pydantic import AnyUrl
 from sqlalchemy.orm import Session
 
@@ -25,7 +26,9 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import (
     SIGN_IN_REJECTED_REASON,
     read_connection_secret,
+    read_oauth_client,
 )
+from onyx.server.features.mcp import oauth as mcp_oauth
 from onyx.server.features.mcp.credentials import (
     mcp_oauth_client_information_fingerprint,
 )
@@ -224,3 +227,59 @@ def test_grant_for_an_entered_client_that_changed_is_refused(
         )
     )
     assert get_connection(db_session, integration.id, user.id) is not None
+
+
+def test_refresh_locks_the_oauth_client_before_the_connection(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    """The sign-in callback locks the OAuth client and then the connection.
+    A refresh that saves new metadata must use the same order."""
+    integration = make_integration(
+        kind=IntegrationKind.MCP,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
+    )
+    user = make_test_user("mcp_storage_lock_order")
+    storage = IntegrationTokenStorage(integration.id, user.id)
+    asyncio.run(storage.set_tokens(OAuthToken(access_token="a1", refresh_token="r1")))
+    context = MagicMock(spec=OAuthContext)
+    context.oauth_metadata = OAuthMetadata.model_validate(
+        {
+            "issuer": "https://auth.example.test",
+            "authorization_endpoint": "https://auth.example.test/authorize",
+            "token_endpoint": "https://auth.example.test/token",
+        }
+    )
+    storage.bind_oauth_context(context)
+    locks: list[str] = []
+    real_client = mcp_oauth.get_oauth_client
+    real_connection = mcp_oauth.get_connection
+
+    def client(*args: Any, **kwargs: Any) -> Any:
+        if kwargs.get("for_update"):
+            locks.append("client")
+        return real_client(*args, **kwargs)
+
+    def connection(*args: Any, **kwargs: Any) -> Any:
+        if kwargs.get("for_update"):
+            locks.append("connection")
+        return real_connection(*args, **kwargs)
+
+    with (
+        patch.object(mcp_oauth, "get_oauth_client", client),
+        patch.object(mcp_oauth, "get_connection", connection),
+    ):
+        assert asyncio.run(
+            storage.set_refreshed_tokens(
+                OAuthToken(access_token="a2", refresh_token="r2"), "r1"
+            )
+        )
+
+    assert locks == ["client", "connection"]
+    oauth_client = get_oauth_client(db_session, integration.id)
+    assert oauth_client is not None
+    db_session.refresh(oauth_client)
+    assert read_oauth_client(oauth_client).registration["oauth_metadata"]
