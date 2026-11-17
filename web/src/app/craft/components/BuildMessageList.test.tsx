@@ -290,7 +290,7 @@ describe("BuildMessageList thinking visibility", () => {
     expect(screen.getByText("Final answer")).toBeInTheDocument();
   });
 
-  it("keeps completed thought packets collapsed in the active stream", () => {
+  it("keeps completed thought packets collapsed in the active stream", async () => {
     renderList({
       isStreaming: true,
       timelineEvents: [
@@ -303,7 +303,8 @@ describe("BuildMessageList thinking visibility", () => {
     expect(
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Final answer")).toBeInTheDocument();
+    // Live text types out.
+    expect(await screen.findByText("Final answer")).toBeInTheDocument();
   });
 
   it("shows live thought packets as collapsed progress by default", () => {
