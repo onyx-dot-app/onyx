@@ -931,6 +931,7 @@ def connector_document_extraction(
                     window_end=window_end,
                     connector=connector_runner.connector,
                     connector_config_hash=connector_config_hash,
+                    uses_conversion_stage=lister_mode,
                 )
 
                 # checkpoint resumption OR the connector already finished.
