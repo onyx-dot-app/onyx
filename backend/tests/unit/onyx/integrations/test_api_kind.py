@@ -378,11 +378,10 @@ def test_openapi_build_chat_tools_keys_actions_by_the_unsubstituted_operation_id
     tool = Tool(id=6, name="me", openapi_schema=spec)
     monkeypatch.setattr(api_kind, "get_openapi_tool_for_integration", lambda *_: tool)
     integration = _integration(tool_id=tool.id, external_app_id=None)
-    scope = ToolApprovalScope(
-        app_kind=GatedAppKind.MCP_SERVER, target_id=21, action_id="get_USER_ID"
-    )
+    scope = ToolApprovalScope(integration_id=21, action_id="get_USER_ID")
     ctx = ChatToolContext(
         user_id=uuid4(),
+        credentials=_credentials({}),
         approval_for=lambda key: scope if key == "get_USER_ID" else None,
     )
 
