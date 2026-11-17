@@ -14,6 +14,7 @@ import functools
 import inspect
 import io
 import json
+import ssl
 import threading
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
@@ -93,7 +94,6 @@ _R = TypeVar("_R")
 
 # Google caps a batch request at 100 calls.
 _MAX_BATCH_SIZE = 100
-_DOWNLOAD_NUM_RETRIES = 3
 # Extra bytes a download chunk reads past the size threshold, so an oversized
 # file is detected without reading all of it.
 _CHUNK_SIZE_BUFFER = 64
@@ -109,9 +109,9 @@ _DOCS_FETCH_CHUNK_SIZE = 1024 * 1024
 _DOCS_FETCH_TRIES = 7
 _DOCS_FETCH_RETRY_DELAY_SECONDS = 2
 _DOCS_FETCH_RETRY_MAX_DELAY_SECONDS = 32
-_RATE_LIMITED_DOWNLOAD_TRIES = 8
-_RATE_LIMITED_DOWNLOAD_DELAY_SECONDS = 1
-_RATE_LIMITED_DOWNLOAD_MAX_DELAY_SECONDS = 32
+_DOWNLOAD_TRIES = 8
+_DOWNLOAD_RETRY_DELAY_SECONDS = 1
+_DOWNLOAD_RETRY_MAX_DELAY_SECONDS = 32
 _RATE_LIMIT_REASONS = frozenset({"userRateLimitExceeded", "rateLimitExceeded"})
 # The api label of the request metrics for the APIs that the limiter does not
 # budget. Drive and Docs use the DriveQuotaApi values.
@@ -318,17 +318,28 @@ def is_transient_google_error(error: BaseException) -> bool:
     return isinstance(error, _TRANSIENT_REQUEST_ERRORS)
 
 
-def _is_rate_limited_http_error(error: BaseException) -> bool:
-    return isinstance(error, HttpError) and _from_http_error(error).rate_limited
+# The connection errors that googleapiclient's own retry covers.
+_DOWNLOAD_CONNECTION_ERRORS: tuple[type[Exception], ...] = (
+    *GOOGLE_CONNECTION_ERRORS,
+    ssl.SSLError,
+)
 
 
-# The media download retries a rate limit itself for only a few seconds.
-_retry_rate_limited_download = retry_builder(
-    tries=_RATE_LIMITED_DOWNLOAD_TRIES,
-    delay=_RATE_LIMITED_DOWNLOAD_DELAY_SECONDS,
-    max_delay=_RATE_LIMITED_DOWNLOAD_MAX_DELAY_SECONDS,
-    exceptions=HttpError,
-    retry_if=_is_rate_limited_http_error,
+def _is_transient_download_error(error: BaseException) -> bool:
+    if isinstance(error, HttpError):
+        return _from_http_error(error).transient
+    return isinstance(error, _DOWNLOAD_CONNECTION_ERRORS)
+
+
+# The only retry of a media download: the download itself does not retry, so
+# the limiter sees each rate-limited try. Google's quotas refill within a
+# minute, and these waits add up to more than a minute.
+_retry_transient_download = retry_builder(
+    tries=_DOWNLOAD_TRIES,
+    delay=_DOWNLOAD_RETRY_DELAY_SECONDS,
+    max_delay=_DOWNLOAD_RETRY_MAX_DELAY_SECONDS,
+    exceptions=(HttpError, *_DOWNLOAD_CONNECTION_ERRORS),
+    retry_if=_is_transient_download_error,
 )
 
 _retry_transient_fetch = retry_builder(
@@ -372,8 +383,8 @@ def _record_request(api: str, outcome: RequestOutcome, count: int = 1) -> None:
 
 class _CountingHttp:
     """Wraps the http object of a media request and counts each HTTP request.
-    A media download retries in googleapiclient, with no ``execute`` for
-    each try, so the gateway counts at this level."""
+    A media download has no ``execute``, so the gateway counts at this
+    level."""
 
     def __init__(self, http: Any, api: str) -> None:
         self._http = http
@@ -534,10 +545,9 @@ def _download(request: Any, file_id: str, size_threshold: int) -> bytes:
     )
     done = False
     while not done:
-        # num_retries retries transient errors with exponential backoff.
-        download_progress, done = downloader.next_chunk(
-            num_retries=_DOWNLOAD_NUM_RETRIES
-        )
+        # No num_retries: _retry_transient_download retries the whole call,
+        # so the limiter sees a rate-limited try.
+        download_progress, done = downloader.next_chunk()
         if download_progress.resumable_progress > size_threshold:
             raise ExportSizeThresholdExceeded(
                 f"File {file_id} exceeds size threshold of {size_threshold}"
@@ -1219,7 +1229,7 @@ class GoogleDriveSourceOperations(SourceOperations):
         ``ExportSizeThresholdExceeded`` past ``size_threshold`` bytes."""
         request = self._drive(user_email).files().get_media(fileId=file_id)
         _add_resource_key_header(request, file_id, resource_key)
-        return _retry_rate_limited_download(self._limited_download)(
+        return _retry_transient_download(self._limited_download)(
             request,
             file_id,
             size_threshold,
@@ -1249,7 +1259,7 @@ class GoogleDriveSourceOperations(SourceOperations):
             .export_media(fileId=file_id, mimeType=mime_type)
         )
         _add_resource_key_header(request, file_id, resource_key)
-        return _retry_rate_limited_download(self._limited_download)(
+        return _retry_transient_download(self._limited_download)(
             request,
             file_id,
             size_threshold,
