@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "Rechercher dans Slack à la requête"
+        },
+        "jiraServiceManagement": {
+          "description": "Tickets de centre de services Jira Service Management"
         }
       }
     },
@@ -4940,6 +4943,45 @@
             "mailboxes": {
               "label": "Boîtes aux lettres",
               "description": "Indiquez les boîtes aux lettres à indexer (par ex. INBOX, Sent, Drafts). Laissez vide pour indexer toutes les boîtes aux lettres."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurer le connecteur Jira Service Management",
+          "subtext": "Configurez le contenu Jira Service Management à indexer. Vous pouvez tout indexer ou limiter l'indexation à un projet spécifique ou à une requête JQL.",
+          "fields": {
+            "jira_base_url": {
+              "label": "URL du site",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Tout"
+                },
+                "project": {
+                  "label": "Projet"
+                },
+                "jql": {
+                  "label": "Requête JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexe tous les tickets de centre de services accessibles au compte",
+              "description": "Onyx indexe les tickets de centre de services que le compte sélectionné peut lire. Pour indexer des tickets d'autres types de projet, choisissez un autre onglet."
+            },
+            "project_key": {
+              "label": "Clé du projet",
+              "description": "La clé d'un projet spécifique à indexer (par ex. 'IT')."
+            },
+            "jql_query": {
+              "label": "Requête JQL",
+              "description": "Une requête JQL personnalisée pour filtrer les tickets Jira Service Management.\n\nIMPORTANT : N'incluez aucun filtre temporel dans la requête JQL, car cela entrerait en conflit avec la logique du connecteur. N'incluez pas non plus de clauses ORDER BY.\n\nConsultez la [documentation JQL d'Atlassian](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) pour plus de détails sur la syntaxe."
+            },
+            "comment_email_blacklist": {
+              "label": "Liste d'exclusion d'e-mails pour les commentaires",
+              "description": "Pratique pour ignorer certains bots. Ajoutez les adresses e-mail des utilisateurs dont les commentaires ne doivent PAS être indexés."
             }
           }
         }
