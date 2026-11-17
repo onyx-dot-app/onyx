@@ -1,6 +1,7 @@
 """Default Chat selection preserves disabled tools and enables legacy OpenAPI."""
 
 from collections.abc import Callable, Generator
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -13,6 +14,22 @@ from onyx.db.persona import (
 )
 
 ToolFactory = Callable[..., Tool]
+
+OPENAPI_SCHEMA: dict[str, Any] = {
+    "openapi": "3.0.0",
+    "info": {"title": "Disabled Tool API", "version": "1.0.0"},
+    "servers": [{"url": "https://api.example.com"}],
+    "paths": {
+        "/test": {
+            "get": {
+                "operationId": "test_operation",
+                "summary": "Test operation",
+                "description": "A test operation",
+                "responses": {"200": {"description": "Success"}},
+            }
+        }
+    },
+}
 
 
 @pytest.fixture
@@ -252,9 +269,6 @@ def test_custom_tool_api_saves_default_chat_with_metadata(
     from onyx.db.tools import delete_tool__no_commit
     from onyx.server.features.tool import api
     from onyx.server.features.tool.models import CustomToolCreate, CustomToolUpdate
-    from tests.external_dependency_unit.tools.test_disabled_tool_not_constructed import (
-        OPENAPI_SCHEMA,
-    )
 
     monkeypatch.setattr(api, "has_global_permission", lambda *_: True)
     monkeypatch.setattr(api, "can_manage_tool", lambda *_: True)
@@ -402,9 +416,6 @@ def test_tool_update_and_default_selection_do_not_deadlock(
     from onyx.db.persona import set_default_chat_tools__no_commit
     from onyx.server.features.tool import api
     from onyx.server.features.tool.models import CustomToolUpdate
-    from tests.external_dependency_unit.tools.test_disabled_tool_not_constructed import (
-        OPENAPI_SCHEMA,
-    )
 
     monkeypatch.setattr(api, "has_global_permission", lambda *_: True)
     monkeypatch.setattr(api, "can_manage_tool", lambda *_: True)

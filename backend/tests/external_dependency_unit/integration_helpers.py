@@ -186,10 +186,7 @@ def make_openapi_integration(
     auth_mode: IntegrationAuthMode = IntegrationAuthMode.NONE,
     auth_method: IntegrationAuthMethod | None = None,
     header_template: dict[str, str] | None = None,
-    sync_actions: bool = True,
 ) -> tuple[Integration, Tool]:
-    """``sync_actions=False`` leaves the integration with no actions, as the
-    integration tables migration does."""
     tool = Tool(
         name=f"openapi-{uuid4().hex[:8]}",
         description="OpenAPI tool",
@@ -208,8 +205,7 @@ def make_openapi_integration(
         header_template=header_template,
         tool_id=tool.id,
     )
-    if sync_actions:
-        sync_integration_actions__no_commit(integration, db_session)
+    sync_integration_actions__no_commit(integration, db_session)
     db_session.commit()
     return integration, tool
 
