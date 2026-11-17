@@ -502,7 +502,7 @@ class _LimitedRequest:
     """A googleapiclient request that counts each ``execute`` by its outcome.
     With a limiter, it also spends before each ``execute`` and reports a
     rate-limit answer. The retry helpers call ``execute`` again for each try,
-    so each try counts and spends.
+    so each try counts, spends and reports.
 
     ``answers_counted`` is for a batch: its callback counts the answer of each
     request in it, so a batch that Google answers is not counted here. A
@@ -737,7 +737,9 @@ class GoogleDriveSourceOperations(SourceOperations):
         """Builds a request from the user's Drive client and executes it. A
         lost connection, a rate limit or a server error is tried again with
         backoff. After a lost connection, the next try uses a new client.
-        ``request_count`` is the number of calls in a batch."""
+        ``request_count`` is the number of calls in a batch. Each try spends
+        and reports its rate-limit answer: the limiter cuts on the refused
+        share, not on one answer."""
 
         def execute_once() -> Any:
             try:
@@ -1131,9 +1133,7 @@ class GoogleDriveSourceOperations(SourceOperations):
         )
         # Google can refuse single calls of a batch for their rate. Report
         # them by scope, with their count.
-        self._report_rate_limits(
-            DriveQuotaApi.DRIVE, user_email, list(errors.values())
-        )
+        self._report_rate_limits(DriveQuotaApi.DRIVE, user_email, list(errors.values()))
         return files, errors
 
     @source_operation(
