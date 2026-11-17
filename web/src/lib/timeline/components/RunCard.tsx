@@ -129,12 +129,14 @@ export function RunCard<S extends RunCardStep>({
     }
   }, [isRunning, startedAt]);
 
-  if (steps.length === 0 && !isRunning) return null;
-
+  // A run that stopped working with no steps (e.g. "Thinking..." before a
+  // text-only answer) has nothing to show. It leaves through Presence's exit,
+  // so it fades out and its height closes, instead of vanishing.
+  const visible = steps.length > 0 || isRunning;
   const foldable = steps.length > 0;
 
   return (
-    <Presence appear={arrivedLive} grow>
+    <Presence show={visible} appear={arrivedLive} grow>
       <TimelineRoot>
         <Line
           flavour="card"
