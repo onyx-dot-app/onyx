@@ -15,28 +15,20 @@ from typing import Any
 from sqlalchemy import LargeBinary, select, update
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
+from ee.onyx.utils.encryption import (
+    DecryptionError,
+    build_keyring,
+    decrypt_with_keyring,
+    get_keyring,
+    is_current_ciphertext,
+)
 from onyx.db.models import Base, EncryptedJson, EncryptedString
-from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 
 logger = setup_logger()
 
 _BATCH_SIZE = 500
-
-
-def _can_decrypt_with_current_key(data: bytes) -> bool:
-    """Check if data is already encrypted with the current key.
-
-    Passes the key explicitly so the fallback-to-raw-decode path in
-    _decrypt_bytes is NOT triggered — a clean success/failure signal.
-    """
-    try:
-        decrypt_bytes_to_string(data, key=ENCRYPTION_KEY_SECRET)
-        return True
-    except Exception:
-        return False
 
 
 def _discover_encrypted_columns() -> list[tuple[type, str, list[str], bool]]:
@@ -83,10 +75,15 @@ def rotate_encryption_key(
     if not global_version.is_ee_version():
         raise RuntimeError("EE mode is not enabled — rotation requires EE encryption.")
 
-    if not ENCRYPTION_KEY_SECRET:
+    keyring = get_keyring()
+    if keyring.write_key_id is None:
         raise RuntimeError(
-            "ENCRYPTION_KEY_SECRET is not set — cannot rotate. Set the target encryption key in the environment before running."
+            "ENCRYPTION_WRITE_KEY_ID is not set — cannot rotate. Set the target "
+            "encryption key in the environment before running."
         )
+    # Without --old-key, every format the process can read is a source: legacy
+    # ciphertext under ENCRYPTION_KEY_SECRET, plain text, and staged keys.
+    old_keyring = build_keyring(old_key, "", "") if old_key else keyring
 
     encrypted_columns = _discover_encrypted_columns()
     totals: dict[str, int] = {}
@@ -109,19 +106,16 @@ def rotate_encryption_key(
             if raw_bytes is None:
                 continue
 
-            if _can_decrypt_with_current_key(raw_bytes):
+            if is_current_ciphertext(keyring, raw_bytes):
                 continue
 
             try:
-                if not old_key:
-                    decrypted_str = raw_bytes.decode("utf-8")
-                else:
-                    decrypted_str = decrypt_bytes_to_string(raw_bytes, key=old_key)
+                decrypted_str = decrypt_with_keyring(old_keyring, raw_bytes).plaintext
 
                 # For EncryptedJson, parse back to dict so the TypeDecorator
                 # can json.dumps() it cleanly (avoids double-encoding).
                 value: Any = json.loads(decrypted_str) if is_json else decrypted_str
-            except (ValueError, UnicodeDecodeError) as e:
+            except (DecryptionError, ValueError) as e:
                 pk_vals = [row[i] for i in range(len(pk_names))]
                 logger.warning(
                     "Could not decrypt/parse %s.%s row %s — skipping: %s",
