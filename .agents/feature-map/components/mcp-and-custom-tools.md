@@ -91,8 +91,7 @@ This component owns:
 Its neighbours own:
 - [[tools-framework]]: the `Tool` interface and per-turn construction.
 - [[plugins]]: the plugin UI, Default Chat selection and personal preferences.
-- [[auth-and-identity]]: the OpenAPI per-tool `OAuthConfig` and
-  `OAuthUserToken` rows, and the OAuth attempt store.
+- [[auth-and-identity]]: the OAuth attempt store.
 - [[craft-external-apps]]: action policy storage and precedence, and the Craft
   proxy gate.
 - [[chat-frontend]]: the approval card.
@@ -206,9 +205,12 @@ tag; a status-only change keeps it. There is no import job.
 
 Chat, the sandbox proxy and Craft read only the integration tables. The old
 MCP, OAuth config, user OAuth token, Craft external app and tool status routes
-are removed. No production code reads or writes the old sign-in, policy and
-access tables; `backend/tests/unit/onyx/integrations/test_no_old_table_access.py`
-lists the few rollback and cleanup writes that remain.
+are removed. The old sign-in, policy and preference tables stay for a
+rollback but have no model (`backend/alembic/env.py` notes it). The models that
+remain for old tables are `OAuthConfig` and `MCPConnectionConfig` (the targets
+of `Tool.oauth_config_id` and `MCPServer.admin_connection_config_id`),
+`GatedApp` (the rollback key on approval rows) and `MCPServer__UserGroup` (a
+group delete and the community downgrade remove its rows).
 
 **Chat on integrations.** `db/tools.py:capture_persona_tool_configuration`
 copies the agent's built-in tools and its `persona__plugin` links (plugin id
