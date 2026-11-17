@@ -37,6 +37,9 @@ function Preferences() {
       await action();
     } catch (e) {
       setError(errorMessage(e));
+      // A failed action can still have changed something (a server change
+      // signs out first), so show the app's real state again.
+      void getPrefs().then(setPrefs);
     }
   }
 

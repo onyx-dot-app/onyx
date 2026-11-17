@@ -114,6 +114,7 @@ fn hand_over_session(
 
 /// Opens (or reuses) the main window logged in as `token`, at `path` on the server.
 pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Result<(), String> {
+    let epoch = app.state::<AppState>().epoch();
     let server_url = Url::parse(server).map_err(|e| e.to_string())?;
     let target = server_url.join(path).map_err(|e| e.to_string())?;
 
@@ -192,9 +193,21 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
     #[cfg(target_os = "macos")]
     crate::macos_dialogs::install(&window);
 
-    let cookie_name = app.state::<AppState>().cookie_name(server).await;
-    hand_over_session(&window, &server_url, &cookie_name, token)?;
-    window.navigate(target).map_err(|e| e.to_string())?;
+    // A window that did not get the session must not stay open: the next
+    // open() would reuse it without a session and show the web login page.
+    let result = async {
+        let cookie_name = app.state::<AppState>().cookie_name(server).await;
+        if app.state::<AppState>().epoch() != epoch {
+            return Err("The session ended while Onyx was opening.".to_string());
+        }
+        hand_over_session(&window, &server_url, &cookie_name, token)?;
+        window.navigate(target).map_err(|e| e.to_string())
+    }
+    .await;
+    if let Err(e) = result {
+        let _ = window.destroy();
+        return Err(e);
+    }
     let _ = window.set_focus();
     Ok(())
 }

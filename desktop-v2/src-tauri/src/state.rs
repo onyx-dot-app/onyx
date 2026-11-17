@@ -50,10 +50,25 @@ impl AppState {
                 return name.clone();
             }
         }
-        let name = self.api.session_cookie_name(server).await;
-        *self.cookie_name.lock().unwrap_or_else(|p| p.into_inner()) =
-            Some((server.to_string(), name.clone()));
-        name
+        // A brief metadata failure would otherwise give the web UI the wrong
+        // cookie and show a valid session as signed out: retry, and cache
+        // only a name the server reported.
+        let mut last_error = String::new();
+        for attempt in 0..3 {
+            if attempt > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+            match self.api.session_cookie_name(server).await {
+                Ok(name) => {
+                    *self.cookie_name.lock().unwrap_or_else(|p| p.into_inner()) =
+                        Some((server.to_string(), name.clone()));
+                    return name;
+                }
+                Err(e) => last_error = e,
+            }
+        }
+        log::warn!("could not read the session cookie name: {last_error}");
+        crate::api::DEFAULT_SESSION_COOKIE.to_string()
     }
 
     /// The cookie name already looked up for `server`, or the default.
@@ -96,7 +111,10 @@ impl AppState {
     }
 
     pub fn clear_token(&self, server: &str) -> Result<(), String> {
-        *self.token.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        // Held until the keychain entry is gone, so a concurrent `token()`
+        // cannot load the old token back into the cache.
+        let mut cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
+        *cache = None;
         session_store::clear(server)
     }
 

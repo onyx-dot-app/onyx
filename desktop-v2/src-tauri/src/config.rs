@@ -49,7 +49,11 @@ impl ConfigStore {
             fs::create_dir_all(parent).map_err(|e| format!("Could not create config dir: {e}"))?;
         }
         let raw = serde_json::to_string_pretty(&next).map_err(|e| e.to_string())?;
-        fs::write(&self.path, raw).map_err(|e| format!("Could not save config: {e}"))?;
+        // Written beside the file, then renamed over it, so a failed write
+        // never leaves a truncated settings file.
+        let tmp = self.path.with_extension("json.tmp");
+        fs::write(&tmp, raw).map_err(|e| format!("Could not save config: {e}"))?;
+        fs::rename(&tmp, &self.path).map_err(|e| format!("Could not save config: {e}"))?;
         *guard = next;
         Ok(())
     }

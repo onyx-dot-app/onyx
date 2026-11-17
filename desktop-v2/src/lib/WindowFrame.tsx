@@ -38,15 +38,19 @@ export function WindowFrame({ title, subtitle, children }: WindowFrameProps) {
 
 interface FieldProps {
   label: string;
+  // The id of the input this label names, for assistive technology.
+  inputId: string;
   children: ReactNode;
 }
 
-export function Field({ label, children }: FieldProps) {
+export function Field({ label, inputId, children }: FieldProps) {
   return (
     <Section gap={1.5} alignItems="stretch" height="fit">
-      <Text font="secondary-action" color="text-04">
-        {label}
-      </Text>
+      <label htmlFor={inputId}>
+        <Text font="secondary-action" color="text-04">
+          {label}
+        </Text>
+      </label>
       {children}
     </Section>
   );

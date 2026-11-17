@@ -58,12 +58,14 @@ bun install
 bun run dev
 ```
 
-Point onboarding at any Onyx server v4.2 or later. The default is `http://localhost:3000`.
+Point onboarding at any Onyx server v4.2 or later. The default is `http://localhost:3000`. A remote
+server needs `https://`; `http://` works only for a server on this computer.
 
 ## Checks
 
 ```bash
 bun run typecheck   # tsc
+bun run vite:build  # the Rust build embeds dist/, so build it first
 bun run lint:rust   # cargo clippy -D warnings
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo test --manifest-path src-tauri/Cargo.toml

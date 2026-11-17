@@ -111,13 +111,21 @@ pub fn handle(app: &AppHandle, id: &str) {
         OPEN => windows::show_primary(app),
         QUIT => app.exit(0),
         NEW_CHAT => {
-            let Ok((server, token)) = app.state::<AppState>().session() else {
+            let state = app.state::<AppState>();
+            let epoch = state.epoch();
+            let Ok((server, token)) = state.session() else {
                 windows::route(app);
                 return;
             };
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                let _ = main_window::open(&app, &server, &token, "/app").await;
+                // A sign-out between the menu click and this task wins.
+                if app.state::<AppState>().epoch() != epoch {
+                    return;
+                }
+                if let Err(e) = main_window::open(&app, &server, &token, "/app").await {
+                    log::warn!("could not open a new chat: {e}");
+                }
             });
         }
         RELOAD => {

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Button, InputTypeIn, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { mount } from "@/lib/mount";
@@ -12,18 +12,23 @@ function Onboarding() {
   const [checking, setChecking] = useState(false);
   const [info, setInfo] = useState<ServerInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Each check gets an id; editing the URL starts a new one, so a check for
+  // the old URL can never enable Continue for it.
+  const checkId = useRef(0);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    const id = ++checkId.current;
     setChecking(true);
     setError(null);
     setInfo(null);
     try {
-      setInfo(await checkServer(url));
+      const result = await checkServer(url);
+      if (id === checkId.current) setInfo(result);
     } catch (e) {
-      setError(errorMessage(e));
+      if (id === checkId.current) setError(errorMessage(e));
     } finally {
-      setChecking(false);
+      if (id === checkId.current) setChecking(false);
     }
   }
 
@@ -40,15 +45,17 @@ function Onboarding() {
     <WindowFrame title="Welcome to Onyx" subtitle="Connect to your Onyx server">
       <form onSubmit={onSubmit}>
         <Section gap={4} alignItems="stretch" height="fit">
-          <Field label="Server URL">
+          <Field label="Server URL" inputId="server-url">
             <InputTypeIn
               id="server-url"
               value={url}
               autoFocus
               spellCheck={false}
               onChange={(e) => {
+                checkId.current += 1;
                 setUrl(e.target.value);
                 setInfo(null);
+                setChecking(false);
               }}
               placeholder="https://cloud.onyx.app"
             />

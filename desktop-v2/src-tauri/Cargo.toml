@@ -17,6 +17,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # native-tls: trust what the OS trusts (keychain roots, corporate TLS proxies).
 reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
+tokio = { version = "1", features = ["time"] }
 url = "2.5"
 keyring = { version = "3", features = ["apple-native"] }
 rfd = "0.15"

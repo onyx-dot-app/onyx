@@ -33,7 +33,7 @@ function Login() {
       <Section gap={4} alignItems="stretch" height="fit">
         <form onSubmit={onSubmit}>
           <Section gap={4} alignItems="stretch" height="fit">
-            <Field label="Email">
+            <Field label="Email" inputId="email">
               <InputTypeIn
                 id="email"
                 type="email"
@@ -43,7 +43,7 @@ function Login() {
                 onChange={(e) => setEmail(e.target.value)}
               />
             </Field>
-            <Field label="Password">
+            <Field label="Password" inputId="password">
               <InputPasswordTypeIn
                 id="password"
                 autoComplete="current-password"
