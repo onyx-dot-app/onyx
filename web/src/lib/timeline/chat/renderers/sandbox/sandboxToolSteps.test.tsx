@@ -82,22 +82,21 @@ function renderMessage(packets: Packet[]) {
   );
 }
 
-// Opens the run card when it is folded. Its fold button is named by the
-// step count.
+// Opens the run card when it is folded, then its steps, which start closed.
+// The card's fold button is named by the step count.
 async function openRun() {
   const fold = screen.queryByRole("button", { name: /^\d+ steps?$/ });
   if (fold?.getAttribute("aria-expanded") === "false") {
     await act(async () => fold.click());
   }
-}
-
-// Opens the run card and every step in it.
-async function expandTimeline() {
-  await screen.findByText("Done.");
-  await openRun();
   for (const step of screen.queryAllByRole("button", { expanded: false })) {
     await act(async () => step.click());
   }
+}
+
+async function expandTimeline() {
+  await screen.findByText("Done.");
+  await openRun();
 }
 
 const PATCH = [
@@ -158,6 +157,7 @@ test("a command shows its output while it runs and how it ended", async () => {
     expect(
       (await screen.findAllByText("Running command")).length
     ).toBeGreaterThan(0);
+    await openRun();
     expect(view.container).toHaveTextContent("$ make test");
     // While it runs, only the last lines of the output are in the page.
     expect(screen.getByText(/test_8 ok/)).toBeInTheDocument();
@@ -617,9 +617,6 @@ test("a call the user stopped shows as stopped, not as a result", async () => {
   );
   try {
     await openRun();
-    for (const step of screen.queryAllByRole("button", { expanded: false })) {
-      await act(async () => step.click());
-    }
     // Both calls show as stopped.
     expect(await screen.findAllByText("Stopped")).toHaveLength(2);
     expect(screen.getByText("waiting")).toBeInTheDocument();
