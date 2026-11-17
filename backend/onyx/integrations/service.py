@@ -74,6 +74,7 @@ from onyx.integrations.connections import (
     sign_in_host,
     sign_in_settings_for,
 )
+from onyx.integrations.craft import always_asks
 from onyx.integrations.kinds.mcp_server import fetch_mcp_actions
 from onyx.integrations.models import (
     ApiConfig,
@@ -906,6 +907,7 @@ def _credential_fields(integration: Integration) -> list[CredentialField]:
 
 
 def _action_views(
+    integration: Integration,
     actions: list[IntegrationAction],
     admin_rows: Mapping[str, IntegrationActionPolicyValue],
 ) -> list[IntegrationActionView]:
@@ -922,6 +924,7 @@ def _action_views(
                 else None
             ),
             effective_admin_policy=admin_policy(admin_rows, action.key, action),
+            always_asks=always_asks(integration.kind, action.key),
         )
         for action in actions
     ]
@@ -932,7 +935,7 @@ def action_views(
 ) -> list[IntegrationActionView]:
     rows = get_policy_rows(db_session, integration.id, None)
     return _action_views(
-        list_integration_actions(integration.id, db_session), rows.admin
+        integration, list_integration_actions(integration.id, db_session), rows.admin
     )
 
 
@@ -1158,7 +1161,9 @@ def admin_actions(
             STORED_TO_EFFECTIVE[default_row] if default_row is not None else None
         ),
         actions=_action_views(
-            list_integration_actions(integration.id, db_session), rows.admin
+            integration,
+            list_integration_actions(integration.id, db_session),
+            rows.admin,
         ),
     )
 
@@ -1303,7 +1308,9 @@ def member_actions(
             ),
         )
         for view in _action_views(
-            list_integration_actions(integration.id, db_session), rows.admin
+            integration,
+            list_integration_actions(integration.id, db_session),
+            rows.admin,
         )
     ]
 
