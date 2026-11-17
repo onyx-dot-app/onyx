@@ -441,6 +441,25 @@ describe("useComposerToolsState", () => {
     expect(result.current.disabledToolIds).toEqual([]);
   });
 
+  it("holds a send while a saved switch-off waits for the plugin list", async () => {
+    mockApi({
+      holdTools: true,
+      preferences: {
+        "0": { disabled_tool_ids: [], disabled_plugin_ids: ["p"] },
+      },
+    });
+    const { result } = renderTools();
+    await waitFor(() => expect(client.isFetching()).toBe(1));
+    expect(result.current.toolOptionsReady).toBe(false);
+  });
+
+  it("sends at once when nothing is switched off, before the plugin list loads", async () => {
+    mockApi({ holdTools: true });
+    const { result } = renderTools();
+    await waitFor(() => expect(client.isFetching()).toBe(1));
+    expect(result.current.toolOptionsReady).toBe(true);
+  });
+
   it("turns on an OpenAPI tool that an old tool id still lists as off", async () => {
     const api = mockApi({
       preferences: {
