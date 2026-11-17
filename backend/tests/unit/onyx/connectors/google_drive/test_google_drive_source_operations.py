@@ -660,11 +660,13 @@ def test_a_429_that_names_a_per_user_quota_cuts_only_that_user(
         mock.patch.object(
             source_operations, "_download", side_effect=_http_error(429, body)
         ),
+        mock.patch("time.sleep"),
         pytest.raises(GoogleDriveHttpError),
     ):
         gateway.download_file(user_email="a@co.com", file_id="f", size_threshold=10)
 
-    assert limiter.reported == [("drive", "a@co.com", user_scope)]
+    tries = source_operations._RATE_LIMITED_DOWNLOAD_TRIES
+    assert limiter.reported == [("drive", "a@co.com", user_scope)] * tries
 
 
 def test_a_batch_read_spends_one_read_for_each_file() -> None:
