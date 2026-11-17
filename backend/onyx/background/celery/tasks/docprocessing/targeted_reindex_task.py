@@ -35,6 +35,7 @@ from onyx.db.targeted_reindex import (
     resolve_failure_derived_targets,
     targets_to_connector_failures,
 )
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
@@ -170,6 +171,9 @@ def run_targeted_reindex(
             attempt.time_started = datetime.datetime.now(datetime.timezone.utc)
         job.status = IndexingStatus.IN_PROGRESS
         db_session.commit()
+        # Keeps check_for_indexing, which runs the stale-job validator,
+        # scheduled for this tenant while the job is open.
+        maybe_mark_tenant_active(get_current_tenant_id(), caller="targeted_reindex")
 
         resolved_count = 0
         still_failing_count = 0
@@ -196,6 +200,11 @@ def run_targeted_reindex(
             failed_keys: set[tuple[int, str]] = set()
             pair_ends: dict[int, _PairEnd] = {}
             for cc_pair_id, cc_targets in by_cc_pair.items():
+                # The stale-job validator can fail the job while a pair runs.
+                # Index no more pairs after that.
+                db_session.refresh(job, ["status"])
+                if job.status.is_terminal():
+                    break
                 # A Cancel stops the pairs not yet fetched. One that arrives
                 # while a pair runs ends that pair's attempts CANCELED after it.
                 if cc_pair_id in _canceled_pair_ids(db_session, attempts):

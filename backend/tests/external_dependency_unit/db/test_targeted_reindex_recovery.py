@@ -11,10 +11,21 @@ from onyx.background.celery.tasks.docprocessing.targeted_reindex_task import (
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import IndexAttempt, TargetedReindexJob, TargetedReindexJobTarget
 from onyx.db.targeted_reindex import TargetSpec, create_targeted_reindex_job
+from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
 )
+
+
+def _delete_job(db_session: Session, job_id: int) -> None:
+    db_session.rollback()
+    db_session.query(TargetedReindexJobTarget).filter_by(
+        targeted_reindex_job_id=job_id
+    ).delete()
+    db_session.query(IndexAttempt).filter_by(targeted_reindex_job_id=job_id).delete()
+    db_session.query(TargetedReindexJob).filter_by(id=job_id).delete()
+    db_session.commit()
 
 
 @pytest.fixture
@@ -26,13 +37,7 @@ def job(db_session: Session) -> Generator[TargetedReindexJob, None, None]:
     row = db_session.get(TargetedReindexJob, result.targeted_reindex_job_id)
     assert row is not None
     yield row
-    db_session.rollback()
-    db_session.query(TargetedReindexJobTarget).filter_by(
-        targeted_reindex_job_id=row.id
-    ).delete()
-    db_session.query(IndexAttempt).filter_by(targeted_reindex_job_id=row.id).delete()
-    db_session.delete(row)
-    db_session.commit()
+    _delete_job(db_session, row.id)
     cleanup_cc_pair(db_session, pair)
 
 
@@ -117,3 +122,91 @@ def test_late_worker_does_not_overwrite_reaped_state(
     assert all(
         attempt.status == IndexingStatus.FAILED for attempt in job.index_attempts
     )
+
+
+def test_reaped_job_stops_before_next_pair(db_session: Session) -> None:
+    from onyx.background.celery.tasks.docprocessing.tasks import (
+        validate_active_indexing_attempts,
+    )
+    from onyx.background.indexing.run_targeted_reindex import CCPairReindexResult
+
+    pairs = [make_cc_pair(db_session), make_cc_pair(db_session)]
+    result = create_targeted_reindex_job(
+        db_session,
+        None,
+        [TargetSpec(cc_pair_id=pair.id, document_id="lost-doc") for pair in pairs],
+    )
+    job_id = result.targeted_reindex_job_id
+
+    def reap_while_processing(**_: object) -> CCPairReindexResult:
+        db_session.expire_all()
+        for attempt in db_session.query(IndexAttempt).filter_by(
+            targeted_reindex_job_id=job_id
+        ):
+            attempt.time_started = datetime.now(timezone.utc) - timedelta(days=1)
+        db_session.commit()
+        validate_active_indexing_attempts(MagicMock())
+        return CCPairReindexResult(
+            landed_doc_ids=set(), failed_doc_ids=set(), unsupported=False
+        )
+
+    try:
+        with patch(
+            "onyx.background.indexing.run_targeted_reindex.process_targets_for_cc_pair",
+            side_effect=reap_while_processing,
+        ) as processor:
+            run_targeted_reindex(job_id)
+        assert processor.call_count == 1
+    finally:
+        _delete_job(db_session, job_id)
+        for pair in pairs:
+            cleanup_cc_pair(db_session, pair)
+
+
+def test_submit_and_start_mark_tenant_active(
+    db_session: Session, job: TargetedReindexJob
+) -> None:
+    from onyx.background.indexing.run_targeted_reindex import CCPairReindexResult
+    from onyx.server.documents.targeted_reindex import (
+        DocumentTargetRequest,
+        TargetedReindexRequest,
+        submit_targeted_reindex,
+    )
+
+    tenant_id = get_current_tenant_id()
+    with (
+        patch(
+            "onyx.background.celery.tasks.docprocessing.targeted_reindex_task.maybe_mark_tenant_active"
+        ) as mark,
+        patch(
+            "onyx.background.indexing.run_targeted_reindex.process_targets_for_cc_pair",
+            return_value=CCPairReindexResult(
+                landed_doc_ids=set(), failed_doc_ids=set(), unsupported=False
+            ),
+        ),
+    ):
+        run_targeted_reindex(job.id)
+    mark.assert_called_once_with(tenant_id, caller="targeted_reindex")
+
+    pair_id = job.index_attempts[0].connector_credential_pair_id
+    with (
+        patch(
+            "onyx.server.documents.targeted_reindex.maybe_mark_tenant_active"
+        ) as mark,
+        patch("onyx.server.documents.targeted_reindex.client_app"),
+        patch(
+            "onyx.server.documents.targeted_reindex.verify_user_can_manage_all_cc_pairs",
+            return_value=True,
+        ),
+    ):
+        response = submit_targeted_reindex(
+            TargetedReindexRequest(
+                targets=[
+                    DocumentTargetRequest(cc_pair_id=pair_id, document_id="new-doc")
+                ]
+            ),
+            user=MagicMock(id=None),
+            db_session=db_session,
+        )
+    _delete_job(db_session, response.targeted_reindex_job_id)
+    mark.assert_called_once_with(tenant_id, caller="targeted_reindex")

@@ -43,6 +43,7 @@ from onyx.db.targeted_reindex import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -146,6 +147,9 @@ def submit_targeted_reindex(
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     tenant_id = get_current_tenant_id()
+    # Keeps check_for_indexing, which runs the stale-job validator, scheduled
+    # for this tenant until a lost task's job reaches its deadline.
+    maybe_mark_tenant_active(tenant_id, caller="targeted_reindex")
     try:
         # Route to the existing PRIMARY queue. The design has the trigger
         # task running on the primary worker that already owns the
