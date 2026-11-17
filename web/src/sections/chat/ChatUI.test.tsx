@@ -252,6 +252,17 @@ test("a session-load failure is visible alongside an existing response error", (
 });
 
 test("a failed response keeps partial text and ends search activity", async () => {
+  // jsdom fires no animation events, so titles swap without motion.
+  jest.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+    matches: query.includes("prefers-reduced-motion"),
+    media: query,
+    onchange: null,
+    addListener: jest.fn(),
+    removeListener: jest.fn(),
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+    dispatchEvent: jest.fn(),
+  }));
   const packets: Packet[] = [
     {
       placement: { turn_index: 0, tab_index: 0 },
@@ -310,12 +321,14 @@ test("a failed response keeps partial text and ends search activity", async () =
     await screen.findByText("Provider declined the request")
   ).toBeInTheDocument();
   expect(await screen.findByText("Partial answer")).toBeInTheDocument();
-  // The run header settles; the open step keeps its own title.
+  // The run header settles, and the run folds under the text.
   await waitFor(() => {
-    expect(screen.getByText(/^Thought for/)).toBeInTheDocument();
-    expect(screen.getAllByText("Searching internal documents")).toHaveLength(1);
+    expect(
+      screen.queryByText("Searching internal documents")
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("onyx-ai-message")).toBeInTheDocument();
   });
+  jest.mocked(window.matchMedia).mockRestore();
 });
 
 test("readiness errors do not offer regeneration before input is available", () => {

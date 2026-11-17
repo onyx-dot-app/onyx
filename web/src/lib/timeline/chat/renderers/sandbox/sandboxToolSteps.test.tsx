@@ -82,13 +82,21 @@ function renderMessage(packets: Packet[]) {
   );
 }
 
-// A run that works or has one step is already open; only a folded run has
-// the expand button.
+// Opens the run card when it is folded. Its fold button is named by the
+// step count.
+async function openRun() {
+  const fold = screen.queryByRole("button", { name: /^\d+ steps?$/ });
+  if (fold?.getAttribute("aria-expanded") === "false") {
+    await act(async () => fold.click());
+  }
+}
+
+// Opens the run card and every step in it.
 async function expandTimeline() {
   await screen.findByText("Done.");
-  const expand = screen.queryByRole("button", { name: "Expand timeline" });
-  if (expand) {
-    await act(async () => expand.click());
+  await openRun();
+  for (const step of screen.queryAllByRole("button", { expanded: false })) {
+    await act(async () => step.click());
   }
 }
 
@@ -608,11 +616,12 @@ test("a call the user stopped shows as stopped, not as a result", async () => {
     ])
   );
   try {
-    await act(async () => {
-      screen.queryByRole("button", { name: "Expand timeline" })?.click();
-    });
-    // Both calls, and the timeline's own stopped step
-    expect(await screen.findAllByText("Stopped")).toHaveLength(3);
+    await openRun();
+    for (const step of screen.queryAllByRole("button", { expanded: false })) {
+      await act(async () => step.click());
+    }
+    // Both calls show as stopped.
+    expect(await screen.findAllByText("Stopped")).toHaveLength(2);
     expect(screen.getByText("waiting")).toBeInTheDocument();
     expect(screen.queryByText("Ran command")).not.toBeInTheDocument();
     expect(screen.queryByText("No output")).not.toBeInTheDocument();
@@ -647,9 +656,7 @@ test("a code mode call that its cell's end cut off shows as stopped", async () =
   const view = render(renderMessage(cellPackets));
   try {
     // Stopped as soon as the cell ends, while the turn goes on
-    await act(async () => {
-      screen.queryByRole("button", { name: "Expand timeline" })?.click();
-    });
+    await openRun();
     expect(await screen.findByText("Stopped")).toBeInTheDocument();
     expect(screen.getByText("waiting")).toBeInTheDocument();
     expect(screen.queryByText("Command failed")).not.toBeInTheDocument();
