@@ -363,7 +363,9 @@ and stops every active background agent on the selected branch. The root turn an
 A parent's Stop blocks its later spawns. A stopped run records `RunFailureKind.STOPPED_BY_USER`:
 `list_agents` shows "stopped by the user", and its result wakes no agent; the root reads it as a notice at its next step.
 Return `ChildRunWait` to wait for results without holding a tool thread.
-Paths are readable labels and may repeat.
+An agent's path is its parent's path plus its name, and it names one agent on the branch:
+`register_child` refuses a name whose path a visible agent holds, finished agents included.
+Chat's agent tools address agents by that path, or by `..` for the caller's parent; models never see agent IDs.
 
 Foreground children are the default. The parent waits for their terminal results and cancels them on failure or cancellation.
 Failed child cancellation records an error without skipping sibling cancellation or releasing locally owned work before it drains.

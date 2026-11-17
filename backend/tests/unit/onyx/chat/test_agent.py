@@ -1167,13 +1167,9 @@ def test_child_notification_remaps_citations() -> None:
             )
         ]
         assert len(notifications) == 2
-        for notification, completion, citation in zip(
-            notifications, completions, (2, 3), strict=True
-        ):
+        for notification, citation in zip(notifications, (2, 3), strict=True):
             assert json.loads(notification.text.split("\n", 1)[1]) == {
                 "agent": "/root/research",
-                "agent_id": completion.agent_id,
-                "run_id": completion.run_id,
                 "status": "complete",
                 "answer": f"Child evidence [{citation}]",
             }

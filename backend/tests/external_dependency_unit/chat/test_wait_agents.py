@@ -5,7 +5,6 @@ runs release through the run store, whose release event dispatches the root's
 follow-up.
 """
 
-import re
 import time
 from collections.abc import Callable, Generator
 from threading import Event
@@ -48,7 +47,6 @@ from onyx.llm.models import (
     GenerationRequest,
     TextContent,
     ToolCall,
-    ToolResultMessage,
 )
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -130,7 +128,7 @@ class Workers:
         ]
         if len(self.root_requests) == 1:
             if self.spawn_and_wait:
-                return AssistantMessage(content=[*spawns, self._wait_call(request)])
+                return AssistantMessage(content=[*spawns, self._wait_call()])
             return AssistantMessage(content=spawns)
         if not self.first_turn_done:
             self.first_turn_done = True
@@ -141,26 +139,18 @@ class Workers:
             if not self.wait:
                 return _text(WAITING)
             return AssistantMessage(
-                content=[TextContent(text=WAITING), self._wait_call(request)]
+                content=[TextContent(text=WAITING), self._wait_call()]
             )
         seen = [name for name in self.names if f"Result {name}" in str(texts)]
         return _text(f"Answer with {', '.join(seen) or 'nothing'}")
 
-    def _wait_call(self, request: GenerationRequest) -> ToolCall:
+    def _wait_call(self) -> ToolCall:
         if self.wait_for is None:
             return ToolCall(id="wait", name=WAIT_AGENTS_TOOL_NAME, arguments={})
-        agent_ids = {
-            match[1]: match[2]
-            for message in request.messages
-            if isinstance(message, ToolResultMessage)
-            and (
-                match := re.search(r"/root/(\w+) \(agent_id: ([\w-]+)\)", message.text)
-            )
-        }
         return ToolCall(
             id="wait",
             name=WAIT_AGENTS_TOOL_NAME,
-            arguments={"agent_ids": [agent_ids[name] for name in self.wait_for]},
+            arguments={"targets": [f"/root/{name}" for name in self.wait_for]},
         )
 
 

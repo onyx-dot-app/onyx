@@ -279,8 +279,6 @@ def agent_result_message(completion: AgentCompletion) -> UserMessage:
     output = completion.output
     result = {
         "agent": completion.agent_path,
-        "agent_id": completion.agent_id,
-        "run_id": completion.run_id,
         "status": completion.status.value,
         "answer": output.text if output is not None else "",
     }
