@@ -165,7 +165,7 @@ def _refresh_log_context(
     }
 
 
-def _oauth_error_from_response(
+def oauth_error_from_response(
     body: bytes, content_type: str | None
 ) -> tuple[str | None, str]:
     """Extract only the safe OAuth error code and body format from a response."""
@@ -197,7 +197,7 @@ def _response_request_hostname(response: httpx.Response) -> str | None:
         return None
 
 
-def _oauth_token_from_response(body: bytes) -> OAuthToken:
+def oauth_token_from_response(body: bytes) -> OAuthToken:
     """Parse JSON or form-encoded OAuth token responses."""
     try:
         return OAuthToken.model_validate_json(body)
@@ -943,7 +943,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
 
         if response.status_code != 200:
             body = await response.aread()
-            oauth_error, _ = _oauth_error_from_response(
+            oauth_error, _ = oauth_error_from_response(
                 body, response.headers.get("content-type")
             )
             detail = f"MCP OAuth token exchange failed ({response.status_code})"
@@ -956,7 +956,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
 
         body = await response.aread()
         try:
-            tokens = _oauth_token_from_response(body)
+            tokens = oauth_token_from_response(body)
         except ValidationError:
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,
@@ -1073,7 +1073,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         """Handle JSON and form-encoded refresh responses without logging secrets."""
         body = await response.aread()
         content_type = response.headers.get("content-type")
-        oauth_error, body_format = _oauth_error_from_response(body, content_type)
+        oauth_error, body_format = oauth_error_from_response(body, content_type)
         token_endpoint_hostname = _response_request_hostname(response)
 
         response_fields = self._refresh_log_fields(
@@ -1103,7 +1103,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             return False
 
         try:
-            token_response = _oauth_token_from_response(body)
+            token_response = oauth_token_from_response(body)
         except ValidationError:
             logger.warning("mcp_oauth.refresh.invalid_response", extra=response_fields)
             self.context.clear_tokens()

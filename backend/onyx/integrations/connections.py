@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 import requests
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_refresher import (
@@ -77,6 +78,8 @@ from onyx.server.features.mcp.oauth import (
     IntegrationTokenStorage,
     integration_mcp_server_connection,
     make_integration_oauth_provider,
+    oauth_error_from_response,
+    oauth_token_from_response,
 )
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
@@ -265,7 +268,16 @@ def _with_legacy_defaults(
             if signed_in_user is not None
             else None
         )
-        saved = read_connection(user_row).secret if user_row else ConnectionSecret()
+        saved_record = read_connection(user_row) if user_row else None
+        if (
+            saved_record is not None
+            and saved_record.status is IntegrationConnectionStatus.NEEDS_RECONNECT
+        ):
+            return ConnectionProblem(
+                code=ConnectionState.NEEDS_RECONNECT,
+                reason=_needs_reconnect_reason(integration, saved_record),
+            )
+        saved = saved_record.secret if saved_record else ConnectionSecret()
         saved = (
             saved.model_copy(
                 update={
@@ -346,6 +358,13 @@ def _login_token_stale(account: OAuthAccount, now: float) -> bool:
     )
 
 
+def _login_token_expired(account: OAuthAccount) -> bool:
+    return (
+        account.expires_at is not None
+        and account.expires_at <= datetime.now(timezone.utc).timestamp()
+    )
+
+
 def _reload_account(db_session: Session, account: OAuthAccount) -> OAuthAccount:
     """The account row in this session, re-read. The user may come from the
     auth session of the request, so its rows can belong to another session."""
@@ -379,10 +398,7 @@ def _fresh_onyx_login_token(
                     db_session.commit()
         except CacheLockAcquisitionError:
             account = _reload_account(db_session, account)
-    if (
-        account.expires_at is not None
-        and account.expires_at <= datetime.now(timezone.utc).timestamp()
-    ):
+    if _login_token_expired(account):
         return None
     return account.access_token
 
@@ -396,11 +412,12 @@ def _resolve_onyx_login(
             code=ConnectionState.NOT_CONNECTED,
             reason=f"Sign in to Onyx with single sign-on to use {integration.name}.",
         )
-    token = (
-        _fresh_onyx_login_token(user, account, db_session)
-        if refresh
-        else account.access_token
-    )
+    if refresh:
+        token = _fresh_onyx_login_token(user, account, db_session)
+    elif _login_token_expired(account) and not account.refresh_token:
+        token = None
+    else:
+        token = account.access_token
     if token is None:
         return ConnectionProblem(
             code=ConnectionState.NEEDS_RECONNECT,
@@ -624,17 +641,6 @@ def _send_token_request(request: httpx.Request, *, mcp: bool) -> httpx.Response:
         return client.send(request)
 
 
-def _oauth_error_code(response: httpx.Response) -> str | None:
-    try:
-        body = response.json()
-    except ValueError:
-        return None
-    if isinstance(body, dict):
-        error = body.get("error")
-        return error if isinstance(error, str) else None
-    return None
-
-
 def _expires_in(value: object) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         return None
@@ -650,7 +656,9 @@ def _grant_from_token_response(request: httpx.Request, mcp: bool) -> RefreshedGr
     except (httpx.HTTPError, OnyxError, ValueError) as error:
         raise _RefreshTemporaryError(f"token request failed: {error}") from error
 
-    oauth_error = _oauth_error_code(response)
+    oauth_error, _ = oauth_error_from_response(
+        response.content, response.headers.get("content-type")
+    )
     if response.status_code in _PERMANENT_REFRESH_STATUSES or (
         oauth_error == "invalid_grant"
     ):
@@ -660,6 +668,22 @@ def _grant_from_token_response(request: httpx.Request, mcp: bool) -> RefreshedGr
         )
     if response.status_code != 200:
         raise _RefreshTemporaryError(f"token endpoint status {response.status_code}")
+    if mcp:
+        # An MCP server can answer with a form-encoded body.
+        try:
+            token = oauth_token_from_response(response.content)
+        except ValidationError as error:
+            raise _RefreshTemporaryError(
+                "token response has no access token"
+            ) from error
+        return RefreshedGrant(
+            secret=ConnectionSecret(
+                access_token=token.access_token,
+                refresh_token=token.refresh_token,
+                token_type=token.token_type,
+            ),
+            expires_in=token.expires_in,
+        )
     try:
         body = response.json()
     except ValueError as error:

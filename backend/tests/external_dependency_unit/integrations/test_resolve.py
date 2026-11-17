@@ -175,7 +175,7 @@ def test_anonymous_user_gets_no_individual_connection(
 
 
 def _add_login_account(
-    db_session: Session, user: User, *, expires_at: int, refresh_token: str
+    db_session: Session, user: User, *, expires_at: int, refresh_token: str | None
 ) -> OAuthAccount:
     account = OAuthAccount(
         user_id=user.id,
@@ -244,6 +244,33 @@ def test_onyx_login_uses_and_refreshes_login_token(
         db_session.refresh(account)
         assert account.access_token == "refreshed-login"
         assert account.expires_at == new_expiry
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(OAuthAccount).where(OAuthAccount.__table__.c.user_id == user.id)
+        )
+        db_session.commit()
+
+
+def test_onyx_login_status_of_an_expired_token_without_refresh_needs_reconnect(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = make_integration(
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.ONYX_LOGIN,
+    )
+    user = make_test_user("onyx_login_expired")
+    try:
+        now = int(datetime.now(timezone.utc).timestamp())
+        _add_login_account(db_session, user, expires_at=now - 60, refresh_token=None)
+
+        status = integration_status(integration, user, db_session)
+        result = expect_problem(resolve_connection(integration, user, db_session))
+
+        assert result.code is ConnectionState.NEEDS_RECONNECT
+        assert (status.state, status.reason) == (result.code, result.reason)
     finally:
         db_session.rollback()
         db_session.execute(
