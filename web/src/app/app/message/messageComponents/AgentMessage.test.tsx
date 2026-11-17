@@ -8,7 +8,7 @@ import {
 } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
-import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
+import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
 import type { MinimalAgent } from "@/lib/agents/types";
 
@@ -689,7 +689,11 @@ test("a later report of a code mode call replaces what the step shows", async ()
 
 test("a program call whose stream stopped for approval shows a waiting header and, once decided, the record", async () => {
   seedSessionAwaitingAnswer();
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
   const cell = { turn_index: 0, tab_index: 0 };
   const nested = { ...cell, sub_turn_index: 0 };
   // The program's call starts, then the request arrives at the cell's placement.
@@ -745,7 +749,7 @@ test("a program call whose stream stopped for approval shows a waiting header an
 
     // A decision this client made ends the wait before its packet arrives.
     act(() =>
-      useToolApprovalUi.setState({
+      useToolRequestUi.setState({
         localStatuses: new Map([["approval", "approved"]]),
       })
     );
@@ -780,6 +784,121 @@ test("a program call whose stream stopped for approval shows a waiting header an
     ).not.toHaveLength(0);
     expect(
       screen.queryByText("Waiting for your approval")
+    ).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a question waits with a header, then a typed answer shows as the user's message", async () => {
+  seedSessionAwaitingAnswer();
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
+  const asked: Packet[] = [
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: PacketType.TOOL_QUESTION_REQUEST,
+        question_request_id: "question",
+        tool_call_id: "call",
+        questions: [
+          {
+            id: "scope",
+            header: "Scope",
+            question: "Which files should I change?",
+            options: [
+              { label: "All files", description: "Change every file." },
+              { label: "Docs", description: "Only the docs." },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      placement: { turn_index: 0 },
+      obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_USER },
+    },
+  ];
+  const view = render(
+    <AgentMessage
+      rawPackets={asked}
+      packetCount={asked.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    expect(
+      await screen.findByText("Waiting for your answer")
+    ).toBeInTheDocument();
+    // The waiting card shows in the transcript's trailing region.
+    expect(screen.queryByTestId("tool-question-card")).not.toBeInTheDocument();
+
+    // The continuation's replay resolves the question, then answers.
+    const answered: Packet[] = [
+      asked[0]!,
+      {
+        placement: { turn_index: 0, tab_index: 0 },
+        obj: {
+          type: PacketType.TOOL_QUESTION_RESOLVED,
+          question_request_id: "question",
+          outcome: "answered",
+          answered_via: "message",
+          answers: null,
+          message: "Only the README",
+        },
+      },
+      {
+        placement: { turn_index: 1, tab_index: 0 },
+        obj: {
+          type: PacketType.MESSAGE_START,
+          id: "answer",
+          content: "",
+          final_documents: null,
+        },
+      },
+      {
+        placement: { turn_index: 1, tab_index: 0 },
+        obj: { type: PacketType.MESSAGE_DELTA, content: "README updated." },
+      },
+      {
+        placement: { turn_index: 1 },
+        obj: { type: PacketType.STOP, stop_reason: StopReason.FINISHED },
+      },
+    ];
+    view.rerender(
+      <AgentMessage
+        rawPackets={answered}
+        packetCount={answered.length}
+        chatState={chatState}
+        nodeId={NEW_ANSWER_NODE_ID}
+        llmManager={null}
+        hideFooter
+        disableTTS
+      />
+    );
+    const record = await screen.findByTestId("tool-question-card");
+    expect(within(record).getByRole("status")).toHaveTextContent(
+      "Answered in the chat"
+    );
+    expect(
+      within(record).getByText("Which files should I change?")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Only the README")).toBeInTheDocument();
+    // The user's message comes after the record and before the answer.
+    expect(
+      record.compareDocumentPosition(screen.getByText("Only the README")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(await screen.findByText("README updated.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Waiting for your answer")
     ).not.toBeInTheDocument();
   } finally {
     view.unmount();

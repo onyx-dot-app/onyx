@@ -1,9 +1,18 @@
+/**
+ * The tool requests of a chat that wait on the user: approval requests and
+ * the questions that the agent asks. Both read from a response's packets,
+ * wait in the region after the last message, and leave a record in the
+ * reply's timeline once their resolution arrives.
+ */
 import { create } from "zustand";
 import {
   Packet,
   PacketType,
   ToolApprovalRequest,
   ToolApprovalResolved,
+  ToolQuestionAnswer,
+  ToolQuestionRequest,
+  ToolQuestionResolved,
 } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
@@ -41,21 +50,23 @@ export interface ToolApprovalRead {
   entries: ToolApprovalEntry[];
 }
 
-// Streams append to a response's packet array and a replay replaces it, so a
-// read stays valid for the same array until it grows.
-const approvalReads = new WeakMap<
-  Packet[],
-  { count: number; read: ToolApprovalRead }
->();
+interface CachedRead<T> {
+  count: number;
+  read: T;
+}
 
 /**
- * The requests in one response's packets and their outcomes. A resolution
- * without a known outcome counts as no resolution. A stop changes nothing:
- * the server resolves every request that it ends, also as "cancelled".
+ * Streams append to a response's packet array and a replay replaces it, so a
+ * read stays valid for the same array until a packet of `types` arrives.
  * Packets that cannot change the result keep the same read object.
  */
-export function readToolApprovals(packets: Packet[]): ToolApprovalRead {
-  const cached = approvalReads.get(packets);
+function readOnce<T>(
+  cache: WeakMap<Packet[], CachedRead<T>>,
+  packets: Packet[],
+  types: ReadonlySet<string>,
+  read: (packets: Packet[]) => T
+): T {
+  const cached = cache.get(packets);
   if (cached && cached.count <= packets.length) {
     let changed = false;
     for (
@@ -64,39 +75,114 @@ export function readToolApprovals(packets: Packet[]): ToolApprovalRead {
       index++
     ) {
       const type = packets[index]?.obj.type;
-      changed =
-        type === PacketType.TOOL_APPROVAL_REQUEST ||
-        type === PacketType.TOOL_APPROVAL_RESOLVED;
+      changed = type !== undefined && types.has(type);
     }
     if (!changed) {
       cached.count = packets.length;
       return cached.read;
     }
   }
-  const entries = new Map<string, ToolApprovalEntry>();
-  const outcomes = new Map<string, ToolApprovalResolved["outcome"]>();
-  for (const packet of packets) {
-    if (packet.obj.type === PacketType.TOOL_APPROVAL_REQUEST) {
-      entries.set(packet.obj.approval_id, {
-        turnIndex: packet.placement.turn_index,
-        request: packet.obj,
-        outcome: null,
-      });
-    } else if (
-      packet.obj.type === PacketType.TOOL_APPROVAL_RESOLVED &&
-      OUTCOMES.has(packet.obj.outcome)
-    ) {
-      outcomes.set(packet.obj.approval_id, packet.obj.outcome);
+  const result = read(packets);
+  cache.set(packets, { count: packets.length, read: result });
+  return result;
+}
+
+const approvalReads = new WeakMap<Packet[], CachedRead<ToolApprovalRead>>();
+const APPROVAL_PACKETS: ReadonlySet<string> = new Set([
+  PacketType.TOOL_APPROVAL_REQUEST,
+  PacketType.TOOL_APPROVAL_RESOLVED,
+]);
+
+/**
+ * The requests in one response's packets and their outcomes. A resolution
+ * without a known outcome counts as no resolution. A stop changes nothing:
+ * the server resolves every request that it ends, also as "cancelled".
+ */
+export function readToolApprovals(packets: Packet[]): ToolApprovalRead {
+  return readOnce(approvalReads, packets, APPROVAL_PACKETS, (packets) => {
+    const entries = new Map<string, ToolApprovalEntry>();
+    const outcomes = new Map<string, ToolApprovalResolved["outcome"]>();
+    for (const packet of packets) {
+      if (packet.obj.type === PacketType.TOOL_APPROVAL_REQUEST) {
+        entries.set(packet.obj.approval_id, {
+          turnIndex: packet.placement.turn_index,
+          request: packet.obj,
+          outcome: null,
+        });
+      } else if (
+        packet.obj.type === PacketType.TOOL_APPROVAL_RESOLVED &&
+        OUTCOMES.has(packet.obj.outcome)
+      ) {
+        outcomes.set(packet.obj.approval_id, packet.obj.outcome);
+      }
     }
-  }
-  const read: ToolApprovalRead = {
-    entries: Array.from(entries.values(), (entry) => ({
-      ...entry,
-      outcome: outcomes.get(entry.request.approval_id) ?? null,
-    })),
-  };
-  approvalReads.set(packets, { count: packets.length, read });
-  return read;
+    return {
+      entries: Array.from(entries.values(), (entry) => ({
+        ...entry,
+        outcome: outcomes.get(entry.request.approval_id) ?? null,
+      })),
+    };
+  });
+}
+
+/** What one response's packets say about a question call. */
+export interface ToolQuestionEntry {
+  turnIndex: number;
+  request: ToolQuestionRequest;
+  /** Null until the resolution packet arrives. */
+  resolution: ToolQuestionResolved | null;
+}
+
+export interface ToolQuestionRead {
+  entries: ToolQuestionEntry[];
+}
+
+const questionReads = new WeakMap<Packet[], CachedRead<ToolQuestionRead>>();
+const QUESTION_PACKETS: ReadonlySet<string> = new Set([
+  PacketType.TOOL_QUESTION_REQUEST,
+  PacketType.TOOL_QUESTION_RESOLVED,
+]);
+const QUESTION_OUTCOMES: ReadonlySet<string> = new Set<
+  ToolQuestionResolved["outcome"]
+>(["answered", "cancelled"]);
+
+/**
+ * The question calls in one response's packets and how they ended. As with
+ * approvals, only the resolution packet ends a question; a stop does not.
+ */
+export function readToolQuestions(packets: Packet[]): ToolQuestionRead {
+  return readOnce(questionReads, packets, QUESTION_PACKETS, (packets) => {
+    const entries = new Map<string, ToolQuestionEntry>();
+    const resolutions = new Map<string, ToolQuestionResolved>();
+    for (const packet of packets) {
+      if (packet.obj.type === PacketType.TOOL_QUESTION_REQUEST) {
+        entries.set(packet.obj.question_request_id, {
+          turnIndex: packet.placement.turn_index,
+          request: packet.obj,
+          resolution: null,
+        });
+      } else if (
+        packet.obj.type === PacketType.TOOL_QUESTION_RESOLVED &&
+        QUESTION_OUTCOMES.has(packet.obj.outcome)
+      ) {
+        resolutions.set(packet.obj.question_request_id, packet.obj);
+      }
+    }
+    return {
+      entries: Array.from(entries.values(), (entry) => ({
+        ...entry,
+        resolution: resolutions.get(entry.request.question_request_id) ?? null,
+      })),
+    };
+  });
+}
+
+/** Whether the response's packets hold an approval request or a question. */
+export function asksUser(packets: Packet[]): boolean {
+  return (
+    readToolApprovals(packets).entries.length > 0 ||
+    readToolQuestions(packets).entries.length > 0
+  );
 }
 
 /** Whether the server still waits for a decision on the request. */
@@ -124,34 +210,97 @@ export function toolApprovalStatus(
   }
 }
 
-/** A request that waits for a decision, and the response that holds it. */
-interface WaitingToolApproval {
+/**
+ * How a question call shows. "closed": nothing waits for an answer any more,
+ * and this client does not know how it ended.
+ */
+export type ToolQuestionStatus =
+  | { kind: "pending" }
+  | { kind: "closed" }
+  | { kind: "cancelled" }
+  | {
+      kind: "answered";
+      /** The card's answers, in the order of the questions. */
+      answers: ToolQuestionAnswer[] | null;
+      /** The text that the user typed in the chat instead of the card. */
+      message: string | null;
+    };
+
+export const PENDING_QUESTION: ToolQuestionStatus = { kind: "pending" };
+const CANCELLED_QUESTION: ToolQuestionStatus = { kind: "cancelled" };
+
+/** A question call, as the card or its record shows it. */
+export interface ToolQuestionCall {
   turnIndex: number;
-  request: ToolApprovalRequest;
-  response: Message;
-  /** The response is one answer of a multi-model turn. */
-  multiModel: boolean;
+  request: ToolQuestionRequest;
+  status: ToolQuestionStatus;
 }
 
 /**
- * Every request on the selected branch that the server has not resolved, the
- * reply's own and its background subagents', oldest response first and in
- * packet order within a response.
+ * As with approvals, the resolution packet decides the status. Before it
+ * arrives, an answer this client sent decides it.
  */
-export function readWaitingToolApprovals(
+export function toolQuestionStatus(
+  entry: ToolQuestionEntry,
+  localStatus: ToolQuestionStatus | undefined
+): ToolQuestionStatus {
+  const { resolution } = entry;
+  if (resolution === null) return localStatus ?? PENDING_QUESTION;
+  if (resolution.outcome === "cancelled") return CANCELLED_QUESTION;
+  return {
+    kind: "answered",
+    answers: resolution.answers ?? null,
+    message: resolution.message ?? null,
+  };
+}
+
+/** What a reply waits for from its own user, for its timeline header. */
+export type AwaitingUser = "approval" | "answer";
+
+/** A request that waits for the user, and the response that holds it. */
+export type WaitingToolRequest = {
+  turnIndex: number;
+  response: Message;
+  /** The response is one answer of a multi-model turn. */
+  multiModel: boolean;
+} & (
+  | { kind: "approval"; request: ToolApprovalRequest }
+  | { kind: "question"; request: ToolQuestionRequest }
+);
+
+/**
+ * Every approval request and question on the selected branch that the server
+ * has not resolved, the reply's own and its background subagents', oldest
+ * response first and by turn within a response.
+ */
+export function readWaitingToolRequests(
   tree: MessageTreeState
-): WaitingToolApproval[] {
-  const waiting: WaitingToolApproval[] = [];
+): WaitingToolRequest[] {
+  const waiting: WaitingToolRequest[] = [];
   function collect(response: Message, multiModel: boolean) {
+    const found: WaitingToolRequest[] = [];
     for (const entry of readToolApprovals(response.packets).entries) {
       if (awaitsDecision(entry))
-        waiting.push({
+        found.push({
+          kind: "approval",
           turnIndex: entry.turnIndex,
           request: entry.request,
           response,
           multiModel,
         });
     }
+    for (const entry of readToolQuestions(response.packets).entries) {
+      if (entry.resolution === null)
+        found.push({
+          kind: "question",
+          turnIndex: entry.turnIndex,
+          request: entry.request,
+          response,
+          multiModel,
+        });
+    }
+    // A stable sort keeps packet order within a turn.
+    waiting.push(...found.sort((a, b) => a.turnIndex - b.turnIndex));
   }
   let multiModelQuestion: number | null = null;
   for (const message of getLatestMessageChain(tree)) {
@@ -169,31 +318,65 @@ export function readWaitingToolApprovals(
   return waiting;
 }
 
-type SectionEntry =
-  | { kind: "display"; turnIndex: number; group: GroupedPacket }
-  | { kind: "approval"; turnIndex: number; approval: ToolApproval };
+/**
+ * The question calls on the selected branch that the server has not
+ * resolved, oldest first, each with the status that this client knows. A
+ * question that this client already answered, or found closed, keeps its
+ * local status until the resolution arrives; only a pending one still
+ * waits for the user's answer.
+ */
+export function readWaitingQuestions(
+  tree: MessageTreeState,
+  localAnswers: ReadonlyMap<string, ToolQuestionStatus>
+): ToolQuestionCall[] {
+  return readWaitingToolRequests(tree).flatMap((item) =>
+    item.kind === "question"
+      ? [
+          {
+            turnIndex: item.turnIndex,
+            request: item.request,
+            status:
+              localAnswers.get(item.request.question_request_id) ??
+              PENDING_QUESTION,
+          },
+        ]
+      : []
+  );
+}
 
 /**
- * Orders approval cards with a section's display groups by turn. A card
- * follows the display groups of its own turn and of every earlier turn.
+ * The record of an approval request or a question call in a reply's
+ * timeline.
  */
-export function orderApprovalsByTurn(
+export type ToolRequestRecord =
+  | ({ kind: "approval" } & ToolApproval)
+  | ({ kind: "question" } & ToolQuestionCall);
+
+type SectionEntry<T> =
+  | { kind: "display"; turnIndex: number; group: GroupedPacket }
+  | { kind: "record"; turnIndex: number; record: T };
+
+/**
+ * Orders records with a section's display groups by turn. A record follows
+ * the display groups of its own turn and of every earlier turn.
+ */
+export function orderRecordsByTurn<T extends { turnIndex: number }>(
   displayGroups: GroupedPacket[],
-  approvals: ToolApproval[]
-): SectionEntry[] {
-  const entries: SectionEntry[] = displayGroups.map((group) => ({
+  records: T[]
+): SectionEntry<T>[] {
+  const entries: SectionEntry<T>[] = displayGroups.map((group) => ({
     kind: "display",
     turnIndex: group.turn_index,
     group,
   }));
-  for (const approval of approvals) {
+  for (const record of records) {
     const index = entries.findIndex(
-      (entry) => entry.turnIndex > approval.turnIndex
+      (entry) => entry.turnIndex > record.turnIndex
     );
     entries.splice(index === -1 ? entries.length : index, 0, {
-      kind: "approval",
-      turnIndex: approval.turnIndex,
-      approval,
+      kind: "record",
+      turnIndex: record.turnIndex,
+      record,
     });
   }
   return entries;
@@ -214,38 +397,57 @@ export function decidedStatus(
 const NUDGE_TTL_MS = 2000;
 let lastNudgeSeq = 0;
 
-interface ToolApprovalUiState {
-  /** Statuses this client learned before the resolution packets arrive. */
+interface ToolRequestUiState {
+  /** Approval statuses this client learned before the resolution packets
+   * arrive. */
   localStatuses: ReadonlyMap<string, ApprovalStatus>;
-  /** The card to bring into view; `seq` repeats the nudge for the same card. */
-  nudge: { approvalId: string; seq: number } | null;
+  /** Question statuses this client learned before the resolution packets
+   * arrive. */
+  localAnswers: ReadonlyMap<string, ToolQuestionStatus>;
+  /** The card to bring into view, by approval or question request ID; `seq`
+   * repeats the nudge for the same card. */
+  nudge: { requestId: string; seq: number } | null;
   /** Records the status a decision produced until its resolution arrives. */
   recordStatus: (approvalId: string, status: ApprovalStatus) => void;
+  /** Records the status an answer produced until its resolution arrives. */
+  recordAnswer: (questionRequestId: string, status: ToolQuestionStatus) => void;
   /** Drops statuses that resolution packets now report. */
-  forgetStatuses: (approvalIds: string[]) => void;
-  nudgeApproval: (approvalId: string) => void;
+  forgetStatuses: (requestIds: string[]) => void;
+  nudgeRequest: (requestId: string) => void;
   /** Called once the card handled the nudge, so a remount does not repeat it. */
   clearNudge: (seq: number) => void;
 }
 
-export const useToolApprovalUi = create<ToolApprovalUiState>()((set, get) => ({
+export const useToolRequestUi = create<ToolRequestUiState>()((set, get) => ({
   localStatuses: new Map(),
+  localAnswers: new Map(),
   nudge: null,
   recordStatus: (approvalId, status) =>
     set((state) => ({
       localStatuses: new Map(state.localStatuses).set(approvalId, status),
     })),
-  forgetStatuses: (approvalIds) =>
+  recordAnswer: (questionRequestId, status) =>
+    set((state) => ({
+      localAnswers: new Map(state.localAnswers).set(questionRequestId, status),
+    })),
+  forgetStatuses: (requestIds) =>
     set((state) => {
-      const stale = approvalIds.filter((id) => state.localStatuses.has(id));
-      if (stale.length === 0) return {};
-      const localStatuses = new Map(state.localStatuses);
-      for (const id of stale) localStatuses.delete(id);
-      return { localStatuses };
+      const update: Partial<ToolRequestUiState> = {};
+      if (requestIds.some((id) => state.localStatuses.has(id))) {
+        const localStatuses = new Map(state.localStatuses);
+        for (const id of requestIds) localStatuses.delete(id);
+        update.localStatuses = localStatuses;
+      }
+      if (requestIds.some((id) => state.localAnswers.has(id))) {
+        const localAnswers = new Map(state.localAnswers);
+        for (const id of requestIds) localAnswers.delete(id);
+        update.localAnswers = localAnswers;
+      }
+      return update;
     }),
-  nudgeApproval: (approvalId) => {
+  nudgeRequest: (requestId) => {
     const seq = ++lastNudgeSeq;
-    set({ nudge: { approvalId, seq } });
+    set({ nudge: { requestId, seq } });
     setTimeout(() => get().clearNudge(seq), NUDGE_TTL_MS);
   },
   clearNudge: (seq) =>

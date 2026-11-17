@@ -202,7 +202,7 @@ export interface SendMessageParams {
 
 export class ChatSendRejectedError extends Error {}
 
-/** The chat waits for a tool approval; the server saved nothing. */
+/** The chat waits for a tool approval or answers; the server saved nothing. */
 export class ApprovalPendingError extends ChatSendRejectedError {}
 
 export async function* sendMessage({

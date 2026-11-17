@@ -1,5 +1,10 @@
 import { mutate, type ScopedMutator, useSWRConfig } from "swr";
-import { ChatSessionSharedStatus, type Message } from "@/app/app/types";
+import {
+  ChatFileType,
+  ChatSessionSharedStatus,
+  type Message,
+} from "@/app/app/types";
+import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import {
   act,
   fireEvent,
@@ -13,6 +18,7 @@ import AppInputBar, { AppInputBarProps } from "@/sections/input/AppInputBar";
 import {
   waitForChatResponseEnd,
   fetchSettledChatSession,
+  readChatSessionStatus,
 } from "@/lib/chat/sessionReadiness";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
@@ -21,7 +27,7 @@ import type { ChatSessionStatus, PendingChatMessage } from "@/lib/chat/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@opal/layouts";
 import { PacketType, StopReason } from "@/app/app/services/streamingModels";
-import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
+import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import { APPROVAL_PENDING_ERROR_CODE } from "@/app/app/types";
 
 Element.prototype.scrollIntoView = jest.fn();
@@ -30,6 +36,7 @@ let mockSearchMode = false;
 let mockIncognito = false;
 let mockInterruptOnSend = false;
 let pending: PendingChatMessage[] = [];
+let mockMessageFiles: ProjectFile[] = [];
 let fetchSpy: jest.SpiedFunction<typeof fetch>;
 
 const mockClearDraft = jest.fn();
@@ -38,6 +45,7 @@ const mockWriteDraft = jest.fn();
 jest.mock("@/lib/chat/sessionReadiness", () => ({
   waitForChatResponseEnd: jest.fn(),
   fetchSettledChatSession: jest.fn(),
+  readChatSessionStatus: jest.fn(),
 }));
 
 jest.mock("@/providers/UserProvider", () => ({
@@ -78,7 +86,7 @@ jest.mock("@/lib/settings/hooks", () => ({
 }));
 jest.mock("@/lib/projects/providers", () => ({
   useProjectsContext: () => ({
-    currentMessageFiles: [],
+    currentMessageFiles: mockMessageFiles,
     setCurrentMessageFiles: jest.fn(),
   }),
 }));
@@ -184,6 +192,7 @@ function props(chatState: AppInputBarProps["chatState"]): ComposerProps {
 
 beforeEach(() => {
   chatStatus = IDLE_STATUS;
+  mockMessageFiles = [];
   mockChatId = "session";
   mockSearchMode = false;
   mockIncognito = false;
@@ -556,7 +565,11 @@ test("a waiting card leaves the send to the server", async () => {
 });
 
 test("a server refusal for a waiting approval keeps the draft and points at its card", async () => {
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
   const warning = jest.spyOn(toast, "warning");
   awaitToolApproval();
   fetchSpy.mockImplementation(async (url, init) =>
@@ -570,7 +583,7 @@ test("a server refusal for a waiting approval keeps the draft and points at its 
   await user.keyboard("{Enter}");
 
   await waitFor(() =>
-    expect(useToolApprovalUi.getState().nudge?.approvalId).toBe("approval-1")
+    expect(useToolRequestUi.getState().nudge?.requestId).toBe("approval-1")
   );
   expect(textbox).toHaveTextContent("Keep this draft");
   expect(warning).toHaveBeenCalledWith(
@@ -580,7 +593,11 @@ test("a server refusal for a waiting approval keeps the draft and points at its 
 });
 
 test("a server refusal for an approval this tab does not show loads the server's cards", async () => {
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
   const warning = jest.spyOn(toast, "warning");
   const error = jest.spyOn(toast, "error");
   const user = setupUser();
@@ -595,12 +612,288 @@ test("a server refusal for an approval this tab does not show loads the server's
 
   await waitFor(() => expect(textbox).toHaveTextContent("Keep this draft"));
   expect(warning).toHaveBeenCalledWith(
-    "Approve or reject the pending tool calls first."
+    "Answer the pending approval requests or questions first."
   );
   expect(error).not.toHaveBeenCalled();
   // This tab has no card for the other tab's turn, so it loads the session.
-  expect(useToolApprovalUi.getState().nudge).toBeNull();
+  expect(useToolRequestUi.getState().nudge).toBeNull();
   await waitFor(() => expect(fetchSettledChatSession).toHaveBeenCalled());
+});
+
+/** Puts a question that waits for the user's answer in the latest response. */
+function awaitQuestion() {
+  const store = useChatSessionStore.getState();
+  const tree = new Map(store.sessions.get("session")!.messageTree);
+  tree.set(2, {
+    ...tree.get(2)!,
+    packets: [
+      {
+        placement: { turn_index: 1, tab_index: 0 },
+        obj: {
+          type: PacketType.TOOL_QUESTION_REQUEST,
+          question_request_id: "question-1",
+          tool_call_id: "call-1",
+          questions: [
+            {
+              id: "scope",
+              header: "Scope",
+              question: "Which files?",
+              options: [
+                { label: "All", description: "Every file." },
+                { label: "Docs", description: "Only the docs." },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  });
+  store.updateSessionMessageTree("session", tree);
+}
+
+const ANSWERS_URL = "/api/chat/question-requests/question-1/answers";
+
+/** Answers the answers route with `response`; other reads as usual. */
+function answerWith(response: () => Response) {
+  const answered = jest.fn();
+  fetchSpy.mockImplementation(async (url, init) => {
+    if (String(url) === ANSWERS_URL) {
+      answered(JSON.parse(String(init?.body)));
+      return response();
+    }
+    return readResponse(url);
+  });
+  return answered;
+}
+
+describe("while a question waits", () => {
+  beforeEach(() => {
+    useToolRequestUi.setState({
+      localStatuses: new Map(),
+      localAnswers: new Map(),
+      nudge: null,
+    });
+    awaitQuestion();
+    jest.mocked(readChatSessionStatus).mockResolvedValue(IDLE_STATUS);
+  });
+
+  test.each(["input", "streaming"] as const)(
+    "typed text answers it instead of starting a turn (%s)",
+    async (chatState) => {
+      useChatSessionStore.getState().updateChatState("session", chatState);
+      const answered = answerWith(
+        () =>
+          new Response(
+            JSON.stringify({
+              question_request_id: "question-1",
+              continuation: null,
+            })
+          )
+      );
+      const user = setupUser();
+      const inputProps = props(chatState);
+      render(<ChatInput {...inputProps} />);
+      const textbox = screen.getByRole("textbox", { name: "Message input" });
+
+      await user.click(textbox);
+      await user.keyboard("{Enter}");
+
+      await waitFor(() =>
+        expect(answered).toHaveBeenCalledWith({ message: "Keep this draft" })
+      );
+      expect(inputProps.onSubmit).not.toHaveBeenCalled();
+      expect(pending).toHaveLength(1);
+      expect(textbox).toHaveTextContent("");
+      // The card shows the answer until the resolution arrives, so later
+      // text starts a turn again.
+      await waitFor(() =>
+        expect(
+          useToolRequestUi.getState().localAnswers.get("question-1")
+        ).toEqual({
+          kind: "answered",
+          answers: null,
+          message: "Keep this draft",
+        })
+      );
+    }
+  );
+
+  test("a question answered here no longer takes typed text", async () => {
+    useToolRequestUi.getState().recordAnswer("question-1", {
+      kind: "answered",
+      answers: [{ question_id: "scope", option_label: "Docs" }],
+      message: null,
+    });
+    const answered = answerWith(() => new Response("{}"));
+    const user = setupUser();
+    const inputProps = props("input");
+    render(<ChatInput {...inputProps} />);
+
+    await user.click(screen.getByRole("textbox", { name: "Message input" }));
+    await user.keyboard("{Enter}");
+
+    expect(inputProps.onSubmit).toHaveBeenCalledWith({
+      message: "Keep this draft",
+      mentions: [],
+    });
+    expect(answered).not.toHaveBeenCalled();
+  });
+
+  test("Stop stays available while the main button sends the answer", async () => {
+    useChatSessionStore.getState().updateChatState("session", "streaming");
+    const user = setupUser();
+    const inputProps = props("streaming");
+    render(<ChatInput {...inputProps} />);
+
+    await user.click(screen.getByRole("button", { name: "Stop generating" }));
+
+    expect(inputProps.stopGenerating).toHaveBeenCalled();
+  });
+
+  test("a message with files is held, with the reason", async () => {
+    mockMessageFiles = [
+      {
+        id: "file-1",
+        name: "notes.txt",
+        project_id: null,
+        user_id: null,
+        file_id: "file-1",
+        created_at: "2026-11-17T00:00:00Z",
+        status: UserFileStatus.COMPLETED,
+        file_type: "text/plain",
+        last_accessed_at: "2026-11-17T00:00:00Z",
+        chat_file_type: ChatFileType.PLAIN_TEXT,
+        token_count: 1,
+        chunk_count: 1,
+      },
+    ];
+    const answered = answerWith(() => new Response("{}"));
+    const user = setupUser();
+    const inputProps = props("input");
+    const { container } = render(<ChatInput {...inputProps} />);
+    const textbox = screen.getByRole("textbox", { name: "Message input" });
+
+    await user.click(textbox);
+    await user.keyboard("{Enter}");
+
+    expect(
+      screen.getByText(
+        "Answers to the agent's questions can't include files. Remove the files to answer."
+      )
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector("#onyx-chat-input-send-button")
+    ).toBeDisabled();
+    expect(answered).not.toHaveBeenCalled();
+    expect(inputProps.onSubmit).not.toHaveBeenCalled();
+    expect(textbox).toHaveTextContent("Keep this draft");
+  });
+
+  test("an approval that still waits points at its card and keeps the text", async () => {
+    const tree = new Map(
+      useChatSessionStore.getState().sessions.get("session")!.messageTree
+    );
+    const answer = tree.get(2)!;
+    tree.set(2, {
+      ...answer,
+      packets: [
+        ...answer.packets,
+        {
+          placement: { turn_index: 1, tab_index: 1 },
+          obj: {
+            type: PacketType.TOOL_APPROVAL_REQUEST,
+            approval_id: "approval-1",
+            tool_call_id: "call-2",
+            tool_name: "mcp__3__github__create_issue",
+            display_name: "Create issue",
+            arguments: {},
+            agent_name: null,
+          },
+        },
+      ],
+    });
+    useChatSessionStore.getState().updateSessionMessageTree("session", tree);
+    answerWith(
+      () =>
+        new Response(
+          JSON.stringify({
+            error_code: APPROVAL_PENDING_ERROR_CODE,
+            detail: "Approve or reject the pending requests",
+          }),
+          { status: 409 }
+        )
+    );
+    const warning = jest.spyOn(toast, "warning");
+    const user = setupUser();
+    render(<ChatInput {...props("input")} />);
+    const textbox = screen.getByRole("textbox", { name: "Message input" });
+
+    await user.click(textbox);
+    await user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(useToolRequestUi.getState().nudge?.requestId).toBe("approval-1")
+    );
+    expect(warning).toHaveBeenCalledWith(
+      "Approve or reject the pending tool calls first."
+    );
+    await waitFor(() => expect(textbox).toHaveTextContent("Keep this draft"));
+    expect(useToolRequestUi.getState().localAnswers.size).toBe(0);
+  });
+
+  test.each([409, 404])(
+    "a question that no longer waits (%s) closes and keeps the text",
+    async (status) => {
+      answerWith(
+        () =>
+          new Response(
+            JSON.stringify({ detail: "This question no longer waits" }),
+            { status }
+          )
+      );
+      const user = setupUser();
+      render(<ChatInput {...props("input")} />);
+      const textbox = screen.getByRole("textbox", { name: "Message input" });
+
+      await user.click(textbox);
+      await user.keyboard("{Enter}");
+
+      await waitFor(() =>
+        expect(
+          useToolRequestUi.getState().localAnswers.get("question-1")
+        ).toEqual({ kind: "closed" })
+      );
+      await waitFor(() => expect(textbox).toHaveTextContent("Keep this draft"));
+      // Another answer can have continued the reply.
+      expect(readChatSessionStatus).toHaveBeenCalledWith("session");
+    }
+  );
+
+  test("another refusal shows the server's reason and keeps the text", async () => {
+    answerWith(
+      () =>
+        new Response(
+          JSON.stringify({
+            error_code: "PAYLOAD_TOO_LARGE",
+            detail: "A message can have at most 100 bytes",
+          }),
+          { status: 413 }
+        )
+    );
+    const error = jest.spyOn(toast, "error");
+    const user = setupUser();
+    render(<ChatInput {...props("input")} />);
+    const textbox = screen.getByRole("textbox", { name: "Message input" });
+
+    await user.click(textbox);
+    await user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith("A message can have at most 100 bytes")
+    );
+    await waitFor(() => expect(textbox).toHaveTextContent("Keep this draft"));
+    expect(useToolRequestUi.getState().localAnswers.size).toBe(0);
+  });
 });
 
 test("a queued message waits for the chat's tool selection to save", async () => {

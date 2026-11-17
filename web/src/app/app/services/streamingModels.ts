@@ -91,6 +91,10 @@ export enum PacketType {
   // Tool call approvals: the run waits for the user's decision on a request
   TOOL_APPROVAL_REQUEST = "tool_approval_request",
   TOOL_APPROVAL_RESOLVED = "tool_approval_resolved",
+
+  // Questions: the run waits for the user's answers to a question call
+  TOOL_QUESTION_REQUEST = "tool_question_request",
+  TOOL_QUESTION_RESOLVED = "tool_question_resolved",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
@@ -657,6 +661,52 @@ export interface ToolApprovalResolved extends BaseObj {
 
 export type ToolApprovalObj = ToolApprovalRequest | ToolApprovalResolved;
 
+// Question Packets
+export interface ToolQuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface ToolQuestion {
+  id: string;
+  /** A short label, at most 12 characters. */
+  header: string;
+  question: string;
+  /** In the model's order; a recommended option comes first. */
+  options: ToolQuestionOption[];
+}
+
+/** The user's answer to one question: a listed option, a note, or both. */
+export interface ToolQuestionAnswer {
+  question_id: string;
+  option_label?: string | null;
+  user_note?: string | null;
+}
+
+/** A question call waits for the user's answers; placed at the call. */
+export interface ToolQuestionRequest extends BaseObj {
+  type: "tool_question_request";
+  question_request_id: string;
+  tool_call_id: string;
+  questions: ToolQuestion[];
+}
+
+/**
+ * How a question call ended: answered on its card (`answers`) or by a message
+ * that the user typed in the chat (`message`), or cancelled because its run
+ * stopped first.
+ */
+export interface ToolQuestionResolved extends BaseObj {
+  type: "tool_question_resolved";
+  question_request_id: string;
+  outcome: "answered" | "cancelled";
+  answered_via?: "card" | "message" | null;
+  answers?: ToolQuestionAnswer[] | null;
+  message?: string | null;
+}
+
+export type ToolQuestionObj = ToolQuestionRequest | ToolQuestionResolved;
+
 // Union type for all possible streaming objects
 export type ObjTypes =
   | UserMessage
@@ -674,6 +724,7 @@ export type ObjTypes =
   | CodingAgentObj
   | CodeModeObj
   | ToolApprovalObj
+  | ToolQuestionObj
   | PacketErrorObj
   | CitationObj;
 

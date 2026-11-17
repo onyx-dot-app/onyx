@@ -13,8 +13,8 @@ import {
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { toast } from "@opal/layouts";
 import {
-  readWaitingToolApprovals,
-  useToolApprovalUi,
+  readWaitingToolRequests,
+  useToolRequestUi,
 } from "@/lib/chat/toolApprovals";
 import {
   claimStreamReader,
@@ -446,7 +446,11 @@ test.each([false, true])(
 
 test("a lost stream keeps its waiting approval open after the server is idle", async () => {
   jest.spyOn(console, "log").mockImplementation(() => {});
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
   const idle = Promise.withResolvers<null>();
   jest.mocked(waitForChatResponseEnd).mockReturnValueOnce(idle.promise);
   useChatSessionStore.setState({
@@ -486,7 +490,9 @@ test("a lost stream keeps its waiting approval open after the server is idle", a
   const tree = () =>
     useChatSessionStore.getState().sessions.get("session")!.messageTree;
   const waitingIds = () =>
-    readWaitingToolApprovals(tree()).map(({ request }) => request.approval_id);
+    readWaitingToolRequests(tree()).flatMap((item) =>
+      item.kind === "approval" ? [item.request.approval_id] : []
+    );
 
   let sending: Promise<void> | undefined;
   act(() => {
@@ -512,7 +518,11 @@ test("a lost stream keeps its waiting approval open after the server is idle", a
 
 test("a continuation that names the send's own stream keeps the send as its only reader", async () => {
   jest.spyOn(console, "log").mockImplementation(() => {});
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
   useChatSessionStore.setState({
     sessions: new Map(),
     currentSessionId: "session",
@@ -551,7 +561,9 @@ test("a continuation that names the send's own stream keeps the send as its only
   const tree = () =>
     useChatSessionStore.getState().sessions.get("session")!.messageTree;
   const waitingIds = () =>
-    readWaitingToolApprovals(tree()).map(({ request }) => request.approval_id);
+    readWaitingToolRequests(tree()).flatMap((item) =>
+      item.kind === "approval" ? [item.request.approval_id] : []
+    );
 
   let sending: Promise<void> | undefined;
   act(() => {
@@ -579,7 +591,11 @@ test("a continuation that names the send's own stream keeps the send as its only
 
 test("a send reader's later flush keeps an answer that its continuation took over", async () => {
   jest.spyOn(console, "log").mockImplementation(() => {});
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
   useChatSessionStore.setState({
     sessions: new Map(),
     currentSessionId: "session",
@@ -665,7 +681,11 @@ test("a send reader's later flush keeps an answer that its continuation took ove
 });
 
 test("a send refused for a waiting approval restores the draft and points at the card", async () => {
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
   useChatSessionStore.setState({
     sessions: new Map(),
     currentSessionId: "session",
@@ -748,14 +768,18 @@ test("a send refused for a waiting approval restores the draft and points at the
     mentions: [],
     files: [],
   });
-  expect(toast.warning).toHaveBeenCalledWith("toast");
+  expect(toast.warning).toHaveBeenCalledWith("pendingToolApproval.toast");
   expect(toast.error).not.toHaveBeenCalled();
-  expect(useToolApprovalUi.getState().nudge?.approvalId).toBe("approval-1");
+  expect(useToolRequestUi.getState().nudge?.requestId).toBe("approval-1");
   expect(refreshChatSession).not.toHaveBeenCalled();
 });
 
 test("a send refused for an approval this chat does not show settles with the saved session", async () => {
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
   useChatSessionStore.setState({
     sessions: new Map(),
     currentSessionId: "session",
@@ -793,8 +817,8 @@ test("a send refused for an approval this chat does not show settles with the sa
     mentions: [],
     files: [],
   });
-  expect(toast.warning).toHaveBeenCalledWith("toast");
-  expect(useToolApprovalUi.getState().nudge).toBeNull();
+  expect(toast.warning).toHaveBeenCalledWith("pendingUserInput.toast");
+  expect(useToolRequestUi.getState().nudge).toBeNull();
   // Settlement loads the saved session, which replays the server's cards.
   expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
   expect(refreshChatSession).not.toHaveBeenCalled();
