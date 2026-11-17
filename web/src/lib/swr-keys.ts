@@ -271,6 +271,8 @@ export const SWR_KEYS = {
     `/api/admin/integrations/${integrationId}/actions`,
   adminPluginInstallationPolicy: (pluginId: string) =>
     `/api/admin/plugins/${pluginId}/installation-policy`,
+  plugin: (pluginId: string) => `/api/plugins/${pluginId}`,
+  pluginAccess: (pluginId: string) => `/api/plugins/${pluginId}/access`,
   integrations: "/api/integrations",
   integrationActionPolicies: (integrationId: number) =>
     `/api/action-policies/integration/${integrationId}`,
