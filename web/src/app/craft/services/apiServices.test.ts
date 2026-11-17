@@ -420,6 +420,28 @@ describe("attachment mutations", () => {
     expect(name).toBe("Deck v2.pptx");
     expect(opts).toHaveProperty("content");
     expect((opts as { content: Blob }).content.size).toBe(4);
+    expect((opts as { content: Blob }).content.type).toBe(
+      "application/octet-stream"
+    );
+  });
+
+  it("keeps the plain file name when filename* is malformed", async () => {
+    jest.mocked(downloadFile).mockClear();
+    jest.mocked(fetch).mockResolvedValueOnce(
+      new Response("x", {
+        headers: {
+          "Content-Type": "text/html",
+          "Content-Disposition":
+            "attachment; filename=\"page.html\"; filename*=UTF-8''%E0%A4%A",
+        },
+      })
+    );
+    await downloadArtifactFile("session", "outputs/page.html");
+    const [name, opts] = jest.mocked(downloadFile).mock.calls[0]!;
+    expect(name).toBe("page.html");
+    expect((opts as { content: Blob }).content.type).toBe(
+      "application/octet-stream"
+    );
   });
 
   it("falls back to the link when the download fetch fails", async () => {

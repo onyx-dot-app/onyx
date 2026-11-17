@@ -775,8 +775,20 @@ async function downloadViaBlob(
   const disposition = response.headers.get("Content-Disposition") ?? "";
   const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
   const plain = disposition.match(/filename="([^"]+)"/i)?.[1];
-  const name = encoded ? decodeURIComponent(encoded) : plain;
-  downloadFile(name || fallbackName, { content: await response.blob() });
+  let name = plain;
+  if (encoded) {
+    try {
+      name = decodeURIComponent(encoded);
+    } catch {
+      // Malformed percent-encoding: keep the plain filename.
+    }
+  }
+  // A neutral type keeps the same-origin blob from ever being rendered,
+  // e.g. an HTML artifact opened in a tab instead of saved.
+  const bytes = await response.arrayBuffer();
+  downloadFile(name || fallbackName, {
+    content: new Blob([bytes], { type: "application/octet-stream" }),
+  });
 }
 
 export function downloadArtifactFile(
