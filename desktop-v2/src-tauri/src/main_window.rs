@@ -205,8 +205,8 @@ pub fn close(app: &AppHandle, server: &str) {
         return;
     };
     if let Ok(server_url) = Url::parse(server) {
-        #[cfg(target_os = "macos")]
         let name = app.state::<AppState>().cached_cookie_name(server);
+        #[cfg(target_os = "macos")]
         let _ = crate::macos_cookies::clear_session_cookie(&window, &server_url, &name);
         if let Ok(cookie) = session_cookie(&server_url, &name, "") {
             let _ = window.delete_cookie(cookie);

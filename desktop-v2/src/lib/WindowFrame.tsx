@@ -13,22 +13,25 @@ export function WindowFrame({ title, subtitle, children }: WindowFrameProps) {
   return (
     <Section gap={0} justifyContent="start" alignItems="stretch">
       <div className="drag-region h-6 shrink-0" data-tauri-drag-region />
-      <Section gap={6} padding={8} justifyContent="start" alignItems="stretch">
-        <Section flexDirection="row" gap={3} justifyContent="start" height="fit">
-          <img src="/onyx-logo.svg" alt="" className="h-8 w-8" />
-          <Section gap={0} alignItems="start" height="fit">
-            <Text font="heading-section" color="text-05">
-              {title}
-            </Text>
-            {subtitle ? (
-              <Text font="secondary-body" color="text-03">
-                {subtitle}
+      {/* The windows have a fixed size: content that does not fit scrolls. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <Section gap={6} padding={8} justifyContent="start" alignItems="stretch" height="fit">
+          <Section flexDirection="row" gap={3} justifyContent="start" height="fit">
+            <img src="/onyx-logo.svg" alt="" className="h-8 w-8" />
+            <Section gap={0} alignItems="start" height="fit">
+              <Text font="heading-section" color="text-05">
+                {title}
               </Text>
-            ) : null}
+              {subtitle ? (
+                <Text font="secondary-body" color="text-03">
+                  {subtitle}
+                </Text>
+              ) : null}
+            </Section>
           </Section>
+          {children}
         </Section>
-        {children}
-      </Section>
+      </div>
     </Section>
   );
 }
