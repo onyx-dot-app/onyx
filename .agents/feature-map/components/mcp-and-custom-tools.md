@@ -134,8 +134,8 @@ new servers and authentication edits:
 attempt in `server/features/mcp/oauth_flow.py:MCP_OAUTH_ATTEMPTS` (ten
 minutes). The callback consumes it, checks access and the client fingerprint
 again, and calls `server/features/mcp/oauth.py:complete_mcp_oauth_authorization`.
-`refresh_mcp_oauth_token_if_expired` refreshes under a shared lock per
-connection config, because providers rotate refresh tokens.
+The MCP SDK provider refreshes under a shared lock per connection config,
+because providers rotate refresh tokens.
 
 **OAuth client registration.** With `KNOWN_PROVIDER` mode, the admin supplies
 the client ID and endpoints. With `AUTO_DISCOVERY`, the client registers in
@@ -488,7 +488,7 @@ it.
     A key saved during the call stays connected. An OAuth2 connection is left
     to the refresh.
 13. `craft-sessions-bake-mcp-config` **Craft sessions bake MCP config.** A change
-    to a server's URL, access or `available_in_craft` must call
+    to a server's URL or access must call
     `server/features/mcp/api.py:_hot_reload_craft_sessions`. Take
     `backend/onyx/db/mcp.py:affected_user_ids_for_mcp_server` before an access
     change or a delete; users who lose access are not in the
