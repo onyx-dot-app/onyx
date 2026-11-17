@@ -8,9 +8,17 @@ the DB. CUSTOM apps author globs; built-in providers author regexes.
 
 from __future__ import annotations
 
-from onyx.db.enums import ExternalAppType
-from onyx.db.models import ExternalApp
+from unittest.mock import MagicMock, patch
+
+import pytest
+from sqlalchemy.orm import Session
+
+from onyx.db.enums import ExternalAppType, IntegrationKind
+from onyx.db.models import ExternalApp, Integration
 from onyx.external_apps.matching.engine import resolve_app_for_url
+from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.integrations.models import RequestMatch
+from onyx.sandbox_proxy.request_evaluator import _matches
 
 
 def _app(
@@ -59,3 +67,29 @@ def test_malformed_builtin_regex_is_skipped_not_fatal() -> None:
     bad = _app(["("], ExternalAppType.SLACK)  # invalid regex
     good = _app(["https://slack\\.com/api/.*"], ExternalAppType.SLACK)
     assert resolve_app_for_url("https://slack.com/api/x", [bad, good]) is good
+
+
+def test_a_failed_integration_match_blocks_the_request() -> None:
+    """A broader integration must not claim a request that a more specific
+    one failed to match, so the error reaches the gate, which blocks."""
+    broken = Integration(id=1, kind=IntegrationKind.MCP)
+    broad = Integration(id=2, kind=IntegrationKind.MCP)
+
+    def match(
+        integration: Integration, _request: ProxiedRequest, _db: Session
+    ) -> RequestMatch:
+        if integration is broken:
+            raise ValueError("bad stored settings")
+        return RequestMatch(actions=[], path_prefix_length=1)
+
+    handler = MagicMock()
+    handler.match_request.side_effect = match
+    request = ProxiedRequest(method="POST", path="/mcp/x")
+    with (
+        patch(
+            "onyx.sandbox_proxy.request_evaluator.get_kind_handler",
+            return_value=handler,
+        ),
+        pytest.raises(ValueError),
+    ):
+        _matches([broken, broad], request, MagicMock())

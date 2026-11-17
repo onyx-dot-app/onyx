@@ -64,16 +64,11 @@ def _matches(
 ) -> list[tuple[Integration, RequestMatch]]:
     matches: list[tuple[Integration, RequestMatch]] = []
     for integration in integrations:
-        try:
-            match = get_kind_handler(integration.kind).match_request(
-                integration, request, db_session
-            )
-        except Exception:
-            # A broken integration is not matched, so it gets no credential.
-            logger.exception(
-                "integration_match_error integration=%s; skipping", integration.id
-            )
-            continue
+        # An error blocks the request: skipping the integration could let a
+        # broader one claim it with its own credential.
+        match = get_kind_handler(integration.kind).match_request(
+            integration, request, db_session
+        )
         if match is not None:
             matches.append((integration, match))
     return matches
