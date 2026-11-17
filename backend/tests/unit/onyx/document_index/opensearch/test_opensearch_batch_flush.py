@@ -236,3 +236,48 @@ def test_index_writes_all_enriched_source_types() -> None:
         DocumentSource.GOOGLE_DRIVE.value,
         DocumentSource.WEB.value,
     ]
+
+
+@patch(
+    "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
+    100,
+)
+def test_doc_split_across_groups_is_deleted_once_before_its_first_write() -> None:
+    """A doc that spans two groups is deleted with the first group only, so
+    the second delete cannot remove the chunks the first bulk call wrote."""
+    index, mock_bulk = _make_index()
+    doc_ids = ["doc_0", "doc_1", "doc_2"]
+    chunks = [
+        _make_chunk(doc_id, chunk_idx) for doc_id in doc_ids for chunk_idx in range(60)
+    ]
+    metadata = IndexingMetadata(
+        doc_id_to_chunk_cnt_diff={
+            doc_id: IndexingMetadata.ChunkCounts(old_chunk_cnt=0, new_chunk_cnt=60)
+            for doc_id in doc_ids
+        },
+    )
+
+    results = index.index(chunks, metadata)
+
+    batch_sizes = [len(call.kwargs["documents"]) for call in mock_bulk.call_args_list]
+    assert batch_sizes == [100, 80]
+    mock_delete: MagicMock = cast(MagicMock, index._client).delete_by_query
+    deleted_per_call = [
+        next(
+            f["terms"]["document_id"]
+            for f in call.args[0]["query"]["bool"]["filter"]
+            if "terms" in f
+        )
+        for call in mock_delete.call_args_list
+    ]
+    # doc_1 is split: chunks 0-39 go in the first group, 40-59 in the second.
+    assert deleted_per_call == [["doc_0", "doc_1"], ["doc_2"]]
+    written = [
+        (chunk.document_id, chunk.chunk_index)
+        for call in mock_bulk.call_args_list
+        for chunk in call.kwargs["documents"]
+    ]
+    assert sorted(written) == sorted(
+        (doc_id, chunk_idx) for doc_id in doc_ids for chunk_idx in range(60)
+    )
+    assert [r.document_id for r in results] == doc_ids
