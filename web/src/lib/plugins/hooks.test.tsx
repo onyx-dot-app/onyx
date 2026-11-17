@@ -74,7 +74,7 @@ test("the default agent runs the plugins the server lists", async () => {
   ]);
 });
 
-test("turning a plugin off saves disabled_plugin_ids and keeps the built-in tools", async () => {
+test("turning a plugin off sends only disabled_plugin_ids", async () => {
   const fetchMock = mockFetch({
     "/api/user/assistant/preferences": {
       "8": { disabled_tool_ids: [3], disabled_plugin_ids: ["other"] },
@@ -92,10 +92,7 @@ test("turning a plugin off saves disabled_plugin_ids and keeps the built-in tool
   );
   expect(
     requestBody(fetchMock, "PATCH", "/api/user/assistant/8/preferences")
-  ).toEqual({
-    disabled_tool_ids: [3],
-    disabled_plugin_ids: ["other", LINEAR_PLUGIN_ID],
-  });
+  ).toEqual({ disabled_plugin_ids: ["other", LINEAR_PLUGIN_ID] });
   expect(result.current.disabledPluginIds(8)).toEqual([
     "other",
     LINEAR_PLUGIN_ID,
