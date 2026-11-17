@@ -70,6 +70,7 @@ def test_valid_limiter_budgets_keep_the_limiter_on() -> None:
     [
         ("CELERY_WORKER_DOCCONVERSION_CONCURRENCY", 2),
         ("DOCCONVERSION_WINDOW_BATCHES", 32),
+        ("DOCCONVERSION_STALL_SECONDS", 300),
     ],
 )
 def test_a_bad_conversion_setting_gives_its_default(name: str, default: int) -> None:
