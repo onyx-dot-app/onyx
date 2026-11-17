@@ -686,7 +686,7 @@ def test_onedrive_document_keeps_raw_graph_identity_and_scoped_hierarchy() -> No
     assert not document.external_access.is_public
 
 
-def test_onedrive_hierarchy_is_drive_scoped_and_private_in_ce() -> None:
+def test_onedrive_hierarchy_is_drive_scoped_without_unread_access() -> None:
     folder = DriveDeltaItem.model_validate(
         {
             "id": "folder",
@@ -699,8 +699,8 @@ def test_onedrive_hierarchy_is_drive_scoped_and_private_in_ce() -> None:
 
     assert node.raw_node_id == "d:folder"
     assert node.raw_parent_id == drive_root_id("d")
-    assert node.external_access is not None
-    assert node.external_access == node.external_access.empty()
+    # Access that was not read is None, so the stored node access stays.
+    assert node.external_access is None
 
 
 def test_onedrive_recorded_spike_item_does_not_require_shared_changed() -> None:

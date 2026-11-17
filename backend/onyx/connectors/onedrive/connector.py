@@ -141,7 +141,7 @@ def user_root_node(
         display_name=user.display_name or user.user_principal_name,
         link=drive.web_url,
         node_type=HierarchyNodeType.MY_DRIVE,
-        external_access=external_access or ExternalAccess.empty(),
+        external_access=external_access,
     )
 
 
@@ -178,7 +178,7 @@ def folder_node(
         display_name=item.name or "",
         link=item.web_url,
         node_type=HierarchyNodeType.FOLDER,
-        external_access=external_access or ExternalAccess.empty(),
+        external_access=external_access,
     )
 
 
