@@ -63,7 +63,8 @@ slim listing and returns the checkpoint. It yields `SlimDocumentStub`s with a
 permissions; `resolve_targets` reads every permission of a file before the
 link-only filter and permission sync use them. With permission sync, each
 folder node still gets its permissions (`_listed_folder_node`), so a private
-folder is never a public node. Inline indexing and pruning ask for permissions
+folder is never a public node. Without permission sync, a folder node has
+`external_access=None`, so the stored access stays. Inline indexing and pruning ask for permissions
 when `exclude_domain_link_only` is on, because they filter at the listing.
 
 **Indexability.** `connectors/google_drive/doc_conversion.py:drive_file_skip_reason` is the metadata

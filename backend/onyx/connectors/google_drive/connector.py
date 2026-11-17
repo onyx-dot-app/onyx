@@ -786,9 +786,11 @@ class GoogleDriveConnector(
         permission_sync_context: PermissionSyncContext | None,
         add_prefix: bool,
     ) -> HierarchyNode:
-        """The node of a listed folder. A listing without permissions gives no
-        permission ids: they are read as the user who listed the folder. If
-        that read fails, the folder gets no access, not public access."""
+        """The node of a listed folder. Without a permission sync context, the
+        node has no access value, so the stored access stays. A listing
+        without permissions gives no permission ids: they are read as the
+        user who listed the folder. If that read fails, the folder gets no
+        access, not public access."""
         drive_file = folder.drive_file
         if permission_sync_context is not None and "permissionIds" not in drive_file:
             try:
