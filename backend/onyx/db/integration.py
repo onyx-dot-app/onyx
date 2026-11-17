@@ -235,16 +235,33 @@ def list_action_summaries(
     return actions
 
 
-def list_external_app_types(
+def list_external_apps_by_integration(
     integration_ids: Collection[int], db_session: Session
-) -> dict[int, ExternalAppType]:
-    """The app type of each integration that has an ``external_app`` row."""
+) -> dict[int, ExternalApp]:
+    """The ``external_app`` row of each integration that has one."""
     if not integration_ids:
         return {}
     return dict(
         db_session.execute(
-            select(Integration.id, ExternalApp.app_type)
+            select(Integration.id, ExternalApp)
             .join(ExternalApp, ExternalApp.id == Integration.external_app_id)
+            .where(Integration.id.in_(integration_ids))
+        )
+        .tuples()
+        .all()
+    )
+
+
+def list_mcp_servers_by_integration(
+    integration_ids: Collection[int], db_session: Session
+) -> dict[int, MCPServer]:
+    """The ``mcp_server`` row of each integration that has one."""
+    if not integration_ids:
+        return {}
+    return dict(
+        db_session.execute(
+            select(Integration.id, MCPServer)
+            .join(MCPServer, MCPServer.id == Integration.mcp_server_id)
             .where(Integration.id.in_(integration_ids))
         )
         .tuples()

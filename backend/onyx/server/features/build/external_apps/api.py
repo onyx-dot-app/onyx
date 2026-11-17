@@ -1,6 +1,3 @@
-import ipaddress
-import re
-from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -10,7 +7,6 @@ from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
-    ExternalAppType,
     IntegrationAuthMethod,
     IntegrationAuthMode,
     IntegrationKind,
@@ -31,7 +27,7 @@ from onyx.integrations.connection_models import (
     read_connection_secret,
 )
 from onyx.integrations.connections import credential_field_keys, integration_status
-from onyx.integrations.craft import list_runnable_integrations
+from onyx.integrations.craft import craft_service_urls, list_runnable_integrations
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
@@ -70,40 +66,6 @@ def _to_user_response(
         integration_status(integration, user, db_session).state
         is ConnectionState.CONNECTED
     )
-    service_urls: list[str] = []
-    for pattern in app.upstream_url_patterns:
-        if app.app_type != ExternalAppType.CUSTOM:
-            pattern = pattern.removeprefix("^")
-        authority = pattern.partition("://")[2].split("/", 1)[0].rsplit("@", 1)[-1]
-        if app.app_type != ExternalAppType.CUSTOM:
-            if "?" in authority or re.search(r"(?<!\\)\.", authority):
-                continue
-            pattern = pattern.replace(r"\.", ".").replace(r"\-", "-")
-        host_port, separator, query = authority.partition("?")
-        if separator and "=" not in query:
-            continue
-        if re.search(r"[\s*+|(){}^$]", host_port):
-            continue
-        try:
-            parsed = urlsplit(pattern)
-            hostname = parsed.hostname
-            port = parsed.port
-            if parsed.scheme not in ("http", "https") or not hostname:
-                continue
-            if ":" in hostname:
-                hostname = f"[{ipaddress.IPv6Address(hostname).compressed}]"
-            elif not re.fullmatch(
-                r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*",
-                hostname,
-            ):
-                continue
-        except ValueError:
-            continue
-        origin = f"{parsed.scheme}://{hostname}"
-        if port is not None and port != {"http": 80, "https": 443}[parsed.scheme]:
-            origin += f":{port}"
-        if origin not in service_urls:
-            service_urls.append(origin)
 
     return ExternalAppUserResponse(
         id=app.id,
@@ -114,7 +76,7 @@ def _to_user_response(
         credential_values=credential_values,
         authenticated=authenticated,
         supports_oauth=isinstance(get_provider_for_app(app), OAuthExternalAppProvider),
-        service_urls=service_urls,
+        service_urls=craft_service_urls(app),
     )
 
 

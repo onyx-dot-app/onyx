@@ -995,6 +995,54 @@ def test_member_cannot_save_always_allow_over_an_admin_block_or_allow(
     )
 
 
+@pytest.mark.usefixtures("craft_available")
+def test_member_list_carries_the_craft_fields(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    request = _custom_create()
+    request.for_organization = True
+    custom = admin_api.create_integration(request, admin, db_session)
+    created.add(custom.id)
+    with patch("onyx.integrations.service.discover_mcp_tools", return_value=[]):
+        mcp = admin_api.create_integration(
+            IntegrationCreate(
+                for_organization=True,
+                name=f"mcp-{uuid4().hex[:8]}",
+                auth_mode=IntegrationAuthMode.NONE,
+                config=McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
+            ),
+            admin,
+            db_session,
+        )
+    created.add(mcp.id)
+    api.save_member_connection(
+        custom.id,
+        ConnectionFieldsRequest(fields={"token": "secret-value"}),
+        member,
+        db_session,
+    )
+
+    listed = {
+        view.id: view for view in api.list_integrations_for_member(member, db_session)
+    }
+    app = get_external_app_for_integration(custom.id, db_session)
+    assert app is not None
+    custom_view = listed[custom.id]
+    assert custom_view.external_app_id == app.id
+    assert custom_view.service_urls == ["https://api.custom.example.com"]
+    assert set(custom_view.credential_values) == {"token"}
+    assert custom_view.credential_values["token"] != "secret-value"
+    assert (custom_view.mcp_server_id, custom_view.server_url) == (None, None)
+    server = get_mcp_server_for_integration(mcp.id, db_session)
+    assert server is not None
+    mcp_view = listed[mcp.id]
+    assert (mcp_view.mcp_server_id, mcp_view.server_url) == (
+        server.id,
+        "https://mcp.example.com/mcp",
+    )
+    assert mcp_view.external_app_id is None
+
+
 def test_member_cannot_reach_a_private_integration(
     db_session: Session, scoped: User, member: User, created: Created
 ) -> None:

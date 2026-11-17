@@ -1,12 +1,15 @@
 """The integrations that Craft uses for a user and for the tasks of the user."""
 
+import ipaddress
+import re
 from collections.abc import Collection, Sequence
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, InstanceOf
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import IntegrationKind
+from onyx.db.enums import ExternalAppType, IntegrationKind
 from onyx.db.integration import (
     get_external_app_for_integration,
     list_integration_actions,
@@ -367,3 +370,43 @@ def replace_task_plugins__no_commit(
             for plugin in plugins
         },
     )
+
+
+def craft_service_urls(app: ExternalApp) -> list[str]:
+    """The origins of the URL patterns of an app that Craft can show as links."""
+    service_urls: list[str] = []
+    for pattern in app.upstream_url_patterns:
+        if app.app_type != ExternalAppType.CUSTOM:
+            pattern = pattern.removeprefix("^")
+        authority = pattern.partition("://")[2].split("/", 1)[0].rsplit("@", 1)[-1]
+        if app.app_type != ExternalAppType.CUSTOM:
+            if "?" in authority or re.search(r"(?<!\\)\.", authority):
+                continue
+            pattern = pattern.replace(r"\.", ".").replace(r"\-", "-")
+        host_port, separator, query = authority.partition("?")
+        if separator and "=" not in query:
+            continue
+        if re.search(r"[\s*+|(){}^$]", host_port):
+            continue
+        try:
+            parsed = urlsplit(pattern)
+            hostname = parsed.hostname
+            port = parsed.port
+            if parsed.scheme not in ("http", "https") or not hostname:
+                continue
+            if ":" in hostname:
+                hostname = f"[{ipaddress.IPv6Address(hostname).compressed}]"
+            elif not re.fullmatch(
+                r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*",
+                hostname,
+            ):
+                continue
+        except ValueError:
+            continue
+        origin = f"{parsed.scheme}://{hostname}"
+        if port is not None and port != {"http": 80, "https": 443}[parsed.scheme]:
+            origin += f":{port}"
+        if origin not in service_urls:
+            service_urls.append(origin)
+
+    return service_urls

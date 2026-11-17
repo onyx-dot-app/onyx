@@ -35,12 +35,13 @@ from onyx.db.integration import (
     get_openapi_tool_for_integration,
     insert_integration__no_commit,
     list_action_summaries,
-    list_external_app_types,
+    list_external_apps_by_integration,
     list_integration_actions,
     list_integration_ids_held_by_plugins,
     list_integration_plugin_rows,
     list_integrations,
     list_integrations_by_ids,
+    list_mcp_servers_by_integration,
     lock_integration,
     lock_integration__no_commit,
     rename_kind_row__no_commit,
@@ -51,10 +52,17 @@ from onyx.db.integration import (
 from onyx.db.integration_connection import (
     get_oauth_client,
     get_oauth_clients,
+    list_connections,
     user_can_see_integration,
 )
 from onyx.db.integration_policy import get_policy_rows, list_admin_policy_rows
-from onyx.db.models import Integration, IntegrationAction, IntegrationOAuthClient, User
+from onyx.db.models import (
+    ExternalApp,
+    Integration,
+    IntegrationAction,
+    IntegrationOAuthClient,
+    User,
+)
 from onyx.db.plugin import create_integration_plugin__no_commit
 from onyx.db.plugin_access import (
     UserPluginState,
@@ -70,7 +78,11 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.external_apps.url_glob import UrlGlob
-from onyx.integrations.connection_models import ConnectionState, read_oauth_client
+from onyx.integrations.connection_models import (
+    ConnectionState,
+    read_connection_secret,
+    read_oauth_client,
+)
 from onyx.integrations.connections import (
     IntegrationStatus,
     MissingHeaderValueError,
@@ -84,7 +96,7 @@ from onyx.integrations.connections import (
     sign_in_host,
     sign_in_settings_for,
 )
-from onyx.integrations.craft import always_asks
+from onyx.integrations.craft import always_asks, craft_service_urls
 from onyx.integrations.kinds.mcp_server import fetch_mcp_actions, mcp_action_specs
 from onyx.integrations.models import (
     EffectivePolicy,
@@ -231,11 +243,10 @@ def _check_onyx_login(user: User, method: IntegrationAuthMethod | None) -> None:
         )
 
 
-def _shapes(
+def _external_apps(
     integrations: Collection[Integration], db_session: Session
-) -> dict[int, tuple[IntegrationShape, str | None]]:
-    """The shape and the preset id of each integration."""
-    app_types = list_external_app_types(
+) -> dict[int, ExternalApp]:
+    return list_external_apps_by_integration(
         [
             integration.id
             for integration in integrations
@@ -243,6 +254,12 @@ def _shapes(
         ],
         db_session,
     )
+
+
+def _shapes(
+    integrations: Collection[Integration], external_apps: Mapping[int, ExternalApp]
+) -> dict[int, tuple[IntegrationShape, str | None]]:
+    """The shape and the preset id of each integration."""
     shapes: dict[int, tuple[IntegrationShape, str | None]] = {}
     for integration in integrations:
         if integration.kind is IntegrationKind.MCP:
@@ -251,16 +268,16 @@ def _shapes(
         if integration.tool_id is not None:
             shapes[integration.id] = (IntegrationShape.OPENAPI, None)
             continue
-        app_type = app_types.get(integration.id)
-        if app_type is None:
+        app = external_apps.get(integration.id)
+        if app is None:
             raise OnyxError(
                 OnyxErrorCode.NOT_FOUND,
                 f"Integration {integration.id} has no API settings.",
             )
         shapes[integration.id] = (
             (IntegrationShape.CUSTOM, None)
-            if app_type == ExternalAppType.CUSTOM
-            else (IntegrationShape.PRESET, app_type.value)
+            if app.app_type == ExternalAppType.CUSTOM
+            else (IntegrationShape.PRESET, app.app_type.value)
         )
     return shapes
 
@@ -268,7 +285,9 @@ def _shapes(
 def _shape_and_preset(
     integration: Integration, db_session: Session
 ) -> tuple[IntegrationShape, str | None]:
-    return _shapes([integration], db_session)[integration.id]
+    return _shapes([integration], _external_apps([integration], db_session))[
+        integration.id
+    ]
 
 
 def _preset_or_400(preset_id: str) -> Preset:
@@ -1053,7 +1072,7 @@ def _admin_views(
 ) -> list[AdminIntegration]:
     creator_emails = _creator_emails(integrations, db_session)
     statuses = _organization_statuses(integrations, db_session)
-    shapes = _shapes(integrations, db_session)
+    shapes = _shapes(integrations, _external_apps(integrations, db_session))
     action_counts = count_integration_actions(
         [integration.id for integration in integrations], db_session
     )
@@ -1318,6 +1337,30 @@ def _visible_plugin_refs(
     }
 
 
+def _saved_credential_values(
+    user: User, integrations: Collection[Integration], db_session: Session
+) -> dict[int, dict[str, str]]:
+    """The masked values the user saved for each api_key integration with a
+    connection for each user."""
+    keyed = {
+        integration.id: credential_field_keys(integration)
+        for integration in integrations
+        if integration.auth_mode is IntegrationAuthMode.INDIVIDUAL
+        and integration.auth_method is IntegrationAuthMethod.API_KEY
+    }
+    connections = list_connections(db_session, list(keyed), user.id)
+    values: dict[int, dict[str, str]] = {}
+    for integration_id, keys in keyed.items():
+        connection = connections.get((integration_id, user.id))
+        if connection is None:
+            continue
+        fields = read_connection_secret(connection).fields
+        values[integration_id] = {
+            key: mask_string(fields[key]) for key in keys if key in fields
+        }
+    return values
+
+
 def _member_views(
     user: User,
     integrations: Collection[Integration],
@@ -1325,10 +1368,22 @@ def _member_views(
     db_session: Session,
 ) -> list[MemberIntegration]:
     statuses = integration_statuses(integrations, user, db_session)
-    shapes = _shapes(integrations, db_session)
+    external_apps = _external_apps(integrations, db_session)
+    shapes = _shapes(integrations, external_apps)
+    mcp_servers = list_mcp_servers_by_integration(
+        [
+            integration.id
+            for integration in integrations
+            if integration.mcp_server_id is not None
+        ],
+        db_session,
+    )
+    saved_values = _saved_credential_values(user, integrations, db_session)
     views: list[MemberIntegration] = []
     for integration in integrations:
         shape, preset_id = shapes[integration.id]
+        app = external_apps.get(integration.id)
+        server = mcp_servers.get(integration.id)
         views.append(
             MemberIntegration(
                 id=integration.id,
@@ -1343,6 +1398,11 @@ def _member_views(
                 status=statuses[integration.id],
                 plugins=plugin_refs[integration.id],
                 users_can_save_always_allow=integration.users_can_save_always_allow,
+                credential_values=saved_values.get(integration.id, {}),
+                external_app_id=app.id if app is not None else None,
+                service_urls=craft_service_urls(app) if app is not None else [],
+                mcp_server_id=server.id if server is not None else None,
+                server_url=server.server_url if server is not None else None,
             )
         )
     return views
@@ -1466,7 +1526,7 @@ def agent_catalog(user: User, db_session: Session) -> list[AgentPluginOption]:
         if integration.enabled
     ]
     integration_ids = [integration.id for integration in integrations]
-    shapes = _shapes(integrations, db_session)
+    shapes = _shapes(integrations, _external_apps(integrations, db_session))
     actions = list_action_summaries(integration_ids, db_session)
     admin_rows = list_admin_policy_rows(db_session, integration_ids)
     integration_options = {
