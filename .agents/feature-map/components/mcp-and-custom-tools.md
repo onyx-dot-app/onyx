@@ -114,8 +114,7 @@ OpenAPI kind     -> one CustomTool per offered operation (custom__<integration i
 ```
 
 **MCP setup.** An admin adds an MCP server through
-`POST /admin/integrations` (see "Integrations API (U6)" below). The old staged
-setup and member OAuth routes are gone. The add form still uses
+`POST /admin/integrations` (see "Integrations API" below). The add form uses
 `POST /admin/mcp/probe` and `POST /admin/mcp/oauth/discover`
 (`server/features/mcp/api.py`). Sign-in uses the one flow in
 `integrations/oauth.py`.
@@ -247,8 +246,7 @@ and none for a preset or custom app. Tool names use the integration id
 (`mcp__<id>__<name>__<tool>`, `custom__<id>__<operationId>`), and each tool has
 `id = None`.
 
-**Integrations API (U6).** One API serves every integration; the contract
-is plans/workstream-u-api-contract.md (local only). Routes:
+**Integrations API.** One API serves every integration. Routes:
 `server/features/integrations/admin_api.py` (`/admin/integrations`: list,
 presets, create, read, PATCH, DELETE, actions GET/PUT, `actions/refresh`,
 `organization-connection` PUT/DELETE) and `server/features/integrations/api.py`
@@ -259,12 +257,16 @@ OAuth start and callback stay in
 `integrations/service.py`; the queries are in `db/integration.py` and
 `db/integration_policy.py`.
 - Create (`create_integration__no_commit`) writes, in one transaction, the
-  `integration` row, its kind row (`mcp_server`, the OpenAPI `tool` row, or
-  `external_app` with the preset or URL patterns), the OAuth client, one plugin
-  that holds it (`db/plugin.py:create_integration_plugin__no_commit`: version 1
-  with no files, Organization library or the creator's "My uploads") and the
-  actions. A public MCP server is asked for its tools at create; a failure
-  leaves no actions until a refresh.
+  kind row (`mcp_server`, the OpenAPI `tool` row, or `external_app` with the
+  preset or URL patterns), then the `integration` row with exactly one of
+  `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client, one
+  plugin that holds it (`db/plugin.py:create_integration_plugin__no_commit`:
+  version 1 with no files, Organization library or the creator's "My uploads")
+  and the actions. A public MCP server is asked for its tools at create; a
+  failure leaves no actions until a refresh.
+- Delete (`db/integration.py:delete_integration__no_commit`) deletes the
+  integration and then its kind row. A plugin left with no skill and no
+  integration goes too. A deleted kind row deletes its integration by cascade.
 - A preset keeps its client id, secret and host settings (Zendesk
   `subdomain`) on `integration_oauth_client`; the host settings are in
   `additional_params`, which
@@ -439,11 +441,11 @@ it.
    place that picks a credential.** Chat construction and MCP execution reach
    it through `integrations/call_credentials.py:resolve_call_credentials`, and
    so does the sandbox proxy. A mode never falls back to the other one.
-2. `oauth-always-per-user` **OAuth is always per user.**
-   `server/features/mcp/models.py:MCPToolCreateRequest.validate_auth_configuration`
-   rejects OAuth with any performer other than `PER_USER`. The OAuth client
-   registration is shared configuration. The admin's grant is the admin's own
-   connection.
+2. `oauth-always-per-user` **An OAuth grant belongs to one connection.** An
+   `individual` integration keeps a grant per user. A `shared` integration has
+   one organization connection, and only a manager of the integration makes it
+   (`integrations/oauth.py:_check_may_connect`). The OAuth client registration
+   is shared configuration.
 3. `token-forwarding-full-manager` **Forwarding a login token is a full-manager
    decision.** `passthrough_auth` and `PT_OAUTH` send each chatting user's Onyx
    token to the admin's URL.
@@ -468,9 +470,10 @@ it.
    `db/integration.py:replace_integration_actions__no_commit` treats a tool
    that the remote server renames as a new action, and the policy rows and
    agent settings of the old key no longer apply to it.
-7. `mcp-tool-user-id-none` **`Tool.user_id` is `None` for MCP tools.** Ownership
-   is on `MCPServer.owner`. Check rights with `db/tools.py:can_manage_tool`,
-   never with `tool.user_id == user.id`.
+7. `mcp-tool-user-id-none` **`Tool.user_id` is not the owner.** The plugins
+   that hold the integration decide who manages it. Check rights with
+   `integrations/service.py:manages_integration`, never with
+   `tool.user_id == user.id`.
 8. `access-grants-default-chat-only` **Plugin visibility gates chat, not server
    grants.** Chat offers an integration's actions to each user who can use the
    agent and can see a plugin of the agent that holds the integration
@@ -823,7 +826,7 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   exception to a 400, on the assumption that an agent still uses the tool.
   `Persona__Tool.tool_id` cascades on delete, so that case cannot occur. The
   handler hides real errors.
-- `MCPTransport.STDIO` is accepted by `MCPToolCreateRequest`, but the client
+- `MCPTransport.STDIO` is accepted by `McpServerConfigInput`, but the client
   has no STDIO path and uses `sse_client` for it. Do not remove the enum value:
   the column is a non-native enum, and a stored `STDIO` row would fail to load.
 - A per-tool OAuth token replaces a static `Authorization` header with only a
@@ -871,14 +874,10 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 
 ## Recipes
 
-- `mcp-auth-type` **An MCP auth type.** Copy how `API_TOKEN` is handled; list the current set
-  in `db/enums.py:MCPAuthenticationType`. Add validation in
-  `MCPToolCreateRequest.validate_auth_configuration`, which resets the OAuth
-  fields, `oauth_cimd_enabled` included, for every type that is not `OAUTH`.
-  Handle the type in `server/features/mcp/credentials.py`
-  (`resolve_mcp_credentials`, `ResolvedMCPCredentials`,
-  `user_connection_status`), and in
-  `_mcp_setup_headers` and the fingerprint in `server/features/mcp/api.py`.
+- `mcp-auth-type` **A sign-in method.** Copy how `api_key` is handled; list the
+  current set in `db/enums.py:IntegrationAuthMethod`. Add validation in
+  `integrations/service.py:_validate_sign_in` and `_allowed_methods`, and
+  resolve the method in `integrations/connections.py:resolve_connection`.
   Add a test that a user without a credential gets the auth error, not a
   shared credential.
 - `mcp-transport` **A transport.** Copy `STREAMABLE_HTTP`; list the set in

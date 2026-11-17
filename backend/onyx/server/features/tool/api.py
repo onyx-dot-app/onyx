@@ -2,6 +2,7 @@
 custom tool is an ``api`` integration with an OpenAPI schema: the routes read
 and write the integration and return the id of its OpenAPI ``tool`` row."""
 
+from collections.abc import Sequence
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -20,8 +21,8 @@ from onyx.db.enums import (
 )
 from onyx.db.integration import (
     IntegrationPluginRow,
-    get_integration_by_id,
     get_openapi_tool_for_integration,
+    get_openapi_tool_with_integration,
     list_integration_plugin_rows,
     list_openapi_tools_with_integration,
 )
@@ -31,7 +32,7 @@ from onyx.db.integration_connection import (
 )
 from onyx.db.models import Integration, Tool, User
 from onyx.db.plugin import lock_plugin, set_plugin_preferences__no_commit
-from onyx.db.plugin_access import load_user_plugin_states
+from onyx.db.plugin_access import get_visible_plugin_ids, load_user_plugin_states
 from onyx.db.tools import get_tools
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -71,6 +72,7 @@ admin_router = APIRouter(prefix="/admin/tool")
 _DEFAULT_CHAT_POLICIES = frozenset(
     {PluginInstallationPolicy.DEFAULT, PluginInstallationPolicy.REQUIRED}
 )
+_BEARER_TEMPLATE = "Bearer {access_token}"
 
 
 class _AuthSettings(BaseModel):
@@ -96,7 +98,7 @@ def _auth_settings(headers: list[Header], passthrough_auth: bool) -> _AuthSettin
         return _AuthSettings(
             auth_mode=IntegrationAuthMode.INDIVIDUAL,
             auth_method=IntegrationAuthMethod.ONYX_LOGIN,
-            header_template={**values, "Authorization": "Bearer {access_token}"},
+            header_template={**values, "Authorization": _BEARER_TEMPLATE},
             credential_fields=None,
             organization_fields={},
         )
@@ -170,7 +172,7 @@ def _stored_headers(integration: Integration, db_session: Session) -> dict[str, 
     fields = _organization_fields(integration, db_session)
     headers: dict[str, str] = {}
     for name, template in (integration.header_template or {}).items():
-        if template == "Bearer {access_token}" and name.lower() == "authorization":
+        if template == _BEARER_TEMPLATE and name.lower() == "authorization":
             continue
         if template.startswith("{") and template.endswith("}"):
             value = fields.get(template[1:-1])
@@ -257,18 +259,10 @@ def _alias_snapshot(
 
 
 def _openapi_tool_or_404(tool_id: int, db_session: Session) -> tuple[Tool, Integration]:
-    tool = db_session.get(Tool, tool_id)
-    if (
-        tool is None
-        or tool.openapi_schema is None
-        or tool.mcp_server_id is not None
-        or tool.integration_id is None
-    ):
+    pair = get_openapi_tool_with_integration(tool_id, db_session)
+    if pair is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, f"Tool with ID {tool_id} not found")
-    integration = get_integration_by_id(tool.integration_id, db_session)
-    if integration is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, f"Tool with ID {tool_id} not found")
-    return tool, integration
+    return pair
 
 
 def _snapshot_for(
@@ -288,7 +282,6 @@ def create_custom_tool(
 ) -> ToolSnapshot:
     _check_default_chat_permission(tool_data.default_chat_enabled, user)
     _refuse_oauth_config(tool_data.oauth_config_id)
-    validate_openapi_definition(tool_data.definition)
     auth = _auth_settings(tool_data.custom_headers or [], tool_data.passthrough_auth)
     integration = create_integration__no_commit(
         user,
@@ -326,11 +319,8 @@ def update_custom_tool(
     if "oauth_config_id" in tool_data.model_fields_set:
         _refuse_oauth_config(tool_data.oauth_config_id)
     tool, integration = _openapi_tool_or_404(tool_id, db_session)
-    integration = get_manageable_integration(
-        user, integration.id, db_session, lock=True
-    )
-    if tool_data.definition is not None:
-        validate_openapi_definition(tool_data.definition)
+    # Check before the stored headers are read; the update locks the row.
+    get_manageable_integration(user, integration.id, db_session)
 
     update = IntegrationUpdate()
     if tool_data.name is not None:
@@ -401,33 +391,27 @@ def validate_tool(
 
 
 def _openapi_snapshots(
-    user: User, db_session: Session, *, managed_or_visible: bool
+    user: User,
+    tools: Sequence[tuple[Tool, Integration]],
+    db_session: Session,
+    *,
+    include_managed: bool,
 ) -> list[ToolSnapshot]:
-    """The custom tools the user can see through a plugin. With
-    ``managed_or_visible``, also those the user manages, with the
-    permissions stamped."""
-    tools = list_openapi_tools_with_integration(db_session)
-    integration_ids = [
-        tool.integration_id for tool in tools if tool.integration_id is not None
-    ]
-    plugin_rows = list_integration_plugin_rows(integration_ids, db_session)
+    plugin_rows = list_integration_plugin_rows(
+        [integration.id for _, integration in tools], db_session
+    )
     states = {
         state.plugin_id: state
         for state in load_user_plugin_states([user.id], db_session)
     }
     snapshots: list[ToolSnapshot] = []
-    for tool in tools:
-        if tool.integration_id is None or tool.openapi_schema is None:
-            continue
-        integration = get_integration_by_id(tool.integration_id, db_session)
-        if integration is None:
-            continue
-        plugins = plugin_rows.get(integration.id, [])
+    for tool, integration in tools:
+        plugins = plugin_rows[integration.id]
         visible = [plugin for plugin in plugins if plugin.plugin_id in states]
         can_manage = manages_integration(user, plugins)
-        if not visible and not (managed_or_visible and can_manage):
+        if not visible and not (include_managed and can_manage):
             continue
-        if not managed_or_visible and not integration.enabled:
+        if not include_managed and not integration.enabled:
             continue
         snapshots.append(
             _alias_snapshot(
@@ -439,9 +423,7 @@ def _openapi_snapshots(
                 if visible
                 else True,
                 permissions=(
-                    tool_permissions(can_manage=can_manage)
-                    if managed_or_visible
-                    else None
+                    tool_permissions(can_manage=can_manage) if include_managed else None
                 ),
             )
         )
@@ -453,7 +435,12 @@ def list_openapi_tools(
     db_session: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[ToolSnapshot]:
-    return _openapi_snapshots(user, db_session, managed_or_visible=True)
+    return _openapi_snapshots(
+        user,
+        list_openapi_tools_with_integration(db_session),
+        db_session,
+        include_managed=True,
+    )
 
 
 @router.get("/{tool_id}", tags=PUBLIC_API_TAGS)
@@ -465,11 +452,15 @@ def get_custom_tool(
     tool = db_session.get(Tool, tool_id)
     if tool is not None and tool.in_code_tool_id is not None:
         return ToolSnapshot.from_model(tool)
-    tool, integration = _openapi_tool_or_404(tool_id, db_session)
-    for snapshot in _openapi_snapshots(user, db_session, managed_or_visible=True):
-        if snapshot.id == tool.id:
-            snapshot.permissions = {}
-            return snapshot
+    snapshots = _openapi_snapshots(
+        user,
+        [_openapi_tool_or_404(tool_id, db_session)],
+        db_session,
+        include_managed=True,
+    )
+    if snapshots:
+        snapshots[0].permissions = {}
+        return snapshots[0]
     raise OnyxError(
         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
         "You can only view actions you manage, or ones a plugin you can see holds.",
@@ -485,9 +476,7 @@ def update_tool_user_preferences(
 ) -> ToolUserPreferences:
     """Turn the plugins that hold the custom tool on or off for the user."""
     _, integration = _openapi_tool_or_404(tool_id, db_session)
-    visible = {
-        state.plugin_id for state in load_user_plugin_states([user.id], db_session)
-    }
+    visible = get_visible_plugin_ids(user.id, db_session)
     plugin_ids = [
         row.plugin_id
         for row in list_integration_plugin_rows([integration.id], db_session)[
@@ -523,4 +512,9 @@ def list_tools(
         except KeyError:
             pass
         built_in.append(ToolSnapshot.from_model(tool))
-    return built_in + _openapi_snapshots(user, db_session, managed_or_visible=False)
+    return built_in + _openapi_snapshots(
+        user,
+        list_openapi_tools_with_integration(db_session),
+        db_session,
+        include_managed=False,
+    )

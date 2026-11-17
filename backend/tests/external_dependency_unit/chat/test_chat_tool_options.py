@@ -12,7 +12,6 @@ from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.db.models import ChatSession, Persona, User
 from onyx.db.tools import get_builtin_tool
 from onyx.llm.model_response import Delta
-from onyx.server.features.mcp.api import get_mcp_servers_for_user
 from onyx.server.features.tool.api import list_tools
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.tools.models import (
@@ -57,7 +56,6 @@ class Agent:
         plugin_id: UUID,
         mcp_id: int,
         api_id: int,
-        mcp_server_id: int,
         api_tool_id: int,
         open_url_id: int,
     ) -> None:
@@ -65,7 +63,6 @@ class Agent:
         self.user = user
         self.plugin_id = plugin_id
         self.open_url_id = open_url_id
-        self.mcp_server_id = mcp_server_id
         self.api_tool_id = api_tool_id
         self.hello = normalize_external_tool_name(f"mcp__{mcp_id}__{SERVER}__hello")
         self.bye = normalize_external_tool_name(f"mcp__{mcp_id}__{SERVER}__bye")
@@ -80,7 +77,7 @@ def agent(
     db_session: Session, make_test_user: MakeTestUser
 ) -> Generator[Agent, None, None]:
     user = make_test_user("chat_tool_options")
-    mcp, server = make_mcp_integration(
+    mcp, _ = make_mcp_integration(
         db_session,
         # Construction reads the synced actions; no test calls the server.
         server_url="http://127.0.0.1:9/mcp",
@@ -116,7 +113,6 @@ def agent(
             plugin.id,
             mcp.id,
             api.id,
-            server.id,
             api_tool.id,
             open_url.id,
         )
@@ -241,13 +237,9 @@ def test_an_action_preference_reaches_the_agent(
     )
 
 
-def test_the_catalog_names_the_plugin_of_each_server_and_tool(
+def test_the_catalog_names_the_plugin_of_each_tool(
     db_session: Session, agent: Agent
 ) -> None:
-    servers = get_mcp_servers_for_user(db=db_session, user=agent.user).mcp_servers
-    assert [
-        server.plugin_ids for server in servers if server.id == agent.mcp_server_id
-    ] == [[agent.plugin_id]]
     tools = list_tools(db_session=db_session, user=agent.user)
     assert [tool.plugin_ids for tool in tools if tool.id == agent.api_tool_id] == [
         [agent.plugin_id]

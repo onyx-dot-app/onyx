@@ -55,7 +55,7 @@ class _MemoryTokenStorage:
         self.client_info = client_info
 
 
-class _RecordingAuthorizationStorage(oauth.PersistentTokenStorage):
+class _RecordingAuthorizationStorage(oauth.IntegrationTokenStorage):
     def __init__(
         self,
         token_endpoint_auth_method: Literal[
@@ -81,8 +81,8 @@ class _RecordingAuthorizationStorage(oauth.PersistentTokenStorage):
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         return self.client_info
 
-    async def set_client_info(self, client_info: OAuthClientInformationFull) -> None:
-        self.client_info = client_info
+    async def set_client_info(self, info: OAuthClientInformationFull) -> None:
+        self.client_info = info
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
         del tokens

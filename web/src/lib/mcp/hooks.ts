@@ -7,6 +7,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
   AgentEditorMCPServer,
+  CraftMCPServersResponse,
   MCPAuthenticationServer,
   MCPServersResponse,
 } from "@/lib/mcp/types";
@@ -112,7 +113,7 @@ export function useMcpServersForAgent(agentId: number | undefined) {
  * state (`craft_connected`).
  */
 export function useCraftMcpServers(enabled: boolean = true) {
-  const { data, error, isLoading } = useSWR<MCPServersResponse>(
+  const { data, error, isLoading } = useSWR<CraftMCPServersResponse>(
     enabled ? SWR_KEYS.mcpServersCraft : null,
     errorHandlingFetcher,
     // The Apps page re-reads this after every connect/disconnect; holding the

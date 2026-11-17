@@ -14,7 +14,8 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import get_external_app_by_id
-from onyx.db.models import ExternalApp, User
+from onyx.db.integration import get_integration_by_kind_row
+from onyx.db.models import ExternalApp, Integration, User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
     get_endpoint_catalog,
@@ -241,7 +242,14 @@ def render_external_app_files(
         if external_app_id is not None
         else None
     )
-    integration_id = external_app.integration_id if external_app else None
+    integration = (
+        get_integration_by_kind_row(
+            Integration.external_app_id, external_app.id, db_session
+        )
+        if external_app is not None
+        else None
+    )
+    integration_id = integration.id if integration is not None else None
     blocked = (
         admin_blocked_actions(db_session, integration_id)
         if integration_id is not None

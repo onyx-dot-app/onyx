@@ -249,7 +249,8 @@ only the configuration of a chat that does not exist yet.
 
 - Web unit tests sit next to the code in `web/src/sections/plugins/`,
   `web/src/sections/actions/` and `web/src/lib/plugins/`.
-- Backend: `backend/tests/external_dependency_unit/integrations/test_integrations_api.py`.
+- Backend: `backend/tests/external_dependency_unit/integrations/test_integrations_api.py`
+  and `backend/tests/integration/tests/integrations/test_integrations_api.py`.
 - Playwright: `web/tests/e2e/mcp/`, which covers Default Chat.
 - By hand, enable a server for Default Chat from the plugin page and confirm
   that Admin > Chat Preferences shows its tools selected. Then turn it off as a

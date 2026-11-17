@@ -5,10 +5,8 @@ import type {
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import {
   MCPConnectionStatus,
-  MCPAuthenticationPerformer,
-  MCPAuthenticationType,
   MCPServerStatus,
-  type MCPServer,
+  type CraftMCPServer,
 } from "@/lib/mcp/types";
 
 export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
@@ -98,23 +96,19 @@ export function appFixture(
 }
 
 export function mcpServerFixture(
-  over: Partial<MCPServer> & { id: number }
-): MCPServer {
+  over: Partial<CraftMCPServer> & { id: number }
+): CraftMCPServer {
   return {
     name: `MCP ${over.id}`,
     description: "An MCP server",
     server_url: `https://mcp-${over.id}.example.com/mcp`,
     owner: "admin@example.com",
-    auth_type: MCPAuthenticationType.API_TOKEN,
-    auth_performer: MCPAuthenticationPerformer.PER_USER,
+    transport: null,
     connection_status: MCPConnectionStatus.CONNECTED,
     craft_connected: true,
     status: MCPServerStatus.CONNECTED,
-    is_public: true,
-    groups: [],
-    users: [],
     available_in_craft: true,
-    tool_count: 2,
+    plugin_ids: [],
     ...over,
   };
 }

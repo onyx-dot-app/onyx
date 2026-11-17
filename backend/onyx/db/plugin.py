@@ -41,6 +41,7 @@ from onyx.db.enums import (
     SkillInstallationPolicy,
     SkillSharePermission,
 )
+from onyx.db.integration import plugin_holds_integration
 from onyx.db.models import (
     Marketplace,
     Plugin,
@@ -923,12 +924,7 @@ def publish_or_request_review__no_commit(
     if (
         publisher is not None
         and not has_global_permission(publisher, Permission.MANAGE_ACTIONS)
-        and db_session.scalar(
-            select(Plugin__Integration.integration_id)
-            .where(Plugin__Integration.plugin_id == plugin.id)
-            .limit(1)
-        )
-        is not None
+        and plugin_holds_integration(plugin.id, db_session)
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

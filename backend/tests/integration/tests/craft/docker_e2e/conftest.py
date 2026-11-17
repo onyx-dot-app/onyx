@@ -241,22 +241,23 @@ def slack_external_app() -> None:
     with get_session_with_tenant(tenant_id="public") as db:
         existing = get_built_in_external_app(db, ExternalAppType.SLACK)
         if existing is None:
+            app = create_external_app_row__no_commit(
+                name="Slack",
+                app_type=ExternalAppType.SLACK,
+                upstream_url_patterns=["https://slack\\.com/api/.*"],
+                auth_template={"Authorization": "Bearer {access_token}"},
+                db_session=db,
+            )
             integration = Integration(
                 kind=IntegrationKind.API,
                 name="Slack",
                 auth_mode=IntegrationAuthMode.SHARED,
                 auth_method=IntegrationAuthMethod.API_KEY,
                 header_template={"Authorization": "Bearer {access_token}"},
+                external_app_id=app.id,
             )
             db.add(integration)
             db.flush()
-            app = create_external_app_row__no_commit(
-                integration=integration,
-                app_type=ExternalAppType.SLACK,
-                upstream_url_patterns=["https://slack\\.com/api/.*"],
-                auth_template={"Authorization": "Bearer {access_token}"},
-                db_session=db,
-            )
             upsert_connection__no_commit(
                 db,
                 integration_id=integration.id,

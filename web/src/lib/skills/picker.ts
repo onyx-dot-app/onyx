@@ -3,7 +3,7 @@ import type {
   ExternalAppUserResponse,
 } from "@/app/craft/v1/apps/registry";
 import type { SkillsList } from "@/lib/skills/types";
-import type { MCPServer } from "@/lib/mcp/types";
+import type { CraftMCPServer } from "@/lib/mcp/types";
 import type { CaretText } from "@/lib/contentEditable";
 import { CRAFT_APPS_TAB_PARAM } from "@/app/craft/v1/apps/connectableApps";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
@@ -53,7 +53,7 @@ export function compareByName<T extends { name: string }>(a: T, b: T): number {
 export function toPickerSections(
   skillsData: SkillsList | undefined,
   externalApps: ExternalAppUserResponse[] | undefined,
-  mcpServers?: MCPServer[] | undefined
+  mcpServers?: CraftMCPServer[] | undefined
 ): PickerSections {
   if (!skillsData && !externalApps && !mcpServers) return EMPTY_SECTIONS;
 
@@ -98,7 +98,7 @@ export function toPickerSections(
       serverUrl: server.server_url,
       // Whether Craft can actually authenticate this user against the server,
       // not whether a credential row exists. See `craft_connected`.
-      authenticated: server.craft_connected ?? false,
+      authenticated: server.craft_connected,
     });
   }
 

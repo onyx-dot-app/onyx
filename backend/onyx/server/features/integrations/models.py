@@ -250,7 +250,6 @@ class AgentPluginOption(BaseModel):
 
 
 class IntegrationOAuthStartRequest(BaseModel):
-    # True for the organization connection of a shared integration.
     organization: bool = False
     return_path: SafeOAuthReturnPath | None = None
 

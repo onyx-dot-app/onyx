@@ -10,7 +10,7 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.integrations.connections import (
     IntegrationStatus,
-    connect_with_fields,
+    connect_with_fields__no_commit,
     disconnect,
     integration_status,
 )
@@ -72,7 +72,8 @@ def save_member_connection(
     db_session: Session = Depends(get_session),
 ) -> IntegrationStatus:
     integration = get_member_integration(user, integration_id, db_session)
-    connect_with_fields(integration, user, request.fields, db_session)
+    connect_with_fields__no_commit(integration, user, request.fields, db_session)
+    db_session.commit()
     reload_craft_sessions({user.id}, db_session)
     return integration_status(integration, user, db_session)
 

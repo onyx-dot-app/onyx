@@ -11,7 +11,7 @@ import importlib
 import importlib.util
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import cast
 from uuid import uuid4
 
@@ -97,12 +97,15 @@ def test_rendered_cloud_file_names_the_configured_cloud(
     class _App:
         id = 1
         app_type = ExternalAppType.SLACK
-        integration_id = 1
 
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_id", lambda *_: _App()
     )
     monkeypatch.setattr("onyx.skills.rendering.admin_blocked_actions", lambda *_: set())
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_integration_by_kind_row",
+        lambda *_: SimpleNamespace(id=1),
+    )
     monkeypatch.setattr(
         "onyx.skills.rendering.preset_organization_values",
         lambda *_: {},
