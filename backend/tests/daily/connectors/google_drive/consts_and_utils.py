@@ -911,11 +911,17 @@ def get_expected_hierarchy_for_test_user_1_shared_with_me_only() -> dict[
 ]:
     """Expected hierarchy nodes when test_user_1 runs with include_files_shared_with_me=True only.
 
-    Only the external root appears, not the branch inside it that test_user_1 holds a
-    direct grant on: this run surfaces the shared ancestor, not each shared descendant.
+    The folder listing of this run returns every folder that test_user_1 sees
+    and does not own. That includes the branch inside the external root that
+    test_user_1 holds a direct grant on, though no listed file is in it.
     """
     return _clear_parents(
-        _pick(FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID, EXTERNAL_SHARED_FOLDER_ID),
+        _pick(
+            FOLDER_3_ID,
+            TEST_USER_1_EXTRA_FOLDER_ID,
+            EXTERNAL_SHARED_FOLDER_ID,
+            EXTERNAL_ONLY_USER_1_FOLDER_ID,
+        ),
         FOLDER_3_ID,
     )
 
