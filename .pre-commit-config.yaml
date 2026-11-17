@@ -562,6 +562,22 @@ repos:
         pass_filenames: false
         files: ^desktop/src-tauri/(src/.*\.rs|Cargo\.(toml|lock))$
 
+      # desktop-v2/ (preview app beside desktop/). Same toolchain needs and the
+      # same CI split: desktop-v2.yml is the gate.
+      - id: desktop-v2-rust-fmt
+        name: desktop-v2 cargo fmt
+        entry: bash -c 'cd desktop-v2/src-tauri && cargo fmt --check'
+        language: system
+        pass_filenames: false
+        files: ^desktop-v2/src-tauri/src/.*\.rs$
+
+      - id: desktop-v2-rust-clippy
+        name: desktop-v2 cargo clippy
+        entry: bash -c 'mkdir -p desktop-v2/dist && cd desktop-v2/src-tauri && cargo clippy --all-targets -- -D warnings'
+        language: system
+        pass_filenames: false
+        files: ^desktop-v2/src-tauri/(src/.*\.rs|Cargo\.(toml|lock))$
+
       # mobile/ is a standalone Expo (SDK 56) app with its own bun.lock — it is NOT
       # part of the root bun workspace, so it gets its own install + lockfile-check
       # hooks. Lint/format use the Expo-native toolchain (ESLint flat config +

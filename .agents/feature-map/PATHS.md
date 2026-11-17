@@ -293,7 +293,7 @@ covers new files that match it.
 | `web/src/app/nrf/`, `web/src/app/components/nrf/`, `web/src/lib/extension/` | desktop-widget-extensions, chat-frontend |
 | `mobile/` | mobile-app |
 | `mobile/src/chat/streamingModels.ts`, `mobile/src/chat/ndjson.ts` | mobile-app, streaming-protocol |
-| `desktop/`, `widget/`, `extensions/` | desktop-widget-extensions |
+| `desktop/`, `desktop-v2/`, `widget/`, `extensions/` | desktop-widget-extensions |
 
 ## Frontend: Craft
 

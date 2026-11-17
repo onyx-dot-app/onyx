@@ -50,6 +50,12 @@ This component holds the desktop shell, the widget, the Chrome extension, and
 the framed pages and framed sign-in path in the web app that only these clients
 need. Each client has a README with its build and design notes.
 
+It also holds desktop v2 (`desktop-v2/`), a preview native macOS app that
+installs beside v1 and is not the default. It signs in through
+`/api/auth/mobile/login`, hands the token to the remote web UI as the session
+cookie, and gives IPC only to its bundled windows. It has its own CI build
+and release; v1's release does not build it.
+
 It does not own the chat UI that the desktop shell and the side panel load
 ([[chat-frontend]]), the chat endpoints ([[core-chat-loop]]), API keys and JWT
 verification ([[auth-and-identity]]), or the acting-user rules for the widget
