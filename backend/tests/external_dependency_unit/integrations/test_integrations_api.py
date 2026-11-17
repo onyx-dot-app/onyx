@@ -1144,3 +1144,277 @@ def test_custom_tool_aliases_keep_their_shapes(
     tool_api.delete_custom_tool(snapshot.id, db_session, admin)
     assert db_session.get(Integration, integration.id) is None
     assert db_session.get(Tool, snapshot.id) is None
+
+
+# Review fixes
+
+
+def _member_connection(db_session: Session, integration_id: int, user: User) -> None:
+    from onyx.db.integration_connection import upsert_connection__no_commit
+
+    upsert_connection__no_commit(
+        db_session,
+        integration_id=integration_id,
+        user_id=user.id,
+        secret=ConnectionSecret(access_token="token").model_dump(mode="json"),
+        expires_at=None,
+        granted_scopes=None,
+    )
+    db_session.commit()
+
+
+def _connection_status(
+    db_session: Session, integration_id: int, user: User
+) -> IntegrationConnectionStatus:
+    db_session.expire_all()
+    connection = get_connection(db_session, integration_id, user.id)
+    assert connection is not None
+    return connection.status
+
+
+@pytest.mark.usefixtures("craft_available")
+@pytest.mark.parametrize("shape", ["openapi", "custom"])
+def test_a_destination_change_resets_connections(
+    db_session: Session, admin: User, member: User, created: Created, shape: str
+) -> None:
+    request = _openapi_create() if shape == "openapi" else _custom_create()
+    detail = admin_api.create_integration(request, admin, db_session)
+    created.add(detail.id)
+    _member_connection(db_session, detail.id, member)
+
+    admin_api.update_integration(
+        detail.id, IntegrationUpdate(name="Renamed"), admin, db_session
+    )
+    assert (
+        _connection_status(db_session, detail.id, member)
+        is IntegrationConnectionStatus.CONNECTED
+    )
+
+    config = (
+        OpenApiConfigInput(
+            openapi_spec={
+                **OPENAPI_SPEC,
+                "servers": [{"url": "https://new.example.com"}],
+            }
+        )
+        if shape == "openapi"
+        else CustomConfigInput(upstream_url_patterns=["https://new.example.com/*"])
+    )
+    admin_api.update_integration(
+        detail.id, IntegrationUpdate(config=config), admin, db_session
+    )
+    assert (
+        _connection_status(db_session, detail.id, member)
+        is IntegrationConnectionStatus.NEEDS_RECONNECT
+    )
+
+
+def test_scoped_owner_cannot_move_an_onyx_login_integration(
+    db_session: Session, scoped: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(
+        _openapi_create(for_organization=False), scoped, db_session
+    )
+    created.add(detail.id)
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+    integration.auth_mode = IntegrationAuthMode.INDIVIDUAL
+    integration.auth_method = IntegrationAuthMethod.ONYX_LOGIN
+    integration.header_template = {"Authorization": "Bearer {access_token}"}
+    db_session.commit()
+
+    for update in (
+        IntegrationUpdate(
+            config=OpenApiConfigInput(
+                openapi_spec={
+                    **OPENAPI_SPEC,
+                    "servers": [{"url": "https://other.example.com"}],
+                }
+            )
+        ),
+        IntegrationUpdate(header_template={"Authorization": "Bearer {access_token}"}),
+    ):
+        with pytest.raises(OnyxError) as error:
+            admin_api.update_integration(detail.id, update, scoped, db_session)
+        assert error.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+        db_session.rollback()
+
+
+def test_saving_a_legacy_oauth_client_keeps_its_credentials(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    from onyx.db.enums import IntegrationLegacyFormat
+    from onyx.integrations.connection_models import read_oauth_client
+
+    detail = admin_api.create_integration(_oauth_create(), admin, db_session)
+    created.add(detail.id)
+    stored = get_oauth_client(db_session, detail.id)
+    assert stored is not None
+    stored.legacy_format = IntegrationLegacyFormat.MCP_CONFIG.value
+    stored.client_id = None
+    stored.client_secret = None
+    stored.registration = {  # ty: ignore[invalid-assignment]
+        "client_info": {"client_id": "legacy-id", "client_secret": "legacy-secret"}
+    }
+    db_session.commit()
+    _member_connection(db_session, detail.id, member)
+
+    view = admin_api.get_integration_admin(detail.id, admin, db_session)
+    assert view.oauth_client is not None
+    assert view.oauth_client.client_id == "legacy-id"
+    assert view.oauth_client.has_client_secret is True
+
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            oauth_client=OAuthClientInput(
+                **view.oauth_client.model_dump(exclude={"has_client_secret"})
+            )
+        ),
+        admin,
+        db_session,
+    )
+
+    assert (
+        _connection_status(db_session, detail.id, member)
+        is IntegrationConnectionStatus.CONNECTED
+    )
+    stored = get_oauth_client(db_session, detail.id)
+    assert stored is not None and stored.legacy_format is None
+    credentials = read_oauth_client(stored)
+    assert credentials.client_id == "legacy-id"
+    assert credentials.client_secret == "legacy-secret"
+
+
+def test_turning_default_chat_off_makes_the_plugin_available(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    from onyx.db.enums import PluginInstallationPolicy
+
+    snapshot = tool_api.create_custom_tool(
+        CustomToolCreate(
+            name=f"chat-{uuid4().hex[:8]}",
+            description="Chat",
+            definition=OPENAPI_SPEC,
+            custom_headers=[],
+            passthrough_auth=False,
+        ),
+        db_session,
+        admin,
+    )
+    integration = get_integration_by_kind_row(
+        Integration.tool_id, snapshot.id, db_session
+    )
+    assert integration is not None
+    created.add(integration.id)
+
+    for enabled, policy in (
+        (True, PluginInstallationPolicy.DEFAULT),
+        (False, PluginInstallationPolicy.AVAILABLE),
+    ):
+        updated = tool_api.update_custom_tool(
+            snapshot.id,
+            CustomToolUpdate(default_chat_enabled=enabled),
+            db_session,
+            admin,
+        )
+        assert updated.default_chat_enabled is enabled
+        db_session.expire_all()
+        assert _plugin_of(db_session, integration.id).installation_policy is policy
+
+
+def _linear_create() -> IntegrationCreate:
+    return IntegrationCreate(
+        for_organization=True,
+        name=f"linear-{uuid4().hex[:8]}",
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        oauth_client=OAuthClientInput(
+            provider_mode=IntegrationOAuthProviderMode.PRESET
+        ),
+        config=PresetConfigInput(
+            preset_id="LINEAR",
+            organization_credentials={"client_id": "lin-id", "client_secret": "lin-s"},
+        ),
+    )
+
+
+@pytest.mark.usefixtures("craft_available")
+def test_cloud_protects_onyx_managed_presets(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_linear_create(), admin, db_session)
+    created.add(detail.id)
+
+    with patch("onyx.integrations.service.MULTI_TENANT", True):
+        with pytest.raises(OnyxError) as error:
+            admin_api.create_integration(_linear_create(), admin, db_session)
+        assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+        db_session.rollback()
+
+        view = admin_api.get_integration_admin(detail.id, admin, db_session)
+        assert view.oauth_client is None
+
+        with pytest.raises(OnyxError) as error:
+            admin_api.update_integration(
+                detail.id,
+                IntegrationUpdate(
+                    oauth_client=OAuthClientInput(
+                        provider_mode=IntegrationOAuthProviderMode.PRESET,
+                        client_id="other",
+                    )
+                ),
+                admin,
+                db_session,
+            )
+        assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+        db_session.rollback()
+
+        renamed = admin_api.update_integration(
+            detail.id, IntegrationUpdate(name="Linear"), admin, db_session
+        )
+        assert renamed.name == "Linear"
+
+        with pytest.raises(OnyxError) as error:
+            admin_api.delete_integration(detail.id, admin, db_session)
+        assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+        db_session.rollback()
+
+
+def test_member_plugin_refs_carry_the_users_install_setting(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    from onyx.db.enums import PluginInstallationPolicy
+    from onyx.db.models import Plugin__UserGroup, User__UserGroup, UserGroup
+
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    plugin_id = detail.plugins[0].plugin_id
+    group = UserGroup(name=f"u6-required-{uuid4().hex[:8]}")
+    db_session.add(group)
+    db_session.flush()
+    db_session.add(User__UserGroup(user_id=member.id, user_group_id=group.id))
+    db_session.add(
+        Plugin__UserGroup(
+            plugin_id=plugin_id,
+            user_group_id=group.id,
+            permission=None,
+            installation_policy=PluginInstallationPolicy.REQUIRED,
+        )
+    )
+    db_session.commit()
+    try:
+        listed = {
+            view.id: view
+            for view in api.list_integrations_for_member(member, db_session)
+        }
+        assert [ref.installation_policy for ref in listed[detail.id].plugins] == [
+            PluginInstallationPolicy.REQUIRED
+        ]
+        member_view = api.get_integration_for_member(detail.id, member, db_session)
+        assert [ref.installation_policy for ref in member_view.plugins] == [
+            PluginInstallationPolicy.REQUIRED
+        ]
+    finally:
+        db_session.delete(group)
+        db_session.commit()

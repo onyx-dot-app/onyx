@@ -75,20 +75,31 @@ def test_admin_create_read_update_delete(
     created.remove(detail.id)
 
 
+def _craft_available(user: DATestUser) -> bool:
+    response = client.get(f"{API_SERVER_URL}/settings", headers=user.headers)
+    response.raise_for_status()
+    return bool(response.json()["onyx_craft_available"])
+
+
 def test_create_each_shape(admin_user: DATestUser, created: list[int]) -> None:
-    custom = IntegrationManager.create(
-        {
-            "name": f"custom-{uuid4().hex[:8]}",
-            "auth_mode": "none",
-            "config": {
-                "shape": "custom",
-                "upstream_url_patterns": ["https://api.custom.example.com/*"],
-            },
+    custom_body: dict[str, Any] = {
+        "name": f"custom-{uuid4().hex[:8]}",
+        "auth_mode": "none",
+        "config": {
+            "shape": "custom",
+            "upstream_url_patterns": ["https://api.custom.example.com/*"],
         },
-        admin_user,
-    )
-    created.append(custom.id)
-    assert custom.shape.value == "custom"
+    }
+    presets = {preset.id for preset in IntegrationManager.presets(admin_user)}
+    if _craft_available(admin_user):
+        custom = IntegrationManager.create(custom_body, admin_user)
+        created.append(custom.id)
+        assert custom.shape.value == "custom"
+        assert "GITHUB" in presets
+    else:
+        # Only Craft runs an external app.
+        assert IntegrationManager.create_raw(custom_body, admin_user).status_code == 400
+        assert presets == set()
 
     # An unreachable public server is still added; a refresh asks again.
     mcp = IntegrationManager.create(
@@ -105,9 +116,6 @@ def test_create_each_shape(admin_user: DATestUser, created: list[int]) -> None:
     )
     created.append(mcp.id)
     assert mcp.kind.value == "mcp_server"
-
-    presets = {preset.id for preset in IntegrationManager.presets(admin_user)}
-    assert "GITHUB" in presets
 
 
 def test_basic_user_cannot_use_admin_routes(

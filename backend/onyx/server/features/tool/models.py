@@ -3,8 +3,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-from onyx.db.enums import ActionPolicy
+from onyx.db.enums import ActionPolicy, IntegrationAuthMethod, IntegrationAuthMode
 from onyx.db.models import Tool
+from onyx.server.features.integrations.models import CredentialField
 from onyx.server.features.tool.tool_visibility import (
     get_tool_visibility_config,
     is_openapi_tool,
@@ -137,3 +138,14 @@ class CustomToolUpdate(BaseModel):
     custom_headers: list[Header] | None = None
     passthrough_auth: bool | None = None
     oauth_config_id: int | None = None
+
+
+class CustomToolAuthSettings(BaseModel):
+    """The integration sign-in that a custom tool request maps to."""
+
+    auth_mode: IntegrationAuthMode
+    auth_method: IntegrationAuthMethod | None
+    header_template: dict[str, str] | None
+    credential_fields: list[CredentialField] | None
+    # The values of the organization connection, by header name.
+    organization_fields: dict[str, str]
