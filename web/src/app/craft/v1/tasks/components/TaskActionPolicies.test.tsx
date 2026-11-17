@@ -160,6 +160,36 @@ it("turning a plugin off and on again keeps its action settings", async () => {
   ]);
 });
 
+it("editing a plugin that was turned off keeps its other settings", async () => {
+  const user = setupUser();
+  mockData = [
+    pluginView({
+      enabled: true,
+      action_settings: { default: "ask", actions: { search: "blocked" } },
+    }),
+  ];
+  render(<Form taskId="task-1" />);
+  await user.click(
+    screen.getByRole("switch", { name: "Enable Linear for this task" })
+  );
+  await user.click(screen.getByRole("button", { name: "Manage actions" }));
+  await user.click(
+    screen.getByRole("combobox", { name: "Setting for Create issue" })
+  );
+  await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await user.click(screen.getByRole("button", { name: "Save task" }));
+  expect(mockSave).toHaveBeenLastCalledWith([
+    {
+      plugin_id: "plugin-1",
+      action_settings: {
+        default: "ask",
+        actions: { search: "blocked", create: "blocked" },
+      },
+    },
+  ]);
+});
+
 it("does not offer Allow for a locked action", async () => {
   const user = setupUser();
   mockData = [
