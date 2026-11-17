@@ -85,7 +85,7 @@ function routes() {
         id: 2,
         name: "Reports API",
         description: "Weekly reports",
-        status: { state: "connected", reason: null, moving_credentials: false },
+        status: { state: "connected", reason: null },
         plugins: [
           {
             plugin_id: REPORTS_PLUGIN_ID,
