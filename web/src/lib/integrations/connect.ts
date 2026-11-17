@@ -8,9 +8,8 @@ export type ConnectAction = "connect" | "reconnect" | null;
 
 export function connectAction(integration: MemberIntegration): ConnectAction {
   if (
-    integration.status.moving_credentials ||
-    (integration.auth_method !== "oauth2" &&
-      integration.auth_method !== "api_key")
+    integration.auth_method !== "oauth2" &&
+    integration.auth_method !== "api_key"
   )
     return null;
   if (integration.status.state === "not_connected") return "connect";

@@ -58,7 +58,6 @@ const catalog: AgentChatPlugins = {
           status: {
             state: "connected",
             reason: null,
-            moving_credentials: false,
           },
         }),
       ],

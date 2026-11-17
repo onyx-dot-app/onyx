@@ -30,7 +30,7 @@ export default function IntegrationConnectionRow({
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
-  const { state, reason, moving_credentials } = integration.status;
+  const { state, reason } = integration.status;
   const action = connectAction(integration);
   const name = integration.name;
 
@@ -81,9 +81,8 @@ export default function IntegrationConnectionRow({
     }
   }
 
-  const description = moving_credentials
-    ? t("movingCredentials")
-    : state === "connected"
+  const description =
+    state === "connected"
       ? t("status.connected")
       : state === "not_connected"
         ? t("status.notConnected")

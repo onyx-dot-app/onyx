@@ -66,7 +66,7 @@ function status(
   state: MemberIntegration["status"]["state"],
   reason: string | null = null
 ): MemberIntegration["status"] {
-  return { state, reason, moving_credentials: false };
+  return { state, reason };
 }
 
 afterEach(() => {

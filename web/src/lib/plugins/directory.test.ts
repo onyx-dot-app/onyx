@@ -15,7 +15,7 @@ const personal = makeMemberIntegration({
   id: 2,
   name: "Reports API",
   description: "Weekly reports",
-  status: { state: "connected", reason: null, moving_credentials: false },
+  status: { state: "connected", reason: null },
   plugins: [
     {
       plugin_id: "44444444-4444-4444-8444-444444444444",

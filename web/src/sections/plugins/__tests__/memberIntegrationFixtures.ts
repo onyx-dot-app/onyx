@@ -16,7 +16,7 @@ export function makeMemberIntegration(
     auth_mode: "individual",
     auth_method: "oauth2",
     credential_fields: [],
-    status: { state: "not_connected", reason: null, moving_credentials: false },
+    status: { state: "not_connected", reason: null },
     plugins: [
       {
         plugin_id: LINEAR_PLUGIN_ID,
