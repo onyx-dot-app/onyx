@@ -36,6 +36,7 @@ from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
 from onyx.db.engine.shard_registry import (
     ShardRegistry,
     get_catalog_engine,
+    get_engine_for_shard,
 )
 from onyx.db.engine.shard_routing import get_engine_for_tenant
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -527,10 +528,32 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
     if not is_valid_schema_name(tenant_id):
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid tenant ID")
 
-    engine = get_engine_for_tenant(tenant_id)
+    with _session_on_schema(get_engine_for_tenant(tenant_id), tenant_id) as session:
+        yield session
 
+
+@contextmanager
+def get_session_for_schema_on_shard(
+    *, shard_name: str, schema_name: str
+) -> Generator[Session, None, None]:
+    """Session on one schema of one physical database, with no tenant routing.
+
+    For maintenance that must reach every physical copy of a schema: the template
+    that every shard holds under one name, or both copies of a tenant mid-move.
+    """
+    if not is_valid_schema_name(schema_name):
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid schema name")
+
+    with _session_on_schema(get_engine_for_shard(shard_name), schema_name) as session:
+        yield session
+
+
+@contextmanager
+def _session_on_schema(
+    engine: Engine, schema_name: str
+) -> Generator[Session, None, None]:
     # no need to use the schema translation map for self-hosted + default schema
-    if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
+    if not MULTI_TENANT and schema_name == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
         session = Session(bind=engine, expire_on_commit=False)
         try:
             yield session
@@ -539,7 +562,7 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
         return
 
     # Create connection with schema translation to handle querying the right schema
-    schema_translate_map = {None: tenant_id}
+    schema_translate_map = {None: schema_name}
     with engine.connect().execution_options(
         schema_translate_map=schema_translate_map
     ) as connection:
