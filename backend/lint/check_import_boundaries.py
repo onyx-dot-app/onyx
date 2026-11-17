@@ -47,6 +47,7 @@ _CONTRACT_KEYS = {
     "source",
     "source_exclude",
     "forbidden",
+    "external_forbidden",
     "allowed",
     "standalone",
     "container",
@@ -80,6 +81,7 @@ class Contract:
     source_exclude: tuple[str, ...]
     # Dotted module prefixes.
     forbidden: tuple[str, ...]
+    external_forbidden: tuple[str, ...]
     allowed: tuple[str, ...]
     # The source ships as its own package, under another name. A relative
     # import inside it is allowed; the absolute form would not resolve there.
@@ -219,6 +221,7 @@ def _parse_contract(table: Mapping[str, object], backend_dir: Path) -> Contract:
         source=_strings(table, "source", where),
         source_exclude=_strings(table, "source_exclude", where),
         forbidden=_strings(table, "forbidden", where),
+        external_forbidden=_strings(table, "external_forbidden", where),
         allowed=_strings(table, "allowed", where),
         standalone=table.get("standalone", False) is True,
         container=str(table.get("container", "")).rstrip("/"),
@@ -239,8 +242,10 @@ def _parse_contract(table: Mapping[str, object], backend_dir: Path) -> Contract:
                 raise ConfigError(f"{where}: sibling `{sibling}` not found")
         return contract
 
-    if not contract.source or not contract.forbidden:
-        raise ConfigError(f"{where}: `source` and `forbidden` must not be empty")
+    if not contract.source or not (contract.forbidden or contract.external_forbidden):
+        raise ConfigError(
+            f"{where}: `source` and at least one forbidden module are required"
+        )
     for prefix in contract.source + contract.source_exclude:
         if _edition_absent(backend_dir, prefix):
             continue
@@ -329,7 +334,10 @@ def _breaks(
     if contract.standalone and found.relative:
         if _stays_in_package(contract, path, module, backend_dir):
             return False
-    return any(_matches_module(module, prefix) for prefix in contract.forbidden)
+    return any(
+        _matches_module(module, prefix)
+        for prefix in contract.forbidden + contract.external_forbidden
+    )
 
 
 def _stays_in_package(
