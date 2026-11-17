@@ -35,7 +35,11 @@ from onyx.db.plugin_access import get_visible_plugin_ids, load_user_plugin_state
 from onyx.db.tools import get_tools, get_tools_by_ids
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.connection_models import ConnectionSecret, read_connection_secret
+from onyx.integrations.connection_models import (
+    ConnectionSecret,
+    literal_header_value,
+    read_connection_secret,
+)
 from onyx.integrations.connections import literal_headers
 from onyx.integrations.models import IntegrationPluginRow
 from onyx.integrations.service import (
@@ -94,7 +98,10 @@ def _auth_settings(
         return CustomToolAuthSettings(
             auth_mode=IntegrationAuthMode.INDIVIDUAL,
             auth_method=IntegrationAuthMethod.ONYX_LOGIN,
-            header_template={**values, "Authorization": _BEARER_TEMPLATE},
+            header_template={
+                **{key: literal_header_value(value) for key, value in values.items()},
+                "Authorization": _BEARER_TEMPLATE,
+            },
             credential_fields=None,
             organization_fields={},
         )
