@@ -748,7 +748,7 @@
         "noAuthentication": "Não é necessária autenticação",
         "connection": "Conexão",
         "tools": "Ferramentas",
-        "toolCount": "{count, plural, one {# ferramenta} other {# ferramentas}}",
+        "toolCount": "{count, plural, one {# ação} other {# ações}}",
         "noTools": "Não há ferramentas visíveis salvas para este plugin.",
         "connect": "Conectar conta",
         "useInChat": "Usar no Chat",
@@ -11053,7 +11053,6 @@
         "needsSetup": "Requer configuração",
         "off": "Desativada",
         "needsReconnect": "Requer reconexão",
-        "movingCredentials": "Movendo credenciais",
         "ready": "Pronta"
       },
       "signIn": {

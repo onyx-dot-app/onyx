@@ -748,7 +748,7 @@
         "noAuthentication": "لا يلزم المصادقة",
         "connection": "الاتصال",
         "tools": "الأدوات",
-        "toolCount": "{count, plural, zero {لا توجد أدوات} one {أداة واحدة} two {أداتان} few {# أدوات} many {# أداة} other {# أداة}}",
+        "toolCount": "{count, plural, zero {لا توجد إجراءات} one {إجراء واحد} two {إجراءان} few {# إجراءات} many {# إجراءً} other {# إجراء}}",
         "noTools": "لا توجد أدوات مرئية محفوظة لهذه الإضافة.",
         "connect": "ربط الحساب",
         "useInChat": "استخدام في المحادثة",
@@ -11053,7 +11053,6 @@
         "needsSetup": "يحتاج إلى إعداد",
         "off": "متوقف",
         "needsReconnect": "يحتاج إلى إعادة الاتصال",
-        "movingCredentials": "جارٍ نقل بيانات الاعتماد",
         "ready": "جاهز"
       },
       "signIn": {

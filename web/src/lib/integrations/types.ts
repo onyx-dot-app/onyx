@@ -19,7 +19,6 @@ export type OAuthProviderMode = "preset" | "manual" | "discovery";
 export interface IntegrationStatus {
   state: ConnectionState;
   reason: string | null;
-  moving_credentials: boolean;
 }
 
 export interface CredentialField {

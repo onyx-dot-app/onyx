@@ -43,8 +43,6 @@ export function useIntegrationLabels() {
           color: "warning",
           tooltip: integration.organization_status?.reason ?? undefined,
         };
-      if (integration.organization_status?.moving_credentials)
-        return { title: t("status.movingCredentials"), color: "info" };
       return { title: t("status.ready"), color: "success" };
     },
   };

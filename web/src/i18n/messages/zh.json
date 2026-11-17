@@ -748,7 +748,7 @@
         "noAuthentication": "无需身份验证",
         "connection": "连接",
         "tools": "工具",
-        "toolCount": "{count, plural, other {#个工具}}",
+        "toolCount": "{count, plural, other {#个操作}}",
         "noTools": "此插件尚未保存可见的工具。",
         "connect": "连接账户",
         "useInChat": "在聊天中使用",
@@ -11053,7 +11053,6 @@
         "needsSetup": "需要设置",
         "off": "已关闭",
         "needsReconnect": "需要重新连接",
-        "movingCredentials": "正在迁移凭据",
         "ready": "就绪"
       },
       "signIn": {

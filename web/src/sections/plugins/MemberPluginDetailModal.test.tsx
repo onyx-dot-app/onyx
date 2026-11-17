@@ -361,7 +361,7 @@ test("Tools tab searches stored tools and expands full descriptions without live
   await setupUser().click(screen.getByRole("tab", { name: "Tools" }));
   expect(screen.getByText("Search issues")).toBeVisible();
   expect(screen.getByText(description.trim())).toBeVisible();
-  expect(screen.getByText("1 tool")).toBeVisible();
+  expect(screen.getByText("1 action")).toBeVisible();
   expect(screen.getByRole("searchbox", { name: "Search tools" })).toBeVisible();
   expect(requests).toHaveBeenCalledTimes(1);
   expect(requests).toHaveBeenCalledWith("/api/action-policies/mcp_server/7");
@@ -408,7 +408,7 @@ test("empty MCP tools use the stored-catalog empty state", async () => {
   expect(
     screen.getByText("No visible tools are stored for this plugin.")
   ).toBeVisible();
-  expect(screen.getByText("0 tools")).toBeVisible();
+  expect(screen.getByText("0 actions")).toBeVisible();
 });
 
 test("Craft MCP details do not imply an empty tool catalog when snapshots are unavailable", () => {
@@ -579,7 +579,7 @@ test("OpenAPI details share MCP navigation and render schema endpoints, not the 
   expect(screen.getByText("Fetch the current user")).toBeVisible();
   expect(screen.getByText("createRepo")).toBeVisible();
   expect(screen.getByText("Create a repository")).toBeVisible();
-  expect(screen.getByText("2 tools")).toBeVisible();
+  expect(screen.getByText("2 actions")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Disconnect" })
   ).not.toBeInTheDocument();
@@ -621,11 +621,11 @@ test("OpenAPI tools search matches name and description and reports no results",
     await user.type(search, query);
     expect(screen.getByText("createDeployment")).toBeVisible();
     expect(screen.queryByText("listReleases")).not.toBeInTheDocument();
-    expect(screen.getByText("1 tool")).toBeVisible();
+    expect(screen.getByText("1 action")).toBeVisible();
   }
   await user.clear(search);
   await user.type(search, "not-found");
-  expect(screen.getByText("0 tools")).toBeVisible();
+  expect(screen.getByText("0 actions")).toBeVisible();
   expect(screen.getByText("No tools found")).toBeVisible();
   expect(screen.queryByRole("list")).not.toBeInTheDocument();
 });
@@ -637,7 +637,7 @@ test("OpenAPI tools handle an empty schema without counting the plugin as an end
     connection: { kind: "connected", ownership: "none" },
   });
   await setupUser().click(screen.getByRole("tab", { name: "Tools" }));
-  expect(screen.getByText("0 tools")).toBeVisible();
+  expect(screen.getByText("0 actions")).toBeVisible();
   expect(
     screen.getByText("No visible tools are stored for this plugin.")
   ).toBeVisible();

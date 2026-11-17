@@ -62,12 +62,22 @@ export default function IntegrationsPage() {
       weight: 28,
       truncate: true,
       cell: (name, row) => (
-        <Section alignItems="start" gap={0} height="auto">
-          <Text font="main-ui-action" color="text-04" maxLines={1}>
+        <Section alignItems="stretch" gap={0} height="auto">
+          <Text
+            font="main-ui-action"
+            color="text-04"
+            maxLines={1}
+            overflowTooltip
+          >
             {name}
           </Text>
           {row.description && (
-            <Text font="secondary-body" color="text-03" maxLines={1}>
+            <Text
+              font="secondary-body"
+              color="text-03"
+              maxLines={1}
+              overflowTooltip
+            >
               {row.description}
             </Text>
           )}
