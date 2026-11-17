@@ -8,7 +8,12 @@ import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { WidgetConfig, ChatMessage, TokenProvider } from "./types/widget-types";
+import {
+  WidgetConfig,
+  ChatMessage,
+  MessageFeedback,
+  TokenProvider,
+} from "./types/widget-types";
 import {
   ApprovalDecisionResponse,
   ChatSessionStatus,
@@ -134,8 +139,11 @@ export class OnyxChatWidget extends LitElement {
   // Expanded argument values, as `[approval id, key]` JSON, and cards that
   // show all their rows, as `[approval id]` JSON
   @state() private expandedArguments: ReadonlySet<string> = new Set();
+  // The answer whose Copy button shows its "copied" check
+  @state() private copiedMessageId: ChatMessage["id"] | null = null;
 
   private config!: WidgetConfig;
+  private copiedTimer?: ReturnType<typeof setTimeout>;
   private apiService!: ApiService;
   private sessionRestored = false;
   private abortController?: AbortController;
@@ -362,40 +370,157 @@ export class OnyxChatWidget extends LitElement {
     clearSession();
   }
 
-  /**
-   * Render markdown content safely.
-   * Strips [[n]](url) citation links before markdown parsing so they render
-   * as plain [n] text references. Citation badges are rendered separately.
-   * Renumbers citations to sequential display numbers (1, 2, 3...).
-   */
+  /** Render markdown content safely. */
   private renderMarkdown(content: string, citations?: ResolvedCitation[]) {
     try {
-      let stripped = content;
-      if (this.config.includeCitations) {
-        if (citations?.length) {
-          // Build a map from backend citation number → sequential display number
-          const displayMap = new Map<number, number>();
-          citations.forEach((c, i) => displayMap.set(c.citation_number, i + 1));
-
-          // Replace [[n]](url) with superscript-style display number
-          stripped = stripped.replace(
-            /\[\[(\d+)\]\]\([^)]*\)/g,
-            (_match, num) => {
-              const displayNum = displayMap.get(Number(num));
-              return displayNum ? `<sup>[${displayNum}]</sup>` : "";
-            }
-          );
-        } else {
-          // Still streaming or no citations resolved yet — strip raw links
-          stripped = stripped.replace(/\[\[(\d+)\]\]\([^)]*\)/g, "");
-        }
-      }
-      const htmlContent = marked.parse(stripped, { async: false }) as string;
-      return unsafeHTML(sanitizeAnswerHtml(htmlContent));
+      return unsafeHTML(this.answerHtml(content, citations));
     } catch (err) {
       console.error("Failed to parse markdown:", err);
       return content; // Fallback to plain text
     }
+  }
+
+  /**
+   * An answer's markdown as sanitized HTML.
+   * Strips [[n]](url) citation links before markdown parsing so they render
+   * as plain [n] text references. Citation badges are rendered separately.
+   * Renumbers citations to sequential display numbers (1, 2, 3...).
+   */
+  private answerHtml(content: string, citations?: ResolvedCitation[]): string {
+    let stripped = content;
+    if (this.config.includeCitations) {
+      if (citations?.length) {
+        // Build a map from backend citation number → sequential display number
+        const displayMap = new Map<number, number>();
+        citations.forEach((c, i) => displayMap.set(c.citation_number, i + 1));
+
+        // Replace [[n]](url) with superscript-style display number
+        stripped = stripped.replace(
+          /\[\[(\d+)\]\]\([^)]*\)/g,
+          (_match, num) => {
+            const displayNum = displayMap.get(Number(num));
+            return displayNum ? `<sup>[${displayNum}]</sup>` : "";
+          }
+        );
+      } else {
+        // Still streaming or no citations resolved yet — strip raw links
+        stripped = stripped.replace(/\[\[(\d+)\]\]\([^)]*\)/g, "");
+      }
+    }
+    const htmlContent = marked.parse(stripped, { async: false }) as string;
+    return sanitizeAnswerHtml(htmlContent);
+  }
+
+  /**
+   * Copy an answer as rich HTML, so pasted text keeps its formatting, with
+   * plain text for targets that take no HTML.
+   */
+  private async copyAnswer(msg: ChatMessage, e: Event) {
+    const body = (e.currentTarget as HTMLElement)
+      .closest(".message")
+      ?.querySelector(".answer-body");
+    if (!(body instanceof HTMLElement)) return;
+    const text = body.innerText;
+    try {
+      try {
+        const answerHtml = this.answerHtml(msg.content, msg.citations);
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([answerHtml], { type: "text/html" }),
+            "text/plain": new Blob([text], { type: "text/plain" }),
+          }),
+        ]);
+      } catch {
+        // Older browsers and some embeds allow only plain text
+        await navigator.clipboard.writeText(text);
+      }
+    } catch (err) {
+      console.error("Failed to copy answer:", err);
+      this.error = "Could not copy the answer.";
+      return;
+    }
+    clearTimeout(this.copiedTimer);
+    this.copiedMessageId = msg.id;
+    this.copiedTimer = setTimeout(() => {
+      this.copiedMessageId = null;
+    }, 2000);
+  }
+
+  /** Rate an answer; rating it the same way again removes the rating. */
+  private async rateAnswer(msg: ChatMessage, rating: MessageFeedback) {
+    if (typeof msg.id !== "number") return;
+    const messageId = msg.id;
+    const previous = msg.feedback;
+    const next = previous === rating ? undefined : rating;
+    await this.storeFeedback(messageId, next);
+    try {
+      await this.apiService.setMessageFeedback(
+        messageId,
+        next === undefined ? null : next === "like"
+      );
+    } catch (err) {
+      console.error("Failed to submit feedback:", err);
+      await this.storeFeedback(messageId, previous);
+      this.error = "Could not save your feedback. Please try again.";
+    }
+  }
+
+  private async storeFeedback(
+    messageId: number,
+    feedback: MessageFeedback | undefined
+  ) {
+    this.messages = this.messages.map((m) =>
+      m.id === messageId ? { ...m, feedback } : m
+    );
+    const sessionId = this.chatSessionId;
+    if (sessionId) {
+      saveSession(sessionId, this.messages, await this.currentIdentity());
+    }
+  }
+
+  private renderAnswerActions(msg: ChatMessage) {
+    const copied = this.copiedMessageId === msg.id;
+    const rateable = typeof msg.id === "number";
+    return html`
+      <div class="answer-actions">
+        <button
+          class="answer-action"
+          @click=${(e: Event) => this.copyAnswer(msg, e)}
+          title=${copied ? "Copied" : "Copy"}
+          aria-label="Copy answer"
+        >
+          ${
+            copied
+              ? html`<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5L6.5 12L13 4.5" /></svg>`
+              : html`<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" /><path d="M10.5 5.5V3.5C10.5 2.95 10.05 2.5 9.5 2.5H3.5C2.95 2.5 2.5 2.95 2.5 3.5V9.5C2.5 10.05 2.95 10.5 3.5 10.5H5.5" /></svg>`
+          }
+        </button>
+        ${
+          rateable
+            ? html`
+                <button
+                  class="answer-action ${msg.feedback === "like" ? "selected" : ""}"
+                  @click=${() => this.rateAnswer(msg, "like")}
+                  title="Good response"
+                  aria-label="Good response"
+                  aria-pressed=${msg.feedback === "like"}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7V14H2.5C2.22 14 2 13.78 2 13.5V7.5C2 7.22 2.22 7 2.5 7H4.5ZM4.5 7L7.5 1.5C8.33 1.5 9 2.17 9 3V5.5H12.6C13.5 5.5 14.18 6.3 14.04 7.18L13.24 12.18C13.12 12.91 12.5 13.45 11.76 13.45H4.5" /></svg>
+                </button>
+                <button
+                  class="answer-action ${msg.feedback === "dislike" ? "selected" : ""}"
+                  @click=${() => this.rateAnswer(msg, "dislike")}
+                  title="Bad response"
+                  aria-label="Bad response"
+                  aria-pressed=${msg.feedback === "dislike"}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 9V2H13.5C13.78 2 14 2.22 14 2.5V8.5C14 8.78 13.78 9 13.5 9H11.5ZM11.5 9L8.5 14.5C7.67 14.5 7 13.83 7 13V10.5H3.4C2.5 10.5 1.82 9.7 1.96 8.82L2.76 3.82C2.88 3.09 3.5 2.55 4.24 2.55H11.5" /></svg>
+                </button>
+              `
+            : ""
+        }
+      </div>
+    `;
   }
 
   private static readonly CITATIONS_COLLAPSED_COUNT = 1;
@@ -1468,13 +1593,21 @@ export class OnyxChatWidget extends LitElement {
                   : html`<div class="message-bubble">
                       ${
                         msg.role === "assistant"
-                          ? html`${this.renderMarkdown(
-                              msg.content,
-                              msg.citations
-                            )}${this.renderCitations(msg.citations)}`
+                          ? html`<div class="answer-body">
+                                ${this.renderMarkdown(msg.content, msg.citations)}
+                              </div>
+                              ${this.renderCitations(msg.citations)}`
                           : msg.content
                       }
                     </div>`
+              }
+              ${
+                msg.role === "assistant" &&
+                msg.content &&
+                !msg.isStreaming &&
+                !msg.awaitingApproval
+                  ? this.renderAnswerActions(msg)
+                  : ""
               }
               ${(msg.approvals ?? []).map((entry) => {
                 const local = this.localApprovals.get(

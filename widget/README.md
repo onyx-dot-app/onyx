@@ -19,6 +19,7 @@ The widget runs in the browser, so whatever credential it holds is visible to th
 - 🌐 **Two Deployment Modes** - Cloud CDN or self-hosted
 - ♿ **Markdown Support** - Rich text formatting in responses
 - 💾 **Session Persistence** - Conversations survive page reloads
+- 👍 **Copy and Feedback** - Copy an answer with its formatting; rate it with thumbs up or down
 - 🎯 **Two Display Modes** - Floating launcher or inline embed
 
 ## Quick Start

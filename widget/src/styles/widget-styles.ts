@@ -539,6 +539,45 @@ export const widgetStyles = css`
     letter-spacing: -0.02em;
   }
 
+  /* Copy and rating buttons under an answer */
+  .answer-actions {
+    display: flex;
+    gap: 2px;
+  }
+
+  .answer-action {
+    background: none;
+    border: none;
+    color: var(--text-04);
+    cursor: pointer;
+    padding: 0;
+    border-radius: var(--onyx-radius-08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    opacity: 0.6;
+    transition:
+      background var(--onyx-transition-fast),
+      opacity var(--onyx-transition-fast);
+  }
+
+  .answer-action:hover {
+    background: var(--background-neutral-03);
+    opacity: 1;
+  }
+
+  .answer-action.selected {
+    color: var(--theme-primary-05);
+    opacity: 1;
+  }
+
+  .answer-action.selected svg {
+    fill: currentColor;
+    fill-opacity: 0.15;
+  }
+
   /* Citation source row */
   .citation-list {
     display: flex;
