@@ -18,7 +18,9 @@ const ADMIN_API_KEY =
 const MEMBER_API_KEY =
   process.env.MCP_PER_USER_KEY_USER_KEY || "mcp_live-kid_bob_001-S3cr3tBob";
 const REQUIRED_USERNAME_HEADER = "X-Username";
-const DEFAULT_PORT = Number(process.env.MCP_PER_USER_KEY_TEST_PORT || "8007");
+const PORT = process.env.MCP_PER_USER_KEY_TEST_PORT
+  ? Number(process.env.MCP_PER_USER_KEY_TEST_PORT)
+  : undefined;
 const MCP_PER_USER_KEY_TEST_URL = process.env.MCP_PER_USER_KEY_TEST_URL;
 const FIELDS = { "API Key": MEMBER_API_KEY, Username: "basic-pw" };
 
@@ -42,7 +44,7 @@ test.describe("MCP per-user API key auth (two credential fields)", () => {
       serverUrl = MCP_PER_USER_KEY_TEST_URL;
     } else {
       serverProcess = await startMcpPerUserKeyServer({
-        port: DEFAULT_PORT,
+        port: PORT,
         requiredHeaders: [REQUIRED_USERNAME_HEADER],
       });
       serverUrl = `http://${serverProcess.address.host}:${serverProcess.address.port}/mcp`;
