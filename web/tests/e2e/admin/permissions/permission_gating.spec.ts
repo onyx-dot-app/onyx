@@ -542,7 +542,21 @@ test.describe("Permission gating: MANAGE_ACTIONS", () => {
     const toolId = await adminClient.createCustomTool(toolName);
 
     const mcpName = `E2E Manage MCP ${Date.now()}`;
-    const mcpServerId = await adminClient.createMcpServer(mcpName);
+    const { id: mcpIntegrationId } = await adminClient.createIntegration({
+      for_organization: true,
+      name: mcpName,
+      description: "E2E test MCP server",
+      auth_mode: "none",
+      auth_method: null,
+      credential_fields: null,
+      header_template: null,
+      oauth_client: null,
+      config: {
+        shape: "mcp_server",
+        server_url: "https://example.com/mcp",
+        transport: "STREAMABLE_HTTP",
+      },
+    });
 
     try {
       await page.context().clearCookies();
@@ -583,7 +597,7 @@ test.describe("Permission gating: MANAGE_ACTIONS", () => {
         await loginAs(page, "admin");
         const cleanupClient = new OnyxApiClient(page.request);
         await cleanupClient.deleteCustomTool(toolId);
-        await cleanupClient.deleteMcpServer(mcpServerId);
+        await cleanupClient.deleteIntegration(mcpIntegrationId);
       });
     }
   });

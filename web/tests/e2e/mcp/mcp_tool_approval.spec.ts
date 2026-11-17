@@ -37,7 +37,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
   test.describe.configure({ mode: "serial" });
 
   let serverProcess: McpServerProcess | null = null;
-  let serverId: number;
+  let integrationId: number;
   let agentId: number;
   let agentName: string;
   let qualifiedToolName: string;
@@ -63,37 +63,56 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     });
     const adminClient = new OnyxApiClient(adminContext.request);
     const serverName = `PW Approval Server ${Date.now()}`;
-    serverId = await adminClient.createMcpServerWithAuth({
+    const created = await adminClient.createIntegration({
+      for_organization: true,
       name: serverName,
       description: "MCP server whose tools ask for approval (e2e)",
-      server_url: serverUrl,
-      auth_type: "API_TOKEN",
-      auth_performer: "ADMIN",
-      api_token: API_KEY,
+      auth_mode: "shared",
+      auth_method: "api_key",
+      credential_fields: [{ key: "api_key", label: "API Key", secret: true }],
+      header_template: { Authorization: "Bearer {api_key}" },
+      oauth_client: null,
+      config: {
+        shape: "mcp_server",
+        server_url: serverUrl,
+        transport: "STREAMABLE_HTTP",
+      },
     });
-    await adminClient.discoverMcpTools(serverId);
-    const toolId = await adminClient.findMcpToolId(serverId, TOOL_NAME);
-    const tool = (await adminClient.getMcpDbTools(serverId)).find(
-      (dbTool) => dbTool.id === toolId
+    integrationId = created.id;
+    const plugin = created.plugins[0];
+    if (!plugin) throw new Error("The integration has no plugin");
+    const connect = await adminContext.request.put(
+      `/api/admin/integrations/${integrationId}/organization-connection`,
+      { data: { fields: { api_key: API_KEY } } }
     );
-    toolDisplayName = tool?.display_name || TOOL_NAME;
-    qualifiedToolName = qualifiedMcpToolName(serverId, serverName, TOOL_NAME);
-    const slowToolId = await adminClient.findMcpToolId(
-      serverId,
-      SLOW_TOOL_NAME
+    expect(connect.ok(), await connect.text()).toBeTruthy();
+    const { actions } =
+      await adminClient.refreshIntegrationActions(integrationId);
+    const tool = actions.find((action) => action.key === TOOL_NAME);
+    if (!actions.some((action) => action.key === SLOW_TOOL_NAME) || !tool) {
+      throw new Error(
+        `Missing ${TOOL_NAME} or ${SLOW_TOOL_NAME}. Saw: ${actions
+          .map((action) => action.key)
+          .join(", ")}`
+      );
+    }
+    toolDisplayName = tool.display_name;
+    qualifiedToolName = qualifiedMcpToolName(
+      integrationId,
+      serverName,
+      TOOL_NAME
     );
-    await adminClient.setMcpActionPolicies(serverId, {
-      [SLOW_TOOL_NAME]: "ALWAYS",
+    await adminClient.setIntegrationActionPolicies(integrationId, {
+      [SLOW_TOOL_NAME]: "allow",
     });
     qualifiedSlowToolName = qualifiedMcpToolName(
-      serverId,
+      integrationId,
       serverName,
       SLOW_TOOL_NAME
     );
     agentName = `PW Approval Agent ${Date.now()}`;
-    agentId = await adminClient.createAgentWithMcpTools(agentName, [
-      toolId,
-      slowToolId,
+    agentId = await adminClient.createAgentWithPlugins(agentName, [
+      plugin.plugin_id,
     ]);
     await adminContext.close();
   });
@@ -104,7 +123,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     });
     const adminClient = new OnyxApiClient(adminContext.request);
     if (agentId) await adminClient.deleteAgent(agentId);
-    if (serverId) await adminClient.deleteMcpServer(serverId);
+    if (integrationId) await adminClient.deleteIntegration(integrationId);
     await adminContext.close();
     await serverProcess?.stop();
   });
