@@ -221,7 +221,7 @@ jobs:
           # so pytest-split runs each one across this many jobs. It balances
           # the jobs with backend/tests/integration/.test_durations; refresh
           # that file with `pytest --store-durations` after a suite changes.
-          declare -A splits=([usergroup]=2 [connector]=2 [indexing]=2 [permissions_membership]=2 [reindex_port]=3)
+          declare -A splits=([usergroup]=2 [connector]=2 [indexing]=2 [permissions_membership]=2 [reindex_port]=3 [skills]=3)
 
           # Create JSON array with directory info
           all_dirs=""
@@ -382,7 +382,9 @@ jobs:
       contents: read
     runs-on:
       - runs-on
-      - runner=4cpu-linux-arm64
+      - >-
+        ${{ contains(fromJSON('["connector_job_tests/azure_datalake","connector_job_tests/onedrive","connector_job_tests/jira","tests/llm_provider","tests/query_history","tests/permissions_access"]'), matrix.test-dir.path)
+            && 'runner=8cpu-linux-arm64' || 'runner=4cpu-linux-arm64' }}
       - ${{ format('run-id={0}-integration-tests-{1}-job-{2}', github.run_id, matrix.edition, strategy['job-index']) }}
       - extras=ecr-cache
       # The default ~38GB volume is ~50% AMI baseline plus ~15GB of pulled
