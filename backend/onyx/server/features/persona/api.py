@@ -377,7 +377,7 @@ def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
     user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
-) -> PersonaSnapshot:
+) -> FullPersonaSnapshot:
     tenant_id = get_current_tenant_id()
 
     _validate_user_knowledge_enabled(persona_upsert_request, "create")
@@ -409,7 +409,7 @@ def update_persona(
     # editor-shared user should be able to edit the agent they were granted access to.
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> PersonaSnapshot:
+) -> FullPersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
     _validate_vector_db_knowledge(persona_upsert_request)
 

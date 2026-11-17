@@ -61,6 +61,7 @@ from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import (
+    IntegrationStatus,
     credential_field_keys,
     header_field_keys,
     integration_status,
@@ -80,6 +81,7 @@ from onyx.integrations.policy import (
 from onyx.integrations.presets import PRESETS, Preset, get_preset
 from onyx.integrations.registry import get_kind_handler
 from onyx.integrations.sync import sync_integration_actions__no_commit
+from onyx.server.features.build.utils import is_craft_available_for_deployment
 from onyx.server.features.integrations.models import (
     ActionGrantsResponse,
     AdminIntegration,
@@ -248,7 +250,10 @@ def _preset_methods(preset: Preset) -> list[IntegrationAuthMethod | None]:
     return [None]
 
 
-def preset_views() -> list[PresetView]:
+def preset_views(user: User) -> list[PresetView]:
+    """Empty when Craft is not available: only Craft runs a preset app."""
+    if not is_craft_available_for_deployment(user):
+        return []
     return [
         PresetView(
             id=preset.id,
@@ -483,6 +488,14 @@ def create_integration__no_commit(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Give the integration a name.")
     config = request.config
     shape = IntegrationShape(config.shape)
+    if shape in (
+        IntegrationShape.PRESET,
+        IntegrationShape.CUSTOM,
+    ) and not is_craft_available_for_deployment(user):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Craft is not available, so you cannot add an external app.",
+        )
     preset = (
         _preset_or_400(config.preset_id)
         if isinstance(config, PresetConfigInput)
@@ -860,14 +873,31 @@ def _setup_reason(
     return "Connect the account of the organization."
 
 
+def organization_status(
+    integration: Integration, db_session: Session
+) -> IntegrationStatus:
+    """The status of the organization connection, with a reason that tells
+    the admin what to do."""
+    status = integration_status(integration, None, db_session)
+    if status.state is not ConnectionState.NOT_SET_UP:
+        return status
+    return status.model_copy(
+        update={
+            "reason": _setup_reason(
+                integration, get_oauth_client(db_session, integration.id)
+            )
+        }
+    )
+
+
 def _admin_view(
     user: User,
     integration: Integration,
     plugins: list[IntegrationPluginRow],
     db_session: Session,
 ) -> AdminIntegration:
-    organization_status = integration_status(integration, None, db_session)
-    needs_setup = organization_status.state is ConnectionState.NOT_SET_UP
+    org_status = organization_status(integration, db_session)
+    needs_setup = org_status.state is ConnectionState.NOT_SET_UP
     creator = (
         db_session.get(User, integration.created_by_user_id)
         if integration.created_by_user_id is not None
@@ -888,15 +918,9 @@ def _admin_view(
         created_by_email=creator.email if creator is not None else None,
         action_count=count_integration_actions(integration.id, db_session),
         needs_setup=needs_setup,
-        setup_reason=(
-            _setup_reason(integration, get_oauth_client(db_session, integration.id))
-            if needs_setup
-            else None
-        ),
+        setup_reason=org_status.reason if needs_setup else None,
         organization_status=(
-            organization_status
-            if integration.auth_mode is IntegrationAuthMode.SHARED
-            else None
+            org_status if integration.auth_mode is IntegrationAuthMode.SHARED else None
         ),
         can_manage=manages_integration(user, plugins),
     )
@@ -1178,6 +1202,23 @@ def set_action_grants__no_commit(
             f"Your admin does not let users save Always allow for {integration.name}.",
         )
     _check_action_keys(integration, grants, db_session)
+    admin_policies = {
+        view.key: view.effective_admin_policy
+        for view in action_views(integration, db_session)
+    }
+    for key, value in sorted(grants.items()):
+        if value != "allow":
+            continue
+        if admin_policies[key] is EffectivePolicy.BLOCKED:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Your admin blocks {key}. You cannot save Always allow for it.",
+            )
+        if admin_policies[key] is EffectivePolicy.ALLOW:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Your admin already allows {key}. Always allow is not necessary.",
+            )
     set_policy_rows__no_commit(
         integration_id=integration.id,
         user_id=user.id,
