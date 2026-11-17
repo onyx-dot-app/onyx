@@ -23,7 +23,10 @@ from onyx.background.celery.celery_utils import (
     extract_ids_from_runnable_connector,
 )
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
-from onyx.background.celery.tasks.docprocessing.utils import IndexingCallbackBase
+from onyx.background.celery.tasks.shared.indexing_callback import IndexingCallbackBase
+from onyx.background.celery.tasks.shared.prune_records import (
+    reset_prune_and_cancel_sync_record,
+)
 from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING, JOB_TIMEOUT
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
@@ -70,7 +73,6 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.permission_sync_attempt import get_open_doc_permission_sync_attempt
 from onyx.db.sync_record import (
-    cleanup_sync_records,
     fail_in_progress_sync_records,
     insert_sync_record,
     record_sync_record_error,
@@ -245,20 +247,6 @@ CC_PAIR_STATUSES_BLOCKING_PRUNE = {
     ConnectorCredentialPairStatus.PAUSED,
     ConnectorCredentialPairStatus.DELETING,
 }
-
-
-def reset_prune_and_cancel_sync_record(
-    redis_connector: RedisConnector, db_session: Session
-) -> None:
-    """Abandons the pair's prune: its open PRUNING sync record ends CANCELED and
-    the fence is reset. The pair's prune request stays, so a later prune
-    serves it. The record closes first, so a failed write keeps the fence up."""
-    cleanup_sync_records(
-        db_session=db_session,
-        entity_id=redis_connector.cc_pair_id,
-        sync_type=SyncType.PRUNING,
-    )
-    redis_connector.prune.reset()
 
 
 def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:

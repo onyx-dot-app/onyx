@@ -243,3 +243,22 @@ source_exclude = [
 ]
 forbidden = ["onyx.background", "ee.onyx.background"]
 allowed = ["onyx.background.celery.versioned_apps.client"]
+
+[[contract]]
+name = "celery-task-packages-are-independent"
+rule = "A Celery task package must not import another task package"
+reason = "Each task package owns one job. An import of a sibling ties two jobs together and loads the task module of the sibling."
+instead = "Move the shared code to onyx/background/celery/tasks/shared/, or to onyx/db for a database helper."
+type = "independence"
+container = "onyx/background/celery/tasks"
+shared = ["shared"]
+
+[[contract.exception]]
+importer = "onyx/background/celery/tasks/docfetching/tasks.py"
+imports = "onyx.background.celery.tasks.docprocessing"
+reason = "Fetch and processing are two stages of one indexing pipeline. Fetch starts the processing tasks and shares their heartbeat and log builder."
+
+[[contract.exception]]
+importer = "onyx/background/celery/tasks/docprocessing/tasks.py"
+imports = "onyx.background.celery.tasks.docfetching.task_creation_utils"
+reason = "Fetch and processing are two stages of one indexing pipeline. The processing scheduler creates the next fetch attempt."

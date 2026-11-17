@@ -82,6 +82,7 @@ adds an import across one of these boundaries. The contracts are in `lint/import
 | `onyx`, `ee` outside `server` and `background` | `onyx.background`, except the Celery client app |
 | A connector in `onyx/connectors` | Another connector. Shared code goes in `cross_connector_utils`, `google_utils` or `microsoft_utils` |
 | A source in `ee/onyx/external_permissions` | Another source. Shared code goes in `microsoft_utils` |
+| A task package in `onyx/background/celery/tasks` | Another task package. Shared code goes in `shared` |
 
 - Every `import` statement counts: module level, inside a function, and under `TYPE_CHECKING`.
 - The failure message gives the contract and where the code goes. Move the code. Do not move the
