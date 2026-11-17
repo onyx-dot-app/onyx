@@ -2,6 +2,7 @@ import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import Engine, event
 from sqlalchemy.orm import Session, sessionmaker
@@ -12,7 +13,6 @@ from onyx.chat.process_message import run_chat_turn
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.chat import create_chat_session
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-from onyx.db.integration_policy import list_persona_plugin_links
 from onyx.db.tools import get_builtin_tool
 from onyx.db.users import get_user_by_email
 from onyx.evals.models import (
@@ -29,6 +29,7 @@ from onyx.evals.models import (
 )
 from onyx.evals.provider import get_provider
 from onyx.integrations.models import ApprovalMode
+from onyx.integrations.policy import agent_plugin_settings
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
@@ -44,16 +45,21 @@ logger = setup_logger()
 
 
 def _tool_options(
-    db_session: Session, allowed_tool_ids: list[int], preferred_tool: str | None
+    db_session: Session,
+    user_id: UUID,
+    allowed_tool_ids: list[int],
+    preferred_tool: str | None,
 ) -> ToolOptions:
     """Limits the built-in tools to the configured ones and keeps each plugin
-    of the default agent."""
+    that the default agent uses for the user."""
     allowed: list[CapabilityEntry | PluginEntry] = [
         CapabilityEntry(tool_id=tool_id) for tool_id in allowed_tool_ids
     ]
     allowed.extend(
-        PluginEntry(plugin_id=link.plugin_id)
-        for link in list_persona_plugin_links(db_session, DEFAULT_PERSONA_ID)
+        PluginEntry(plugin_id=plugin_id)
+        for plugin_id in agent_plugin_settings(
+            db_session, user_id, DEFAULT_PERSONA_ID, {}
+        )
     )
     return ToolOptions(
         allowed=allowed,
@@ -237,6 +243,7 @@ def _get_answer_with_tools(
                 llm_override=llm_override,
                 tool_options=_tool_options(
                     db_session,
+                    user.id,
                     full_configuration.allowed_tool_ids,
                     eval_input.get("preferred_tool"),
                 ),
@@ -385,6 +392,7 @@ def _get_multi_turn_answer_with_tools(
                     llm_override=llm_override,
                     tool_options=_tool_options(
                         db_session,
+                        user_id,
                         full_configuration.allowed_tool_ids,
                         msg.preferred_tool,
                     ),
