@@ -58,7 +58,6 @@ export function memberPluginEntries(
   }
   for (const integration of integrations) {
     for (const ref of integration.plugins) {
-      if (ref.installation_policy === "NOT_AVAILABLE") continue;
       const entry = entries.get(ref.plugin_id);
       if (entry) {
         if (!entry.integrations.includes(integration))

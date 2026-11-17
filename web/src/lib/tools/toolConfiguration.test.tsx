@@ -55,18 +55,26 @@ let mockUser: Pick<User, "id" | "email" | "is_anonymous_user"> | null =
 // The agent's plugins and the plugins the user turned off for it.
 let mockPluginIds: string[] | null = [];
 let mockDisabledPluginIds: string[] = [];
+// The agents whose plugins and preferences the composer read.
+let mockReadAgentIds: (number | undefined)[] = [];
 const mockSetPluginsDisabled = jest.fn(() => Promise.resolve());
 jest.mock("@/lib/plugins/hooks", () => ({
-  useAgentChatPlugins: () => ({
-    pluginIds: mockPluginIds,
-    plugins: [],
-    isLoading: false,
-    error: undefined,
-    refresh: jest.fn(),
-  }),
+  useAgentChatPlugins: (agentId: number | undefined) => {
+    mockReadAgentIds.push(agentId);
+    return {
+      pluginIds: mockPluginIds,
+      plugins: [],
+      isLoading: false,
+      error: undefined,
+      refresh: jest.fn(),
+    };
+  },
   useAgentPluginPreferences: () => ({
     loaded: true,
-    disabledPluginIds: () => mockDisabledPluginIds,
+    disabledPluginIds: (agentId: number) => {
+      mockReadAgentIds.push(agentId);
+      return mockDisabledPluginIds;
+    },
     setPluginsDisabled: mockSetPluginsDisabled,
   }),
 }));
@@ -82,6 +90,7 @@ beforeEach(() => {
   mockUser = SIGNED_IN;
   mockPluginIds = [];
   mockDisabledPluginIds = [];
+  mockReadAgentIds = [];
   mockSetPluginsDisabled.mockClear();
   echoSaves();
 });
@@ -920,6 +929,22 @@ describe("useToolConfiguration: plugins of the agent", () => {
       { type: "capability", tool_id: 2 },
       { type: "plugin", plugin_id: "plugin-a" },
     ]);
+  });
+
+  test("an agent preview reads and saves the plugins of the previewed agent", () => {
+    mockChatId = null;
+    mockActiveAgent = AGENT;
+    mockPluginIds = ["plugin-a"];
+    const previewId = AGENT.id + 100;
+    const { result } = renderHook(() => useToolConfiguration(previewId));
+
+    act(() => result.current.setPluginEnabled(["plugin-a"], false));
+    expect(mockSetPluginsDisabled).toHaveBeenCalledWith(
+      previewId,
+      ["plugin-a"],
+      true
+    );
+    expect(new Set(mockReadAgentIds)).toEqual(new Set([previewId]));
   });
 
   test("a tool change sends a saved actions list of a plugin back unchanged", async () => {

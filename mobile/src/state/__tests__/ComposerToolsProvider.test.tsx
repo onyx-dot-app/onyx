@@ -137,6 +137,7 @@ function mockApi({
   availableTools = [searchTool, imageTool, fileReaderTool],
   holdTools = false,
   toolError = false,
+  integrations = [],
 }: {
   preferences?: Record<
     string,
@@ -153,6 +154,8 @@ function mockApi({
   availableTools?: (ToolSnapshot & { plugin_ids?: string[] })[];
   holdTools?: boolean;
   toolError?: boolean;
+  // The member integrations; their enabled plugin refs are the default agent's plugins.
+  integrations?: { plugins: { plugin_id: string; enabled: boolean }[] }[];
 } = {}) {
   const stored: Record<
     string,
@@ -180,6 +183,7 @@ function mockApi({
         ? new Promise(() => {})
         : Promise.resolve(availableTools);
     }
+    if (path === "/integrations") return Promise.resolve(integrations);
     if (path === "/manage/connector-status") {
       const rows = () =>
         connectors.map((source) => ({
@@ -403,6 +407,14 @@ describe("useComposerToolsState", () => {
         { ...imageTool, plugin_ids: ["plugin-image"] },
         { ...imageTool, id: 9, plugin_ids: ["plugin-other"] },
       ],
+      integrations: [
+        {
+          plugins: [
+            { plugin_id: "plugin-image", enabled: true },
+            { plugin_id: "plugin-other", enabled: true },
+          ],
+        },
+      ],
     });
     const { result } = renderTools({
       agent: agent([searchTool, imageTool]),
@@ -475,6 +487,33 @@ describe("useComposerToolsState", () => {
     const { result } = renderTools();
     await waitFor(() => expect(client.isFetching()).toBe(1));
     expect(result.current.toolOptionsReady).toBe(true);
+  });
+
+  it("keeps an MCP plugin that no tool lists in the allow-list", async () => {
+    mockApi({
+      integrations: [
+        {
+          plugins: [
+            { plugin_id: "plugin-mcp", enabled: true },
+            { plugin_id: "plugin-off", enabled: false },
+          ],
+        },
+      ],
+    });
+    const { result } = renderTools({
+      agent: agent([searchTool, imageTool]),
+    });
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+
+    await act(async () => {
+      result.current.toggleToolEnabled(2);
+    });
+
+    await waitFor(() => expect(result.current.disabledToolIds).toEqual([2]));
+    expect(result.current.resolveToolOptions().allowed).toEqual([
+      { type: "capability", tool_id: 1 },
+      { type: "plugin", plugin_id: "plugin-mcp" },
+    ]);
   });
 
   it("turns on an OpenAPI tool that an old tool id still lists as off", async () => {
