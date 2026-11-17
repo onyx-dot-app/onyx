@@ -549,7 +549,9 @@ def test_a_task_whose_batch_raises_leaves_the_attempt_running(run: _Run) -> None
         "tenant_id": run.tenant_id,
         "batch_num": 0,
     }
-    docconversion_task.run(**kwargs)
+    # The task sends with its own app. Patch the send so no broker is needed.
+    with patch.object(docconversion_task.app, "send_task"):
+        docconversion_task.run(**kwargs)
 
     assert run.attempt().status == IndexingStatus.IN_PROGRESS
     errors = run.db_session.scalars(
