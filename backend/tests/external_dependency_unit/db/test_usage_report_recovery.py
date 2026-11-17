@@ -257,7 +257,7 @@ def test_job_failed_during_upload_removes_the_zip(
     from onyx.configs.constants import OnyxCeleryTask
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.db.enums import TaskStatus
-    from onyx.db.tasks import mark_task_as_finished_with_id, register_task
+    from onyx.db.tasks import fail_task_with_id, register_task
     from onyx.file_store.file_store import get_default_file_store
 
     register_task(
@@ -274,7 +274,7 @@ def test_job_failed_during_upload_removes_the_zip(
             # Cleanup fails the job while the ZIP uploads. It must not wait.
             with get_session_with_current_tenant() as cleanup_session:
                 cleanup_session.execute(text("SET LOCAL lock_timeout = '5s'"))
-                mark_task_as_finished_with_id(cleanup_session, report_id, success=False)
+                fail_task_with_id(cleanup_session, report_id, TaskStatus.STARTED)
             uploaded.append(str(kwargs["file_id"]))
         return real_store.save_file(**kwargs)  # ty: ignore[invalid-argument-type]
 

@@ -13,7 +13,10 @@ from ee.onyx.db.usage_export import (
     get_usage_report_data,
     register_usage_report_job,
 )
-from ee.onyx.server.reporting.usage_export_models import USAGE_REPORT_MEDIA_TYPE
+from ee.onyx.server.reporting.usage_export_models import (
+    USAGE_REPORT_MEDIA_TYPE,
+    UsageReportJob,
+)
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import (
@@ -24,7 +27,7 @@ from onyx.configs.constants import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, TaskStatus
 from onyx.db.models import User
-from onyx.db.tasks import fail_pending_task, get_all_tasks_with_prefix
+from onyx.db.tasks import fail_task_with_id, get_all_tasks_with_prefix
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
@@ -34,12 +37,6 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter()
-
-
-class UsageReportJob(BaseModel):
-    report_id: UUID
-    status: TaskStatus
-    time_created: datetime
 
 
 @router.get("/admin/usage-report-jobs")
@@ -99,7 +96,7 @@ def generate_report(
         )
     except Exception:
         logger.exception("Failed to send usage report task report_id=%s", report_id)
-        fail_pending_task(db_session, str(report_id))
+        fail_task_with_id(db_session, str(report_id), TaskStatus.PENDING)
         raise OnyxError(
             OnyxErrorCode.SERVICE_UNAVAILABLE,
             "Failed to start the usage report.",

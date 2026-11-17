@@ -29,10 +29,12 @@ import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UsageReport } from "@/app/ee/admin/performance/usage/types";
-import { ReportPeriod } from "@/views/admin/WorkspaceAnalyticsPage/types";
+import {
+  ReportPeriod,
+  UsageReportJob,
+} from "@/views/admin/WorkspaceAnalyticsPage/types";
 import {
   generateUsageReport,
-  fetchUsageReportJobs,
   usageReportDownloadUrl,
 } from "@/views/admin/WorkspaceAnalyticsPage/svc";
 
@@ -43,6 +45,10 @@ function presetPeriod(label: string, days: number): ReportPeriod {
 
 const PAGE_SIZE = 8;
 const POLL_INTERVAL_MS = 3_000;
+
+function isOpen(job: UsageReportJob): boolean {
+  return job.status === "PENDING" || job.status === "STARTED";
+}
 
 function periodLabel(
   report: UsageReport,
@@ -304,23 +310,23 @@ export default function UsageReports() {
     error: jobsError,
     isLoading: jobsLoading,
     mutate: mutateJobs,
-  } = useSWR(SWR_KEYS.usageReportJobs, fetchUsageReportJobs, {
-    refreshInterval: POLL_INTERVAL_MS,
+  } = useSWR<UsageReportJob[]>(SWR_KEYS.usageReportJobs, errorHandlingFetcher, {
+    refreshInterval: (latest) =>
+      requestedReportId !== null || latest?.some(isOpen) ? POLL_INTERVAL_MS : 0,
   });
   // Only the admin's own request blocks Generate. Jobs of other admins, or
   // from before a reload, show as rows but do not block a new request.
   const pending = (jobs ?? []).some(
-    (job) =>
-      job.report_id === requestedReportId &&
-      (job.status === "PENDING" || job.status === "STARTED")
+    (job) => job.report_id === requestedReportId && isOpen(job)
   );
+  const polling = requestedReportId !== null || (jobs ?? []).some(isOpen);
   const {
     data: reports,
     error: listError,
     isLoading: listLoading,
     mutate,
   } = useSWR<UsageReport[]>(SWR_KEYS.usageReport, errorHandlingFetcher, {
-    refreshInterval: POLL_INTERVAL_MS,
+    refreshInterval: polling ? POLL_INTERVAL_MS : 0,
   });
 
   useEffect(() => {
@@ -452,7 +458,7 @@ export default function UsageReports() {
                     time: humanReadableFormatWithTime(job.time_created, locale),
                   })}
                 />
-              ) : job.status === "PENDING" || job.status === "STARTED" ? (
+              ) : isOpen(job) ? (
                 <PendingReportRow key={job.report_id} />
               ) : null
             )}

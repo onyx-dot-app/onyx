@@ -1,15 +1,14 @@
-import hashlib
-import struct
 import uuid
 from collections.abc import Generator
 from datetime import datetime
 from typing import IO, Optional
 
 from fastapi_users_db_sqlalchemy import UUID_ID
-from sqlalchemy import cast, func, select
+from sqlalchemy import cast
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.license import acquire_advisory_xact_lock, advisory_lock_id
 from ee.onyx.db.query_history import fetch_chat_sessions_eagerly_by_time
 from ee.onyx.server.reporting.usage_export_models import (
     USAGE_REPORT_MEDIA_TYPE,
@@ -224,9 +223,10 @@ def write_usage_report(
 
 
 def register_usage_report_job(db_session: Session, report_id: uuid.UUID) -> None:
-    key = f"usage-report:{get_current_tenant_id()}:{report_id}"
-    lock_id = struct.unpack("q", hashlib.sha256(key.encode()).digest()[:8])[0]
-    db_session.execute(select(func.pg_advisory_xact_lock(lock_id)))
+    acquire_advisory_xact_lock(
+        db_session,
+        advisory_lock_id("usage_report", f"{get_current_tenant_id()}:{report_id}"),
+    )
     if (
         usage_report_id_in_use(db_session, report_id)
         or get_task_with_id(db_session, str(report_id)) is not None

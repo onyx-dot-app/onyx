@@ -6,7 +6,8 @@ from celery import Task, shared_task
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.tasks import claim_task_with_id, fail_started_task
+from onyx.db.enums import TaskStatus
+from onyx.db.tasks import claim_task_with_id, fail_task_with_id
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -54,5 +55,5 @@ def generate_usage_report_task(
             )
         except Exception:
             if track_job:
-                fail_started_task(db_session, task_id)
+                fail_task_with_id(db_session, task_id, TaskStatus.STARTED)
             raise
