@@ -245,24 +245,6 @@ def parse_envelope_header(data: bytes) -> tuple[EnvelopeHeader, int] | None:
     return EnvelopeHeader(version=version, key_id=key_id), header_length
 
 
-def is_current_ciphertext(keyring: Keyring, data: bytes) -> bool:
-    """True when the bytes are an envelope under the keyring's write key.
-
-    A malformed envelope header counts as not current, so a caller that converts
-    stale values gets to report it as unreadable.
-    """
-    if keyring.write_key_id is None:
-        return False
-    try:
-        parsed = parse_envelope_header(data)
-    except DecryptionError:
-        return False
-    if parsed is None:
-        return False
-    header, _ = parsed
-    return header.version == ENVELOPE_VERSION and header.key_id == keyring.write_key_id
-
-
 def _encrypt_envelope(key_id: str, key: bytes, plaintext: str) -> bytes:
     header = _envelope_header(key_id)
     nonce = urandom(_NONCE_BYTES)

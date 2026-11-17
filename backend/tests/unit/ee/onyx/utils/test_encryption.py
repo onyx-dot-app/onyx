@@ -25,7 +25,6 @@ from ee.onyx.utils.encryption import (
     describe_keyring,
     encrypt_with_keyring,
     get_keyring,
-    is_current_ciphertext,
     parse_envelope_header,
 )
 from onyx.utils.encryption import (
@@ -153,20 +152,11 @@ class TestEnvelope:
         parsed = parse_envelope_header(data)
         assert parsed is not None
         assert parsed[0].key_id == LEGACY_KEY_ID
-        assert is_current_ciphertext(keyring, data)
         assert decrypt_with_keyring(_legacy_only(), data).plaintext == "same secret"
         # The AES-CBC key bytes themselves never serve AES-GCM.
         assert keyring.legacy_key is not None
         assert keyring.keys[LEGACY_KEY_ID] != keyring.legacy_key
         assert len(keyring.keys[LEGACY_KEY_ID]) == 32
-
-    def test_is_current_only_for_the_write_key(self) -> None:
-        under_a = encrypt_with_keyring(_staged("k2026"), "v")
-        assert is_current_ciphertext(_staged("k2026"), under_a)
-        assert not is_current_ciphertext(_staged(), under_a)
-        assert not is_current_ciphertext(_staged("k2026"), LEGACY_VECTOR)
-        two_keys = build_keyring("", _keys_json(k2026=KEY_A, k2027=KEY_B), "k2027")
-        assert not is_current_ciphertext(two_keys, under_a)
 
 
 class TestMixedPhases:
@@ -188,7 +178,6 @@ class TestMixedPhases:
         data = encrypt_with_keyring(_retired(), "under k2026")
         next_keyring = build_keyring("", _keys_json(k2026=KEY_A, k2027=KEY_B), "k2027")
         assert decrypt_with_keyring(next_keyring, data).plaintext == "under k2026"
-        assert not is_current_ciphertext(next_keyring, data)
 
 
 class TestFailsSafely:
