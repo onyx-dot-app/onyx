@@ -1,17 +1,17 @@
-# Log
+# LogLine
 
-**Import:** `import { Log } from "@opal/components";`
+**Import:** `import { LogLine } from "@opal/components";`
 
 One line of a log or report: a title column and centre content. A list of
 checks, the steps of a job, or the entries of an audit trail are each a column
-of `Log`s, and the columns line up from line to line. It shares its row with
-[`Line`](../cards/line/README.md) (from the internal
-[`line-base`](../cards/line-base/README.md)).
+of `LogLine`s, and the columns line up from line to line. It shares its row with
+[`Line`](../line/README.md) (from the internal
+[`line-base`](../line-base/README.md)).
 
 ## Props
 
 `variant`, `padding`, `icon`, `rightChildren`, `expandable`, `expanded` and
-`expandedContent`, as on [`Line`](../cards/line/README.md), plus:
+`expandedContent`, as on [`Line`](../line/README.md), plus:
 
 | Prop             | Type                | Default | Description                                                                  |
 | ---------------- | ------------------- | ------- | ---------------------------------------------------------------------------- |
@@ -27,13 +27,15 @@ The title column is exactly 10rem, and 1rem separates it from the centre
 content. A title too long for its column is cut with an ellipsis and shows in
 full in a tooltip. `centerChildren` handles its own overflow.
 
-Unlike `Line`, a `Log` with `onClick` hovers and presses as one surface with
-its body, and a click anywhere on it but a link calls `onClick`.
+With `onClick`, the row and the body hover and press as one surface, and a
+click on the row (not on a link) calls `onClick`. The body keeps its text
+selection, its cursor and its own clicks, so selecting or clicking in it never
+toggles the line.
 
 ## Usage
 
 ```tsx
-<Log
+<LogLine
   variant="error-heavy"
   icon={SvgXCircle}
   title="Check attachment access"

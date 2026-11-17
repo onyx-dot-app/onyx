@@ -9,10 +9,10 @@ import {
   LineSurface,
   type LineBaseProps,
   type LineExpandableProps,
-} from "@opal/components/cards/line-base/components";
+} from "@opal/components/lines/line-base/components";
 import type { RichStr } from "@opal/types";
 
-type LogProps = LineBaseProps &
+type LogLineProps = LineBaseProps &
   LineExpandableProps & {
     /** What the line is about. One line, in a 10rem column. */
     title: string | RichStr;
@@ -22,10 +22,10 @@ type LogProps = LineBaseProps &
      */
     centerChildren?: React.ReactNode;
     /**
-     * Makes the whole log interactive: the line and its body hover and press
-     * as one, and a click anywhere on them, except on a link, calls this. A
-     * button inside (e.g. a chevron) is its keyboard target; that button's
-     * click reaches this too.
+     * Makes the line interactive: the row and the body hover and press as
+     * one, and a click on the row, except on a link, calls this. Clicks and
+     * text selection in the body never do. A button inside (e.g. a chevron)
+     * is its keyboard target; that button's click reaches this too.
      */
     onClick?: () => void;
   };
@@ -34,9 +34,9 @@ type LogProps = LineBaseProps &
  * One line of a log or report: a 10rem title column, then centre content,
  * 1rem apart, so the columns of a list of logs read apart. Trailing content
  * goes in `rightChildren`. With `onClick`, the line and its body are one
- * interactive surface.
+ * surface, and only the row toggles it.
  */
-function Log({
+function LogLine({
   variant = "default",
   padding = 1,
   icon,
@@ -47,7 +47,7 @@ function Log({
   expandable,
   expanded,
   expandedContent,
-}: LogProps) {
+}: LogLineProps) {
   const content = (
     <>
       <LineRow padding={padding} icon={icon} rightChildren={rightChildren}>
@@ -100,4 +100,4 @@ function Log({
   );
 }
 
-export { Log, type LogProps };
+export { LogLine, type LogLineProps };

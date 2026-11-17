@@ -19,7 +19,7 @@ import {
   Fold,
   FoldButton,
   LinkButton,
-  Log,
+  LogLine,
   type LineVariant,
   SelectCard,
   Badge,
@@ -367,7 +367,7 @@ function CheckLog({
   return (
     <Hoverable.Root group={ROW_HOVER_GROUP}>
       {expandable ? (
-        <Log
+        <LogLine
           {...line}
           onClick={() => setExpanded((value) => !value)}
           expandable
@@ -376,12 +376,12 @@ function CheckLog({
         />
       ) : (runnable || rerunnable) && onRunCheck ? (
         // A row does what its right-most button does: here, Run or Re-run.
-        <Log {...line} onClick={() => onRunCheck(check.check_id)} />
+        <LogLine {...line} onClick={() => onRunCheck(check.check_id)} />
       ) : skippable && onSkipCheck ? (
         // A running check's right-most button is Skip.
-        <Log {...line} onClick={() => onSkipCheck(check.check_id)} />
+        <LogLine {...line} onClick={() => onSkipCheck(check.check_id)} />
       ) : (
-        <Log {...line} />
+        <LogLine {...line} />
       )}
     </Hoverable.Root>
   );

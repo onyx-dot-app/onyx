@@ -7,10 +7,9 @@ import {
   LineBody,
   LineRoot,
   LineRow,
-  LineSurface,
   type LineBaseProps,
   type LineExpandableProps,
-} from "@opal/components/cards/line-base/components";
+} from "@opal/components/lines/line-base/components";
 import type { RichStr } from "@opal/types";
 
 type LineStepProps = LineBaseProps &
@@ -20,10 +19,10 @@ type LineStepProps = LineBaseProps &
     /** What the line is about. Fills the row, on one line. */
     title: string | RichStr;
     /**
-     * Makes the row interactive: it hovers and presses, and a click on it,
-     * except on a link, calls this. The body never does. A button in
-     * `rightChildren` (e.g. a chevron) is its keyboard target; that button's
-     * click reaches this too.
+     * Makes the row toggle the line: a click on it, except on a link, calls
+     * this, and hovering it darkens its title and icon (no fill). The body
+     * never calls this. A button in `rightChildren` (e.g. a chevron) is its
+     * keyboard target; that button's click reaches this too.
      */
     onClick?: () => void;
   };
@@ -53,9 +52,9 @@ type LineProps = LineStepProps | LineCardProps;
  * variant also tints the line, and its body when expanded. A title too long
  * for the row shows in full in a tooltip.
  *
- * With `onClick`, the row is interactive. With `expandable`, a body opens
- * below it while `expanded`. As in an expandable `SelectCard`, only the row
- * is interactive: the body keeps its own clicks and selection.
+ * With `onClick`, the row toggles the line and hovers subtly; the body keeps
+ * its own clicks and selection. With `expandable`, a body opens below the
+ * row while `expanded`.
  */
 function LineStep({
   variant = "default",
@@ -76,23 +75,42 @@ function LineStep({
         height="fit"
         className="min-w-0 flex-1"
       >
-        <Text
-          maxLines={1}
-          overflowTooltip
-          font="secondary-action"
-          color="text-03"
-        >
-          {title}
-        </Text>
+        <span className="opal-line-title">
+          <Text
+            maxLines={1}
+            overflowTooltip
+            font="secondary-action"
+            color="inherit"
+          >
+            {title}
+          </Text>
+        </span>
       </Section>
     </LineRow>
   );
 
   return (
     <LineRoot variant={variant} padding={padding}>
-      {onClick ? <LineSurface onClick={onClick}>{row}</LineSurface> : row}
+      {onClick ? (
+        // The row toggles the line and hovers subtly: its title and icon
+        // darken, with no fill, so the body needs no gap to keep off it.
+        <div
+          role="presentation"
+          className="opal-line-toggle"
+          onClick={(event: React.MouseEvent) => {
+            if (event.target instanceof Element && event.target.closest("a")) {
+              return;
+            }
+            onClick();
+          }}
+        >
+          {row}
+        </div>
+      ) : (
+        row
+      )}
       {expandable && (
-        <LineBody expanded={expanded} inset="start">
+        <LineBody expanded={expanded} inset="content">
           {expandedContent}
         </LineBody>
       )}

@@ -21,10 +21,31 @@
   @apply ps-7 pe-1 pb-1;
 }
 
-/* `start` pads only the start, to sit under the content, and the top, to
-   space the body from the row. */
-.opal-line .opal-line-body[data-opal-line-body-inset="start"] {
-  @apply pt-1 pe-0 pb-0;
+/* `content` pads only the start, to sit under the content, flush with the
+   row: a step's row hovers without a fill, so nothing needs a gap. */
+.opal-line .opal-line-body[data-opal-line-body-inset="content"] {
+  @apply pe-0 pb-0;
+}
+
+/* A step's row toggles it with a subtle hover: the title and a default icon
+   darken, with no fill. */
+.opal-line-title {
+  @apply min-w-0 text-text-03 transition-colors;
+}
+.opal-line-toggle {
+  @apply cursor-pointer select-none;
+}
+.opal-line-toggle:hover .opal-line-title,
+.opal-line[data-opal-line-status="default"]
+  .opal-line-toggle:hover
+  .opal-line-icon {
+  @apply text-text-05;
+}
+
+/* Inside an interactive line, the body keeps its text selection and an
+   ordinary cursor: only the row toggles the line. */
+.opal-line .interactive .opal-line-body {
+  @apply cursor-auto select-text;
 }
 
 /* `top` pads only the top, for a card's steps under its header. */
@@ -71,35 +92,4 @@
 }
 .opal-line[data-opal-line-weight="heavy"][data-opal-line-status="error"] {
   @apply bg-status-error-00;
-}
-
-/* ── Corners of a heavy line's row ───────────────────────────────────────────
-   On a heavy `Line`, the open body shares the row's tint, so the row's hover
-   fill squares its bottom corners to join the body. As in an expandable
-   `SelectCard`, the corners square as the fold expands, and round as it
-   collapses, after the content fades out. The surface writes its radius
-   inline (`Interactive.Container`), hence `!important`. The list restates the
-   one in `core/interactive/shared.css`, because `transition` is a shorthand.
-   A `Log`'s body sits inside its surface, so this never matches a `Log`. */
-.opal-line[data-opal-line-weight="heavy"] > .interactive {
-  transition:
-    background-color var(--interactive-duration) var(--interactive-easing),
-    --interactive-foreground var(--interactive-duration)
-      var(--interactive-easing),
-    --interactive-foreground-icon var(--interactive-duration)
-      var(--interactive-easing),
-    border-radius 150ms ease-out 100ms;
-}
-
-.opal-line[data-opal-line-weight="heavy"]
-  > .interactive:has(+ .opal-fold[data-open="true"]) {
-  border-bottom-left-radius: 0 !important;
-  border-bottom-right-radius: 0 !important;
-  transition:
-    background-color var(--interactive-duration) var(--interactive-easing),
-    --interactive-foreground var(--interactive-duration)
-      var(--interactive-easing),
-    --interactive-foreground-icon var(--interactive-duration)
-      var(--interactive-easing),
-    border-radius 150ms ease-out;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/components/cards/line-base/styles.css";
+import "@opal/components/lines/line-base/styles.css";
 import { Section } from "@opal/layouts/general/components";
 import { Fold } from "@opal/components/fold/components";
 import { Interactive } from "@opal/core";
@@ -172,13 +172,13 @@ function LineRow({
 interface LineBodyProps {
   expanded: boolean;
   /**
-   * Where the body is padded. `around`: on the start, end and bottom, the
-   * line's padding. `start`: only on the start, to sit under the content,
-   * and 0.25rem on the top, inside the fold, to space it from the row.
-   * `top`: only 0.25rem on the top, for a card, which pads itself.
+   * Where the body is padded. `around`: under the icon's column, and on the
+   * end and bottom by the line's padding. `content`: only under the icon's
+   * column, flush with the row. `top`: only 0.25rem on the top, for a card,
+   * which pads itself.
    * @default "around"
    */
-  inset?: "around" | "start" | "top";
+  inset?: "around" | "content" | "top";
   children: React.ReactNode;
 }
 
@@ -198,21 +198,34 @@ function LineBody({ expanded, inset = "around", children }: LineBodyProps) {
 // ---------------------------------------------------------------------------
 
 interface LineSurfaceProps {
-  /** Called on a click anywhere in the surface, except on a link. */
+  /**
+   * Called on a click on the row. A click in the body, on a link, or one that
+   * ends a text selection does not call it.
+   */
   onClick: () => void;
   children: React.ReactNode;
 }
 
-/** A `tertiary` stateless surface that hovers, presses and clicks as one. */
+/**
+ * A `tertiary` stateless surface: the row and the body hover and press as
+ * one, but only the row toggles. The body keeps its text selection, its
+ * cursor and its own clicks.
+ */
 function LineSurface({ onClick, children }: LineSurfaceProps) {
   return (
     <Interactive.Stateless
       variant="default"
       prominence="tertiary"
       onClick={(event: React.MouseEvent) => {
-        if (event.target instanceof Element && event.target.closest("a")) {
-          return;
+        const target = event.target;
+        if (target instanceof Element) {
+          if (target.closest("a")) return;
+          // This line's own body, not that of a line around it (a step
+          // inside a card's body).
+          const body = target.closest(".opal-line-body");
+          if (body && event.currentTarget.contains(body)) return;
         }
+        if (window.getSelection()?.toString()) return;
         onClick();
       }}
     >
