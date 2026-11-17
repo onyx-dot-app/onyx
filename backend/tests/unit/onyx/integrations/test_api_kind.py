@@ -83,14 +83,16 @@ def _integration(tool_id: int | None, external_app_id: int | None) -> Integratio
     )
 
 
-def _use_openapi_tool(monkeypatch: pytest.MonkeyPatch) -> Integration:
+def _use_openapi_tool(
+    monkeypatch: pytest.MonkeyPatch, spec: dict[str, Any] = OPENAPI_SPEC
+) -> Integration:
     """Patch the tool getter and the stored actions that the sync writes."""
-    tool = Tool(id=5, name="orders", openapi_schema=OPENAPI_SPEC)
+    tool = Tool(id=5, name="orders", openapi_schema=spec)
     rows = [
-        IntegrationAction(**spec.model_dump())
-        for spec in (
+        IntegrationAction(**action.model_dump())
+        for action in (
             api_kind.openapi_action_spec(method_spec)
-            for method_spec in openapi_to_method_specs(OPENAPI_SPEC)
+            for method_spec in openapi_to_method_specs(spec)
         )
     ]
     monkeypatch.setattr(api_kind, "get_openapi_tool_for_integration", lambda *_: tool)
@@ -191,6 +193,61 @@ def test_openapi_match_policy_follows_the_method(
     assert get is not None and delete is not None
     assert get[0].default_policy is IntegrationActionPolicyValue.ALLOW
     assert delete[0].default_policy is IntegrationActionPolicyValue.ASK
+
+
+def _get(operation_id: str, *parameters: str) -> dict[str, Any]:
+    return {
+        "get": {
+            "operationId": operation_id,
+            "summary": operation_id,
+            "parameters": [
+                {
+                    "name": name,
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                }
+                for name in parameters
+            ],
+        }
+    }
+
+
+FILES_SPEC: dict[str, Any] = {
+    "openapi": "3.0.0",
+    "info": {"title": "Files", "description": "Files API", "version": "1"},
+    "servers": [{"url": "https://api.files.example.com/v1"}],
+    "paths": {
+        "/files/{id}.json": _get("downloadFile", "id"),
+        "/files/v{version}-{id}": _get("getVersion", "version", "id"),
+        "/files/mine": _get("listMyFiles"),
+        "/files/{id}": _get("getFile", "id"),
+    },
+}
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("/files/42.json", ["downloadFile"]),
+        ("/files/v2-42", ["getVersion"]),
+        # A concrete path wins over a templated one.
+        ("/files/mine", ["listMyFiles"]),
+        ("/files/42", ["getFile"]),
+        ("/files/.json", ["getFile"]),
+    ],
+)
+def test_openapi_match_parameters_inside_a_segment_and_concrete_paths_first(
+    monkeypatch: pytest.MonkeyPatch, path: str, expected: list[str]
+) -> None:
+    integration = _use_openapi_tool(monkeypatch, FILES_SPEC)
+
+    matched = HANDLER.match_request(
+        integration, _request("GET", f"https://api.files.example.com/v1{path}"), DB
+    )
+
+    assert matched is not None
+    assert [m.action_key for m in matched] == expected
 
 
 @pytest.mark.parametrize(

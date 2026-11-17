@@ -1,3 +1,4 @@
+import re
 from collections.abc import Sequence
 
 from mitmproxy import http
@@ -22,7 +23,6 @@ from onyx.external_apps.matching.engine import (
     recognize_actions,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
-from onyx.external_apps.providers.actions import path_matches
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.integrations.kinds.base import IntegrationKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
@@ -75,6 +75,21 @@ def openapi_action_spec(method_spec: MethodSpec) -> IntegrationActionSpec:
         http_method=method_spec.method.upper(),
         path_template=method_spec.path,
     )
+
+
+_PATH_PARAMETER = re.compile(r"\{[^{}/]+\}")
+
+
+def _literal_length(template: str) -> int:
+    return len(_PATH_PARAMETER.sub("", template.rstrip("/")))
+
+
+def _openapi_path_matches(template: str, path: str) -> bool:
+    """A parameter fills all or part of one segment, as in ``/files/{id}.json``.
+    A trailing slash on either side is ignored."""
+    literals = _PATH_PARAMETER.split(template.rstrip("/"))
+    pattern = "[^/]+".join(re.escape(literal) for literal in literals)
+    return re.fullmatch(pattern + "/?", path) is not None
 
 
 def _whole_domain_action(
@@ -275,7 +290,19 @@ class ApiKindHandler(IntegrationKindHandler):
         path = normalized_request_path(proxied.path or "")
         relative_path = path[len(target.path_prefix) :] or "/"
         method = method.upper()
-        matched = [
+        candidates = [
+            (action, action.path_template)
+            for action in list_integration_actions(integration_id, db_session)
+            if action.http_method == method
+            and action.path_template is not None
+            and _openapi_path_matches(action.path_template, relative_path)
+        ]
+        if not candidates:
+            return [_whole_domain_action(integration_id, f"{method} {path}")]
+        # As in OpenAPI, a concrete path wins over a templated one: the
+        # template with the most literal text wins.
+        longest = max(_literal_length(template) for _, template in candidates)
+        return [
             MatchedIntegrationAction(
                 integration_id=integration_id,
                 action_key=action.key,
@@ -284,9 +311,6 @@ class ApiKindHandler(IntegrationKindHandler):
                 default_policy=action.default_policy
                 or IntegrationActionPolicyValue.ASK,
             )
-            for action in list_integration_actions(integration_id, db_session)
-            if action.http_method == method
-            and action.path_template is not None
-            and path_matches(action.path_template, relative_path)
+            for action, template in candidates
+            if _literal_length(template) == longest
         ]
-        return matched or [_whole_domain_action(integration_id, f"{method} {path}")]
