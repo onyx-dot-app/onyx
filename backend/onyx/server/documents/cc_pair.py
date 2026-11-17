@@ -4,7 +4,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -90,6 +89,7 @@ from onyx.db.index_attempt import (
     get_open_error_counts_for_index_attempts,
     get_paginated_index_attempts_for_cc_pair_id,
     get_queue_positions,
+    get_unfinished_index_attempts_for_cc_pair,
     get_waiting_index_attempt,
     has_queued_index_attempt,
 )
@@ -887,17 +887,8 @@ def update_cc_pair_status(
         redis_connector.stop.set_fence(True)
 
         # Request cancellation for any active indexing attempts for this cc_pair
-        active_attempts = (
-            db_session.execute(
-                select(IndexAttempt).where(
-                    IndexAttempt.connector_credential_pair_id == cc_pair_id,
-                    IndexAttempt.status.in_(
-                        [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                    ),
-                )
-            )
-            .scalars()
-            .all()
+        active_attempts = get_unfinished_index_attempts_for_cc_pair(
+            db_session, cc_pair_id
         )
 
         for attempt in active_attempts:

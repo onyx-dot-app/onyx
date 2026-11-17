@@ -298,6 +298,11 @@ def create_tool__no_commit(
     return new_tool
 
 
+def add_tool__no_commit(tool: Tool, db_session: Session) -> None:
+    """Add a newly built tool row as is, without a flush."""
+    db_session.add(tool)
+
+
 def update_tool(
     tool_id: int,
     name: str | None,

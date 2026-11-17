@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from onyx.db.models import (
     KGRelationship,
     KGRelationshipExtractionStaging,
+    KGRelationshipType,
+    KGRelationshipTypeExtractionStaging,
 )
 from onyx.utils.logger import setup_logger
 
@@ -25,3 +27,27 @@ def delete_from_kg_relationships__no_commit(
     db_session.query(KGRelationship).filter(
         KGRelationship.source_document.in_(document_ids)
     ).delete(synchronize_session=False)
+
+
+def delete_all_kg_relationships__no_commit(db_session: Session) -> None:
+    """Delete all relationships from the normalized table."""
+    db_session.query(KGRelationship).delete()
+
+
+def delete_all_kg_relationship_types__no_commit(db_session: Session) -> None:
+    """Delete all relationship types from the normalized table."""
+    db_session.query(KGRelationshipType).delete()
+
+
+def delete_all_kg_relationships_extraction_staging__no_commit(
+    db_session: Session,
+) -> None:
+    """Delete all relationships from the extraction staging table."""
+    db_session.query(KGRelationshipExtractionStaging).delete()
+
+
+def delete_all_kg_relationship_types_extraction_staging__no_commit(
+    db_session: Session,
+) -> None:
+    """Delete all relationship types from the extraction staging table."""
+    db_session.query(KGRelationshipTypeExtractionStaging).delete()

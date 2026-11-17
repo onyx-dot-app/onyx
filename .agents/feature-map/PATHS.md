@@ -87,7 +87,7 @@ covers new files that match it.
 | `backend/onyx/server/manage/search_settings.py`, `backend/onyx/server/manage/embedding/` | document-index |
 | `backend/onyx/background/celery/tasks/vespa/`, `backend/onyx/background/celery/tasks/port/`, `backend/onyx/background/celery/tasks/index_reclaim/`, `backend/onyx/background/celery/tasks/cc_pair_ids_backfill/` | document-index |
 | `backend/model_server/`, `backend/shared_configs/embedding_models.py` | document-index |
-| `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py` | access-control |
+| `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py`, `backend/onyx/db/access.py` | access-control |
 | `backend/onyx/db/document_set.py`, `backend/onyx/db/user_group.py`, `backend/onyx/server/features/document_set/`, `backend/ee/onyx/db/document_set.py` | access-control |
 | `backend/ee/onyx/server/user_group/`, `backend/ee/onyx/db/user_group.py` | access-control, authorization |
 | `terraform-provider-onyx/internal/provider/user_group_resource.go`, `terraform-provider-onyx/docs/resources/user_group.md`, `terraform-provider-onyx/examples/resources/onyx_user_group/`, `terraform-provider-onyx/README.md` | authorization |
@@ -164,7 +164,7 @@ covers new files that match it.
 | `backend/onyx/server/auth_check.py`, `backend/ee/onyx/server/auth_check.py` | authorization |
 | `backend/onyx/server/pat/models.py` | authorization |
 | `backend/onyx/db/tenant_shard.py`, `backend/onyx/db/engine/` | multi-tenancy |
-| `backend/ee/onyx/server/tenants/`, `backend/ee/onyx/db/user_tenant_mapping.py`, `backend/ee/onyx/db/tenant_snapshot.py`, `backend/ee/onyx/background/celery/tasks/tenant_provisioning/` | multi-tenancy |
+| `backend/ee/onyx/server/tenants/`, `backend/ee/onyx/db/user_tenant_mapping.py`, `backend/ee/onyx/db/tenant_snapshot.py`, `backend/ee/onyx/db/tenant_provisioning.py`, `backend/ee/onyx/background/celery/tasks/tenant_provisioning/` | multi-tenancy |
 | `backend/shared_configs/contextvars.py`, `backend/alembic/run_multitenant_migrations.py`, `backend/alembic/env.py`, `backend/alembic_tenants/`, `backend/onyx/redis/tenant_redis_client.py`, `backend/onyx/redis/redis_pool.py` | multi-tenancy |
 | `backend/onyx/utils/threadpool_concurrency.py`, `backend/onyx/utils/middleware.py` | multi-tenancy |
 | `backend/ee/onyx/server/middleware/tenant_tracking.py` | multi-tenancy, billing |
@@ -223,7 +223,7 @@ covers new files that match it.
 | `backend/onyx/agents/` | agent-runtime |
 | `backend/onyx/agents/compaction.py` | agent-runtime, context-assembly |
 | `backend/onyx/agents/tool_execution.py`, `backend/onyx/agents/tools.py` | agent-runtime, tools-framework |
-| `backend/onyx/llm/`, `backend/onyx/server/manage/llm/`, `backend/onyx/db/llm.py` | llm-providers |
+| `backend/onyx/llm/`, `backend/onyx/server/manage/llm/`, `backend/onyx/db/llm.py`, `backend/onyx/db/model_configuration.py` | llm-providers |
 | `cli/internal/parser/`, `cli/internal/models/events.go` | streaming-protocol |
 
 ## Backend: Craft
@@ -384,7 +384,7 @@ the admin routes and check that each has a row above, run
 | `backend/onyx/db/seeding/`, `backend/onyx/seeding/`, `backend/ee/onyx/server/seeding.py` | Seed data for rows that several components own. The default agent and the built-in tool rows come from migrations. |
 | `backend/onyx/evals/`, `backend/onyx/server/evals/`, `backend/ee/onyx/server/evals/` | The eval harness. Read the component being evaluated. A prompt or retrieval change needs an eval, not only a unit test. |
 | `backend/onyx/main.py`, `backend/ee/onyx/main.py`, `backend/onyx/setup.py` | App assembly: router and middleware registration and startup. Read the component of each router or middleware you change. |
-| `backend/onyx/cache/`, `backend/onyx/redis/`, `backend/onyx/key_value_store/`, `backend/onyx/db/encrypted_kv_store.py` | Cache and key-value libraries. Fences, rate limits and the stream buffer use them, so check the callers. |
+| `backend/onyx/cache/`, `backend/onyx/redis/`, `backend/onyx/key_value_store/`, `backend/onyx/db/encrypted_kv_store.py`, `backend/onyx/db/kv_store.py` | Cache and key-value libraries. Fences, rate limits and the stream buffer use them, so check the callers. |
 | `backend/onyx/error_handling/` | `OnyxError` and the error codes that clients see. |
 | `backend/onyx/utils/` | Shared helpers. Check the callers. |
 | `backend/onyx/configs/`, `backend/ee/onyx/configs/app_configs.py`, `backend/shared_configs/` | Settings for every area. Read the component that documents the setting. |

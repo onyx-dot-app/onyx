@@ -218,6 +218,21 @@ def get_user_files_from_project(
     )
 
 
+def get_project_user_files_by_file_ids(
+    project_id: int, file_ids: list[str], db_session: Session
+) -> list[UserFile]:
+    """The project's user files whose file_id is in file_ids."""
+    return (
+        db_session.query(UserFile)
+        .join(Project__UserFile)
+        .filter(
+            Project__UserFile.project_id == project_id,
+            UserFile.file_id.in_(file_ids),
+        )
+        .all()
+    )
+
+
 def get_project_instructions(db_session: Session, project_id: int | None) -> str | None:
     """Return the project's instruction text from the project, else None.
 
@@ -262,3 +277,95 @@ def get_project_token_count(
     )
 
     return int(total_tokens)
+
+
+def get_user_projects(user_id: UUID, db_session: Session) -> list[UserProject]:
+    return db_session.query(UserProject).filter(UserProject.user_id == user_id).all()
+
+
+def get_owned_user_project(
+    project_id: int, user_id: UUID, db_session: Session
+) -> UserProject | None:
+    return (
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
+        .one_or_none()
+    )
+
+
+def create_user_project__no_commit(
+    name: str, user_id: UUID, db_session: Session
+) -> UserProject:
+    project = UserProject(name=name, user_id=user_id)
+    db_session.add(project)
+    return project
+
+
+def delete_user_project__no_commit(project: UserProject, db_session: Session) -> None:
+    db_session.delete(project)
+
+
+def get_owned_user_file(
+    file_id: UUID, user_id: UUID, db_session: Session
+) -> UserFile | None:
+    return (
+        db_session.query(UserFile)
+        .filter(UserFile.id == file_id, UserFile.user_id == user_id)
+        .one_or_none()
+    )
+
+
+def get_owned_user_file_not_deleting(
+    file_id: UUID, user_id: UUID, db_session: Session
+) -> UserFile | None:
+    return (
+        db_session.query(UserFile)
+        .filter(UserFile.id == file_id, UserFile.user_id == user_id)
+        .filter(UserFile.status != UserFileStatus.DELETING)
+        .one_or_none()
+    )
+
+
+def get_owned_user_files_not_deleting_by_ids(
+    file_ids: list[UUID], user_id: UUID, db_session: Session
+) -> list[UserFile]:
+    return (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == user_id)
+        .filter(UserFile.id.in_(file_ids))
+        .filter(UserFile.status != UserFileStatus.DELETING)
+        .all()
+    )
+
+
+def get_owned_project_user_files_by_link_date(
+    project_id: int, user_id: UUID, db_session: Session
+) -> list[UserFile]:
+    """The user's non-FAILED files in the project, most recently linked first."""
+    return (
+        db_session.query(UserFile)
+        .join(Project__UserFile, UserFile.id == Project__UserFile.user_file_id)
+        .filter(
+            Project__UserFile.project_id == project_id,
+            UserFile.user_id == user_id,
+            UserFile.status != UserFileStatus.FAILED,
+        )
+        .order_by(Project__UserFile.created_at.desc())
+        .all()
+    )
+
+
+def get_owned_project_user_files_by_upload_date(
+    project_id: int, user_id: UUID, db_session: Session
+) -> list[UserFile]:
+    """The user's non-FAILED files in the project, most recently created first."""
+    return (
+        db_session.query(UserFile)
+        .filter(
+            UserFile.projects.any(id=project_id),
+            UserFile.user_id == user_id,
+            UserFile.status != UserFileStatus.FAILED,
+        )
+        .order_by(UserFile.created_at.desc())
+        .all()
+    )

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
 from onyx.db.models import UserFile
+from onyx.db.projects import get_project_user_files_by_file_ids
 from onyx.db.user_file import get_user_file_by_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import (
@@ -334,7 +335,6 @@ def verify_user_files(
     Raises:
         ValueError: If any file does not belong to the user or is not found
     """
-    from onyx.db.models import Project__UserFile
     from onyx.db.projects import check_project_ownership
 
     user_file_descriptors: list[tuple[UUID, str]] = []
@@ -380,14 +380,8 @@ def verify_user_files(
             )
 
         # Verify all project files belong to the specified project
-        user_files_in_project = (
-            db_session.query(UserFile)
-            .join(Project__UserFile)
-            .filter(
-                Project__UserFile.project_id == project_id,
-                UserFile.file_id.in_(project_file_ids),
-            )
-            .all()
+        user_files_in_project = get_project_user_files_by_file_ids(
+            project_id, project_file_ids, db_session
         )
 
         # Check if all files were found in the project

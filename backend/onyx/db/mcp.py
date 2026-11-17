@@ -1,4 +1,5 @@
 import datetime
+from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import Select, and_, delete, select
@@ -682,3 +683,21 @@ def delete_all_user_connection_configs_for_server_no_commit(
         )
     )
     db_session.flush()  # Don't commit yet, let caller decide when to commit
+
+
+def lock_mcp_server_row(server_id: int, db_session: Session) -> None:
+    """Hold the server row until the transaction ends, so concurrent
+    writers for one server run one at a time."""
+    db_session.execute(
+        select(MCPServer.id).where(MCPServer.id == server_id).with_for_update()
+    )
+
+
+def fetch_mcp_tools(
+    db_session: Session, server_ids: set[int] | None = None
+) -> Sequence[Tool]:
+    """Tools of MCP servers, ordered by id. `server_ids` limits the servers."""
+    stmt = select(Tool).where(Tool.mcp_server_id.is_not(None)).order_by(Tool.id)
+    if server_ids is not None:
+        stmt = stmt.where(Tool.mcp_server_id.in_(server_ids))
+    return db_session.scalars(stmt).all()

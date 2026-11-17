@@ -19,8 +19,11 @@ from onyx.db.image_generation import (
     unset_default_image_generation_config,
 )
 from onyx.db.llm import (
+    add_llm_provider__no_commit,
+    add_model_configuration__no_commit,
     fetch_existing_llm_provider_by_id,
     fetch_existing_llm_providers,
+    get_llm_provider_by_pk,
     remove_llm_provider,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
@@ -156,7 +159,7 @@ def _create_image_gen_llm_provider__no_commit(
         is_public=provider_request.is_public,
         custom_config=provider_request.custom_config,
     )
-    db_session.add(new_provider)
+    add_llm_provider__no_commit(db_session, new_provider)
     db_session.flush()  # Get the ID
 
     # Create model configuration
@@ -171,7 +174,7 @@ def _create_image_gen_llm_provider__no_commit(
         is_visible=True,
         max_input_tokens=max_input_tokens,
     )
-    db_session.add(model_config)
+    add_model_configuration__no_commit(db_session, model_config)
     db_session.flush()
 
     return model_config.id
@@ -473,7 +476,7 @@ def update_config(
 
         # 2. Rename old LLM provider to free up the name
         # (Can't delete first due to cascade: LLMProvider -> ModelConfig -> ImageGenConfig)
-        old_provider = db_session.get(LLMProviderModel, old_llm_provider_id)
+        old_provider = get_llm_provider_by_pk(db_session, old_llm_provider_id)
         if old_provider:
             old_provider.name = f"{old_provider.name}-old-{old_llm_provider_id}"
             db_session.flush()

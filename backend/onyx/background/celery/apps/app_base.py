@@ -357,6 +357,7 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
     while True:
         try:
             with Session(get_sqlalchemy_engine()) as db_session:
+                # db-ops-outside-db: allow database readiness probe
                 result = db_session.execute(text("SELECT NOW()")).scalar()
                 if result:
                     ready = True

@@ -2,8 +2,6 @@ import uuid
 from types import TracebackType
 from typing import Any
 
-from sqlalchemy import select
-
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLock
 from onyx.configs.constants import DocumentSource
@@ -12,8 +10,8 @@ from onyx.connectors.credential_families import (
     to_stored_credential_json,
 )
 from onyx.connectors.interfaces import CredentialsProviderInterface
+from onyx.db.credentials import fetch_credential_or_raise
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.models import Credential
 from onyx.utils.credential_audit import emit_credential_access
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -67,9 +65,7 @@ class OnyxDBCredentialsProvider(
 
     def get_credentials(self) -> dict[str, Any]:
         with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
-            credential = db_session.execute(
-                select(Credential).where(Credential.id == self._credential_id)
-            ).scalar_one()
+            credential = fetch_credential_or_raise(db_session, self._credential_id)
 
             if credential is None:
                 raise ValueError(
@@ -92,11 +88,9 @@ class OnyxDBCredentialsProvider(
     def set_credentials(self, credential_json: dict[str, Any]) -> None:
         with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
             try:
-                credential = db_session.execute(
-                    select(Credential)
-                    .where(Credential.id == self._credential_id)
-                    .with_for_update()
-                ).scalar_one()
+                credential = fetch_credential_or_raise(
+                    db_session, self._credential_id, for_update=True
+                )
 
                 if credential is None:
                     raise ValueError(
