@@ -20,7 +20,8 @@ import {
   toast,
 } from "@opal/layouts";
 import { useSWRConfig } from "swr";
-import { isSilentOAuthOutcome, launchOAuth } from "@/lib/oauth/launch";
+import { connectWithOAuth } from "@/lib/integrations/connect";
+import { isSilentOAuthOutcome } from "@/lib/oauth/launch";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   deleteOrganizationConnection,
@@ -212,15 +213,14 @@ export default function IntegrationConfigurationTab({
     }
   }
 
-  function connectWithOAuth() {
+  function connectOrganization() {
     setBusy(true);
-    launchOAuth(() =>
-      startOrganizationOAuth(
-        integration.id,
-        integrationDetailHref(integration.id, "configuration")
-      )
+    connectWithOAuth(
+      (path) => startOrganizationOAuth(integration.id, path),
+      integrationDetailHref(integration.id, "configuration")
     )
-      .then(async () => {
+      .then(async (result) => {
+        if (result !== "connected") return;
         toast.success(t("organization.connected"));
         await refresh();
       })
@@ -419,7 +419,7 @@ export default function IntegrationConfigurationTab({
               ) : null}
               {organizationState !== "connected" &&
                 (integration.auth_method === "oauth2" ? (
-                  <Button disabled={disabled} onClick={connectWithOAuth}>
+                  <Button disabled={disabled} onClick={connectOrganization}>
                     {t("organization.connect")}
                   </Button>
                 ) : integration.auth_method === "api_key" ? (

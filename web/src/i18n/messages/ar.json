@@ -13993,16 +13993,6 @@
           "description": "عيّن سياسة لكل إجراء على حدة.",
           "title": "متقدم"
         }
-      },
-      "userCredentials": {
-        "cancelButton": "إلغاء",
-        "connectButton": "اتصال",
-        "connectingButton": "جارٍ الاتصال…",
-        "description": "أدخل بيانات اعتمادك لتفويض هذا التطبيق لحسابك.",
-        "errors": {
-          "connectFailedTitle": "تعذّر الاتصال"
-        },
-        "title": "توصيل {name}"
       }
     },
     "artifactsTab": {

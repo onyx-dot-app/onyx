@@ -12,7 +12,7 @@ import {
   connectWithOAuth,
   needsAdmin,
 } from "@/lib/integrations/connect";
-import { deleteUserConnection } from "@/lib/integrations/svc";
+import { deleteUserConnection, startUserOAuth } from "@/lib/integrations/svc";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import { isSilentOAuthOutcome, oauthFailureDetail } from "@/lib/oauth/launch";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -54,8 +54,11 @@ export default function IntegrationConnectionRow({
     }
     setBusy(true);
     try {
-      if ((await connectWithOAuth(integration.id, returnPath)) === "connected")
-        await connected();
+      const result = await connectWithOAuth(
+        (path) => startUserOAuth(integration.id, path),
+        returnPath
+      );
+      if (result === "connected") await connected();
     } catch (error) {
       if (!isSilentOAuthOutcome(error))
         toast.error(

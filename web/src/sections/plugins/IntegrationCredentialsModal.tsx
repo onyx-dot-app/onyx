@@ -2,17 +2,12 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  BasicModalFooter,
-  Button,
-  InputPasswordTypeIn,
-  InputTypeIn,
-  Modal,
-} from "@opal/components";
-import { InputVertical, toast } from "@opal/layouts";
+import { BasicModalFooter, Button, Modal } from "@opal/components";
+import { toast } from "@opal/layouts";
 import { SvgKey } from "@opal/icons";
 import { saveUserConnection } from "@/lib/integrations/svc";
 import type { MemberIntegration } from "@/lib/integrations/types";
+import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs";
 
 interface IntegrationCredentialsModalProps {
   integration: MemberIntegration;
@@ -66,34 +61,17 @@ export default function IntegrationCredentialsModal({
           onClose={busy ? undefined : onClose}
         />
         <Modal.Body padding={4} gap={4} alignItems="stretch">
-          {fields.map((field) => {
-            const Input = field.secret ? InputPasswordTypeIn : InputTypeIn;
-            return (
-              <InputVertical
-                key={field.key}
-                withLabel={`credential-${field.key}`}
-                title={field.label}
-                error={
-                  showErrors && !values[field.key]?.trim()
-                    ? t("required")
-                    : undefined
-                }
-              >
-                <Input
-                  id={`credential-${field.key}`}
-                  aria-label={field.label}
-                  value={values[field.key] ?? ""}
-                  disabled={busy}
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      [field.key]: event.target.value,
-                    }))
-                  }
-                />
-              </InputVertical>
-            );
-          })}
+          <CredentialFieldInputs
+            fields={fields}
+            values={values}
+            onChange={setValues}
+            disabled={busy}
+            error={(field) =>
+              showErrors && !values[field.key]?.trim()
+                ? t("required")
+                : undefined
+            }
+          />
         </Modal.Body>
         <Modal.Footer>
           <BasicModalFooter
