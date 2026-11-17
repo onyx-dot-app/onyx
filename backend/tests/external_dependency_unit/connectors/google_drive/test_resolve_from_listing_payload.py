@@ -3,15 +3,17 @@ documents as today's checkpointed load, with no files.get calls."""
 
 import time
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from onyx.connectors.google_drive import connector as connector_module
 from onyx.connectors.google_drive import doc_conversion
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.google_drive.doc_conversion import GOOGLE_MIME_TYPES_TO_EXPORT
 from onyx.connectors.google_drive.models import (
     DriveListingPayload,
+    GDriveMimeType,
     GoogleDriveCheckpoint,
     RetrievedDriveFile,
 )
@@ -373,3 +375,62 @@ def test_non_member_conversion_first_keeps_the_drive_name_inline(
         assert path[0] == case.real_name, doc.id
         if doc.semantic_identifier == _SHARED_FILE_NAME:
             assert path == case.full_path
+
+
+def _drive_calls(mock_drive: MockDrive) -> dict[str, int]:
+    """Drive and Docs calls by operation since the last stats reset. Each
+    request of a batch counts, as at Google."""
+    return {
+        op: int(stats["count"])
+        for op, stats in mock_drive.stats()["ops"].items()
+        if op.startswith(("drive.", "docs."))
+    }
+
+
+@pytest.mark.usefixtures("listing_mode")
+def test_conversion_spends_few_drive_requests_per_file(mock_drive: MockDrive) -> None:
+    """Drive quota limits indexing throughput, so conversion reads only what
+    it needs. Drive never gives `permissions` for a shared drive file, so its
+    permissions come from one permissions.list and no files.get. A Google Doc
+    with no smart chips is read from the Docs API alone, with no Drive
+    export."""
+    connector = mock_drive.build_connector()
+    listing = list_with_resume(connector)
+    targets: list[ResolveTarget] = []
+    for stub in listing.stubs:
+        assert stub.listing_payload is not None
+        payload = DriveListingPayload.model_validate(
+            stub.listing_payload.model_dump(mode="json")
+        )
+        targets.append(ResolveTarget(document_id=stub.id, listing_payload=payload))
+    files = [
+        cast(DriveListingPayload, t.listing_payload).drive_file or {} for t in targets
+    ]
+    shared = [f for f in files if f.get("driveId")]
+    google_docs = [f for f in files if f.get("mimeType") == GDriveMimeType.DOC.value]
+    exported = [f for f in files if f.get("mimeType") in GOOGLE_MIME_TYPES_TO_EXPORT]
+    assert shared and len(shared) < len(targets)
+    assert google_docs and len(google_docs) < len(exported)
+
+    doc_conversion._folder_cache.clear()
+    mock_drive.reset_stats()
+    results = list(connector.resolve_targets(targets, include_permissions=True))
+    calls = _drive_calls(mock_drive)
+    drive_requests = sum(v for k, v in calls.items() if k.startswith("drive."))
+    docs = [r for r in results if isinstance(r, Document)]
+    print(
+        f"\nmock requests for {len(targets)} targets ({len(shared)} in shared "
+        f"drives), {len(docs)} documents: {calls}; Drive requests per target "
+        f"{drive_requests / len(targets):.2f}, per document "
+        f"{drive_requests / len(docs):.2f}"
+    )
+
+    assert not [r for r in results if isinstance(r, ConnectorFailure)]
+    # The batch reads only the files outside shared drives.
+    assert calls.get("drive.files.get", 0) == len(targets) - len(shared)
+    # The listing user of a shared drive file can read its permissions.
+    assert calls.get("drive.permissions.list", 0) == len(shared)
+    # The mock's Google Docs have no smart chips, so only Sheets and Slides
+    # are exported. With no raw file callback, Sheets are skipped unread.
+    assert calls.get("docs.documents.get", 0) == len(google_docs)
+    assert 0 < calls.get("drive.files.export", 0) <= len(exported) - len(google_docs)
