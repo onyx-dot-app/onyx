@@ -85,7 +85,7 @@ from onyx.prompts.user_info import (
 )
 from onyx.tools.constants import CODE_MODE_TOOL_NAME, FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import LlmPythonExecutionResult
+from onyx.tools.models import LlmPythonExecutionResult, ToolPreference
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -169,7 +169,7 @@ def build_chat_prompt(
     previous_results: Sequence[ToolResultMessage],
     is_last_step: bool,
     has_history_citations: bool = False,
-    preferred_tool_id: int | None = None,
+    preferred_tool: ToolPreference | None = None,
 ) -> ChatPrompt:
     """Select instructions and reminders before assembling conversation history."""
     values = memory.user_info.placeholder_values if memory else {}
@@ -236,12 +236,12 @@ def build_chat_prompt(
         enabled=reminders_enabled,
         has_history_citations=has_history_citations,
     )
-    if preferred_tool_id is not None:
+    if preferred_tool is not None:
         preferred_names = [
-            name for tool in tools for name in tool.operation_names(preferred_tool_id)
+            name for tool in tools for name in tool.operation_names(preferred_tool)
         ]
         if not preferred_names:
-            raise ValueError(f"Preferred tool {preferred_tool_id} is not available")
+            raise ValueError(f"Preferred {preferred_tool} is not available")
         preference = TOOL_PREFERENCE_REMINDER.format(
             operations=", ".join(preferred_names),
             guidance=TOOL_PREFERENCE_LAST_STEP_GUIDANCE
@@ -695,7 +695,7 @@ def _create_file_tool_metadata_message(
 
     Name only a tool this step actually received. FileReaderTool is attached
     only when the vector DB is disabled, and internal search can be absent even
-    when it is enabled (persona, ``allowed_tool_ids``, or a disabled search
+    when it is enabled (persona, the tool options, or a disabled search
     usage setting). Naming a tool the model was never given makes it invent
     workarounds — it searches the web for the document or guesses the contents.
 

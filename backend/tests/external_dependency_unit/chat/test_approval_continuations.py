@@ -71,7 +71,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     ToolApprovalRequest,
 )
-from onyx.tools.models import ChatToolSelection
+from onyx.tools.models import CapabilityEntry, ToolOptions
 from onyx.tools.tool_constructor import SearchToolConfig
 from tests.external_dependency_unit.chat.test_parked_agent_handoff import (
     ACTION,
@@ -138,7 +138,7 @@ class ApprovalTurns:
         self.sent: list[str] = []
         self.tool = _gated(integration_id, self.sent)
         # The tool limits and search filters that each turn built its tools with.
-        self.tool_limits: list[tuple[list[int] | None, BaseFilters | None]] = []
+        self.tool_limits: list[tuple[ToolOptions | None, BaseFilters | None]] = []
 
     def start(
         self,
@@ -146,21 +146,21 @@ class ApprovalTurns:
         script: Script,
         *,
         models: list[LLMOverride] | None = None,
-        selection: ChatToolSelection | None = None,
+        options: ToolOptions | None = None,
         additional_context: str | None = None,
     ) -> list[OverallStop]:
-        """Send a message, to several `models` if given, limited to the tools
-        and search filters of `selection` and with the request-only
+        """Send a message, to several `models` if given, limited to the tool
+        `options` and with the request-only
         `additional_context`; returns the stops of the turn."""
 
         def construct_tools(
             *,
-            allowed_tool_ids: list[int] | None,
+            tool_options: ToolOptions | None,
             search_tool_config: SearchToolConfig,
             **_kwargs: object,
         ) -> list[FakeMCPTool]:
             self.tool_limits.append(
-                (allowed_tool_ids, search_tool_config.user_selected_filters)
+                (tool_options, search_tool_config.user_selected_filters)
             )
             return [self.tool]
 
@@ -173,7 +173,7 @@ class ApprovalTurns:
             message="Email the team",
             chat_session_id=self.chat_session_id,
             additional_context=additional_context,
-            **(selection.model_dump() if selection else {}),
+            tool_options=options,
         )
         return [
             packet.obj
@@ -369,12 +369,11 @@ def test_a_continuation_keeps_the_tools_and_search_filters_of_its_request(
     """A request limits its turn to some tools and search filters that the
     chat does not save. Its response parks for approval and continues after
     the decision with the same limits, not with every tool of the agent."""
-    selection = ChatToolSelection(
-        # A built-in tool id: an integration action has none.
-        allowed_tool_ids=[1],
+    options = ToolOptions(
+        allowed=[CapabilityEntry(tool_id=1)],
         internal_search_filters=BaseFilters(source_type=[DocumentSource.WEB]),
     )
-    stops = turns.start(monkeypatch, Script(turns.tool), selection=selection)
+    stops = turns.start(monkeypatch, Script(turns.tool), options=options)
     assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
     [request] = turns.requests()
 
@@ -385,7 +384,7 @@ def test_a_continuation_keeps_the_tools_and_search_filters_of_its_request(
         "the response completes",
     )
     assert turns.sent == ["team"]
-    limits = (selection.allowed_tool_ids, selection.internal_search_filters)
+    limits = (options, options.internal_search_filters)
     assert turns.tool_limits == [limits, limits]
 
 

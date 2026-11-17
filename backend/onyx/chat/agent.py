@@ -72,7 +72,7 @@ from onyx.prompts.chat_prompts import (
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile, ToolContext
+from onyx.tools.models import ChatFile, ToolContext, ToolPreference
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
@@ -105,7 +105,7 @@ class ChatAgent(Agent, RestorableFeature):
         user_memory_context: UserMemoryContext | None,
         llm: LLM,
         token_counter: Callable[[str], int],
-        preferred_tool_id: int | None = None,
+        preferred_tool: ToolPreference | None = None,
         user_identity: LLMUserIdentity | None = None,
         chat_files: list[ChatFile] | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
@@ -159,7 +159,7 @@ class ChatAgent(Agent, RestorableFeature):
         self.inject_memories = inject_memories_in_prompt
         self.search_context = SearchContext()
         self.started = time.monotonic()
-        self.preferred_tool_id = preferred_tool_id
+        self.preferred_tool = preferred_tool
         self.chat_files = list(chat_files or [])
         # Only the Python tool reads the files of found documents.
         self.stages_files = any(
@@ -247,7 +247,7 @@ class ChatAgent(Agent, RestorableFeature):
             reasoning_effort=self.reasoning_effort,
             include_citations=self.include_citations,
             inject_memories=self.inject_memories,
-            preferred_tool_id=self.preferred_tool_id,
+            preferred_tool=self.preferred_tool,
             code_mode=self.code_mode,
             base_prompt=self.base_system_prompt,
             custom_prompt=self.custom_agent_prompt,
@@ -273,7 +273,7 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.reasoning_effort != self.reasoning_effort
             or saved.include_citations != self.include_citations
             or saved.inject_memories != self.inject_memories
-            or saved.preferred_tool_id != self.preferred_tool_id
+            or saved.preferred_tool != self.preferred_tool
             or saved.code_mode != self.code_mode
             or saved.base_prompt != self.base_system_prompt
             or saved.custom_prompt != self.custom_agent_prompt
@@ -379,7 +379,7 @@ class ChatAgent(Agent, RestorableFeature):
             previous_results=previous.tool_results if previous else [],
             is_last_step=state.step.is_last,
             has_history_citations=bool(self.citation_processor.citation_to_doc),
-            preferred_tool_id=self.preferred_tool_id,
+            preferred_tool=self.preferred_tool,
         )
         return PreparedStep(
             input_messages=received.messages,
@@ -511,7 +511,7 @@ def build_chat_agent(
     tools: list[Tool],
     inject_memories: bool,
     with_subagents: bool,
-    preferred_tool_id: int | None = None,
+    preferred_tool: ToolPreference | None = None,
     additional_context: str | None = None,
     is_subagent: bool = False,
     depth: int = 0,
@@ -548,7 +548,7 @@ def build_chat_agent(
         user_memory_context=setup.user_memory_context,
         llm=llm,
         token_counter=get_llm_token_counter(llm),
-        preferred_tool_id=preferred_tool_id,
+        preferred_tool=preferred_tool,
         user_identity=setup.user_identity,
         chat_files=setup.chat_files_for_tools,
         reasoning_effort=setup.reasoning_effort,

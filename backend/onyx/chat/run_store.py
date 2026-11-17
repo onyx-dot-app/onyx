@@ -124,7 +124,7 @@ from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.skills.chat import accept_picked_skills
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatToolSelection, ToolApprovalScope
+from onyx.tools.models import ToolApprovalScope, ToolOptions
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -357,14 +357,14 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         on_root_parked: Callable[[Run], None] | None = None,
         model_configuration_id: int | None = None,
         temperature: float | None = None,
-        tool_selection: ChatToolSelection | None = None,
+        tool_options: ToolOptions | None = None,
     ) -> None:
         self.tenant_id = tenant_id
         # The model, temperature, tools and search filters of the branch's
         # runs, which parked runs continue with.
         self._model_configuration_id = model_configuration_id
         self._temperature = temperature
-        self._tool_selection = tool_selection
+        self._tool_options = tool_options
         # The root response answers unread agent results under a hidden
         # AGENT_RESULTS question, as a released wait's follow-up does.
         self._answers_agent_results = answers_agent_results
@@ -737,7 +737,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             self._next_input_poll = time.monotonic() + INPUT_POLL_SECONDS
         try:
             inbox, selected = self._read_inbox()
-            # A run saved with another model, temperature or tool selection
+            # A run saved with another model, temperature or tool options
             # waits for an agent host, which continues it with them.
             parked = [
                 run
@@ -746,7 +746,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 and run.root_response_id in self.visible_response_ids
                 and run.model_configuration_id == self._model_configuration_id
                 and run.temperature == self._temperature
-                and run.tool_selection == self._tool_selection
+                and run.tool_options == self._tool_options
             ]
             for run in parked:
                 lock = self.cache.lock(
@@ -1572,7 +1572,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 self._binding(response_id),
                 model_configuration_id=self._model_configuration_id,
                 temperature=self._temperature,
-                tool_selection=self._tool_selection,
+                tool_options=self._tool_options,
             )
             owned.run.handoff(expected_revision=captured.run_state.revision, save=save)
         except BaseException:

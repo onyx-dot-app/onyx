@@ -170,13 +170,14 @@ from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDi
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.skills.models import SkillOmission
 from onyx.tools.models import (
-    ChatToolSelection,
     CustomToolCallSummary,
     FileReadResult,
+    LegacyToolSelection,
     LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
     ToolExecutionError,
+    ToolOptions,
 )
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
@@ -3577,14 +3578,14 @@ class ChatSession(Base):
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
     )
-    # The tools the user last selected. Turns the server starts use them; NULL
-    # means the agent's tools.
-    tool_selection: Mapped[ChatToolSelection | None] = mapped_column(
-        PydanticType(ChatToolSelection), nullable=True
+    # The old tool selection: read only, for a chat with no tool_options.
+    tool_selection: Mapped[LegacyToolSelection | None] = mapped_column(
+        PydanticType(LegacyToolSelection), nullable=True
     )
-    # The tools and plugins the user last selected. Replaces tool_selection.
-    tool_options: Mapped[dict[str, Any] | None] = mapped_column(
-        PGJSONB(), nullable=True
+    # The tools, plugins and search filters the user last picked. Turns the
+    # server starts use them; NULL means the agent's tools.
+    tool_options: Mapped[ToolOptions | None] = mapped_column(
+        PydanticType(ToolOptions), nullable=True
     )
     # When the user stopped the chat; queued turns wait until the next turn starts.
     queue_paused_at: Mapped[datetime.datetime | None] = mapped_column(

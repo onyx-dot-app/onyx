@@ -285,7 +285,7 @@ health calls are not retried.
    `tools/tool_implementations/coding_agent/coding_agent_tool.py:CodingAgentTool._run`
    builds it with `BASH_TOOL_SENTINEL_ID = 0`. Its calls are saved with the
    coding agent's child run and replay on reload, but they have no `tool_id`.
-   Persona attachment, `Tool.enabled` and `allowed_tool_ids` act on
+   Persona attachment, `Tool.enabled` and the tool options act on
    `CodingAgentTool`, not on `bash`.
 8. `bash-calls-sequential` **Bash calls in one coding-agent call share a file
    system and run in order.** `coding_agent/agent.py:CodingAgent` registers

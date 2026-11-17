@@ -8,6 +8,7 @@ integration with no sign-in or shared sign-in.
 """
 
 from collections.abc import Sequence
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -33,10 +34,14 @@ logger = setup_logger()
 def _integration_tools(
     db_session: Session,
     integration: Integration,
-    settings: Sequence[ActionSettings | None],
+    link_settings: Sequence[ActionSettings | None],
+    plugin_ids: frozenset[UUID],
     user: User,
     request: IntegrationChatRequest,
 ) -> list[Tool]:
+    """``link_settings``: every agent link that holds the integration.
+    ``plugin_ids``: the plugins of those that the tool options allow."""
+    kept_actions = _kept_actions(request, plugin_ids)
     acting_user = None if user.is_anonymous else user
     credentials = resolve_call_credentials(integration, acting_user, db_session)
     if isinstance(credentials, ConnectionProblem):
@@ -45,13 +50,18 @@ def _integration_tools(
         )
         return []
     actions = list_integration_actions(integration.id, db_session)
+    actions = [
+        action
+        for action in actions
+        if kept_actions is None or action.key in kept_actions
+    ]
     policies = resolve_action_policies(
         db_session,
         integration=integration,
         actions=actions,
         action_keys=[action.key for action in actions],
         user_id=acting_user.id if acting_user else None,
-        link_settings=settings,
+        link_settings=link_settings,
         approval_mode=request.approval_mode,
         chat_session_id=request.chat_session_id,
     )
@@ -78,10 +88,25 @@ def _integration_tools(
         additional_headers=request.additional_headers,
         mcp_headers=request.mcp_headers,
         approval_for=approval_for,
+        plugin_ids=plugin_ids,
     )
     return get_kind_handler(integration.kind).build_chat_tools(
         integration, offered, ctx, db_session
     )
+
+
+def _kept_actions(
+    request: IntegrationChatRequest, plugin_ids: frozenset[UUID]
+) -> frozenset[str] | None:
+    if request.allowed_plugins is None:
+        return None
+    kept: frozenset[str] = frozenset()
+    for plugin_id in plugin_ids:
+        plugin_actions = request.allowed_plugins[plugin_id]
+        if plugin_actions is None:
+            return None
+        kept |= plugin_actions
+    return kept
 
 
 def build_integration_chat_tools(
@@ -98,11 +123,19 @@ def build_integration_chat_tools(
         {link.plugin_id: link.action_settings for link in request.plugin_links},
         published_only=user.is_anonymous,
     )
+    # The tool options pick the integrations and actions. The settings of
+    # every agent link still apply, so a request cannot drop a Blocked one.
     tools: list[Tool] = []
     for integration_id, links in held.items():
         integration = links.integration
+        allowed = frozenset(
+            plugin_id
+            for plugin_id in links.plugin_ids
+            if request.allowed_plugins is None or plugin_id in request.allowed_plugins
+        )
         if (
-            not integration.enabled
+            not allowed
+            or not integration.enabled
             or (
                 user.is_anonymous
                 and integration.auth_mode is IntegrationAuthMode.INDIVIDUAL
@@ -112,7 +145,7 @@ def build_integration_chat_tools(
             continue
         try:
             tools += _integration_tools(
-                db_session, integration, links.settings, user, request
+                db_session, integration, links.settings, allowed, user, request
             )
         except Exception:
             # One broken integration does not stop the turn.

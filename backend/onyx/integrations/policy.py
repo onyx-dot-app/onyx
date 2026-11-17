@@ -63,10 +63,11 @@ _STRICTNESS: dict[EffectivePolicy, int] = {
 
 
 class AgentIntegrationLinks(BaseModel):
-    """An integration that plugins of an agent hold, with the agent settings
-    of each such plugin."""
+    """An integration that plugins of an agent hold, with each such plugin
+    and its agent settings."""
 
     integration: InstanceOf[Integration]
+    plugin_ids: list[UUID] = []
     settings: list[ActionSettings | None] = []
 
 
@@ -237,9 +238,11 @@ def agent_link_settings_by_integration(
     for plugin_id, integration in list_plugin_integrations(
         db_session, list(settings_by_plugin)
     ):
-        by_integration.setdefault(
+        links = by_integration.setdefault(
             integration.id, AgentIntegrationLinks(integration=integration)
-        ).settings.append(settings_by_plugin[plugin_id])
+        )
+        links.plugin_ids.append(plugin_id)
+        links.settings.append(settings_by_plugin[plugin_id])
     return by_integration
 
 

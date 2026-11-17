@@ -251,8 +251,9 @@ class ApiKindHandler(IntegrationKindHandler):
                 user_email=ctx.user_email,
             ),
             approval_for=ctx.approval_for,
+            plugin_ids=ctx.plugin_ids,
         )
-        return [tool for tool in tools if tool.action_key in keys]
+        return [tool for tool in tools if tool.plugin_action.action in keys]
 
     def match_request(
         self,

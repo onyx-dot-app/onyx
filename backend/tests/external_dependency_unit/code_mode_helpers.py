@@ -27,6 +27,7 @@ from onyx.server.query_and_chat.streaming_models import (
     CodeModeStart,
     Packet,
 )
+from onyx.tools.models import ToolOptions
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
@@ -104,6 +105,7 @@ def send(
     *,
     code_mode: bool = True,
     on_part: Callable[[AnswerStreamPart], None] = lambda _part: None,
+    tool_options: ToolOptions | None = None,
 ) -> list[AnswerStreamPart]:
     """Send a message and read its stream; `on_part` sees each part as it arrives."""
     parts: list[AnswerStreamPart] = []
@@ -117,7 +119,10 @@ def send(
     ):
         for part in handle_stream_message_objects(
             new_msg_req=SendMessageRequest(
-                message=message, chat_session_id=chat_session_id, stream=True
+                message=message,
+                chat_session_id=chat_session_id,
+                stream=True,
+                tool_options=tool_options,
             ),
             user=user,
         ):

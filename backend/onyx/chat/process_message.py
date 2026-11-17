@@ -80,6 +80,7 @@ from onyx.db.chat import (
     create_new_chat_message,
     find_summary_for_branch,
     get_chat_session_by_id,
+    get_chat_session_tool_options,
     load_message_branch,
     reserve_chat_response_ids,
     reserve_stream_id,
@@ -151,7 +152,7 @@ from onyx.tools.constants import (
     FILE_READER_TOOL_ID,
     SEARCH_TOOL_ID,
 )
-from onyx.tools.models import SearchToolUsage
+from onyx.tools.models import CapabilityPreference, SearchToolUsage
 from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
@@ -341,21 +342,23 @@ def prepare_chat_turn(
                 if resumed_response_id is not None
                 else parked_agent_response_id
             )
-            parked_model, parked_selection = (
+            parked_model, parked_options = (
                 parked_response_settings(db_session, parked_response_id)
                 if parked_response_id is not None
                 else (None, None)
             )
-            # Other turns that the server starts use the chat's current tools
-            # and filters.
-            saved_selection = parked_selection or chat_session.tool_selection
-            if server_started and saved_selection is not None:
-                new_msg_req = SendMessageRequest.model_validate(
-                    new_msg_req.model_dump() | saved_selection.model_dump()
+            # Other turns that the server starts use the chat's saved tool
+            # options.
+            saved_options = parked_options or get_chat_session_tool_options(
+                db_session, chat_session
+            )
+            if server_started and saved_options is not None:
+                new_msg_req = new_msg_req.model_copy(
+                    update={"tool_options": saved_options}
                 )
-            if parked_selection is not None:
+            if parked_options is not None:
                 # Document-set access can end while a run is parked.
-                filters = parked_selection.internal_search_filters
+                filters = parked_options.internal_search_filters
                 require_document_set_access(
                     db_session, filters.document_set if filters else None, user
                 )
@@ -521,11 +524,14 @@ def prepare_chat_turn(
                         OnyxErrorCode.BAD_REQUEST,
                         "Deep research requires a model with at least 50,000 input tokens",
                     )
+            preferred_tool = (
+                new_msg_req.tool_options.preferred if new_msg_req.tool_options else None
+            )
             if (
                 chat_session.incognito_record_mode is not None
-                and new_msg_req.preferred_tool_id is not None
+                and isinstance(preferred_tool, CapabilityPreference)
                 and any(
-                    tool.id == new_msg_req.preferred_tool_id
+                    tool.id == preferred_tool.tool_id
                     and tool.in_code_tool_id == CODING_AGENT_TOOL_ID
                     for tool in chat_session.persona.tools
                 )
@@ -716,7 +722,6 @@ def prepare_chat_turn(
             if new_msg_req.deep_research and research_tool_id is None:
                 raise ValueError("Research tool configuration is missing")
             tool_names = {tool.id: tool.name for tool in tools}
-            preferred_tool_id = new_msg_req.preferred_tool_id
             summary_message = find_summary_for_branch(db_session, chat_history)
             checkpoint = checkpoint_from_summary(summary_message)
             descriptors = {
@@ -834,18 +839,19 @@ def prepare_chat_turn(
         # Inline project context replaces retrieval for this request.
         if (
             search_params.search_usage == SearchToolUsage.DISABLED
+            and isinstance(preferred_tool, CapabilityPreference)
             and (
-                new_msg_req.allowed_tool_ids is None
-                or preferred_tool_id in new_msg_req.allowed_tool_ids
+                new_msg_req.tool_options is None
+                or new_msg_req.tool_options.allows_tool(preferred_tool.tool_id)
             )
             and any(
-                tool.id == preferred_tool_id
+                tool.id == preferred_tool.tool_id
                 and tool.in_code_tool_id == SEARCH_TOOL_ID
                 and tool.enabled
                 for tool in tool_configuration.tools
             )
         ):
-            preferred_tool_id = None
+            preferred_tool = None
         # Temporary history is saved after the work that can reject the turn.
         if history_store is not None:
             admission.refresh()
@@ -903,8 +909,8 @@ def prepare_chat_turn(
             search_params=search_params,
             all_injected_file_metadata=history.all_injected_file_metadata,
             available_files=available_files,
-            preferred_tool_id=preferred_tool_id,
-            preferred_tool_saved=server_started and saved_selection is not None,
+            preferred_tool=preferred_tool,
+            preferred_tool_saved=server_started and saved_options is not None,
             chat_files_for_tools=chat_files_for_tools,
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,
@@ -1180,11 +1186,11 @@ def dispatch_pending_chat_messages(
                             if (
                                 run.model_configuration_id,
                                 run.temperature,
-                                run.tool_selection,
+                                run.tool_options,
                             ) == (
                                 hosted_agents[0].model_configuration_id,
                                 hosted_agents[0].temperature,
-                                hosted_agents[0].tool_selection,
+                                hosted_agents[0].tool_options,
                             ):
                                 fail_suspended_response(
                                     cache, get_current_tenant_id(), run.response_id
