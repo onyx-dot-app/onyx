@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import KV_SUGGESTED_QUESTIONS_USER_KEY, DocumentSource
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -26,11 +26,13 @@ NOW = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
 class _FakeKvStore:
     def __init__(self) -> None:
         self.data: dict[str, JSON_ro] = {}
+        self.refresh_cache_calls: list[bool] = []
 
     def store(self, key: str, val: JSON_ro) -> None:
         self.data[key] = val
 
-    def load(self, key: str) -> JSON_ro:
+    def load(self, key: str, refresh_cache: bool = False) -> JSON_ro:
+        self.refresh_cache_calls.append(refresh_cache)
         if key not in self.data:
             raise KvKeyNotFoundError()
         return self.data[key]
@@ -45,6 +47,15 @@ def _no_lock(**_kwargs: object) -> Iterator[None]:
 def kv(monkeypatch: pytest.MonkeyPatch) -> _FakeKvStore:
     fake = _FakeKvStore()
     monkeypatch.setattr(store, "get_kv_store", lambda: fake)
+    monkeypatch.setattr(
+        store,
+        "load_user_record_values",
+        lambda _session, user_ids: {
+            user_id: fake.data[KV_SUGGESTED_QUESTIONS_USER_KEY.format(user_id)]
+            for user_id in user_ids
+            if KV_SUGGESTED_QUESTIONS_USER_KEY.format(user_id) in fake.data
+        },
+    )
     monkeypatch.setattr(store, "cache_shared_lock", _no_lock)
     monkeypatch.setattr(store, "get_current_tenant_id", lambda: "tenant")
     return fake
@@ -132,6 +143,11 @@ def test_record_seen_and_mark_used_update_one_record() -> None:
     record = store.load_user_record(user_id)
     assert record.last_seen_at == NOW
     assert record.used == ["q1"]
+
+
+def test_locked_update_reads_postgres_not_the_cache(kv: _FakeKvStore) -> None:
+    store.record_seen(uuid4(), NOW)
+    assert kv.refresh_cache_calls == [True]
 
 
 @pytest.mark.usefixtures("kv")

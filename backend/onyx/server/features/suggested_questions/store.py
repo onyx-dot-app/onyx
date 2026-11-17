@@ -11,6 +11,7 @@ from onyx.configs.constants import (
 )
 from onyx.db.enums import AccountType
 from onyx.db.models import User
+from onyx.db.suggested_questions import load_user_record_values
 from onyx.db.users import get_all_users
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -72,9 +73,12 @@ def merge_questions(
     return newest_first[:max_size]
 
 
-def load_user_record(user_id: UUID) -> UserRecord:
+def load_user_record(user_id: UUID, refresh_cache: bool = False) -> UserRecord:
     try:
-        stored = get_kv_store().load(KV_SUGGESTED_QUESTIONS_USER_KEY.format(user_id))
+        stored = get_kv_store().load(
+            KV_SUGGESTED_QUESTIONS_USER_KEY.format(user_id),
+            refresh_cache=refresh_cache,
+        )
     except KvKeyNotFoundError:
         return UserRecord()
     return UserRecord.model_validate(stored)
@@ -91,7 +95,9 @@ def _update_user_record(
         wait_for_lock_s=SQ_USER_RECORD_LOCK_TIMEOUT_S,
         logger=logger,
     ):
-        record = update(load_user_record(user_id))
+        # Read Postgres, not the cache: an unlocked reader can refill the
+        # cache with an older value after a locked writer has saved.
+        record = update(load_user_record(user_id, refresh_cache=True))
         get_kv_store().store(
             KV_SUGGESTED_QUESTIONS_USER_KEY.format(user_id),
             record.model_dump(mode="json"),
@@ -124,12 +130,21 @@ def get_recently_active_users(db_session: Session, now: datetime) -> list[User]:
     """People the pool should cover: those who opened the chat in the last
     SQ_ACTIVE_DAYS days, and those who have never opened it, who are most
     likely new. Only people who came and then stayed away are left out."""
+    people = [
+        user
+        for user in get_all_users(db_session, include_api_key_users=False)
+        if user.is_active and user.account_type == AccountType.STANDARD
+    ]
+    stored = load_user_record_values(db_session, [user.id for user in people])
     since = now - timedelta(days=SQ_ACTIVE_DAYS)
     active = []
-    for user in get_all_users(db_session, include_api_key_users=False):
-        if not user.is_active or user.account_type != AccountType.STANDARD:
-            continue
-        last_seen_at = load_user_record(user.id).last_seen_at
+    for user in people:
+        record_value = stored.get(user.id)
+        last_seen_at = (
+            UserRecord.model_validate(record_value).last_seen_at
+            if record_value is not None
+            else None
+        )
         if last_seen_at is None or last_seen_at >= since:
             active.append(user)
     return active
