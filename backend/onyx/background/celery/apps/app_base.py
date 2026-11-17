@@ -301,6 +301,9 @@ def on_celeryd_init(
 
     validate_encryption_configuration_or_exit()
 
+    # Initialize tracing in workers if credentials are available.
+    setup_tracing()
+
 
 def validate_encryption_configuration_or_exit() -> None:
     """Celery catches an exception raised in a signal handler and starts anyway,
@@ -310,9 +313,6 @@ def validate_encryption_configuration_or_exit() -> None:
     except RuntimeError as e:
         logger.critical("Encryption settings are unusable, stopping: %s", e)
         raise SystemExit(1) from e
-
-    # Initialize tracing in workers if credentials are available.
-    setup_tracing()
 
 
 def wait_for_redis(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
