@@ -1340,12 +1340,27 @@ def test_a_destination_change_resets_connections(
         _connection_status(db_session, detail.id, member)
         is IntegrationConnectionStatus.CONNECTED
     )
+    if shape == "openapi":
+        tool = get_openapi_tool_for_integration(detail.id, db_session)
+        assert tool is not None
+        assert (tool.name, tool.display_name) == ("Renamed", "Renamed")
+    else:
+        app = get_external_app_for_integration(detail.id, db_session)
+        assert app is not None and app.name == "Renamed"
 
     config = (
         OpenApiConfigInput(
             openapi_spec={
                 **OPENAPI_SPEC,
                 "servers": [{"url": "https://new.example.com"}],
+                "paths": {
+                    "/forecast": {
+                        "get": {
+                            "operationId": "get_forecast",
+                            "summary": "Get the forecast",
+                        }
+                    }
+                },
             }
         )
         if shape == "openapi"
@@ -1358,6 +1373,10 @@ def test_a_destination_change_resets_connections(
         _connection_status(db_session, detail.id, member)
         is IntegrationConnectionStatus.NEEDS_RECONNECT
     )
+    if shape == "openapi":
+        assert [a.key for a in list_integration_actions(detail.id, db_session)] == [
+            "get_forecast"
+        ]
 
 
 def test_scoped_owner_cannot_move_an_onyx_login_integration(
