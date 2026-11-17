@@ -247,6 +247,34 @@ def list_persona_openapi_tools(
     ]
 
 
+def list_persona_mcp_tools(
+    persona_id: int, db_session: Session
+) -> list[tuple[UUID, Tool, bool]]:
+    """The old MCP tool rows of each MCP integration that a plugin of the
+    agent holds, with the plugin and whether the link selects the tool (does
+    not block its action). The selected rows are the old MCP tool ids of the
+    agent."""
+    return [
+        (
+            plugin_id,
+            tool,
+            ActionSettings.model_validate(settings or {}).value_for(tool.name)
+            is not LinkValue.BLOCKED,
+        )
+        for plugin_id, settings, tool in db_session.execute(
+            select(Persona__Plugin.plugin_id, Persona__Plugin.action_settings, Tool)
+            .join(
+                Plugin__Integration,
+                Plugin__Integration.plugin_id == Persona__Plugin.plugin_id,
+            )
+            .join(Integration, Integration.id == Plugin__Integration.integration_id)
+            .join(Tool, Tool.mcp_server_id == Integration.mcp_server_id)
+            .where(Persona__Plugin.persona_id == persona_id)
+            .order_by(Tool.id, Persona__Plugin.plugin_id)
+        ).tuples()
+    ]
+
+
 def write_persona_plugin_links__no_commit(
     persona_id: int,
     links: Sequence[PersonaPluginLink],

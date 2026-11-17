@@ -27,6 +27,7 @@ from onyx.db.models import (
     Marketplace,
     Plugin,
     Plugin__Integration,
+    Tool,
     User,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -401,3 +402,54 @@ def test_agent_tool_ids_round_trip_through_the_plugin_links(
     assert list_persona_plugin_links(db_session, agent.id) == []
     # The integration stays; only the link of the agent goes.
     assert db_session.get(Integration, integration.id) is not None
+
+
+def test_agent_mcp_tool_ids_round_trip_and_change_the_selection(
+    db_session: Session, admin: User, created: list[int]
+) -> None:
+    server_id = _upsert(db_session, admin, created)
+    alpha, beta = (
+        Tool(name=name, description="", mcp_server_id=server_id, user_id=admin.id)
+        for name in ("alpha", "beta")
+    )
+    db_session.add_all([alpha, beta])
+    db_session.commit()
+
+    def request(tool_ids: list[int], name: str) -> PersonaUpsertRequest:
+        return PersonaUpsertRequest(
+            name=name,
+            description="",
+            system_prompt="",
+            task_prompt="",
+            datetime_aware=False,
+            document_set_ids=[],
+            tool_ids=tool_ids,
+            is_public=True,
+        )
+
+    def links() -> list[dict[str, Any] | None]:
+        return [
+            row.action_settings
+            for row in list_persona_plugin_links(db_session, agent.id)
+        ]
+
+    name = f"agent-{uuid4().hex[:8]}"
+    agent = persona_api.create_persona(request([alpha.id], name), admin, db_session)
+    assert [t.id for t in agent.tools] == [alpha.id]
+
+    both = persona_api.update_persona(
+        agent.id, request([alpha.id, beta.id], name), admin, db_session
+    )
+    assert sorted(t.id for t in both.tools) == sorted([alpha.id, beta.id])
+    assert links() == [
+        {"default": "blocked", "actions": {"alpha": "inherit", "beta": "inherit"}}
+    ]
+
+    beta_only = persona_api.update_persona(
+        agent.id, request([beta.id], name), admin, db_session
+    )
+    assert [t.id for t in beta_only.tools] == [beta.id]
+
+    cleared = persona_api.update_persona(agent.id, request([], name), admin, db_session)
+    assert cleared.tools == []
+    assert links() == []

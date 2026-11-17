@@ -1025,7 +1025,7 @@ def _persona(
     db_session: Session,
     user: User,
     *,
-    tool_ids: list[int],
+    tool_ids: list[int] | None,
     plugin_links: list[PersonaPluginLink] | None,
     persona_id: int | None = None,
 ) -> int:
@@ -1118,8 +1118,14 @@ def test_persona_plugins_and_legacy_tool_ids(
     ]
 
     # None keeps the links.
-    _persona(db_session, admin, tool_ids=[], plugin_links=None, persona_id=persona_id)
+    _persona(
+        db_session, admin, tool_ids=None, plugin_links=None, persona_id=persona_id
+    )
     assert len(list_persona_plugin_links(db_session, persona_id)) == 1
+
+    # Old tool ids with no MCP tool remove the link of the old MCP tool.
+    _persona(db_session, admin, tool_ids=[], plugin_links=None, persona_id=persona_id)
+    assert list_persona_plugin_links(db_session, persona_id) == []
 
 
 def test_persona_create_and_update_responses_carry_plugins() -> None:
