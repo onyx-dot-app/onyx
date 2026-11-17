@@ -141,15 +141,27 @@ test("deletes the integration after a confirmation", async () => {
 });
 
 test("disables the controls when the admin cannot manage it", async () => {
-  mockFetch({ [URL_DETAIL]: makeDetail({ can_manage: false }) });
+  mockFetch({
+    [URL_DETAIL]: makeDetail({ can_manage: false, can_delete: false }),
+  });
   open();
   const view = await inPanel();
   expect(
     await view.findByText(detailCopy.overview.readOnly)
   ).toBeInTheDocument();
   expect(
-    view.getByRole("button", { name: detailCopy.overview.delete.label })
-  ).toBeDisabled();
+    view.queryByRole("button", { name: detailCopy.overview.delete.label })
+  ).not.toBeInTheDocument();
+});
+
+test("hides Delete for an app that Onyx provides", async () => {
+  mockFetch({ [URL_DETAIL]: makeDetail({ can_delete: false }) });
+  open();
+  const view = await inPanel();
+  await view.findByText("Manage issues");
+  expect(
+    view.queryByRole("button", { name: detailCopy.overview.delete.label })
+  ).not.toBeInTheDocument();
 });
 
 // ── Configuration ────────────────────────────────────────────────────────────

@@ -99,6 +99,8 @@ export interface AdminIntegrationDetail extends AdminIntegration {
   header_template: Record<string, string> | null;
   users_can_save_always_allow: boolean;
   oauth_client: OAuthClientView | null;
+  /** False when the user cannot manage it, or when Onyx provides the app. */
+  can_delete: boolean;
 }
 
 export interface IntegrationPreset {

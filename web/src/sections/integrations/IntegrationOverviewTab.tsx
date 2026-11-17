@@ -231,20 +231,22 @@ export default function IntegrationOverviewTab({
               onCheckedChange={(checked) => void setEnabled(checked)}
             />
           </InputHorizontal>
-          <InputHorizontal
-            title={t("delete.title")}
-            description={t("delete.description")}
-          >
-            <Button
-              variant="danger"
-              prominence="secondary"
-              icon={SvgTrash}
-              disabled={busy || readOnly}
-              onClick={() => setConfirmDelete(true)}
+          {integration.can_delete && (
+            <InputHorizontal
+              title={t("delete.title")}
+              description={t("delete.description")}
             >
-              {t("delete.label")}
-            </Button>
-          </InputHorizontal>
+              <Button
+                variant="danger"
+                prominence="secondary"
+                icon={SvgTrash}
+                disabled={busy}
+                onClick={() => setConfirmDelete(true)}
+              >
+                {t("delete.label")}
+              </Button>
+            </InputHorizontal>
+          )}
         </Section>
       </Card>
       {confirmDelete && (
