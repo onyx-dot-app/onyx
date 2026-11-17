@@ -3,32 +3,20 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
 import { loginAs } from "@tests/e2e/utils/auth";
 
-async function expandAdvancedOptions(page: Page): Promise<void> {
+async function waitForQueryHistoryRow(page: Page): Promise<void> {
   await expect(page.locator('[aria-label="admin-page-title"]')).toBeVisible({
     timeout: 10000,
   });
-
-  const header = page.getByText("Advanced Options", { exact: true });
-  await expect(header).toBeVisible({ timeout: 10000 });
-
-  const queryHistoryTrigger = page
-    .locator("label")
-    .filter({ hasText: "Query History Visibility" })
-    .first();
-
-  const alreadyVisible = await queryHistoryTrigger
-    .isVisible()
-    .catch(() => false);
-  if (alreadyVisible) return;
-
-  await header.scrollIntoViewIfNeeded();
-  await header.click();
-
-  await expect(queryHistoryTrigger).toBeVisible({ timeout: 5000 });
+  await expect(
+    page
+      .locator("label")
+      .filter({ hasText: "Query History Visibility" })
+      .first()
+  ).toBeVisible({ timeout: 10000 });
 }
 
 async function getQueryHistoryValue(page: Page): Promise<string> {
-  await expandAdvancedOptions(page);
+  await waitForQueryHistoryRow(page);
 
   const trigger = page
     .locator("label")
@@ -46,9 +34,9 @@ async function setQueryHistoryType(
   page: Page,
   value: "Show with User Info" | "Anonymized" | "Hidden"
 ): Promise<void> {
-  await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
+  await page.goto(ADMIN_ROUTES.SECURITY_HARDENING.path);
   await page.waitForLoadState("networkidle");
-  await expandAdvancedOptions(page);
+  await waitForQueryHistoryRow(page);
 
   const currentValue = await getQueryHistoryValue(page);
   if (currentValue === value) return;
@@ -85,7 +73,7 @@ test.describe("Query History Toggle @exclusive", () => {
   test("dropdown shows current value and persists after reload", async ({
     page,
   }) => {
-    await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
+    await page.goto(ADMIN_ROUTES.SECURITY_HARDENING.path);
     await page.waitForLoadState("networkidle");
 
     const currentValue = await getQueryHistoryValue(page);

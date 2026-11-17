@@ -2261,10 +2261,6 @@
       "advanced": {
         "title": "高级选项"
       },
-      "anonymousUsers": {
-        "description": "允许任何人**无需登录**即可开始聊天。他们看不到其他聊天，也无法创建智能体或更改设置。",
-        "title": "允许匿名用户"
-      },
       "autoDetectFilters": {
         "description": "自动应用从搜索查询中推断出的来源和时间过滤条件。",
         "title": "自动识别搜索过滤条件"
@@ -2335,48 +2331,6 @@
       "multiModel": {
         "description": "允许多个模型在对话中并行生成回复。",
         "title": "多模型生成"
-      },
-      "queryHistory": {
-        "anonymized": {
-          "description": "查询对管理员可见，但已移除用户身份信息",
-          "label": "匿名化"
-        },
-        "description": "控制组织的完整对话历史在管理面板中的显示方式。",
-        "disabled": {
-          "description": "查询历史报告已禁用。",
-          "label": "隐藏"
-        },
-        "normal": {
-          "description": "所有查询对管理员可见，并关联到具体用户。",
-          "label": "显示并附带用户信息"
-        },
-        "title": "查询历史可见性"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "请输入 1 到 {max} 之间的整数天数。",
-          "label": "自定义保留期",
-          "moreTooltip": "更多",
-          "placeholder": "以天为单位",
-          "restoreTooltip": "恢复默认"
-        },
-        "description": "指定 {appName} 在您的组织中保留对话的时长。",
-        "forever": {
-          "label": "永久"
-        },
-        "presets": {
-          "days30": "30 天",
-          "days60": "60 天",
-          "days7": "7 天",
-          "days90": "90 天",
-          "year1": "1 年"
-        },
-        "reduceModal": {
-          "confirmLabel": "缩短保留期",
-          "message": "超过 {days, plural, one {# 天} other {# 天}} 没有活动的对话将被永久删除。此操作无法撤销。",
-          "title": "缩短对话保留期？"
-        },
-        "title": "保留对话历史"
       },
       "searchMode": {
         "description": "用于在组织内快速搜索文档的界面模式。",
@@ -8651,6 +8605,48 @@
         "section": {
           "title": "管理员控制"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "查询对管理员可见，但已移除用户身份信息",
+            "label": "匿名化"
+          },
+          "description": "控制组织的完整对话历史在管理面板中的显示方式。",
+          "disabled": {
+            "description": "查询历史报告已禁用。",
+            "label": "隐藏"
+          },
+          "normal": {
+            "description": "所有查询对管理员可见，并关联到具体用户。",
+            "label": "显示并附带用户信息"
+          },
+          "title": "查询历史可见性"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "请输入 1 到 {max} 之间的整数天数。",
+            "label": "自定义保留期",
+            "moreTooltip": "更多",
+            "placeholder": "以天为单位",
+            "restoreTooltip": "恢复默认"
+          },
+          "description": "指定 {appName} 在您的组织中保留对话的时长。",
+          "forever": {
+            "label": "永久"
+          },
+          "presets": {
+            "days30": "30 天",
+            "days60": "60 天",
+            "days7": "7 天",
+            "days90": "90 天",
+            "year1": "1 年"
+          },
+          "reduceModal": {
+            "confirmLabel": "缩短保留期",
+            "message": "超过 {days, plural, one {# 天} other {# 天}} 没有活动的对话将被永久删除。此操作无法撤销。",
+            "title": "缩短对话保留期？"
+          },
+          "title": "保留对话历史"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "仅管理员可以查看完整用户列表。",
@@ -8669,6 +8665,10 @@
           "placeholder": "添加域名（例如 onyx.app）",
           "subDescription": "新用户只能使用此域名列表中的邮箱注册新账户。",
           "title": "允许的邮箱域名"
+        },
+        "anonymousUsers": {
+          "description": "允许任何人**无需登录**即可开始聊天。他们看不到其他聊天，也无法创建智能体或更改设置。",
+          "title": "允许匿名用户"
         },
         "emailDomains": {
           "description": "将新用户注册限制为特定的邮箱域名。",
