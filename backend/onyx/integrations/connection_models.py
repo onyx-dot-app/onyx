@@ -1,8 +1,4 @@
-"""Shapes shared by the connection logic, the OAuth flow and the MCP SDK
-token storage, and the one reader of stored connection and OAuth client
-secrets. Kept free of heavy imports so each of them can use it.
-
-The integration tables migration copied the old secrets as they were and
+"""The integration tables migration copied the old secrets as they were and
 named their format in ``legacy_format``. The readers here give the same
 shapes for the new format and for each old format. Each write saves the new
 format and clears ``legacy_format``."""
@@ -14,7 +10,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from onyx.db.enums import IntegrationConnectionStatus, IntegrationLegacyFormat
+from onyx.db.enums import (
+    IntegrationConnectionStatus,
+    IntegrationLegacyFormat,
+    IntegrationOAuthProviderMode,
+)
 from onyx.db.models import IntegrationConnection, IntegrationOAuthClient
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
@@ -39,9 +39,6 @@ _PRESET_CLIENT_FIELDS = frozenset({"client_id", "client_secret"})
 
 
 class ConnectionSecret(BaseModel):
-    """The one secret shape of every connection, stored encrypted in
-    ``integration_connection.secret``."""
-
     access_token: str | None = None
     refresh_token: str | None = None
     token_type: str | None = None
@@ -53,8 +50,6 @@ class ConnectionSecret(BaseModel):
 
 
 class ConnectionRecord(BaseModel):
-    """A connection row, read in its stored format."""
-
     secret: ConnectionSecret
     expires_at: datetime.datetime | None
     granted_scopes: list[str] | None
@@ -63,9 +58,6 @@ class ConnectionRecord(BaseModel):
 
 
 class OAuthClientCredentials(BaseModel):
-    """An ``integration_oauth_client`` row's secrets, read in its stored
-    format."""
-
     client_id: str | None = None
     client_secret: str | None = None
     # The registration in the new format: OAUTH_CLIENT_INFO_KEY and
@@ -313,6 +305,11 @@ def read_oauth_client(oauth_client: IntegrationOAuthClient) -> OAuthClientCreden
                 else None
             ),
             registration=_dict(registration),
+            host_values=(
+                _str_values(oauth_client.additional_params)
+                if oauth_client.provider_mode is IntegrationOAuthProviderMode.PRESET
+                else {}
+            ),
         )
     data = _dict(registration)
     match IntegrationLegacyFormat(oauth_client.legacy_format):
@@ -345,12 +342,6 @@ def read_oauth_client(oauth_client: IntegrationOAuthClient) -> OAuthClientCreden
             raise ValueError(
                 f"Unknown OAuth client format: {oauth_client.legacy_format}"
             )
-
-
-class ConnectionProblemCode(str, Enum):
-    NOT_SET_UP = "not_set_up"
-    NOT_CONNECTED = "not_connected"
-    NEEDS_RECONNECT = "needs_reconnect"
 
 
 class ConnectionState(str, Enum):

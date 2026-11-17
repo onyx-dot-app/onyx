@@ -10,9 +10,8 @@ from typing import Any
 from urllib.parse import parse_qs
 from uuid import UUID
 
-import pytest
 from mcp.shared.auth import OAuthToken
-from sqlalchemy import delete, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
@@ -23,38 +22,28 @@ from onyx.db.enums import (
     IntegrationKind,
     IntegrationLegacyFormat,
     IntegrationOAuthProviderMode,
-    MCPAuthenticationPerformer,
-    MCPAuthenticationType,
-    MCPTransport,
 )
+from onyx.db.integration import get_mcp_server_for_integration
 from onyx.db.integration_connection import (
     get_connection,
     get_oauth_client,
     mark_connection_needs_reconnect__no_commit,
 )
 from onyx.db.models import (
-    ExternalApp,
     Integration,
     IntegrationConnection,
-    MCPServer,
-    User,
 )
 from onyx.integrations.connection_models import (
     OAUTH_CLIENT_INFO_KEY,
     OAUTH_METADATA_KEY,
     SIGN_IN_EXPIRED_REASON,
     SIGN_IN_REJECTED_REASON,
-    ConnectionProblemCode,
-    ConnectionSecret,
     ConnectionState,
     read_connection,
     read_connection_secret,
     read_oauth_client,
 )
 from onyx.integrations.connections import (
-    ConnectionProblem,
-    MissingHeaderValueError,
-    ResolvedConnection,
     ensure_fresh_connection,
     integration_status,
     oauth_client_configured,
@@ -72,21 +61,11 @@ from tests.external_dependency_unit.integrations.conftest import (
     TOKEN_URL,
     FakeTokenEndpoint,
     MakeIntegration,
+    expect_problem,
+    expect_resolved,
 )
 
 _MCP_TOKEN_URL = "https://mcp-auth.example.test/oauth/token"
-
-
-def _resolved(result: ResolvedConnection | ConnectionProblem) -> ResolvedConnection:
-    if not isinstance(result, ResolvedConnection):
-        pytest.fail(f"expected a connection, got {result}")
-    return result
-
-
-def _problem(result: ResolvedConnection | ConnectionProblem) -> ConnectionProblem:
-    if not isinstance(result, ConnectionProblem):
-        pytest.fail(f"expected a problem, got {result}")
-    return result
 
 
 def _seed(
@@ -126,33 +105,6 @@ def _unix(delta: timedelta) -> float:
     return (datetime.now(timezone.utc) + delta).timestamp()
 
 
-def _mcp_server(
-    db_session: Session, integration: Integration, owner: User
-) -> MCPServer:
-    server = MCPServer(
-        owner=owner.email,
-        name=f"mcp-{integration.id}",
-        server_url="https://mcp.example.test/mcp",
-        transport=MCPTransport.STREAMABLE_HTTP,
-        auth_type=MCPAuthenticationType.OAUTH,
-        auth_performer=MCPAuthenticationPerformer.PER_USER,
-        integration_id=integration.id,
-    )
-    db_session.add(server)
-    db_session.commit()
-    return server
-
-
-def test_render_headers_reads_doubled_braces_as_literal() -> None:
-    assert render_headers({"X-Static": "a{{b}}c"}, None) == {"X-Static": "a{b}c"}
-    assert render_headers(
-        {"X-Mixed": "{{{api_key}}}"}, ConnectionSecret(fields={"api_key": "k"})
-    ) == {"X-Mixed": "{k}"}
-    with pytest.raises(MissingHeaderValueError) as error:
-        render_headers({"X-Key": "{x}"}, ConnectionSecret())
-    assert error.value.placeholders == ["x"]
-
-
 def test_mcp_config_shared_api_key(
     db_session: Session, make_integration: MakeIntegration
 ) -> None:
@@ -174,7 +126,7 @@ def test_mcp_config_shared_api_key(
         },
     )
 
-    secret = _resolved(resolve_connection(integration, None, db_session)).secret
+    secret = expect_resolved(resolve_connection(integration, None, db_session)).secret
     assert render_headers(integration.header_template, secret) == {
         "Authorization": "Bearer sk-1",
         "X-Static": "v{1}",
@@ -223,7 +175,7 @@ def test_mcp_config_individual_api_key_and_reauth(
         },
     )
 
-    secret = _resolved(resolve_connection(integration, user, db_session)).secret
+    secret = expect_resolved(resolve_connection(integration, user, db_session)).secret
     assert render_headers(
         integration.header_template, secret, extra_values={"user_email": user.email}
     ) == {"Authorization": "Bearer user-key", "X-User": user.email}
@@ -232,8 +184,8 @@ def test_mcp_config_individual_api_key_and_reauth(
         is ConnectionState.CONNECTED
     )
 
-    problem = _problem(resolve_connection(integration, rejected_user, db_session))
-    assert problem.code is ConnectionProblemCode.NEEDS_RECONNECT
+    problem = expect_problem(resolve_connection(integration, rejected_user, db_session))
+    assert problem.code is ConnectionState.NEEDS_RECONNECT
     assert problem.reason == SIGN_IN_REJECTED_REASON
     status = integration_status(integration, rejected_user, db_session)
     assert status.state is ConnectionState.NEEDS_RECONNECT
@@ -312,7 +264,7 @@ def test_mcp_config_token_storage_loads_and_saves_new_format(
     assert (tokens.access_token, tokens.refresh_token) == ("a1", "r1")
     assert tokens.scope == "read write"
 
-    secret = _resolved(resolve_connection(integration, user, db_session)).secret
+    secret = expect_resolved(resolve_connection(integration, user, db_session)).secret
     # The stale token copy in the old headers is dropped.
     assert render_headers(integration.header_template, secret) == {"X-Route": "eu"}
 
@@ -339,37 +291,31 @@ def test_mcp_config_refresh_writes_new_format(
 ) -> None:
     integration = _mcp_oauth_integration(db_session, make_integration)
     user = make_test_user("legacy_mcp_refresh")
-    server = _mcp_server(db_session, integration, user)
-    try:
-        connection = _seed(
-            db_session,
-            integration,
-            user.id,
-            IntegrationLegacyFormat.MCP_CONFIG,
-            _mcp_oauth_user_secret(_unix(-timedelta(minutes=5))),
-        )
-        assert connection.expires_at is None
+    connection = _seed(
+        db_session,
+        integration,
+        user.id,
+        IntegrationLegacyFormat.MCP_CONFIG,
+        _mcp_oauth_user_secret(_unix(-timedelta(minutes=5))),
+    )
+    assert connection.expires_at is None
 
-        ensure_fresh_connection(connection, integration, db_session)
+    ensure_fresh_connection(connection, integration, db_session)
 
-        assert len(token_endpoint.requests) == 1
-        request = token_endpoint.requests[0]
-        assert str(request.url) == _MCP_TOKEN_URL
-        assert parse_qs(request.content.decode())["refresh_token"] == ["r1"]
-        db_session.refresh(connection)
-        assert connection.legacy_format is None
-        assert connection.expires_at is not None
-        assert connection.granted_scopes == ["read", "write"]
-        secret = read_connection_secret(connection)
-        assert (secret.access_token, secret.refresh_token) == (
-            "new-access",
-            "new-refresh",
-        )
-        assert secret.headers == {"X-Route": "eu"}
-    finally:
-        db_session.rollback()
-        db_session.execute(delete(MCPServer).where(MCPServer.id == server.id))
-        db_session.commit()
+    assert len(token_endpoint.requests) == 1
+    request = token_endpoint.requests[0]
+    assert str(request.url) == _MCP_TOKEN_URL
+    assert parse_qs(request.content.decode())["refresh_token"] == ["r1"]
+    db_session.refresh(connection)
+    assert connection.legacy_format is None
+    assert connection.expires_at is not None
+    assert connection.granted_scopes == ["read", "write"]
+    secret = read_connection_secret(connection)
+    assert (secret.access_token, secret.refresh_token) == (
+        "new-access",
+        "new-refresh",
+    )
+    assert secret.headers == {"X-Route": "eu"}
 
 
 def test_mcp_config_registration_saves_new_format(
@@ -380,31 +326,27 @@ def test_mcp_config_registration_saves_new_format(
     integration = _mcp_oauth_integration(db_session, make_integration)
     user = make_test_user("legacy_mcp_registration")
     storage = IntegrationTokenStorage(integration.id, user.id)
-    server = _mcp_server(db_session, integration, user)
-    try:
-        oauth_client = get_oauth_client(db_session, integration.id)
-        assert oauth_client is not None
-        provider = make_integration_oauth_provider(
-            integration_mcp_server_connection(server, integration, oauth_client),
-            storage,
-        )
-        asyncio.run(storage.get_tokens())
-        assert provider.context.oauth_metadata is not None
-        # A token save with the metadata rewrites the client in the new format.
-        asyncio.run(storage.set_tokens(OAuthToken(access_token="a1")))
+    server = get_mcp_server_for_integration(integration.id, db_session)
+    assert server is not None
+    oauth_client = get_oauth_client(db_session, integration.id)
+    assert oauth_client is not None
+    provider = make_integration_oauth_provider(
+        integration_mcp_server_connection(server, integration, oauth_client),
+        storage,
+    )
+    asyncio.run(storage.get_tokens())
+    assert provider.context.oauth_metadata is not None
+    # A token save with the metadata rewrites the client in the new format.
+    asyncio.run(storage.set_tokens(OAuthToken(access_token="a1")))
 
-        db_session.refresh(oauth_client)
-        assert oauth_client.legacy_format is None
-        assert oauth_client.client_id is not None
-        assert oauth_client.client_id.get_value(apply_mask=False) == "dcr-client"
-        assert oauth_client.registration is not None
-        registration = oauth_client.registration.get_value(apply_mask=False)
-        assert registration[OAUTH_CLIENT_INFO_KEY]["client_id"] == "dcr-client"
-        assert registration[OAUTH_METADATA_KEY]["token_endpoint"] == _MCP_TOKEN_URL
-    finally:
-        db_session.rollback()
-        db_session.execute(delete(MCPServer).where(MCPServer.id == server.id))
-        db_session.commit()
+    db_session.refresh(oauth_client)
+    assert oauth_client.legacy_format is None
+    assert oauth_client.client_id is not None
+    assert oauth_client.client_id.get_value(apply_mask=False) == "dcr-client"
+    assert oauth_client.registration is not None
+    registration = oauth_client.registration.get_value(apply_mask=False)
+    assert registration[OAUTH_CLIENT_INFO_KEY]["client_id"] == "dcr-client"
+    assert registration[OAUTH_METADATA_KEY]["token_endpoint"] == _MCP_TOKEN_URL
 
 
 def test_oauth_user_token_refresh_writes_new_format(
@@ -436,7 +378,7 @@ def test_oauth_user_token_refresh_writes_new_format(
         },
     )
 
-    secret = _resolved(resolve_connection(integration, user, db_session)).secret
+    secret = expect_resolved(resolve_connection(integration, user, db_session)).secret
 
     assert len(token_endpoint.requests) == 1
     assert str(token_endpoint.requests[0].url) == TOKEN_URL
@@ -475,7 +417,7 @@ def test_oauth_user_token_expired_without_refresh_needs_reconnect(
     status = integration_status(integration, user, db_session)
     assert status.state is ConnectionState.NEEDS_RECONNECT
     assert status.reason == SIGN_IN_EXPIRED_REASON
-    problem = _problem(resolve_connection(integration, user, db_session))
+    problem = expect_problem(resolve_connection(integration, user, db_session))
     assert problem.reason == SIGN_IN_EXPIRED_REASON
     assert token_endpoint.requests == []
 
@@ -495,58 +437,42 @@ def test_preset_registration_and_user_token(
             "client_secret": "zd-secret",
             "subdomain": "acme",
         },
+        app_type=ExternalAppType.ZENDESK,
     )
     _tag_oauth_client(db_session, integration, IntegrationLegacyFormat.EXTERNAL_APP_ORG)
-    app = ExternalApp(
-        name=f"Zendesk {integration.id}",
-        app_type=ExternalAppType.ZENDESK,
-        upstream_url_patterns=[],
-        auth_template={"Authorization": "Bearer {access_token}"},
-        organization_credentials={},
-        integration_id=integration.id,
-    )
-    db_session.add(app)
-    db_session.commit()
     user = make_test_user("legacy_preset")
-    try:
-        oauth_client = get_oauth_client(db_session, integration.id)
-        assert oauth_client is not None
-        credentials = read_oauth_client(oauth_client)
-        assert (credentials.client_id, credentials.client_secret) == (
-            "zd-client",
-            "zd-secret",
-        )
-        assert preset_host_values(integration, db_session) == {"subdomain": "acme"}
-        assert oauth_client_configured(integration, oauth_client)
+    oauth_client = get_oauth_client(db_session, integration.id)
+    assert oauth_client is not None
+    credentials = read_oauth_client(oauth_client)
+    assert (credentials.client_id, credentials.client_secret) == (
+        "zd-client",
+        "zd-secret",
+    )
+    assert preset_host_values(integration, db_session) == {"subdomain": "acme"}
+    assert oauth_client_configured(integration, oauth_client)
 
-        _seed(
-            db_session,
-            integration,
-            user.id,
-            IntegrationLegacyFormat.EXTERNAL_APP_USER,
-            {
-                "access_token": "zd-access",
-                "refresh_token": "zd-refresh",
-                "token_type": "Bearer",
-                "expires_at": (
-                    datetime.now(timezone.utc) + timedelta(hours=1)
-                ).isoformat(),
-            },
-            granted_scopes=["read"],
-        )
-        connection = get_connection(db_session, integration.id, user.id)
-        assert connection is not None
-        record = read_connection(connection)
-        assert record.expires_at is not None
-        assert record.granted_scopes == ["read"]
-        secret = _resolved(resolve_connection(integration, user, db_session)).secret
-        assert render_headers(integration.header_template, secret) == {
-            "Authorization": "Bearer zd-access"
-        }
-    finally:
-        db_session.rollback()
-        db_session.execute(delete(ExternalApp).where(ExternalApp.id == app.id))
-        db_session.commit()
+    _seed(
+        db_session,
+        integration,
+        user.id,
+        IntegrationLegacyFormat.EXTERNAL_APP_USER,
+        {
+            "access_token": "zd-access",
+            "refresh_token": "zd-refresh",
+            "token_type": "Bearer",
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        },
+        granted_scopes=["read"],
+    )
+    connection = get_connection(db_session, integration.id, user.id)
+    assert connection is not None
+    record = read_connection(connection)
+    assert record.expires_at is not None
+    assert record.granted_scopes == ["read"]
+    secret = expect_resolved(resolve_connection(integration, user, db_session)).secret
+    assert render_headers(integration.header_template, secret) == {
+        "Authorization": "Bearer zd-access"
+    }
 
 
 def test_individual_custom_app_merges_organization_fields(
@@ -576,15 +502,15 @@ def test_individual_custom_app_merges_organization_fields(
         {"api_key": "user-key", "region": "eu"},
     )
 
-    secret = _resolved(resolve_connection(integration, user, db_session)).secret
+    secret = expect_resolved(resolve_connection(integration, user, db_session)).secret
     assert render_headers(integration.header_template, secret) == {
         "X-Key": "user-key",
         "X-Region": "eu",
     }
     # The organization values do not fill the template, so a user with no
     # row is not connected.
-    problem = _problem(resolve_connection(integration, other, db_session))
-    assert problem.code is ConnectionProblemCode.NOT_CONNECTED
+    problem = expect_problem(resolve_connection(integration, other, db_session))
+    assert problem.code is ConnectionState.NOT_CONNECTED
     assert (
         integration_status(integration, other, db_session).state
         is ConnectionState.NOT_CONNECTED
@@ -617,7 +543,7 @@ def test_tool_headers_plain_json(
     )
     db_session.commit()
 
-    secret = _resolved(resolve_connection(integration, None, db_session)).secret
+    secret = expect_resolved(resolve_connection(integration, None, db_session)).secret
     assert render_headers(integration.header_template, secret) == {
         "X-Api-Key": "abc{1}"
     }
@@ -654,7 +580,7 @@ def test_mcp_config_no_sign_in_keeps_admin_template(
         {"headers": {"X-Team": "blue"}, "header_substitutions": {"team": "blue"}},
     )
 
-    secret = _resolved(resolve_connection(integration, user, db_session)).secret
+    secret = expect_resolved(resolve_connection(integration, user, db_session)).secret
     assert render_headers(
         integration.header_template, secret, extra_values={"user_email": user.email}
     ) == {"X-Team": "blue", "X-User": user.email}
@@ -679,7 +605,7 @@ def test_individual_custom_app_user_without_row_uses_full_organization_values(
     )
     user = make_test_user("legacy_custom_app_no_row")
 
-    secret = _resolved(resolve_connection(integration, user, db_session)).secret
+    secret = expect_resolved(resolve_connection(integration, user, db_session)).secret
     assert render_headers(integration.header_template, secret) == {
         "X-Key": "org-key",
         "X-Region": "eu",
@@ -688,8 +614,8 @@ def test_individual_custom_app_user_without_row_uses_full_organization_values(
         integration_status(integration, user, db_session).state
         is ConnectionState.CONNECTED
     )
-    assert _problem(resolve_connection(integration, None, db_session)).code is (
-        ConnectionProblemCode.NOT_CONNECTED
+    assert expect_problem(resolve_connection(integration, None, db_session)).code is (
+        ConnectionState.NOT_CONNECTED
     )
 
 
@@ -719,8 +645,8 @@ def test_mcp_config_no_sign_in_without_user_values_is_not_connected(
     )
 
     for user in (no_row, partial):
-        problem = _problem(resolve_connection(integration, user, db_session))
-        assert problem.code is ConnectionProblemCode.NOT_CONNECTED
+        problem = expect_problem(resolve_connection(integration, user, db_session))
+        assert problem.code is ConnectionState.NOT_CONNECTED
         status = integration_status(integration, user, db_session)
         assert status.state is ConnectionState.NOT_CONNECTED
         assert status.reason == problem.reason

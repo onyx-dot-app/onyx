@@ -21,13 +21,12 @@ from onyx.db.integration_connection import (
 )
 from onyx.db.models import OAuthAccount, User
 from onyx.integrations.connection_models import (
-    ConnectionProblemCode,
     ConnectionSecret,
+    ConnectionState,
 )
 from onyx.integrations.connections import (
-    ConnectionProblem,
     MissingHeaderValueError,
-    ResolvedConnection,
+    integration_status,
     render_headers,
     resolve_connection,
 )
@@ -35,27 +34,17 @@ from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integrations.conftest import (
     MakeIntegration,
     add_connection,
+    expect_problem,
+    expect_resolved,
     far_future,
 )
-
-
-def _resolved(result: ResolvedConnection | ConnectionProblem) -> ResolvedConnection:
-    if not isinstance(result, ResolvedConnection):
-        pytest.fail(f"expected a connection, got {result}")
-    return result
-
-
-def _problem(result: ResolvedConnection | ConnectionProblem) -> ConnectionProblem:
-    if not isinstance(result, ConnectionProblem):
-        pytest.fail(f"expected a problem, got {result}")
-    return result
 
 
 def test_none_mode_runs_without_credential(
     db_session: Session, make_integration: MakeIntegration
 ) -> None:
     integration = make_integration(auth_mode=IntegrationAuthMode.NONE, auth_method=None)
-    resolved = _resolved(resolve_connection(integration, None, db_session))
+    resolved = expect_resolved(resolve_connection(integration, None, db_session))
     assert resolved.secret is None
 
 
@@ -74,8 +63,8 @@ def test_shared_api_key_uses_organization_row_only(
     add_connection(
         db_session, integration, user.id, ConnectionSecret(fields={"api_key": "u"})
     )
-    problem = _problem(resolve_connection(integration, user, db_session))
-    assert problem.code is ConnectionProblemCode.NOT_SET_UP
+    problem = expect_problem(resolve_connection(integration, user, db_session))
+    assert problem.code is ConnectionState.NOT_SET_UP
     assert problem.reason == (
         f"{integration.name} is not set up for your organization. Ask your admin."
     )
@@ -83,7 +72,7 @@ def test_shared_api_key_uses_organization_row_only(
     add_connection(
         db_session, integration, None, ConnectionSecret(fields={"api_key": "org"})
     )
-    resolved = _resolved(resolve_connection(integration, user, db_session))
+    resolved = expect_resolved(resolve_connection(integration, user, db_session))
     assert resolved.secret is not None
     assert render_headers(integration.header_template, resolved.secret) == {
         "X-Api-Key": "org"
@@ -110,7 +99,7 @@ def test_shared_oauth2_uses_organization_token(
         expires_at=far_future(),
     )
     user = make_test_user("shared_oauth")
-    resolved = _resolved(resolve_connection(integration, user, db_session))
+    resolved = expect_resolved(resolve_connection(integration, user, db_session))
     assert render_headers(integration.header_template, resolved.secret) == {
         "Authorization": "Bearer org-token"
     }
@@ -135,12 +124,12 @@ def test_individual_oauth2_uses_acting_user_row_only(
     # The organization row must never stand in for a user row.
     add_connection(db_session, integration, None, ConnectionSecret(access_token="org"))
 
-    resolved = _resolved(resolve_connection(integration, owner, db_session))
+    resolved = expect_resolved(resolve_connection(integration, owner, db_session))
     assert resolved.secret is not None
     assert resolved.secret.access_token == "owner"
 
-    problem = _problem(resolve_connection(integration, other, db_session))
-    assert problem.code is ConnectionProblemCode.NOT_CONNECTED
+    problem = expect_problem(resolve_connection(integration, other, db_session))
+    assert problem.code is ConnectionState.NOT_CONNECTED
 
 
 def test_individual_api_key_and_needs_reconnect(
@@ -157,15 +146,15 @@ def test_individual_api_key_and_needs_reconnect(
     connection = add_connection(
         db_session, integration, user.id, ConnectionSecret(fields={"api_key": "k1"})
     )
-    resolved = _resolved(resolve_connection(integration, user, db_session))
+    resolved = expect_resolved(resolve_connection(integration, user, db_session))
     assert render_headers(integration.header_template, resolved.secret) == {
         "Authorization": "Token k1"
     }
 
     mark_connection_needs_reconnect__no_commit(db_session, connection, "Key revoked")
     db_session.commit()
-    problem = _problem(resolve_connection(integration, user, db_session))
-    assert problem.code is ConnectionProblemCode.NEEDS_RECONNECT
+    problem = expect_problem(resolve_connection(integration, user, db_session))
+    assert problem.code is ConnectionState.NEEDS_RECONNECT
     assert problem.reason == "Key revoked"
 
 
@@ -178,8 +167,10 @@ def test_anonymous_user_gets_no_individual_connection(
     )
     anonymous = User(id=UUID(ANONYMOUS_USER_UUID), email="anonymous@example.com")
     for acting_user in (None, anonymous):
-        problem = _problem(resolve_connection(integration, acting_user, db_session))
-        assert problem.code is ConnectionProblemCode.NOT_CONNECTED
+        problem = expect_problem(
+            resolve_connection(integration, acting_user, db_session)
+        )
+        assert problem.code is ConnectionState.NOT_CONNECTED
 
 
 def _add_login_account(
@@ -212,14 +203,11 @@ def test_onyx_login_uses_and_refreshes_login_token(
     )
     user = make_test_user("onyx_login")
     try:
-        problem = _problem(resolve_connection(integration, user, db_session))
-        assert problem.code is ConnectionProblemCode.NEEDS_RECONNECT
-
         now = int(datetime.now(timezone.utc).timestamp())
         account = _add_login_account(
             db_session, user, expires_at=now + 3600, refresh_token="login-refresh"
         )
-        resolved = _resolved(resolve_connection(integration, user, db_session))
+        resolved = expect_resolved(resolve_connection(integration, user, db_session))
         assert render_headers(integration.header_template, resolved.secret) == {
             "Authorization": "Bearer login-token"
         }
@@ -246,7 +234,9 @@ def test_onyx_login_uses_and_refreshes_login_token(
                 ),
             ) as refresh_call,
         ):
-            resolved = _resolved(resolve_connection(integration, user, db_session))
+            resolved = expect_resolved(
+                resolve_connection(integration, user, db_session)
+            )
         assert refresh_call.await_count == 1
         assert resolved.secret is not None
         assert resolved.secret.access_token == "refreshed-login"
@@ -259,6 +249,23 @@ def test_onyx_login_uses_and_refreshes_login_token(
             delete(OAuthAccount).where(OAuthAccount.__table__.c.user_id == user.id)
         )
         db_session.commit()
+
+
+def test_onyx_login_without_a_login_account_is_not_connected(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = make_integration(
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.ONYX_LOGIN,
+    )
+    user = make_test_user("onyx_login_no_account")
+
+    result = expect_problem(resolve_connection(integration, user, db_session))
+    assert result.code is ConnectionState.NOT_CONNECTED
+    status = integration_status(integration, user, db_session)
+    assert (status.state, status.reason) == (result.code, result.reason)
 
 
 def test_render_headers_fills_and_refuses() -> None:
@@ -289,3 +296,7 @@ def test_render_headers_fills_and_refuses() -> None:
         render_headers({"X-Key": "{api_key}"}, None)
 
     assert render_headers(None, None) == {}
+    assert render_headers({"X-Static": "a{{b}}c"}, None) == {"X-Static": "a{b}c"}
+    assert render_headers(
+        {"X-Mixed": "{{{api_key}}}"}, ConnectionSecret(fields={"api_key": "k"})
+    ) == {"X-Mixed": "{k}"}

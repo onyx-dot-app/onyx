@@ -83,8 +83,7 @@ This component owns:
 - chat tool approvals: the policy materialized at tool construction, the
   approval requests and their decisions.
 - integration credentials on the new tables (`integration_connection`,
-  `integration_oauth_client`): resolve, sign-in, refresh, status, lifecycle and
-  the one-time import.
+  `integration_oauth_client`): resolve, sign-in, refresh, status and lifecycle.
 
 Its neighbours own:
 - [[tools-framework]]: the `Tool` interface and per-turn construction.
@@ -176,7 +175,8 @@ OpenAPI tool, external app). Queries are in `db/integration_connection.py`.
   MCP SDK storage also uses. A 400 or 401 or `invalid_grant` sets
   `needs_reconnect` with a reason and keeps the row. Other errors keep the token.
 - `integration_status` gives Connected, Not connected, Needs reconnect or Not set
-  up.
+  up. It maps `resolve_connection(..., refresh=False)`, so it never calls the
+  service.
 - `mark_sign_in_settings_changed` sets every connection to Needs reconnect.
   Compare `sign_in_settings_for` before and after an edit: a change of only the
   client secret or a label keeps the connections. Deactivation
@@ -188,12 +188,15 @@ The one sign-in flow is `integrations/oauth.py`, served by
 `POST /integrations/oauth/callback`. The attempt store namespace is
 `integration`. Each kind keeps the redirect URI admins registered before:
 `/mcp/oauth/callback`, `/craft/v1/apps/oauth/callback` (presets) and
-`/oauth-config/callback` (manual clients). MCP servers use the SDK with
+`/oauth-config/callback` (manual clients). A preset reads its host values, such
+as the Zendesk subdomain, from the OAuth client only
+(`integrations/connections.py:preset_host_values`): `additional_params`, or the tagged
+registration of an old client. MCP servers use the SDK with
 `server/features/mcp/oauth.py:IntegrationTokenStorage`, which keeps the grant in
 `integration_connection` and the DCR or CIMD client and discovered metadata in
 `integration_oauth_client.registration`.
 
-**Old secret formats.** The U1 migration copies each old secret as its
+**Old secret formats.** The integration tables migration copies each old secret as its
 encrypted bytes and names the old shape in `legacy_format` on
 `integration_connection` and `integration_oauth_client` (`db/enums.py:IntegrationLegacyFormat`:
 `mcp_config`, `external_app_org`, `external_app_user`, `oauth_user_token`,
@@ -210,9 +213,8 @@ whose template needs values that the user did not save is Not connected. Every s
 `set_oauth_client_credentials__no_commit`) saves the new format and clears the
 tag; a status-only change keeps it. There is no import job.
 
-Release N moves the readers in steps. Until U4, chat, the sandbox proxy and the
-old MCP, OAuth config and external app routes still read and write the old
-tables (`mcp_connection_config`, `oauth_user_token`,
+Chat, the sandbox proxy and the old MCP, OAuth config and external app routes
+read and write the old tables (`mcp_connection_config`, `oauth_user_token`,
 `external_app_user_credential`) with the old refresh functions.
 
 **Credential scope.** `server/features/mcp/credentials.py:resolve_mcp_credentials`

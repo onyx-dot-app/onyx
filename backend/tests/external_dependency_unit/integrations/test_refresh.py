@@ -2,12 +2,10 @@
 errors, and each token endpoint source."""
 
 import threading
-from typing import Any
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qs
 
 import requests
-from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -18,18 +16,15 @@ from onyx.db.enums import (
     IntegrationConnectionStatus,
     IntegrationKind,
     IntegrationOAuthProviderMode,
-    MCPAuthenticationPerformer,
-    MCPAuthenticationType,
-    MCPTransport,
 )
 from onyx.db.integration import get_integration_by_id
 from onyx.db.integration_connection import get_connection_by_id
-from onyx.db.models import ExternalApp, Integration, MCPServer, User
+from onyx.db.models import Integration, User
 from onyx.integrations.connection_models import (
     OAUTH_CLIENT_INFO_KEY,
     OAUTH_METADATA_KEY,
-    ConnectionProblemCode,
     ConnectionSecret,
+    ConnectionState,
     read_connection_secret,
 )
 from onyx.integrations.connections import (
@@ -46,6 +41,7 @@ from tests.external_dependency_unit.integrations.conftest import (
     add_connection,
     expired,
     far_future,
+    token_response,
 )
 
 
@@ -153,7 +149,7 @@ def test_dead_refresh_token_needs_reconnect_and_keeps_row(
     result = resolve_connection(integration, user, db_session)
 
     assert isinstance(result, ConnectionProblem)
-    assert result.code is ConnectionProblemCode.NEEDS_RECONNECT
+    assert result.code is ConnectionState.NEEDS_RECONNECT
     assert "invalid_grant" in result.reason
     kept = get_connection_by_id(db_session, connection.id)
     assert kept is not None
@@ -208,13 +204,6 @@ def test_expired_token_without_refresh_token_needs_reconnect(
     assert token_endpoint.requests == []
 
 
-def _token_response(status: int, body: dict[str, Any]) -> requests.Response:
-    response = MagicMock(spec=requests.Response)
-    response.status_code = status
-    response.json.return_value = body
-    return response
-
-
 def test_preset_refresh_uses_provider(
     db_session: Session,
     make_integration: MakeIntegration,
@@ -226,54 +215,67 @@ def test_preset_refresh_uses_provider(
         provider_mode=IntegrationOAuthProviderMode.PRESET,
         client_id="linear-client",
         client_secret="linear-secret",
-    )
-    app = ExternalApp(
-        name=f"Linear {integration.id}",
         app_type=ExternalAppType.LINEAR,
-        upstream_url_patterns=[],
-        auth_template={"Authorization": "Bearer {access_token}"},
-        organization_credentials={},
-        integration_id=integration.id,
     )
-    db_session.add(app)
-    db_session.commit()
     user = make_test_user("preset_refresh")
-    try:
-        connection = add_connection(
-            db_session, integration, user.id, _stale_secret(), expires_at=expired()
+    connection = add_connection(
+        db_session, integration, user.id, _stale_secret(), expires_at=expired()
+    )
+    post = MagicMock(
+        return_value=token_response(
+            {
+                "access_token": "linear-new",
+                "refresh_token": "linear-refresh-2",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+            },
         )
-        post = MagicMock(
-            return_value=_token_response(
-                200,
-                {
-                    "access_token": "linear-new",
-                    "refresh_token": "linear-refresh-2",
-                    "token_type": "Bearer",
-                    "expires_in": 3600,
-                },
-            )
-        )
-        with patch.object(requests, "post", post):
-            ensure_fresh_connection(connection, integration, db_session)
-        assert post.call_count == 1
-        assert post.call_args.kwargs["data"]["client_id"] == "linear-client"
-        secret = read_connection_secret(connection)
-        assert secret.access_token == "linear-new"
-        assert secret.refresh_token == "linear-refresh-2"
+    )
+    with patch.object(requests, "post", post):
+        ensure_fresh_connection(connection, integration, db_session)
+    assert post.call_count == 1
+    assert post.call_args.kwargs["data"]["client_id"] == "linear-client"
+    secret = read_connection_secret(connection)
+    assert secret.access_token == "linear-new"
+    assert secret.refresh_token == "linear-refresh-2"
 
-        connection.expires_at = expired()
-        db_session.commit()
-        with patch.object(
-            requests,
-            "post",
-            MagicMock(return_value=_token_response(400, {"error": "invalid_grant"})),
-        ):
-            ensure_fresh_connection(connection, integration, db_session)
-        assert connection.status is IntegrationConnectionStatus.NEEDS_RECONNECT
-    finally:
-        db_session.rollback()
-        db_session.execute(delete(ExternalApp).where(ExternalApp.id == app.id))
-        db_session.commit()
+    connection.expires_at = expired()
+    db_session.commit()
+    with patch.object(
+        requests,
+        "post",
+        MagicMock(return_value=token_response({"error": "invalid_grant"}, 400)),
+    ):
+        ensure_fresh_connection(connection, integration, db_session)
+    assert connection.status is IntegrationConnectionStatus.NEEDS_RECONNECT
+
+
+def test_preset_refresh_with_a_bad_expires_in_has_no_expiry(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = make_integration(
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        provider_mode=IntegrationOAuthProviderMode.PRESET,
+        client_id="linear-client",
+        client_secret="linear-secret",
+        app_type=ExternalAppType.LINEAR,
+    )
+    user = make_test_user("preset_bad_expiry")
+    connection = add_connection(
+        db_session, integration, user.id, _stale_secret(), expires_at=expired()
+    )
+    post = MagicMock(
+        return_value=token_response(
+            {"access_token": "linear-new", "token_type": "Bearer", "expires_in": "soon"}
+        )
+    )
+    with patch.object(requests, "post", post):
+        ensure_fresh_connection(connection, integration, db_session)
+    assert read_connection_secret(connection).access_token == "linear-new"
+    assert connection.expires_at is None
 
 
 def test_mcp_refresh_uses_sdk_request(
@@ -303,31 +305,15 @@ def test_mcp_refresh_uses_sdk_request(
         },
     )
     user: User = make_test_user("mcp_refresh")
-    server = MCPServer(
-        owner=user.email,
-        name=f"mcp-{integration.id}",
-        server_url="https://mcp.example.test/mcp",
-        transport=MCPTransport.STREAMABLE_HTTP,
-        auth_type=MCPAuthenticationType.OAUTH,
-        auth_performer=MCPAuthenticationPerformer.PER_USER,
-        integration_id=integration.id,
+    connection = add_connection(
+        db_session, integration, user.id, _stale_secret(), expires_at=expired()
     )
-    db_session.add(server)
-    db_session.commit()
-    try:
-        connection = add_connection(
-            db_session, integration, user.id, _stale_secret(), expires_at=expired()
-        )
-        ensure_fresh_connection(connection, integration, db_session)
+    ensure_fresh_connection(connection, integration, db_session)
 
-        assert len(token_endpoint.requests) == 1
-        request = token_endpoint.requests[0]
-        assert str(request.url) == sdk_token_url
-        body = parse_qs(request.content.decode())
-        assert body["refresh_token"] == ["old-refresh"]
-        assert body["client_id"] == ["dcr-client"]
-        assert read_connection_secret(connection).access_token == "new-access"
-    finally:
-        db_session.rollback()
-        db_session.execute(delete(MCPServer).where(MCPServer.id == server.id))
-        db_session.commit()
+    assert len(token_endpoint.requests) == 1
+    request = token_endpoint.requests[0]
+    assert str(request.url) == sdk_token_url
+    body = parse_qs(request.content.decode())
+    assert body["refresh_token"] == ["old-refresh"]
+    assert body["client_id"] == ["dcr-client"]
+    assert read_connection_secret(connection).access_token == "new-access"

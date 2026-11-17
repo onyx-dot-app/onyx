@@ -3,27 +3,35 @@ import time
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
-from unittest.mock import patch
-from uuid import UUID
+from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
+import requests
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
+    ExternalAppType,
     IntegrationAuthMethod,
     IntegrationAuthMode,
     IntegrationKind,
     IntegrationOAuthProviderMode,
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPTransport,
 )
 from onyx.db.integration_connection import upsert_connection__no_commit
 from onyx.db.models import (
+    ExternalApp,
     Integration,
     IntegrationConnection,
     IntegrationOAuthClient,
+    MCPServer,
 )
 from onyx.integrations.connection_models import ConnectionSecret
+from onyx.integrations.connections import ConnectionProblem, ResolvedConnection
 
 TOKEN_URL = "https://auth.example.test/token"
 AUTHORIZE_URL = "https://auth.example.test/authorize"
@@ -41,6 +49,7 @@ class MakeIntegration(Protocol):
         auth_mode: IntegrationAuthMode,
         auth_method: IntegrationAuthMethod | None,
         kind: IntegrationKind = IntegrationKind.API,
+        app_type: ExternalAppType = ExternalAppType.CUSTOM,
         header_template: dict[str, str] | None = None,
         provider_mode: IntegrationOAuthProviderMode | None = None,
         client_id: str | None = None,
@@ -53,13 +62,17 @@ class MakeIntegration(Protocol):
 
 @pytest.fixture
 def make_integration(db_session: Session) -> Generator[MakeIntegration, None, None]:
-    created: list[int] = []
+    """An MCP integration gets an MCP server; an API integration gets an
+    external app of ``app_type``."""
+    server_ids: list[int] = []
+    app_ids: list[int] = []
 
     def make(
         *,
         auth_mode: IntegrationAuthMode,
         auth_method: IntegrationAuthMethod | None,
         kind: IntegrationKind = IntegrationKind.API,
+        app_type: ExternalAppType = ExternalAppType.CUSTOM,
         header_template: dict[str, str] | None = None,
         provider_mode: IntegrationOAuthProviderMode | None = None,
         client_id: str | None = None,
@@ -68,13 +81,39 @@ def make_integration(db_session: Session) -> Generator[MakeIntegration, None, No
         registration: dict[str, Any] | None = None,
         scopes: list[str] | None = None,
     ) -> Integration:
+        name = f"Test integration {uuid4().hex[:8]}"
         integration = Integration(
             kind=kind,
-            name=f"Test integration {len(created)}",
+            name=name,
             auth_mode=auth_mode,
             auth_method=auth_method,
             header_template=header_template,
         )
+        if kind is IntegrationKind.MCP:
+            server = MCPServer(
+                owner="integration-test@example.com",
+                name=name,
+                server_url="https://mcp.example.test/mcp",
+                transport=MCPTransport.STREAMABLE_HTTP,
+                auth_type=MCPAuthenticationType.OAUTH,
+                auth_performer=MCPAuthenticationPerformer.PER_USER,
+            )
+            db_session.add(server)
+            db_session.flush()
+            server_ids.append(server.id)
+            integration.mcp_server_id = server.id
+        else:
+            app = ExternalApp(
+                name=name,
+                app_type=app_type,
+                upstream_url_patterns=[],
+                auth_template={"Authorization": "Bearer {access_token}"},
+                organization_credentials={},
+            )
+            db_session.add(app)
+            db_session.flush()
+            app_ids.append(app.id)
+            integration.external_app_id = app.id
         db_session.add(integration)
         db_session.flush()
         if provider_mode is not None:
@@ -100,16 +139,16 @@ def make_integration(db_session: Session) -> Generator[MakeIntegration, None, No
                 )
             )
         db_session.commit()
-        created.append(integration.id)
         return integration
 
     try:
         yield make
     finally:
         db_session.rollback()
-        if created:
-            db_session.execute(delete(Integration).where(Integration.id.in_(created)))
-            db_session.commit()
+        # The integration and its rows go by cascade.
+        db_session.execute(delete(MCPServer).where(MCPServer.id.in_(server_ids)))
+        db_session.execute(delete(ExternalApp).where(ExternalApp.id.in_(app_ids)))
+        db_session.commit()
 
 
 def add_connection(
@@ -130,6 +169,28 @@ def add_connection(
     )
     db_session.commit()
     return connection
+
+
+def expect_resolved(
+    result: ResolvedConnection | ConnectionProblem,
+) -> ResolvedConnection:
+    if not isinstance(result, ResolvedConnection):
+        pytest.fail(f"expected a connection, got {result}")
+    return result
+
+
+def expect_problem(result: ResolvedConnection | ConnectionProblem) -> ConnectionProblem:
+    if not isinstance(result, ConnectionProblem):
+        pytest.fail(f"expected a problem, got {result}")
+    return result
+
+
+def token_response(body: dict[str, Any], status: int = 200) -> MagicMock:
+    response = MagicMock(spec=requests.Response)
+    response.status_code = status
+    response.json.return_value = body
+    response.raise_for_status.return_value = None
+    return response
 
 
 def expired() -> datetime:

@@ -1407,27 +1407,34 @@ class IntegrationTokenStorage(PersistentTokenStorage):
                 self._oauth_context is not None
                 and self._oauth_context.oauth_metadata is not None
             ):
-                oauth_client = get_oauth_client(
-                    db_session, self.integration_id, for_update=True
+                self._save_oauth_metadata(
+                    db_session,
+                    self._oauth_context.oauth_metadata.model_dump(mode="json"),
                 )
-                if oauth_client is not None:
-                    credentials = read_oauth_client(oauth_client)
-                    set_oauth_client_credentials__no_commit(
-                        db_session,
-                        oauth_client,
-                        client_id=credentials.client_id,
-                        client_secret=credentials.client_secret,
-                        registration={
-                            **credentials.registration,
-                            OAUTH_METADATA_KEY: (
-                                self._oauth_context.oauth_metadata.model_dump(
-                                    mode="json"
-                                )
-                            ),
-                        },
-                    )
             db_session.commit()
         return True
+
+    def _save_oauth_metadata(
+        self, db_session: Session, metadata: dict[str, Any]
+    ) -> None:
+        oauth_client = get_oauth_client(db_session, self.integration_id)
+        if oauth_client is None:
+            return
+        credentials = read_oauth_client(oauth_client)
+        if (
+            oauth_client.legacy_format is None
+            and credentials.registration.get(OAUTH_METADATA_KEY) == metadata
+        ):
+            return
+        db_session.refresh(oauth_client, with_for_update=True)
+        credentials = read_oauth_client(oauth_client)
+        set_oauth_client_credentials__no_commit(
+            db_session,
+            oauth_client,
+            client_id=credentials.client_id,
+            client_secret=credentials.client_secret,
+            registration={**credentials.registration, OAUTH_METADATA_KEY: metadata},
+        )
 
     async def discard_persisted_tokens(
         self, redeemed_refresh_token: str | None
