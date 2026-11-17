@@ -7,7 +7,39 @@
 
 import { type Page, type Locator, expect } from "@playwright/test";
 import type { TaskPluginView } from "@/app/craft/v1/tasks/types";
-import { appFixture, mcpServerFixture } from "@/lib/skills/__fixtures__/picker";
+import type { MemberIntegration } from "@/lib/integrations/types";
+
+function memberIntegration(
+  overrides: Partial<MemberIntegration> & { id: number; name: string }
+): MemberIntegration {
+  return {
+    kind: "api",
+    shape: "custom",
+    description: null,
+    preset_id: null,
+    auth_mode: "individual",
+    auth_method: "api_key",
+    credential_fields: [],
+    status: { state: "connected", reason: null },
+    plugins: [
+      {
+        plugin_id: `plugin-${overrides.id}`,
+        plugin_name: overrides.name,
+        scope: "organization",
+        owner_email: null,
+        installation_policy: "AVAILABLE",
+        enabled: true,
+      },
+    ],
+    users_can_save_always_allow: true,
+    credential_values: {},
+    external_app_id: null,
+    service_urls: [],
+    mcp_server_id: null,
+    server_url: null,
+    ...overrides,
+  };
+}
 
 const TASKS_LIST_PATH = "/craft/v1/tasks";
 const NEW_TASK_PATH = "/craft/v1/tasks/new";
@@ -167,33 +199,24 @@ export class ScheduledTasksPage {
     await this.page.route("**/api/build/action-policies", async (route) => {
       await route.fulfill({ json: plugins });
     });
-    await this.page.route("**/api/build/apps", async (route) => {
+    await this.page.route("**/api/integrations", async (route) => {
       await route.fulfill({
         json: [
-          appFixture({
-            id: 11,
-            name: "Acme CRM",
-            app_type: "CUSTOM",
-          }),
-          appFixture({
+          memberIntegration({ id: 11, name: "Acme CRM", external_app_id: 11 }),
+          memberIntegration({
             id: 12,
             name: "Acme Support",
-            app_type: "CUSTOM",
+            external_app_id: 12,
+          }),
+          memberIntegration({
+            id: 22,
+            name: "Acme MCP",
+            kind: "mcp",
+            shape: "mcp_server",
+            mcp_server_id: 22,
+            server_url: "https://mcp.example.com/mcp",
           }),
         ],
-      });
-    });
-    await this.page.route("**/api/mcp/servers/craft", async (route) => {
-      await route.fulfill({
-        json: {
-          mcp_servers: [
-            mcpServerFixture({
-              id: 22,
-              name: "Acme MCP",
-              server_url: "https://mcp.example.com/mcp",
-            }),
-          ],
-        },
       });
     });
   }

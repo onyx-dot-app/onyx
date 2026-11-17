@@ -1,4 +1,3 @@
-import { MCPConnectionStatus } from "@/lib/mcp/types";
 import {
   detectPickerTrigger,
   filterPickerSections,
@@ -184,14 +183,7 @@ describe("toPickerSections", () => {
   it("builds the MCP section from the craft listing, keyed off craft_connected", () => {
     const servers = [
       mcpServerFixture({ id: 9, name: "Zulip MCP" }),
-      // A credential row can exist while the proxy still cannot authenticate
-      // the user, so `connection_status` must not drive this.
-      mcpServerFixture({
-        id: 4,
-        name: "Asana MCP",
-        connection_status: MCPConnectionStatus.CONNECTED,
-        craft_connected: false,
-      }),
+      mcpServerFixture({ id: 4, name: "Asana MCP", craft_connected: false }),
     ];
     const { mcpServers } = toPickerSections(undefined, undefined, servers);
     expect(

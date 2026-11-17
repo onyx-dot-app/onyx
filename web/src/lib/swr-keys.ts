@@ -259,7 +259,6 @@ export const SWR_KEYS = {
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
   mcpServers: "/api/mcp/servers",
-  mcpServersCraft: "/api/mcp/servers/craft",
   agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
 
   // ── Integrations ──────────────────────────────────────────────────────────
@@ -323,7 +322,6 @@ export const SWR_KEYS = {
     `craft-output-thumbnail:${sessionId}:${filePath}`,
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
-  buildExternalApps: "/api/build/apps",
   buildBaseInstructions: "/api/build/admin/base-instructions",
   buildSessionApprovalStatus: (sessionId: string) =>
     `/api/build/approvals/sessions/${sessionId}/status`,
