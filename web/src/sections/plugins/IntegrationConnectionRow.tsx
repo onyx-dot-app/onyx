@@ -101,6 +101,7 @@ export default function IntegrationConnectionRow({
         rightChildren={
           action ? (
             <Button
+              key="connect"
               size="md"
               icon={busy ? IconLoader : SvgKey}
               disabled={busy}
@@ -117,6 +118,7 @@ export default function IntegrationConnectionRow({
             allowDisconnect &&
             integration.auth_mode === "individual" ? (
             <Button
+              key="disconnect"
               size="md"
               prominence="secondary"
               disabled={busy}
