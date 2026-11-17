@@ -1,6 +1,7 @@
 """The one credential check for a chat call of an integration action."""
 
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from uuid import UUID
 
 from mcp.client.auth import OAuthClientProvider
@@ -26,6 +27,7 @@ from onyx.integrations.connection_models import (
     connection_secret_fingerprint,
 )
 from onyx.integrations.connections import (
+    REFRESH_SKEW,
     ConnectionProblem,
     MissingHeaderValueError,
     has_placeholder,
@@ -33,7 +35,7 @@ from onyx.integrations.connections import (
     resolve_connection,
 )
 from onyx.integrations.models import CallCredentials
-from onyx.server.features.mcp.models import merge_mcp_headers
+from onyx.server.features.mcp.models import MCPServerConnection, merge_mcp_headers
 from onyx.server.features.mcp.oauth import (
     IntegrationTokenStorage,
     integration_mcp_server_connection,
@@ -101,32 +103,28 @@ def resolve_call_credentials(
         ),
         headers=headers,
         secret_fingerprint=resolved.secret_fingerprint,
+        expires_at=resolved.expires_at,
     )
 
 
-def resolve_mcp_call_auth(
-    integration_id: int,
-    acting_user_id: UUID | None,
-    transport: MCPTransport | None,
-    server_url: str,
-) -> tuple[CallCredentials, OAuthClientProvider | None] | ConnectionProblem:
-    """``resolve_call_credentials`` and ``mcp_oauth_provider`` in a session of
-    their own, for an MCP call that runs after construction. ``server_url`` is
-    the URL the call goes to; when the server moved since construction, the
-    credential is not sent."""
+def credentials_near_expiry(credentials: CallCredentials) -> bool:
+    """Whether the bearer token of a token method expires within the refresh
+    window, so a call must resolve the credential again."""
+    return (
+        credentials.auth_method in _TOKEN_METHODS
+        and credentials.expires_at is not None
+        and credentials.expires_at - datetime.now(timezone.utc) <= REFRESH_SKEW
+    )
+
+
+def resolve_fresh_call_credentials(
+    integration_id: int, acting_user_id: UUID | None
+) -> CallCredentials | ConnectionProblem:
+    """``resolve_call_credentials`` in a session of its own, for a call that
+    runs after construction with a token near expiry."""
     with get_session_with_current_tenant() as db_session:
         integration = get_integration_by_id(integration_id, db_session)
-        server = (
-            get_mcp_server_for_integration(integration_id, db_session)
-            if integration is not None
-            else None
-        )
-        if (
-            integration is None
-            or not integration.enabled
-            or server is None
-            or server.server_url != server_url
-        ):
+        if integration is None or not integration.enabled:
             return ConnectionProblem(
                 code=ConnectionState.NOT_SET_UP,
                 reason="The integration is no longer available.",
@@ -136,23 +134,18 @@ def resolve_mcp_call_auth(
             if acting_user_id is not None
             else None
         )
-        credentials = resolve_call_credentials(integration, acting_user, db_session)
-        if isinstance(credentials, ConnectionProblem):
-            return credentials
-        return credentials, mcp_oauth_provider(
-            integration, credentials, transport, db_session
-        )
+        return resolve_call_credentials(integration, acting_user, db_session)
 
 
-def mcp_oauth_provider(
+def mcp_oauth_server(
     integration: Integration,
     credentials: CallCredentials,
     transport: MCPTransport | None,
     db_session: Session,
-) -> OAuthClientProvider | None:
-    """The MCP SDK provider that refreshes an OAuth2 token during a call.
-    None for other methods and for SSE, where the refresh before the call
-    (``resolve_connection``) does the job."""
+) -> MCPServerConnection | None:
+    """The server settings for the MCP SDK provider that refreshes an OAuth2
+    token during a call. None for other methods and for SSE, where the
+    refresh before the call (``resolve_connection``) does the job."""
     if (
         credentials.auth_method is not IntegrationAuthMethod.OAUTH2
         or transport is MCPTransport.SSE
@@ -162,9 +155,17 @@ def mcp_oauth_provider(
     oauth_client = get_oauth_client(db_session, integration.id)
     if server is None or oauth_client is None:
         return None
+    return integration_mcp_server_connection(server, integration, oauth_client)
+
+
+def mcp_oauth_provider(
+    server: MCPServerConnection, credentials: CallCredentials
+) -> OAuthClientProvider:
     return make_integration_oauth_provider(
-        integration_mcp_server_connection(server, integration, oauth_client),
-        IntegrationTokenStorage(integration.id, credentials.connection_user_id),
+        server,
+        IntegrationTokenStorage(
+            credentials.integration_id, credentials.connection_user_id
+        ),
     )
 
 

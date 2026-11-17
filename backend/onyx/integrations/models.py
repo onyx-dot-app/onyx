@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -160,3 +161,5 @@ class CallCredentials(BaseModel):
     # The fingerprint of the stored secret of that connection, so a late
     # rejection does not mark a key that replaced it.
     secret_fingerprint: str | None = None
+    # When the bearer token of a token method expires; None when unknown.
+    expires_at: datetime | None = None
