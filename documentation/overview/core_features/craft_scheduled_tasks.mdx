@@ -58,10 +58,10 @@ Open **Scheduled Tasks** from the Craft sidebar, then select **New Scheduled Tas
   </Step>
 
   <Step title="Choose plugins">
-    Under **Plugins**,
-    select **Enable for this task** only for the Apps and MCP plugins the task must use without you present.
-    Open each one's **Approval settings** to set its policies for the task.
-    Connect required Apps before creating the task.
+    Under **Plugins**, turn on only the plugins that the task must use without you present.
+    The list shows the plugins that you have turned on and that hold an integration.
+    Open **Manage actions** on a plugin to set a value for each action of its integrations.
+    Connect required integrations before creating the task.
   </Step>
 
   <Step title="Save and test">
@@ -106,31 +106,31 @@ Interval schedules run on repeating clock boundaries rather than a fixed delay a
   Review and resave time-based tasks after traveling, changing time zones, or a daylight-saving transition.
 </Note>
 
-## Set task approval settings carefully
+## Set task action settings carefully
 
 A Scheduled Task runs without you present, so nobody can answer an approval card during the run.
-Each task has its own **Plugins** section with per-App **Approval settings**.
-Only the Apps and MCP plugins that you enable there are available to the task.
-Each App starts with your current approval settings. Changes apply only to that task.
+Each task has its own **Plugins** section. A run can use only the integrations of the plugins that you turn on there.
+Other integrations are blocked. Each action starts with **Use integration setting**. Changes apply only to that task.
 
-| Task policy      | During a Scheduled Task                                                           |
-| ---------------- | --------------------------------------------------------------------------------- |
-| **Auto-approve** | The action runs without a prompt.                                                 |
-| **Ask**          | The run stops with the **Awaiting approval** status when it reaches the action.   |
-| **Disabled**     | The action is blocked.                                                            |
+| Task value                  | During a Scheduled Task                                                         |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| **Use integration setting** | The action uses the setting of the integration, as the menu shows it.           |
+| **Allow**                   | The action runs without a prompt.                                               |
+| **Ask**                     | The run stops with the **Awaiting approval** status when it reaches the action. |
+| **Blocked**                 | The action is blocked.                                                          |
 
-If your admin set an action to **Disabled**, a task cannot turn it on.
-If your admin turned off **Let users manage approval settings** for an App, the workspace policies apply to the task.
+If your admin set an action to **Blocked**, a task cannot turn it on.
+If your admin does not let users save **Always allow** on an integration,
+**Allow** in a task does not change the admin setting.
 
 <Warning>
-  Keep the prompt and the list of enabled Apps as narrow as possible.
-  Auto-approve only the actions that the task must perform. Be especially cautious with Apps that can send messages,
-  modify customer data, delete content, or publish externally.
+  Keep the prompt and the list of enabled Apps as narrow as possible. Allow only the actions that the task must perform.
+  Be especially cautious with Apps that can send messages, modify customer data, delete content, or publish externally.
 </Warning>
 
 ## Review run history
 
-Open a task to see its plugins, approval settings, and **Run history**.
+Open a task to see its plugins and **Run history**.
 
 Select a run after it creates a session to inspect its messages, files, previews, and artifacts.
 Queued runs do not have a session yet, and skipped runs never create one, so those rows cannot be opened.
@@ -149,7 +149,7 @@ Failed and approval-blocked runs are not retried automatically.
 
 <Warning>
   For an **Awaiting approval** run, open the generated session to see which action stopped it.
-  Then edit the task's approval settings, or narrow the prompt so it avoids that action,
+  Then edit the action settings of the task, or narrow the prompt so it avoids that action,
   and use **Run once** to try again.
 </Warning>
 
@@ -171,8 +171,7 @@ Deleting a task does not cancel a run that is already queued or running.
 <AccordionGroup>
   <Accordion title="A run succeeded, but I did not receive anything">
     Open the run session from history and inspect its output. If the task should deliver somewhere else,
-    add an explicit destination to the prompt, connect that App,
-    and set the delivery action to **Auto-approve** in the task's approval settings.
+    add an explicit destination to the prompt, connect that App, and set the delivery action to **Allow** in the task.
   </Accordion>
 
 <Accordion title="A run was skipped">

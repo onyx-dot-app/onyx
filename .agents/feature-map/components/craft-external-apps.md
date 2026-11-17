@@ -92,50 +92,50 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
                     client connection; else IdentityResolver.resolve_sandbox
                     (source IP) -> sandbox, user, tenant; failure -> 403
  4 body cap         raw_content None or > PARSER_MAX_BODY_BYTES -> 403
- 5 recognition      CompositeRequestEvaluator: external apps first, then MCP
+ 5 recognition      IntegrationRequestEvaluator: match_request of each kind
+                    for the integrations the user runs; API before MCP
                     None -> no gate; host-claiming resolvers may still inject
  6 session          verified session tag required for any matched request
- 7 policy           resolve_action_policies; strictest action governs
+ 7 policy           resolve_craft_action_policies; strictest action governs
                     DENY -> 403   ASK -> session grant or approval wait
  8 recheck          after an approval: same actions, live policy, same run
- 9 injection        CredentialInjectionDispatcher: OnyxPat, MCPServer,
-                    ExternalApp resolvers, first claim wins
+ 9 injection        CredentialInjectionDispatcher: OnyxPat, Integration
+                    resolvers, first claim wins
 10 forward          session-tag headers stripped first
 ```
 
-**Recognition.** `sandbox_proxy/request_evaluator.py:ExternalAppRequestEvaluator`
-loads enabled apps and calls `resolve_app_for_url`, which full-matches the URL
-against each app's patterns in id order.
-`external_apps/matching/engine.py:recognize_actions` maps the request to
-catalog actions. A request that matches no catalog action gets one synthetic
-`unspecified` action. `McpRequestEvaluator` attributes by host and longest path
-prefix among the user's Craft-enabled servers
-(`sandbox_proxy/resolvers/mcp_matching.py:match_request`), then parses the
-JSON-RPC body (`sandbox_proxy/mcp_jsonrpc.py:classify_mcp_request`). Protocol
-messages need a session and task access but no approval. `tools/call` gives one
-action per tool. Its default is Ask, or Always when the server marks the tool
-read-only (`Tool.mcp_read_only`, from `readOnlyHint`). Grants, policies and approvals key off
-`GatedTarget.key`, never a display name ([[craft-admin#gated-app-identity-by-id]]).
+**Recognition.** `sandbox_proxy/request_evaluator.py:IntegrationRequestEvaluator`
+loads the integrations the sandbox owner can use
+(`integrations/craft.py:list_runnable_integrations`: each enabled integration
+of a plugin that the user can see and has turned on) and calls
+`match_request` of each kind (`integrations/kinds/`). An API integration wins
+over an MCP server on a shared host, and the lowest id wins between API
+integrations. For an external app, `external_apps/matching/engine.py:resolve_app_for_url`
+full-matches the URL against the app's patterns and `recognize_actions` maps
+the request to catalog actions. A request that matches no catalog action gets
+one synthetic `unspecified` action. An MCP server attributes by host and path
+prefix (`sandbox_proxy/resolvers/mcp_matching.py:match_request`) and returns
+the prefix length in `RequestMatch`; the evaluator picks the longest prefix
+across servers, and a tie matches nothing. The kind then parses the JSON-RPC
+body (`sandbox_proxy/mcp_jsonrpc.py:classify_mcp_request`). Protocol messages
+need a session and task access but no approval. `tools/call` gives one action
+per tool. Its default is the default of the `integration_action` row. Grants,
+policies and approvals key off `GatedTarget.integration_id`, never a display
+name.
 
-**Policy precedence.** `db/action_policy.py:resolve_action_policies` and
-`effective_action_policy` own it. For each action:
-
-1. In a scheduled run, an app that is not enabled for the task is DENY.
-2. Workspace DENY wins.
-3. If the app does not allow user management
-   (`GatedApp.users_can_manage_policies` false), the workspace policy applies.
-4. Otherwise the stored choice applies: the task's choice in a scheduled run,
-   or the user's personal choice in an interactive or Slack session and in
-   main chat. A stored choice can be looser than the workspace policy.
-5. With no stored choice, a scheduled run uses Ask and an interactive session
-   uses the workspace policy.
-
-The workspace policy is the stored override or the catalog default. The gate
-then forces `unspecified` to Ask unless it resolved to DENY
-(`GateAddon._resolve_request_policies`). `AllMatchedActions` sorts actions
+**Policy precedence.** `integrations/craft.py:resolve_craft_action_policies`
+calls the one policy function (`integrations/policy.py:resolve_action_policies`)
+with the interactive approval mode, so Ask keeps the approval wait. An
+interactive session has no link settings. A scheduled run uses the
+`action_settings` of each `scheduled_task__plugin` row whose plugin holds the
+integration, and the strictest result wins; an integration that no plugin of
+the task holds is Blocked. The gate maps Allow, Ask and Blocked to the
+`ActionPolicy` values that approval rows store (`sandbox_proxy/addons/gate.py:resolve_gate_policies`),
+then forces `unspecified` on an API integration to Ask unless it resolved to
+DENY (`GateAddon._resolve_request_policies`). `AllMatchedActions` sorts actions
 strictest first, and `governing_action` decides the verdict.
 
-**Session and run context.** `db/action_policy.py:get_active_scheduled_task_context`
+**Session and run context.** `db/scheduled_task.py:get_active_scheduled_task_context`
 returns the run for a session only while the run is `RUNNING`. A scheduled
 session with no running run raises, and the gate returns `no_active_session`.
 Only interactive and Slack sessions fall back to personal choices.
@@ -164,30 +164,26 @@ request and stashes the context to answer it in the cache
 `backend/onyx/server/features/build/external_apps/api.py:resolve_connect_app_request` answers the
 permission on the sandbox: allow for connected, reject for declined.
 
-**Personal Craft opt-out.** `MCPServerUserPreference.enabled_in_craft` is
-enforced twice: `MCPServerResolver` refuses to inject credentials, and
-`backend/onyx/db/mcp.py:get_craft_enabled_mcp_servers` leaves the server out of the Craft
-list. A missing row means enabled. A preference change reloads running Craft
-sessions through `server/features/mcp/api.py:_hot_reload_craft_sessions`, which
-only restamps `mcp_config_hash` and does not push skill files.
+**Craft catalog.** Craft uses the integrations of the plugins the user runs.
+`server/features/build/sandbox/util/mcp_config.py:resolve_craft_mcp_servers`
+writes the MCP integrations whose `integration_status` is connected (or that
+have no sign-in) into the opencode config, with each Blocked action as a
+disabled tool. `GET /mcp/servers/craft` lists the same servers, and
+`integrations/craft.py:list_connectable_apps` lists the external apps the user
+can still connect. No code reads `mcp_server.available_in_craft`.
 
 **Credentials.** The sandbox holds only the placeholder
 `server/features/build/configs.py:SANDBOX_PROXY_INJECTED_PLACEHOLDER`. The
 resolvers claim a request by host or by the gate's attribution, never by the
 placeholder value. `sandbox_proxy/server.py:build_resolvers` registers the
 resolvers. `backend/onyx/sandbox_proxy/resolvers/onyx_pat.py:OnyxPatResolver` claims the Onyx API host
-and injects the Craft PAT. `backend/onyx/sandbox_proxy/resolvers/mcp_server.py:MCPServerResolver`
-injects MCP credentials. `backend/onyx/sandbox_proxy/resolvers/external_app.py:ExternalAppResolver` first
-calls `ensure_fresh_credentials` (`external_apps/token_refresh.py`), which
-refreshes an expiring OAuth token under a fleet-wide Redis lock and clears the
-credential when the grant is dead. It then renders the app's `auth_template`
-from organization and user credentials. It refuses with
-`CredentialUnavailableError` when the app is missing or disabled, or when the
-app has an `auth_template` but no headers render. Recognition loads only
-enabled apps, so this check covers an app disabled during a request. Disabling
-an app does not delete stored user credentials
-(`backend/onyx/db/external_app.py:update_external_app`), so enabling it again
-restores injection with the old secrets.
+and injects the Craft PAT. `backend/onyx/sandbox_proxy/resolvers/integration.py:IntegrationResolver`
+injects the credential of the matched integration through
+`integrations/call_credentials.py:resolve_call_credentials`: `resolve_connection`
+(which refreshes a token that expires soon) and `render_headers`; an OAuth
+integration sends its access token as a bearer token. It checks again that
+the integration is enabled and that the user runs it, and refuses with
+`CredentialUnavailableError` and the reason of the connection problem.
 
 **OAuth connect.** `server/features/build/external_apps/oauth.py` binds each
 attempt to the user, app and a fingerprint of the resolved OAuth
@@ -242,13 +238,13 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    Built-ins use regexes, and a malformed regex is skipped with a warning, not
    rejected. When patterns overlap, the lowest app id wins. Each app row holds
    its own copy of the patterns ([[#url-patterns-on-app-row]]).
-5. `mcp-fails-closed` **External apps match before MCP, and MCP fails closed
-   twice.** On a host that is both, the external-app attribution governs, and
-   `MCPServerResolver.claims` defers. An unparsable body on a matched MCP host
-   becomes a DENY action. Independently, `MCPServerResolver.resolve` refuses to
-   inject onto a non-protocol request that has no gate verdict, and blocks a
-   path outside every configured server URL on an MCP host. Evaluator and
-   resolver both use `backend/onyx/sandbox_proxy/resolvers/mcp_matching.py` so they agree on attribution.
+5. `mcp-fails-closed` **API integrations match before MCP, and MCP fails closed
+   twice.** On a host that is both, the API attribution governs. An unparsable
+   body on a matched MCP host becomes a DENY action. Independently,
+   `IntegrationResolver` claims each host of an enabled MCP integration: with
+   no gate verdict it refuses a non-protocol request, and it blocks a request
+   outside every server URL that the user can use. The resolver injects for the
+   integration the gate evaluated, never a re-match.
 6. `body-cap-all-requests` **The body cap applies to every request, matched or
    not.** The check runs before recognition.
    `sandbox_proxy/addons/gate.py:PARSER_MAX_BODY_BYTES` is 32 MiB,
@@ -289,7 +285,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     provider.** `db/external_app.py:create_external_app` stores the patterns
     that the create request submits; the admin form sends the provider's
     descriptor patterns.
-    `sandbox_proxy/request_evaluator.py:resolve_app_for_url` matches against
+    `external_apps/matching/engine.py:resolve_app_for_url` matches against
     the row. A pattern change in provider code reaches new apps only. Existing
     apps get no credential and no policy gate on the new host until a data
     migration updates their rows. A plain append works only for literal
@@ -325,11 +321,13 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 - The proxy does not scrub responses. An upstream API that echoes request
   headers in its response body returns the injected credential to the agent.
 - The MCP tool default comes from the server's unverified `readOnlyHint`
-  (`db/action_policy.py:mcp_tool_default_policy`). The proxy, chat tool
-  construction, the policy view and workspace saves all use it. A workspace
-  save drops an override equal to the default, so an admin Ask chosen while the
-  default was Ask has no row. That tool becomes Always when a later sync marks
-  it read-only.
+  (`integrations/kinds/mcp_server.py:mcp_action_default_policy`). The proxy and
+  chat tool construction read it from the `integration_action` row.
+- The evaluator loads the plugin states and the kind rows of each integration
+  the user runs on each request; there is no cache yet.
+- An external app or MCP server that the old admin routes create has no
+  integration row until the integration routes replace them, so the proxy does
+  not match it.
 
 ---
 
@@ -383,8 +381,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   return empty headers only when the request may go out without one.
 - `approval-end-state` **A new end state for an approval.** Write it through `try_record_decision`
   and wake the waiter ([[#approval-single-writer]]).
-- `approval-point` **A new approval point.** Map its target to a `GatedApp`, so the session
-  grant in `submit_decision` can cover it.
+- `approval-point` **A new approval point.** Write the `integration_id` of its target on the
+  approval row, so the session grant in `submit_decision` can cover it.
 - `investigate-app-call-failed` **Investigate "the agent's call to an app failed".** Read the
   response the agent got first: a proxy 403 carries the error code from
   `backend/onyx/sandbox_proxy/errors.py`. A Disabled action returns

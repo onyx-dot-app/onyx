@@ -225,13 +225,14 @@ They cannot turn on an action that you set to **Disabled**.
 
 A [Scheduled Task](/overview/core_features/craft_scheduled_tasks) runs without a user present,
 so it cannot show an approval card.
-The task owner enables the Apps that the task can use in the task's **Approval settings**.
-Each App starts with the owner's current approval settings. Changes apply only to that task.
+The task owner turns on the plugins that the task can use in the task's **Plugins** section.
+A run can use only the integrations of those plugins. Each action starts with the integration setting,
+and the owner can set it to **Allow**, **Ask** or **Blocked** for that task only.
 
-- If **Let users manage approval settings** is off, the workspace policies apply to the task.
+- If users cannot save **Always allow** on the integration, **Allow** in a task does not change your setting.
 - Task settings cannot override **Disabled**.
 - If a run reaches an action that needs approval, the run stops with the **Awaiting approval** status.
-  The owner must change the task's approval settings, then run the task again.
+  The owner must change the action settings of the task, then run the task again.
 
 ## Skills for Apps
 
@@ -357,7 +358,7 @@ Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enable for Craft**
   </Accordion>
 
   <Accordion title="A Scheduled Task is awaiting approval">
-    Confirm that the task owner is still connected to the app and that the app is on in the task's approval settings.
+    Confirm that the task owner is still connected to the app and that a plugin of the task holds the app.
     Then check for a **Disabled** policy, or a different app than the prompt was expected to use.
     Correct the task and use **Run now**. The blocked run does not resume automatically.
   </Accordion>

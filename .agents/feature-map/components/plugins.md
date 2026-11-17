@@ -151,9 +151,9 @@ only the configuration of a chat that does not exist yet.
    `server/features/tool/api.py:update_tool_user_preferences` and
    `server/features/mcp/api.py:update_mcp_user_preferences` refuse to turn on
    a plugin that is not on in Default Chat (or not available in Craft).
-   The sandbox proxy (`sandbox_proxy/resolvers/mcp_server.py`) and
-   `backend/onyx/db/mcp.py:get_craft_enabled_mcp_servers` enforce
-   `enabled_in_craft`.
+   Craft no longer reads `enabled_in_craft`: the sandbox proxy and the Craft
+   MCP config use the integrations of the plugins the user runs
+   (`integrations/craft.py:list_runnable_integrations`).
 5. `openapi-enabled-default-chat-only` **OpenAPI tools use `Tool.enabled` only
    for Default Chat.** `server/features/tool/models.py:CustomToolCreate`
    rejects `enabled=false` and `server/features/tool/api.py:update_tools_status`
@@ -198,13 +198,13 @@ only the configuration of a chat that does not exist yet.
     or without Craft, and so does the user-management switch
     (`sections/actions/modals/MCPServerDetailsPage.tsx`). The member approval
     tab (`sections/plugins/MemberPluginDetailModal.tsx`) shows for a connected
-    MCP server whose `users_can_manage_policies` is on, with or without Craft
-    and whatever its `available_in_craft`. It reads and writes
+    MCP server whose `users_can_manage_policies` is on, with or without Craft.
+    It reads and writes
     `/action-policies/{kind}/{target_id}` (`server/features/action_policies/api.py`),
     which checks server access but not Craft. External apps on the same routes
     still need Craft. The Craft catalog list (`/build/action-policies`) and task
-    choices cover only Craft-enabled MCP servers
-    (`db/action_policy.py:list_action_policies`). The plugin UI must not show
+    choices cover the integrations of the plugins the user runs
+    (`integrations/craft.py:list_task_plugin_views`). The plugin UI must not show
     read or write badges to members.
 12. `shared-oauth-config-shared-connection` **OpenAPI tools that share an
     `OAuthConfig` share each user's connection.** `OAuthUserToken` is unique on

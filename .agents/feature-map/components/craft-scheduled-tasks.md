@@ -108,13 +108,18 @@ API server as one more reader of the sandbox's event stream for a `RUNNING`
 run. It sends keepalives until the executor stores the opencode session id, so
 a quick click on a new run does not fail.
 
-**App policies.** Task create and patch accept per-app settings.
-`db/action_policy.py:replace_task_action_policies` stores them as
-`ScheduledTaskEnabledApp` rows (which apps the task may use) and
-`ScheduledTaskActionPolicy` rows (choices per action). An empty map stores no
-choices; it does not copy personal choices. The editor copies personal choices
-into the draft on the first edit or enable. Edits apply to the next request,
-including requests of a run in progress.
+**Plugins and action settings.** Task create and patch accept
+`plugins: [{plugin_id, action_settings}]`.
+`integrations/craft.py:replace_task_plugins__no_commit` checks that the owner
+can see each plugin and that each action key belongs to one of its
+integrations, then stores `scheduled_task__plugin` rows. A run can use only the
+integrations of these plugins; the proxy blocks each other integration. Each
+action value is Allow, Ask, Blocked or Inherit (the integration setting).
+`GET /scheduled-tasks/{id}/action-policies` and the new-task catalog
+`GET /build/action-policies` return `TaskPluginView` rows
+(`integrations/craft.py:list_task_plugin_views`) with the setting and the
+effective policy of each action. Edits apply to the next request, including
+requests of a run in progress.
 
 ---
 
@@ -139,17 +144,18 @@ including requests of a run in progress.
 4. `link-session-before-turn` **Link the session to the run before any agent
    turn.** The proxy finds a task's authority through
    `ScheduledTaskRun.session_id` and a `RUNNING` status
-   (`db/action_policy.py:get_active_scheduled_task_context`). An unlinked or
+   (`db/scheduled_task.py:get_active_scheduled_task_context`). An unlinked or
    finished run gives `no_active_session` for every app request. The authority
    also ends with the run
    ([[craft-external-apps#task-authority-ends-with-run]]). Do not add a
    fallback to personal policies for scheduled sessions.
-5. `task-choices-default-ask` **Task choices follow the precedence in
-   [[craft-external-apps]].** Two rules differ from personal choices: an app
-   not enabled for the task denies every action, and a missing task choice
-   means Ask, not the workspace default. When the app does not let users
-   manage policies, the workspace policy applies to tasks too
-   (`db/action_policy.py:effective_action_policy`).
+5. `task-choices-default-ask` **Task choices follow the policy function in
+   [[craft-external-apps]].** An integration that no plugin of the task holds
+   blocks every action. The `action_settings` of the task are the link
+   settings: an admin Blocked stays final, and Allow does not apply when users
+   cannot save Always allow on the integration
+   (`integrations/policy.py:resolve_action_policies`). A task that the
+   migration copied has `default: ask`, as the old tables gave.
 6. `origin-filter-not-join` **Hide scheduled sessions by `BuildSession.origin`,
    not by a join.**
    `server/features/build/session/manager.py:SessionManager.create_session` commits the session and
