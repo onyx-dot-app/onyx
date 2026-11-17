@@ -10791,16 +10791,37 @@
           "label": "Salvar"
         }
       },
-      "mcp": {
-        "noAccess": {
-          "tooltip": "Você não tem mais acesso a este servidor MCP. Suas ferramentas existentes serão preservadas."
-        },
-        "searchTools": {
-          "placeholder": "Pesquisar ferramentas..."
-        }
-      },
       "page": {
         "ariaLabel": "Página do editor de agentes"
+      },
+      "plugins": {
+        "actionSetting": "Configuração para {action}",
+        "add": "Adicionar um plugin",
+        "askHint": "Para executar sem perguntar, um administrador define como Permitir na integração, ou cada usuário escolhe Sempre permitir.",
+        "askHintAdminOnly": "Para executar sem perguntar, um administrador define como Permitir na integração.",
+        "choice": {
+          "inherit": "Usar a configuração da integração"
+        },
+        "default": {
+          "description": "Aplica-se a cada ação sem configuração própria, também às ações que a integração adicionar depois.",
+          "title": "Padrão para Outras Ações"
+        },
+        "defaultSetting": "Configuração padrão para {plugin}",
+        "description": "Dê plugins ao agente. Cada ação usa a configuração da integração, a menos que você escolha outra.",
+        "effective": "{policy, select, allow {Permite} ask {Pergunta} other {Bloqueada}} ({source, select, integration {configuração da integração} agentDefault {padrão do agente} other {configuração do agente}})",
+        "empty": "Nenhum plugin com integrações está disponível para você.",
+        "loadFailed": "Não foi possível carregar os plugins.",
+        "lock": {
+          "adminBlocked": "Permitir não está disponível: um administrador bloqueou esta ação.",
+          "adminFinal": "Permitir não está disponível: a configuração do administrador desta integração é definitiva.",
+          "defaultFinal": "Permitir não está disponível: as configurações do administrador destas integrações são definitivas."
+        },
+        "noActions": "Esta integração ainda não tem ações.",
+        "notVisible": "Você não pode ver as ações deste plugin. As configurações dele ficam como estão.",
+        "openIntegration": "Abrir ações de {integration}",
+        "remove": "Remover {plugin}",
+        "retry": "Tentar novamente",
+        "title": "Plugins"
       },
       "prompts": {
         "instructions": {
@@ -11057,14 +11078,6 @@
         "knowledgeCutoff": {
           "description": "Documentos com data da última atualização anterior a esta serão ignorados.",
           "title": "Data de corte do conhecimento"
-        },
-        "mcpCard": {
-          "expand": {
-            "label": "Expandir"
-          },
-          "fold": {
-            "label": "Recolher"
-          }
         },
         "moreInfo": {
           "title": "Mais informações"

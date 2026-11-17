@@ -6,6 +6,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   AdminIntegration,
   AdminIntegrationDetail,
+  AgentPluginOption,
   IntegrationActionsResponse,
   IntegrationPreset,
   MemberActionPolicies,
@@ -15,6 +16,15 @@ import type {
 export function useAdminIntegrations() {
   return useSWR<AdminIntegration[], Error>(
     SWR_KEYS.adminIntegrations,
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
+}
+
+/** Plugins with integrations that the user can attach to an agent. */
+export function useAgentPluginCatalog() {
+  return useSWR<AgentPluginOption[], Error>(
+    SWR_KEYS.agentPluginCatalog,
     errorHandlingFetcher,
     { onErrorRetry: skipRetryOnAuthError }
   );

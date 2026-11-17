@@ -56,6 +56,26 @@ export interface PersonaOwnerGroup {
   name: string;
 }
 
+/** The setting of one action on an agent's plugin link. */
+export type LinkValue = "inherit" | "allow" | "ask" | "blocked";
+
+/** `persona__plugin.action_settings`. A missing key inherits. */
+export interface AgentActionSettings {
+  default?: LinkValue;
+  actions?: Record<string, LinkValue>;
+}
+
+export interface AgentPluginLink {
+  plugin_id: string;
+  plugin_name: string;
+  action_settings: AgentActionSettings;
+}
+
+export interface AgentPluginInput {
+  plugin_id: string;
+  action_settings: AgentActionSettings;
+}
+
 export interface MinimalAgent {
   id: number;
   name: string;
@@ -95,20 +115,7 @@ export interface Agent extends MinimalAgent {
   datetime_aware: boolean;
 }
 
-export type LinkValue = "inherit" | "allow" | "ask" | "blocked";
-
-/** A plugin the agent attaches, with the agent's setting for its actions. */
-export interface AgentPluginLink {
-  plugin_id: string;
-  plugin_name: string;
-  action_settings: {
-    default: LinkValue;
-    actions: Record<string, LinkValue>;
-  };
-}
-
 export interface FullAgent extends Agent {
-  plugins?: AgentPluginLink[];
   search_start_date: string | null;
   // per-action affordance map for the requesting user; stamped by GET /persona/{id}
   permissions: PermissionsOf<"Agent">;
@@ -118,6 +125,7 @@ export interface FullAgent extends Agent {
   sharing_status: PersonaSharingStatus;
   admin_count: number;
   ownership_vacant: boolean;
+  plugins: AgentPluginLink[];
 }
 
 // ── Upsert / API parameter types ──────────────────────────────────────────────
@@ -138,6 +146,7 @@ export interface AgentUpsertParameters {
   users?: string[];
   groups?: number[];
   tool_ids: number[];
+  plugins: AgentPluginInput[];
   remove_image?: boolean;
   search_start_date: Date | null;
   uploaded_image_id: string | null;
@@ -162,6 +171,7 @@ export interface AgentUpsertRequest {
   users?: string[];
   groups?: number[];
   tool_ids: number[];
+  plugins: AgentPluginInput[] | null;
   remove_image?: boolean;
   uploaded_image_id: string | null;
   icon_name: string | null;

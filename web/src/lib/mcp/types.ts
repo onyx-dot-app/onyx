@@ -1,5 +1,3 @@
-import type React from "react";
-import type { IconProps } from "@opal/types";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
@@ -52,23 +50,9 @@ export interface MCPAuthTemplate {
   required_fields: string[];
 }
 
-export interface AgentEditorMCPServer extends MCPServer {
-  can_attach: boolean;
-}
-
 export interface MCPServersResponse {
   assistant_id?: string | null;
   mcp_servers: MCPServer[];
-}
-
-export interface MCPTool {
-  id: string;
-  name: string;
-  description: string;
-  icon?: React.FunctionComponent<IconProps>;
-  isAvailable: boolean;
-  isEnabled: boolean;
-  permissions?: PermissionsOf<"Action">;
 }
 
 export enum MCPAuthenticationType {
@@ -93,18 +77,6 @@ export enum MCPTransportType {
   STREAMABLE_HTTP = "STREAMABLE_HTTP",
   SSE = "SSE",
 }
-
-/** The agent editor's form fields for one MCP server: its switch, then one per tool. */
-export interface MCPServerFormValues {
-  enabled: boolean;
-  [tool: `tool_${string}`]: boolean;
-}
-
-/** The MCP slice of the agent editor's form, keyed by server field name. */
-export type MCPServersFormValues = Record<
-  `mcp_server_${number}`,
-  MCPServerFormValues | undefined
->;
 
 export interface MCPOAuthDiscovery {
   status: "metadata_found" | "metadata_missing" | "unreachable";
