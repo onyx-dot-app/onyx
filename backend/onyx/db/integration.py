@@ -3,7 +3,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Select, delete, func, select, update
-from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
+from sqlalchemy.orm import InstrumentedAttribute, Session, aliased, load_only
 from sqlalchemy.sql.elements import KeyedColumnElement
 
 from onyx.db.enums import (
@@ -23,6 +23,7 @@ from onyx.db.models import (
     Integration,
     IntegrationAction,
     IntegrationActionPolicy,
+    IntegrationConnection,
     IntegrationOAuthClient,
     Marketplace,
     MCPServer,
@@ -142,29 +143,40 @@ def get_integration_by_kind_row(
     return db_session.scalar(select(Integration).where(kind_row_id == row_id))
 
 
-def _openapi_tools_with_integration() -> Select[tuple[Tool, Integration]]:
+def _openapi_tools_with_integration() -> Select[
+    tuple[Tool, Integration, IntegrationConnection]
+]:
     return (
-        select(Tool, Integration)
+        select(Tool, Integration, IntegrationConnection)
         .join(Integration, Integration.tool_id == Tool.id)
+        .outerjoin(
+            IntegrationConnection,
+            (IntegrationConnection.integration_id == Integration.id)
+            & IntegrationConnection.user_id.is_(None),
+        )
         .where(Tool.openapi_schema.is_not(None))
     )
 
 
 def list_openapi_tools_with_integration(
     db_session: Session,
-) -> list[tuple[Tool, Integration]]:
-    return list(
-        db_session.execute(_openapi_tools_with_integration().order_by(Tool.id)).tuples()
-    )
+) -> list[tuple[Tool, Integration, IntegrationConnection | None]]:
+    """Each OpenAPI tool with its integration and organization connection."""
+    return [
+        (tool, integration, organization)
+        for tool, integration, organization in db_session.execute(
+            _openapi_tools_with_integration().order_by(Tool.id)
+        ).tuples()
+    ]
 
 
 def get_openapi_tool_with_integration(
     tool_id: int, db_session: Session
-) -> tuple[Tool, Integration] | None:
+) -> tuple[Tool, Integration, IntegrationConnection | None] | None:
     row = db_session.execute(
         _openapi_tools_with_integration().where(Tool.id == tool_id)
     ).one_or_none()
-    return (row[0], row[1]) if row is not None else None
+    return (row[0], row[1], row[2]) if row is not None else None
 
 
 def list_integration_actions(
@@ -179,14 +191,64 @@ def list_integration_actions(
     )
 
 
-def count_integration_actions(integration_id: int, db_session: Session) -> int:
-    return (
-        db_session.scalar(
-            select(func.count())
-            .select_from(IntegrationAction)
-            .where(IntegrationAction.integration_id == integration_id)
+def count_integration_actions(
+    integration_ids: Collection[int], db_session: Session
+) -> dict[int, int]:
+    counts = dict.fromkeys(integration_ids, 0)
+    if not integration_ids:
+        return counts
+    for integration_id, count in db_session.execute(
+        select(IntegrationAction.integration_id, func.count())
+        .where(IntegrationAction.integration_id.in_(integration_ids))
+        .group_by(IntegrationAction.integration_id)
+    ).tuples():
+        counts[integration_id] = count
+    return counts
+
+
+def list_action_summaries(
+    integration_ids: Collection[int], db_session: Session
+) -> dict[int, list[IntegrationAction]]:
+    """The actions of each integration with only the columns a view shows,
+    in action order."""
+    actions: dict[int, list[IntegrationAction]] = {
+        integration_id: [] for integration_id in integration_ids
+    }
+    if not integration_ids:
+        return actions
+    for action in db_session.scalars(
+        select(IntegrationAction)
+        .options(
+            load_only(
+                IntegrationAction.integration_id,
+                IntegrationAction.key,
+                IntegrationAction.display_name,
+                IntegrationAction.description,
+                IntegrationAction.read_only,
+                IntegrationAction.default_policy,
+            )
         )
-        or 0
+        .where(IntegrationAction.integration_id.in_(integration_ids))
+        .order_by(IntegrationAction.id)
+    ):
+        actions[action.integration_id].append(action)
+    return actions
+
+
+def list_external_app_types(
+    integration_ids: Collection[int], db_session: Session
+) -> dict[int, ExternalAppType]:
+    """The app type of each integration that has an ``external_app`` row."""
+    if not integration_ids:
+        return {}
+    return dict(
+        db_session.execute(
+            select(Integration.id, ExternalApp.app_type)
+            .join(ExternalApp, ExternalApp.id == Integration.external_app_id)
+            .where(Integration.id.in_(integration_ids))
+        )
+        .tuples()
+        .all()
     )
 
 

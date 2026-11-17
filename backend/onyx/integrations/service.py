@@ -34,6 +34,8 @@ from onyx.db.integration import (
     get_mcp_server_for_integration,
     get_openapi_tool_for_integration,
     insert_integration__no_commit,
+    list_action_summaries,
+    list_external_app_types,
     list_integration_actions,
     list_integration_ids_held_by_plugins,
     list_integration_plugin_rows,
@@ -46,8 +48,12 @@ from onyx.db.integration import (
     set_policy_rows__no_commit,
     upsert_oauth_client__no_commit,
 )
-from onyx.db.integration_connection import get_oauth_client, user_can_see_integration
-from onyx.db.integration_policy import get_policy_rows
+from onyx.db.integration_connection import (
+    get_oauth_client,
+    get_oauth_clients,
+    user_can_see_integration,
+)
+from onyx.db.integration_policy import get_policy_rows, list_admin_policy_rows
 from onyx.db.models import Integration, IntegrationAction, IntegrationOAuthClient, User
 from onyx.db.plugin import create_integration_plugin__no_commit
 from onyx.db.plugin_access import (
@@ -71,7 +77,7 @@ from onyx.integrations.connections import (
     credential_field_keys,
     has_placeholder,
     header_field_keys,
-    integration_status,
+    integration_statuses,
     mark_sign_in_settings_changed,
     oauth_client_configured,
     render_headers,
@@ -81,8 +87,6 @@ from onyx.integrations.connections import (
 from onyx.integrations.craft import always_asks
 from onyx.integrations.kinds.mcp_server import fetch_mcp_actions, mcp_action_specs
 from onyx.integrations.models import (
-    ApiConfig,
-    ApiShape,
     EffectivePolicy,
     IntegrationActionSpec,
     IntegrationPluginRow,
@@ -94,7 +98,6 @@ from onyx.integrations.policy import (
     admin_policy,
 )
 from onyx.integrations.presets import PRESETS, Preset, get_preset
-from onyx.integrations.registry import get_kind_handler
 from onyx.integrations.sync import sync_integration_actions__no_commit
 from onyx.server.features.build.utils import is_craft_available_for_deployment
 from onyx.server.features.integrations.models import (
@@ -142,11 +145,6 @@ logger = setup_logger()
 
 _CLIENT_CREDENTIAL_KEYS = ("client_id", "client_secret")
 
-_API_SHAPES: dict[ApiShape, IntegrationShape] = {
-    ApiShape.OPENAPI: IntegrationShape.OPENAPI,
-    ApiShape.PRESET: IntegrationShape.PRESET,
-    ApiShape.CUSTOM: IntegrationShape.CUSTOM,
-}
 # The fields of an update that Onyx owns for an Onyx-managed preset.
 _ONYX_MANAGED_FIELDS = frozenset(
     {
@@ -233,22 +231,44 @@ def _check_onyx_login(user: User, method: IntegrationAuthMethod | None) -> None:
         )
 
 
+def _shapes(
+    integrations: Collection[Integration], db_session: Session
+) -> dict[int, tuple[IntegrationShape, str | None]]:
+    """The shape and the preset id of each integration."""
+    app_types = list_external_app_types(
+        [
+            integration.id
+            for integration in integrations
+            if integration.external_app_id is not None
+        ],
+        db_session,
+    )
+    shapes: dict[int, tuple[IntegrationShape, str | None]] = {}
+    for integration in integrations:
+        if integration.kind is IntegrationKind.MCP:
+            shapes[integration.id] = (IntegrationShape.MCP_SERVER, None)
+            continue
+        if integration.tool_id is not None:
+            shapes[integration.id] = (IntegrationShape.OPENAPI, None)
+            continue
+        app_type = app_types.get(integration.id)
+        if app_type is None:
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                f"Integration {integration.id} has no API settings.",
+            )
+        shapes[integration.id] = (
+            (IntegrationShape.CUSTOM, None)
+            if app_type == ExternalAppType.CUSTOM
+            else (IntegrationShape.PRESET, app_type.value)
+        )
+    return shapes
+
+
 def _shape_and_preset(
     integration: Integration, db_session: Session
 ) -> tuple[IntegrationShape, str | None]:
-    if integration.kind is IntegrationKind.MCP:
-        return IntegrationShape.MCP_SERVER, None
-    config = get_kind_handler(integration.kind).load_config(integration, db_session)
-    if not isinstance(config, ApiConfig):
-        raise OnyxError(
-            OnyxErrorCode.INTERNAL_ERROR, "Unexpected integration settings."
-        )
-    preset_id = (
-        config.app_type.value
-        if config.shape is ApiShape.PRESET and config.app_type is not None
-        else None
-    )
-    return _API_SHAPES[config.shape], preset_id
+    return _shapes([integration], db_session)[integration.id]
 
 
 def _preset_or_400(preset_id: str) -> Preset:
@@ -982,21 +1002,33 @@ def _setup_reason(
     return "Connect the account of the organization."
 
 
+def _organization_statuses(
+    integrations: Collection[Integration], db_session: Session
+) -> dict[int, IntegrationStatus]:
+    """The status of each organization connection, with a reason that tells
+    the admin what to do."""
+    statuses = integration_statuses(integrations, None, db_session)
+    not_set_up = [
+        integration
+        for integration in integrations
+        if statuses[integration.id].state is ConnectionState.NOT_SET_UP
+    ]
+    oauth_clients = get_oauth_clients(
+        db_session, [integration.id for integration in not_set_up]
+    )
+    for integration in not_set_up:
+        statuses[integration.id] = statuses[integration.id].model_copy(
+            update={
+                "reason": _setup_reason(integration, oauth_clients.get(integration.id))
+            }
+        )
+    return statuses
+
+
 def organization_status(
     integration: Integration, db_session: Session
 ) -> IntegrationStatus:
-    """The status of the organization connection, with a reason that tells
-    the admin what to do."""
-    status = integration_status(integration, None, db_session)
-    if status.state is not ConnectionState.NOT_SET_UP:
-        return status
-    return status.model_copy(
-        update={
-            "reason": _setup_reason(
-                integration, get_oauth_client(db_session, integration.id)
-            )
-        }
-    )
+    return _organization_statuses([integration], db_session)[integration.id]
 
 
 def _creator_emails(
@@ -1013,40 +1045,53 @@ def _creator_emails(
     }
 
 
-def _admin_view(
+def _admin_views(
     user: User,
-    integration: Integration,
-    plugins: list[IntegrationPluginRow],
-    creator_emails: Mapping[UUID, str],
+    integrations: Collection[Integration],
+    plugin_rows: Mapping[int, list[IntegrationPluginRow]],
     db_session: Session,
-) -> AdminIntegration:
-    org_status = organization_status(integration, db_session)
-    needs_setup = org_status.state is ConnectionState.NOT_SET_UP
-    shape, preset_id = _shape_and_preset(integration, db_session)
-    return AdminIntegration(
-        id=integration.id,
-        kind=integration.kind,
-        shape=shape,
-        name=integration.name,
-        description=integration.description,
-        preset_id=preset_id,
-        enabled=integration.enabled,
-        auth_mode=integration.auth_mode,
-        auth_method=integration.auth_method,
-        plugins=[_plugin_ref(row) for row in plugins],
-        created_by_email=(
-            creator_emails.get(integration.created_by_user_id)
-            if integration.created_by_user_id is not None
-            else None
-        ),
-        action_count=count_integration_actions(integration.id, db_session),
-        needs_setup=needs_setup,
-        setup_reason=org_status.reason if needs_setup else None,
-        organization_status=(
-            org_status if integration.auth_mode is IntegrationAuthMode.SHARED else None
-        ),
-        can_manage=manages_integration(user, plugins),
+) -> list[AdminIntegration]:
+    creator_emails = _creator_emails(integrations, db_session)
+    statuses = _organization_statuses(integrations, db_session)
+    shapes = _shapes(integrations, db_session)
+    action_counts = count_integration_actions(
+        [integration.id for integration in integrations], db_session
     )
+    views: list[AdminIntegration] = []
+    for integration in integrations:
+        org_status = statuses[integration.id]
+        needs_setup = org_status.state is ConnectionState.NOT_SET_UP
+        shape, preset_id = shapes[integration.id]
+        plugins = plugin_rows[integration.id]
+        views.append(
+            AdminIntegration(
+                id=integration.id,
+                kind=integration.kind,
+                shape=shape,
+                name=integration.name,
+                description=integration.description,
+                preset_id=preset_id,
+                enabled=integration.enabled,
+                auth_mode=integration.auth_mode,
+                auth_method=integration.auth_method,
+                plugins=[_plugin_ref(row) for row in plugins],
+                created_by_email=(
+                    creator_emails.get(integration.created_by_user_id)
+                    if integration.created_by_user_id is not None
+                    else None
+                ),
+                action_count=action_counts[integration.id],
+                needs_setup=needs_setup,
+                setup_reason=org_status.reason if needs_setup else None,
+                organization_status=(
+                    org_status
+                    if integration.auth_mode is IntegrationAuthMode.SHARED
+                    else None
+                ),
+                can_manage=manages_integration(user, plugins),
+            )
+        )
+    return views
 
 
 def list_admin_integrations(user: User, db_session: Session) -> list[AdminIntegration]:
@@ -1063,20 +1108,18 @@ def list_admin_integrations(user: User, db_session: Session) -> list[AdminIntegr
                 visible_plugin_ids(user.id), db_session
             )
         )
-    creator_emails = _creator_emails(integrations, db_session)
-    views: list[AdminIntegration] = []
-    for integration in integrations:
-        plugins = plugin_rows[integration.id]
-        if (
-            visible is not None
-            and integration.id not in visible
-            and not manages_integration(user, plugins)
-        ):
-            continue
-        views.append(
-            _admin_view(user, integration, plugins, creator_emails, db_session)
-        )
-    return views
+    return _admin_views(
+        user,
+        [
+            integration
+            for integration in integrations
+            if visible is None
+            or integration.id in visible
+            or manages_integration(user, plugin_rows[integration.id])
+        ],
+        plugin_rows,
+        db_session,
+    )
 
 
 def _config_view(
@@ -1157,14 +1200,12 @@ def masked_header_template(
 def admin_detail(
     user: User, integration: Integration, db_session: Session
 ) -> AdminIntegrationDetail:
-    plugins = list_integration_plugin_rows([integration.id], db_session)[integration.id]
-    view = _admin_view(
+    view = _admin_views(
         user,
-        integration,
-        plugins,
-        _creator_emails([integration], db_session),
+        [integration],
+        list_integration_plugin_rows([integration.id], db_session),
         db_session,
-    )
+    )[0]
     managed = view.preset_id is not None and _is_onyx_managed(
         _preset_or_400(view.preset_id)
     )
@@ -1277,27 +1318,34 @@ def _visible_plugin_refs(
     }
 
 
-def _member_view(
+def _member_views(
     user: User,
-    integration: Integration,
-    plugins: list[MemberPluginRef],
+    integrations: Collection[Integration],
+    plugin_refs: Mapping[int, list[MemberPluginRef]],
     db_session: Session,
-) -> MemberIntegration:
-    shape, preset_id = _shape_and_preset(integration, db_session)
-    return MemberIntegration(
-        id=integration.id,
-        kind=integration.kind,
-        shape=shape,
-        name=integration.name,
-        description=integration.description,
-        preset_id=preset_id,
-        auth_mode=integration.auth_mode,
-        auth_method=integration.auth_method,
-        credential_fields=_credential_fields(integration),
-        status=integration_status(integration, user, db_session),
-        plugins=plugins,
-        users_can_save_always_allow=integration.users_can_save_always_allow,
-    )
+) -> list[MemberIntegration]:
+    statuses = integration_statuses(integrations, user, db_session)
+    shapes = _shapes(integrations, db_session)
+    views: list[MemberIntegration] = []
+    for integration in integrations:
+        shape, preset_id = shapes[integration.id]
+        views.append(
+            MemberIntegration(
+                id=integration.id,
+                kind=integration.kind,
+                shape=shape,
+                name=integration.name,
+                description=integration.description,
+                preset_id=preset_id,
+                auth_mode=integration.auth_mode,
+                auth_method=integration.auth_method,
+                credential_fields=_credential_fields(integration),
+                status=statuses[integration.id],
+                plugins=plugin_refs[integration.id],
+                users_can_save_always_allow=integration.users_can_save_always_allow,
+            )
+        )
+    return views
 
 
 def list_member_integrations(
@@ -1305,12 +1353,16 @@ def list_member_integrations(
 ) -> list[MemberIntegration]:
     states = _plugin_states(user, db_session)
     integration_ids = list_integration_ids_held_by_plugins(list(states), db_session)
-    plugin_refs = _visible_plugin_refs(states, integration_ids, db_session)
-    return [
-        _member_view(user, integration, plugin_refs[integration.id], db_session)
-        for integration in list_integrations_by_ids(integration_ids, db_session)
-        if integration.enabled
-    ]
+    return _member_views(
+        user,
+        [
+            integration
+            for integration in list_integrations_by_ids(integration_ids, db_session)
+            if integration.enabled
+        ],
+        _visible_plugin_refs(states, integration_ids, db_session),
+        db_session,
+    )
 
 
 def get_member_integration(
@@ -1346,11 +1398,11 @@ def member_actions(
 def member_detail(
     user: User, integration: Integration, db_session: Session
 ) -> MemberIntegrationDetail:
-    plugins = _visible_plugin_refs(
+    plugin_refs = _visible_plugin_refs(
         _plugin_states(user, db_session), [integration.id], db_session
-    )[integration.id]
+    )
     return MemberIntegrationDetail(
-        **_member_view(user, integration, plugins, db_session).model_dump(),
+        **_member_views(user, [integration], plugin_refs, db_session)[0].model_dump(),
         actions=member_actions(user, integration, db_session),
     )
 
@@ -1406,21 +1458,30 @@ def set_action_grants__no_commit(
 
 def agent_catalog(user: User, db_session: Session) -> list[AgentPluginOption]:
     visible = get_visible_plugin_ids(user.id, db_session)
-    integration_options: dict[int, AgentIntegrationOption] = {}
-    for integration in list_integrations_by_ids(
-        list_integration_ids_held_by_plugins(visible, db_session), db_session
-    ):
-        if not integration.enabled:
-            continue
-        shape, _ = _shape_and_preset(integration, db_session)
-        integration_options[integration.id] = AgentIntegrationOption(
+    integrations = [
+        integration
+        for integration in list_integrations_by_ids(
+            list_integration_ids_held_by_plugins(visible, db_session), db_session
+        )
+        if integration.enabled
+    ]
+    integration_ids = [integration.id for integration in integrations]
+    shapes = _shapes(integrations, db_session)
+    actions = list_action_summaries(integration_ids, db_session)
+    admin_rows = list_admin_policy_rows(db_session, integration_ids)
+    integration_options = {
+        integration.id: AgentIntegrationOption(
             id=integration.id,
             name=integration.name,
             kind=integration.kind,
-            shape=shape,
+            shape=shapes[integration.id][0],
             users_can_save_always_allow=integration.users_can_save_always_allow,
-            actions=action_views(integration, db_session),
+            actions=_action_views(
+                integration, actions[integration.id], admin_rows[integration.id]
+            ),
         )
+        for integration in integrations
+    }
     options: dict[UUID, AgentPluginOption] = {}
     for integration_id, rows in list_integration_plugin_rows(
         list(integration_options), db_session

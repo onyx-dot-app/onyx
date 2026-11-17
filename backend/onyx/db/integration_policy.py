@@ -46,6 +46,29 @@ def get_policy_rows(
     return PolicyRows(admin=admin, user=user)
 
 
+def list_admin_policy_rows(
+    db_session: Session, integration_ids: Collection[int]
+) -> dict[int, dict[str, IntegrationActionPolicyValue]]:
+    """The admin rows of each integration, by action key."""
+    rows: dict[int, dict[str, IntegrationActionPolicyValue]] = {
+        integration_id: {} for integration_id in integration_ids
+    }
+    if not integration_ids:
+        return rows
+    for integration_id, action, policy in db_session.execute(
+        select(
+            IntegrationActionPolicy.integration_id,
+            IntegrationActionPolicy.action,
+            IntegrationActionPolicy.policy,
+        ).where(
+            IntegrationActionPolicy.integration_id.in_(integration_ids),
+            IntegrationActionPolicy.user_id.is_(None),
+        )
+    ).tuples():
+        rows[integration_id][action] = policy
+    return rows
+
+
 def get_session_granted_actions(
     db_session: Session, chat_session_id: UUID, integration_id: int
 ) -> set[str]:

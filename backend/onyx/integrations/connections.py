@@ -1,5 +1,5 @@
 import re
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -35,6 +35,8 @@ from onyx.db.integration_connection import (
     get_connection_by_id,
     get_connection_with_organization,
     get_oauth_client,
+    get_oauth_clients,
+    list_connections,
     mark_connection_needs_reconnect__no_commit,
     mark_integration_connections_needs_reconnect__no_commit,
     reload_connection,
@@ -935,18 +937,76 @@ def oauth_client_configured(
 def integration_status(
     integration: Integration, user: User | None, db_session: Session
 ) -> IntegrationStatus:
-    if integration.auth_mode is not IntegrationAuthMode.NONE and (
-        not oauth_client_configured(
-            integration, get_oauth_client(db_session, integration.id)
+    return integration_statuses([integration], user, db_session)[integration.id]
+
+
+def _reads_connections(integration: Integration) -> bool:
+    if integration.auth_mode is IntegrationAuthMode.NONE:
+        return _may_have_legacy_defaults(integration)
+    return integration.auth_method is not IntegrationAuthMethod.ONYX_LOGIN or (
+        _may_have_legacy_defaults(integration)
+    )
+
+
+def integration_statuses(
+    integrations: Collection[Integration], user: User | None, db_session: Session
+) -> dict[int, IntegrationStatus]:
+    """The status of each integration for ``user`` (None: the organization
+    connection). One query reads the OAuth clients and one the connections,
+    for all integrations."""
+    oauth_clients = get_oauth_clients(
+        db_session,
+        [
+            integration.id
+            for integration in integrations
+            if integration.auth_method is IntegrationAuthMethod.OAUTH2
+        ],
+    )
+    signed_in_user = _signed_in(user)
+    connections = list_connections(
+        db_session,
+        [
+            integration.id
+            for integration in integrations
+            if _reads_connections(integration)
+        ],
+        signed_in_user.id if signed_in_user is not None else None,
+    )
+    statuses: dict[int, IntegrationStatus] = {}
+    for integration in integrations:
+        if integration.auth_mode is not IntegrationAuthMode.NONE and (
+            not oauth_client_configured(integration, oauth_clients.get(integration.id))
+        ):
+            statuses[integration.id] = IntegrationStatus(
+                state=ConnectionState.NOT_SET_UP,
+                reason=not_set_up_reason(integration),
+            )
+            continue
+
+        organization = connections.get((integration.id, None))
+        user_row = (
+            connections.get((integration.id, signed_in_user.id))
+            if signed_in_user is not None
+            else None
         )
-    ):
-        return IntegrationStatus(
-            state=ConnectionState.NOT_SET_UP, reason=not_set_up_reason(integration)
+        result = _resolve_by_mode(
+            integration,
+            signed_in_user,
+            organization,
+            user_row,
+            db_session,
+            refresh=False,
         )
-    result = resolve_connection(integration, user, db_session, refresh=False)
-    if isinstance(result, ConnectionProblem):
-        return IntegrationStatus(state=result.code, reason=result.reason)
-    return IntegrationStatus(state=ConnectionState.CONNECTED, reason=None)
+        if _may_have_legacy_defaults(integration):
+            result = _with_legacy_defaults(
+                integration, signed_in_user, result, organization, user_row
+            )
+        statuses[integration.id] = (
+            IntegrationStatus(state=result.code, reason=result.reason)
+            if isinstance(result, ConnectionProblem)
+            else IntegrationStatus(state=ConnectionState.CONNECTED, reason=None)
+        )
+    return statuses
 
 
 def credential_field_keys(integration: Integration) -> list[str]:
