@@ -169,6 +169,7 @@ def test_independence(
         ('forbidden = ["ee"]', 'forbidden = ["enterprise"]'),
         ('reason = "Community code runs without ee."', 'reason = ""'),
         ('instead = "Use fetch_versioned_implementation."', ""),
+        ('allowed = ["ee.onyx.allowed"]', 'alowed = ["ee.onyx.allowed"]'),
     ],
 )
 def test_contract_that_names_nothing_is_rejected(

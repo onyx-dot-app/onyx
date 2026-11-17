@@ -29,6 +29,21 @@ CONFIG_PATH = BACKEND_DIR / "import_boundaries.toml"
 _SKIP_DIRS = {".venv", "__pycache__", "node_modules"}
 _FORBIDDEN = "forbidden"
 _INDEPENDENCE = "independence"
+_CONTRACT_KEYS = {
+    "name",
+    "rule",
+    "reason",
+    "instead",
+    "type",
+    "source",
+    "source_exclude",
+    "forbidden",
+    "allowed",
+    "container",
+    "shared",
+    "exception",
+}
+_EXCEPTION_KEYS = {"importer", "imports", "reason"}
 
 
 class ConfigError(Exception):
@@ -96,6 +111,15 @@ def _module_exists(backend_dir: Path, module: str) -> bool:
     return False
 
 
+def _reject_unknown_keys(
+    table: Mapping[str, object], known: set[str], where: str
+) -> None:
+    # A misspelled key would be ignored and could switch off part of a contract.
+    unknown = sorted(set(table) - known)
+    if unknown:
+        raise ConfigError(f"{where}: unknown key(s) {', '.join(unknown)}")
+
+
 def _string(table: Mapping[str, object], key: str, where: str) -> str:
     value = table.get(key)
     if not isinstance(value, str) or not value.strip():
@@ -121,6 +145,7 @@ def _parse_exceptions(
         if not isinstance(item, dict):
             raise ConfigError(f"{where}: `exception` must be an array of tables")
         entry: dict[str, object] = {str(key): value for key, value in item.items()}
+        _reject_unknown_keys(entry, _EXCEPTION_KEYS, f"{where} exception")
         exception = ImportException(
             importer=_string(entry, "importer", f"{where} exception"),
             imports=_string(entry, "imports", f"{where} exception"),
@@ -137,6 +162,7 @@ def _parse_exceptions(
 def _parse_contract(table: Mapping[str, object], backend_dir: Path) -> Contract:
     name = _string(table, "name", "contract")
     where = f"contract `{name}`"
+    _reject_unknown_keys(table, _CONTRACT_KEYS, where)
     kind = str(table.get("type", _FORBIDDEN))
     if kind not in (_FORBIDDEN, _INDEPENDENCE):
         raise ConfigError(f"{where}: unknown type `{kind}`")
