@@ -439,47 +439,6 @@
         "reconnectFailed": "Der MCP-Server konnte nicht erneut verbunden werden"
       }
     },
-    "openApiAuthModal": {
-      "cancelButton": {
-        "label": "Abbrechen"
-      },
-      "header": {
-        "description": "Authentifizieren Sie Ihre Verbindung, um dieses OpenAPI-Plugin zu verwenden."
-      },
-      "headers": {
-        "addButton": {
-          "label": "Header hinzufügen"
-        }
-      },
-      "loading": {
-        "label": "Vorhandene Konfiguration wird geladen..."
-      },
-      "submitButton": {
-        "label": "Verbinden"
-      },
-      "connectionCheck": {
-        "discovery": {
-          "idle": "Geben Sie gültige HTTPS-Endpunkte ein, um die PKCE-Unterstützung zu prüfen.",
-          "checking": "Angegebene PKCE-Unterstützung wird geprüft…",
-          "supported": "Der Anbieter gibt Unterstützung für S256 PKCE an.",
-          "unsupported": "Der Anbieter gibt keine Unterstützung für S256 PKCE an.",
-          "unknown": "PKCE-Unterstützung konnte nicht geprüft werden. Sie können die Einstellung weiterhin manuell wählen."
-        },
-        "testing": "Verbindung wird getestet…",
-        "successPkce": "Autorisierung mit PKCE-Parametern erfolgreich. Dies beweist nicht, dass der Anbieter PKCE erzwingt.",
-        "success": "Autorisierung ohne PKCE erfolgreich.",
-        "result": {
-          "blocked": "Erlauben Sie Pop-ups und versuchen Sie es erneut.",
-          "closed": "Das Testfenster wurde geschlossen oder getrennt. Schließen Sie einen noch offenen Test ab oder versuchen Sie es erneut.",
-          "stale": "Einstellungen geändert. Testen Sie die aktuellen Einstellungen erneut.",
-          "failed": "Autorisierungstest fehlgeschlagen. Prüfen Sie die Einstellungen und versuchen Sie es erneut.",
-          "denied": "Die Autorisierung beim Anbieter wurde abgelehnt oder abgebrochen.",
-          "interrupted": "Der Test ist abgelaufen oder wurde unterbrochen. Starten Sie einen neuen Test."
-        },
-        "returnToSettings": "Kehren Sie zum Einstellungsfenster zurück, um das Ergebnis zu sehen.",
-        "close": "Fenster schließen"
-      }
-    },
     "openApiCard": {
       "card": {
         "ariaLabel": "OpenAPI-Aktionskarte {name}"

@@ -439,47 +439,6 @@
         "reconnectFailed": "Failed to reconnect MCP Server"
       }
     },
-    "openApiAuthModal": {
-      "cancelButton": {
-        "label": "Cancel"
-      },
-      "header": {
-        "description": "Authenticate your connection to start using this OpenAPI plugin."
-      },
-      "headers": {
-        "addButton": {
-          "label": "Add Header"
-        }
-      },
-      "loading": {
-        "label": "Loading existing configuration..."
-      },
-      "submitButton": {
-        "label": "Connect"
-      },
-      "connectionCheck": {
-        "discovery": {
-          "idle": "Enter valid HTTPS endpoints to check PKCE support.",
-          "checking": "Checking advertised PKCE support…",
-          "supported": "Provider advertises S256 PKCE support.",
-          "unsupported": "Provider does not advertise S256 PKCE support.",
-          "unknown": "Could not verify PKCE support. You can still choose the setting manually."
-        },
-        "testing": "Testing connection…",
-        "successPkce": "Authorization succeeded with PKCE parameters. This does not prove the provider enforces PKCE.",
-        "success": "Authorization succeeded without PKCE.",
-        "result": {
-          "blocked": "Allow popups and try again.",
-          "closed": "Test window closed or disconnected. Finish any open test, or try again.",
-          "stale": "Settings changed. Test the current settings again.",
-          "failed": "Authorization test failed. Check the settings and try again.",
-          "denied": "Provider authorization was declined or canceled.",
-          "interrupted": "The test expired or was interrupted. Start a new test."
-        },
-        "returnToSettings": "Return to the settings window to see the result.",
-        "close": "Close window"
-      }
-    },
     "openApiCard": {
       "card": {
         "ariaLabel": "{name} OpenAPI action card"

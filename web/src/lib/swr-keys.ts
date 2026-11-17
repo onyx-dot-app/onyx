@@ -258,7 +258,6 @@ export const SWR_KEYS = {
   scimToken: "/api/admin/enterprise-settings/scim/token",
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
-  adminMcpServers: "/api/admin/mcp/servers",
   mcpServers: "/api/mcp/servers",
   mcpServersCraft: "/api/mcp/servers/craft",
   agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
@@ -317,7 +316,6 @@ export const SWR_KEYS = {
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
   buildExternalApps: "/api/build/apps",
-  buildExternalAppsAdmin: "/api/build/admin/apps",
   buildBaseInstructions: "/api/build/admin/base-instructions",
   buildSessionApprovalStatus: (sessionId: string) =>
     `/api/build/approvals/sessions/${sessionId}/status`,

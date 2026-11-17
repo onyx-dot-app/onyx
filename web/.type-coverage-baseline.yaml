@@ -75,16 +75,15 @@ packages:
   src/lib/credentials: 98.9
   src/lib/docx: 100
   src/lib/extension: 100
-  src/lib/externalApps: 100
   src/lib/hierarchy: 100
   src/lib/hooks: 96
   src/lib/integrations: 100
   src/lib/languageModels: 99.1
-  src/lib/mcp: 99.3
+  src/lib/mcp: 99.4
   src/lib/multiModel: 100
   src/lib/navigation: 100
   src/lib/notifications: 99.3
-  src/lib/oauth: 99.5
+  src/lib/oauth: 99.4
   src/lib/oauth-provider: 100
   src/lib/onboarding: 99.8
   src/lib/opensearch-health: 100
@@ -136,7 +135,7 @@ packages:
   src/sections/model-selector: 99.9
   src/sections/oauth: 100
   src/sections/oauth-provider: 100
-  src/sections/plugins: 99.8
+  src/sections/plugins: 99.9
   src/sections/settings: 100
   src/sections/sidebar: 99.1
   src/sections/skills: 99.9
