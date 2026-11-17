@@ -124,6 +124,8 @@ KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_KG_CONFIG_KEY = "kg_config"
 KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY = "opensearch_cc_pair_ids_backfill_progress"
 KV_TABULAR_RECHUNK_PROGRESS_KEY = "tabular_rechunk_progress"
+KV_SUGGESTED_QUESTIONS_POOL_KEY = "suggested_questions_pool"
+KV_SUGGESTED_QUESTIONS_USER_KEY = "suggested_questions_user:{}"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
@@ -587,6 +589,11 @@ class OnyxCeleryQueues:
     # Scheduled tasks queue (Craft scheduled-task executor)
     SCHEDULED_TASKS = "scheduled_tasks"
 
+    # Playground suggested questions, consumed by the light worker. Runs take
+    # seconds (a decision call, an LLM call and a few searches), so they stay
+    # off the primary queue.
+    SUGGESTED_QUESTIONS = "suggested_questions"
+
 
 class OnyxRedisLocks:
     PRIMARY_WORKER = "da_lock:primary_worker"
@@ -723,6 +730,10 @@ class OnyxCeleryTask:
     CHECK_FOR_USER_FILE_DELETE = "check_for_user_file_delete"
     DELETE_SINGLE_USER_FILE = "delete_single_user_file"
     CHECK_FOR_INCOGNITO_FILE_CLEANUP = "check_for_incognito_file_cleanup"
+
+    # Playground suggested questions
+    GENERATE_SUGGESTED_QUESTIONS_POOL = "generate_suggested_questions_pool"
+    GENERATE_SUGGESTED_QUESTIONS_FOR_USER = "generate_suggested_questions_for_user"
 
     # Targeted reindex
     TARGETED_REINDEX_TASK = "targeted_reindex_task"
