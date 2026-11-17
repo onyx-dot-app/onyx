@@ -717,8 +717,9 @@ export interface ToolConfigurationHandle {
   ready: boolean;
 
   /**
-   * False while an existing chat's saved options have not loaded. A send
-   * then would carry no allow-list and turn on what the chat turned off.
+   * False while an existing chat's saved options, or the plugins a new
+   * chat starts with turned off, have not loaded. A send then would carry
+   * no allow-list and turn on what the user turned off.
    */
   optionsLoaded: boolean;
 
@@ -1135,7 +1136,7 @@ export function useToolConfiguration(
                 pluginIds ?? []
               ),
       ready,
-      optionsLoaded: !isChat || chatConfiguration !== null,
+      optionsLoaded: isChat ? chatConfiguration !== null : preferences.loaded,
       filters: configuration.filters,
       setFilters,
       handOffTo,
@@ -1146,6 +1147,7 @@ export function useToolConfiguration(
     ready,
     isChat,
     chatConfiguration,
+    preferences.loaded,
     savedAllowed,
     activeAgent,
     pluginIds,

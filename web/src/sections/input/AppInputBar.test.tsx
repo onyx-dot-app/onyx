@@ -134,6 +134,13 @@ jest.mock("@/lib/plugins/hooks", () => ({
     error: undefined,
     refresh: jest.fn(),
   }),
+  useAgentPluginPreferences: () => ({
+    loaded: true,
+    error: undefined,
+    disabledPluginIds: () => [],
+    setPluginsDisabled: jest.fn(),
+    retry: jest.fn(),
+  }),
 }));
 jest.mock("@/lib/agents/hooks", () => ({ useActiveAgent: () => undefined }));
 const mockProjectsContext: {
