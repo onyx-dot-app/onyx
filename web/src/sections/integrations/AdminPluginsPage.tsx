@@ -4,27 +4,47 @@ import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   Button,
+  InputSingleSelect,
   InputTypeIn,
   Table,
   Text,
   type TableColumn,
 } from "@opal/components";
-import { IllustrationContent, Section, SettingsLayouts } from "@opal/layouts";
+import {
+  IllustrationContent,
+  Section,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { useNavigation } from "@opal/navigation";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useAdminIntegrations } from "@/lib/integrations/hooks";
-import type { AdminPluginEntry } from "@/lib/integrations/types";
+import { setPluginInstallationPolicy } from "@/lib/integrations/svc";
+import type {
+  AdminPluginEntry,
+  InstallationPolicy,
+} from "@/lib/integrations/types";
 import {
   integrationDetailHref,
   pluginsFromIntegrations,
 } from "@/lib/integrations/utils";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import {
+  useInstallationPolicyCopy,
+  usePolicyOptions,
+} from "@/lib/skills/hooks";
+import { INSTALLATION_POLICIES } from "@/lib/skills/installationPolicy";
+import { Permission } from "@/lib/types";
 
 export default function AdminPluginsPage() {
   const t = useTranslations("admin.plugins");
   const locale = useLocale();
   const navigation = useNavigation();
-  const { data, error, isLoading } = useAdminIntegrations();
+  const { data, error, isLoading, mutate } = useAdminIntegrations();
+  const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_ACTIONS);
+  const policyCopy = useInstallationPolicyCopy();
+  const policyOptions = usePolicyOptions();
   const [query, setQuery] = useState("");
   const search = query.trim().toLocaleLowerCase();
   const entries = pluginsFromIntegrations(data ?? [], locale).filter((entry) =>
@@ -33,6 +53,28 @@ export default function AdminPluginsPage() {
       .toLocaleLowerCase()
       .includes(search)
   );
+
+  async function saveInstallationPolicy(
+    row: AdminPluginEntry,
+    policy: InstallationPolicy
+  ) {
+    try {
+      await setPluginInstallationPolicy(row.plugin.plugin_id, policy);
+      toast.success(
+        t("installationSaved", {
+          name: row.plugin.plugin_name,
+          policy: policyCopy.label(policy),
+        })
+      );
+    } catch (saveError) {
+      toast.error(
+        saveError instanceof Error
+          ? saveError.message
+          : t("installationSaveFailed")
+      );
+    }
+    await mutate();
+  }
 
   const columns: TableColumn<AdminPluginEntry>[] = [
     {
@@ -64,13 +106,33 @@ export default function AdminPluginsPage() {
       id: "installation",
       title: t("columns.installation"),
       width: { weight: 16 },
-      cell: (row) => (
-        <Text font="main-ui-body" color="text-03" maxLines={1}>
-          {t("installation", {
-            policy: row.plugin.installation_policy ?? "none",
-          })}
-        </Text>
-      ),
+      cell: (row) => {
+        const policy = row.plugin.installation_policy;
+        // Only an Organization library plugin has an install setting.
+        if (row.plugin.scope !== "organization" || policy === null)
+          return (
+            <Text font="main-ui-body" color="text-03" maxLines={1}>
+              {"\u2014"}
+            </Text>
+          );
+        return (
+          <InputSingleSelect
+            placeholder={t("installationSelect", {
+              name: row.plugin.plugin_name,
+            })}
+            value={policy}
+            disabled={!isGlobalHolder}
+            options={policyOptions}
+            onValueChange={(value) => {
+              const next = INSTALLATION_POLICIES.find(
+                (option) => option === value
+              );
+              if (next && next !== policy)
+                void saveInstallationPolicy(row, next);
+            }}
+          />
+        );
+      },
     },
     {
       kind: "display",

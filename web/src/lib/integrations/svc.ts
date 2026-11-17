@@ -2,6 +2,7 @@ import { parseErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   AdminIntegrationDetail,
+  InstallationPolicy,
   IntegrationActionsResponse,
   IntegrationActionsUpdate,
   IntegrationCreate,
@@ -14,7 +15,8 @@ type RequestBody =
   | IntegrationUpdate
   | IntegrationActionsUpdate
   | { fields: Record<string, string> }
-  | { organization: boolean; return_path: string };
+  | { organization: boolean; return_path: string }
+  | { installation_policy: InstallationPolicy };
 
 async function request(
   url: string,
@@ -104,4 +106,13 @@ export async function startOrganizationOAuth(
   });
   const body: { authorization_url: string } = await res.json();
   return body.authorization_url;
+}
+
+export async function setPluginInstallationPolicy(
+  pluginId: string,
+  installationPolicy: InstallationPolicy
+): Promise<void> {
+  await request(SWR_KEYS.adminPluginInstallationPolicy(pluginId), "PUT", {
+    installation_policy: installationPolicy,
+  });
 }

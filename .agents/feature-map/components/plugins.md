@@ -21,7 +21,10 @@ Group or user restriction needs EE.
   then posts the kind's form to `POST /admin/integrations`. Only a global
   action manager sees "For the organization"; everyone else adds "For me".
   Admin > Plugins (`/admin/plugins`) lists the plugins that hold integrations,
-  built from the `plugins` refs of that list. The detail page
+  built from the `plugins` refs of that list
+  (`sections/integrations/AdminPluginsPage.tsx`). Each Organization library
+  plugin has an install setting select, which a global action manager changes
+  through `PUT /admin/plugins/{id}/installation-policy`. The detail page
   `/admin/integrations/[id]` has Overview, Configuration (sign-in settings and
   the organization connection) and Actions ("Default for new actions", then
   Read-only and Write actions, each Allow, Ask or Blocked).

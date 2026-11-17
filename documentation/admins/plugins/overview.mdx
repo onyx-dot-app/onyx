@@ -104,6 +104,26 @@ for example a missing organization connection or OAuth client.
 Deleting an integration removes it from each plugin that holds it, and deletes its connections and action settings.
 To keep an integration but stop all use of it, turn off **Enabled** on its **Overview** tab instead.
 
+## The Plugins page
+
+**Admin Panel → Plugins** lists each plugin that holds integrations, with its library, its install setting,
+and its integrations. Each **Organization library** plugin has an install setting:
+
+| Install setting | Effect |
+| --- | --- |
+| **Required** | On for each user. Users cannot turn it off. |
+| **Installed by default** | On for each user. Each user can turn it off. |
+| **Available to install** | Off for each user. Each user can turn it on in **Plugins**. |
+| **Not available** | Hidden from users. |
+
+Only users with the organization-wide **Manage Actions** permission can change the install setting.
+The default agent uses only the plugins that a user has on.
+A custom agent uses each plugin that it holds and that the user can see.
+
+A plugin in a **My uploads** has no install setting. Its owner shares it with people and groups,
+or publishes it to the **Organization library**. To publish a plugin that holds an integration,
+a user needs the organization-wide **Manage Actions** permission.
+
 ## Integration settings
 
 Click an integration to open its detail page.

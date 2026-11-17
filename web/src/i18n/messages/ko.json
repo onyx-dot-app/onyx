@@ -10929,7 +10929,9 @@
         "organization": "조직 라이브러리",
         "personal": "{owner}의 내 업로드"
       },
-      "installation": "{policy, select, REQUIRED {필수} DEFAULT {기본적으로 켜짐} AVAILABLE {사용 가능} NOT_AVAILABLE {사용할 수 없음} other {없음}}",
+      "installationSelect": "{name}의 설치 설정",
+      "installationSaved": "{name}이(가) 이제 {policy}입니다.",
+      "installationSaveFailed": "설치 설정을 저장할 수 없습니다.",
       "openIntegration": "{name} 열기",
       "empty": {
         "title": "연동이 포함된 플러그인이 없습니다",

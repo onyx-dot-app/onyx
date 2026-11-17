@@ -10929,7 +10929,9 @@
         "organization": "组织库",
         "personal": "{owner} 的“我的上传”"
       },
-      "installation": "{policy, select, REQUIRED {必需} DEFAULT {默认开启} AVAILABLE {可用} NOT_AVAILABLE {不可用} other {无}}",
+      "installationSelect": "{name} 的安装设置",
+      "installationSaved": "{name} 现在为 {policy}。",
+      "installationSaveFailed": "无法保存安装设置。",
       "openIntegration": "打开 {name}",
       "empty": {
         "title": "没有包含集成的插件",

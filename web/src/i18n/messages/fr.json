@@ -10929,7 +10929,9 @@
         "organization": "Bibliothèque de l’organisation",
         "personal": "Mes importations de {owner}"
       },
-      "installation": "{policy, select, REQUIRED {Obligatoire} DEFAULT {Activée par défaut} AVAILABLE {Disponible} NOT_AVAILABLE {Non disponible} other {Aucun}}",
+      "installationSelect": "Paramètre d'installation de {name}",
+      "installationSaved": "{name} est maintenant {policy}.",
+      "installationSaveFailed": "Impossible d'enregistrer le paramètre d'installation.",
       "openIntegration": "Ouvrir {name}",
       "empty": {
         "title": "Aucune extension avec des intégrations",

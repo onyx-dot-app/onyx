@@ -10929,7 +10929,9 @@
         "organization": "مكتبة المؤسسة",
         "personal": "«مرفوعاتي» لـ {owner}"
       },
-      "installation": "{policy, select, REQUIRED {مطلوبة} DEFAULT {مفعّلة افتراضيًا} AVAILABLE {متاحة} NOT_AVAILABLE {غير متاحة} other {لا شيء}}",
+      "installationSelect": "إعداد التثبيت لـ {name}",
+      "installationSaved": "أصبح {name} الآن {policy}.",
+      "installationSaveFailed": "تعذّر حفظ إعداد التثبيت.",
       "openIntegration": "فتح {name}",
       "empty": {
         "title": "لا توجد إضافات تحتوي على تكاملات",
