@@ -46,8 +46,12 @@ ALLOWED_LOCATIONS = {
     "backend/onyx/redis/": "the Redis package",
     # The CacheBackend interface and its Redis implementation.
     "backend/onyx/cache/": "the CacheBackend implementations",
-    # Reads the Celery broker queues. The broker is not cache state.
-    "backend/onyx/background/celery/celery_redis.py": "Celery broker access",
+    # Celery workers need Redis as their broker, so they never run with the
+    # PostgreSQL cache. CacheBackend covers the Redis use outside Celery.
+    "backend/onyx/background/celery/": "Celery workers and broker access",
+    "backend/ee/onyx/background/celery/": "Celery workers",
+    # Indexing jobs run only inside the Celery docfetching worker.
+    "backend/onyx/background/indexing/": "indexing jobs in Celery workers",
 }
 
 # Names in `onyx.redis` that hand out a Redis client or a Redis-only lock.

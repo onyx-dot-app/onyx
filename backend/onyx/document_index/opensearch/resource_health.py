@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from typing import Any
 
+from onyx.cache.factory import get_shared_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.constants import (
@@ -14,8 +16,6 @@ from onyx.document_index.opensearch.models import (
     ResourceSnapshot,
     VectorResourceStats,
 )
-from onyx.redis.redis_pool import get_shared_redis_client
-from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.fleet_telemetry import emit_telemetry
 from onyx.utils.logger import setup_logger
 
@@ -96,7 +96,7 @@ def evaluate_resource_health(
 def get_resource_health() -> ResourceHealth:
     if DISABLE_VECTOR_DB:
         return ResourceHealth()
-    raw: bytes | str | None = get_shared_redis_client().get(RESOURCE_SNAPSHOT_KEY)
+    raw: bytes | None = get_shared_cache_backend().get(RESOURCE_SNAPSHOT_KEY)
     if raw is None:
         return ResourceHealth()
     snapshot: ResourceSnapshot = ResourceSnapshot.model_validate_json(raw)
@@ -146,13 +146,13 @@ def refresh_resource_health() -> None:
     cluster: dict[str, Any] | None = None
     snapshot: ResourceSnapshot | None = None
     try:
-        redis: TenantRedisClient = get_shared_redis_client()
+        cache: CacheBackend = get_shared_cache_backend()
         # Retain the lease on failure too, so duplicate tasks cannot hammer an unhealthy cluster.
-        if not redis.set(
-            RESOURCE_CHECK_LEASE_KEY, "1", nx=True, ex=RESOURCE_CHECK_INTERVAL_SECONDS
+        if not cache.set_if_absent(
+            RESOURCE_CHECK_LEASE_KEY, "1", ex=RESOURCE_CHECK_INTERVAL_SECONDS
         ):
             return
-        raw: bytes | str | None = redis.get(RESOURCE_SNAPSHOT_KEY)
+        raw: bytes | None = cache.get(RESOURCE_SNAPSHOT_KEY)
         previous: ResourceSnapshot | None = (
             ResourceSnapshot.model_validate_json(raw) if raw else None
         )
@@ -170,7 +170,7 @@ def refresh_resource_health() -> None:
             nodes, vectors, previous, datetime.now(timezone.utc)
         )
         # Keep the last observation on failure; the API marks old observations stale.
-        redis.set(RESOURCE_SNAPSHOT_KEY, snapshot.model_dump_json())
+        cache.set(RESOURCE_SNAPSHOT_KEY, snapshot.model_dump_json())
     except Exception:
         logger.exception("Unable to refresh OpenSearch resource health")
     _report_to_fleet(cluster, snapshot)

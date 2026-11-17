@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     DISABLE_VECTOR_DB,
     DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP,
@@ -67,7 +68,6 @@ from onyx.document_index.opensearch.port_copy import (
     find_documents_with_no_chunks,
 )
 from onyx.key_value_store.factory import get_kv_store
-from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -270,9 +270,9 @@ def _ported_documents_present_in_new_index(
     if PORT_SWAP_VERIFY_DOCS_PER_UNIT == 0:
         return True
 
-    redis_client = get_redis_client()
+    cache = get_cache_backend()
     backoff_key = _verification_backoff_key(new_search_settings.id)
-    if redis_client.exists(backoff_key):
+    if cache.exists(backoff_key):
         return False
 
     connector_document_ids = sample_ported_document_ids(
@@ -286,9 +286,9 @@ def _ported_documents_present_in_new_index(
         return True
 
     def hold_and_back_off() -> bool:
-        # Redis rejects ex=0, and a delay of 0 means retry on the next tick anyway.
+        # The cache rejects ex=0, and a delay of 0 means retry on the next tick anyway.
         if PORT_SWAP_VERIFY_RETRY_DELAY_S > 0:
-            redis_client.set(backoff_key, "1", ex=PORT_SWAP_VERIFY_RETRY_DELAY_S)
+            cache.set(backoff_key, "1", ex=PORT_SWAP_VERIFY_RETRY_DELAY_S)
         return False
 
     try:

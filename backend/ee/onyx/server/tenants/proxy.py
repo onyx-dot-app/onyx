@@ -24,17 +24,16 @@ from typing import Literal
 import httpx
 from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, ValidationError
-from redis.exceptions import RedisError
 
 from ee.onyx.server.billing.models import SeatUpdateRequest, SeatUpdateResponse
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.utils.license import is_license_valid, verify_license_signature
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 BILLING_INFO_CACHE_KEY = "proxy:billing-information:v1"
@@ -52,8 +51,8 @@ def _drop_billing_snapshot(tenant_id: str) -> None:
     proxy never sees, so callers that know the subscription moved must say so.
     """
     try:
-        get_redis_client(tenant_id=tenant_id).delete(BILLING_INFO_CACHE_KEY)
-    except RedisError as exc:
+        get_cache_backend(tenant_id=tenant_id).delete(BILLING_INFO_CACHE_KEY)
+    except CACHE_TRANSIENT_ERRORS as exc:
         logger.warning(
             "Billing info cache invalidation failed for tenant %s: %s",
             tenant_id,
@@ -369,7 +368,7 @@ async def proxy_billing_information(
     Auth: Valid signature required, expired OK. A lapsed instance still needs
     subscription state to know whether a renewal already happened.
 
-    Caches the response in Redis per tenant for BILLING_INFO_CACHE_TTL_SEC.
+    Caches the response per tenant for BILLING_INFO_CACHE_TTL_SEC.
     The frontend polls this endpoint on a tight loop, but Stripe-backed
     billing state doesn't change second-to-second, so a short shared cache
     eliminates almost all control-plane round trips.
@@ -380,12 +379,12 @@ async def proxy_billing_information(
         raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "License missing tenant_id")
 
     tenant_id = license_payload.tenant_id
-    redis_client: TenantRedisClient | None = None
+    cache: CacheBackend | None = None
     cached: bytes | None = None
     try:
-        redis_client = get_redis_client(tenant_id=tenant_id)
-        cached = redis_client.get(BILLING_INFO_CACHE_KEY)
-    except RedisError as exc:
+        cache = get_cache_backend(tenant_id=tenant_id)
+        cached = cache.get(BILLING_INFO_CACHE_KEY)
+    except CACHE_TRANSIENT_ERRORS as exc:
         logger.warning(
             "Billing info cache read failed for tenant %s: %s",
             tenant_id,
@@ -410,14 +409,14 @@ async def proxy_billing_information(
     if "tenant_id" not in result:
         result["tenant_id"] = tenant_id
     billing_info = BillingInformationResponse(**result)
-    if redis_client is not None:
+    if cache is not None:
         try:
-            redis_client.setex(
+            cache.set(
                 BILLING_INFO_CACHE_KEY,
-                BILLING_INFO_CACHE_TTL_SEC,
                 billing_info.model_dump_json(),
+                ex=BILLING_INFO_CACHE_TTL_SEC,
             )
-        except RedisError as exc:
+        except CACHE_TRANSIENT_ERRORS as exc:
             logger.warning(
                 "Billing info cache write failed for tenant %s: %s",
                 tenant_id,

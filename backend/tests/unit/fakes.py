@@ -80,6 +80,13 @@ class FakeCache(CacheBackend):
         self.set(key, value, ex=ex)
         return True
 
+    def incr(self, key: str, ex: int | None = None) -> int:
+        count = int(self.store.get(key, b"0")) + 1
+        self.store[key] = str(count).encode()
+        if ex is not None:
+            self.expiries[key] = ex
+        return count
+
     def delete(self, key: str) -> None:
         self.store.pop(key, None)
         self.expiries.pop(key, None)
@@ -107,6 +114,16 @@ class FakeCache(CacheBackend):
     def set_remove(self, key: str, member: str | bytes) -> None:
         value = member if isinstance(member, bytes) else member.encode()
         self.sets.get(key, set()).discard(value)
+
+    def set_contains(self, key: str, member: str | bytes) -> bool:
+        value = member if isinstance(member, bytes) else member.encode()
+        return value in self.sets.get(key, set())
+
+    def set_replace(self, key: str, members: Collection[str | bytes]) -> None:
+        self.sets[key] = {
+            member if isinstance(member, bytes) else member.encode()
+            for member in members
+        }
 
     def set_members(self, key: str, *, limit: int) -> list[bytes]:
         if limit < 1:

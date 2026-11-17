@@ -22,12 +22,12 @@ Two deliberate choices:
 import threading
 import time
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     ONYX_DB_SHARD_MAP_TTL_SECONDS,
     ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS,
 )
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
-from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -58,8 +58,9 @@ class _VersionPoller:
         Raises on a Redis failure rather than returning a sentinel, so callers can't
         confuse "unreachable" with "never bumped".
         """
-        client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
-        raw = client.get(SHARD_MAP_VERSION_KEY)
+        raw = get_cache_backend(tenant_id=ONYX_CLOUD_TENANT_ID).get(
+            SHARD_MAP_VERSION_KEY
+        )
         if raw is None:
             # Never bumped. A stable sentinel keeps this from looking like a change
             # on every poll.
@@ -155,8 +156,9 @@ def bump_shard_map_version() -> int:
     *before* unfreezing the tenant. Raises if Redis is unreachable — a flip whose
     invalidation cannot be published is not safe to proceed from.
     """
-    client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
-    version = int(client.incr(SHARD_MAP_VERSION_KEY))
+    version = get_cache_backend(tenant_id=ONYX_CLOUD_TENANT_ID).incr(
+        SHARD_MAP_VERSION_KEY
+    )
     logger.info("Bumped shard map version to %s", version)
     return version
 

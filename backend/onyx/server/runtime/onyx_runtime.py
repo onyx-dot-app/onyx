@@ -22,7 +22,6 @@ from onyx.configs.constants import (
     ONYX_EMAILABLE_LOGO_MAX_DIM,
 )
 from onyx.file_store.file_store import get_default_file_store
-from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.utils.file import FileWithMimeType, OnyxStaticFileManager
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -115,7 +114,7 @@ class OnyxRuntime:
 
         beat_multiplier: float = CLOUD_BEAT_MULTIPLIER_DEFAULT
 
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        r = OnyxRuntime._runtime_settings_cache()
 
         beat_multiplier_bytes = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:beat_multiplier")
         if beat_multiplier_bytes is not None:
@@ -135,7 +134,7 @@ class OnyxRuntime:
 
         value: float = CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT
 
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        r = OnyxRuntime._runtime_settings_cache()
 
         value_bytes = r.get(
             f"{ONYX_CLOUD_REDIS_RUNTIME}:doc_permission_sync_multiplier"
@@ -156,9 +155,23 @@ class OnyxRuntime:
         """Read `runtime:{feature}:{axis}` from Redis and interpret it as a
         bool. Returns `default` if the key is absent or unparseable. `axis` is
         either `enabled` (shadow mode) or `enforce`."""
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        r = OnyxRuntime._runtime_settings_cache()
         raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:{feature}:{axis}")
         return OnyxRuntime._parse_bool_flag(raw, default)
+
+    @staticmethod
+    def _runtime_settings_cache() -> CacheBackend:
+        """The cache that holds runtime settings, read from the replica. The
+        Postgres backend has no cloud schema in a single-tenant install, so it
+        uses the current tenant's cache."""
+        return get_cache_backend(
+            tenant_id=(
+                None
+                if CACHE_BACKEND == CacheBackendType.POSTGRES
+                else ONYX_CLOUD_TENANT_ID
+            ),
+            replica=True,
+        )
 
     @staticmethod
     def _request_path_flag_cache(
@@ -273,7 +286,7 @@ class OnyxRuntime:
         has time to refresh memberships before they expire."""
         default = TENANT_WORK_GATING_TTL_SECONDS
 
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        r = OnyxRuntime._runtime_settings_cache()
         raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:ttl_seconds")
         if raw is None:
             return default
@@ -294,7 +307,7 @@ class OnyxRuntime:
         self-heal cadence."""
         default = TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS
 
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        r = OnyxRuntime._runtime_settings_cache()
         raw = r.get(
             f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:full_fanout_interval_seconds"
         )
@@ -315,7 +328,7 @@ class OnyxRuntime:
 
         interval: int = CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT
 
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+        r = OnyxRuntime._runtime_settings_cache()
 
         interval_bytes = r.get(
             f"{ONYX_CLOUD_REDIS_RUNTIME}:build_fence_lookup_table_interval"

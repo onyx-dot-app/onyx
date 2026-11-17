@@ -349,7 +349,7 @@ def _setup(
     app = MagicMock()
     app.name = "Google Calendar"
 
-    monkeypatch.setattr(tr, "redis_shared_lock", _noop_cm)
+    monkeypatch.setattr(tr, "cache_shared_lock", _noop_cm)
     monkeypatch.setattr(tr, "get_session_with_tenant", _noop_cm)
     monkeypatch.setattr(tr, "get_external_app_by_id", lambda *_a, **_k: app)
     monkeypatch.setattr(tr, "get_provider_for_app", lambda *_a, **_k: provider)
@@ -458,7 +458,7 @@ def test_ensure_fresh_redis_unavailable_keeps_existing_token(
     def _boom(*_a: Any, **_k: Any) -> Any:
         raise RedisConnectionError("Error connecting to Redis.")
 
-    monkeypatch.setattr(tr, "redis_shared_lock", _boom)
+    monkeypatch.setattr(tr, "cache_shared_lock", _boom)
     _run()  # must not raise
     spies["refresh"].assert_not_called()
     spies["upsert"].assert_not_called()

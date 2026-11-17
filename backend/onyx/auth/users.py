@@ -57,6 +57,8 @@ from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
 from pydantic import BaseModel
+
+# no-direct-redis: allow session store for AUTH_BACKEND=redis
 from redis.exceptions import WatchError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -163,6 +165,7 @@ from onyx.oauth_provider.auth import (
     extract_oauth_provider_bearer,
 )
 from onyx.redis.redis_pool import (
+    # no-direct-redis: allow session store for AUTH_BACKEND=redis
     get_async_redis_connection,
     retrieve_auth_token_data,
     retrieve_ws_token_data,
@@ -1819,6 +1822,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         self.key_prefix = key_prefix
 
     async def write_token(self, user: User) -> str:
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
 
         # The token names the workspace every later request runs against, so it
@@ -1844,6 +1848,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         # Per-user set of session tokens, so revoke_user_sessions needs no scan.
         # It lives as long as the user's newest session; members whose token
         # key has expired are pruned here.
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         index_key = f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user_id}"
         members = list(
@@ -1871,6 +1876,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         Sessions written before the index existed are not covered until they
         are refreshed.
         """
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         index_key = f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user_id}"
         members = await cast(Awaitable[set[bytes | str]], redis.smembers(index_key))
@@ -1895,6 +1901,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         if token is None:
             return None
 
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         raw_value = await redis.get(f"{self.key_prefix}{token}")
         if raw_value is None and not may_be_session_token(token):
@@ -1919,6 +1926,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         Overwrites the token with a tombstone so other tabs' rejections classify
         as a sign-out rather than an anomalous drop.
         """
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         token_key = f"{self.key_prefix}{token}"
         previous_raw_value = await redis.get(token_key)
@@ -1940,6 +1948,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
             # If no token provided, create a new one
             return await self.write_token(user)
 
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         token_key = f"{self.key_prefix}{token}"
 

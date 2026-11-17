@@ -37,7 +37,7 @@ from onyx.server.federated import api as federated_api
     ],
 )
 def test_connector_redirect_stays_on_site(redirect: str) -> None:
-    with patch.object(connector_api, "get_redis_client") as redis:
+    with patch.object(connector_api, "get_cache_backend") as redis:
         with pytest.raises(OnyxError) as error:
             connector_api.prepare_authorization_request(
                 DocumentSource.SLACK,
@@ -93,7 +93,7 @@ def test_connector_callback_checks_owner(
         email="owner@example.com", redirect_on_success="/admin", user_id=owner
     )
     with (
-        patch.object(module, "get_redis_client") as redis,
+        patch.object(module, "get_cache_backend") as redis,
         patch.object(provider, "CLIENT_ID", "test-client"),
         patch.object(provider, "CLIENT_SECRET", "test-secret"),
         patch.object(

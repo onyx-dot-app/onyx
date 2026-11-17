@@ -1,4 +1,3 @@
-import math
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -71,9 +70,7 @@ def _checkpoint_failed_runtime(
             check_ownership()
             if not session_lock.owned():
                 raise CacheLockLostError("Sandbox checkpoint session lock lost")
-            session_lock.extend(
-                math.ceil(SESSION_FLOW_LOCK_LEASE_SECONDS), replace_ttl=True
-            )
+            session_lock.extend(SESSION_FLOW_LOCK_LEASE_SECONDS)
 
         check_checkpoint_ownership()
         if manager.supports_opencode_history_persistence:

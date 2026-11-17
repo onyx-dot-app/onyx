@@ -115,6 +115,8 @@ def _trigger_user_file_project_sync(
         get_user_file_project_sync_queue_depth,
     )
     from onyx.background.celery.versioned_apps.client import app as client_app
+
+    # no-direct-redis: allow client for a Celery task helper
     from onyx.redis.redis_pool import get_redis_client
 
     queue_depth = get_user_file_project_sync_queue_depth(client_app)
@@ -127,6 +129,7 @@ def _trigger_user_file_project_sync(
         )
         return
 
+    # no-direct-redis: allow client for a Celery task helper
     redis_client = get_redis_client(tenant_id=tenant_id)
     enqueued = enqueue_user_file_project_sync_task(
         celery_app=client_app,

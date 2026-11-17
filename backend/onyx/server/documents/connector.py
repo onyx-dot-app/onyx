@@ -162,6 +162,8 @@ from onyx.file_store.file_store import (
     FileStore,
     get_default_file_store,
 )
+
+# no-direct-redis: allow client for a Celery task helper
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.capability_check_runs import (
@@ -924,6 +926,7 @@ def update_connector_files(
 
         # If files were removed, trigger pruning immediately
         if file_ids_list:
+            # no-direct-redis: allow client for a Celery task helper
             r = get_redis_client()
             payload_id = try_creating_prune_generator_task(
                 client_app, cc_pair, db_session, r, tenant_id

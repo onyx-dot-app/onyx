@@ -2,9 +2,10 @@ import uuid
 from types import TracebackType
 from typing import Any
 
-from redis.lock import Lock as RedisLock
 from sqlalchemy import select
 
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credential_families import (
     to_source_credential_json,
@@ -13,7 +14,6 @@ from onyx.connectors.credential_families import (
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import Credential
-from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.credential_audit import emit_credential_access
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -35,12 +35,12 @@ class OnyxDBCredentialsProvider(
         self._source = source
         self._credential_id = credential_id
 
-        self.redis_client = get_redis_client(tenant_id=tenant_id)
-
         # Keyed by credential only: connectors of different sources can share a
         # family credential, and their renewals must not overlap either.
         self.lock_key = f"da_lock:credential_{credential_id}"
-        self._lock: RedisLock = self.redis_client.lock(self.lock_key, self.LOCK_TTL)
+        self._lock: CacheLock = get_cache_backend(tenant_id=tenant_id).lock(
+            self.lock_key, timeout=self.LOCK_TTL
+        )
 
     def __enter__(self) -> "OnyxDBCredentialsProvider":
         acquired = self._lock.acquire(blocking_timeout=self.LOCK_TTL)

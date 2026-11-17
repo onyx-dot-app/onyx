@@ -45,7 +45,6 @@ from onyx.db.models import (
     SearchSettings,
 )
 from onyx.redis.redis_docprocessing import RedisDocprocessing
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -489,7 +488,7 @@ def mark_attempt_succeeded(
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
-            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+            RedisDocprocessing(index_attempt_id).cleanup()
         except Exception:
             logger.debug(
                 "Failed to clean up docprocessing counters for attempt %s",
@@ -521,7 +520,7 @@ def mark_attempt_partially_succeeded(
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
-            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+            RedisDocprocessing(index_attempt_id).cleanup()
         except Exception:
             logger.debug(
                 "Failed to clean up docprocessing counters for attempt %s",
@@ -563,7 +562,7 @@ def mark_attempt_canceled(
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
-            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+            RedisDocprocessing(index_attempt_id).cleanup()
         except Exception:
             logger.debug(
                 "Failed to clean up docprocessing counters for attempt %s",
@@ -607,7 +606,7 @@ def mark_attempt_failed(
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
-            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+            RedisDocprocessing(index_attempt_id).cleanup()
         except Exception:
             logger.debug(
                 "Failed to clean up docprocessing counters for attempt %s",
@@ -651,7 +650,7 @@ def mark_attempt_interrupted(
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
-            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+            RedisDocprocessing(index_attempt_id).cleanup()
         except Exception:
             logger.debug(
                 "Failed to clean up docprocessing counters for attempt %s",

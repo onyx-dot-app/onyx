@@ -334,7 +334,7 @@ def test_malformed_address_is_rejected(client: TestClient) -> None:
 
 @patch("onyx.server.sso_discovery.MULTI_TENANT", True)
 @patch(
-    "onyx.server.sso_discovery.get_async_redis_connection",
+    "onyx.server.sso_discovery.get_shared_cache_backend",
     side_effect=ConnectionError("redis is down"),
 )
 def test_lookup_refuses_when_the_limiter_is_unavailable(

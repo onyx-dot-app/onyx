@@ -29,7 +29,6 @@ from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.constants import NotificationType, OnyxCeleryPriority, OnyxCeleryTask
 from onyx.db.notification import dismiss_notifications_with_other_value
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.models import ApplicationStatus
 from onyx.utils.logger import setup_logger
 
@@ -67,17 +66,16 @@ _LICENSE_CLAIM_COOLDOWN_SEC = 10
 def claim_cooldown_is_active() -> bool:
     """Claim the cooldown slot. True when another claim already holds it.
 
-    Checking is claiming: the SET NX starts the cooldown, so callers must not
+    Checking is claiming: the set-if-absent starts the cooldown, so callers must not
     call this speculatively. Never raises.
 
-    Fails open: a Redis outage should not stop an admin from recovering a
+    Fails open: a cache outage should not stop an admin from recovering a
     lapsed instance, and the cost of an extra proxy call is one request.
     """
     try:
-        return not get_redis_client().set(
+        return not get_cache_backend().set_if_absent(
             _LICENSE_CLAIM_COOLDOWN_KEY,
             "1",
-            nx=True,
             ex=_LICENSE_CLAIM_COOLDOWN_SEC,
         )
     except Exception as e:
@@ -93,7 +91,7 @@ def clear_claim_cooldown() -> None:
     is part of that write rather than a user retrying. Never raises.
     """
     try:
-        get_redis_client().delete(_LICENSE_CLAIM_COOLDOWN_KEY)
+        get_cache_backend().delete(_LICENSE_CLAIM_COOLDOWN_KEY)
     except Exception as e:
         logger.debug("License claim cooldown unavailable: %s", e)
 
@@ -499,7 +497,7 @@ def resume_license_reclaim() -> None:
     except Exception as e:
         logger.warning("Failed to clear license reclaim block: %s", e)
     try:
-        get_redis_client().delete(_LICENSE_RECLAIM_DEBOUNCE_KEY)
+        get_cache_backend().delete(_LICENSE_RECLAIM_DEBOUNCE_KEY)
     except Exception as e:
         logger.warning("Failed to clear license reclaim debounce: %s", e)
 
@@ -540,13 +538,12 @@ def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None
         else _LICENSE_RECLAIM_DEBOUNCE_TTL_SEC
     )
     try:
-        redis_client = get_redis_client()
-        # SET NX doubles as the debounce and a cross-process lock: only the
-        # first request in the window enqueues.
-        if not redis_client.set(
+        cache = get_cache_backend()
+        # Set-if-absent doubles as the debounce and a cross-process lock: only
+        # the first request in the window enqueues.
+        if not cache.set_if_absent(
             _LICENSE_RECLAIM_DEBOUNCE_KEY,
             "1",
-            nx=True,
             ex=debounce_ttl,
         ):
             return
@@ -561,7 +558,7 @@ def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None
         except Exception:
             # The claim above is what stops other requests from enqueueing.
             # Holding it after a failed send would idle out the whole window.
-            redis_client.delete(_LICENSE_RECLAIM_DEBOUNCE_KEY)
+            cache.delete(_LICENSE_RECLAIM_DEBOUNCE_KEY)
             raise
         logger.info("Scheduled license reclaim (license expires %s)", expires_at.date())
     except Exception as e:

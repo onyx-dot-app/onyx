@@ -21,12 +21,12 @@ import json
 from typing import Any
 
 from pydantic import ValidationError
-from redis.exceptions import RedisError
 
 from ee.onyx.server.tenants.billing import fetch_billing_information
 from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
+from onyx.cache.factory import get_shared_cache_backend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.configs.app_configs import BILLING_CACHE_TTL_SECONDS
-from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -94,12 +94,12 @@ def cached_fetch_billing_information(
             "cached_fetch_billing_information is cloud-only; gate callers on MULTI_TENANT"
         )
 
-    redis = get_shared_redis_client()
+    cache = get_shared_cache_backend()
     key = _cache_key(tenant_id)
 
     try:
-        raw = redis.get(key)
-    except RedisError as e:
+        raw = cache.get(key)
+    except CACHE_TRANSIENT_ERRORS as e:
         logger.warning(
             "billing cache read failed for tenant %s, falling through to CP: %s",
             tenant_id,
@@ -107,7 +107,7 @@ def cached_fetch_billing_information(
         )
         return fetch_billing_information(tenant_id)
 
-    if raw and isinstance(raw, (bytes, str)):
+    if raw:
         try:
             return _deserialize(raw)
         except (json.JSONDecodeError, ValueError, ValidationError) as e:
@@ -125,8 +125,8 @@ def cached_fetch_billing_information(
     info = fetch_billing_information(tenant_id)
 
     try:
-        redis.setex(key, BILLING_CACHE_TTL_SECONDS, _serialize(info))
-    except RedisError as e:
+        cache.set(key, _serialize(info), ex=BILLING_CACHE_TTL_SECONDS)
+    except CACHE_TRANSIENT_ERRORS as e:
         logger.warning("billing cache write failed for tenant %s: %s", tenant_id, e)
 
     return info
@@ -158,9 +158,9 @@ def invalidate_billing_cache(tenant_id: str) -> bool:
         return True
 
     try:
-        get_shared_redis_client().delete(_cache_key(tenant_id))
+        get_shared_cache_backend().delete(_cache_key(tenant_id))
         return True
-    except RedisError as e:
+    except CACHE_TRANSIENT_ERRORS as e:
         logger.warning(
             "billing cache invalidate failed for tenant %s: %s", tenant_id, e
         )
