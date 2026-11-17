@@ -270,7 +270,10 @@ the stored token on each request, so a new token takes effect at once.
   Health sends `x-sandboxd-key`.
 - `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
   free memory (a node at its `max_vms` cap is skipped),
-  `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. When every node refuses,
+  `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. New `VmRequest`s default to
+  32 GiB of scratch; placement keeps larger template disks. Sparse growth
+  preserves the small shared template. Existing VMs keep their size until recreated.
+  When every node refuses,
   placement deletes the attempt's daemon key, unless it skipped the pinned
   node (no template there) without a Create. Wake is an
   idempotent ensure: it reads the durable placement record and asks that
