@@ -7,6 +7,7 @@ import {
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
 import { IntegrationConnectPrompt } from "@tests/e2e/pages/IntegrationConnectPrompt";
 import { MemberPluginDetailPage } from "@tests/e2e/pages/MemberPluginDetailPage";
@@ -67,6 +68,7 @@ test.describe("MCP OAuth flows", () => {
   let integrationId: number | null = null;
   let pluginId = "";
   let agentId: number | null = null;
+  let agentName = "";
   const createdIntegrationIds: number[] = [];
   const curators: { email: string; password: string; groupId: number }[] = [];
   let chatUser: { email: string; password: string } | null = null;
@@ -176,11 +178,10 @@ test.describe("MCP OAuth flows", () => {
     await adminClient.setIntegrationActionPolicies(integrationId, {
       [TOOL_NAME]: "allow",
     });
-    agentId = await adminClient.createAgentWithPlugins(
-      `PW OAuth Agent ${Date.now()}`,
-      [pluginId],
-      { isPublic: true }
-    );
+    agentName = `PW OAuth Agent ${Date.now()}`;
+    agentId = await adminClient.createAgentWithPlugins(agentName, [pluginId], {
+      isPublic: true,
+    });
   });
 
   test("A member connects from a plugin page and uses the tool", async ({
@@ -204,7 +205,7 @@ test.describe("MCP OAuth flows", () => {
     }
     await detail.expectStatus("Connected");
 
-    await page.goto(`/app?agentId=${agentId}`);
+    await new ChatPage(page).gotoAgent(agentId!, agentName);
     await expectMcpToolInvoked(
       page,
       qualifiedMcpToolName(integrationId!, serverName, TOOL_NAME)
