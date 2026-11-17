@@ -361,10 +361,10 @@ repos:
         name: OnyxError, not HTTPException
         description: "Fail when a backend file gains an HTTPException or a fastapi/starlette status constant"
         language: system
-        entry: python3 backend/scripts/check_no_http_exception.py
+        entry: python3 backend/lint/check_no_http_exception.py
         pass_filenames: false
         stages: [pre-commit]
-        files: ^backend/((onyx|ee)/.*\.py|scripts/(check_no_http_exception\.py|no_http_exception_baseline\.txt))$
+        files: ^backend/((onyx|ee)/.*\.py|lint/(check_no_http_exception\.py|no_http_exception_baseline\.txt))$
       # Runs on every commit so a rename or deletion of a file the map cites
       # fails in the same PR.
       - id: feature-map-integrity

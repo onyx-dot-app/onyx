@@ -17,8 +17,8 @@ The check reads names through the imports of the file. It does not follow an
 alias such as `E = HTTPException`, a star import or a re-export.
 
 Usage, from the repo root:
-    python3 backend/scripts/check_no_http_exception.py
-    python3 backend/scripts/check_no_http_exception.py --write-baseline
+    python3 backend/lint/check_no_http_exception.py
+    python3 backend/lint/check_no_http_exception.py --write-baseline
 """
 
 import argparse
@@ -49,10 +49,10 @@ _TEXT_GATE = re.compile(r"HTTPException|\b(?:HTTP|WS)_\d")
 _SIMPLE_STATEMENTS = (ast.Assign, ast.AnnAssign, ast.Expr, ast.Raise, ast.Return)
 _BASELINE_HEADER = """\
 # Per-file counts of HTTPException and fastapi/starlette status-constant uses that
-# predate the check in backend/scripts/check_no_http_exception.py. Do not add
+# predate the check in backend/lint/check_no_http_exception.py. Do not add
 # entries or raise a count: raise OnyxError instead (backend/AGENTS.md, "Error
 # Handling"). After you remove violations, regenerate with:
-#   python3 backend/scripts/check_no_http_exception.py --write-baseline
+#   python3 backend/lint/check_no_http_exception.py --write-baseline
 """
 _FIX = (
     "Raise `OnyxError(OnyxErrorCode.X, detail)` from `onyx.error_handling.exceptions`. "

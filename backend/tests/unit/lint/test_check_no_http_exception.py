@@ -5,7 +5,7 @@ the allow marker only with a reason, and ratchets each file against the baseline
 from pathlib import Path
 
 import pytest
-from scripts import check_no_http_exception
+from lint import check_no_http_exception
 
 _CLEAN = "backend/onyx/server/clean.py"
 _LEGACY = "backend/onyx/server/legacy.py"

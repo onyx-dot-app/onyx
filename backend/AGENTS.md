@@ -252,8 +252,8 @@ raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied
 Available error codes are defined in `backend/onyx/error_handling/error_codes.py`. If a new error
 category is needed, add it there first — do not invent ad-hoc codes.
 
-`scripts/check_no_http_exception.py` enforces this on commit for `backend/onyx` and `backend/ee`.
-Violations that predate the check are counted per file in `scripts/no_http_exception_baseline.txt`,
+`lint/check_no_http_exception.py` enforces this on commit for `backend/onyx` and `backend/ee`.
+Violations that predate the check are counted per file in `lint/no_http_exception_baseline.txt`,
 and a file fails when its count rises. A deliberate exception carries
 `# http-exception: allow <reason>` on or directly above the line.
 
