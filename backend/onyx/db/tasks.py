@@ -51,6 +51,32 @@ def fail_started_task(db_session: Session, task_id: str) -> None:
     db_session.commit()
 
 
+def fail_pending_task(db_session: Session, task_id: str) -> None:
+    """For a job whose task was never sent. A worker that claimed it keeps it."""
+    db_session.rollback()
+    db_session.execute(
+        update(TaskQueueState)
+        .where(
+            TaskQueueState.task_id == task_id,
+            TaskQueueState.status == TaskStatus.PENDING,
+        )
+        .values(status=TaskStatus.FAILURE, start_time=func.now())
+    )
+    db_session.commit()
+
+
+def is_task_started(db_session: Session, task_id: str) -> bool:
+    return (
+        db_session.scalar(
+            select(TaskQueueState.id).where(
+                TaskQueueState.task_id == task_id,
+                TaskQueueState.status == TaskStatus.STARTED,
+            )
+        )
+        is not None
+    )
+
+
 def cleanup_stale_tasks(
     db_session: Session,
     task_name_prefix: str,
@@ -76,8 +102,9 @@ def cleanup_stale_tasks(
             ),
         )
     )
-    db_session.execute(
-        update(TaskQueueState)
+    # A worker holds its row lock while it publishes, so skip locked rows.
+    stale_ids = db_session.scalars(
+        select(TaskQueueState.id)
         .where(
             matching,
             or_(
@@ -95,8 +122,14 @@ def cleanup_stale_tasks(
                 ),
             ),
         )
-        .values(status=TaskStatus.FAILURE, start_time=func.now())
-    )
+        .with_for_update(skip_locked=True)
+    ).all()
+    if stale_ids:
+        db_session.execute(
+            update(TaskQueueState)
+            .where(TaskQueueState.id.in_(stale_ids))
+            .values(status=TaskStatus.FAILURE, start_time=func.now())
+        )
     db_session.commit()
 
 

@@ -161,8 +161,11 @@ messages queued before an upgrade.
 conditional update. The hourly cleanup fails pending rows after one hour plus
 five minutes, and started rows after `JOB_TIMEOUT` plus five minutes. It keeps
 failures for 24 hours from the failure transition. Claiming resets the start
-time, so an old queued job that just started is safe. File publication locks
-the started row, so a late worker cannot publish after cleanup fails the job.
+time, so an old queued job that just started is safe. The worker uploads the
+file without a row lock, then locks the started row to publish. A late worker
+whose job cleanup failed deletes its file. Cleanup skips rows that a worker
+locks. The start route fails its new row when the send fails, as on Lite
+without workers.
 Celery time limits do not stop these thread workers.
 
 **Other periodic flows.** Each owner documents its flow; this list says where

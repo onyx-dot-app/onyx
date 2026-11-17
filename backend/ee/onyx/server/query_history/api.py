@@ -43,15 +43,18 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, TaskStatus
 from onyx.db.file_record import get_query_history_export_files
 from onyx.db.models import ChatSession, User
-from onyx.db.tasks import get_task_with_id, register_task
+from onyx.db.tasks import fail_pending_task, get_task_with_id, register_task
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionDetails, ChatSessionsResponse
 from onyx.server.settings.store import load_settings
+from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import parallel_yield
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 router = APIRouter()
 
@@ -336,19 +339,27 @@ def start_query_history_export(
         start_time=start_time,
     )
 
-    client_app.send_task(  # celery-expires: allow (user-started job, nothing sends it again)
-        OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK,
-        expires=USER_EXPORT_TASK_EXPIRES,
-        task_id=task_id,
-        priority=OnyxCeleryPriority.MEDIUM,
-        queue=OnyxCeleryQueues.CSV_GENERATION,
-        kwargs={
-            "start": start,
-            "end": end,
-            "start_time": start_time,
-            "tenant_id": get_current_tenant_id(),
-        },
-    )
+    try:
+        client_app.send_task(
+            OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK,
+            expires=USER_EXPORT_TASK_EXPIRES,
+            task_id=task_id,
+            priority=OnyxCeleryPriority.MEDIUM,
+            queue=OnyxCeleryQueues.CSV_GENERATION,
+            kwargs={
+                "start": start,
+                "end": end,
+                "start_time": start_time,
+                "tenant_id": get_current_tenant_id(),
+            },
+        )
+    except Exception:
+        logger.exception("Failed to send query history export task_id=%r", task_id)
+        fail_pending_task(db_session, task_id)
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Failed to start the query history export.",
+        )
 
     return {"request_id": task_id}
 
