@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.docprocessing import tasks as docprocessing_tasks
 from onyx.background.celery.tasks.docprocessing.tasks import _docprocessing_task
 from onyx.background.indexing import run_docconversion
 from onyx.background.indexing.run_docconversion import (
@@ -309,6 +310,25 @@ def test_a_batch_with_no_documents_counts_as_complete(run: _Run) -> None:
 
     assert run.attempt().completed_batches == 1
     assert run.docs.get_batch(0) is None
+
+
+def test_an_empty_batch_whose_delete_fails_counts_once(
+    run: _Run, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With persistent indexing, the failure handler counts a batch whose
+    processing raised. A delete error after the count would count the empty
+    batch twice."""
+    monkeypatch.setattr(docprocessing_tasks, "PERSISTENT_INDEXING", True)
+    run.store_stub_batch(0, ["nothing"])
+    run.dispatch()
+    run.convert(0)
+
+    with patch.object(
+        type(run.docs), "delete_batch_by_num", side_effect=OSError("store down")
+    ):
+        _process(run, 0)
+
+    assert run.attempt().completed_batches == 1
 
 
 def test_a_retry_with_no_documents_drops_the_dead_run_batch(run: _Run) -> None:
