@@ -294,6 +294,8 @@ class IndexAttemptProgress(BaseModel):
     docs_listed: int
     docs_skipped: int
     docs_indexed: int
+    # Open failures of the attempt that name a document. Failures that name
+    # no document, and closed ones, do not count.
     docs_failed: int
     # Batches of listed documents. `batches_total` is set when listing is done.
     batches_listed: int
@@ -306,7 +308,7 @@ class IndexAttemptProgress(BaseModel):
 
     @classmethod
     def from_index_attempt(
-        cls, index_attempt: IndexAttempt, error_count: int
+        cls, index_attempt: IndexAttempt, open_doc_error_count: int
     ) -> "IndexAttemptProgress | None":
         if not index_attempt.uses_conversion_stage:
             return None
@@ -318,7 +320,7 @@ class IndexAttemptProgress(BaseModel):
             docs_listed=index_attempt.stubs_listed,
             docs_skipped=index_attempt.stubs_skipped,
             docs_indexed=index_attempt.total_docs_indexed or 0,
-            docs_failed=error_count,
+            docs_failed=open_doc_error_count,
             batches_listed=index_attempt.stub_batches_stored,
             batches_converted=converted,
             batches_indexed=indexed,
@@ -416,7 +418,7 @@ class IndexAttemptSnapshot(BaseModel):
             ),
             is_backfill=index_attempt.is_backfill,
             progress=IndexAttemptProgress.from_index_attempt(
-                index_attempt, error_count
+                index_attempt, open_doc_error_count
             ),
         )
 
