@@ -103,8 +103,15 @@ at a shortcut back up its path (`shortcut_path`). A folder in a shared drive
 that an organizer lists in full is walked too: the walk follows the folder
 shortcuts, and `_admit` drops the files that the drive listing covers. If no
 usable user can walk it, the drive listing is its only cover
-(`folders_covered_by_drive`), and a failure of that listing makes the folder
-unreachable.
+(`folders_covered_by_drive`). When that listing fails, the folder is planned
+again: a new full listing of the drive covers it again, and with no cover the
+folder is unreachable.
+
+A listing drops a shortcut target that another started listing covers. When
+that listing fails, the started listings list the failed owner's or drive's
+files again: shared-with-user listings and folder walks with an owner or drive
+filter. My Drive listings, and for a failed drive also shared drive
+listings, list their shortcuts again (`shortcuts_only`).
 
 OAuth uses the same partition kinds with the OAuth user as the only principal:
 its member shared drives (from its own `drives.list`), its own files, and the
@@ -130,7 +137,9 @@ parents of its files the same way.
 
 A checkpoint with no listing state starts the listing again from the window
 start. A checkpoint of the serial crawl that came before (`phase_progress`,
-`completion_map`) parses with those keys ignored, so it does the same.
+`completion_map`) parses with those keys ignored, so it does the same. That
+restart also clears `seen_hierarchy_node_raw_ids`: the serial crawl could send
+a folder with no parent, so each folder node is sent again.
 
 **Document id.** The id comes from the file's web view link
 (`connectors/google_drive/doc_conversion.py:onyx_document_id_from_drive_file`).
