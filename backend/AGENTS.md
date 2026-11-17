@@ -80,6 +80,7 @@ adds an import across one of these boundaries. The contracts are in `import_boun
   import into a function to hide it.
 - A deliberate import needs a `[[contract.exception]]` entry with a reason.
 - Run all contracts with `python3 backend/scripts/check_import_boundaries.py`.
+- A tree without Enterprise code, such as the FOSS mirror, skips the paths under `ee/`.
 
 ## Background Workers (Celery)
 

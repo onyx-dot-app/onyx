@@ -13,6 +13,10 @@ and directories that ship outside the backend image are covered.
 Usage, from the repo root:
     python3 backend/scripts/check_import_boundaries.py            # whole tree
     python3 backend/scripts/check_import_boundaries.py backend/onyx/db/user.py ...
+    python3 backend/scripts/check_import_boundaries.py --changed [file ...]
+
+`--changed` is for the hook: it validates the contracts and checks only the
+given files, so a commit that changes no backend Python stays fast.
 
 Standard library only: the hook runs without the backend virtualenv.
 """
@@ -99,15 +103,38 @@ def _matches_path(path: str, prefix: str) -> bool:
     return path.startswith(prefix) if prefix.endswith("/") else path == prefix
 
 
+def _defined_names(module_file: Path) -> set[str]:
+    """Names that the top level of a module binds."""
+    names: set[str] = set()
+    for node in ast.parse(module_file.read_text(encoding="utf-8")).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            names.update(a.asname or a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.Assign):
+            names.update(t.id for t in node.targets if isinstance(t, ast.Name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return names
+
+
+def _edition_absent(backend_dir: Path, name: str) -> bool:
+    """True for an Enterprise path or module in a tree that has no Enterprise
+    code. The FOSS mirror removes backend/ee and keeps only its __init__.py."""
+    under_ee = name == "ee" or name.startswith(("ee.", "ee/"))
+    return under_ee and not (backend_dir / "ee" / "onyx").is_dir()
+
+
 def _module_exists(backend_dir: Path, module: str) -> bool:
-    """True for a package, a module, or a name defined in a module."""
+    """True for a package, a module, or a name that a module defines."""
     parts = module.split(".")
-    for candidate in (parts, parts[:-1]):
-        if not candidate:
-            continue
-        base = backend_dir.joinpath(*candidate)
-        if base.is_dir() or base.with_suffix(".py").is_file():
-            return True
+    base = backend_dir.joinpath(*parts)
+    if base.is_dir() or base.with_suffix(".py").is_file():
+        return True
+    parent = backend_dir.joinpath(*parts[:-1])
+    for parent_file in (parent.with_suffix(".py"), parent / "__init__.py"):
+        if len(parts) > 1 and parent_file.is_file():
+            return parts[-1] in _defined_names(parent_file)
     return False
 
 
@@ -151,7 +178,9 @@ def _parse_exceptions(
             imports=_string(entry, "imports", f"{where} exception"),
             reason=_string(entry, "reason", f"{where} exception"),
         )
-        if not (backend_dir / exception.importer).is_file():
+        if not (backend_dir / exception.importer).is_file() and not _edition_absent(
+            backend_dir, exception.importer
+        ):
             raise ConfigError(
                 f"{where}: exception importer `{exception.importer}` does not exist"
             )
@@ -185,6 +214,8 @@ def _parse_contract(table: Mapping[str, object], backend_dir: Path) -> Contract:
     # A path or module that no longer exists would switch the contract off
     # without a failure, so a rename must update the contract.
     if kind == _INDEPENDENCE:
+        if _edition_absent(backend_dir, contract.container + "/"):
+            return contract
         if not (backend_dir / contract.container).is_dir() or not contract.container:
             raise ConfigError(f"{where}: container `{contract.container}` not found")
         for sibling in contract.shared:
@@ -195,11 +226,15 @@ def _parse_contract(table: Mapping[str, object], backend_dir: Path) -> Contract:
     if not contract.source or not contract.forbidden:
         raise ConfigError(f"{where}: `source` and `forbidden` must not be empty")
     for prefix in contract.source + contract.source_exclude:
+        if _edition_absent(backend_dir, prefix):
+            continue
         if not (backend_dir / prefix).exists():
             raise ConfigError(f"{where}: path `{prefix}` does not exist")
         if (backend_dir / prefix).is_dir() != prefix.endswith("/"):
             raise ConfigError(f"{where}: end a directory with `/`: `{prefix}`")
     for module in contract.forbidden + contract.allowed:
+        if _edition_absent(backend_dir, module):
+            continue
         if not _module_exists(backend_dir, module):
             raise ConfigError(f"{where}: module `{module}` does not exist")
     return contract
@@ -328,6 +363,8 @@ def _all_files(contracts: list[Contract], backend_dir: Path) -> list[str]:
     files: set[str] = set()
     for root in roots:
         base = backend_dir / root
+        if not base.exists():
+            continue
         if base.is_file():
             files.add(root)
             continue
@@ -370,7 +407,9 @@ def main(arguments: list[str]) -> int:
         print(f"backend/{CONFIG_PATH.name}: {error}")
         return 2
 
-    files = _requested_files(arguments, BACKEND_DIR) if arguments else None
+    changed_only = "--changed" in arguments
+    paths = [argument for argument in arguments if argument != "--changed"]
+    files = _requested_files(paths, BACKEND_DIR) if paths or changed_only else None
     if files is None:
         files = _all_files(contracts, BACKEND_DIR)
 

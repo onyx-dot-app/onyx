@@ -72,6 +72,8 @@ reason = "sandbox_daemon ships alone in the sandbox image as the top-level packa
 instead = "Keep the code inside sandbox_daemon/. Where the API server needs the same value, define it on both sides and name the twin in a comment."
 source = ["onyx/server/features/build/sandbox/image/"]
 forbidden = ["onyx", "ee", "shared_configs", "model_server", "scripts", "tests"]
+# A relative import inside the daemon resolves to this path in the repo.
+allowed = ["onyx.server.features.build.sandbox.image"]
 
 [[contract]]
 name = "builtin-skills-are-standalone"

@@ -170,6 +170,9 @@ def test_independence(
         ('reason = "Community code runs without ee."', 'reason = ""'),
         ('instead = "Use fetch_versioned_implementation."', ""),
         ('allowed = ["ee.onyx.allowed"]', 'alowed = ["ee.onyx.allowed"]'),
+        # A missing module under a package that exists.
+        ('forbidden = ["ee"]', 'forbidden = ["ee.onyx.renamed"]'),
+        ('allowed = ["ee.onyx.allowed"]', 'allowed = ["ee.onyx.tier.missing"]'),
     ],
 )
 def test_contract_that_names_nothing_is_rejected(
@@ -177,6 +180,51 @@ def test_contract_that_names_nothing_is_rejected(
 ) -> None:
     with pytest.raises(ConfigError):
         _backend(tmp_path, _FORBIDDEN_CONTRACT.replace(old, new))
+
+
+def test_name_defined_in_a_module_is_accepted(tmp_path: Path) -> None:
+    config = _FORBIDDEN_CONTRACT.replace(
+        'allowed = ["ee.onyx.allowed"]', 'allowed = ["ee.onyx.tier.get_tier"]'
+    )
+    (tmp_path / "ee/onyx").mkdir(parents=True)
+    (tmp_path / "ee/onyx/tier.py").write_text("def get_tier() -> None: ...\n")
+    modules, _ = _flagged(
+        tmp_path, config, "onyx/chat/tier.py", "from ee.onyx.tier import get_tier"
+    )
+    assert modules == []
+
+
+def test_enterprise_names_are_optional_in_a_community_tree(tmp_path: Path) -> None:
+    """The FOSS mirror keeps only backend/ee/__init__.py."""
+    (tmp_path / "onyx/chat").mkdir(parents=True)
+    (tmp_path / "onyx/chat/tier.py").touch()
+    (tmp_path / "ee").mkdir()
+    (tmp_path / "ee/__init__.py").touch()
+    config = _FORBIDDEN_CONTRACT.replace(
+        'source = ["onyx/"]',
+        'source = ["onyx/", "ee/"]\nsource_exclude = ["ee/onyx/main.py"]',
+    ) + _EXCEPTION.replace("onyx/chat/tier.py", "ee/onyx/tier.py")
+    config_path = tmp_path / "import_boundaries.toml"
+    config_path.write_text(config)
+
+    contracts = check_import_boundaries.load_contracts(config_path, tmp_path)
+    violations, _ = check_import_boundaries.check_file(
+        "onyx/chat/tier.py", "import ee.onyx.tier", contracts, tmp_path
+    )
+    assert [violation.module for violation in violations] == ["ee.onyx.tier"]
+
+
+def test_relative_import_inside_a_standalone_package_passes(tmp_path: Path) -> None:
+    config = _FORBIDDEN_CONTRACT.replace(
+        'source = ["onyx/"]', 'source = ["onyx/connectors/jira/"]'
+    ).replace(
+        'forbidden = ["ee"]\nallowed = ["ee.onyx.allowed"]',
+        'forbidden = ["onyx", "ee"]\nallowed = ["onyx.connectors.jira"]',
+    )
+    path = "onyx/connectors/jira/connector.py"
+    assert _flagged(tmp_path, config, path, "from .utils import x") == ([], [])
+    modules, _ = _flagged(tmp_path, config, path, "from ..slack import connector")
+    assert modules == ["onyx.connectors.slack.connector"]
 
 
 def test_exception_needs_a_reason(tmp_path: Path) -> None:
@@ -205,3 +253,7 @@ def test_failure_message_names_contract_import_and_destination(
 
 def test_repo_contracts_hold() -> None:
     assert check_import_boundaries.main([]) == 0
+
+
+def test_changed_mode_checks_only_the_given_files() -> None:
+    assert check_import_boundaries.main(["--changed"]) == 0

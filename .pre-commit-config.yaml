@@ -401,8 +401,10 @@ repos:
         name: backend import boundaries
         description: "Fail on an import that crosses a boundary in backend/import_boundaries.toml"
         language: system
-        entry: python3 backend/scripts/check_import_boundaries.py
+        entry: python3 backend/scripts/check_import_boundaries.py --changed
         pass_filenames: true
+        # Deleted files must also trigger the contract validation.
+        always_run: true
         stages: [pre-commit]
         files: ^backend/(.*\.py|import_boundaries\.toml)$
       # Runs on every commit so a rename or deletion of a file the map cites
