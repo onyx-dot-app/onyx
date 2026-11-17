@@ -170,7 +170,7 @@ then the chat default.
    `skills/push.py:push_skills_for_users` so the skill file lists DENY actions as
    unavailable (`skills/rendering.py:build_action_availability_section`).
    The PATCH and the delete push to the users who can see a plugin that holds
-   the app's integration (`db/app_skill.py:plugin_ids_holding_external_app`),
+   the app's integration,
    because only they get its built-in skill ([[skills#built-in-app-skill-rule]]).
    Built-in create and app delete push before commit, so a push failure rolls
    the write back. Custom create pushes nothing. The MCP routes only restamp
@@ -184,11 +184,12 @@ then the chat default.
    behaviour for every app that kept the default, with no migration and no
    row change.
 7. `app-type-immutable` **`app_type` cannot change on update.** The PATCH
-   request has no `app_type` field, and `db/external_app.py:update_external_app`
-   raises on a mismatch, because the type decides the skill and provider.
+   request has no `app_type` field, and
+   `backend/onyx/integrations/service.py:update_integration__no_commit` refuses
+   a preset change, because the type decides the skill and provider.
    Delete and recreate instead.
 8. `managed-builtins-locked-multi-tenant` **Onyx-managed built-ins are locked
-   only when `MULTI_TENANT`.** `backend/onyx/server/features/build/external_apps/api.py:_to_admin_response` blanks
+   only when `MULTI_TENANT`.** The old admin response blanked
    credentials, auth template and URL patterns. The create and delete routes
    refuse them. The PATCH route silently ignores those three fields and
    applies the rest (`enabled`, name, policies and the user-management
@@ -285,8 +286,7 @@ then the chat default.
   and `backend/tests/unit/onyx/server/features/craft/`.
 - External-app admin and the Cloud lockdown:
   `backend/tests/external_dependency_unit/craft/`.
-- Policy storage: `backend/tests/external_dependency_unit/permissions/` and
-  `backend/tests/integration/tests/external_apps/`.
+- Policy storage: `backend/tests/external_dependency_unit/integrations/`.
 - Default model: `backend/tests/external_dependency_unit/llm/`.
 - By hand: save organization instructions, start a new session, and confirm
   the section in the session's `AGENTS.md`.

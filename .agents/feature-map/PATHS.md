@@ -155,7 +155,7 @@ covers new files that match it.
 | `backend/onyx/server/auth/mobile.py`, `backend/onyx/auth/mobile_sso/` | mobile-app, auth-and-identity |
 | `backend/ee/onyx/server/scim/`, `backend/ee/onyx/db/saml.py`, `backend/ee/onyx/db/scim.py`, `backend/ee/onyx/db/tenant_sso_domain.py`, `backend/ee/onyx/background/celery/tasks/sso_domain_revalidation/` | auth-and-identity |
 | `backend/onyx/db/users.py`, `backend/onyx/db/auth.py`, `backend/onyx/db/api_key.py`, `backend/onyx/db/pat.py`, `backend/onyx/db/saml.py`, `backend/onyx/db/sso_provider.py`, `backend/onyx/server/api_key/`, `backend/onyx/server/pat/`, `backend/onyx/server/manage/users.py` | auth-and-identity |
-| `backend/onyx/oauth/`, `backend/onyx/db/oauth_config.py`, `backend/onyx/server/features/oauth_config/`, `backend/onyx/server/features/user_oauth_token/` | auth-and-identity |
+| `backend/onyx/oauth/` | auth-and-identity |
 | `backend/onyx/oauth_provider/`, `backend/onyx/db/oauth_provider.py`, `backend/onyx/server/oauth_provider/` | auth-and-identity |
 | `backend/onyx/server/security/`, `backend/onyx/db/security_settings.py`, `backend/onyx/server/features/password/` | auth-and-identity |
 | `backend/onyx/utils/url.py`, `backend/onyx/utils/playwright_fetch.py` | auth-and-identity |
@@ -234,7 +234,7 @@ covers new files that match it.
 | `backend/onyx/server/features/build/api.py`, `backend/onyx/server/features/build/utils.py` | craft-admin, craft-sessions |
 | `backend/onyx/server/features/build/packets.py`, `backend/onyx/server/features/build/session/streaming.py`, `backend/onyx/server/features/build/interactive_turns/api.py` | craft-streaming, craft-sessions |
 | `backend/onyx/server/features/build/approvals/` | craft-external-apps |
-| `backend/onyx/server/features/build/external_apps/`, `backend/onyx/server/features/build/action_policies.py` | craft-external-apps, craft-admin |
+| `backend/onyx/server/features/build/external_apps/` | craft-external-apps, craft-admin |
 | `backend/onyx/server/features/build/connect_app.py`, `backend/onyx/server/features/build/sandbox/image/opencode-plugins/connect-app.ts` | craft-external-apps |
 | `backend/onyx/server/features/build/db/action_approval.py` | craft-external-apps |
 | `backend/onyx/db/action_policy.py`, `web/src/sections/actions/PolicyEditor.tsx` | craft-external-apps |
@@ -348,7 +348,7 @@ covers new files that match it.
 | `web/src/app/admin/plugins/`, `web/src/app/admin/mcp-actions/`, `web/src/app/admin/openapi-actions/` | plugins |
 | `web/src/sections/plugins/`, `web/src/lib/plugins/`, `web/src/sections/actions/modals/MCPPluginSetupModal.tsx` | plugins |
 | `web/src/sections/plugins/ExternalAppPluginDetail.tsx`, `web/src/sections/plugins/CraftAppEditorTabs.tsx` | craft-admin |
-| `web/src/sections/actions/`, `web/src/lib/mcp/`, `web/src/app/mcp/oauth/`, `web/src/app/api/chat/mcp/oauth/`, `web/src/hooks/useOpenApiTools.ts`, `web/src/lib/hooks/useToolOAuthStatus.ts` | plugins, mcp-and-custom-tools |
+| `web/src/sections/actions/`, `web/src/lib/mcp/`, `web/src/app/mcp/oauth/`, `web/src/hooks/useOpenApiTools.ts`, `web/src/lib/hooks/useToolOAuthStatus.ts` | plugins, mcp-and-custom-tools |
 | `web/src/app/mcp/[[...path]]/` | mcp-server |
 | `web/src/app/admin/bots/`, `web/src/lib/updateSlackBotField.ts` | slack-bot |
 | `web/src/app/admin/discord-bot/` | discord-bot |

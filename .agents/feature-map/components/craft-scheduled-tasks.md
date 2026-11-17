@@ -286,7 +286,6 @@ requests of a run in progress.
 ## Verification
 
 - Dispatch, executor and sweeps: `backend/tests/external_dependency_unit/craft/`.
-- Task choices and enablement: `backend/tests/external_dependency_unit/permissions/`.
 - Task context in the proxy: `backend/tests/unit/sandbox_proxy/`.
 - Schedule compilation: `backend/tests/unit/onyx/server/features/craft/scheduled_tasks/`.
 - The API: `backend/tests/integration/tests/craft/`.

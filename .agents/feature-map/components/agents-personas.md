@@ -155,9 +155,10 @@ read. `seed_pinned_personas_from_featured` runs once, at account creation.
    The `db/models.py:Persona__Tool` docstring states this. Disabled and
    unconfigured tools stay attached, and `tools/tool_constructor.py:construct_tools`
    skips them. Never treat the join row as
-   proof that a tool runs ([[tools-framework]]). The editor rebuilds `tool_ids`
-   from `backend/onyx/db/persona.py:get_tool_ids_on_editable_personas`, so a tool missing from that
-   listing is dropped on the next save.
+   proof that a tool runs ([[tools-framework]]). Only built-in tool ids stay
+   on `Persona__Tool`; an old custom or MCP id in `tool_ids` adds a
+   `persona__plugin` link
+   (`backend/onyx/db/integration_policy.py:legacy_tool_plugin_links`).
 8. `persona-search-info-detached` **`PersonaSearchInfo` must stay a detached
    snapshot.** `db/tools.py:capture_persona_tool_configuration` copies document
    set names, `search_start_date`, document ids and folder ids before the

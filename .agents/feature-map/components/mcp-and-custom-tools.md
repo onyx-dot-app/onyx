@@ -114,28 +114,12 @@ MCP server kind  -> one MCPTool per offered action (mcp__<integration id>__...)
 OpenAPI kind     -> one CustomTool per offered operation (custom__<integration id>__...)
 ```
 
-**Staged MCP setup.** `server/features/mcp/api.py:setup_mcp_server` handles both
-new servers and authentication edits:
-1. `_prepare_mcp_setup` resolves masked fields against stored values and takes
-   a fingerprint of the saved configuration (`_mcp_setup_configuration_fingerprint`).
-2. For OAuth with no reusable grant,
-   `server/features/mcp/setup_oauth.py:start_setup_oauth` returns an
-   authorization URL. The pending request is encrypted and stored in
-   `SETUP_OAUTH_ATTEMPTS` under a state with the `mcp-setup_` prefix. Nothing
-   is written to the database.
-3. `process_oauth_callback` sends a `mcp-setup_` state to `_complete_mcp_setup`,
-   which exchanges the code into `TransientTokenStorage` and discovers tools.
-4. `_publish_mcp_setup` locks the server, the gated app and the default
-   assistant, checks the fingerprint again, and then writes the server,
-   credentials, tools, Craft action policies and Default Chat selection in one
-   transaction.
-
-**Member OAuth for a saved server.** `_connect_oauth` stores an owner-bound
-attempt in `server/features/mcp/oauth_flow.py:MCP_OAUTH_ATTEMPTS` (ten
-minutes). The callback consumes it, checks access and the client fingerprint
-again, and calls `server/features/mcp/oauth.py:complete_mcp_oauth_authorization`.
-The MCP SDK provider refreshes under a shared lock per connection config,
-because providers rotate refresh tokens.
+**MCP setup.** An admin adds an MCP server through
+`POST /admin/integrations` (see "Integrations API (U6)" below). The old staged
+setup and member OAuth routes are gone. The add form still uses
+`POST /admin/mcp/probe` and `POST /admin/mcp/oauth/discover`
+(`server/features/mcp/api.py`). Sign-in uses the one flow in
+`integrations/oauth.py`.
 
 **OAuth client registration.** With `KNOWN_PROVIDER` mode, the admin supplies
 the client ID and endpoints. With `AUTO_DISCOVERY`, the client registers in
@@ -221,10 +205,10 @@ whose template needs values that the user did not save is Not connected. Every s
 `set_oauth_client_credentials__no_commit`) saves the new format and clears the
 tag; a status-only change keeps it. There is no import job.
 
-Chat reads only the integration tables. The sandbox proxy and the old MCP,
-OAuth config and external app routes read and write the old tables
-(`mcp_connection_config`, `oauth_user_token`, `external_app_user_credential`)
-with the old refresh functions.
+Chat reads only the integration tables. The old MCP, OAuth config, user OAuth
+token, Craft external app and tool status routes are removed. The sandbox proxy
+and Craft read and write the old tables (`mcp_connection_config`,
+`external_app_user_credential`) with the old refresh functions.
 
 **Chat on integrations.** `db/tools.py:capture_persona_tool_configuration`
 copies the agent's built-in tools and its `persona__plugin` links (plugin id
@@ -262,6 +246,57 @@ Request MCP headers do not stand in for a missing connection. The kind handler (
 and none for a preset or custom app. Tool names use the integration id
 (`mcp__<id>__<name>__<tool>`, `custom__<id>__<operationId>`), and each tool has
 `id = None`.
+
+**Integrations API (U6).** One API serves every integration; the contract
+is plans/workstream-u-api-contract.md (local only). Routes:
+`server/features/integrations/admin_api.py` (`/admin/integrations`: list,
+presets, create, read, PATCH, DELETE, actions GET/PUT, `actions/refresh`,
+`organization-connection` PUT/DELETE) and `server/features/integrations/api.py`
+(`/integrations`: list, detail, `connection` PUT/DELETE, `agent-catalog`; and
+`/action-policies/integration/{id}` GET/PUT for the user's Always allow). The
+OAuth start and callback stay in
+`backend/onyx/server/features/integrations/connections_api.py`. The logic is in
+`integrations/service.py`; the queries are in `db/integration.py` and
+`db/integration_policy.py`.
+- Create (`create_integration__no_commit`) writes, in one transaction, the
+  `integration` row, its kind row (`mcp_server`, the OpenAPI `tool` row, or
+  `external_app` with the preset or URL patterns), the OAuth client, one plugin
+  that holds it (`db/plugin.py:create_integration_plugin__no_commit`: version 1
+  with no files, Organization library or the creator's "My uploads") and the
+  actions. A public MCP server is asked for its tools at create; a failure
+  leaves no actions until a refresh.
+- A preset keeps its client id, secret and host settings (Zendesk
+  `subdomain`) on `integration_oauth_client`; the host settings are in
+  `additional_params`, which
+  `backend/onyx/integrations/connections.py:preset_host_values` reads.
+  `external_app.organization_credentials` is not written.
+- Who manages: `backend/onyx/integrations/service.py:manages_integration`. Organization-wide
+  manage:actions manages each integration. A scoped holder manages one only
+  when each plugin that holds it is in its own "My uploads". Only
+  organization-wide manage:actions adds for the organization or sets
+  `onyx_login`. `db/plugin.py:publish_or_request_review__no_commit` refuses to
+  publish a plugin that holds an integration unless the actor (or the approver
+  of a review request) has organization-wide manage:actions. Manage-plugins
+  scope gives no right on an integration.
+- PATCH compares `sign_in_settings_for` before and after and calls
+  `mark_sign_in_settings_changed`; `client_secret: null` keeps the secret.
+- MCP actions:
+  `backend/onyx/integrations/kinds/mcp_server.py:fetch_mcp_actions` asks the server with
+  the acting user's credential; the refresh writes the result as
+  `integration_action` rows. `discover_actions` returns the stored rows, so the
+  sync never reads MCP `tool` rows.
+- Agents: `PersonaUpsertRequest.plugins` replaces the `persona__plugin` links
+  (null keeps them). An old custom or MCP id in `tool_ids` adds the plugin of
+  its integration (`db/integration_policy.py:legacy_tool_plugin_links`; MCP
+  links get `default: blocked` and each listed tool `inherit`). Built-in ids
+  stay on `persona__tool`. Agent detail returns `plugins`.
+- The eight public `/tool` and `/admin/tool` routes
+  (`server/features/tool/api.py`) are aliases on `api` integrations with an
+  OpenAPI schema and return the `tool` row id. Plain headers become a shared
+  API key connection; `passthrough_auth` is `onyx_login`; `oauth_config_id` is
+  refused; `default_chat_enabled` is the plugin install setting (DEFAULT).
+- Changes call `backend/onyx/integrations/service.py:reload_craft_sessions` after the commit so running
+  Craft sandboxes pick them up.
 
 **Outbound safety.** `server/features/mcp/ssrf.py:mcp_ssrf_httpx_client_factory`
 checks every request the MCP SDK makes, redirects included, at the admin SSRF
@@ -399,56 +434,43 @@ it.
 3. `token-forwarding-full-manager` **Forwarding a login token is a full-manager
    decision.** `passthrough_auth` and `PT_OAUTH` send each chatting user's Onyx
    token to the admin's URL.
-   `server/features/tool/api.py:_validate_auth_settings` lets only a global
-   `MANAGE_ACTIONS` holder turn it on or change the destinations or headers of
-   such a tool. `server/features/mcp/api.py:_validate_mcp_setup` and
-   `server/features/mcp/api.py:upsert_mcp_server` do the same for `PT_OAUTH`.
-   Keep both opt-in.
+   `backend/onyx/integrations/service.py:create_integration__no_commit` and
+   `update_integration__no_commit` let only a global `MANAGE_ACTIONS` holder
+   set the `onyx_login` method, also through the `/admin/tool/custom` aliases.
+   Keep it opt-in.
 4. `guarded-client-factory` **Every outbound MCP request must use the guarded
    client factory**, `server/features/mcp/ssrf.py:mcp_ssrf_httpx_client_factory`.
    The SDK builds URLs from server responses. A new call that makes its own
    `httpx.AsyncClient` reopens SSRF.
 5. `mcp-schema-from-db` **MCP tool schemas come from the database.**
    `tools/tool_constructor.py:_construct_tools_impl` builds each `MCPTool` from
-   `Tool.mcp_input_schema`. A change on the remote server reaches the model
-   only after `server/features/mcp/api.py:_sync_mcp_server_tools` runs: on
-   setup, and when a manager lists tools from the live server
-   (`_list_mcp_tools_by_id` with `is_admin`, which
-   `admin_list_mcp_tools_by_id` and `get_mcp_server_tools_snapshots` call). The
-   member route `user_list_mcp_tools_by_id` discovers but never writes. OpenAPI
-   tools need no sync. The same sync saves the tool's declared `outputSchema`
-   in `Tool.mcp_output_schema`, and sets it to NULL when the server declares
-   none. It also saves `annotations.readOnlyHint` in `Tool.mcp_read_only` (NULL
-   when absent), which sets the Craft default policy
-   ([[craft-external-apps]]). `server.action_policies` holds only stored
-   overrides, so `MCPServerToolsEditor` reads each tool's default from
-   `ToolSnapshot.default_action_policy` on the tool snapshot route.
-6. `sync-matches-by-name` **Sync matches tools by name.**
-   `server/features/mcp/api.py:_sync_mcp_server_tools` treats a tool that the
-   remote server renames as a new tool: it is deleted and inserted again with
-   a new `Tool.id`.
-   `Persona__Tool` cascades, so every agent loses it, and its enabled flag
-   resets. Deleting a server removes its tools from every agent in the same
-   way.
+   the stored `integration_action` rows. A change on the remote server
+   reaches the model only after a refresh
+   (`POST /admin/integrations/{id}/actions/refresh`, which calls
+   `backend/onyx/integrations/kinds/mcp_server.py:fetch_mcp_actions`) or a
+   create of a public server. OpenAPI tools need no refresh. The refresh saves
+   the declared `outputSchema` and `annotations.readOnlyHint`, which sets the
+   default policy of the action.
+6. `sync-matches-by-name` **Sync matches actions by key.**
+   `db/integration.py:replace_integration_actions__no_commit` treats a tool
+   that the remote server renames as a new action, and the policy rows and
+   agent settings of the old key no longer apply to it.
 7. `mcp-tool-user-id-none` **`Tool.user_id` is `None` for MCP tools.** Ownership
    is on `MCPServer.owner`. Check rights with `db/tools.py:can_manage_tool`,
    never with `tool.user_id == user.id`.
 8. `access-grants-default-chat-only` **Plugin visibility gates chat, not server
    grants.** Chat offers an integration's actions to each user who can use the
    agent and can see a plugin of the agent that holds the integration
-   (`integrations/chat_tools.py`). `backend/onyx/db/mcp.py:user_can_access_mcp_server`
-   still gates attachment in the old routes only.
-9. `destination-change-deletes-credentials` **A changed URL or auth scheme
-   deletes user credentials.** `server/features/mcp/api.py:_upsert_mcp_server`
-   calls `_invalidate_mcp_user_credentials` when the URL, auth scheme or header
-   template changes, and `_prepare_mcp_setup` drops stored secrets for a new
-   URL. A new destination must never receive credentials that were given for
-   the old one.
-10. `setup-fingerprint` **A new server-level setting must join the setup
-    fingerprint.** An OAuth return can arrive minutes after setup starts.
-    `server/features/mcp/api.py:_assert_mcp_setup_current` rejects it only
-    when `_mcp_setup_configuration_fingerprint` changed. A setting left out of the
-    fingerprint is overwritten without a conflict.
+   (`integrations/chat_tools.py`). Old server grants gate nothing in chat.
+9. `destination-change-deletes-credentials` **A changed URL or sign-in
+   setting resets connections.** `integrations/connections.py:sign_in_settings_for`
+   includes the host, and an admin PATCH that changes it sets every connection
+   to Needs reconnect. A new destination must never receive credentials that
+   were given for the old one.
+10. `setup-fingerprint` **A new sign-in setting must join the sign-in
+    fingerprint.** An OAuth return can arrive minutes after the start.
+    `integrations/oauth.py:_configuration_fingerprint` rejects it only when the
+    settings changed. A setting left out is overwritten without a conflict.
 11. `expected-failure-tool-response` **An expected failure returns an error
     `ToolResult`.** `tools/tool_implementations/mcp/mcp_tool.py:MCPTool._run`
     preserves `CallToolResult.isError` as a failed result without marking
@@ -474,11 +496,10 @@ it.
     A key saved during the call stays connected. An OAuth2 connection is left
     to the refresh.
 13. `craft-sessions-bake-mcp-config` **Craft sessions bake MCP config.** A change
-    to a server's URL or access must call
-    `server/features/mcp/api.py:_hot_reload_craft_sessions`. Take
-    `backend/onyx/db/mcp.py:affected_user_ids_for_mcp_server` before an access
-    change or a delete; users who lose access are not in the
-    set afterwards. The reload only restamps `mcp_config_hash`; it does not push
+    to an integration must call
+    `backend/onyx/integrations/service.py:reload_craft_sessions`. Take
+    `craft_users_of_integration` before a delete; users who lose access are not
+    in the set afterwards. The reload only restamps `mcp_config_hash`; it does not push
     skill files.
 
 14. `cancel-in-flight-request` **Chat cancellation stops an active MCP request.**
@@ -776,7 +797,7 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 - A per-tool OAuth token replaces a static `Authorization` header with only a
   log warning (`tools/tool_implementations/custom/custom_tool.py:CustomTool`).
   Save rejects that pair only for `passthrough_auth`
-  (`server/features/tool/api.py:_validate_auth_settings`).
+  (`server/features/tool/api.py:_auth_settings`).
 - On CE, `_apply_mcp_server_access` raises `EE_REQUIRED` for a non-public
   server. The Community downgrade ([[billing]]) makes only group-restricted
   servers public, so a server restricted to named users fails every access
