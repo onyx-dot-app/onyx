@@ -142,31 +142,6 @@ test("shows nothing when every integration is connected", () => {
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
 
-test("Connect starts the sign-in with the chat as the return path", async () => {
-  jest.spyOn(window, "open").mockReturnValue(null);
-  const fetchMock = mockFetch({
-    "POST /api/integrations/1/oauth/start": {
-      authorization_url: "https://linear.app/oauth/authorize?state=s",
-    },
-  });
-  const u = user();
-  render(
-    <IntegrationConnectPrompt
-      agentId={8}
-      toolConfiguration={{ ready: true, isPluginEnabled: () => true }}
-    />
-  );
-  await u.click(
-    screen.getByRole("button", { name: "2 integrations need sign-in" })
-  );
-  await u.click(await screen.findByRole("button", { name: "Connect Linear" }));
-  await waitFor(() =>
-    expect(
-      requestBody(fetchMock, "POST", "/api/integrations/1/oauth/start")
-    ).toEqual({ organization: false, return_path: "/app?chatId=chat-1" })
-  );
-});
-
 test("reads the statuses again when the user opens it, not on each render", async () => {
   const { rerender } = render(
     <IntegrationConnectPrompt

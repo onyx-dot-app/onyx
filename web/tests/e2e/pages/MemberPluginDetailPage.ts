@@ -123,4 +123,27 @@ export class MemberPluginDetailPage {
     expect((await response).ok()).toBeTruthy();
     await expect(this.connectButton(integration)).toBeVisible();
   }
+
+  alwaysAllowSwitch(action: string): Locator {
+    return this.page.getByRole("switch", {
+      name: `Always allow ${action}`,
+      exact: true,
+    });
+  }
+
+  /** Saves the user's Always allow choice of one action on the Integrations tab. */
+  async setAlwaysAllow(action: string, allow: boolean): Promise<void> {
+    const toggle = this.alwaysAllowSwitch(action);
+    await expect(toggle).toBeEnabled();
+    if ((await toggle.getAttribute("aria-checked")) === String(allow)) return;
+    const response = this.page.waitForResponse(
+      (candidate) =>
+        /\/api\/action-policies\/integration\/\d+$/.test(
+          new URL(candidate.url()).pathname
+        ) && candidate.request().method() === "PUT"
+    );
+    await toggle.click();
+    expect((await response).ok()).toBeTruthy();
+    await expect(toggle).toHaveAttribute("aria-checked", String(allow));
+  }
 }

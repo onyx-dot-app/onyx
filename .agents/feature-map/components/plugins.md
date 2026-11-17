@@ -290,4 +290,5 @@ only the configuration of a chat that does not exist yet.
   `backend/tests/external_dependency_unit/integrations/test_plugin_settings_api.py`
   and `backend/tests/integration/tests/integrations/test_integrations_api.py`.
 - Playwright: `web/tests/e2e/mcp/`: the default agent, connecting from a
-  plugin page and from the chat prompt (API key and OAuth), and plugin access.
+  plugin page and from the chat prompt (API key and OAuth), plugin access, and
+  Always allow (`web/tests/e2e/mcp/mcp_tool_approval.spec.ts`).
