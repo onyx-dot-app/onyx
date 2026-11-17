@@ -198,7 +198,8 @@ def resolve_chat_action_policy(
     """The current policy of one action for the agent of a chat, before the
     chat grants. The approval check uses it to see that an action is not
     Blocked now. It reads the plugins that chat tool construction reads, so
-    a plugin the user cannot use does not change the result."""
+    a plugin the user cannot use does not change the result, and an action
+    that no such plugin holds is Blocked."""
     persona_id = get_chat_session_persona_id(db_session, chat_session_id)
     link_settings: list[ActionSettings | None] = []
     if persona_id is not None:
@@ -218,6 +219,9 @@ def resolve_chat_action_policy(
             )
             if held.id == integration.id
         ]
+    if not link_settings:
+        # Chat tool construction offers no tool for it.
+        return EffectivePolicy.BLOCKED
     return resolve_action_policies(
         db_session,
         integration=integration,

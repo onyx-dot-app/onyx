@@ -27,6 +27,7 @@ from onyx.db.models import (
     Integration,
     IntegrationAction,
     Persona,
+    Persona__Plugin,
     User,
     UserPluginPreference,
 )
@@ -455,6 +456,44 @@ def test_the_approval_recheck_ignores_plugins_the_user_cannot_use(
         )
 
         link_persona(db_session, persona.id, turned_off.id, blocked)
+        assert _recheck(db_session, integration, user, persona.id) is (
+            EffectivePolicy.BLOCKED
+        )
+    finally:
+        db_session.rollback()
+        db_session.query(Persona).filter(Persona.id == persona.id).delete()
+        db_session.commit()
+
+
+def test_the_approval_recheck_blocks_when_no_plugin_holds_the_integration(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    integrations: list[int],
+    make_test_user: MakeTestUser,
+) -> None:
+    user = make_test_user("policy_recheck_unheld")
+    integration, _ = make_mcp_integration(
+        db_session,
+        server_url="https://mcp.example.test/mcp",
+        name=f"unheld-{uuid4().hex[:8]}",
+        tools=("update",),
+    )
+    integrations.append(integration.id)
+    plugin = hold_in_plugin(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    persona = create_test_persona(db_session, user)
+    try:
+        link_persona(db_session, persona.id, plugin.id)
+        assert _recheck(db_session, integration, user, persona.id) is (
+            EffectivePolicy.ASK
+        )
+
+        # The plugin is removed from the agent while an approval waits.
+        db_session.query(Persona__Plugin).filter(
+            Persona__Plugin.persona_id == persona.id
+        ).delete()
+        db_session.commit()
         assert _recheck(db_session, integration, user, persona.id) is (
             EffectivePolicy.BLOCKED
         )

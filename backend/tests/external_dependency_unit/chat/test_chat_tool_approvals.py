@@ -46,7 +46,7 @@ from onyx.chat.run_store import (
     fail_suspended_response,
 )
 from onyx.chat.tool_questions import CANCELLED_QUESTION_MESSAGE
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import delete_messages_and_files_from_chat_session
 from onyx.db.chat_inputs import read_chat_inbox
@@ -55,6 +55,7 @@ from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
     IntegrationActionPolicyValue,
+    PluginInstallationPolicy,
     QuestionAnsweredVia,
     QuestionOutcome,
 )
@@ -125,6 +126,7 @@ from tests.external_dependency_unit.chat.test_run_store import (
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
+    hold_in_plugin,
     make_mcp_integration,
     set_policy,
 )
@@ -238,7 +240,16 @@ def chat(
         name=f"approvals_{uuid4().hex[:8]}",
         tools=[ACTION],
     )
-    chat_session = ChatSession(id=uuid4(), user_id=user.id, description="approvals")
+    # The default agent uses each plugin the user runs.
+    hold_in_plugin(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    chat_session = ChatSession(
+        id=uuid4(),
+        user_id=user.id,
+        persona_id=DEFAULT_PERSONA_ID,
+        description="approvals",
+    )
     db_session.add(chat_session)
     db_session.flush()
     question = ChatMessage(
