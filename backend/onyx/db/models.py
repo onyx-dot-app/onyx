@@ -2760,7 +2760,7 @@ class IndexAttempt(Base):
     total_batches: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # batches that are fully indexed (i.e. have completed docfetching and docprocessing)
     completed_batches: Mapped[int] = mapped_column(Integer, default=0)
-    # TODO: unused, remove this column
+    # Stub batches whose conversion failed as a whole (conversion stage only).
     total_failures_batch_level: Mapped[int] = mapped_column(Integer, default=0)
     total_chunks: Mapped[int] = mapped_column(Integer, default=0)
 

@@ -65,8 +65,9 @@ class _Payload(ListingPayload):
 
 
 class _FakeConnector(Resolver):
-    """Converts a target as its payload says: a document, a failure, or
-    nothing. It also yields one folder node for each call."""
+    """Converts a target as its payload says: a document, a failure,
+    nothing, or an error that ends the batch. It also yields one folder node
+    for each call."""
 
     listing_payload_type = _Payload
 
@@ -101,6 +102,8 @@ class _FakeConnector(Resolver):
                 doc = make_doc(target.document_id)
                 doc.parent_hierarchy_raw_node_id = self.folder_id
                 yield doc
+            elif payload.outcome == "raise":
+                raise ConnectionResetError(104, "Connection reset by peer")
             elif payload.outcome == "failure":
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(document_id=target.document_id),
@@ -358,3 +361,42 @@ def test_the_window_bounds_the_batches_in_conversion(
     run.convert(0)
     conversions = run.sends(OnyxCeleryTask.DOCCONVERSION_TASK)
     assert [send["kwargs"]["batch_num"] for send in conversions] == [0, 1, 2]
+
+
+def test_a_batch_that_raises_records_its_documents_as_failures(run: _Run) -> None:
+    """A source error ends one batch's conversion. The documents converted
+    before it go on, the others become failures that name their document, and
+    the attempt goes on."""
+    doc_ids = run.store_stub_batch(0, ["document", "raise", "document"])
+    run.dispatch()
+
+    run.convert(0)
+
+    stored = run.docs.get_batch(0)
+    assert stored is not None
+    assert [doc.id for doc in stored] == [doc_ids[0]]
+    assert run.stubs.get_batch(0, _Payload) is None
+    errors = run.db_session.scalars(
+        select(IndexAttemptError).where(
+            IndexAttemptError.index_attempt_id == run.attempt_id
+        )
+    ).all()
+    assert sorted(error.document_id or "" for error in errors) == sorted(doc_ids[1:])
+    attempt = run.attempt()
+    assert attempt.status == IndexingStatus.IN_PROGRESS
+    assert attempt.stub_batches_converted == 1
+    assert attempt.total_failures_batch_level == 1
+    assert len(run.sends(OnyxCeleryTask.DOCPROCESSING_TASK)) == 1
+
+
+def test_many_failed_batches_fail_the_conversion(run: _Run) -> None:
+    """When the source fails for many batches, the conversion raises, and the
+    task fails the attempt."""
+    for batch_num in range(4):
+        run.store_stub_batch(batch_num, ["raise"])
+    run.dispatch()
+
+    for batch_num in range(3):
+        run.convert(batch_num)
+    with pytest.raises(RuntimeError, match="failed for 4 of 4 stub batches"):
+        run.convert(3)
