@@ -83,20 +83,20 @@ export default function IntegrationDetailPage({
               </Tabs.Trigger>
               <Tabs.Trigger value="actions">{t("tabs.actions")}</Tabs.Trigger>
             </Tabs.List>
-            <Tabs.Content value="overview">
+            <Tabs.Content value="overview" keepMounted>
               <IntegrationOverviewTab
                 integration={data}
                 onChanged={() => void mutate()}
               />
             </Tabs.Content>
-            <Tabs.Content value="configuration">
+            <Tabs.Content value="configuration" keepMounted>
               <IntegrationConfigurationTab
                 key={`${data.id}:${data.auth_mode}:${data.auth_method ?? ""}`}
                 integration={data}
                 onChanged={() => void mutate()}
               />
             </Tabs.Content>
-            <Tabs.Content value="actions">
+            <Tabs.Content value="actions" keepMounted>
               <IntegrationActionsTab
                 integration={data}
                 onOpenConfiguration={() => selectTab("configuration")}

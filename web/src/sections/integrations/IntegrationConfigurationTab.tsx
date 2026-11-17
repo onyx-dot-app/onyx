@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import isEqual from "lodash/isEqual";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -29,9 +30,13 @@ import {
 } from "@/lib/integrations/svc";
 import type {
   AdminIntegrationDetail,
+  AuthMethod,
   IntegrationConfig,
   IntegrationUpdate,
 } from "@/lib/integrations/types";
+import { useIntegrationPresets } from "@/lib/integrations/hooks";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
+import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import { integrationDetailHref } from "@/lib/integrations/utils";
 import IntegrationSignInFields from "@/sections/integrations/IntegrationSignInFields";
 import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs";
@@ -92,8 +97,22 @@ export default function IntegrationConfigurationTab({
     integration.users_can_save_always_allow
   );
   const [fields, setFields] = useState<Record<string, string>>({});
+  const [presetCredentials, setPresetCredentials] = useState<
+    Record<string, string>
+  >({});
   const [showErrors, setShowErrors] = useState(false);
   const [busy, setBusy] = useState(false);
+  const presets = useIntegrationPresets(integration.shape === "preset");
+  const preset = presets.data?.find(
+    (option) => option.id === integration.preset_id
+  );
+  const methods: readonly AuthMethod[] =
+    integration.shape === "preset"
+      ? (preset?.auth_methods.flatMap((method) => (method ? [method] : [])) ??
+        (integration.auth_method ? [integration.auth_method] : []))
+      : SIGN_IN_METHODS[integration.shape];
+  const savedSignIn = signInPayload(signInDraftFromDetail(integration));
+  const signInChanged = !isEqual(signInPayload(signIn), savedSignIn);
 
   function nextConfig(): IntegrationConfig | null | undefined {
     const config = integration.config;
@@ -116,8 +135,28 @@ export default function IntegrationConfigurationTab({
       const spec = parseSpec(specText);
       return spec ? { shape: "openapi", openapi_spec: spec } : null;
     }
-    return undefined;
+    const filled = Object.fromEntries(
+      Object.entries(presetCredentials).flatMap(([key, value]) =>
+        value.trim() ? [[key, value.trim()]] : []
+      )
+    );
+    if (!preset || Object.keys(filled).length === 0) return undefined;
+    if (
+      preset.required_org_credential_fields.some((field) => !filled[field.key])
+    )
+      return null;
+    return {
+      shape: "preset",
+      preset_id: config.preset_id,
+      organization_credentials: filled,
+    };
   }
+
+  const dirty =
+    nextConfig() !== undefined ||
+    signInChanged ||
+    alwaysAllow !== integration.users_can_save_always_allow;
+  const unsavedChanges = useUnsavedChangesGuard({ isDirty: dirty });
 
   async function refresh() {
     await mutate(SWR_KEYS.adminIntegrations);
@@ -133,11 +172,14 @@ export default function IntegrationConfigurationTab({
     setBusy(true);
     try {
       const update: IntegrationUpdate = {
-        ...signInPayload(signIn),
         users_can_save_always_allow: alwaysAllow,
       };
+      // The sign-in fields replace the stored ones, so send them only on a
+      // change.
+      if (signInChanged) Object.assign(update, signInPayload(signIn));
       if (config) update.config = config;
       await updateIntegration(integration.id, update);
+      setPresetCredentials({});
       toast.success(t("saved"));
       await refresh();
     } catch (error) {
@@ -208,6 +250,32 @@ export default function IntegrationConfigurationTab({
           {t("readOnly")}
         </Text>
       )}
+      {integration.config.shape === "preset" &&
+        preset &&
+        preset.required_org_credential_fields.length > 0 && (
+          <Card padding={4}>
+            <Section gap={4} alignItems="stretch" height="auto">
+              <Content
+                font="main-ui-action"
+                title={t("preset.title")}
+                description={t("preset.description")}
+              />
+              <CredentialFieldInputs
+                fields={preset.required_org_credential_fields}
+                values={presetCredentials}
+                onChange={setPresetCredentials}
+                disabled={disabled}
+                error={(field) =>
+                  showErrors &&
+                  nextConfig() === null &&
+                  !presetCredentials[field.key]?.trim()
+                    ? t("preset.credentialRequired")
+                    : undefined
+                }
+              />
+            </Section>
+          </Card>
+        )}
       {integration.config.shape !== "preset" && (
         <Card padding={4}>
           <Section gap={4} alignItems="stretch" height="auto">
@@ -273,8 +341,8 @@ export default function IntegrationConfigurationTab({
           <IntegrationSignInFields
             draft={signIn}
             onChange={setSignIn}
-            methods={SIGN_IN_METHODS[integration.shape]}
-            preset={integration.shape === "preset"}
+            methods={methods}
+            shape={integration.shape}
             showErrors={showErrors}
             disabled={disabled}
           />
@@ -364,6 +432,11 @@ export default function IntegrationConfigurationTab({
           </Section>
         </Card>
       )}
+      <UnsavedChangesModal
+        open={unsavedChanges.confirmationOpen}
+        onCancel={unsavedChanges.cancelLeave}
+        onDiscard={unsavedChanges.discardAndLeave}
+      />
     </Section>
   );
 }

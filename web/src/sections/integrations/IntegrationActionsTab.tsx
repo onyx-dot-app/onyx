@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
+import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import { useTranslations } from "next-intl";
 import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { ContentAction, Section, toast } from "@opal/layouts";
@@ -18,12 +20,38 @@ import {
 import type {
   AdminIntegrationDetail,
   IntegrationAction,
+  IntegrationActionsResponse,
   PolicyValue,
 } from "@/lib/integrations/types";
 
 interface Draft {
   defaultPolicy: PolicyValue | null;
   actions: Record<string, PolicyValue | null>;
+}
+
+function savedDraft(data: IntegrationActionsResponse): Draft {
+  return {
+    defaultPolicy: data.default_policy,
+    actions: Object.fromEntries(
+      data.actions.map((action) => [action.key, action.admin_policy])
+    ),
+  };
+}
+
+function isDirty(
+  draft: Draft | null,
+  data: IntegrationActionsResponse
+): boolean {
+  if (draft === null) return false;
+  const saved = savedDraft(data);
+  return (
+    draft.defaultPolicy !== saved.defaultPolicy ||
+    data.actions.some(
+      (action) =>
+        (draft.actions[action.key] ?? null) !==
+        (saved.actions[action.key] ?? null)
+    )
+  );
 }
 
 interface IntegrationActionsTabProps {
@@ -44,6 +72,8 @@ export default function IntegrationActionsTab({
   const [busy, setBusy] = useState(false);
   const readOnly = !integration.can_manage;
   const isMcp = integration.shape === "mcp_server";
+  const dirty = data ? isDirty(draft, data) : false;
+  const unsavedChanges = useUnsavedChangesGuard({ isDirty: dirty });
 
   if (isLoading) return <IconLoader />;
   if (error || !data)
@@ -56,20 +86,7 @@ export default function IntegrationActionsTab({
       </Section>
     );
 
-  const saved: Draft = {
-    defaultPolicy: data.default_policy,
-    actions: Object.fromEntries(
-      data.actions.map((action) => [action.key, action.admin_policy])
-    ),
-  };
-  const current = draft ?? saved;
-  const dirty =
-    current.defaultPolicy !== saved.defaultPolicy ||
-    data.actions.some(
-      (action) =>
-        (current.actions[action.key] ?? null) !==
-        (saved.actions[action.key] ?? null)
-    );
+  const current = draft ?? savedDraft(data);
 
   function fallback(action: IntegrationAction): PolicyValue {
     return current.defaultPolicy ?? action.default_policy;
@@ -177,6 +194,9 @@ export default function IntegrationActionsTab({
     data.actions.length === 0 &&
     integration.organization_status?.state !== "connected" &&
     integration.auth_mode !== "none";
+  // An individual server lists its tools with the acting admin's own
+  // connection, which the Configuration tab does not hold.
+  const individual = integration.auth_mode === "individual";
 
   return (
     <Section gap={4} alignItems="stretch" height="auto">
@@ -253,11 +273,17 @@ export default function IntegrationActionsTab({
         <MessageCard
           variant="info"
           title={t("connectFirst.title")}
-          description={t("connectFirst.description")}
+          description={
+            individual
+              ? t("connectFirst.individualDescription")
+              : t("connectFirst.description")
+          }
           rightChildren={
-            <Button prominence="secondary" onClick={onOpenConfiguration}>
-              {t("connectFirst.open")}
-            </Button>
+            individual ? undefined : (
+              <Button prominence="secondary" onClick={onOpenConfiguration}>
+                {t("connectFirst.open")}
+              </Button>
+            )
           }
         />
       ) : data.actions.length === 0 ? (
@@ -295,6 +321,11 @@ export default function IntegrationActionsTab({
           )}
         </>
       )}
+      <UnsavedChangesModal
+        open={unsavedChanges.confirmationOpen}
+        onCancel={unsavedChanges.cancelLeave}
+        onDiscard={unsavedChanges.discardAndLeave}
+      />
     </Section>
   );
 }

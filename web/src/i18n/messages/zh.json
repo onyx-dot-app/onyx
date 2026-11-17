@@ -11148,7 +11148,14 @@
           },
           "deleted": "已删除 {name}。",
           "deleteFailed": "无法删除集成。",
-          "saveFailed": "无法保存更改。"
+          "saveFailed": "无法保存更改。",
+          "details": {
+            "name": "名称",
+            "nameRequired": "请为集成命名。",
+            "description": "描述",
+            "save": "保存",
+            "saved": "已保存名称和描述。"
+          }
         },
         "configuration": {
           "readOnly": "您可以查看此集成，但无法更改。",
@@ -11183,6 +11190,11 @@
             "connected": "已连接组织账户。",
             "disconnected": "已断开组织账户。",
             "failed": "无法更改组织连接。"
+          },
+          "preset": {
+            "title": "账户设置",
+            "description": "输入新值以替换已保存的账户设置和 OAuth 客户端。留空则保留现有值。",
+            "credentialRequired": "请填写每个字段以替换账户设置。"
           }
         },
         "actions": {
@@ -11211,7 +11223,8 @@
           "connectFirst": {
             "title": "请先连接服务器",
             "description": "MCP 服务器连接后，Onyx 才会加载其操作。",
-            "open": "打开配置"
+            "open": "打开配置",
+            "individualDescription": "每位用户都需登录此服务器。请在插件页面连接你自己的账户，然后点击刷新。"
           }
         }
       }

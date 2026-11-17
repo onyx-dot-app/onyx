@@ -26,6 +26,8 @@ jest.mock("next/navigation", () => ({
 }));
 
 const URL_DETAIL = "/api/admin/integrations/1";
+const URL_ACTIONS = `${URL_DETAIL}/actions`;
+const NO_ACTIONS = { default_policy: null, actions: [] };
 
 function user() {
   return setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
@@ -38,6 +40,20 @@ function open(tab?: string) {
     tab ? `/admin/integrations/1?tab=${tab}` : "/admin/integrations/1"
   );
   render(<IntegrationDetailPage integrationId={1} />);
+}
+
+function activePanel(): HTMLElement {
+  const panel = document.querySelector<HTMLElement>(
+    '[role="tabpanel"][data-state="active"]'
+  );
+  if (!panel) throw new Error("No active tab panel");
+  return panel;
+}
+
+/** The tabs stay mounted, so query only the open one. */
+async function inPanel() {
+  await waitFor(() => activePanel());
+  return within(activePanel());
 }
 
 afterEach(() => jest.restoreAllMocks());
@@ -78,15 +94,14 @@ test("shows the overview and turns the integration off", async () => {
   });
   const u = user();
   open();
-  expect(await screen.findByText("Manage issues")).toBeInTheDocument();
-  expect(screen.getByText("Each user (OAuth)")).toBeInTheDocument();
-  expect(screen.getByText("admin@example.com")).toBeInTheDocument();
-  expect(
-    screen.getByText("Organization library, available")
-  ).toBeInTheDocument();
+  const view = await inPanel();
+  expect(await view.findByText("Manage issues")).toBeInTheDocument();
+  expect(view.getByText("Each user (OAuth)")).toBeInTheDocument();
+  expect(view.getByText("admin@example.com")).toBeInTheDocument();
+  expect(view.getByText("Organization library, available")).toBeInTheDocument();
 
   await u.click(
-    screen.getByRole("switch", { name: detailCopy.overview.enabled.title })
+    view.getByRole("switch", { name: detailCopy.overview.enabled.title })
   );
   await waitFor(() =>
     expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual({
@@ -103,9 +118,10 @@ test("deletes the integration after a confirmation", async () => {
   });
   const u = user();
   open();
-  await screen.findByText("Manage issues");
+  const view = await inPanel();
+  await view.findByText("Manage issues");
   await u.click(
-    screen.getByRole("button", { name: detailCopy.overview.delete.label })
+    view.getByRole("button", { name: detailCopy.overview.delete.label })
   );
   const dialog = await screen.findByRole("dialog");
   await u.click(
@@ -127,11 +143,12 @@ test("deletes the integration after a confirmation", async () => {
 test("disables the controls when the admin cannot manage it", async () => {
   mockFetch({ [URL_DETAIL]: makeDetail({ can_manage: false }) });
   open();
+  const view = await inPanel();
   expect(
-    await screen.findByText(detailCopy.overview.readOnly)
+    await view.findByText(detailCopy.overview.readOnly)
   ).toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: detailCopy.overview.delete.label })
+    view.getByRole("button", { name: detailCopy.overview.delete.label })
   ).toBeDisabled();
 });
 
@@ -145,24 +162,25 @@ test("saves the sign-in settings", async () => {
   });
   const u = user();
   open("configuration");
-  const scopes = await screen.findByRole("textbox", {
+  const view = await inPanel();
+  const scopes = await view.findByRole("textbox", {
     name: copy.signIn.oauth.scopes.title,
   });
   expect(
-    screen.getByRole("textbox", { name: copy.signIn.oauth.clientId })
+    view.getByRole("textbox", { name: copy.signIn.oauth.clientId })
   ).toHaveValue("client-1");
   expect(
-    screen.getByPlaceholderText(copy.signIn.oauth.clientSecretSaved)
+    view.getByPlaceholderText(copy.signIn.oauth.clientSecretSaved)
   ).toBeInTheDocument();
   await u.clear(scopes);
   await u.type(scopes, "read write");
   await u.click(
-    screen.getByRole("switch", {
+    view.getByRole("switch", {
       name: detailCopy.configuration.alwaysAllow.title,
     })
   );
   await u.click(
-    screen.getByRole("button", { name: detailCopy.configuration.save })
+    view.getByRole("button", { name: detailCopy.configuration.save })
   );
 
   await waitFor(() =>
@@ -194,18 +212,18 @@ test("sends a changed server URL with the configuration", async () => {
   });
   const u = user();
   open("configuration");
-  const url = await screen.findByRole("textbox", {
+  const view = await inPanel();
+  const url = await view.findByRole("textbox", {
     name: detailCopy.configuration.connection.serverUrl,
   });
   await u.clear(url);
   await u.type(url, "https://mcp.linear.app/v2");
   await u.click(
-    screen.getByRole("button", { name: detailCopy.configuration.save })
+    view.getByRole("button", { name: detailCopy.configuration.save })
   );
   await waitFor(() =>
     expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual(
       expect.objectContaining({
-        auth_mode: "none",
         config: {
           shape: "mcp_server",
           server_url: "https://mcp.linear.app/v2",
@@ -232,11 +250,12 @@ test("sends an edited OpenAPI schema and rejects one that is not JSON", async ()
   });
   const u = user();
   open("configuration");
-  const schema = await screen.findByRole("textbox", {
+  const view = await inPanel();
+  const schema = await view.findByRole("textbox", {
     name: detailCopy.configuration.connection.schema,
   });
   expect(schema).toHaveValue(JSON.stringify(spec, null, 2));
-  const save = screen.getByRole("button", {
+  const save = view.getByRole("button", {
     name: detailCopy.configuration.save,
   });
 
@@ -244,7 +263,7 @@ test("sends an edited OpenAPI schema and rejects one that is not JSON", async ()
   await u.type(schema, "not json");
   await u.click(save);
   expect(
-    screen.getByText(detailCopy.configuration.connection.schemaError)
+    view.getByText(detailCopy.configuration.connection.schemaError)
   ).toBeInTheDocument();
   expect(
     fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")
@@ -286,10 +305,11 @@ test("connects the organization account with an API key", async () => {
   });
   const u = user();
   open("configuration");
-  const key = await screen.findByLabelText("API key");
+  const view = await inPanel();
+  const key = await view.findByLabelText("API key");
   await u.type(key, "secret-1");
   await u.click(
-    screen.getByRole("button", {
+    view.getByRole("button", {
       name: detailCopy.configuration.organization.connect,
     })
   );
@@ -297,5 +317,234 @@ test("connects the organization account with an API key", async () => {
     expect(
       requestBody(fetchMock, "PUT", `${URL_DETAIL}/organization-connection`)
     ).toEqual({ fields: { api_key: "secret-1" } })
+  );
+});
+
+test("sends only Always allow when the sign-in did not change", async () => {
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "shared",
+      auth_method: "api_key",
+      oauth_client: null,
+      config: { shape: "openapi", openapi_spec: { openapi: "3.0.0" } },
+      header_template: { Authorization: "Bearer {api_key}", "X-Org": "{org}" },
+    }),
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+    [URL_ACTIONS]: NO_ACTIONS,
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  await u.click(
+    await view.findByRole("switch", {
+      name: detailCopy.configuration.alwaysAllow.title,
+    })
+  );
+  await u.click(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  );
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual({
+      users_can_save_always_allow: false,
+    })
+  );
+});
+
+test("keeps the other headers and the OAuth options in a sign-in change", async () => {
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      oauth_client: {
+        ...makeDetail().oauth_client!,
+        additional_params: { audience: "api" },
+        pkce: true,
+      },
+    }),
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+    [URL_ACTIONS]: NO_ACTIONS,
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const scopes = await view.findByRole("textbox", {
+    name: copy.signIn.oauth.scopes.title,
+  });
+  await u.type(scopes, " write");
+  await u.click(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  );
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual(
+      expect.objectContaining({
+        oauth_client: expect.objectContaining({
+          scopes: ["read", "write"],
+          additional_params: { audience: "api" },
+          pkce: true,
+        }),
+      })
+    )
+  );
+});
+
+test("keeps every saved header when the API key header changes", async () => {
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "shared",
+      auth_method: "api_key",
+      oauth_client: null,
+      config: { shape: "openapi", openapi_spec: { openapi: "3.0.0" } },
+      header_template: { Authorization: "Bearer {api_key}", "X-Org": "{org}" },
+    }),
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+    [URL_ACTIONS]: NO_ACTIONS,
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const value = await view.findByRole("textbox", {
+    name: copy.signIn.header.value.title,
+  });
+  await u.clear(value);
+  await u.click(value);
+  await u.paste("Token {api_key}");
+  await u.click(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  );
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual(
+      expect.objectContaining({
+        header_template: { "X-Org": "{org}", Authorization: "Token {api_key}" },
+      })
+    )
+  );
+});
+
+test("offers only the provider modes the backend accepts", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      config: { shape: "openapi", openapi_spec: { openapi: "3.0.0" } },
+    }),
+    [URL_ACTIONS]: NO_ACTIONS,
+  });
+  open("configuration");
+  const view = await inPanel();
+  await view.findByRole("textbox", { name: copy.signIn.oauth.clientId });
+  expect(
+    view.queryByText(copy.signIn.oauth.providerMode.title)
+  ).not.toBeInTheDocument();
+});
+
+test("replaces the account settings of a preset", async () => {
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "preset",
+      preset_id: "ZENDESK",
+      oauth_client: { ...makeDetail().oauth_client!, provider_mode: "preset" },
+      config: {
+        shape: "preset",
+        preset_id: "ZENDESK",
+      },
+    }),
+    "/api/admin/integrations/presets": [
+      {
+        id: "ZENDESK",
+        name: "Zendesk",
+        auth_methods: ["oauth2"],
+        required_org_credential_fields: [
+          { key: "subdomain", label: "Subdomain", secret: false },
+          { key: "client_id", label: "Client ID", secret: false },
+        ],
+        setup_instructions: null,
+      },
+    ],
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+    [URL_ACTIONS]: NO_ACTIONS,
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  await u.type(await view.findByLabelText("Subdomain"), "acme");
+  const save = view.getByRole("button", {
+    name: detailCopy.configuration.save,
+  });
+  await u.click(save);
+  expect(
+    view.getByText(detailCopy.configuration.preset.credentialRequired)
+  ).toBeInTheDocument();
+  await u.type(view.getByLabelText("Client ID"), "zd-client");
+  await u.click(save);
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual({
+      users_can_save_always_allow: true,
+      config: {
+        shape: "preset",
+        preset_id: "ZENDESK",
+        organization_credentials: { subdomain: "acme", client_id: "zd-client" },
+      },
+    })
+  );
+});
+
+test("keeps a configuration draft across a tab switch", async () => {
+  mockFetch({ [URL_DETAIL]: makeDetail(), [URL_ACTIONS]: NO_ACTIONS });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const scopes = await view.findByRole("textbox", {
+    name: copy.signIn.oauth.scopes.title,
+  });
+  await u.type(scopes, " write");
+  await u.click(screen.getByRole("tab", { name: detailCopy.tabs.overview }));
+  await u.click(
+    screen.getByRole("tab", { name: detailCopy.tabs.configuration })
+  );
+  expect(
+    (await inPanel()).getByRole("textbox", {
+      name: copy.signIn.oauth.scopes.title,
+    })
+  ).toHaveValue("read write");
+});
+
+test("renames the integration and changes its description", async () => {
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail(),
+    [`PATCH ${URL_DETAIL}`]: makeDetail({
+      name: "Linear EU",
+      description: "EU issues",
+    }),
+    [URL_ACTIONS]: NO_ACTIONS,
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open();
+  const view = await inPanel();
+  const name = await view.findByRole("textbox", {
+    name: detailCopy.overview.details.name,
+  });
+  await u.clear(name);
+  await u.type(name, "Linear EU");
+  const description = view.getByRole("textbox", {
+    name: detailCopy.overview.details.description,
+  });
+  await u.clear(description);
+  await u.type(description, "EU issues");
+  await u.click(
+    view.getByRole("button", { name: detailCopy.overview.details.save })
+  );
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual({
+      name: "Linear EU",
+      description: "EU issues",
+    })
   );
 });

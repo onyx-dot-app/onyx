@@ -11148,7 +11148,14 @@
           },
           "deleted": "Se eliminó {name}.",
           "deleteFailed": "No se pudo eliminar la integración.",
-          "saveFailed": "No se pudo guardar el cambio."
+          "saveFailed": "No se pudo guardar el cambio.",
+          "details": {
+            "name": "Nombre",
+            "nameRequired": "Asigna un nombre a la integración.",
+            "description": "Descripción",
+            "save": "Guardar",
+            "saved": "Se guardaron el nombre y la descripción."
+          }
         },
         "configuration": {
           "readOnly": "Puedes ver esta integración, pero no puedes cambiarla.",
@@ -11183,6 +11190,11 @@
             "connected": "Se conectó la cuenta de la organización.",
             "disconnected": "Se desconectó la cuenta de la organización.",
             "failed": "No se pudo cambiar la conexión de la organización."
+          },
+          "preset": {
+            "title": "Configuración de la cuenta",
+            "description": "Introduce nuevos valores para reemplazar la configuración de la cuenta y el cliente OAuth guardados. Deja los campos vacíos para conservarlos.",
+            "credentialRequired": "Completa cada campo para reemplazar la configuración de la cuenta."
           }
         },
         "actions": {
@@ -11211,7 +11223,8 @@
           "connectFirst": {
             "title": "Conecta primero el servidor",
             "description": "Onyx carga las acciones de un servidor MCP después de que el servidor se conecta.",
-            "open": "Abrir Configuración"
+            "open": "Abrir Configuración",
+            "individualDescription": "Cada usuario inicia sesión en este servidor. Conecta tu propia cuenta en la página Plugins y luego haz clic en Actualizar."
           }
         }
       }

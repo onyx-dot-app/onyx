@@ -376,7 +376,7 @@ export default function AddIntegrationModal({
                   draft={signIn}
                   onChange={changeSignIn}
                   methods={methods}
-                  preset={step.shape === "preset"}
+                  shape={step.shape}
                   showErrors={showErrors}
                   disabled={busy}
                 />
