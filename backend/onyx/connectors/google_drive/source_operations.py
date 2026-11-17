@@ -724,9 +724,7 @@ class GoogleDriveSourceOperations(SourceOperations):
         """Drops this thread's Drive client for the user. The next call builds
         a new one, with new connections: a socket that broke stays in the old
         client's connection pool."""
-        local: threading.local | None = vars(self).get("_drive_clients")
-        if local is not None:
-            vars(local).get("by_user", {}).pop(user_email, None)
+        self._thread_clients().pop(("drive", user_email), None)
 
     def _execute_drive(
         self,
