@@ -16,6 +16,7 @@ from onyx.connectors.google_drive.connector import (
 )
 from onyx.connectors.google_drive.models import (
     DriveRetrievalStage,
+    GDriveMimeType,
     GoogleDriveCheckpoint,
     RetrievedDriveFile,
 )
@@ -54,7 +55,11 @@ def _make_file(idx: int, parent_id: str | None = None) -> RetrievedDriveFile:
     rf.completion_stage = DriveRetrievalStage.DONE
     rf.user_email = f"user{idx}@example.com"
     rf.parent_id = parent_id
-    drive_file: dict[str, object] = {"id": f"file_{idx}", "name": f"file_{idx}"}
+    drive_file: dict[str, object] = {
+        "id": f"file_{idx}",
+        "name": f"file_{idx}",
+        "mimeType": GDriveMimeType.DOC.value,
+    }
     if parent_id is not None:
         drive_file["parents"] = [parent_id]
     rf.drive_file = drive_file
@@ -246,7 +251,7 @@ def test_filtered_tail_still_yields_finished_conversions() -> None:
     with (
         _patched(connector, conversions, batch_size=2, max_in_flight=10),
         patch(
-            f"{_CONN_MODULE}.has_link_only_permission",
+            "onyx.connectors.google_drive.doc_conversion.has_link_only_permission",
             side_effect=lambda drive_file: (
                 int(str(drive_file["id"]).removeprefix("file_")) >= 2
             ),

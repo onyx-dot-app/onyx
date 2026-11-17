@@ -22,6 +22,7 @@ from onyx.access.models import (
 )
 from onyx.access.utils import build_domain_group_id, build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import GoogleDriveFileType
@@ -387,6 +388,18 @@ def get_external_access_for_folder(
     )
 
 
+def build_perm_sync_connector(cc_pair: ConnectorCredentialPair) -> GoogleDriveConnector:
+    connector = GoogleDriveConnector(
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
+    )
+    # The slim listing must admit the image files that indexing admitted.
+    connector.set_allow_images(get_image_extraction_and_analysis_enabled())
+    connector.load_credentials(credential_json(cc_pair))
+    return connector
+
+
 def gdrive_doc_sync(
     cc_pair: ConnectorCredentialPair,
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
@@ -400,13 +413,7 @@ def gdrive_doc_sync(
     it in postgres so that when it gets created later, the permissions are
     already populated. The crawl resumes where a stopped attempt left off.
     """
-    google_drive_connector = GoogleDriveConnector(
-        **build_connector_kwargs(
-            cc_pair.connector.source, cc_pair.connector.connector_specific_config
-        )
-    )
-    google_drive_connector.load_credentials(credential_json(cc_pair))
-
+    google_drive_connector = build_perm_sync_connector(cc_pair)
     slim_doc_generator = _get_slim_doc_generator(
         cc_pair, google_drive_connector, checkpointer, callback
     )
