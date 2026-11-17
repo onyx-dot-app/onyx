@@ -138,8 +138,12 @@ def _configuration_fingerprint(
     )
 
 
-def _check_may_connect(integration: Integration, user: User) -> bool:
-    """Returns whether the connection is the organization connection."""
+def _check_may_connect(
+    integration: Integration, user: User, token_may_manage: bool
+) -> bool:
+    """Returns whether the connection is the organization connection.
+    ``token_may_manage`` is False when the token of the request does not
+    allow Manage actions."""
     if user.is_anonymous:
         raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Sign in to Onyx first.")
     if not integration.enabled:
@@ -153,7 +157,9 @@ def _check_may_connect(integration: Integration, user: User) -> bool:
             f"{integration.name} does not use OAuth sign-in.",
         )
     if integration.auth_mode is IntegrationAuthMode.SHARED:
-        if not has_global_permission(user, Permission.MANAGE_ACTIONS):
+        if not token_may_manage or not has_global_permission(
+            user, Permission.MANAGE_ACTIONS
+        ):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 f"Only an admin can connect {integration.name} for the organization.",
@@ -267,8 +273,10 @@ def start_integration_oauth(
     user: User,
     db_session: Session,
     return_path: str | None = None,
+    *,
+    token_may_manage: bool = True,
 ) -> str:
-    for_organization = _check_may_connect(integration, user)
+    for_organization = _check_may_connect(integration, user, token_may_manage)
     oauth_client = _oauth_client_or_raise(integration, db_session)
     attempt = IntegrationOAuthAttemptPayload(
         integration_id=integration.id,
@@ -456,7 +464,12 @@ def _start_mcp(
 
 
 def complete_integration_oauth(
-    code: str, state: str, user: User, db_session: Session
+    code: str,
+    state: str,
+    user: User,
+    db_session: Session,
+    *,
+    token_may_manage: bool = True,
 ) -> IntegrationOAuthCallbackResult:
     payload = INTEGRATION_OAUTH_ATTEMPTS.consume(
         owner_id=str(user.id), state=state
@@ -464,7 +477,7 @@ def complete_integration_oauth(
     integration = get_integration_by_id(payload.integration_id, db_session)
     if integration is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "The integration no longer exists.")
-    for_organization = _check_may_connect(integration, user)
+    for_organization = _check_may_connect(integration, user, token_may_manage)
     if for_organization != payload.for_organization:
         _raise_settings_changed()
     oauth_client = _check_settings_unchanged(integration, payload, db_session)
