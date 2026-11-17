@@ -55,7 +55,9 @@ from onyx.configs.app_configs import (
     SKIP_SPREADSHEET_CONTENT,
 )
 from onyx.configs.constants import (
+    CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES,
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES,
     DocumentSource,
     MilestoneRecordType,
     NotificationType,
@@ -1514,7 +1516,7 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
                 task_logger.info(
                     f"Cleaning up checkpoint for index attempt {attempt.id}"
                 )
-                self.app.send_task(  # celery-expires: allow (existing send, expiry pending)
+                self.app.send_task(
                     OnyxCeleryTask.CLEANUP_CHECKPOINT,
                     kwargs={
                         "index_attempt_id": attempt.id,
@@ -1522,6 +1524,7 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
                     },
                     queue=OnyxCeleryQueues.CHECKPOINT_CLEANUP,
                     priority=OnyxCeleryPriority.MEDIUM,
+                    expires=CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES,
                 )
     except Exception:
         task_logger.exception("Unexpected exception during checkpoint cleanup")
@@ -1603,7 +1606,7 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
                 task_logger.info(
                     f"check_for_index_attempt_cleanup - Cleaning up index attempts {len(batch)}"
                 )
-                self.app.send_task(  # celery-expires: allow (existing send, expiry pending)
+                self.app.send_task(
                     OnyxCeleryTask.CLEANUP_INDEX_ATTEMPT,
                     kwargs={
                         "index_attempt_ids": batch,
@@ -1611,6 +1614,7 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
                     },
                     queue=OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
                     priority=OnyxCeleryPriority.MEDIUM,
+                    expires=CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES,
                 )
     except Exception:
         task_logger.exception("Unexpected exception during index attempt cleanup check")

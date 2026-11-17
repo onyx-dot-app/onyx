@@ -9,6 +9,7 @@ from onyx.auth.permissions import (
 from onyx.auth.scoped_permissions import (
     assert_within_scope,
 )
+from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
@@ -73,10 +74,11 @@ def create_document_set(
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     if not DISABLE_VECTOR_DB:
-        client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
+        client_app.send_task(
             OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
+            expires=BEAT_EXPIRES_DEFAULT,
         )
 
     return document_set_db_model.id
@@ -172,10 +174,11 @@ def patch_document_set(
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 
     if not DISABLE_VECTOR_DB:
-        client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
+        client_app.send_task(
             OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
+            expires=BEAT_EXPIRES_DEFAULT,
         )
 
 
@@ -221,10 +224,11 @@ def delete_document_set(
         db_session.refresh(document_set)
         db_delete_document_set(document_set, db_session)
     else:
-        client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
+        client_app.send_task(
             OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
+            expires=BEAT_EXPIRES_DEFAULT,
         )
 
 
