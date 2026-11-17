@@ -58,8 +58,9 @@ if config.config_file_name is not None and config.attributes.get(
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # The old sign-in, policy and preference tables (oauth_user_token,
-# external_app_user_credential, workspace_action_policy and others) have no
-# model, so autogenerate proposes to drop them. Keep them out of migrations.
+# external_app_user_credential, workspace_action_policy and others) and the
+# old app to skill link (external_app__skill) have no model, so autogenerate
+# proposes to drop them. Keep them out of migrations.
 target_metadata = [Base.metadata, ResultModelBase.metadata]
 
 logger = logging.getLogger(__name__)
