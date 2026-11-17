@@ -42,6 +42,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemContentError,
     DriveItemData,
     build_item_relative_path,
+    build_parent_reference_path,
     extract_folder_path_from_parent_reference,
     is_path_excluded,
     iter_delta_page_files,
@@ -781,6 +782,7 @@ class SharepointConnector(
         # Delta pages omit parentReference.path, so folder paths are resolved
         # per parent folder id and cached for the connector's lifetime.
         self._folder_path_cache: dict[tuple[str, str], str | None] = {}
+        self._failed_parent_keys: set[tuple[str, str]] = set()
         self.treat_sharing_link_as_public = treat_sharing_link_as_public
         # Read by EE group sync: also enumerate every Entra group in the tenant.
         self.exhaustive_ad_enumeration = exhaustive_ad_enumeration
@@ -900,18 +902,26 @@ class SharepointConnector(
                 yield item
                 continue
             cache_key = (drive_id, item.parent_id)
+            if cache_key in self._failed_parent_keys:
+                yield item
+                continue
             if cache_key not in self._folder_path_cache:
                 try:
                     parent = self.ops.get_drive_item(
                         drive_id=drive_id, item_id=item.parent_id
                     )
-                except Exception as e:
-                    # The path is optional metadata, so a failed lookup must
-                    # not stop the walk. Failures are not cached.
+                except MicrosoftGraphError as e:
                     _raise_if_throttled(e)
+                    # Without a path, excluded_paths would match only the bare
+                    # file name and could index an excluded file.
+                    if self.excluded_paths:
+                        raise
+                    # The path is optional metadata, so do not stop the walk.
+                    # Skip this parent for the rest of the run.
                     logger.warning(
-                        "Could not resolve folder path for item %s: %s", item.id, e
+                        "Could not resolve folder path for item %s", item.id, exc_info=e
                     )
+                    self._failed_parent_keys.add(cache_key)
                     yield item
                     continue
                 self._folder_path_cache[cache_key] = (
@@ -921,7 +931,9 @@ class SharepointConnector(
             if folder_path:
                 item = item.model_copy(
                     update={
-                        "parent_reference_path": f"/drives/{drive_id}/root:/{folder_path}"
+                        "parent_reference_path": build_parent_reference_path(
+                            drive_id, folder_path
+                        )
                     }
                 )
             yield item

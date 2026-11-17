@@ -213,6 +213,14 @@ def extract_folder_path_from_parent_reference(
     return None
 
 
+def build_parent_reference_path(drive_id: str, folder_path: str) -> str:
+    """Inverse of extract_folder_path_from_parent_reference.
+
+    ``folder_path`` must be percent-encoded.
+    """
+    return f"/drives/{drive_id}/root:/{folder_path}"
+
+
 class DriveItemData(BaseModel):
     """Lightweight representation of a Graph API drive item, parsed from JSON.
 

@@ -102,10 +102,9 @@ def test_delta_items_get_folder_path_from_parent_lookup() -> None:
     assert ops.get_drive_item.call_count == 3
 
 
-def test_failed_parent_lookup_keeps_item_and_is_not_cached() -> None:
-    folder = _delta_item("f1", "Eng", "root", "/drives/d/root:")
+def test_failed_parent_lookup_keeps_item_and_skips_parent_for_the_run() -> None:
     ops = MagicMock()
-    ops.get_drive_item.side_effect = [RuntimeError("boom"), folder]
+    ops.get_drive_item.side_effect = MicrosoftGraphError(500, "boom", "x")
     connector = SharepointConnector()
     connector._ops = ops
 
@@ -113,8 +112,18 @@ def test_failed_parent_lookup_keeps_item_and_is_not_cached() -> None:
     out = list(connector._resolve_delta_item_paths("d", items))
 
     assert [i.id for i in out] == ["a", "b"]
-    assert out[0].parent_reference_path is None
-    assert out[1].parent_reference_path == "/drives/d/root:/Eng"
+    assert all(i.parent_reference_path is None for i in out)
+    assert ops.get_drive_item.call_count == 1
+
+
+def test_failed_parent_lookup_raises_when_excluded_paths_are_set() -> None:
+    ops = MagicMock()
+    ops.get_drive_item.side_effect = MicrosoftGraphError(500, "boom", "x")
+    connector = SharepointConnector(excluded_paths=["Engineering/*"])
+    connector._ops = ops
+
+    with pytest.raises(MicrosoftGraphError):
+        list(connector._resolve_delta_item_paths("d", [_delta_item("a", "a", "f1")]))
 
 
 def test_throttled_parent_lookup_propagates() -> None:
