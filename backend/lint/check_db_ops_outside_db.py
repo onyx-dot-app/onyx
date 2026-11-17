@@ -79,8 +79,11 @@ _SESSION_TYPES = frozenset(
 )
 # `engine.connect()` and `session.begin_nested()` give another such object.
 _SESSION_DERIVING_METHODS = frozenset({"connect", "begin", "begin_nested"})
-# Submodules a file may import by name and then qualify a session type with.
-_SQLALCHEMY_SUBMODULES = frozenset({"orm", "engine", "ext", "asyncio"})
+# Submodules a file may import by name and then qualify a session type or a
+# statement builder with, as in `orm.Session` or `sql.select`.
+_SQLALCHEMY_SUBMODULES = frozenset(
+    {"orm", "engine", "ext", "asyncio", "sql", "expression", "dialects", "postgresql"}
+)
 _SESSION_FACTORY_MODULE = re.compile(r"^(ee\.)?onyx\.db\.engine(\.|$)")
 # Other imports from the engine package do not return a session.
 _SESSION_FACTORY_NAME = re.compile(r"session|engine", re.IGNORECASE)

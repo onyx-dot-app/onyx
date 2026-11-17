@@ -171,6 +171,24 @@ def test_qualified_session_constructors_are_found(source: str) -> None:
     assert check_db_ops_outside_db.find_db_operations(source) == ([3], [])
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from sqlalchemy import sql\nstmt = sql.select(1)\n",
+        "import sqlalchemy.sql as sql\nstmt = sql.select(1)\n",
+        "from sqlalchemy.sql import expression\nstmt = expression.select(1)\n",
+        "from sqlalchemy.dialects import postgresql\nstmt = postgresql.insert(table)\n",
+    ],
+)
+def test_builders_through_a_submodule_are_found(source: str) -> None:
+    assert check_db_ops_outside_db.find_db_operations(source) == ([2], [])
+
+
+def test_unrelated_submodule_imports_are_clean() -> None:
+    source = "from sqlalchemy import exc\nerror = exc.select(1)\n"
+    assert check_db_ops_outside_db.find_db_operations(source) == ([], [])
+
+
 def test_dotted_import_binds_the_root_module() -> None:
     source = "import sqlalchemy.sql\nstmt = sqlalchemy.select(1)\n"
     assert check_db_ops_outside_db.find_db_operations(source) == ([2], [])
