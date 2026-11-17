@@ -131,7 +131,7 @@ def _guard_raises(
     try:
         guard(*args, **kwargs)
         return False
-    except OnyxError:
+    except (HTTPException, OnyxError):
         return True
 
 
@@ -731,7 +731,7 @@ def test_persona_share_projection_tracks_share_guard_not_edit(
             db_session=db_session, persona_id=persona.id, user=editor, get_editable=True
         )
         share_allowed = True
-    except HTTPException:
+    except OnyxError:
         share_allowed = False
 
     assert is_editable is True  # EDITOR-shared → in the editable set

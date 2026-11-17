@@ -573,13 +573,17 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     else:
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 
-    application.add_exception_handler(status.HTTP_400_BAD_REQUEST, log_http_error)
-    application.add_exception_handler(status.HTTP_401_UNAUTHORIZED, log_http_error)
-    application.add_exception_handler(status.HTTP_403_FORBIDDEN, log_http_error)
-    application.add_exception_handler(status.HTTP_404_NOT_FOUND, log_http_error)
-    application.add_exception_handler(
-        status.HTTP_500_INTERNAL_SERVER_ERROR, log_http_error
+    # http-exception: allow these register the handler that gives an
+    # HTTPException from FastAPI or a library the OnyxError body.
+    legacy_statuses = (
+        status.HTTP_400_BAD_REQUEST,
+        status.HTTP_401_UNAUTHORIZED,
+        status.HTTP_403_FORBIDDEN,
+        status.HTTP_404_NOT_FOUND,
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
+    for legacy_status in legacy_statuses:
+        application.add_exception_handler(legacy_status, log_http_error)
 
     register_onyx_exception_handlers(application)
 

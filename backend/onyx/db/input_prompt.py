@@ -1,12 +1,13 @@
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
 from onyx.db.models import InputPrompt, InputPrompt__User, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -48,9 +49,9 @@ def insert_input_prompt(
     input_prompt = result.scalar_one_or_none()
 
     if input_prompt is None:
-        raise HTTPException(
-            status_code=409,
-            detail=f"A prompt shortcut with the name '{prompt}' already exists",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"A prompt shortcut with the name '{prompt}' already exists",
         )
 
     db_session.commit()
@@ -72,7 +73,7 @@ def update_input_prompt(
         raise ValueError(f"No input prompt with id {input_prompt_id}")
 
     if not validate_user_prompt_authorization(user, input_prompt):
-        raise HTTPException(status_code=401, detail="You don't own this prompt")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "You don't own this prompt")
 
     input_prompt.prompt = prompt
     input_prompt.content = content
@@ -82,9 +83,9 @@ def update_input_prompt(
         db_session.commit()
     except IntegrityError:
         db_session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=f"A prompt shortcut with the name '{prompt}' already exists",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"A prompt shortcut with the name '{prompt}' already exists",
         )
 
     return input_prompt
@@ -112,7 +113,7 @@ def remove_public_input_prompt(input_prompt_id: int, db_session: Session) -> Non
         raise ValueError(f"No input prompt with id {input_prompt_id}")
 
     if not input_prompt.is_public:
-        raise HTTPException(status_code=400, detail="This prompt is not public")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "This prompt is not public")
 
     db_session.delete(input_prompt)
     db_session.commit()
@@ -131,12 +132,12 @@ def remove_input_prompt(
         raise ValueError(f"No input prompt with id {input_prompt_id}")
 
     if input_prompt.is_public and not delete_public:
-        raise HTTPException(
-            status_code=400, detail="Cannot delete public prompts with this method"
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "Cannot delete public prompts with this method"
         )
 
     if not validate_user_prompt_authorization(user, input_prompt):
-        raise HTTPException(status_code=401, detail="You do not own this prompt")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "You do not own this prompt")
 
     db_session.delete(input_prompt)
     db_session.commit()
@@ -158,7 +159,11 @@ def fetch_input_prompt_by_id(
     result = db_session.scalar(query)
 
     if result is None:
-        raise HTTPException(422, "No input prompt found")
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No input prompt found",
+            status_code_override=422,
+        )
 
     return result
 

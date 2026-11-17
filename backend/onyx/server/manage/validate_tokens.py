@@ -1,8 +1,9 @@
 import requests
-from fastapi import HTTPException
 
 from onyx.configs.constants import SLACK_USER_TOKEN_PREFIX
 from onyx.configs.slack_configs import SLACK_API_URL as SLACK_API_BASE_URL
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 SLACK_API_URL = f"{SLACK_API_BASE_URL}auth.test"
 SLACK_CONNECTIONS_OPEN_URL = f"{SLACK_API_BASE_URL}apps.connections.open"
@@ -13,15 +14,15 @@ def validate_bot_token(bot_token: str) -> bool:
     response = requests.post(SLACK_API_URL, headers=headers)
 
     if response.status_code != 200:
-        raise HTTPException(
-            status_code=500, detail="Error communicating with Slack API."
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, "Error communicating with Slack API."
         )
 
     data = response.json()
     if not data.get("ok", False):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid bot token: {data.get('error', 'Unknown error')}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Invalid bot token: {data.get('error', 'Unknown error')}",
         )
 
     return True
@@ -32,15 +33,15 @@ def validate_app_token(app_token: str) -> bool:
     response = requests.post(SLACK_CONNECTIONS_OPEN_URL, headers=headers)
 
     if response.status_code != 200:
-        raise HTTPException(
-            status_code=500, detail="Error communicating with Slack API."
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, "Error communicating with Slack API."
         )
 
     data = response.json()
     if not data.get("ok", False):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid app token: {data.get('error', 'Unknown error')}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Invalid app token: {data.get('error', 'Unknown error')}",
         )
 
     return True
@@ -62,9 +63,9 @@ def validate_user_token(user_token: str | None) -> None:
         return
 
     if not user_token.startswith(SLACK_USER_TOKEN_PREFIX):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid user token format. User OAuth tokens must start with '{SLACK_USER_TOKEN_PREFIX}'",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Invalid user token format. User OAuth tokens must start with '{SLACK_USER_TOKEN_PREFIX}'",
         )
 
     # Test the token with Slack API to ensure it's valid
@@ -72,13 +73,13 @@ def validate_user_token(user_token: str | None) -> None:
     response = requests.post(SLACK_API_URL, headers=headers)
 
     if response.status_code != 200:
-        raise HTTPException(
-            status_code=500, detail="Error communicating with Slack API."
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, "Error communicating with Slack API."
         )
 
     data = response.json()
     if not data.get("ok", False):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid user token: {data.get('error', 'Unknown error')}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Invalid user token: {data.get('error', 'Unknown error')}",
         )

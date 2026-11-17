@@ -4,7 +4,6 @@ import puremagic
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -106,9 +105,9 @@ def _validate_user_knowledge_enabled(
         if persona_upsert_request.user_file_ids or getattr(  # ods: ignore[getattr]
             persona_upsert_request, "user_project_ids", None
         ):
-            raise HTTPException(
-                status_code=400,
-                detail=f"User Knowledge is disabled. Cannot {action} assistant with user files or projects.",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"User Knowledge is disabled. Cannot {action} assistant with user files or projects.",
             )
 
 
@@ -125,25 +124,19 @@ def _validate_vector_db_knowledge(
         return
 
     if persona_upsert_request.document_set_ids:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot attach document sets to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Cannot attach document sets to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set).",
         )
     if persona_upsert_request.hierarchy_node_ids:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot attach hierarchy nodes to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Cannot attach hierarchy nodes to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set).",
         )
     if persona_upsert_request.document_ids:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot attach documents to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Cannot attach documents to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set).",
         )
 
 
@@ -202,7 +195,7 @@ def patch_user_persona_public_status(
         )
     except ValueError as e:
         logger.exception("Failed to update persona public status")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
 
 
 @admin_router.patch("/{persona_id}/featured")
@@ -221,7 +214,7 @@ def patch_persona_featured_status(
         )
     except ValueError as e:
         logger.exception("Failed to update persona featured status")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
 
 
 @admin_agents_router.patch("/display-priorities")
@@ -239,7 +232,7 @@ def patch_agents_display_priorities(
         )
     except ValueError as e:
         logger.exception("Failed to update agent display priorities.")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
 
 
 def _admin_list_get_editable(user: User, get_editable: bool) -> bool:
@@ -450,9 +443,9 @@ def create_label(
         label_model = create_assistant_label(name=label.name, db_session=db)
         return PersonaLabelResponse.from_model(label_model)
     except IntegrityError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Label with name '{label.name}' already exists. Please choose a different name.",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Label with name '{label.name}' already exists. Please choose a different name.",
         )
 
 
@@ -549,13 +542,13 @@ def share_persona(
         )
     except PermissionError as e:
         logger.exception("Failed to share persona")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
     except NotImplementedError as e:
         logger.exception("Failed to share persona")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
     except ValueError as e:
         logger.exception("Failed to share persona")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 class TransferPersonaOwnershipRequest(BaseModel):
@@ -583,10 +576,10 @@ def transfer_persona_ownership_endpoint(
         )
     except PermissionError as e:
         logger.exception("Failed to transfer persona ownership")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
     except (ValueError, NotImplementedError) as e:
         logger.exception("Failed to transfer persona ownership")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @basic_router.delete("/{persona_id}/share/me")
@@ -603,7 +596,7 @@ def leave_persona_shares(
         )
     except ValueError as e:
         logger.exception("Failed to remove user from persona shares")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)

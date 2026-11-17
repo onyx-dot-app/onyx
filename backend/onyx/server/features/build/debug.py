@@ -11,7 +11,7 @@ FE debug button to tail the user's sandbox pod logs in real time.
 import json
 from collections.abc import Generator
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,8 @@ from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, SandboxStatus
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.configs import ENABLE_OPENCODE_DEBUGGING
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
@@ -34,7 +36,7 @@ def _require_debug_enabled() -> None:
     look like it doesn't exist, not "you're not allowed". This makes
     accidental leaks in prod harmless beyond a 404 in logs."""
     if not ENABLE_OPENCODE_DEBUGGING:
-        raise HTTPException(status_code=404, detail="Not Found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Not Found")
 
 
 @router.get("/debug/opencode-logs/stream")
@@ -53,10 +55,7 @@ def stream_opencode_logs(
     """
     sandbox = get_sandbox_by_user_id(db_session, user.id)
     if sandbox is None or sandbox.status != SandboxStatus.RUNNING:
-        raise HTTPException(
-            status_code=409,
-            detail="No running sandbox to tail logs from",
-        )
+        raise OnyxError(OnyxErrorCode.CONFLICT, "No running sandbox to tail logs from")
 
     sandbox_manager = get_sandbox_manager()
     # Only the K8s manager exposes pod logs — guard so other backends
@@ -66,9 +65,9 @@ def stream_opencode_logs(
         sandbox_manager, "stream_pod_logs", None
     )
     if stream_fn is None:
-        raise HTTPException(
-            status_code=501,
-            detail="Pod log streaming is only available on the Kubernetes sandbox backend",
+        raise OnyxError(
+            OnyxErrorCode.NOT_IMPLEMENTED,
+            "Pod log streaming is only available on the Kubernetes sandbox backend",
         )
 
     def sse_generator() -> Generator[str, None, None]:

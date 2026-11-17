@@ -22,7 +22,7 @@ Auth levels by endpoint:
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, ValidationError
 from redis.exceptions import RedisError
 
@@ -31,6 +31,8 @@ from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.utils.license import is_license_valid, verify_license_signature
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
@@ -88,8 +90,8 @@ def _extract_license_from_header(
     """
     if not authorization or not authorization.startswith("Bearer "):
         if required:
-            raise HTTPException(
-                status_code=401, detail="Missing or invalid authorization header"
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHENTICATED, "Missing or invalid authorization header"
             )
         return None
 
@@ -113,10 +115,10 @@ def verify_license_auth(
     try:
         payload = verify_license_signature(license_data)
     except ValueError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid license: {e}")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, f"Invalid license: {e}")
 
     if not allow_expired and not is_license_valid(payload):
-        raise HTTPException(status_code=401, detail="License has expired")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "License has expired")
 
     return payload
 
@@ -198,12 +200,14 @@ async def forward_to_control_plane(
         except Exception:
             pass
         logger.error("Control plane returned %s: %s", status_code, detail)
-        raise HTTPException(status_code=status_code, detail=detail)
+        raise OnyxError(
+            OnyxErrorCode.for_status(status_code),
+            detail,
+            status_code_override=status_code,
+        )
     except httpx.RequestError:
         logger.exception("Failed to connect to control plane")
-        raise HTTPException(
-            status_code=502, detail="Failed to connect to control plane"
-        )
+        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, "Failed to connect to control plane")
 
 
 # -----------------------------------------------------------------------------
@@ -293,9 +297,8 @@ async def proxy_claim_license(
 
     if not tenant_id or not license_data:
         logger.error("Control plane returned incomplete claim response: %s", result)
-        raise HTTPException(
-            status_code=502,
-            detail="Control plane returned incomplete license data",
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, "Control plane returned incomplete license data"
         )
 
     return ClaimLicenseResponse(
@@ -325,7 +328,7 @@ async def proxy_create_customer_portal_session(
     # tenant_id is a required field in LicensePayload (Pydantic validates this),
     # but we check explicitly for defense in depth
     if not license_payload.tenant_id:
-        raise HTTPException(status_code=401, detail="License missing tenant_id")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "License missing tenant_id")
 
     tenant_id = license_payload.tenant_id
 
@@ -372,7 +375,7 @@ async def proxy_billing_information(
     # tenant_id is a required field in LicensePayload (Pydantic validates this),
     # but we check explicitly for defense in depth
     if not license_payload.tenant_id:
-        raise HTTPException(status_code=401, detail="License missing tenant_id")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "License missing tenant_id")
 
     tenant_id = license_payload.tenant_id
     redis_client: TenantRedisClient | None = None
@@ -435,12 +438,11 @@ async def proxy_license_fetch(
     # tenant_id is a required field in LicensePayload (Pydantic validates this),
     # but we check explicitly for defense in depth
     if not license_payload.tenant_id:
-        raise HTTPException(status_code=401, detail="License missing tenant_id")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "License missing tenant_id")
 
     if tenant_id != license_payload.tenant_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Cannot fetch license for a different tenant",
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED, "Cannot fetch license for a different tenant"
         )
 
     result = await forward_to_control_plane("GET", f"/license/{tenant_id}")
@@ -448,9 +450,8 @@ async def proxy_license_fetch(
     license_data = result.get("license")
     if not license_data:
         logger.error("Control plane returned incomplete license response: %s", result)
-        raise HTTPException(
-            status_code=502,
-            detail="Control plane returned incomplete license data",
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, "Control plane returned incomplete license data"
         )
 
     # This proxy never sees the Stripe webhook, so a fetch that may carry a new
@@ -473,7 +474,7 @@ async def proxy_seat_update(
     Returns the regenerated license in the response for the caller to store.
     """
     if not license_payload.tenant_id:
-        raise HTTPException(status_code=401, detail="License missing tenant_id")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "License missing tenant_id")
 
     tenant_id = license_payload.tenant_id
 

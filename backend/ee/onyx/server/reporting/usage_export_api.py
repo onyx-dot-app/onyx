@@ -2,7 +2,7 @@ from collections.abc import Generator
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -46,7 +46,7 @@ def generate_report(
             datetime.fromisoformat(params.period_from)
             datetime.fromisoformat(params.period_to)
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
     if params.report_id and usage_report_id_in_use(db_session, params.report_id):
         raise OnyxError(
@@ -78,7 +78,7 @@ def read_usage_report(
     try:
         file = get_usage_report_data(report_name)
     except (ValueError, RuntimeError) as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
     def iterfile() -> Generator[bytes, None, None]:
         while True:
@@ -102,4 +102,4 @@ def fetch_usage_reports(
     try:
         return get_all_usage_reports(db_session)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))

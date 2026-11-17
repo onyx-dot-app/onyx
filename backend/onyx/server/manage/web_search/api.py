@@ -174,9 +174,9 @@ def upsert_search_provider_endpoint(
         and request.id is not None
         and existing_by_name.id != request.id
     ):
-        raise HTTPException(
-            status_code=400,
-            detail=f"A search provider named '{request.name}' already exists.",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"A search provider named '{request.name}' already exists.",
         )
 
     if request.id is not None and not request.api_key_changed:
@@ -308,9 +308,9 @@ def test_search_provider(
             request.provider_type, db_session
         )
         if existing_provider is None or not existing_provider.api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="No stored API key found for this provider type.",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                "No stored API key found for this provider type.",
             )
         _require_stored_key_target_unchanged(
             stored_type=existing_provider.provider_type,
@@ -321,9 +321,9 @@ def test_search_provider(
         api_key = existing_provider.api_key.get_value(apply_mask=False)
 
     if requires_key and not api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="API key is required. Either provide api_key or set use_stored_key to true.",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "API key is required. Either provide api_key or set use_stored_key to true.",
         )
 
     try:
@@ -333,11 +333,11 @@ def test_search_provider(
             config=request.config or {},
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(exc)) from exc
 
     if provider is None:
-        raise HTTPException(
-            status_code=400, detail="Unable to build provider configuration."
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "Unable to build provider configuration."
         )
 
     # Run the API client's test_connection method to ensure the connection is valid.
@@ -346,7 +346,7 @@ def test_search_provider(
     except (HTTPException, OnyxError):
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e)) from e
 
 
 @admin_router.get("/content-providers", response_model=list[WebContentProviderView])
@@ -384,9 +384,9 @@ def upsert_content_provider_endpoint(
         and request.id is not None
         and existing_by_name.id != request.id
     ):
-        raise HTTPException(
-            status_code=400,
-            detail=f"A content provider named '{request.name}' already exists.",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"A content provider named '{request.name}' already exists.",
         )
 
     if request.id is not None and not request.api_key_changed:
@@ -528,9 +528,9 @@ def test_content_provider(
             request.provider_type, db_session
         )
         if existing_provider is None or not existing_provider.api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="No stored API key found for this provider type.",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                "No stored API key found for this provider type.",
             )
         _require_stored_key_target_unchanged(
             stored_type=existing_provider.provider_type,
@@ -543,9 +543,9 @@ def test_content_provider(
         api_key = existing_provider.api_key.get_value(apply_mask=False)
 
     if not api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="API key is required. Either provide api_key or set use_stored_key to true.",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "API key is required. Either provide api_key or set use_stored_key to true.",
         )
 
     try:
@@ -555,11 +555,11 @@ def test_content_provider(
             config=request.config,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(exc)) from exc
 
     if provider is None:
-        raise HTTPException(
-            status_code=400, detail="Unable to build provider configuration."
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "Unable to build provider configuration."
         )
 
     # Actually test the API key by making a real content fetch call
@@ -571,11 +571,11 @@ def test_content_provider(
         if not test_results or not any(
             result.scrape_successful for result in test_results
         ):
-            raise HTTPException(
-                status_code=400,
-                detail="API key validation failed: content fetch returned no results.",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                "API key validation failed: content fetch returned no results.",
             )
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except Exception as e:
         error_msg = str(e)
@@ -584,13 +584,11 @@ def test_content_provider(
             or "key" in error_msg.lower()
             or "auth" in error_msg.lower()
         ):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid API key: {error_msg}",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST, f"Invalid API key: {error_msg}"
             ) from e
-        raise HTTPException(
-            status_code=400,
-            detail=f"API key validation failed: {error_msg}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, f"API key validation failed: {error_msg}"
         ) from e
 
     logger.info(

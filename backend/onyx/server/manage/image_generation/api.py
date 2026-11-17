@@ -111,9 +111,8 @@ def _build_llm_provider_request(
     )
 
     if not validate_credentials(provider, credentials):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Incorrect credentials for {provider}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, f"Incorrect credentials for {provider}"
         )
 
     return LLMProviderUpsertRequest(
@@ -213,14 +212,12 @@ def test_image_generation(
             ),
         )
     except ValueError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Invalid image generation provider: {provider}",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"Invalid image generation provider: {provider}"
         )
     except ImageProviderCredentialsError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid image generation credentials",
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHENTICATED, "Invalid image generation credentials"
         )
 
     quality = _get_test_quality_for_model(test_request.model_name)
@@ -232,7 +229,7 @@ def test_image_generation(
             n=1,
             quality=quality,
         )
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except Exception as e:
         logger.warning("Image generation test failed: %s", type(e).__name__)
@@ -258,9 +255,9 @@ def create_config(
         db_session, config_create.image_provider_id
     )
     if existing_config:
-        raise HTTPException(
-            status_code=400,
-            detail=f"ImageGenerationConfig with image_provider_id '{config_create.image_provider_id}' already exists",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"ImageGenerationConfig with image_provider_id '{config_create.image_provider_id}' already exists",
         )
 
     try:
@@ -293,10 +290,10 @@ def create_config(
         invalidate_provider_listing_cache()
         db_session.refresh(config)
         return ImageGenerationConfigView.from_model(config)
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 def _linked_image_provider_id(llm_provider_id: int, model_name: str) -> str:
@@ -427,9 +424,9 @@ def get_config_credentials(
     """
     config = get_image_generation_config(db_session, image_provider_id)
     if not config:
-        raise HTTPException(
-            status_code=404,
-            detail=f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
         )
 
     if not config.llm_provider_owned:
@@ -461,9 +458,9 @@ def update_config(
         # 1. Get existing config
         existing_config = get_image_generation_config(db_session, image_provider_id)
         if not existing_config:
-            raise HTTPException(
-                status_code=404,
-                detail=f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
             )
 
         if not existing_config.llm_provider_owned:
@@ -538,7 +535,7 @@ def update_config(
     except (HTTPException, OnyxError):
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @admin_router.delete("/config/{image_provider_id}")
@@ -552,9 +549,9 @@ def delete_config(
         # Get the config first to find the associated LLM provider
         existing_config = get_image_generation_config(db_session, image_provider_id)
         if not existing_config:
-            raise HTTPException(
-                status_code=404,
-                detail=f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
             )
 
         if not existing_config.llm_provider_owned:
@@ -573,10 +570,10 @@ def delete_config(
 
         db_session.commit()
         invalidate_provider_listing_cache()
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
 
 @admin_router.post("/config/{image_provider_id}/default")
@@ -589,7 +586,7 @@ def set_config_as_default(
     try:
         set_default_image_generation_config(db_session, image_provider_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
 
 @admin_router.delete("/config/{image_provider_id}/default")
@@ -602,4 +599,4 @@ def unset_config_as_default(
     try:
         unset_default_image_generation_config(db_session, image_provider_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))

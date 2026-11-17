@@ -259,8 +259,8 @@ def get_chat_session_admin(
             db_session=db_session,
         )
     except ValueError:
-        raise HTTPException(
-            HTTPStatus.BAD_REQUEST,
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
             f"Chat session with id '{chat_session_id}' does not exist.",
         )
     snapshot = snapshot_from_chat_session(
@@ -268,8 +268,8 @@ def get_chat_session_admin(
     )
 
     if snapshot is None:
-        raise HTTPException(
-            HTTPStatus.BAD_REQUEST,
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
             f"Could not create snapshot for chat session with id '{chat_session_id}'",
         )
 
@@ -302,9 +302,7 @@ def list_all_query_history_exports(
 
         return merged
     except Exception as e:
-        raise HTTPException(
-            HTTPStatus.INTERNAL_SERVER_ERROR, f"Failed to get all tasks: {e}"
-        )
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Failed to get all tasks: {e}")
 
 
 @router.post("/admin/query-history/start-export", tags=PUBLIC_API_TAGS)
@@ -320,8 +318,8 @@ def start_query_history_export(
     end = end or datetime.now(tz=timezone.utc)
 
     if start >= end:
-        raise HTTPException(
-            HTTPStatus.BAD_REQUEST,
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
             f"Start time must come before end time, but instead got the start time coming after; {start=} {end=}",
         )
 
@@ -379,9 +377,8 @@ def get_query_history_export_status(
     )
 
     if not has_file:
-        raise HTTPException(
-            HTTPStatus.NOT_FOUND,
-            f"No task with {request_id=} was found",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"No task with {request_id=} was found"
         )
 
     return {"status": TaskStatus.SUCCESS}
@@ -407,8 +404,8 @@ def download_query_history_csv(
         try:
             csv_stream = file_store.read_file(report_name)
         except Exception as e:
-            raise HTTPException(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
                 f"Failed to read query history file: {str(e)}",
             )
         csv_stream.seek(0)
@@ -422,19 +419,20 @@ def download_query_history_csv(
     # Therefore, we check the task queue to determine its status, if there is any.
     task = get_task_with_id(db_session=db_session, task_id=request_id)
     if not task:
-        raise HTTPException(
-            HTTPStatus.NOT_FOUND,
-            f"No task with {request_id=} was found",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"No task with {request_id=} was found"
         )
 
     if task.status in [TaskStatus.STARTED, TaskStatus.PENDING]:
+        # http-exception: allow 202 is not an error, so no OnyxErrorCode fits
         raise HTTPException(
-            HTTPStatus.ACCEPTED, f"Task with {request_id=} is still being worked on"
+            status_code=HTTPStatus.ACCEPTED,
+            detail=f"Task with {request_id=} is still being worked on",
         )
 
     elif task.status == TaskStatus.FAILURE:
-        raise HTTPException(
-            HTTPStatus.INTERNAL_SERVER_ERROR,
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
             f"Task with {request_id=} failed to be processed",
         )
     else:

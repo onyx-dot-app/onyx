@@ -3,7 +3,7 @@ import uuid
 from typing import List
 from uuid import UUID
 
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -19,6 +19,8 @@ from onyx.configs.constants import (
 )
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Project__UserFile, User, UserFile, UserProject
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.connector import upload_files
 from onyx.server.features.projects.projects_file_utils import (
     RejectedFile,
@@ -128,7 +130,7 @@ def upload_files_to_user_files_with_indexing(
 ) -> CategorizedFilesResult:
     if project_id is not None and user is not None:
         if not check_project_ownership(project_id, user.id, db_session):
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
 
     categorized_files_result = create_user_files(
         files,

@@ -18,7 +18,6 @@ from typing import Callable
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import BuildSessionStatus, SandboxStatus
@@ -363,7 +362,7 @@ class TestRestoreFailureRecovery:
             lambda: stub_sandbox_manager,
         )
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             restore_session(
                 session_id=session_id,
                 user=test_user,

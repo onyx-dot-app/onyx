@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import HTTPException, Request
+from fastapi import Request
 
 from onyx.configs.app_configs import DATA_PLANE_SECRET, EXPECTED_API_KEY, JWT_ALGORITHM
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -28,22 +30,22 @@ async def control_plane_dep(request: Request) -> None:
     api_key = request.headers.get("X-API-KEY")
     if api_key != EXPECTED_API_KEY:
         logger.warning("Invalid API key")
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Invalid API key")
 
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         logger.warning("Invalid authorization header")
-        raise HTTPException(status_code=401, detail="Invalid authorization header")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Invalid authorization header")
 
     token = auth_header.split(" ")[1]
     try:
         payload = jwt.decode(token, DATA_PLANE_SECRET, algorithms=[JWT_ALGORITHM])
         if payload.get("scope") != "tenant:create":
             logger.warning("Insufficient permissions")
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Insufficient permissions")
     except jwt.ExpiredSignatureError:
         logger.warning("Token has expired")
-        raise HTTPException(status_code=401, detail="Token has expired")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Token has expired")
     except jwt.InvalidTokenError:
         logger.warning("Invalid token")
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Invalid token")
