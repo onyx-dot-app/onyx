@@ -12,7 +12,6 @@ from onyx.db.models import User
 from onyx.integrations.connections import (
     IntegrationStatus,
     connect_with_fields__no_commit,
-    integration_status,
 )
 from onyx.integrations.service import (
     admin_actions,
@@ -23,6 +22,7 @@ from onyx.integrations.service import (
     get_manageable_integration,
     get_viewable_integration,
     list_admin_integrations,
+    organization_status,
     preset_views,
     refresh_actions__no_commit,
     reload_craft_sessions,
@@ -55,9 +55,9 @@ def list_integrations_admin(
 
 @router.get("/presets")
 def list_integration_presets(
-    _: User = Depends(_manager),
+    user: User = Depends(_manager),
 ) -> list[PresetView]:
-    return preset_views()
+    return preset_views(user)
 
 
 @router.post("")
@@ -170,7 +170,7 @@ def save_organization_connection(
     reload_craft_sessions(
         craft_users_of_integration(integration.id, db_session), db_session
     )
-    return integration_status(integration, None, db_session)
+    return organization_status(integration, db_session)
 
 
 @router.delete("/{integration_id}/organization-connection")
@@ -185,4 +185,4 @@ def delete_organization_connection(
     reload_craft_sessions(
         craft_users_of_integration(integration.id, db_session), db_session
     )
-    return integration_status(integration, None, db_session)
+    return organization_status(integration, db_session)

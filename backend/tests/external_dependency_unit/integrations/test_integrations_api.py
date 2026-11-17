@@ -72,6 +72,7 @@ from onyx.server.features.integrations.models import (
     PresetConfigInput,
 )
 from onyx.server.features.persona import api as persona_api
+from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.tool import api as tool_api
 from onyx.server.features.tool.models import (
     CustomToolCreate,
@@ -139,6 +140,15 @@ def created(
         yield tracker
     finally:
         delete_integrations(db_session, tracker.ids)
+
+
+@pytest.fixture
+def craft_available() -> Generator[None, None, None]:
+    with patch(
+        "onyx.integrations.service.is_craft_available_for_deployment",
+        return_value=True,
+    ):
+        yield
 
 
 def _openapi_create(
@@ -253,6 +263,7 @@ def test_create_mcp_discovers_tools_of_a_public_server(
     )
 
 
+@pytest.mark.usefixtures("craft_available")
 def test_create_preset_keeps_client_and_host_on_the_oauth_client(
     db_session: Session, admin: User, created: Created
 ) -> None:
@@ -293,24 +304,50 @@ def test_create_preset_keeps_client_and_host_on_the_oauth_client(
     assert len(list_integration_actions(detail.id, db_session)) > 0
 
 
-def test_create_custom_app(db_session: Session, admin: User, created: Created) -> None:
-    detail = admin_api.create_integration(
-        IntegrationCreate(
-            name=f"custom-{uuid4().hex[:8]}",
-            auth_mode=IntegrationAuthMode.INDIVIDUAL,
-            auth_method=IntegrationAuthMethod.API_KEY,
-            header_template={"Authorization": "Bearer {token}"},
-            config=CustomConfigInput(
-                upstream_url_patterns=["https://api.custom.example.com/*"]
-            ),
+def _custom_create() -> IntegrationCreate:
+    return IntegrationCreate(
+        name=f"custom-{uuid4().hex[:8]}",
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"Authorization": "Bearer {token}"},
+        config=CustomConfigInput(
+            upstream_url_patterns=["https://api.custom.example.com/*"]
         ),
-        admin,
-        db_session,
     )
+
+
+@pytest.mark.usefixtures("craft_available")
+def test_create_custom_app(db_session: Session, admin: User, created: Created) -> None:
+    detail = admin_api.create_integration(_custom_create(), admin, db_session)
     created.add(detail.id)
     assert detail.shape is IntegrationShape.CUSTOM
     assert [ref.scope for ref in detail.plugins] == ["personal"]
     assert detail.config.shape is IntegrationShape.CUSTOM
+
+
+def test_without_craft_no_external_app_and_no_presets(
+    db_session: Session, admin: User
+) -> None:
+    preset = IntegrationCreate(
+        name=f"github-{uuid4().hex[:8]}",
+        auth_mode=IntegrationAuthMode.NONE,
+        config=PresetConfigInput(preset_id="GITHUB"),
+    )
+    with patch(
+        "onyx.integrations.service.is_craft_available_for_deployment",
+        return_value=False,
+    ):
+        assert admin_api.list_integration_presets(admin) == []
+        for request in (preset, _custom_create()):
+            with pytest.raises(OnyxError) as error:
+                admin_api.create_integration(request, admin, db_session)
+            assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+            assert (
+                db_session.scalar(
+                    select(Integration.id).where(Integration.name == request.name)
+                )
+                is None
+            )
 
 
 def test_create_rolls_back_when_a_step_fails(db_session: Session, admin: User) -> None:
@@ -338,6 +375,7 @@ def test_create_rolls_back_when_a_step_fails(db_session: Session, admin: User) -
         CustomConfigInput(upstream_url_patterns=["https://api.custom.example.com/*"]),
     ],
 )
+@pytest.mark.usefixtures("craft_available")
 def test_delete_removes_the_kind_row_and_the_emptied_plugin(
     db_session: Session,
     admin: User,
@@ -630,6 +668,11 @@ def test_organization_connection_put_and_delete(
     )
     status = admin_api.delete_organization_connection(detail.id, admin, db_session)
     assert status.state.value == "not_set_up"
+    assert status.reason == "Connect the account of the organization."
+    view = admin_api.get_integration_admin(detail.id, admin, db_session)
+    assert view.organization_status is not None
+    assert view.organization_status.reason == "Connect the account of the organization."
+    assert view.setup_reason == view.organization_status.reason
 
 
 # Actions
@@ -765,6 +808,36 @@ def test_member_list_detail_connection_and_grants(
             db_session,
         )
     assert error.value.status_code == 403
+
+
+def test_member_cannot_save_always_allow_over_an_admin_block_or_allow(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    from onyx.integrations.models import EffectivePolicy
+
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    admin_api.set_integration_actions(
+        detail.id,
+        IntegrationActionsUpdate(actions={"set_alert": EffectivePolicy.BLOCKED}),
+        admin,
+        db_session,
+    )
+
+    for key in ("set_alert", "get_forecast"):
+        with pytest.raises(OnyxError) as error:
+            api.save_action_grants(
+                detail.id,
+                ActionGrantsUpdate(actions={key: "allow"}),
+                member,
+                db_session,
+            )
+        assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+        assert key in error.value.detail
+    assert all(
+        action.user_policy is None
+        for action in api.get_action_grants(detail.id, member, db_session).actions
+    )
 
 
 def test_member_plugin_refs_carry_the_user_choice(
@@ -916,6 +989,20 @@ def test_persona_plugins_and_legacy_tool_ids(
     # None keeps the links.
     _persona(db_session, admin, tool_ids=[], plugin_links=None, persona_id=persona_id)
     assert len(list_persona_plugin_links(db_session, persona_id)) == 1
+
+
+def test_persona_create_and_update_responses_carry_plugins() -> None:
+    """FastAPI drops each field that the response model does not have."""
+    from fastapi.routing import APIRoute
+
+    endpoints = {persona_api.create_persona, persona_api.update_persona}
+    models = [
+        route.response_model
+        for route in persona_api.basic_router.routes
+        if isinstance(route, APIRoute) and route.endpoint in endpoints
+    ]
+    assert models == [FullPersonaSnapshot, FullPersonaSnapshot]
+    assert "plugins" in FullPersonaSnapshot.model_fields
 
 
 # Public aliases

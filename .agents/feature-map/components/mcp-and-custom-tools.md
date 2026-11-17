@@ -255,7 +255,10 @@ presets, create, read, PATCH, DELETE, actions GET/PUT, `actions/refresh`,
 OAuth start and callback stay in
 `backend/onyx/server/features/integrations/connections_api.py`. The logic is in
 `integrations/service.py`; the queries are in `db/integration.py` and
-`db/integration_policy.py`.
+`db/integration_policy.py`. Only Craft runs a preset or custom app, so when
+`is_craft_available_for_deployment` is false, create refuses those shapes and
+the presets list is empty. A user cannot save Always allow on an action whose
+admin value is not Ask.
 - Create (`create_integration__no_commit`) writes, in one transaction, the
   kind row (`mcp_server`, the OpenAPI `tool` row, or `external_app` with the
   preset or URL patterns), then the `integration` row with exactly one of
