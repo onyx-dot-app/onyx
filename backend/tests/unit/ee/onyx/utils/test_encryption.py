@@ -308,9 +308,20 @@ class TestKeyringConfiguration:
         with pytest.raises(EncryptionConfigError, match=match):
             build_keyring("", keys_json, "")
 
-    def test_a_key_in_the_id_position_is_not_echoed(self) -> None:
+    @pytest.mark.parametrize(
+        ("keys_json", "write_key_id"),
+        [
+            ('{"%s": "k2026"}' % KEY_A, ""),
+            ('{"%s": "a", "%s": "b"}' % (KEY_A, KEY_A), ""),
+            (_keys_json(k2026=KEY_A), KEY_A),
+        ],
+        ids=["key-as-id", "duplicate-key-as-id", "key-as-write-id"],
+    )
+    def test_key_material_in_an_id_setting_is_not_echoed(
+        self, keys_json: str, write_key_id: str
+    ) -> None:
         with pytest.raises(EncryptionConfigError) as info:
-            build_keyring("", '{"%s": "k2026"}' % KEY_A, "")
+            build_keyring("", keys_json, write_key_id)
         assert KEY_A not in str(info.value)
 
     def test_write_key_must_be_configured(self) -> None:

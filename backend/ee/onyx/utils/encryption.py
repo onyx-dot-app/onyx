@@ -133,12 +133,18 @@ def _legacy_envelope_key(legacy_key: bytes) -> bytes:
     ).derive(legacy_key)
 
 
+def _quoted_key_id(value: str) -> str:
+    """A key id for an error message. A value that is not a valid id is not
+    echoed: an operator who swaps an id and a key puts the key there."""
+    return repr(value) if KEY_ID_PATTERN.match(value) else "(not a valid key id)"
+
+
 def _reject_duplicate_key_ids(pairs: list[tuple[str, object]]) -> dict[str, object]:
     seen: set[str] = set()
     for key_id, _ in pairs:
         if key_id in seen:
             raise EncryptionConfigError(
-                f"ENCRYPTION_KEYS names key id {key_id!r} more than once"
+                f"ENCRYPTION_KEYS names key id {_quoted_key_id(key_id)} more than once"
             )
         seen.add(key_id)
     return dict(pairs)
@@ -199,8 +205,8 @@ def build_keyring(legacy_secret: str, keys_json: str, write_key_id: str) -> Keyr
                 f"ENCRYPTION_WRITE_KEY_ID={LEGACY_KEY_ID!r} needs ENCRYPTION_KEY_SECRET"
             )
         raise EncryptionConfigError(
-            f"ENCRYPTION_WRITE_KEY_ID={write_key_id!r} is not in ENCRYPTION_KEYS "
-            f"(configured: {sorted(keys)})"
+            f"ENCRYPTION_WRITE_KEY_ID {_quoted_key_id(write_key_id)} is not in "
+            f"ENCRYPTION_KEYS (configured: {sorted(keys)})"
         )
     return Keyring(keys=keys, legacy_key=legacy_key, write_key_id=write_key_id or None)
 

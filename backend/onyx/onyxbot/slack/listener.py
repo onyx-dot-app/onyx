@@ -1402,12 +1402,15 @@ if __name__ == "__main__":
     # Start telemetry before the handler starts message-processing threads.
     start_telemetry("slack")
 
+    # Before the handler: it starts threads that take tenant locks, and a failed
+    # check must not leave those locks held.
+    set_is_ee_if_available()
+    validate_encryption_configuration()
+
     # Initialize the tenant handler which will manage tenant connections
     logger.info("Starting SlackbotHandler")
     tenant_handler = SlackbotHandler()
 
-    set_is_ee_if_available()
-    validate_encryption_configuration()
     setup_tracing()
 
     try:
