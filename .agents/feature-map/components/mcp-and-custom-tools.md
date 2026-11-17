@@ -245,9 +245,9 @@ calls `resolve_connection` and renders the `header_template`. An OAuth2 or Onyx
 login token goes in `Authorization: Bearer` unless the template fills
 Authorization from a placeholder; a literal Authorization value (the static
 header of a migrated OpenAPI tool) loses to the token. A problem means
-no action of the integration is offered. An API integration with no stored
-actions (the migration writes none for an OpenAPI tool or a preset) gets them
-from `integrations/sync.py:sync_api_actions_if_missing` on its first chat.
+no action of the integration is offered. The migration writes the actions of
+each MCP server, OpenAPI tool, preset and custom app, so chat reads the stored
+actions and never discovers them.
 `MCPTool._run` calls the same check again through `resolve_mcp_call_auth`,
 which sends nothing when the server URL changed since construction, and for
 OAuth2 on a non-SSE transport passes `make_integration_oauth_provider` with
