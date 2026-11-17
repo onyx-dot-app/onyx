@@ -282,6 +282,44 @@ test("sends an edited OpenAPI schema and rejects one that is not JSON", async ()
   );
 });
 
+test("reloads the actions after a schema change", async () => {
+  const spec = { openapi: "3.0.0", info: { title: "Reports" } };
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "openapi",
+      auth_mode: "none",
+      auth_method: null,
+      oauth_client: null,
+      config: { shape: "openapi", openapi_spec: spec },
+    }),
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+    [URL_ACTIONS]: NO_ACTIONS,
+    "/api/admin/integrations": [],
+  });
+  const actionReads = () =>
+    fetchMock.mock.calls.filter(
+      ([url, init]) =>
+        String(url) === URL_ACTIONS && (init?.method ?? "GET") === "GET"
+    ).length;
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const schema = await view.findByRole("textbox", {
+    name: detailCopy.configuration.connection.schema,
+  });
+  await waitFor(() => expect(actionReads()).toBeGreaterThan(0));
+  const before = actionReads();
+
+  await u.clear(schema);
+  await u.click(schema);
+  await u.paste('{"openapi":"3.1.0"}');
+  await u.click(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  );
+  await waitFor(() => expect(actionReads()).toBeGreaterThan(before));
+});
+
 test("connects the organization account with an API key", async () => {
   const shared = makeDetail({
     auth_mode: "shared",

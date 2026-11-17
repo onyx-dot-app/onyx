@@ -181,6 +181,9 @@ export default function IntegrationConfigurationTab({
       await updateIntegration(integration.id, update);
       setPresetCredentials({});
       toast.success(t("saved"));
+      // A new schema or server syncs the actions again.
+      if (config)
+        await mutate(SWR_KEYS.adminIntegrationActions(integration.id));
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("saveFailed"));
