@@ -337,6 +337,62 @@ def test_connection_deleted_during_the_lock_wait_is_not_connected(
     assert token_endpoint.requests == []
 
 
+@pytest.mark.parametrize("status_code", [200, 400], ids=["refreshed", "refused"])
+def test_connection_deleted_during_the_token_request_is_not_connected(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+    token_endpoint: FakeTokenEndpoint,
+    status_code: int,
+) -> None:
+    integration = _manual_integration(make_integration)
+    user = make_test_user("deleted_during_token_request")
+    connection = add_connection(
+        db_session, integration, user.id, _stale_secret(), expires_at=expired()
+    )
+    token_endpoint.status_code = status_code
+    if status_code != 200:
+        token_endpoint.body = {"error": "invalid_grant"}
+
+    def send(request: httpx.Request, *, mcp: bool) -> httpx.Response:
+        with get_session_with_current_tenant() as other_session:
+            delete_connection__no_commit(other_session, integration.id, user.id)
+            other_session.commit()
+        return token_endpoint.send(request, mcp=mcp)
+
+    with patch("onyx.integrations.connections._send_token_request", send):
+        assert ensure_fresh_connection(connection, integration, db_session) is None
+        result = resolve_connection(integration, user, db_session)
+
+    assert isinstance(result, ConnectionProblem)
+    assert result.code is ConnectionState.NOT_CONNECTED
+
+
+def test_expired_token_after_a_temporary_refresh_error_is_not_used(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+    token_endpoint: FakeTokenEndpoint,
+) -> None:
+    integration = _manual_integration(make_integration)
+    user = make_test_user("expired_after_temporary_error")
+    connection = add_connection(
+        db_session, integration, user.id, _stale_secret(), expires_at=expired()
+    )
+    token_endpoint.status_code = 503
+    token_endpoint.body = {"error": "temporarily_unavailable"}
+
+    result = resolve_connection(integration, user, db_session)
+
+    assert isinstance(result, ConnectionProblem)
+    assert result.code is ConnectionState.NEEDS_RECONNECT
+    db_session.refresh(connection)
+    # The row stays connected, so the next call tries the refresh again.
+    assert connection.status is IntegrationConnectionStatus.CONNECTED
+    resolve_connection(integration, user, db_session)
+    assert len(token_endpoint.requests) == 2
+
+
 def test_expired_token_without_refresh_token_needs_reconnect(
     db_session: Session,
     make_integration: MakeIntegration,

@@ -1,5 +1,7 @@
 """resolve_connection and render_headers for each sign-in mode and method."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 from uuid import UUID
@@ -11,6 +13,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.oauth_refresher import _RefreshContext
 from onyx.auth.schemas import RefreshedLoginToken
 from onyx.configs.constants import ANONYMOUS_USER_UUID
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
@@ -289,6 +292,52 @@ def test_onyx_login_uses_a_refreshed_token_that_has_no_expiry(
             )
         assert resolved.secret is not None
         assert resolved.secret.access_token == "refreshed-login"
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(OAuthAccount).where(OAuthAccount.__table__.c.user_id == user.id)
+        )
+        db_session.commit()
+
+
+def test_onyx_login_account_deleted_during_the_lock_wait_needs_reconnect(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = make_integration(
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.ONYX_LOGIN,
+        header_template={"Authorization": "Bearer {access_token}"},
+    )
+    user = make_test_user("onyx_login_deleted")
+    try:
+        now = int(datetime.now(timezone.utc).timestamp())
+        # Near expiry, but not expired: the old token would still pass.
+        _add_login_account(
+            db_session, user, expires_at=now + 30, refresh_token="login-refresh"
+        )
+
+        @contextmanager
+        def lock_after_the_account_is_deleted(
+            *_: object, **__: object
+        ) -> Iterator[None]:
+            with get_session_with_current_tenant() as other_session:
+                other_session.execute(
+                    delete(OAuthAccount).where(
+                        OAuthAccount.__table__.c.user_id == user.id
+                    )
+                )
+                other_session.commit()
+            yield
+
+        with patch(
+            "onyx.integrations.connections.cache_shared_lock",
+            lock_after_the_account_is_deleted,
+        ):
+            result = expect_problem(resolve_connection(integration, user, db_session))
+
+        assert result.code is ConnectionState.NEEDS_RECONNECT
     finally:
         db_session.rollback()
         db_session.execute(
