@@ -26,7 +26,7 @@ Usage, from the repo root:
 import argparse
 import ast
 import re
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from pathlib import Path
 
 # A deliberate exception opts out on its own line, and must give a reason.
@@ -218,22 +218,6 @@ def _session_names(tree: ast.AST, imports: _Imports) -> set[str]:
     return names
 
 
-def _statements(tree: ast.AST) -> Iterator[tuple[ast.stmt, ast.Call]]:
-    """Every call with the innermost statement that holds it."""
-
-    def walk(
-        node: ast.AST, statement: ast.stmt | None
-    ) -> Iterator[tuple[ast.stmt, ast.Call]]:
-        if isinstance(node, ast.stmt):
-            statement = node
-        if isinstance(node, ast.Call) and statement is not None:
-            yield statement, node
-        for child in ast.iter_child_nodes(node):
-            yield from walk(child, statement)
-
-    return walk(tree, None)
-
-
 def find_db_operations(source: str) -> tuple[list[int], list[int]]:
     """One-based lines of database operations, and of allow markers with no reason."""
     tree = ast.parse(source)
@@ -242,7 +226,9 @@ def find_db_operations(source: str) -> tuple[list[int], list[int]]:
     sessions = _session_names(tree, imports)
     found: set[int] = set()
     no_reason: set[int] = set()
-    for statement, call in _statements(tree):
+    for call in ast.walk(tree):
+        if not isinstance(call, ast.Call):
+            continue
         func = call.func
         is_operation = imports.is_builder(func) or (
             isinstance(func, ast.Attribute)
@@ -251,13 +237,13 @@ def find_db_operations(source: str) -> tuple[list[int], list[int]]:
         )
         if not is_operation:
             continue
-        # The marker exempts a call on its first or last line, or on its
-        # statement's first line. A line between belongs to a nested call.
-        marked = {statement.lineno, call.lineno, call.end_lineno or call.lineno}
-        marker_lines = [n for n in sorted(marked) if ALLOW_MARKER in lines[n - 1]]
-        if any(_ALLOW_WITH_REASON.search(lines[n - 1]) for n in marker_lines):
-            continue
-        no_reason.update(marker_lines)
+        # The marker exempts the call whose name is on its line, so a marker
+        # on a nested call does not exempt the call around it.
+        line = func.end_lineno or call.lineno
+        if ALLOW_MARKER in lines[line - 1]:
+            if _ALLOW_WITH_REASON.search(lines[line - 1]):
+                continue
+            no_reason.add(line)
         found.add(call.lineno)
     return sorted(found), sorted(no_reason)
 

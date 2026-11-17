@@ -162,21 +162,29 @@ def test_builder_names_from_other_modules_are_clean() -> None:
     [
         "db_session.execute(stmt)  # db-ops-outside-db: allow advisory lock, no query",
         "db_session.execute(  # db-ops-outside-db: allow: advisory lock\n    stmt\n)",
-        "rows = db_session.execute(\n"
+        "rows = db_session.execute(  # db-ops-outside-db: allow advisory lock\n"
         "    select(User)  # db-ops-outside-db: allow built for a db function\n"
-        ").all()  # db-ops-outside-db: allow advisory lock",
+        ").all()",
     ],
 )
 def test_allow_marker_with_a_reason_exempts_its_call(body: str) -> None:
     assert check_db_ops_outside_db.find_db_operations(_source(body)) == ([], [])
 
 
-def test_allow_marker_on_a_nested_call_does_not_exempt_its_parent() -> None:
-    body = (
+@pytest.mark.parametrize(
+    "body",
+    [
         "rows = db_session.execute(\n"
         "    select(User)  # db-ops-outside-db: allow built for a db function\n"
-        ").all()"
-    )
+        ").all()",
+        # Both calls end on the marked line.
+        "rows = db_session.execute(\n"
+        "    select(  # db-ops-outside-db: allow built for a db function\n"
+        "        User\n"
+        "    ))  # db-ops-outside-db: allow nested statement",
+    ],
+)
+def test_allow_marker_on_a_nested_call_does_not_exempt_its_parent(body: str) -> None:
     lines, no_reason = check_db_ops_outside_db.find_db_operations(_source(body))
     assert lines == [_FIRST_BODY_LINE]
     assert no_reason == []
