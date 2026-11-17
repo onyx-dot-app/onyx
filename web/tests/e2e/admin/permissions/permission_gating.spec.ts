@@ -727,24 +727,24 @@ test.describe("Permission gating: MANAGE_BOTS", () => {
       await page.context().clearCookies();
       await apiLogin(page, email, password);
 
-      // Verify Slack Integration page
+      // Verify Slack Bot page
       await page.goto(ADMIN_ROUTES.SLACK_BOTS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain(ADMIN_ROUTES.SLACK_BOTS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Slack Integration")
+        page.getByLabel("admin-page-title").getByText("Slack Bot")
       ).toBeVisible({ timeout: 10000 });
       // href Buttons render as links, not buttons
       await expect(
         page.getByRole("link", { name: "New Slack Bot" })
       ).toBeVisible();
 
-      // Verify Discord Integration page
+      // Verify Discord Bot page
       await page.goto(ADMIN_ROUTES.DISCORD_BOTS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain(ADMIN_ROUTES.DISCORD_BOTS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Discord Integration")
+        page.getByLabel("admin-page-title").getByText("Discord Bot")
       ).toBeVisible({ timeout: 10000 });
       await expect(page.getByText("Add Server")).toBeVisible();
 
