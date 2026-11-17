@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 
 from ee.onyx.auth.users import current_cloud_superuser
 from onyx.background.celery.apps.client import celery_app as client_app
-from onyx.configs.constants import CELERY_USER_REQUESTED_TASK_EXPIRES, OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.models import User
 from onyx.evals.models import EvalConfigurationOptions
 from onyx.server.evals.models import EvalRunAck
@@ -22,11 +22,10 @@ def eval_run(
     Run an evaluation with the given message and optional dataset.
     This endpoint requires a valid API key for authentication.
     """
-    client_app.send_task(
+    client_app.send_task(  # celery-expires: allow (user-started job, nothing sends it again)
         OnyxCeleryTask.EVAL_RUN_TASK,
         kwargs={
             "configuration_dict": request.model_dump(),
         },
-        expires=CELERY_USER_REQUESTED_TASK_EXPIRES,
     )
     return EvalRunAck(success=True)
