@@ -165,7 +165,7 @@ export default function IntegrationConfigurationTab({
 
   async function save() {
     const config = nextConfig();
-    if (config === null || signInErrors(signIn).length > 0) {
+    if (config === null || (signInChanged && signInErrors(signIn).length > 0)) {
       setShowErrors(true);
       return;
     }

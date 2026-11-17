@@ -480,6 +480,53 @@ test("sends only Always allow when the sign-in did not change", async () => {
   );
 });
 
+test("saves Always allow for an app that Onyx provides", async () => {
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: makeDetail({
+      kind: "api",
+      shape: "preset",
+      preset_id: "GITHUB",
+      auth_mode: "individual",
+      auth_method: "oauth2",
+      oauth_client: null,
+      header_template: null,
+      can_delete: false,
+      config: { shape: "preset", preset_id: "GITHUB" },
+    }),
+    "/api/admin/integrations/presets": [
+      {
+        id: "GITHUB",
+        name: "GitHub",
+        auth_methods: ["oauth2"],
+        required_org_credential_fields: [],
+        setup_instructions: null,
+      },
+    ],
+    [`PATCH ${URL_DETAIL}`]: makeDetail(),
+    [URL_ACTIONS]: NO_ACTIONS,
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  await u.click(
+    await view.findByRole("switch", {
+      name: detailCopy.configuration.alwaysAllow.title,
+    })
+  );
+  expect(
+    view.queryByLabelText(copy.signIn.oauth.clientId)
+  ).not.toBeInTheDocument();
+  await u.click(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  );
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual({
+      users_can_save_always_allow: false,
+    })
+  );
+});
+
 test("keeps the other headers and the OAuth options in a sign-in change", async () => {
   const fetchMock = mockFetch({
     [URL_DETAIL]: makeDetail({
