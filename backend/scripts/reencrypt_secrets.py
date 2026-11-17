@@ -13,7 +13,7 @@ Usage (kubernetes):
     kubectl exec -it <api pod> -- python -m scripts.reencrypt_secrets --dry-run
 
 Modes:
-    --dry-run   Classify every value and write nothing. Fails on unreadable or
+    --dry-run   Decrypt every value and write nothing. Fails on unreadable or
                 unsupported values. Runs without a write key.
     (default)   Rewrite every stale value. Fails when any value is left stale,
                 conflicted, unreadable or unsupported. Safe to run again.
@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     mode_group.add_argument(
         "--dry-run",
         action="store_true",
-        help="Classify every value and write nothing.",
+        help="Decrypt every value and write nothing.",
     )
     mode_group.add_argument(
         "--verify",

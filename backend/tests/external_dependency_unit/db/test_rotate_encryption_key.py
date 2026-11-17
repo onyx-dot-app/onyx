@@ -296,6 +296,25 @@ class TestConversion:
         with session_on(schema) as db_session:
             assert raw_credential(db_session, credential_id) == before
 
+    def test_dry_run_decrypts_values_already_under_the_write_key(
+        self, schema: str
+    ) -> None:
+        """A current-looking envelope with a broken tag must fail the dry run, not
+        wait for the verify step."""
+        tampered = bytearray(encrypt_with_keyring(NEW, CREDENTIAL_JSON))
+        tampered[-1] ^= 1
+        with session_on(schema) as db_session:
+            insert_credential(db_session, encrypt_with_keyring(NEW, CREDENTIAL_JSON))
+            insert_credential(db_session, bytes(tampered))
+            insert_credential(db_session, encrypt_with_keyring(NEW, "not json"))
+
+        reports = run(schema, NEW, RotationMode.DRY_RUN)
+
+        assert counts(reports, "credential.credential_json") == {
+            ValueOutcome.CURRENT: 1,
+            ValueOutcome.UNREADABLE: 2,
+        }
+
     def test_same_key_material_moves_to_the_envelope_format(self, schema: str) -> None:
         same_material = build_keyring(LEGACY_SECRET, "", LEGACY_KEY_ID)
         with session_on(schema) as db_session:
@@ -694,6 +713,7 @@ def two_shards(
             patch(f"{ROTATION_MODULE}.get_head_revision", return_value="head-rev"),
             patch(f"{ROTATION_MODULE}.get_cache_backend", return_value=None),
             patch(f"{ROTATION_MODULE}.refresh_template_snapshot", refresh),
+            patch(f"{ROTATION_MODULE}.require_pg_dump"),
         ):
             yield {
                 "tenant": tenant,
@@ -838,6 +858,26 @@ class TestPhysicalCoverage:
         )
         assert stale_report.incomplete_reasons() == ["2 value(s) stale"]
         assert fresh_report.incomplete_reasons() == []
+
+    def test_execute_without_pg_dump_stops_before_any_row_changes(
+        self, two_shards: dict[str, Any]
+    ) -> None:
+        with (
+            patch(f"{ROTATION_MODULE}.get_keyring", return_value=NEW),
+            patch(
+                f"{ROTATION_MODULE}.require_pg_dump",
+                side_effect=RuntimeError("pg_dump is not installed"),
+            ),
+            pytest.raises(RuntimeError, match="pg_dump"),
+        ):
+            rotate_encryption_key(RotationMode.EXECUTE)
+
+        for (shard_name, schema_name), credential_id in two_shards[
+            "credential_ids"
+        ].items():
+            with session_on(schema_name, shard_name) as db_session:
+                raw = raw_credential(db_session, credential_id)
+            assert raw is not None and not is_current_ciphertext(NEW, raw)
 
     @pytest.mark.usefixtures("two_shards")
     def test_a_missing_snapshot_fails_verification(self) -> None:

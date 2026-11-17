@@ -466,6 +466,13 @@ def ensure_template_schema(shard_name: str) -> None:
         connection.execute(CreateSchema(TENANT_TEMPLATE_SCHEMA, if_not_exists=True))
 
 
+def require_pg_dump() -> None:
+    """Dumping a template needs the PostgreSQL client, which only the `dev`
+    image stage installs."""
+    if shutil.which("pg_dump") is None:
+        raise RuntimeError("pg_dump is not installed, run from an image that has it")
+
+
 def dump_schema(shard_name: str, schema: str) -> str:
     """pg_dump of one schema as plain SQL a driver can execute in one go.
 
@@ -474,8 +481,7 @@ def dump_schema(shard_name: str, schema: str) -> str:
     cost, never a per-tenant one."""
     if not validate_tenant_id(schema):
         raise ValueError(f"Refusing to dump schema {schema!r}")
-    if shutil.which("pg_dump") is None:
-        raise RuntimeError("pg_dump is not installed, run from an image that has it")
+    require_pg_dump()
     command = [
         "pg_dump",
         "--schema",

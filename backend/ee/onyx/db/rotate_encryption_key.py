@@ -34,6 +34,7 @@ from ee.onyx.db.tenant_snapshot import (
     get_head_revision,
     get_snapshot,
     refresh_template_snapshot,
+    require_pg_dump,
 )
 from ee.onyx.utils.encryption import (
     ENVELOPE_VERSION,
@@ -64,7 +65,7 @@ SANDBOX_DAEMON_KEY_COLUMN = "cache.sandbox_daemon_key"
 
 
 class RotationMode(str, Enum):
-    # Classify every value; write nothing.
+    # Decrypt every value; write nothing. Stale values do not fail it.
     DRY_RUN = "dry-run"
     # Rewrite every stale value.
     EXECUTE = "execute"
@@ -188,7 +189,8 @@ def classify_value(
     keyring: Keyring, raw: bytes, is_json: bool, decrypt_current: bool
 ) -> _ClassifiedValue:
     """Where one stored value stands against the keyring. A current value is
-    decrypted only when asked, which verification does and conversion skips."""
+    decrypted only when asked: the dry run and verification do, conversion
+    trusts the header and leaves the check to verification."""
     try:
         parsed = parse_envelope_header(raw)
     except DecryptionError:
@@ -285,7 +287,10 @@ def _process_rows(
     conflicted: list[Any] = []
     for key, raw in rows:
         classified = classify_value(
-            keyring, raw, encrypted.is_json, decrypt_current=mode == RotationMode.VERIFY
+            keyring,
+            raw,
+            encrypted.is_json,
+            decrypt_current=mode != RotationMode.EXECUTE,
         )
         if classified.outcome != ValueOutcome.STALE or mode != RotationMode.EXECUTE:
             counts[classified.outcome] += 1
@@ -355,7 +360,7 @@ def rotate_sandbox_daemon_keys(
                 keyring,
                 stored.ciphertext,
                 is_json=False,
-                decrypt_current=mode == RotationMode.VERIFY,
+                decrypt_current=mode != RotationMode.EXECUTE,
             )
             if classified.outcome != ValueOutcome.STALE or mode != RotationMode.EXECUTE:
                 counts[classified.outcome] += 1
@@ -475,6 +480,14 @@ def rotate_encryption_key(
     head_revision = get_head_revision() if MULTI_TENANT else None
     if MULTI_TENANT and head_revision is None:
         raise RuntimeError("Could not determine the head revision")
+    # Checked before any row changes: otherwise the run converts every row and
+    # then fails on each retry at the template's snapshot re-dump.
+    if (
+        MULTI_TENANT
+        and mode == RotationMode.EXECUTE
+        and only_schema in (None, TENANT_TEMPLATE_SCHEMA)
+    ):
+        require_pg_dump()
 
     report = RotationReport(mode=mode)
     # A tenant mid-move has a schema on two shards but one cache; sweep it once.
