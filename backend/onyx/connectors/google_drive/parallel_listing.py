@@ -125,6 +125,7 @@ _OUTPUT_POLL_SECONDS = 0.1
 
 _FILES_QUERY = f"mimeType != '{DRIVE_FOLDER_TYPE}' and trashed = false"
 _FOLDERS_QUERY = f"mimeType = '{DRIVE_FOLDER_TYPE}' and trashed = false"
+_SHORTCUTS_QUERY = f"mimeType = '{DRIVE_SHORTCUT_TYPE}' and trashed = false"
 _FOLDER_OR_SHORTCUT = (
     f"mimeType = '{DRIVE_FOLDER_TYPE}' or mimeType = '{DRIVE_SHORTCUT_TYPE}'"
 )
@@ -602,6 +603,15 @@ class ParallelDriveLister:
         with self._lock:
             self._emit(failures)
             self._finish_planning(partition)
+            if (
+                not usable
+                and plan.covered_drive_id is not None
+                and plan.covered_drive_id not in self._state.listed_drive_ids
+            ):
+                # The drive's listing failed during the checks above. Plan
+                # the folder again, after a new listing of the drive starts.
+                self._state.pending_partitions.append(partition)
+                return []
             if not usable and plan.covered_drive_id is not None:
                 logger.info(
                     "Requested folder %s has no usable user; the full listing "
@@ -703,6 +713,7 @@ class ParallelDriveLister:
         kind: ListingShardKind = ListingShardKind.FILES,
         folder_id: str | None = None,
         shortcut_path: list[str] | None = None,
+        shortcuts_only: bool = False,
     ) -> int:
         """The caller holds the lock."""
         state = self._state
@@ -723,6 +734,7 @@ class ParallelDriveLister:
             open_end=state.open_end and t1 >= state.window_t1,
             folder_id=folder_id,
             shortcut_path=shortcut_path or [],
+            shortcuts_only=shortcuts_only,
         )
         return shard_id
 
@@ -998,7 +1010,12 @@ class ParallelDriveLister:
         if shard.folder_id is not None:
             return _walk_query(shard, t0, t1)
         folders = shard.kind is ListingShardKind.FOLDERS
-        query = _FOLDERS_QUERY if folders else _FILES_QUERY
+        if folders:
+            query = _FOLDERS_QUERY
+        elif shard.shortcuts_only:
+            query = _SHORTCUTS_QUERY
+        else:
+            query = _FILES_QUERY
         if shard.partition.kind is ListingPartitionKind.MY_DRIVE:
             query += " and 'me' in owners"
         elif shard.partition.kind is ListingPartitionKind.SHARED_WITH_USER:
@@ -1178,6 +1195,7 @@ class ParallelDriveLister:
                     shard.drive_filter,
                     folder_id=shard.folder_id,
                     shortcut_path=shard.shortcut_path,
+                    shortcuts_only=shard.shortcuts_only,
                 )
                 for index, (t0, t1) in enumerate(ranges)
             ]
@@ -1276,14 +1294,20 @@ class ParallelDriveLister:
                 state.listed_drive_ids.discard(drive_id)
                 self._checkpoint.organizer_email_by_drive_id.pop(drive_id, None)
                 # A requested folder that no user can walk had only this
-                # drive's full listing as its cover.
+                # drive's full listing as its cover. Plan it again: a new full
+                # listing of the drive covers it again, and with no cover it
+                # is unreachable.
                 for folder_id in [
                     folder_id
                     for folder_id, cover in state.folders_covered_by_drive.items()
                     if cover == drive_id
                 ]:
                     del state.folders_covered_by_drive[folder_id]
-                    self._checkpoint.unreachable_target_ids.add(folder_id)
+                    folder = ListingPartition(
+                        kind=ListingPartitionKind.FOLDER_SUBTREE, key=folder_id
+                    )
+                    if folder not in state.pending_partitions:
+                        state.pending_partitions.append(folder)
                 if list_again:
                     state.pending_partitions.insert(0, partition)
                 else:
@@ -1320,6 +1344,7 @@ class ParallelDriveLister:
                         for started_partition, principal, _ in state.started_partitions
                         if started_partition.kind is ListingPartitionKind.FOLDER_SUBTREE
                     )
+                    relist.extend(self._relist_shortcuts(drive_filter=drive_id))
                     return [
                         self._page_task(shard_id) for shard_id in relist
                     ] + self._plan_tasks()
@@ -1355,10 +1380,39 @@ class ParallelDriveLister:
                     for started_partition, principal, _ in state.started_partitions
                     if started_partition.kind is ListingPartitionKind.FOLDER_SUBTREE
                 )
+                relist.extend(self._relist_shortcuts(owner_filter=owner))
                 return [
                     self._page_task(shard_id) for shard_id in relist
                 ] + self._plan_tasks()
             return self._plan_tasks()
+
+    def _relist_shortcuts(
+        self, owner_filter: str | None = None, drive_filter: str | None = None
+    ) -> list[int]:
+        """Shards that list again the shortcuts of each started exact
+        partition, and keep the targets of a failed owner or drive. The failed
+        listing covered those targets, so they were dropped. A shared drive
+        listing drops only the targets in other listed drives. The caller
+        holds the lock."""
+        state = self._state
+        kinds = {ListingPartitionKind.MY_DRIVE}
+        if drive_filter is not None:
+            kinds.add(ListingPartitionKind.SHARED_DRIVE)
+        return [
+            self._add_shard(
+                started_partition,
+                principal,
+                exact,
+                state.window_t0,
+                state.window_t1,
+                newest_ms=None,
+                owner_filter=owner_filter,
+                drive_filter=drive_filter,
+                shortcuts_only=True,
+            )
+            for started_partition, principal, exact in state.started_partitions
+            if started_partition.kind in kinds
+        ]
 
 
 def extend_window(state: DriveListingState, t1: int) -> None:

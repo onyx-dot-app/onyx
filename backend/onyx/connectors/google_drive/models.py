@@ -200,6 +200,10 @@ class ListingShard(BaseModel):
     # shard that lists again the files of a drive whose listing failed. Drive
     # has no query term for it, so the filter runs on each page.
     drive_filter: str | None = None
+    # Lists only shortcuts, and keeps the targets that owner_filter or
+    # drive_filter names. Set on a My Drive or shared drive shard that lists
+    # again the shortcut targets that a failed partition covered.
+    shortcuts_only: bool = False
     # True when the shard has no upper bound: it lists every file modified at
     # t0 or later, and t1 is not used. Such a shard does not split.
     open_end: bool = False
