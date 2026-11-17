@@ -551,7 +551,6 @@ const AgentMessage = React.memo(function AgentMessage({
                       key={`auth-error-${i}`}
                       toolName={authError.toolName}
                       toolId={authError.toolId}
-                      tools={effectiveChatState.agent.tools}
                     />
                   ))}
                   {orderRecordsByTurn(
