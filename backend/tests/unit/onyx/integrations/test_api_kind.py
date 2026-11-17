@@ -172,9 +172,9 @@ def test_openapi_match_method_and_path_template(
     matched = HANDLER.match_request(integration, _request(method, url), DB)
 
     assert matched is not None
-    assert [m.action_key for m in matched] == expected
+    assert [m.action_key for m in matched.actions] == expected
     if expected == [WHOLE_DOMAIN_ACTION_TYPE]:
-        assert matched[0].default_policy is IntegrationActionPolicyValue.ASK
+        assert matched.actions[0].default_policy is IntegrationActionPolicyValue.ASK
 
 
 def test_openapi_match_policy_follows_the_method(
@@ -192,8 +192,8 @@ def test_openapi_match_policy_follows_the_method(
         DB,
     )
     assert get is not None and delete is not None
-    assert get[0].default_policy is IntegrationActionPolicyValue.ALLOW
-    assert delete[0].default_policy is IntegrationActionPolicyValue.ASK
+    assert get.actions[0].default_policy is IntegrationActionPolicyValue.ALLOW
+    assert delete.actions[0].default_policy is IntegrationActionPolicyValue.ASK
 
 
 def _get(operation_id: str, *parameters: str) -> dict[str, Any]:
@@ -440,10 +440,10 @@ def test_preset_match_graphql(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     assert matched is not None
-    assert [(m.action_key, m.default_policy) for m in matched] == [
+    assert [(m.action_key, m.default_policy) for m in matched.actions] == [
         ("linear.viewer.read", IntegrationActionPolicyValue.ALLOW)
     ]
-    assert matched[0].integration_id == 21
+    assert matched.actions[0].integration_id == 21
     assert HANDLER.load_config(integration, DB).shape is ApiShape.PRESET
 
 
@@ -459,7 +459,7 @@ def test_preset_match_rest(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     assert matched is not None
-    assert [m.action_key for m in matched] == ["github.issues.read"]
+    assert [m.action_key for m in matched.actions] == ["github.issues.read"]
 
 
 def test_preset_match_on_another_host_is_none(
@@ -505,7 +505,7 @@ def test_custom_match_whole_domain(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     assert matched is not None
-    assert [(m.action_key, m.default_policy) for m in matched] == [
+    assert [(m.action_key, m.default_policy) for m in matched.actions] == [
         (WHOLE_DOMAIN_ACTION_TYPE, IntegrationActionPolicyValue.ASK)
     ]
     assert other is None

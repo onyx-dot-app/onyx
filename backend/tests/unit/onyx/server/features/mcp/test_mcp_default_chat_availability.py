@@ -133,7 +133,10 @@ def test_member_server_summary_reports_only_accessible_servers(
     monkeypatch: pytest.MonkeyPatch,
     craft: bool,
 ) -> None:
-    from onyx.db.enums import MCPServerStatus
+    from onyx.db.enums import IntegrationKind, MCPServerStatus
+    from onyx.db.models import Integration
+    from onyx.integrations.connection_models import ConnectionState
+    from onyx.integrations.connections import IntegrationStatus
     from onyx.server.features.mcp import api
     from onyx.server.features.mcp.models import MCPServer as MCPServerResponse
 
@@ -142,8 +145,23 @@ def test_member_server_summary_reports_only_accessible_servers(
     servers = [MCPServer(id=42), MCPServer(id=43)]
     selected_servers = MagicMock(return_value={43})
     monkeypatch.setattr(api, "get_mcp_servers_accessible_to_user", lambda *_: servers)
-    monkeypatch.setattr(api, "get_craft_enabled_mcp_servers", lambda *_, **__: servers)
-    monkeypatch.setattr(api, "get_user_connection_configs", lambda *_: {})
+    monkeypatch.setattr(
+        api,
+        "list_runnable_integrations",
+        lambda *_: [
+            Integration(id=server.id, kind=IntegrationKind.MCP) for server in servers
+        ],
+    )
+    monkeypatch.setattr(
+        api,
+        "get_mcp_server_for_integration",
+        lambda integration_id, _db: next(s for s in servers if s.id == integration_id),
+    )
+    monkeypatch.setattr(
+        api,
+        "integration_status",
+        lambda *_: IntegrationStatus(state=ConnectionState.CONNECTED, reason=None),
+    )
     monkeypatch.setattr(api, "get_default_chat_mcp_server_ids", selected_servers)
     monkeypatch.setattr(
         api,

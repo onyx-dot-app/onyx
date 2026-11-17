@@ -27,7 +27,7 @@ from mitmproxy import http
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.cache.interface import CacheBackend
-from onyx.db.enums import ActionPolicy, GatedAppKind
+from onyx.db.enums import ActionPolicy, IntegrationKind
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
@@ -236,7 +236,7 @@ def make_matched_actions(
             ),
         ),
         target=GatedTarget(
-            kind=GatedAppKind.EXTERNAL_APP, id=external_app_id, app_name=app_name
+            integration_id=external_app_id, kind=IntegrationKind.API, app_name=app_name
         ),
         payload=payload if payload is not None else {},
     )

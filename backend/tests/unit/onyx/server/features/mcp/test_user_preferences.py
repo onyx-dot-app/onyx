@@ -93,27 +93,21 @@ def test_deleted_server_returns_not_found_without_saving_preferences(
 
 
 @pytest.mark.parametrize(
-    ("accessible", "chat_available", "craft_available", "payload"),
+    ("accessible", "chat_available", "payload"),
     [
-        (False, True, True, {"enabled_in_chat": False}),
-        (True, False, True, {"enabled_in_chat": True}),
-        (True, True, False, {"enabled_in_craft": True}),
+        (False, True, {"enabled_in_chat": False}),
+        (True, False, {"enabled_in_chat": True}),
     ],
 )
 def test_update_cannot_exceed_access_or_admin_availability(
     monkeypatch: pytest.MonkeyPatch,
     accessible: bool,
     chat_available: bool,
-    craft_available: bool,
     payload: dict[str, bool],
 ) -> None:
     db = MagicMock(spec=Session)
     monkeypatch.setattr(api, "user_can_access_mcp_server", lambda *_: accessible)
-    monkeypatch.setattr(
-        api,
-        "get_mcp_server_by_id",
-        lambda *_: MCPServer(id=42, available_in_craft=craft_available),
-    )
+    monkeypatch.setattr(api, "get_mcp_server_by_id", lambda *_: MCPServer(id=42))
     monkeypatch.setattr(
         api,
         "get_default_chat_mcp_server_ids",

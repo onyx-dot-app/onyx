@@ -29,9 +29,6 @@ from onyx.db.mcp import (
 )
 from onyx.db.models import MCPServer, User
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.sandbox.util.mcp_config import (
-    resolve_craft_mcp_servers,
-)
 from onyx.server.features.mcp import api
 from onyx.server.features.mcp.api import save_user_credentials
 from onyx.server.features.mcp.credentials import (
@@ -114,18 +111,14 @@ def test_expired_token_with_refresh_token_is_authenticated(
     )
 
 
-def test_dead_grant_is_not_authenticated_and_excluded_from_craft(
+def test_dead_grant_is_not_authenticated(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     user = create_test_user(db_session, "oauth_dead")
     server = _make_oauth_server(db_session, owner_email=user.email)
 
-    def craft_server_ids() -> list[int]:
-        return [r.server_id for r in resolve_craft_mcp_servers(db_session, user)]
-
-    # Positive control: a live grant authenticates and reaches Craft configs,
-    # so the exclusion below can't pass vacuously.
+    # Positive control: a live grant authenticates.
     _store_grant(
         db_session, server, user, expires_at=time.time() + 3600, refresh_token=None
     )
@@ -133,7 +126,6 @@ def test_dead_grant_is_not_authenticated_and_excluded_from_craft(
         user_connection_status(server, user, db_session)
         == MCPConnectionStatus.CONNECTED
     )
-    assert server.id in craft_server_ids()
 
     _store_grant(
         db_session, server, user, expires_at=time.time() - 60, refresh_token=None
@@ -142,7 +134,6 @@ def test_dead_grant_is_not_authenticated_and_excluded_from_craft(
         user_connection_status(server, user, db_session)
         == MCPConnectionStatus.REAUTH_REQUIRED
     )
-    assert server.id not in craft_server_ids()
 
 
 def _invalid_grant_response() -> httpx.Response:

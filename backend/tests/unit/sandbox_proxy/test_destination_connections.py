@@ -26,8 +26,8 @@ from onyx.sandbox_proxy.destination_policy import (
     parse_destination_policy,
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
+from onyx.sandbox_proxy.resolvers.integration import IntegrationResolver
 from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
-from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.server.security.models import SSRFProtectionLevel
 from tests.unit.sandbox_proxy.conftest import (
     NoMatchedRequest,
@@ -85,7 +85,7 @@ async def _proxy(
     api_port: int,
     barrier: "_ConnectionBarrier | None" = None,
     addresses: "_ConnectionAddresses | None" = None,
-    mcp_resolver: MCPServerResolver | None = None,
+    integration_resolver: IntegrationResolver | None = None,
     evaluator: RequestEvaluator | None = None,
     dispatcher: CredentialInjectionDispatcher | None = None,
     connection_strategy: str = "eager",
@@ -100,7 +100,7 @@ async def _proxy(
         master.addons.add(addresses)
     master.addons.add(
         GateAddon(
-            mcp_resolver=mcp_resolver,
+            integration_resolver=integration_resolver,
             identity=StubResolver(
                 sandbox=make_resolved_sandbox(), session_by_id=session_id
             ),
@@ -320,7 +320,7 @@ def test_private_http_mcp_uses_pinned_addresses(
 ) -> None:
     async def exercise() -> None:
         async with _upstream(address) as (port, requests):
-            resolver = MCPServerResolver()
+            resolver = IntegrationResolver()
             monkeypatch.setattr(
                 resolver,
                 "_load_targets",
@@ -339,7 +339,7 @@ def test_private_http_mcp_uses_pinned_addresses(
             )
             unpinned = _dns(monkeypatch, lambda _port: (address,), lambda _port: ())
             async with _proxy(
-                monkeypatch, tmp_path, address, 1, mcp_resolver=resolver
+                monkeypatch, tmp_path, address, 1, integration_resolver=resolver
             ) as proxy_port:
                 response = await _request(address, proxy_port, port)
             assert response.startswith(b"HTTP/1.1 200")
@@ -369,7 +369,7 @@ def test_private_connect_never_forwards_raw_tcp(
             port,
             requests,
         ):
-            resolver = MCPServerResolver()
+            resolver = IntegrationResolver()
             monkeypatch.setattr(
                 resolver,
                 "_load_targets",
@@ -392,7 +392,7 @@ def test_private_connect_never_forwards_raw_tcp(
                 tmp_path,
                 address,
                 1,
-                mcp_resolver=resolver,
+                integration_resolver=resolver,
                 connection_strategy=connection_strategy,
             ) as proxy_port:
                 reader, writer = await asyncio.open_connection(address, proxy_port)
@@ -431,70 +431,72 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
     import json
     from unittest.mock import MagicMock
 
-    from onyx.db.enums import (
-        ActionPolicy,
-        MCPAuthenticationPerformer,
-        MCPAuthenticationType,
-    )
-    from onyx.db.models import MCPServer, User
+    from onyx.db.enums import ActionPolicy, IntegrationKind
+    from onyx.db.models import Integration, MCPServer, User
+    from onyx.integrations.call_credentials import CallCredentials
+    from onyx.integrations.kinds import mcp_server as mcp_kind
     from onyx.sandbox_proxy import request_evaluator
-    from onyx.sandbox_proxy.resolvers import mcp_server
-    from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
+    from onyx.sandbox_proxy.resolvers import integration as integration_resolver
 
     async def exercise() -> None:
         async with _upstream(address) as (port, requests):
-            stored = MCPServer(
-                id=1,
-                name="Private MCP",
-                server_url=f"http://{_HOST}:{port}/mcp",
-                available_in_craft=True,
-                auth_type=MCPAuthenticationType.API_TOKEN,
-                auth_performer=MCPAuthenticationPerformer.ADMIN,
+            server_url = f"http://{_HOST}:{port}/mcp"
+            stored = MCPServer(id=1, name="Private MCP", server_url=server_url)
+            integration = Integration(
+                id=1, kind=IntegrationKind.MCP, name="Private MCP", enabled=True
             )
             user = User(id=make_resolved_sandbox().user_id)
-            for module in (request_evaluator, mcp_server):
+            for module in (request_evaluator, integration_resolver):
                 monkeypatch.setattr(module, "get_session_with_tenant", MagicMock())
                 monkeypatch.setattr(
-                    module, "get_craft_enabled_mcp_servers", lambda *_args: [stored]
+                    module, "list_runnable_integrations", lambda *_args: [integration]
                 )
-                monkeypatch.setattr(module, "fetch_user_by_id", lambda *_args: user)
+            monkeypatch.setattr(
+                mcp_kind, "get_mcp_server_for_integration", lambda *_args: stored
+            )
+            monkeypatch.setattr(mcp_kind, "list_integration_actions", lambda *_: [])
+            monkeypatch.setattr(
+                integration_resolver,
+                "list_enabled_mcp_server_urls",
+                lambda *_args: [(1, server_url)],
+            )
+            monkeypatch.setattr(
+                integration_resolver, "get_integration_by_id", lambda *_: integration
+            )
+            monkeypatch.setattr(
+                integration_resolver, "fetch_user_by_id", lambda *_args: user
+            )
             session_id = uuid4()
             monkeypatch.setattr(gate, "get_session_with_tenant", MagicMock())
             monkeypatch.setattr(
                 gate, "get_active_scheduled_task_context", lambda *_args: None
             )
-            monkeypatch.setattr(gate, "get_gated_app_id", lambda *_args: 1)
             monkeypatch.setattr(
                 gate,
-                "resolve_action_policies",
+                "resolve_gate_policies",
                 lambda *_args, **_kwargs: {"delete_records": ActionPolicy.DENY},
             )
-            monkeypatch.setattr(
-                mcp_server, "get_mcp_server_by_id", lambda *_args: stored
-            )
-            monkeypatch.setattr(
-                mcp_server, "user_can_access_mcp_server", lambda *_args: True
-            )
             credentials = MagicMock(
-                return_value=ResolvedMCPCredentials(
-                    connection_config_id=1,
-                    connection_data={
-                        "headers": {"Authorization": "Bearer real-test-token"}
-                    },
-                    user_oauth_token=None,
-                    auth_type=MCPAuthenticationType.API_TOKEN,
+                return_value=CallCredentials(
+                    integration_id=1,
+                    auth_method=None,
+                    connection_id=None,
+                    connection_user_id=None,
+                    headers={"Authorization": "Bearer real-test-token"},
                 )
             )
-            monkeypatch.setattr(mcp_server, "resolve_mcp_credentials", credentials)
-            resolver = MCPServerResolver()
+            monkeypatch.setattr(
+                integration_resolver, "resolve_call_credentials", credentials
+            )
+            resolver = IntegrationResolver()
             _dns(monkeypatch, lambda _port: (address,), lambda _port: ())
             async with _proxy(
                 monkeypatch,
                 tmp_path,
                 address,
                 1,
-                mcp_resolver=resolver,
-                evaluator=request_evaluator.McpRequestEvaluator(),
+                integration_resolver=resolver,
+                evaluator=request_evaluator.IntegrationRequestEvaluator(),
                 session_id=session_id,
                 dispatcher=CredentialInjectionDispatcher([resolver]),
             ) as proxy_port:
@@ -583,7 +585,7 @@ def test_private_mcp_keepalive_rechecks_actual_peer(
             serve, address, 0, ssl=context if use_tls else None
         )
         port = upstream.sockets[0].getsockname()[1]
-        resolver = MCPServerResolver()
+        resolver = IntegrationResolver()
         monkeypatch.setattr(
             resolver,
             "_load_targets",
@@ -608,7 +610,7 @@ def test_private_mcp_keepalive_rechecks_actual_peer(
                 tmp_path,
                 address,
                 1,
-                mcp_resolver=resolver,
+                integration_resolver=resolver,
                 connection_strategy=connection_strategy,
             ) as proxy_port:
                 reader, writer = await asyncio.open_connection(address, proxy_port)
