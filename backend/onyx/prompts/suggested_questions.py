@@ -20,8 +20,10 @@ SQ_TRIAGE_USABLE_LEVELS = [
 ]
 
 SQ_TRIAGE_SENSITIVE_QUESTION = (
-    "Does excerpt [{index}] reveal private information: pay, health, "
-    "performance reviews, credentials, or personal details about a named person?"
+    "Does excerpt [{index}] reveal private information about a specific person: "
+    "their pay, health, performance review, credentials, or personal details? "
+    "Ignore company-wide policies about pay, benefits or leave that name no "
+    "individual."
 )
 
 SQ_TRIAGE_TOPIC_QUESTION = "Which kind of work is excerpt [{index}] most useful for?"
@@ -37,5 +39,6 @@ SQ_TRIAGE_TOPIC_CHOICES = [
 
 SQ_TRIAGE_FACT_QUESTION = (
     "Does excerpt [{index}] state a concrete fact: a number, a date, a name or "
-    "a short list?"
+    "a short list? Ignore page numbers, version numbers and dates in headers or "
+    "footers."
 )
