@@ -395,7 +395,7 @@ the admin routes and check that each has a row above, run
 | `backend/Dockerfile`, `backend/Dockerfile.model_server`, `web/Dockerfile` | Image builds. `.github/workflows/deployment.yml` sets their build args, such as the version and the git details on the About page. |
 | `deployment/data/nginx/`, `cli/internal/deploy/deployfiles/embedded/data/nginx/` | Reverse-proxy templates. The `cli/` copies are generated: run `ods generate-compose --write` after you change `deployment/data/nginx/`. |
 | `cli/` | The Onyx CLI client. Only its packet parser has an owner (streaming-protocol). |
-| `tools/`, `backend/scripts/`, `backend/requirements/` | Developer tooling and dependency files. |
+| `tools/`, `backend/scripts/`, `backend/lint/`, `backend/requirements/` | Developer tooling and dependency files. |
 | `web/src/lib/common/` | App components meant for any feature: the list states `NoResults` and `NoItems`, and `GridSearchInput`. The agents catalog is their only caller so far. Check the callers. |
 | `web/.oxlintrc.json` | Lint config for `web/`, with the design-system, layout and navigation baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
 | `web/AGENTS.md` | Frontend standards for every agent. Read it before you work in `web/`. |

@@ -18,7 +18,7 @@ callback, or a schedule entry built without a dict literal. It does not prove
 that a variable passed as `expires=` is set.
 
 Usage, from the repo root:
-    python3 backend/scripts/check_celery_task_expires.py [<file> ...]
+    python3 backend/lint/check_celery_task_expires.py [<file> ...]
 With no files it checks backend/onyx, backend/ee and backend/scripts.
 """
 

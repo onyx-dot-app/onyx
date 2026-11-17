@@ -184,7 +184,7 @@ on `task_revoked`, by the same prefixes, because an expired task never reaches
 ## Contracts and traps
 
 1. `send-expires` **Give each new send `expires=`.** The backend AGENTS file
-   requires it, and `backend/scripts/check_celery_task_expires.py` fails a
+   requires it, and `backend/lint/check_celery_task_expires.py` fails a
    commit that omits it. Ten sends carry `# celery-expires: allow (<reason>)`
    on purpose, because an expiry drops work that nothing sends again: the
    docfetching and docprocessing sends, the prune generator (a manual prune),

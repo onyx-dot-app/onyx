@@ -5,7 +5,7 @@ marker only when it gives a reason. The shapes come from this codebase."""
 from pathlib import Path
 
 import pytest
-from scripts import check_celery_task_expires
+from lint import check_celery_task_expires
 
 _SEND_WITHOUT_EXPIRES = """\
 client_app.send_task(
