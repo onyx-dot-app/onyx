@@ -46,6 +46,7 @@ from onyx.db.enums import (
     Permission,
     PermissionAuthority,
 )
+from onyx.db.integration import get_integration_plugin_ids
 from onyx.db.mcp import (
     affected_user_ids_for_mcp_server,
     clear_mcp_admin_connection_config__no_commit,
@@ -1413,6 +1414,11 @@ def _db_mcp_server_to_api_mcp_server(
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
         available_in_craft=db_server.available_in_craft,
+        plugin_ids=get_integration_plugin_ids([db_server.integration_id], db).get(
+            db_server.integration_id, []
+        )
+        if db_server.integration_id is not None
+        else [],
         users_can_manage_policies=users_can_manage_policies(
             db, GatedAppKind.MCP_SERVER, db_server.id
         ),

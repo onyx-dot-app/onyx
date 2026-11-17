@@ -814,6 +814,9 @@ class MCPServer(BaseModel):
     groups: list[int] = Field(default_factory=list)
     users: list[UUID] = Field(default_factory=list)
     available_in_craft: bool = False
+    # The plugins that hold the server's integration; chat tool options name
+    # them.
+    plugin_ids: list[UUID] = Field(default_factory=list)
     users_can_manage_policies: bool = True
     user_enabled_in_chat: bool = True
     user_enabled_in_craft: bool = True

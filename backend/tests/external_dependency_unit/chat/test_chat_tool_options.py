@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.chat.chat_utils import create_chat_session_from_request
+from onyx.db.integration import get_integration_plugin_ids
 from onyx.db.models import ChatSession, Persona, User
 from onyx.db.tools import get_builtin_tool
 from onyx.llm.model_response import Delta
@@ -61,6 +62,7 @@ class Agent:
         self.user = user
         self.plugin_id = plugin_id
         self.open_url_id = open_url_id
+        self.integration_ids = (mcp_id, api_id)
         self.hello = normalize_external_tool_name(f"mcp__{mcp_id}__{SERVER}__hello")
         self.bye = normalize_external_tool_name(f"mcp__{mcp_id}__{SERVER}__bye")
         self.list_orders = normalize_external_tool_name(f"custom__{api_id}__listOrders")
@@ -224,3 +226,12 @@ def test_an_action_preference_reaches_the_agent(
         f"The user selected these operations for this request: {agent.list_orders}."
         in prompt_text
     )
+
+
+def test_the_web_finds_the_plugin_of_an_integration(
+    db_session: Session, agent: Agent
+) -> None:
+    """The MCP server and tool snapshots name this plugin for the popover."""
+    assert get_integration_plugin_ids(agent.integration_ids, db_session) == {
+        integration_id: [agent.plugin_id] for integration_id in agent.integration_ids
+    }
