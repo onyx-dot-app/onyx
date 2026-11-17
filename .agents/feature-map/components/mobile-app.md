@@ -226,8 +226,11 @@ lint forbids reading refs during render: `usePacketProcessor` regroups in a
 `useMemo`, and `usePacedTurnGroups` keeps pacing state in effects.
 
 **Composer tools.** `state/ComposerToolsProvider.tsx` holds the tool state.
-`resolveToolOptions` gives the controller `deep_research`, `preferred_tool_id`,
-`allowed_tool_ids` and the search filters at send time. Sources are tied to the
+`resolveToolOptions` gives the controller `deep_research`, the allowed entries,
+the preferred tool and the search filters at send time; the controller sends
+them as `tool_options`. An OpenAPI or MCP tool is on or off through its plugins
+(`plugin_ids` from `GET /tool`), which the agent preferences save in
+`disabled_plugin_ids`; a built-in tool stays in `disabled_tool_ids`. Sources are tied to the
 search tool: turning a source on prefers search, and turning search off clears
 the sources.
 

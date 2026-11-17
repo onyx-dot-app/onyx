@@ -45,8 +45,9 @@ function fakeServer(
   apiFetchMock.mockImplementation(async (path, init) => {
     if (init?.method === "PATCH") {
       const agentId = path.split("/")[3];
-      const { disabled_tool_ids } = init.body as {
+      const { disabled_tool_ids, disabled_plugin_ids } = init.body as {
         disabled_tool_ids: number[];
+        disabled_plugin_ids: string[];
       };
       /*
        * Committing a tick late lets a second toggle start before the first lands — the only way
@@ -58,7 +59,10 @@ function fakeServer(
       } else if (patchInFlight) {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
-      stored = { ...stored, [agentId]: { disabled_tool_ids } };
+      stored = {
+        ...stored,
+        [agentId]: { disabled_tool_ids, disabled_plugin_ids },
+      };
       return undefined;
     }
     return stored;
@@ -66,6 +70,8 @@ function fakeServer(
   return {
     disabledFor: (agentId: number) =>
       stored[String(agentId)]?.disabled_tool_ids,
+    disabledPluginsFor: (agentId: number) =>
+      stored[String(agentId)]?.disabled_plugin_ids,
   };
 }
 
@@ -128,7 +134,10 @@ describe("useAgentPreferences", () => {
     expect(patchCalls()).toEqual([
       [
         "/user/assistant/5/preferences",
-        { method: "PATCH", body: { disabled_tool_ids: [2, 7] } },
+        {
+          method: "PATCH",
+          body: { disabled_tool_ids: [2, 7], disabled_plugin_ids: [] },
+        },
       ],
     ]);
     expect(server.disabledFor(5)).toEqual([2, 7]);
@@ -136,7 +145,33 @@ describe("useAgentPreferences", () => {
       client.getQueryData<AgentPreferences>(
         QUERY_KEYS.agentPreferences(SERVER_URL),
       ),
-    ).toEqual({ "5": { disabled_tool_ids: [2, 7] } });
+    ).toEqual({ "5": { disabled_tool_ids: [2, 7], disabled_plugin_ids: [] } });
+  });
+
+  it("switches an OpenAPI or MCP tool through its plugins", async () => {
+    const server = fakeServer({ "5": { disabled_tool_ids: [2] } });
+
+    const { result, settle } = renderPreferences();
+    await waitFor(() =>
+      expect(result.current.disabledToolIdsFor(5)).toEqual([2]),
+    );
+
+    await act(async () => {
+      await result.current.setToolDisabled(5, 7, true, ["plugin-a"]);
+    });
+    await settle();
+
+    expect(server.disabledFor(5)).toEqual([2]);
+    expect(server.disabledPluginsFor(5)).toEqual(["plugin-a"]);
+    await waitFor(() =>
+      expect(result.current.disabledPluginIdsFor(5)).toEqual(["plugin-a"]),
+    );
+
+    await act(async () => {
+      await result.current.setToolDisabled(5, 7, false, ["plugin-a"]);
+    });
+    await settle();
+    expect(server.disabledPluginsFor(5)).toEqual([]);
   });
 
   it("removes the tool when asked to switch it back on", async () => {
