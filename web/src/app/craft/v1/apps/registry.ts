@@ -55,12 +55,14 @@ export type ActionPolicy = "ALWAYS" | "ASK" | "DENY";
 
 export interface ExternalAppUserResponse {
   id: number;
+  // The member sign-in routes under /integrations take this id.
+  integration_id: number;
   name: string;
   app_type: ExternalAppType;
   service_urls?: string[];
   credential_keys: string[];
   credential_values: Record<string, string>;
   authenticated: boolean;
-  // OAuth apps connect via a popup; others via the credential form.
+  // OAuth apps connect in a new tab; others via the credential form.
   supports_oauth: boolean;
 }

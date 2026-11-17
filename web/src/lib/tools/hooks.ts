@@ -8,6 +8,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
   ChatSearchFilters,
   ChatToolOptions,
+  ActionPreference,
   ToolOptionsEntry,
   ToolSnapshot,
   ToolState,
@@ -91,6 +92,8 @@ interface ChatConfiguration {
   tools: ToolConfiguration;
   plugins: PluginConfiguration;
   pluginActions: PluginActions;
+  /** Applies only while no built-in tool is preferred. */
+  preferredAction: ActionPreference | null;
   filters: ChatSearchFilters;
 }
 
@@ -105,6 +108,7 @@ const NEUTRAL: ChatConfiguration = {
   tools: {},
   plugins: {},
   pluginActions: {},
+  preferredAction: null,
   filters: NEUTRAL_FILTERS,
 };
 
@@ -122,6 +126,7 @@ function isNeutralConfiguration(configuration: ChatConfiguration): boolean {
     Object.keys(configuration.tools).length === 0 &&
     Object.keys(configuration.plugins).length === 0 &&
     Object.keys(configuration.pluginActions).length === 0 &&
+    configuration.preferredAction === null &&
     isNeutralFilters(configuration.filters)
   );
 }
@@ -274,6 +279,19 @@ function parsePlugins(entries: Record<string, unknown>): PluginConfiguration {
   return plugins;
 }
 
+/** The preferred action of {@link parseConfiguration}, on an already-checked object. */
+function parsePreferredAction(
+  entries: Record<string, unknown>
+): ActionPreference | null {
+  const value = entries.preferredAction;
+  return isRecord(value) &&
+    value.type === "action" &&
+    typeof value.plugin_id === "string" &&
+    typeof value.action === "string"
+    ? { type: "action", plugin_id: value.plugin_id, action: value.action }
+    : null;
+}
+
 /**
  * Reads a configuration back from untrusted text.
  *
@@ -300,6 +318,7 @@ function parseConfiguration(raw: string): ChatConfiguration {
       tools: parseTools(value.tools),
       plugins: isRecord(value.plugins) ? parsePlugins(value.plugins) : {},
       pluginActions: {},
+      preferredAction: parsePreferredAction(value),
       filters: isRecord(value.filters)
         ? parseFilters(value.filters)
         : NEUTRAL_FILTERS,
@@ -309,6 +328,7 @@ function parseConfiguration(raw: string): ChatConfiguration {
     tools: parseTools(value),
     plugins: {},
     pluginActions: {},
+    preferredAction: null,
     filters: NEUTRAL_FILTERS,
   };
 }
@@ -426,6 +446,8 @@ function configurationFrom(
     tools,
     plugins,
     pluginActions: limited,
+    preferredAction:
+      options.preferred?.type === "action" ? options.preferred : null,
     filters: {
       selectedSources: filters?.source_type ?? null,
       documentSets: filters?.document_set ?? [],
@@ -477,25 +499,50 @@ function allowedEntries(
   ];
 }
 
+function preferredToolIdOf(tools: ToolConfiguration): number | null {
+  return (
+    Object.keys(tools)
+      .map(Number)
+      .find((id) => tools[id] === "preferred") ?? null
+  );
+}
+
 /**
- * The tool half of the options, as the user chose it. A preferred tool that
- * is unavailable right now is kept: a send drops it, and a turn the server
- * starts drops it too.
+ * Preferring a built-in tool releases a preferred action, because a message
+ * carries one preference.
+ */
+function withTools(
+  configuration: ChatConfiguration,
+  tools: ToolConfiguration
+): ChatConfiguration {
+  return {
+    ...configuration,
+    tools,
+    preferredAction:
+      preferredToolIdOf(tools) === null ? configuration.preferredAction : null,
+  };
+}
+
+/**
+ * The tool half of the options, as the user chose it. A preferred tool or
+ * action that is unavailable right now is kept: a send drops it, and a turn
+ * the server starts drops it too.
  */
 function toolFields(
-  configuration: Pick<ChatConfiguration, "tools" | "plugins" | "pluginActions">,
+  configuration: Pick<
+    ChatConfiguration,
+    "tools" | "plugins" | "pluginActions" | "preferredAction"
+  >,
   agent: MinimalAgent,
   pluginIds: readonly string[]
 ): Pick<ChatToolOptions, "allowed" | "preferred"> {
-  const { tools, plugins, pluginActions } = configuration;
-  const preferred = Object.keys(tools)
-    .map(Number)
-    .find((id) => tools[id] === "preferred");
+  const { tools, plugins, pluginActions, preferredAction } = configuration;
+  const preferred = preferredToolIdOf(tools);
   return {
     allowed: allowedEntries(tools, plugins, pluginActions, agent, pluginIds),
     preferred:
-      preferred === undefined
-        ? null
+      preferred === null
+        ? preferredAction
         : { type: "capability", tool_id: preferred },
   };
 }
@@ -646,6 +693,8 @@ export interface ToolConfigurationHandle {
   clearPreferredTool: () => void;
   /** The preferred tool for this chat, if any. */
   preferredToolId: number | null;
+  /** The preferred plugin action, saved by another client; the tool wins. */
+  preferredAction: ActionPreference | null;
   /** The built-in tools the model may not use in this chat. */
   disabledToolIds: number[];
   /** Whether a plugin is on for this chat. */
@@ -931,7 +980,7 @@ export function useToolConfiguration(
             activeAgent === undefined ||
             pluginIds === null
             ? null
-            : toolFields({ ...current, tools }, activeAgent, pluginIds);
+            : toolFields(withTools(current, tools), activeAgent, pluginIds);
         });
         return;
       }
@@ -946,7 +995,7 @@ export function useToolConfiguration(
         // behind. A new one every time is a change to everything reading it,
         // and a caller that writes what it reads would never settle.
         if (tools === current.tools) return previous;
-        return { key, configuration: { ...current, tools } };
+        return { key, configuration: withTools(current, tools) };
       });
     },
     [key, editChat, activeAgent, pluginIds]
@@ -1037,8 +1086,7 @@ export function useToolConfiguration(
 
   const handle = useMemo(() => {
     const ids = Object.keys(configuration.tools).map(Number);
-    const preferredToolId =
-      ids.find((toolId) => configuration.tools[toolId] === "preferred") ?? null;
+    const preferredToolId = preferredToolIdOf(configuration.tools);
     return {
       stateOf: (toolId: number) => configuration.tools[toolId] ?? null,
       setToolState,
@@ -1052,6 +1100,7 @@ export function useToolConfiguration(
         }
       },
       preferredToolId,
+      preferredAction: configuration.preferredAction,
       disabledToolIds: ids.filter(
         (toolId) => configuration.tools[toolId] === "disabled"
       ),

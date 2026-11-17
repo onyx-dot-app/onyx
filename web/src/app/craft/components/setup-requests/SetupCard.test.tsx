@@ -12,6 +12,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 
 const mockMutate = jest.fn();
 const mockPostConnectAppDecision = jest.fn();
+const mockConnectWithOAuth = jest.fn();
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -27,8 +28,10 @@ jest.mock("swr", () => ({
 jest.mock("@/app/craft/services/externalAppsService", () => ({
   postConnectAppDecision: (...args: unknown[]) =>
     mockPostConnectAppDecision(...args),
-  startExternalAppOAuth: jest.fn(),
-  upsertUserCredentials: jest.fn(),
+}));
+
+jest.mock("@/lib/integrations/connect", () => ({
+  connectWithOAuth: (...args: unknown[]) => mockConnectWithOAuth(...args),
 }));
 
 jest.mock("@/app/craft/v1/apps/UserCredentialsModal", () => ({
@@ -43,6 +46,7 @@ jest.mock("@/app/craft/v1/apps/UserCredentialsModal", () => ({
 
 const userApp: ExternalAppUserResponse = {
   id: 42,
+  integration_id: 7,
   name: "Acme CRM",
   app_type: "CUSTOM",
   credential_keys: ["token"],
@@ -56,6 +60,30 @@ describe("SetupCard", () => {
     mockMutate.mockReset();
     mockPostConnectAppDecision.mockReset();
     mockPostConnectAppDecision.mockResolvedValue(undefined);
+    mockConnectWithOAuth.mockReset();
+  });
+
+  it("signs in through the integration OAuth flow and posts the decision", async () => {
+    const user = setupUser();
+    mockConnectWithOAuth.mockResolvedValue("connected");
+    render(
+      <SetupCard
+        requestId="request-id"
+        externalAppId={42}
+        reason={null}
+        userApp={{ ...userApp, supports_oauth: true }}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Connect Acme CRM" }));
+
+    await waitFor(() =>
+      expect(mockPostConnectAppDecision).toHaveBeenCalledWith(
+        "request-id",
+        "connected"
+      )
+    );
+    expect(mockConnectWithOAuth).toHaveBeenCalledWith(7, expect.any(String));
   });
 
   it("waits for the pending request to resolve before showing an existing connection", async () => {

@@ -9,13 +9,9 @@ import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { Button, LineItemButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
+import { SvgChevronRight, SvgSettings, SvgSlash } from "@opal/icons";
 import { getIconForAction } from "@/app/app/services/actionUtils";
 import useCCPairs from "@/hooks/useCCPairs";
-import {
-  useToolOAuthStatus,
-  type ToolAuthStatus,
-} from "@/lib/hooks/useToolOAuthStatus";
 import { hasPermission } from "@/lib/permissions/utils";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useSettings } from "@/lib/settings/hooks";
@@ -41,7 +37,6 @@ const HOVER_GROUP = "ToolLineItem";
 
 /** A button the row can offer on its right. At most one of each renders. */
 type ToolAction =
-  | { kind: "authenticate"; authStatus: ToolAuthStatus }
   | { kind: "toggle"; count: { enabled: number; total: number } | null }
   | { kind: "configure"; href: string; tooltip: string }
   | { kind: "selectSources" };
@@ -63,7 +58,6 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const t = useTranslations("actions");
   const navigation = useNavigation();
   const {
-    agent,
     toolConfiguration,
     sourceCounts,
     togglePreferred,
@@ -77,7 +71,6 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const builtInToolNames = useBuiltInToolNames();
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { currentProjectId } = useProjectsContext();
-  const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(agent.id);
   const { incognitoEnabled } = useIncognito();
 
   const tooltipMessages = useMemo(
@@ -157,7 +150,6 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
     sourceCounts.enabled > 0 &&
     sourceCounts.enabled < sourceCounts.total;
 
-  const authStatus = getToolAuthStatus(tool);
   const connectorsLabel = needsConnectors
     ? t("actionLineItem.addConnectors.label")
     : t("actionLineItem.selectSearchSources.label");
@@ -191,12 +183,9 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
     />
   );
 
-  // At most three: an authentication prompt, the enable/disable toggle, and
-  // one of configure / select-sources. Declared in the order they render.
+  // At most two: the enable/disable toggle and one of configure /
+  // select-sources. Declared in the order they render.
   const rightActions: ToolAction[] = [];
-  if (!isUnavailable && tool.oauth_config_id && authStatus) {
-    rightActions.push({ kind: "authenticate", authStatus });
-  }
   if (!isUnavailable && !needsConnectors) {
     rightActions.push({
       kind: "toggle",
@@ -213,19 +202,6 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
 
   function renderRightAction(action: ToolAction) {
     switch (action.kind) {
-      case "authenticate":
-        return (
-          <Button
-            icon={SvgKey}
-            prominence="secondary"
-            size="sm"
-            aria-label={t("actionLineItem.authenticate.label")}
-            onClick={() => {
-              const { hasToken, isTokenExpired } = action.authStatus;
-              if (!hasToken || isTokenExpired) void authenticateTool(tool);
-            }}
-          />
-        );
       case "toggle":
         // The count takes the slot and reveals the toggle on hover. Without
         // it the toggle is bare once switched off, hover-revealed otherwise.

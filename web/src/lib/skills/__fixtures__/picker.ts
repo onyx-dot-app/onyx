@@ -87,6 +87,7 @@ export function appFixture(
 ): ExternalAppUserResponse {
   return {
     name: `App ${over.id}`,
+    integration_id: over.id,
     credential_keys: ["token"],
     credential_values: over.authenticated === false ? {} : { token: "***" },
     authenticated: true,

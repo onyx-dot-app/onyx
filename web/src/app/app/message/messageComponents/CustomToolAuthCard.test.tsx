@@ -1,13 +1,6 @@
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
-import { toast } from "@opal/layouts";
+import { render, screen } from "@tests/setup/test-utils";
 import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
 import type { ToolSnapshot } from "@/lib/tools/types";
-
-jest.mock("swr", () => ({
-  __esModule: true,
-  default: () => ({ data: [], isLoading: false, mutate: jest.fn() }),
-  SWRConfig: ({ children }: { children: React.ReactNode }) => children,
-}));
 
 const tool: ToolSnapshot = {
   id: 1,
@@ -18,50 +11,28 @@ const tool: ToolSnapshot = {
   custom_headers: [],
   in_code_tool_id: null,
   passthrough_auth: false,
-  oauth_config_id: 1,
   enabled: true,
   chat_selectable: true,
   agent_creation_selectable: true,
   default_enabled: false,
+  plugin_ids: ["plugin-1"],
 };
 
-afterEach(() => jest.restoreAllMocks());
+test("links the sign-in to the integrations of the tool's plugin", () => {
+  render(<CustomToolAuthCard toolName="Example" toolId={1} tools={[tool]} />);
+  expect(screen.getByRole("link", { name: /connect/i })).toHaveAttribute(
+    "href",
+    "/app/plugins/plugin-1?tab=integrations"
+  );
+});
 
-test.each([true, false])(
-  "reports an OAuth failure without logging response details (ok=%s)",
-  async (ok) => {
-    jest.spyOn(globalThis, "fetch").mockResolvedValue({
-      ok,
-      json: async () => ({
-        authorization_url: "javascript:alert(1)",
-        state: "test",
-        detail: "private-response-marker",
-      }),
-    } as Response);
-    // jsdom has no window.open; a blocked tab takes the same-tab redirect path.
-    jest.spyOn(window, "open").mockReturnValue(null);
-    const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
-    const errorToast = jest.spyOn(toast, "error").mockReturnValue("test-toast");
-    const originalLocation = window.location.href;
-    const user = setupUser();
-    render(
-      <CustomToolAuthCard
-        toolName="Example"
-        toolId={1}
-        tools={[tool]}
-        agentId={1}
-      />
-    );
-    await user.click(screen.getByRole("button", { name: /connect/i }));
-    await waitFor(() =>
-      expect(errorToast).toHaveBeenCalledWith(
-        "An error occurred during the OAuth process. Please try again."
-      )
-    );
-    expect(errorLog.mock.calls).toEqual([
-      ["[useToolOAuthStatus] OAuth initiation failed"],
-    ]);
-    expect(window.location.href).toBe(originalLocation);
-    expect(screen.getByRole("button", { name: /connect/i })).toBeEnabled();
-  }
-);
+test("shows nothing for a tool with no plugin", () => {
+  const { container } = render(
+    <CustomToolAuthCard
+      toolName="Example"
+      toolId={1}
+      tools={[{ ...tool, plugin_ids: [] }]}
+    />
+  );
+  expect(container).toBeEmptyDOMElement();
+});

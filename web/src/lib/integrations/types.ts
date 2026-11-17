@@ -35,6 +35,11 @@ export interface IntegrationPluginRef {
   installation_policy: InstallationPolicy | null;
 }
 
+/** A plugin ref on the member routes, with the user's on/off of the plugin. */
+export interface MemberPluginRef extends IntegrationPluginRef {
+  enabled: boolean;
+}
+
 export interface IntegrationAction {
   key: string;
   display_name: string;
@@ -159,7 +164,7 @@ export interface MemberIntegration {
   auth_method: AuthMethod | null;
   credential_fields: CredentialField[];
   status: IntegrationStatus;
-  plugins: IntegrationPluginRef[];
+  plugins: MemberPluginRef[];
   users_can_save_always_allow: boolean;
 }
 
