@@ -5,6 +5,7 @@ import { AgentEditorPage } from "@tests/e2e/pages/AgentEditorPage";
 
 const LIST_ACTION = "list_reports";
 const DELETE_ACTION = "delete_report";
+const ARCHIVE_ACTION = "archive_report";
 
 function openApiSpec(title: string): Record<string, unknown> {
   return {
@@ -32,6 +33,21 @@ function openApiSpec(title: string): Record<string, unknown> {
             },
           ],
           responses: { "204": { description: "Deleted" } },
+        },
+      },
+      "/reports/{id}/archive": {
+        post: {
+          operationId: ARCHIVE_ACTION,
+          summary: ARCHIVE_ACTION,
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: { "204": { description: "Archived" } },
         },
       },
     },
@@ -62,6 +78,9 @@ test.describe("Agent plugin action settings", () => {
     });
     integrationId = integration.id;
     pluginName = integration.plugins[0]?.plugin_name ?? name;
+    await client.setIntegrationActionPolicies(integration.id, {
+      [ARCHIVE_ACTION]: "blocked",
+    });
     await context.close();
   });
 
@@ -85,6 +104,12 @@ test.describe("Agent plugin action settings", () => {
     await editor.goto();
     await editor.fill({ name: `PW Plugin Agent ${Date.now()}` });
     await editor.addPlugin(pluginName);
+    await editor.expectActionSetting(
+      ARCHIVE_ACTION,
+      "Use the agent default",
+      "Blocked (integration setting)"
+    );
+    await editor.expectSettingNotOffered(ARCHIVE_ACTION, "Allow");
     await editor.setActionSetting(DELETE_ACTION, "Blocked");
     agentId = await editor.create();
 
