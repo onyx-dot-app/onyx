@@ -20,7 +20,6 @@ import {
   pluginsFromIntegrations,
 } from "@/lib/integrations/utils";
 
-/** The plugins that hold integrations, each with a link to its integrations. */
 export default function AdminPluginsPage() {
   const t = useTranslations("admin.plugins");
   const locale = useLocale();

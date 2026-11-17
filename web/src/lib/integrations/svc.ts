@@ -94,7 +94,6 @@ export async function deleteOrganizationConnection(
   return res.json();
 }
 
-/** Starts the OAuth sign-in of the organization connection. */
 export async function startOrganizationOAuth(
   id: number,
   returnPath: string

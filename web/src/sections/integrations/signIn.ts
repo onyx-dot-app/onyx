@@ -4,12 +4,19 @@ import type {
   AuthMode,
   CredentialField,
   IntegrationCreate,
+  IntegrationShape,
   OAuthClientInput,
   OAuthProviderMode,
 } from "@/lib/integrations/types";
 
-/** Form state of the sign-in settings, shared by the add form and the
- * Configuration tab. */
+export const SIGN_IN_METHODS: Record<IntegrationShape, readonly AuthMethod[]> =
+  {
+    mcp_server: ["oauth2", "api_key"],
+    openapi: ["oauth2", "api_key", "onyx_login"],
+    custom: ["oauth2", "api_key"],
+    preset: ["oauth2", "api_key", "managed"],
+  };
+
 export interface SignInDraft {
   authMode: AuthMode;
   authMethod: AuthMethod | null;
@@ -54,7 +61,7 @@ export const DEFAULT_SIGN_IN: SignInDraft = {
   hasClientSecret: false,
 };
 
-/** The `{placeholder}` names in header values, without `user_email`. */
+/** Without `user_email`. */
 function placeholders(headers: Record<string, string>): string[] {
   return [
     ...new Set(
@@ -75,16 +82,24 @@ function credentialFields(draft: SignInDraft): CredentialField[] {
   }));
 }
 
-function isUrl(value: string): boolean {
+export function normalizedUrl(value: string): string | null {
   try {
     const url = new URL(value.trim());
-    return url.protocol === "https:" || url.protocol === "http:";
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.href
+      : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-/** The fields that block a save, in form order. */
+export function parseUrlPatterns(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 export function signInErrors(draft: SignInDraft): SignInError[] {
   if (draft.authMode === "none") return [];
   const errors: SignInError[] = [];
@@ -93,8 +108,8 @@ export function signInErrors(draft: SignInDraft): SignInError[] {
     if (credentialFields(draft).length === 0) errors.push("headerValue");
   }
   if (draft.authMethod === "oauth2" && draft.providerMode === "manual") {
-    if (!isUrl(draft.authorizationUrl)) errors.push("authorizationUrl");
-    if (!isUrl(draft.tokenUrl)) errors.push("tokenUrl");
+    if (!normalizedUrl(draft.authorizationUrl)) errors.push("authorizationUrl");
+    if (!normalizedUrl(draft.tokenUrl)) errors.push("tokenUrl");
     if (!draft.clientId.trim()) errors.push("clientId");
   }
   return errors;

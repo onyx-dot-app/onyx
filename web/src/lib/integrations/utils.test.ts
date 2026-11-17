@@ -1,10 +1,10 @@
-import { parsePluginId } from "@/lib/plugins/routes";
+import { parsePositiveId } from "@/lib/integrations/utils";
 
 describe("route ID boundary", () => {
   test.each(["7", "0007", String(Number.MAX_SAFE_INTEGER)])(
     "accepts positive safe integer %s",
     (value) => {
-      expect(parsePluginId(value)).toBe(Number(value));
+      expect(parsePositiveId(value)).toBe(Number(value));
     }
   );
 
@@ -22,6 +22,6 @@ describe("route ID boundary", () => {
     " 7",
     "9007199254740992",
   ])("rejects an invalid ID %s", (value) => {
-    expect(parsePluginId(value)).toBeNull();
+    expect(parsePositiveId(value)).toBeNull();
   });
 });

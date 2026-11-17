@@ -53,13 +53,10 @@ jest.mock("@/sections/actions/modals/AddOpenAPIActionModal", () => ({
       <div role="dialog" aria-label="OpenAPI schema">
         <button
           onClick={() =>
-            props.onConfigureAuthentication?.({
+            props.onConfigureAuthentication({
               name: "Reports API",
               description: "Weekly reports",
               definition: { openapi: "3.0.0", info: { title: "Reports API" } },
-              custom_headers: [],
-              passthrough_auth: false,
-              defaultChatEnabled: false,
             })
           }
         >

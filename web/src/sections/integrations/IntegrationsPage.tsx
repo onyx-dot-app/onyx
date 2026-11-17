@@ -16,12 +16,10 @@ import { SvgUnPlugged } from "@opal/illustrations";
 import { useNavigation } from "@opal/navigation";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
-import { useSettings } from "@/lib/settings/hooks";
 import { useAdminIntegrations } from "@/lib/integrations/hooks";
 import type {
   AdminIntegration,
   IntegrationKind,
-  IntegrationShape,
 } from "@/lib/integrations/types";
 import {
   integrationDetailHref,
@@ -33,13 +31,11 @@ import AddIntegrationModal from "@/sections/integrations/AddIntegrationModal";
 type KindFilter = "all" | IntegrationKind;
 const KIND_FILTERS: readonly KindFilter[] = ["all", "mcp_server", "api"];
 
-/** The integration catalog: every app and MCP server the admin can see. */
 export default function IntegrationsPage() {
   const t = useTranslations("admin.integrations");
   const locale = useLocale();
   const navigation = useNavigation();
   const labels = useIntegrationLabels();
-  const settings = useSettings();
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
   );
@@ -48,10 +44,6 @@ export default function IntegrationsPage() {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<KindFilter>("all");
   const [adding, setAdding] = useState(false);
-  const shapes: IntegrationShape[] =
-    settings.onyx_craft_available === true
-      ? ["mcp_server", "openapi", "preset", "custom"]
-      : ["mcp_server", "openapi"];
 
   const search = query.trim().toLocaleLowerCase();
   const integrations = sortIntegrations(data ?? [], locale).filter(
@@ -214,7 +206,6 @@ export default function IntegrationsPage() {
       </SettingsLayouts.Body>
       {adding && (
         <AddIntegrationModal
-          shapes={shapes}
           canChooseOrganization={isGlobalHolder}
           onClose={() => setAdding(false)}
           onCreated={(created) => {

@@ -6,7 +6,6 @@ import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { ContentAction, Section, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { SvgRefreshCw } from "@opal/icons";
-import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import PolicyEditor, {
   type PolicyEditorItem,
 } from "@/sections/actions/PolicyEditor";
@@ -21,7 +20,6 @@ import type {
   IntegrationAction,
   PolicyValue,
 } from "@/lib/integrations/types";
-import { fromActionPolicy, toActionPolicy } from "@/lib/integrations/utils";
 
 interface Draft {
   defaultPolicy: PolicyValue | null;
@@ -33,8 +31,6 @@ interface IntegrationActionsTabProps {
   onOpenConfiguration: () => void;
 }
 
-/** "Default for new actions", then the read-only and write actions, each with
- * Allow, Ask or Blocked. */
 export default function IntegrationActionsTab({
   integration,
   onOpenConfiguration,
@@ -93,7 +89,7 @@ export default function IntegrationActionsTab({
       id: action.key,
       name: action.display_name,
       description: action.description ?? "",
-      defaultPolicy: toActionPolicy(fallback(action)),
+      defaultPolicy: fallback(action),
       note:
         (current.actions[action.key] ?? null) === null
           ? t("usesDefault")
@@ -101,30 +97,25 @@ export default function IntegrationActionsTab({
     }));
   }
 
-  function policies(
-    actions: IntegrationAction[]
-  ): Record<string, ActionPolicy> {
+  function policies(actions: IntegrationAction[]): Record<string, PolicyValue> {
     return Object.fromEntries(
       actions.flatMap((action) => {
         const value = current.actions[action.key];
-        return value ? [[action.key, toActionPolicy(value)]] : [];
+        return value ? [[action.key, value]] : [];
       })
     );
   }
 
   function changeGroup(
     actions: IntegrationAction[],
-    next: Record<string, ActionPolicy>
+    next: Record<string, PolicyValue>
   ) {
     setDraft({
       ...current,
       actions: {
         ...current.actions,
         ...Object.fromEntries(
-          actions.map((action) => {
-            const value = next[action.key];
-            return [action.key, value ? fromActionPolicy(value) : null];
-          })
+          actions.map((action) => [action.key, next[action.key] ?? null])
         ),
       },
     });
@@ -249,16 +240,9 @@ export default function IntegrationActionsTab({
               <PolicyToggle
                 label={t("default.title")}
                 disabled={busy || readOnly}
-                value={
-                  current.defaultPolicy
-                    ? toActionPolicy(current.defaultPolicy)
-                    : null
-                }
+                value={current.defaultPolicy}
                 onChange={(value) =>
-                  setDraft({
-                    ...current,
-                    defaultPolicy: fromActionPolicy(value),
-                  })
+                  setDraft({ ...current, defaultPolicy: value })
                 }
               />
             </Section>

@@ -4,7 +4,6 @@
  * construction live in one place.
  */
 
-import { ActionPolicy, ExternalAppType } from "@/app/craft/v1/apps/registry";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
@@ -14,39 +13,6 @@ async function readErrorDetail(
 ): Promise<string> {
   const data: ErrorResponseBody = await res.json().catch(() => ({}));
   return data.detail ?? `${fallback} (HTTP ${res.status}).`;
-}
-
-interface CreateBuiltInExternalAppBody {
-  enabled?: boolean;
-  users_can_manage_policies?: boolean;
-  name: string;
-  app_type: ExternalAppType;
-  upstream_url_patterns: string[];
-  auth_template: Record<string, string>;
-  organization_credentials: Record<string, string>;
-  // Full replace when present; omit to default every action to ASK.
-  action_policies?: Record<string, ActionPolicy>;
-}
-
-interface CreateCustomExternalAppInput {
-  enabled?: boolean;
-  users_can_manage_policies?: boolean;
-  name: string;
-  upstream_url_patterns: string[];
-  auth_template: Record<string, string>;
-  organization_credentials: Record<string, string>;
-}
-
-interface UpdateExternalAppBody {
-  users_can_manage_policies?: boolean;
-  // Every field is optional; omit to leave the stored value untouched.
-  enabled?: boolean;
-  name?: string;
-  upstream_url_patterns?: string[];
-  auth_template?: Record<string, string>;
-  organization_credentials?: Record<string, string>;
-  // Full replace when present; omit to leave stored policies untouched.
-  action_policies?: Record<string, ActionPolicy>;
 }
 
 interface OAuthStartResponse {

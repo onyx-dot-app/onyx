@@ -49,9 +49,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-/** An individual tool (system or OpenAPI/custom). */
 type ActionFilterItem = {
-  type: "tool";
   toolId: number;
   name: string;
   systemIcon?: React.FC;
@@ -60,11 +58,6 @@ type ActionFilterItem = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Produces a unique string key for each action filter item. */
-function actionFilterKey(item: ActionFilterItem): string {
-  return `tool:${item.toolId}`;
-}
 
 /** Returns true when the item is a built-in system tool (Search, Web Search, etc.). */
 function isSystemTool(item: ActionFilterItem): boolean {
@@ -142,10 +135,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
    * OpenAPI/custom actions.
    */
   const uniqueActions: ActionFilterItem[] = useMemo(() => {
-    const individualTools = new Map<
-      number,
-      { id: number; name: string; systemIcon?: React.FC }
-    >();
+    const individualTools = new Map<number, ActionFilterItem>();
 
     allTools.forEach((tool) => {
       // Skip OpenURL — implicit tool, not user-facing
@@ -158,7 +148,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
       }
 
       individualTools.set(tool.id, {
-        id: tool.id,
+        toolId: tool.id,
         name: tool.display_name,
         systemIcon: SYSTEM_TOOL_ICONS[tool.name],
       });
@@ -166,14 +156,12 @@ export function useAgentsFilters<T extends MinimalAgent>(
 
     const toolItems = Array.from(individualTools.values());
 
-    const systemItems: ActionFilterItem[] = toolItems
+    const systemItems = toolItems
       .filter((t) => !!t.systemIcon)
-      .map((t) => ({ type: "tool" as const, toolId: t.id, ...t }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    const otherItems: ActionFilterItem[] = toolItems
+    const otherItems = toolItems
       .filter((t) => !t.systemIcon)
-      .map((t) => ({ type: "tool" as const, toolId: t.id, ...t }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     return [...systemItems, ...otherItems];
@@ -181,13 +169,10 @@ export function useAgentsFilters<T extends MinimalAgent>(
 
   // -- Derived selection sets ------------------------------------------------
 
-  const selectedToolIds = useMemo(() => {
-    const toolIds = new Set<number>();
-    for (const key of Array.from(selectedActionKeys)) {
-      if (key.startsWith("tool:")) toolIds.add(Number(key.slice(5)));
-    }
-    return toolIds;
-  }, [selectedActionKeys]);
+  const selectedToolIds = useMemo(
+    () => new Set(Array.from(selectedActionKeys, Number)),
+    [selectedActionKeys]
+  );
 
   // -- Filter button labels --------------------------------------------------
 
@@ -209,7 +194,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
     if (selectedActionKeys.size === 0) return t("filters.actions.all.label");
     if (selectedActionKeys.size === 1) {
       const key = Array.from(selectedActionKeys)[0];
-      const item = uniqueActions.find((a) => actionFilterKey(a) === key);
+      const item = uniqueActions.find((a) => String(a.toolId) === key);
       return item?.name ?? t("filters.actions.all.label");
     }
     return t("filters.actions.multiple.label", {
@@ -266,7 +251,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
   }));
   const actionOption = (action: ActionFilterItem): DropdownOption => ({
     kind: "option",
-    value: actionFilterKey(action),
+    value: String(action.toolId),
     icon: action.systemIcon ? action.systemIcon : SvgActions,
     title: action.name,
   });

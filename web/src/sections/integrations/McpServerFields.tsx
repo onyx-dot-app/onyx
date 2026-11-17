@@ -9,19 +9,9 @@ import { streamMCPServerProbe } from "@/lib/mcp/svc";
 import { SUGGESTED_MCP_PLUGINS } from "@/lib/plugins/catalog";
 import type { MCPSetupProbeResult } from "@/lib/mcp/types";
 import type { McpTransport } from "@/lib/integrations/types";
+import { normalizedUrl } from "@/sections/integrations/signIn";
 
 const TRANSPORTS: readonly McpTransport[] = ["STREAMABLE_HTTP", "SSE"];
-
-export function normalizedServerUrl(value: string): string | null {
-  try {
-    const url = new URL(value.trim());
-    return url.protocol === "https:" || url.protocol === "http:"
-      ? url.href
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 type ProbeState =
   | { kind: "idle" }
@@ -32,17 +22,13 @@ interface McpServerFieldsProps {
   serverUrl: string;
   transport: McpTransport;
   onServerUrlChange: (value: string) => void;
-  /** Called with the name and URL of a picked suggested server. */
   onSuggestion: (name: string, url: string) => void;
   onTransportChange: (value: McpTransport) => void;
-  /** Called with each finished probe, to suggest sign-in settings. */
   onProbed: (result: MCPSetupProbeResult) => void;
   showErrors: boolean;
   disabled: boolean;
 }
 
-/** The server URL and transport of an MCP server, with the probe that checks
- * the server and finds its sign-in method. */
 export default function McpServerFields({
   serverUrl,
   transport,
@@ -55,7 +41,7 @@ export default function McpServerFields({
 }: McpServerFieldsProps) {
   const t = useTranslations("admin.integrations.add.mcp");
   const [probe, setProbe] = useState<ProbeState>({ kind: "idle" });
-  const url = normalizedServerUrl(serverUrl);
+  const url = normalizedUrl(serverUrl);
   const onProbedRef = useRef(onProbed);
   useEffect(() => {
     onProbedRef.current = onProbed;
@@ -66,7 +52,6 @@ export default function McpServerFields({
       setProbe({ kind: "idle" });
       return;
     }
-    let cancelled = false;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setProbe({ kind: "checking" });
@@ -80,12 +65,11 @@ export default function McpServerFields({
       } catch {
         result = { kind: "unreachable", reason: "connection_failed" };
       }
-      if (cancelled) return;
+      if (controller.signal.aborted) return;
       setProbe({ kind: "done", result });
       onProbedRef.current(result);
     }, 700);
     return () => {
-      cancelled = true;
       controller.abort();
       window.clearTimeout(timer);
     };

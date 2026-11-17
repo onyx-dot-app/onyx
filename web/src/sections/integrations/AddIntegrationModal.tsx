@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import {
   BasicModalFooter,
   Button,
-  InputPasswordTypeIn,
   InputSingleSelect,
   InputTextArea,
   InputTypeIn,
@@ -20,17 +19,20 @@ import { SvgBlocks, SvgCodeFile, SvgPlug, SvgServer } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import AddOpenAPIActionModal from "@/sections/actions/modals/AddOpenAPIActionModal";
-import McpServerFields, {
-  normalizedServerUrl,
-} from "@/sections/integrations/McpServerFields";
+import McpServerFields from "@/sections/integrations/McpServerFields";
 import IntegrationSignInFields from "@/sections/integrations/IntegrationSignInFields";
+import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs";
 import {
   DEFAULT_SIGN_IN,
+  normalizedUrl,
+  parseUrlPatterns,
+  SIGN_IN_METHODS,
   signInErrors,
   signInPayload,
   type SignInDraft,
 } from "@/sections/integrations/signIn";
 import { createIntegration } from "@/lib/integrations/svc";
+import { useSettings } from "@/lib/settings/hooks";
 import { useIntegrationPresets } from "@/lib/integrations/hooks";
 import type {
   AdminIntegrationDetail,
@@ -48,42 +50,30 @@ const SHAPE_ICONS: Record<IntegrationShape, IconFunctionComponent> = {
   custom: SvgPlug,
 };
 
-const METHODS: Record<
-  Exclude<IntegrationShape, "preset">,
-  readonly AuthMethod[]
-> = {
-  mcp_server: ["oauth2", "api_key"],
-  openapi: ["oauth2", "api_key", "onyx_login"],
-  custom: ["oauth2", "api_key"],
-};
-
 type Step =
   | { kind: "pick" }
   | { kind: "openapiSchema" }
   | { kind: "form"; shape: IntegrationShape };
 
 interface AddIntegrationModalProps {
-  /** The shapes the admin can add, in the order of the kind list. */
-  shapes: readonly IntegrationShape[];
-  /** Global manage:actions: may add an integration for the organization. */
   canChooseOrganization: boolean;
   onClose: () => void;
   onCreated: (integration: AdminIntegrationDetail) => void;
 }
 
 export default function AddIntegrationModal({
-  shapes,
   canChooseOrganization,
   onClose,
   onCreated,
 }: AddIntegrationModalProps) {
   const t = useTranslations("admin.integrations.add");
   const kindCopy = useTranslations("admin.integrations.shape");
-  const [step, setStep] = useState<Step>(
-    shapes.length === 1 && shapes[0] !== "openapi"
-      ? { kind: "form", shape: shapes[0] ?? "mcp_server" }
-      : { kind: "pick" }
-  );
+  const settings = useSettings();
+  const shapes: IntegrationShape[] =
+    settings.onyx_craft_available === true
+      ? ["mcp_server", "openapi", "preset", "custom"]
+      : ["mcp_server", "openapi"];
+  const [step, setStep] = useState<Step>({ kind: "pick" });
   const [busy, setBusy] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [name, setName] = useState("");
@@ -108,7 +98,7 @@ export default function AddIntegrationModal({
   const presetMethods: AuthMethod[] =
     preset?.auth_methods.flatMap((method) => (method ? [method] : [])) ?? [];
   const methods =
-    shape === "preset" ? presetMethods : shape ? METHODS[shape] : [];
+    shape === "preset" ? presetMethods : shape ? SIGN_IN_METHODS[shape] : [];
 
   function close() {
     if (!busy) onClose();
@@ -163,7 +153,7 @@ export default function AddIntegrationModal({
   function config(current: IntegrationShape): IntegrationConfig | null {
     switch (current) {
       case "mcp_server": {
-        const url = normalizedServerUrl(serverUrl);
+        const url = normalizedUrl(serverUrl);
         return url ? { shape: "mcp_server", server_url: url, transport } : null;
       }
       case "openapi":
@@ -185,10 +175,7 @@ export default function AddIntegrationModal({
         };
       }
       case "custom": {
-        const patterns = urlPatterns
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean);
+        const patterns = parseUrlPatterns(urlPatterns);
         return patterns.length
           ? { shape: "custom", upstream_url_patterns: patterns }
           : null;
@@ -225,9 +212,7 @@ export default function AddIntegrationModal({
       <Modal open onOpenChange={(open) => !open && close()}>
         <PluginModalContent>
           <AddOpenAPIActionModal
-            presentation="content"
             title={t("openapi.title")}
-            showDefaultChat={false}
             initialDefinition={openapiSpec ?? undefined}
             initialDescription={description}
             onBusyChange={setBusy}
@@ -235,7 +220,7 @@ export default function AddIntegrationModal({
             onConfigureAuthentication={(draft) => {
               setOpenapiSpec(draft.definition);
               setName(draft.name);
-              setDescription(draft.description ?? "");
+              setDescription(draft.description);
               setStep({ kind: "form", shape: "openapi" });
             }}
           />
@@ -373,53 +358,25 @@ export default function AddIntegrationModal({
                   />
                 </InputVertical>
               )}
-              {preset?.required_org_credential_fields.map((field) => (
-                <InputVertical
-                  key={field.key}
-                  title={field.label}
-                  error={
+              {preset && (
+                <CredentialFieldInputs
+                  fields={preset.required_org_credential_fields}
+                  values={orgCredentials}
+                  onChange={setOrgCredentials}
+                  disabled={busy}
+                  error={(field) =>
                     showErrors && !orgCredentials[field.key]?.trim()
                       ? t("preset.credentialRequired")
                       : undefined
                   }
-                >
-                  {field.secret ? (
-                    <InputPasswordTypeIn
-                      aria-label={field.label}
-                      value={orgCredentials[field.key] ?? ""}
-                      disabled={busy}
-                      onChange={(event) =>
-                        setOrgCredentials((current) => ({
-                          ...current,
-                          [field.key]: event.target.value,
-                        }))
-                      }
-                    />
-                  ) : (
-                    <InputTypeIn
-                      aria-label={field.label}
-                      value={orgCredentials[field.key] ?? ""}
-                      variant={busy ? "disabled" : "primary"}
-                      onChange={(event) =>
-                        setOrgCredentials((current) => ({
-                          ...current,
-                          [field.key]: event.target.value,
-                        }))
-                      }
-                    />
-                  )}
-                </InputVertical>
-              ))}
+                />
+              )}
               {(step.shape !== "preset" || preset) && (
                 <IntegrationSignInFields
                   draft={signIn}
                   onChange={changeSignIn}
                   methods={methods}
-                  providerModes={
-                    step.shape === "preset"
-                      ? ["preset", "manual"]
-                      : ["manual", "discovery"]
-                  }
+                  preset={step.shape === "preset"}
                   showErrors={showErrors}
                   disabled={busy}
                 />

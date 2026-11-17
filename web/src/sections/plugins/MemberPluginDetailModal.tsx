@@ -1,6 +1,7 @@
 "use client";
 
 import isEqual from "lodash/isEqual";
+import mapValues from "lodash/mapValues";
 import { useId, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -19,6 +20,7 @@ import type {
 } from "@/lib/mcp/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
+import type { PolicyValue } from "@/lib/integrations/types";
 import type { AppActionPoliciesView } from "@/lib/plugins/types";
 import PolicyEditor from "@/sections/actions/PolicyEditor";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
@@ -47,6 +49,18 @@ import {
   type MemberPlugin,
 } from "@/lib/plugins/member";
 import { useSkillLimitCopy } from "@/lib/skills/hooks";
+
+const TO_POLICY_VALUE = {
+  ALWAYS: "allow",
+  ASK: "ask",
+  DENY: "blocked",
+} as const satisfies Record<ActionPolicy, PolicyValue>;
+
+const FROM_POLICY_VALUE = {
+  allow: "ALWAYS",
+  ask: "ASK",
+  blocked: "DENY",
+} as const satisfies Record<PolicyValue, ActionPolicy>;
 
 interface MemberPluginDetailModalProps {
   plugin: MemberPlugin;
@@ -517,14 +531,27 @@ export function MemberPluginDetailContent({
                             id: item.action_id,
                             name: item.normalised_name,
                             description: item.description,
-                            defaultPolicy: item.editable
-                              ? item.workspace_policy
-                              : item.effective_policy,
+                            defaultPolicy:
+                              TO_POLICY_VALUE[
+                                item.editable
+                                  ? item.workspace_policy
+                                  : item.effective_policy
+                              ],
                             editable: item.editable,
                             lockReason: item.lock_reason ?? undefined,
                           }))}
-                          policies={policies}
-                          onChange={setPolicies}
+                          policies={mapValues(
+                            policies,
+                            (value) => TO_POLICY_VALUE[value]
+                          )}
+                          onChange={(next) =>
+                            setPolicies(
+                              mapValues(
+                                next,
+                                (value) => FROM_POLICY_VALUE[value]
+                              )
+                            )
+                          }
                           onReset={() => setPolicies({})}
                           resetLabel={approvalCopy("resetAll")}
                           disabled={

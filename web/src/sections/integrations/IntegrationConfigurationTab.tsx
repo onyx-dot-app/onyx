@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
-  InputPasswordTypeIn,
   InputSwitch,
   InputTextArea,
   InputTypeIn,
@@ -30,33 +29,26 @@ import {
 } from "@/lib/integrations/svc";
 import type {
   AdminIntegrationDetail,
-  AuthMethod,
   IntegrationConfig,
   IntegrationUpdate,
 } from "@/lib/integrations/types";
 import { integrationDetailHref } from "@/lib/integrations/utils";
 import IntegrationSignInFields from "@/sections/integrations/IntegrationSignInFields";
-import { normalizedServerUrl } from "@/sections/integrations/McpServerFields";
+import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs";
 import {
+  normalizedUrl,
+  parseUrlPatterns,
+  SIGN_IN_METHODS,
   signInDraftFromDetail,
   signInErrors,
   signInPayload,
   type SignInDraft,
 } from "@/sections/integrations/signIn";
 
-const METHODS: Record<AdminIntegrationDetail["shape"], readonly AuthMethod[]> =
-  {
-    mcp_server: ["oauth2", "api_key"],
-    openapi: ["oauth2", "api_key", "onyx_login"],
-    custom: ["oauth2", "api_key"],
-    preset: ["oauth2", "api_key", "managed"],
-  };
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** The schema text as an object, or `null` when it is not a JSON object. */
 function parseSpec(text: string): Record<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(text);
@@ -106,17 +98,14 @@ export default function IntegrationConfigurationTab({
   function nextConfig(): IntegrationConfig | null | undefined {
     const config = integration.config;
     if (config.shape === "mcp_server") {
-      const url = normalizedServerUrl(serverUrl);
+      const url = normalizedUrl(serverUrl);
       if (!url) return null;
       return url === config.server_url
         ? undefined
         : { ...config, server_url: url };
     }
     if (config.shape === "custom") {
-      const patterns = urlPatterns
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
+      const patterns = parseUrlPatterns(urlPatterns);
       if (!patterns.length) return null;
       return patterns.join("\n") === config.upstream_url_patterns.join("\n")
         ? undefined
@@ -227,7 +216,7 @@ export default function IntegrationConfigurationTab({
               <InputVertical
                 title={t("connection.serverUrl")}
                 error={
-                  showErrors && !normalizedServerUrl(serverUrl)
+                  showErrors && !normalizedUrl(serverUrl)
                     ? t("connection.serverUrlError")
                     : undefined
                 }
@@ -284,12 +273,8 @@ export default function IntegrationConfigurationTab({
           <IntegrationSignInFields
             draft={signIn}
             onChange={setSignIn}
-            methods={METHODS[integration.shape]}
-            providerModes={
-              integration.shape === "preset"
-                ? ["preset", "manual"]
-                : ["manual", "discovery"]
-            }
+            methods={SIGN_IN_METHODS[integration.shape]}
+            preset={integration.shape === "preset"}
             showErrors={showErrors}
             disabled={disabled}
           />
@@ -333,36 +318,14 @@ export default function IntegrationConfigurationTab({
               })}
             </Text>
             {organizationState !== "connected" &&
-              integration.auth_method === "api_key" &&
-              integration.credential_fields.map((field) => (
-                <InputVertical key={field.key} title={field.label}>
-                  {field.secret ? (
-                    <InputPasswordTypeIn
-                      aria-label={field.label}
-                      value={fields[field.key] ?? ""}
-                      disabled={disabled}
-                      onChange={(event) =>
-                        setFields((current) => ({
-                          ...current,
-                          [field.key]: event.target.value,
-                        }))
-                      }
-                    />
-                  ) : (
-                    <InputTypeIn
-                      aria-label={field.label}
-                      value={fields[field.key] ?? ""}
-                      variant={disabled ? "disabled" : "primary"}
-                      onChange={(event) =>
-                        setFields((current) => ({
-                          ...current,
-                          [field.key]: event.target.value,
-                        }))
-                      }
-                    />
-                  )}
-                </InputVertical>
-              ))}
+              integration.auth_method === "api_key" && (
+                <CredentialFieldInputs
+                  fields={integration.credential_fields}
+                  values={fields}
+                  onChange={setFields}
+                  disabled={disabled}
+                />
+              )}
             <Section
               flexDirection="row"
               justifyContent="end"

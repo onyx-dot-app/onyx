@@ -7,7 +7,7 @@ import { Button, Card, OnyxLoader } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgConnected, SvgPlugBroken } from "@opal/illustrations";
 import { verifyMemberPluginConnection } from "@/lib/plugins/member";
-import { parsePluginId } from "@/lib/plugins/routes";
+import { parsePositiveId } from "@/lib/integrations/utils";
 import { CRAFT_PLUGINS_PATH } from "@/app/craft/v1/constants";
 
 export default function MemberPluginOAuthCompletePage() {
@@ -23,7 +23,7 @@ export default function MemberPluginOAuthCompletePage() {
     if (processed.current) return;
     processed.current = true;
     const kind = searchParams?.get("pluginKind");
-    const id = parsePluginId(searchParams?.get("pluginId") ?? undefined);
+    const id = parsePositiveId(searchParams?.get("pluginId") ?? undefined);
     const agentIdParam = searchParams?.get("agentId");
     const agentId = agentIdParam == null ? undefined : Number(agentIdParam);
     const surfaceParam = searchParams?.get("surface");

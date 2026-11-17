@@ -176,9 +176,6 @@
       }
     },
     "addOpenApiModal": {
-      "addHeader": {
-        "title": "OpenAPI 플러그인 추가"
-      },
       "cancelButton": {
         "label": "취소"
       },
@@ -192,9 +189,6 @@
         "subDescription": "이 플러그인의 일부로 제공할 API를 정의하는 OpenAPI 스키마를 지정하세요. 스키마의 어느 위치(예: 서버 URL, 경로, 파라미터 기본값)에나 `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, `USER_EMAIL` 자리 표시자를 사용할 수 있으며, 호출 시점에 현재 요청의 값으로 대체됩니다. [OpenAPI 플러그인]({docsUrl})에 대해 자세히 알아보세요.",
         "title": "OpenAPI 스키마 정의"
       },
-      "editHeader": {
-        "title": "OpenAPI 플러그인 편집"
-      },
       "empty": {
         "description": "OpenAPI 스키마를 입력하면 여기에서 액션을 미리 볼 수 있습니다.",
         "title": "액션을 찾을 수 없음"
@@ -205,16 +199,9 @@
       "method": {
         "noSummary": "요약이 제공되지 않음"
       },
-      "submitButton": {
-        "addLabel": "플러그인 추가",
-        "addingLabel": "추가하는 중...",
-        "saveLabel": "변경 사항 저장",
-        "savingLabel": "저장하는 중..."
-      },
       "toasts": {
         "actionCreated": "OpenAPI 플러그인을 만들었습니다",
-        "invalidJson": "OpenAPI 스키마 정의의 JSON 형식이 잘못되었습니다",
-        "updateFailed": "OpenAPI 플러그인을 업데이트하지 못했습니다"
+        "invalidJson": "OpenAPI 스키마 정의의 JSON 형식이 잘못되었습니다"
       },
       "humanDescription": {
         "title": "사용자를 위한 설명",
@@ -846,19 +833,11 @@
       },
       "controls": {
         "disconnect": "워크스페이스에서 활성화 또는 비활성화",
-        "enable": "워크스페이스에서 활성화",
         "disable": "워크스페이스에서 비활성화",
         "manageAvailability": "워크스페이스 가용성 관리",
         "more": "추가 작업",
         "disableChat": "기본 채팅에서 비활성화",
-        "enableChat": "기본 채팅에서 사용하도록 설정",
-        "disableCraft": "Craft에서 비활성화",
-        "enableCraft": "Craft에서 활성화",
-        "chatDescription": "사용자 지정 에이전트가 없는 채팅에서 이 플러그인을 사용할 수 있게 합니다. 액세스 제어는 계속 적용됩니다.",
-        "defaultChatAdminOnly": "워크스페이스 관리자만 기본 채팅에서의 사용 가능 여부를 변경할 수 있습니다.",
-        "mcpCraftDescription": "Craft에서 이 플러그인을 사용할 수 있게 합니다. 액세스 제어와 도구 권한은 계속 적용됩니다.",
-        "craftAppDescription": "Craft에서 이 앱을 사용할 수 있게 합니다. 연결 및 승인 요구 사항은 계속 적용됩니다.",
-        "workspaceDescription": "Chat 및 사용자 지정 에이전트에서 이 플러그인을 사용할 수 있도록 합니다. 액세스 제어 및 인증 요구 사항은 계속 적용됩니다."
+        "disableCraft": "Craft에서 비활성화"
       },
       "craftApp": {
         "tabs": {

@@ -68,14 +68,13 @@ Its neighbours own:
 
 **Admin flow.** `web/src/sections/integrations/IntegrationsPage.tsx` lists
 integrations. `web/src/lib/integrations/hooks.ts`, `web/src/lib/integrations/svc.ts`
-and `web/src/lib/integrations/types.ts` follow the U6 integration API. The add dialog
-(`sections/integrations/AddIntegrationModal.tsx`) still probes an MCP URL
-through `POST /admin/mcp/probe` to suggest the sign-in, and reuses
+and `web/src/lib/integrations/types.ts` follow the integration API. The add dialog
+(`sections/integrations/AddIntegrationModal.tsx`) probes an MCP URL
+through `POST /admin/mcp/probe` to suggest the sign-in, and uses
 `AddOpenAPIActionModal` as the schema step. The Actions tab
 (`sections/integrations/IntegrationActionsTab.tsx`) is built from
-`PolicyEditor` and `PolicyToggle` and converts the API values
-`allow|ask|blocked` to their `ALWAYS|ASK|DENY` at the edge
-(`lib/integrations/utils.ts`).
+`PolicyEditor` and `PolicyToggle`, which take the API values
+`allow|ask|blocked`.
 
 **Member flow.** `lib/plugins/member.ts:useMemberPlugins` reads only member
 endpoints (MCP servers, tools, the user's OAuth token status and Craft apps),
@@ -176,8 +175,9 @@ only the configuration of a chat that does not exist yet.
    admin endpoints.** A scoped manager or a member cannot read them, and Craft
    app admin records are for full admins only.
 10. `old-admin-routes-redirect` **Old admin plugin URLs only redirect.**
-    `/admin/mcp-actions*`, `/admin/openapi-actions`, `/admin/craft/apps` and
-    `/admin/plugins/{mcp,openapi,external-app}/[id]` open `/admin/integrations`.
+    `redirects()` in `web/next.config.js` sends `/admin/mcp-actions*`,
+    `/admin/openapi-actions`, `/admin/craft/apps` and
+    `/admin/plugins/{mcp,openapi,external-app}/[id]` to `/admin/integrations`.
     A server, tool or app id is not an integration id, so they go to the list,
     not a detail. New links go to `/admin/integrations`.
 11. `action-policies-mcp-and-craft` **Action policies apply to Craft and to MCP
