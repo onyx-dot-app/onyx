@@ -123,13 +123,26 @@ jobs:
             ${{ runner.os }}-nextjs-${{ hashFiles('web/bun.lock') }}-
             ${{ runner.os }}-nextjs-
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+      # The fork's CLI waits out a busy server instead of failing the upload.
+      - name: Check out the preview CLI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
-          version: "0.13.8"
+          repository: rohoswagger/local-preview
+          ref: 77b2593fd0eb4eee938819401bdae279c6abec5a
+          path: .preview-cli
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5 # zizmor: ignore[cache-poisoning]
+        with:
+          go-version-file: .preview-cli/go.mod
+          cache-dependency-path: .preview-cli/go.sum
 
       - name: Install the preview CLI
-        run: uv tool install local-preview==0.9.0
+        working-directory: .preview-cli
+        run: |
+          go build -o "$RUNNER_TEMP/bin/preview" .
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       # Must match the frontend build in the server's own manifest for this
       # repo (manifests/onyx.toml in the terraform workspace) step for step —
@@ -171,7 +184,9 @@ jobs:
           set -euo pipefail
           # stderr into the capture too: on a failure it holds the reason, and
           # the next step quotes the tail of it into the PR comment.
-          preview upload frontend upload "$PREVIEW_SHA" \
+          # The CLI retries while the server is at upload capacity; bound
+          # that wait so the report step still runs before the job timeout.
+          timeout 10m preview upload frontend upload "$PREVIEW_SHA" \
             --repo onyx --server "$PREVIEW_URL" --oidc 2>&1 | tee out.txt
 
           # Every call is bounded (connect, per attempt, and all retries), so a
