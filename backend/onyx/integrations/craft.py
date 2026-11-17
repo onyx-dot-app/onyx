@@ -144,7 +144,7 @@ def _interactive_policies(
     db_session: Session,
     integration: Integration,
     action_keys: Collection[str],
-    user_id: UUID,
+    user_id: UUID | None,
     link_settings: Sequence[ActionSettings | None],
 ) -> dict[str, EffectivePolicy]:
     return resolve_action_policies(
@@ -166,16 +166,15 @@ def resolve_craft_action_policies(
     user_id: UUID,
     task_id: UUID | None,
 ) -> dict[str, EffectivePolicy]:
-    """A scheduled run uses the settings of its task, and blocks each action
-    of an integration that no plugin of the task holds."""
+    """A scheduled run uses the settings of its task, not the saved Always
+    allow choices of its owner, and blocks each action of an integration that
+    no plugin of the task holds."""
     if task_id is None:
         return _interactive_policies(db_session, integration, action_keys, user_id, [])
     settings = task_link_settings(db_session, task_id, user_id, integration.id)
     if not settings:
         return dict.fromkeys(action_keys, EffectivePolicy.BLOCKED)
-    return _interactive_policies(
-        db_session, integration, action_keys, user_id, settings
-    )
+    return _interactive_policies(db_session, integration, action_keys, None, settings)
 
 
 def _integration_view(

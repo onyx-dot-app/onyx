@@ -23,6 +23,7 @@ from onyx.db.enums import (
     ApprovalDecision,
     BuildSessionStatus,
     ExternalAppType,
+    IntegrationActionPolicyValue,
     IntegrationAuthMethod,
     IntegrationAuthMode,
     PluginInstallationPolicy,
@@ -33,6 +34,7 @@ from onyx.db.models import (
     ActionApproval,
     BuildSession,
     Integration,
+    IntegrationActionPolicy,
     Plugin,
     ScheduledTask,
     ScheduledTask__Plugin,
@@ -453,6 +455,40 @@ def test_a_scheduled_task_calls_only_the_integrations_of_its_plugins(
     _, resolved = addon._resolve_request_policies(ctx, blocked)
     assert resolved.governing_action.policy is ActionPolicy.DENY
     assert not addon._task_can_use_app(ctx, blocked.target)
+
+
+def test_a_scheduled_task_ask_ignores_the_owners_always_allow(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    host = _host()
+    mcp = _mcp(db_session, created, f"https://{host}/mcp")
+    plugin = _run(db_session, [mcp])
+    db_session.add(
+        IntegrationActionPolicy(
+            integration_id=mcp.id,
+            action="update",
+            user_id=user.id,
+            policy=IntegrationActionPolicyValue.ALLOW,
+        )
+    )
+    db_session.commit()
+    ctx = _session_ctx(db_session, user)
+    addon = _addon()
+    request = _request(f"https://{host}/mcp", _tool_call("update"))
+    _, resolved = addon._resolve_request_policies(ctx, _evaluate(request, user))
+    assert resolved.governing_action.policy is ActionPolicy.ALWAYS
+
+    run_ctx = _session_ctx(db_session, user)
+    task = _task_run(
+        db_session,
+        user,
+        run_ctx.session_id,
+        {plugin.id: {"default": "inherit", "actions": {"update": "ask"}}},
+    )
+    _, resolved = addon._resolve_request_policies(
+        run_ctx, _evaluate(request, user, task.id)
+    )
+    assert resolved.governing_action.policy is ActionPolicy.ASK
 
 
 def test_an_ask_action_in_a_session_opens_an_approval_with_the_integration(
