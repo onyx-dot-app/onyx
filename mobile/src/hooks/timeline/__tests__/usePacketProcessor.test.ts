@@ -197,6 +197,13 @@ describe("usePacketProcessor", () => {
       expect(result.current.isComplete).toBe(false);
     });
 
+    it("completes when stopped with no answer to render", () => {
+      const { result } = renderHook(() =>
+        usePacketProcessor([searchStart(0), stopAt()], 1),
+      );
+      expect(result.current.isComplete).toBe(true);
+    });
+
     it("stays incomplete when stop has not been seen", () => {
       const { result } = renderHook(() =>
         usePacketProcessor([messageStart(0)], 1),
@@ -272,7 +279,7 @@ describe("usePacketProcessor", () => {
       expect(result.current.isComplete).toBe(true);
     });
 
-    it("image generation flow", () => {
+    it("image generation is a timeline step that collects its images", () => {
       const { result } = renderHook(() =>
         usePacketProcessor(
           [imageStart(0), imageFinal(0), sectionEnd(0), stopAt()],
@@ -281,14 +288,13 @@ describe("usePacketProcessor", () => {
       );
       expect(result.current.generatedImages.length).toBe(1);
       expect(result.current.finalAnswerComing).toBe(false);
+      expect(result.current.toolTurnGroups.length).toBe(1);
       expect(result.current.displayGroups.length).toBe(0);
-      expect(result.current.toolGroups.length).toBe(1);
-      expect(result.current.isComplete).toBe(true);
     });
   });
 });
 
-it("completes a stopped retracted answer without a hidden renderer", () => {
+it("shows the text that a later tool call retracted once the response stops", () => {
   const packets = [messageStart(0), messageDelta(0, "Let me check.")];
   const { result, rerender } = renderHook(
     ({ packets }: { packets: Packet[] }) => usePacketProcessor(packets, 1),
@@ -298,8 +304,9 @@ it("completes a stopped retracted answer without a hidden renderer", () => {
   rerender({
     packets: [...packets, searchStart(1), stopAt(StopReason.USER_CANCELLED)],
   });
-  expect(result.current.finalAnswerComing).toBe(false);
-  expect(result.current.displayGroups).toEqual([]);
-  expect(result.current.processed.potentialDisplayGroups).toHaveLength(1);
+  expect(result.current.finalAnswerComing).toBe(true);
+  expect(result.current.displayGroups).toHaveLength(1);
+  expect(result.current.isComplete).toBe(false);
+  act(() => result.current.onRenderComplete());
   expect(result.current.isComplete).toBe(true);
 });

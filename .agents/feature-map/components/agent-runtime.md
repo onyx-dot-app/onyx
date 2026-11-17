@@ -32,6 +32,38 @@ document does not repeat it.
   `ToolInvocation.agents.spawn_agent`. The tool returns a `ChildRunWait` and
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
+- **Independent children.** ChatAgent and its children expose controls from
+  `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, message, and interrupt children. Incognito chats have no child agents: they omit these controls,
+  the coding agent tool and deep research. Children survive
+  the root response. A subagent must incorporate the results of children it spawns before
+  completing; `RunOwnership.delegated_runs` lists the unread ones. `WAIT_CHILDREN` releases its execution thread while results are pending and reserves
+  the last model step for synthesis. Dependencies belong to the current run, not the
+  agent's entire history. Failure and cancellation remain terminal outcomes.
+  Later turns use the branch-scoped directory and run store to access children. Before a model
+  call the runtime reads submitted messages and finished child results through
+  `RunOwnership.receive_inputs`; chat reads both with one query and formats results with
+  `chat/run_store.py:agent_result_message`. `RunOwnership.accept_inputs` marks them read. Results reach only the
+  spawner; any agent in the visible tree can message another, and messages to the root never
+  start a root run. Chat can remap citations through `PreparedStep.input_messages`.
+  Each input message between steps must carry `InputMessageMetadata` or be input
+  context (`agents/compaction.py:is_input_context`), such as the `<skill>`
+  message after a send that picked a skill (`chat/models.py:accepted_input_messages`);
+  the runtime rejects other messages. Accepted inputs retain their identity and source in saved history.
+  `MessageStartEvent.input_messages` contains the inputs durably accepted by
+  that step; it excludes instructions still queued or withdrawn before acceptance.
+  `send_message` stores the instruction through `RunOwnership.submit_message`; it targets the next step or starts
+  an idle child with fresh limits. Messaging requires run ownership.
+  `send_message(delivery="queue")` waits for normal completion or the step limit; Stop and failure
+  pause queued work. `interrupt_agent` cancels one agent's active run, including its in-flight
+  tool calls and foreground children; agents it started in the background keep running. The run
+  reports no result (`RunOwnership.withdraw_result`), and its conversation remains. The caller
+  and the root cannot be interrupted. `list_agents` shows unfinished agents and agents of the
+  current user turn, and marks the caller; `include_finished` lists the whole branch tree.
+  Chat starts a follow-up response when an idle parent has unread child results; a root
+  `wait_agents` call batches them ([[chat-persistence]], `db/chat_inputs.py:wakes_for_results`).
+  Queued messages and follow-ups start through one entry,
+  `AgentCoordinator.start_message_run`, which restores the agent through its
+  spawner whoever sent the work.
 - [[tools-framework]]: `tools/interface.py:Tool.bind` turns each chat `Tool`
   into an `AgentTool`.
 - **A backend developer who builds a feature on the runtime.** Start from the
@@ -62,18 +94,62 @@ prompt holds and the compaction prompt text.
 
 ```
 Agent (history, checkpoint, tools, prepare_step / after_step,
-       before_tool_call / after_tool_call hooks)
+       before_tool_call / after_tool_call / on_finish / on_suspend /
+       on_drained hooks)
   start() -> Run (one request, step budget, own cancellation signal)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish
-          ToolBatch only waits on ChildRunWait -> _suspend (capture_state)
+          ToolBatch waits on ChildRunWait, PendingToolInput and NestedInputWait
+            -> _suspend (on_suspend amendments, capture_state)
             -> child ends -> _wake_execution on a new "agent-run" thread
   AgentCoordinator: children, RunStore / RunOwnership / AgentDirectory adapters
   handoff(save=...) -> ExecutionCheckpoint -> Agent.resume(snapshot) elsewhere
+  end of run: on_finish(results) -> ToolResultAmendment list
+            -> recorded results replaced, ToolResultAmendedEvent each
+            -> AgentEndEvent -> save
 ```
 
 - `backend/onyx/agents/runtime.py` holds `Agent`, `Run` and the step loop
-  (`_advance_step`).
+  (`_advance_step`). `Agent.start(max_steps=...)` sets the step budget; chat
+  passes `ChatAgent.max_steps`: `MAX_LLM_CYCLES`, or `CODE_MODE_MAX_LLM_CYCLES`
+  when code mode applies (`ChatAgent.code_cells` is set).
+- `Agent.on_finish` runs once at the end of every run, without the execution
+  lock, with the run's recorded tool results.
+  `backend/onyx/agents/runtime.py:Run._release_amendments` collects its
+  `agents/models.py:ToolResultAmendment` list, and `Run._apply_amendments`
+  sets those results and publishes `ToolResultAmendedEvent` for each,
+  after the partial messages end and before `AgentEndEvent` and the save. An
+  amendment can also give a call that Stop interrupted its result. An
+  amendment that names no started call is logged and skipped. An amendment
+  inside the span of the compaction checkpoint drops the checkpoint, so the
+  next request builds its context from the amended result, and compacts only
+  when that context is over budget. A hook that fails or stops for
+  cancellation sets no results; the run still ends.
+  `Agent.on_suspend` runs before each suspension; `Run._suspend` applies its
+  amendments before it captures state. A suspend hook that fails sets no
+  results and the run still suspends. A suspend hook that stops for
+  cancellation finishes the run as cancelled. Chat uses both hooks to close
+  code mode cells ([[code-execution#code-mode-interrupted-run]]).
+  `Agent.on_drained` runs after each finish or suspension once the run's work
+  drains (`Run._work_drained`, from `_drain_workers` and `_suspend`): its tool
+  threads, work that a tool added through `ToolInvocation.run_work` (a code
+  mode cell's driver and its tool call threads), and its foreground
+  children's work (`Run.track_child_work`), not background children. A suspension calls it only when no foreground child
+  waits or works (`RunCoordination.pending_children`,
+  `AgentCoordinator.children_idle`, read only); otherwise the run's later end does.
+  A run that hands off in that state calls no hook; the restoring owner's
+  run end does. It cannot change results. Errors, `AgentCancelled`
+  included, are logged and the run still becomes idle and reusable. Only the
+  root `chat/agent.py:ChatAgent` installs it, to end per-run tool state
+  (`create_chat_agent` passes it to the root only), such as the sandbox turn
+  ([[code-execution]]); subagents share the root's tools and install none.
+  `chat/presentation.py:ResponsePresenter` renders each amendment with
+  `chat/renderer.py:ToolRenderer.amend`. A call without an ended card
+  completes with the amended result. An ended card renders only what the
+  amendment added (`_amendment_packets`), after its section end; the generic
+  display adds nothing. `ToolRenderer.complete` renders that part after the
+  section end too. Live, the closing record follows the answer; replay places
+  it before the answer's `message_start`. Both orders give the same groups.
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
   `agents/compaction.py:compact_history` above the trigger. If the summary
@@ -83,13 +159,14 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   provider context-limit error before any output streams compacts and retries
   once.
 - `backend/onyx/agents/tool_execution.py:ToolBatch` runs a step's calls in
-  parallel. `ToolExecutionMode.SEQUENTIAL` serializes calls to one tool name,
-  and `merge_arguments` merges compatible calls into one worker. It records
+  parallel. `ToolExecutionMode.SEQUENTIAL` serializes calls to one tool name, or
+  to the tools of one `sequence_group`, and `merge_arguments` merges compatible calls into one worker. It records
   results as they complete. Each pass of `ToolBatch.execute` then ends the
   completed calls in call order, and model history replays them in call order. A step with more than `MAX_TOOL_CALLS_PER_STEP` (64) calls or a
   repeated call ID fails the whole run.
 - `backend/onyx/agents/agent_coordination.py:AgentCoordinator` runs children and
-  calls the application's storage and ownership adapters.
+  calls the application's storage and ownership adapters. Explicit discovery
+  refreshes directory metadata so later turns can find newly spawned children.
 - `backend/onyx/agents/execution_records.py:messages_for_model` filters history
   for the model. It drops incomplete tool exchanges, orphaned results, calls
   that repeat an ID in one message (with their results) and thinking that
@@ -99,28 +176,41 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 
 | Runtime interface | Chat implementation |
 |---|---|
-| `RunStore` | `chat/persistence.py:ChatResponsePersistence` saves the root response at the end and skips child runs. In a session that keeps content, `chat/run_store.py:ChatRunStore` wraps it: it saves the parent's partial record before each child reservation and saves each child when it ends. In a content-free incognito session no adapter saves children. |
-| `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. A content-free incognito run keeps local ownership only. |
-| `AgentDirectory` | `chat/subagents.py:ChatAgentDirectory`, limited to the selected branch. |
+| `RunStore` | `chat/persistence.py:ChatResponsePersistence` saves the root response at the end and skips child runs. In a session that keeps content, `chat/run_store.py:ChatRunStore` wraps it: it saves the parent's partial record before each child reservation and saves each child when it ends. Incognito sessions have no children. |
+| `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. It also owns the inbox: received inputs, unread results, withdrawn results and submitted messages. A `FULL_HISTORY` incognito run also has it; a `USAGE_ONLY` incognito run has no run ownership. |
+| `AgentDirectory` | `chat/run_store.py:ChatRunStore`, limited to the selected branch of a chat that keeps content, including a `FULL_HISTORY` incognito chat. It lists the branch's agent tree and accepts messages for any agent in it; lookup, restore, and run reads go through each agent's spawner. A `USAGE_ONLY` incognito run has no directory. |
 | Event listener | `chat/presentation.py:ResponsePresenter`. |
 | `RestorableFeature` | `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`. Product calls only `capture_state`, at each suspension. `chat/restoration.py:restore_chat_agent` rebuilds them for `ChatRunStore.resume`. |
 | `AgentTool` | `tools/interface.py:Tool.bind`. |
 
-**Live and not wired.** In-process suspension is live: deep research and the
-coding agent suspend the parent on `ChildRunWait`, and it continues in the same
-process. No product code calls `Run.suspend`, `Run.submit` or
-`ToolInvocation.agents.start_run`, returns a `PendingToolInput`, or calls
-`ChatRunStore.handoff` or `ChatRunStore.resume`. Only tests do.
-`chat/execution.py` binds `restore_chat_agent` into `ChatRunStore` on every
-content-persisting turn, but only the unwired `ChatRunStore.resume` calls it. So
-`chat/checkpoint.py`, `chat/restoration.py`, `RestorableFeature.restore_state`,
-`chat/subagents.py:ChatAgentDirectory.restore_agent`, and the publish and claim
-functions in `db/chat_checkpoint.py` run only in tests, and no product
-path creates a `ChatResponseCheckpoint` row. Product saves still lock the
-response, check the checkpoint owner and delete any row at a terminal status.
+**Live paths.** In-process suspension is live: deep research and the coding
+agent suspend the parent on `ChildRunWait`, and it continues in the same
+process. Checkpoint transfer is live for chat tool approvals only: the runtime
+gates calls of `AgentTool.approval_required` through the coordinator's
+`ToolApprovals` (`chat/run_store.py:ChatRunStore.request_approval`), and any
+run whose waits are all on people hands off in one park pass of
+`ChatRunStore.poll_control` after `ChatRunStore.may_park`, the root included;
+the root reports its park to its turn through the store's `on_root_parked`
+callback. A parent
+hands off after its waiting foreground children hand off
+(`agents/agent_coordination.py:RunCoordination.validate_handoff`). Decisions
+resume each run on any pod through chat dispatch (`ChatRunStore.resume` with
+the saved answers), the leaf first
+([[mcp-and-custom-tools#chat-approval-durable-wait]]). A code mode program's
+call waits in a saved `NestedInputWait`
+([[mcp-and-custom-tools#program-call-waits-in-cell]]). No product code calls
+`Run.suspend`. Only a user Stop calls `Run.submit`:
+`ChatRunStore.reject_waiting_approvals` gives each live run that the Stop
+cancels its saved rejections, then cancels it, under the run's execution lock. `chat/run_store.py:ChatRunStore.restore_agent`
+loads a saved child for a new run, and `chat/restoration.py:restore_subagent`
+rebuilds it with the current request's tools and settings. Product saves lock
+the response, check the checkpoint owner and delete any row at a terminal
+status.
 To check again, run
-`git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|start_run(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
-and ignore thread-pool `submit` calls; expect no runtime matches.
+`git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
+and ignore thread-pool and job `submit` calls and the code mode `resume`
+calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
+(`resume`) and `chat/tool_approvals.py:open_tool_approval`.
 
 ---
 
@@ -135,18 +225,26 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    Neither failure shows in `run.result()`. The table in the package README lists what each
    wait means.
 2. `no-side-effect-wiring` **Do not reach human input or checkpoint transfer
-   from a product path as a side effect.** A tool that returns a
-   `PendingToolInput`, or a caller of `Run.suspend`, `ChatRunStore.handoff` or
-   `ChatRunStore.resume`, makes that path live without review of its storage, ownership and display. Update the
-   Not wired paragraph in the same change ([[#wire-module]]).
+   from a product path as a side effect.** A new tool, hook or `ToolApprovals`
+   that returns a `PendingToolInput`, or a caller of `Run.suspend`, `ChatRunStore.handoff` or
+   `ChatRunStore.resume`, makes that path live without review of its storage, ownership and display.
+   Chat tool approvals are the one reviewed source of `PendingToolInput`; a
+   new source needs its own saved requests and resume trigger, as
+   [[mcp-and-custom-tools#chat-approval-durable-wait]] has. Update the
+   Live paths paragraph in the same change ([[#wire-module]]).
 3. `restored-tools-must-match` **A restored run needs the same tools and
    configuration.** A checkpoint holds data only. It does not serialize clients,
    callbacks or other resources, so the new owner rebuilds them, possibly in
-   another process or after a deploy. Each tool's definition must equal the
-   saved step's declaration, or `backend/onyx/agents/runtime.py:_execute_tools`
-   raises `ValueError`. `chat/agent.py:ChatAgent.restore_state` also raises when
-   the saved prompt, files, memory or settings differ. Keep a tool's definition
-   stable while saved checkpoints can still resume.
+   another process or after a deploy. A saved call runs only when the agent
+   still has its tool with the same `parameters` schema
+   (`backend/onyx/agents/runtime.py:_execute_tools`); an approved call whose
+   tool is gone or changed gets `agents/tool_execution.py:UNAVAILABLE_CALL_MESSAGE`,
+   and later steps use the current tools. Descriptions, other tools, their
+   order and phases can differ. Saved execution permissions are separate from
+   advertised definitions; restoration must not enable a tool merely because it
+   was advertised, and it drops permitted names that the agent lacks.
+   `chat/agent.py:ChatAgent.restore_state` also raises when
+   the saved prompt, files, memory or settings differ.
 4. `context-captured-at-start` **A run copies the caller's context when it
    starts.** `backend/onyx/agents/runtime.py:Run._start` calls `copy_context()`,
    and the run's worker threads use that copy. So set the tenant and open the
@@ -160,12 +258,17 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    both first ([[multi-tenancy#threads-copy-context]],
    [[observability#root-trace-required]]).
 5. `run-input-protected` **Pass the whole current input in one `start` call.**
-   The question, its attachment text and request context go in
-   `start(messages=...)`. Compaction and truncation keep that group until the
+   The question and its attachment text go in
+   `start(messages=...)`, with the question after its attachments. The
+   `<skill>` messages of the question's picked skills follow it: they are
+   recorded input context (`CompactionMetadata.is_input_context`), not a
+   user turn, so compaction never takes one as the task.
+   Chat supplies request-only context through prompt assembly, outside compacted history.
+   Compaction and truncation keep the input group until the
    model's first step in the run answers it, and input that cannot fit fails the
    run with `agents/compaction.py:ContextLimitError` instead of losing an
-   attachment. Later steps can summarize or cut the attachment text; only the
-   latest user message stays verbatim. Text put in the agent's history can be
+   attachment. Later steps can summarize or cut the attachment text;
+   only the latest user message, the question, stays verbatim. Text put in the agent's history can be
    summarized away at any step. Chat splits the
    two in `chat/process_message.py:prepare_chat_turn` (`input_messages`).
 6. `stable-message-ids` **Message IDs must be stable across reloads.** A
@@ -175,7 +278,8 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    `agents/compaction.py:checkpoint_boundary` rejects it and the runtime
    silently drops the summary. Chat builds IDs such as `chat:<message id>` in
    `chat/chat_utils.py`; a change to that scheme discards every saved summary.
-   Mark request-only messages with `allow_compaction_cutoff=False`.
+   Keep transient request context outside recorded history. [[context-assembly]]
+   owns its placement in the uncached suffix, separate from summary input.
 7. `run-id-is-message-id` **A durable chat run ID is the assistant message ID.**
    The run ID is the reserved `ChatMessage.id` as a string, and child responses
    are reserved before their runs start. `ChatRunStore` and the Postgres history
@@ -237,12 +341,13 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
     starts it as a child (`tools/tool_implementations/coding_agent/coding_agent_tool.py`).
     Return `ChildRunWait`, set `result_from_children`, and release held
     resources through `agents.add_completion_cleanup`. The chat adapters then
-    save and own the child for one run, except in content-free incognito. To
-    restore or rerun it, add a `restoration_config`, a `RestorableFeature` and a
-    branch in `ChatAgentDirectory.restore_agent` and `restore_chat_agent`.
-    `restore_agent` rebuilds only `ResearchAgent`; `restore_chat_agent` rebuilds
-    `ChatAgent`, `ResearchAgent` and `DeepResearchAgent`. Neither rebuilds
-    `CodingAgent`.
+    save and own the child for one run. Incognito chats have no children. To
+    rerun it, add a `restoration_config` and a branch in
+    `chat/restoration.py:restore_subagent`. `ChatRunStore` authorizes and
+    loads saved history; this factory rebuilds Chat and Research children with
+    the current request's authorized resources. For suspended execution, add
+    a `RestorableFeature` and a branch in `restore_chat_agent`, which rebuilds
+    Chat, Research and DeepResearch agents. Neither factory rebuilds CodingAgent.
   - Outside chat, only tests implement `RunStore`, `RunOwnership` and
     `AgentDirectory` without chat storage
     (`backend/tests/unit/onyx/agents/fakes.py`). Children and durable completion
@@ -250,18 +355,18 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
   - Chat tools reach the runtime through `Tool.bind`. A plain `AgentTool` is
     enough for a feature-only tool.
   - A run that a user starts is an LLM entry point and needs the budget checks.
-- `wire-module` **Wire suspension or checkpoint transfer into a product path.**
+- `wire-module` **Wire suspension or checkpoint transfer into another product path.**
   Add an integration test that suspends, hands off and resumes a real turn on
   another process, compare its packets with the live stream
-  ([[streaming-protocol]]), update the Not wired paragraph, and update the
+  ([[streaming-protocol]]), update the Live paths paragraph, and update the
   [[core-chat-loop]] and [[chat-persistence]] documents in the same change.
   `ChatRunStore.handoff` accepts only a `SUSPENDED`, idle run whose child runs
-  are all terminal (else `RunNotTransferable`), and it needs the live owner, so
-  hand off before the process exits, for example on graceful shutdown. A crash
-  in the middle of a tool call leaves no checkpoint, so it cannot resume and
-  needs a rerun policy. The new trigger (startup recovery or the next request)
-  must call `ChatRunStore.resume` with a bound coordinator and the rebuilt agent
-  state; nothing claims checkpoints on its own.
+  have ended or parked (else `RunNotTransferable`), and it needs the live owner, so
+  hand off as soon as the run suspends, as chat approvals do. A crash in the
+  middle of a tool call leaves no checkpoint, so it cannot resume and needs a
+  rerun policy. The trigger must call `ChatRunStore.resume` with a bound
+  coordinator and the rebuilt agent state, as chat dispatch does for
+  approvals; nothing claims checkpoints on its own.
 
 ---
 

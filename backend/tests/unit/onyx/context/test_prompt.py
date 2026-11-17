@@ -29,10 +29,9 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 
-def test_instructions_files_and_reminder_surround_current_task() -> None:
+def test_stable_preamble_precedes_history_and_dynamic_reminders() -> None:
     history: list[Message] = [
         UserMessage(content="Earlier question"),
         AssistantMessage(content=[TextContent(text="Earlier answer")]),
@@ -73,15 +72,15 @@ def test_instructions_files_and_reminder_surround_current_task() -> None:
         token_counter=len,
         available_tool_names={"read_file"},
     )
-    assert [message.text for message in result[:4]] == [
+    assert [message.text for message in result[:2]] == [
         "System instructions",
-        "Earlier question",
-        "Earlier answer",
         "Task instructions",
     ]
-    assert '"title": "project.txt"' in result[4].text
-    assert '"contents": "Project evidence"' in result[4].text
-    assert [message.text for message in result[5:8]] == [
+    assert '"title": "project.txt"' in result[2].text
+    assert '"contents": "Project evidence"' in result[2].text
+    assert [message.text for message in result[3:8]] == [
+        "Earlier question",
+        "Earlier answer",
         "Current question",
         "",
         "Evidence",
@@ -95,7 +94,7 @@ def test_instructions_files_and_reminder_surround_current_task() -> None:
     assert prompt_metadata(result[0]).should_cache
 
 
-def test_project_image_already_in_history_is_not_duplicated() -> None:
+def test_project_image_is_in_preamble_without_changing_user_history() -> None:
     image = ChatLoadedFile(
         file_id="image",
         filename="image.png",
@@ -107,7 +106,6 @@ def test_project_image_already_in_history_is_not_duplicated() -> None:
     history: list[Message] = [
         UserMessage(
             content="Describe the image",
-            metadata=PromptMetadata(image_files=[image], image_token_count=100),
         )
     ]
     result = prepare_prompt(
@@ -132,6 +130,10 @@ def test_project_image_already_in_history_is_not_duplicated() -> None:
         for image in (prompt_metadata(message).image_files or [])
     ]
     assert [image.file_id for image in images] == ["image"]
+    assert prompt_metadata(result[0]).image_files == [image]
+    assert prompt_metadata(result[0]).image_token_count == 100
+    assert result[1].text == "Describe the image"
+    assert prompt_metadata(history[0]).image_files is None
 
 
 @pytest.mark.parametrize("keep_first_file", [True, False])
@@ -186,20 +188,20 @@ def test_prompt_can_be_rebuilt_without_a_user_message(history: list[Message]) ->
     )
     assert [message.text for message in result] == [
         "System",
-        *[message.text for message in history],
         "Task",
+        *[message.text for message in history],
     ]
 
 
 @pytest.mark.parametrize("with_model", [False, True])
-def test_historical_tool_filter_preserves_checkpoint_and_current_evidence(
+def test_prompt_preserves_historical_and_current_evidence_after_checkpoint(
     with_model: bool,
 ) -> None:
     prior_result = ToolResultMessage(
         tool_call_id="old",
         tool_name="web_search",
         content="Old evidence",
-        metadata=PromptMetadata(omit_tool_result_content=True, token_count=9000),
+        metadata=PromptMetadata(token_count=9000),
     )
     image_result = ToolResultMessage(
         tool_call_id="image",
@@ -243,13 +245,15 @@ def test_historical_tool_filter_preserves_checkpoint_and_current_evidence(
     )
     results = [message for message in request if isinstance(message, ToolResultMessage)]
     assert [message.text for message in results] == [
-        TOOL_CALL_RESPONSE_CROSS_MESSAGE,
+        "Old evidence",
         image_result.text,
         "Current evidence",
     ]
-    assert prompt_metadata(results[0]).token_count == len(
-        TOOL_CALL_RESPONSE_CROSS_MESSAGE
-    )
+    if with_model:
+        assert results[0].metadata is None
+        assert results[0].estimated_tokens == 9000
+    else:
+        assert prompt_metadata(results[0]).token_count == 9000
     assert prior_result.text == "Old evidence"
     assert prompt_metadata(prior_result).token_count == 9000
     assert [message.model_dump() for message in history] == original
@@ -324,8 +328,12 @@ def test_prompt_output_isolates_history_and_captured_instructions(
     tool_result = next(
         message for message in result if isinstance(message, ToolResultMessage)
     )
-    assert isinstance(tool_result.details, SearchDocsResponse)
-    tool_result.details.citation_mapping[1] = "changed"
+    if with_model:
+        assert tool_result.details is None
+    else:
+        assert isinstance(tool_result.details, SearchDocsResponse)
+        tool_result.details.citation_mapping[1] = "changed"
+    tool_result.content = "Changed evidence"
     for message in result:
         if isinstance(message, (UserMessage, SystemMessage)):
             message.content = "changed"
@@ -373,3 +381,33 @@ def test_omitted_file_notice_uses_only_available_readers(
         assert metadata.file_id not in notice
         assert "Do not guess" in notice
         assert "search the web" in notice
+
+
+def test_omitted_file_notice_splits_python_staged_and_unstaged_files() -> None:
+    staged = FileToolMetadata(
+        file_id="docx-id", filename="template.docx", approx_char_count=2000
+    )
+    unstaged = FileToolMetadata(
+        file_id="pdf-id",
+        filename="report.pdf",
+        approx_char_count=2000,
+        staged_for_tools=False,
+    )
+    messages = prepare_prompt(
+        [UserMessage(content="Fill in the template")],
+        system_prompt=None,
+        custom_agent_prompt=None,
+        reminder_message=None,
+        context_files=None,
+        token_counter=len,
+        all_injected_file_metadata={
+            staged.file_id: staged,
+            unstaged.file_id: unstaged,
+        },
+        available_tool_names={"run_python"},
+    )
+    notice = next(m.text for m in messages if "template.docx" in m.text)
+    python_part, unreadable_part = notice.split("no tool here can read them")
+    assert "python tool" in python_part and "template.docx" in python_part
+    assert "report.pdf" not in python_part
+    assert "report.pdf" in unreadable_part

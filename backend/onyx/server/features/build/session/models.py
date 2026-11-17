@@ -18,6 +18,8 @@ from onyx.server.features.build.db.build_session import session_runtime_stale
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     MANIFEST_MAX_ENTRIES,
 )
+from onyx.skills.limits import runtime_limit_notice
+from onyx.skills.models import SkillLimitNotice
 
 if TYPE_CHECKING:
     from onyx.db.models import Artifact, BuildSession, Sandbox
@@ -69,10 +71,20 @@ class SandboxResponse(BaseModel):
         )
 
 
+def skill_limit_notice(sandbox: "Sandbox | None") -> SkillLimitNotice | None:
+    """The plugins the run-time skill limit left out of the user's sandbox."""
+    if sandbox is None:
+        return None
+    return runtime_limit_notice(list(sandbox.skill_omissions))
+
+
 class SandboxStatusResponse(BaseModel):
-    """Lightweight sandbox status for the frontend sleep poll."""
+    """Lightweight sandbox status for the frontend poll. It also carries the
+    session's skill state, so a push by someone else reaches an open session."""
 
     status: SandboxStatus | None
+    skills_stale: bool
+    skill_omissions: SkillLimitNotice | None
 
 
 class OutputFileResponse(BaseModel):
@@ -170,6 +182,8 @@ class SessionResponse(BaseModel):
     agent_provider: str | None
     agent_model: str | None
     skills_stale: bool
+    # Plugins the run-time skill limit left out of the user's sandbox.
+    skill_omissions: SkillLimitNotice | None
 
     @classmethod
     def from_model(
@@ -197,11 +211,14 @@ class SessionResponse(BaseModel):
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
             skills_stale=session_runtime_stale(session, sandbox),
+            skill_omissions=skill_limit_notice(sandbox),
         )
 
 
 class SessionSkillsStateResponse(BaseModel):
     skills_stale: bool
+    # The plugins the run-time limit left out of the sandbox after the reload.
+    skill_omissions: SkillLimitNotice | None = None
 
 
 class DetailedSessionResponse(SessionResponse):

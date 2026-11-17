@@ -179,6 +179,20 @@ YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
 )
 
 #####
+# Egnyte
+#####
+
+# In seconds, default 6 hours. Each run costs one API call per folder, and
+# Egnyte allows a token about 1,000 calls a day by default.
+EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY") or 6 * 60 * 60
+)
+# In seconds, default 6 hours. Each run costs one API call per custom group.
+EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY") or 6 * 60 * 60
+)
+
+#####
 # Azure Data Lake Storage
 #####
 

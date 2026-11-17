@@ -148,7 +148,7 @@ export function upsertMessages(
 export function restoreIncognitoMessages(
   saved: MessageTreeState,
   local: MessageTreeState,
-  streamId?: number
+  responseId?: number
 ): MessageTreeState {
   const nodeIds = new Map<number, number>();
   for (const message of local.values()) {
@@ -163,13 +163,9 @@ export function restoreIncognitoMessages(
   );
   if (localRoot && savedRoot) nodeIds.set(savedRoot.nodeId, localRoot.nodeId);
 
-  const active = streamId === undefined ? undefined : saved.get(streamId);
+  const active = responseId === undefined ? undefined : saved.get(responseId);
   const savedQuestion =
-    active?.type === "user"
-      ? active
-      : active?.parentNodeId != null
-        ? saved.get(active.parentNodeId)
-        : undefined;
+    active?.parentNodeId != null ? saved.get(active.parentNodeId) : undefined;
   const localChain = getLatestMessageChain(local);
   const localQuestion = localChain.findLast(
     (message) => message.type === "user"
@@ -261,6 +257,19 @@ export function setMessageAsLatest(
   return newMessages;
 }
 
+/**
+ * The responses of the latest turn: the tip of the latest chain and, for a
+ * multi-model turn, its siblings.
+ */
+export function getLatestTurn(tree: MessageTreeState): Message[] {
+  const latest = getLatestMessageChain(tree).at(-1);
+  if (!latest) return [];
+  if (latest.parentNodeId === null) return [latest];
+  return (tree.get(latest.parentNodeId)?.childrenNodeIds ?? [latest.nodeId])
+    .map((nodeId) => tree.get(nodeId))
+    .filter((node): node is Message => node !== undefined);
+}
+
 export function getLatestMessageChain(messages: MessageTreeState): Message[] {
   const chain: Message[] = [];
   if (messages.size === 0) {
@@ -316,44 +325,6 @@ export function getLatestMessageChain(messages: MessageTreeState): Message[] {
   }
 
   return chain;
-}
-
-export function getLastSuccessfulMessageId(
-  messages: MessageTreeState,
-  chain?: Message[]
-): number | null {
-  const messageChain = chain || getLatestMessageChain(messages);
-  for (let i = messageChain.length - 1; i >= 0; i--) {
-    const message = messageChain[i];
-    if (!message) {
-      console.error(`Message ${i} not found in the message chain.`);
-      continue;
-    }
-
-    // don't include failed / not-completed messages
-    if (message.type !== "error" && message.messageId !== undefined) {
-      return message.messageId ?? null;
-    }
-  }
-
-  // If the chain starts with an error or is empty, check for system message
-  const systemMessage = messages.get(SYSTEM_NODE_ID);
-  if (systemMessage) {
-    // Check if the system message itself is considered "successful" (it usually is)
-    // Or if it has a successful child
-    const childNodeId = systemMessage.latestChildNodeId;
-    if (childNodeId !== null && childNodeId !== undefined) {
-      const firstRealMessage = messages.get(childNodeId);
-      if (firstRealMessage && firstRealMessage.type !== "error") {
-        return firstRealMessage.messageId ?? null;
-      }
-    }
-    // If no successful child, return the system message ID itself as the root?
-    // This matches the class behavior implicitly returning the root ID if nothing else works.
-    return systemMessage.messageId ?? null;
-  }
-
-  return null; // No successful message found
 }
 
 interface BuildEmptyMessageParams {

@@ -21,6 +21,26 @@ The LLM decides when to run code based on the user's request. Users do not need 
 Each code run is independent.
 Variables from one run are not available in the next run unless the model writes them to a file.
 
+## Files available to the code
+
+Onyx copies these files into the working directory of each code run:
+
+- All files that the user attaches to the chat.
+- Word (`.docx`), PowerPoint (`.pptx`), Excel (`.xlsx`, `.xlsm`), and CSV files in the Agent's
+  [knowledge](/admins/agents/overview) or in the chat's Project.
+
+Onyx copies the original file, not its extracted text. The code can open a Word, PowerPoint, or Excel template,
+change it, and return the changed copy to the user. The sandbox includes `python-docx`, `python-pptx`,
+and `openpyxl` for this.
+
+Onyx does not copy other Agent and Project file types, for example PDF and plain text files.
+The model reads the text of these files in the prompt or through search.
+
+The `CODE_INTERPRETER_MAX_STAGED_FILES` and `CODE_INTERPRETER_MAX_STAGED_BYTES` limits apply to all of these files
+together. If a code run has more files than the limits allow, Onyx first copies the files that the code names.
+Onyx always copies at least one file, even if that file is larger than `CODE_INTERPRETER_MAX_STAGED_BYTES`.
+The model gets a notice that names the files that Onyx did not copy.
+
 ## Availability
 
 Code Interpreter is available on all editions. Onyx Cloud has it ready to use.
@@ -57,8 +77,8 @@ The following environment variables control the self-hosted Code Interpreter. Al
 | `CODE_INTERPRETER_BASE_URL` | `http://localhost:8000` (Docker Compose sets `http://code-interpreter:8000`) | URL of the Code Interpreter service. Set it to an empty string to remove the action from all chats. |
 | `CODE_INTERPRETER_DEFAULT_TIMEOUT_MS` | `60000` | Time limit for one code run, in milliseconds. |
 | `CODE_INTERPRETER_MAX_OUTPUT_LENGTH` | `50000` | Maximum characters of stdout and stderr (each) returned to the model. Longer output is truncated. |
-| `CODE_INTERPRETER_MAX_STAGED_FILES` | `25` | Maximum number of chat files sent into one code run. |
-| `CODE_INTERPRETER_MAX_STAGED_BYTES` | `104857600` (100 MiB) | Maximum total size of chat files sent into one code run. |
+| `CODE_INTERPRETER_MAX_STAGED_FILES` | `25` | Maximum number of chat, Agent, and Project files sent into one code run. |
+| `CODE_INTERPRETER_MAX_STAGED_BYTES` | `104857600` (100 MiB) | Maximum total size of chat, Agent, and Project files sent into one code run. |
 
 ## Related
 

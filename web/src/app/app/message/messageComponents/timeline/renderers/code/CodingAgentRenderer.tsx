@@ -7,8 +7,6 @@ import {
   SvgTerminal,
   SvgXCircle,
 } from "@opal/icons";
-import hljs from "highlight.js/lib/core";
-import bash from "highlight.js/lib/languages/bash";
 import {
   CodingAgentFinal,
   CodingAgentPacket,
@@ -24,39 +22,13 @@ import { CodeBlock } from "@/app/app/message/CodeBlock";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import { Text } from "@opal/components";
 import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
+import { HighlightedBashCode } from "@/app/app/message/messageComponents/timeline/renderers/code/HighlightedBashCode";
 
 // Timeline copy is looked up in components and threaded into the plain step
 // helpers below, which cannot call hooks themselves.
 type TimelineTranslate = ReturnType<
   typeof useTranslations<"chat.messages.timeline">
 >;
-
-function ensureBashHljsRegistered() {
-  if (!hljs.listLanguages().includes("bash")) {
-    hljs.registerLanguage("bash", bash);
-  }
-}
-
-function HighlightedBashCode({ code }: { code: string }) {
-  const highlightedHtml = useMemo(() => {
-    ensureBashHljsRegistered();
-    try {
-      return hljs.highlight(code, { language: "bash" }).value;
-    } catch {
-      return code
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    }
-  }, [code]);
-
-  return (
-    <span
-      dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-      className="hljs"
-    />
-  );
-}
 
 interface ThinkingStepView {
   kind: "thinking";
@@ -71,6 +43,8 @@ interface BashStepView {
   exit_code: number | null;
   timed_out: boolean;
   isComplete: boolean;
+  /** The error that ended the call; null if no error ended it. */
+  error: string | null;
 }
 
 type AgentStep = ThinkingStepView | BashStepView;
@@ -94,10 +68,23 @@ function buildAgentSteps(packets: CodingAgentPacket[]): AgentStep[] {
       continue;
     }
 
-    if (
-      update.type === PacketType.CODING_AGENT_FINAL ||
-      update.type === PacketType.ERROR
-    ) {
+    if (update.type === PacketType.ERROR) {
+      // A nested error ends its own call; an error of the agent ends every
+      // call that is still running.
+      const failed =
+        section === null
+          ? [...commands.values()].filter((call) => !call.isComplete)
+          : command
+            ? [command]
+            : [];
+      for (const call of failed) {
+        call.isComplete = true;
+        call.error = update.message ?? "";
+      }
+      continue;
+    }
+
+    if (update.type === PacketType.CODING_AGENT_FINAL) {
       for (const call of commands.values()) call.isComplete = true;
       continue;
     }
@@ -121,6 +108,7 @@ function buildAgentSteps(packets: CodingAgentPacket[]): AgentStep[] {
         exit_code: null,
         timed_out: false,
         isComplete: false,
+        error: null,
       };
       steps.push(call);
       commands.set(section, call);
@@ -159,13 +147,15 @@ function ThinkingStep({ step, isLastStep, isHover }: ThinkingStepProps) {
 
 function bashStepHeader(call: BashStepView, t: TimelineTranslate): string {
   if (!call.isComplete) return t("codingAgent.bashRunning.header");
+  if (call.error !== null) return t("codingAgent.bashFailed.header");
   if (call.timed_out) return t("codingAgent.bashTimedOut.header");
   return t("codingAgent.bashExit.header", { exitCode: call.exit_code ?? 0 });
 }
 
 function bashStepIcon(call: BashStepView) {
   if (!call.isComplete) return SvgTerminal;
-  const failed = call.exit_code !== null && call.exit_code !== 0;
+  const failed =
+    call.error !== null || (call.exit_code !== null && call.exit_code !== 0);
   return failed || call.timed_out ? SvgXCircle : SvgCheckCircle;
 }
 
@@ -207,7 +197,12 @@ function BashStepBody({ call }: { call: BashStepView }) {
               maxLines={3}
             />
           )}
-          {!hasStdout && !hasStderr && call.isComplete && (
+          {call.error && (
+            <Text as="p" font="main-ui-muted" color="text-03">
+              {call.error}
+            </Text>
+          )}
+          {!hasStdout && !hasStderr && !call.error && call.isComplete && (
             <Text as="p" font="main-ui-muted" color="text-04">
               {t("codingAgent.noOutput.text")}
             </Text>
@@ -325,6 +320,7 @@ function ResponseStep({ answer, isLastStep, isHover }: ResponseStepProps) {
 
 export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
   packets,
+  streamPackets,
   renderType,
   stopPacketSeen,
   isHover = false,
@@ -340,7 +336,12 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
   const hasFinal = finalPacket !== undefined;
   const errored = packets.some((p) => p.obj.type === PacketType.ERROR);
 
-  const steps = useMemo(() => buildAgentSteps(packets), [packets]);
+  // Thinking and bash calls stream as nested sections; their order across
+  // sections comes from the stream.
+  const steps = useMemo(
+    () => buildAgentSteps(streamPackets as CodingAgentPacket[]),
+    [streamPackets]
+  );
 
   const isComplete = hasFinal || errored;
 

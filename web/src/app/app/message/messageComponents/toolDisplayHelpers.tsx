@@ -1,12 +1,16 @@
 import type { useTranslations } from "next-intl";
 import type { IconFunctionComponent } from "@opal/types";
 import {
+  ApplyPatchStart,
+  CustomToolStart,
+  FileToolName,
   Packet,
   PacketType,
   SearchToolPacket,
 } from "@/app/app/services/streamingModels";
 import { constructCurrentSearchState } from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
 import { isGroupEndPacket } from "@/app/app/message/messageComponents/timeline/packetHelpers";
+import { isDisplayPacket, isToolPacket } from "@/app/app/services/packetUtils";
 import {
   SvgListCheck,
   SvgGlobe,
@@ -21,6 +25,7 @@ import {
   SvgXCircle,
   SvgCode,
   SvgWrench,
+  SvgEdit,
 } from "@opal/icons";
 
 /**
@@ -31,34 +36,11 @@ export function hasToolError(packets: Packet[]): boolean {
 }
 
 /**
- * Check if a tool group is complete.
- * For research agents, we only look at parent-level SECTION_END or ERROR packets (sub_turn_index is undefined/null),
- * not the SECTION_END packets from nested tools (which have sub_turn_index as a number).
+ * Check if a tool group is complete: a parent-level SECTION_END or ERROR
+ * arrived. Nested calls end with their own SECTION_END and do not count.
  */
 export function isToolComplete(packets: Packet[]): boolean {
-  const firstPacket = packets[0];
-  if (!firstPacket) return false;
-
-  if (firstPacket.obj.type === PacketType.RESEARCH_AGENT_START) {
-    return packets.some(isGroupEndPacket);
-  }
-
-  // For coding agents, the CodingAgentFinal packet (or an error) marks completion.
-  // Nested BashTool packets are part of the same group and don't indicate the
-  // agent is done.
-  if (firstPacket.obj.type === PacketType.CODING_AGENT_START) {
-    return packets.some(
-      (p) =>
-        p.obj.type === PacketType.CODING_AGENT_FINAL ||
-        p.obj.type === PacketType.ERROR
-    );
-  }
-
-  // For other tools, any SECTION_END or ERROR indicates completion
-  return packets.some(
-    (p) =>
-      p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
-  );
+  return packets.some(isGroupEndPacket);
 }
 
 /**
@@ -83,12 +65,28 @@ export function parseToolKey(key: string): {
   };
 }
 
+/**
+ * The packet that names a step's activity. Debug and approval packets share
+ * the step's placement but never name it.
+ */
+export function firstActivityPacket(packets: Packet[]): Packet | undefined {
+  return packets.find(
+    (packet) => isToolPacket(packet, false) || isDisplayPacket(packet)
+  );
+}
+
 export type TimelineTranslate = ReturnType<
   typeof useTranslations<"chat.messages.timeline">
 >;
 
+const FILE_TOOL_TITLES = {
+  apply_patch: "toolNames.applyPatch",
+  edit: "toolNames.editFile",
+  write: "toolNames.writeFile",
+} as const satisfies Record<FileToolName, string>;
+
 export function getToolName(packets: Packet[], t: TimelineTranslate): string {
-  const firstPacket = packets[0];
+  const firstPacket = firstActivityPacket(packets);
   if (!firstPacket) return t("toolNames.tool");
 
   switch (firstPacket.obj.type) {
@@ -102,13 +100,21 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
     }
     case PacketType.PYTHON_TOOL_START:
       return t("toolNames.codeInterpreter");
+    case PacketType.EXEC_COMMAND_START:
+    case PacketType.WRITE_STDIN_START:
+      return t("toolNames.terminal");
+    case PacketType.APPLY_PATCH_START:
+      return t(
+        FILE_TOOL_TITLES[(firstPacket.obj as ApplyPatchStart).tool_name]
+      );
     case PacketType.FETCH_TOOL_START:
       return t("toolNames.openUrls");
-    case PacketType.CUSTOM_TOOL_START:
+    case PacketType.CUSTOM_TOOL_START: {
       return (
-        (firstPacket.obj as { tool_name?: string }).tool_name ||
+        (firstPacket.obj as CustomToolStart).display_name ||
         t("toolNames.customTool")
       );
+    }
     case PacketType.IMAGE_GENERATION_TOOL_START:
       return t("toolNames.generateImage");
     case PacketType.DEEP_RESEARCH_PLAN_START:
@@ -128,7 +134,7 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
 }
 
 export function getToolIcon(packets: Packet[]): IconFunctionComponent {
-  const firstPacket = packets[0];
+  const firstPacket = firstActivityPacket(packets);
   if (!firstPacket) return SvgCircle;
 
   switch (firstPacket.obj.type) {
@@ -139,7 +145,11 @@ export function getToolIcon(packets: Packet[]): IconFunctionComponent {
       return searchState.isInternetSearch ? SvgGlobe : SvgSearchMenu;
     }
     case PacketType.PYTHON_TOOL_START:
+    case PacketType.EXEC_COMMAND_START:
+    case PacketType.WRITE_STDIN_START:
       return SvgTerminal;
+    case PacketType.APPLY_PATCH_START:
+      return SvgEdit;
     case PacketType.FETCH_TOOL_START:
       return SvgLink;
     case PacketType.CUSTOM_TOOL_START:

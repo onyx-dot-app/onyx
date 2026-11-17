@@ -34,4 +34,5 @@ export const autoSyncConfigBySource: Record<
   hubspot: {},
   youtrack: {},
   azure_datalake: {},
+  egnyte: {},
 };

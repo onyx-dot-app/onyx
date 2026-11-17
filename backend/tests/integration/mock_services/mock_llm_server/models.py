@@ -21,7 +21,7 @@ class RequestConditions(BaseModel):
     offers: list[str] = Field(default_factory=list)
     does_not_offer: list[str] = Field(default_factory=list)
     has_results_for: list[str] = Field(default_factory=list)
-    tool_choice: str | None = None
+    tool_choice: str | dict[str, Any] | None = None
     prompt_contains: list[str] = Field(default_factory=list)
 
     def matches(self, request: "RecordedRequest") -> bool:
@@ -52,6 +52,9 @@ class Reply(BaseModel):
     required: bool = True
     # Hold the stream after its first text chunk until the test releases this gate.
     pause_after_first_chunk: str | None = None
+    heartbeat_while_paused: bool = False
+    # End the stream with this provider error after the text, as a failed call.
+    error_after_text: str | None = None
 
 
 class Conversation(BaseModel):
@@ -81,7 +84,7 @@ class RecordedMessage(BaseModel):
 class RecordedRequest(BaseModel):
     messages: list[RecordedMessage]
     tools: list[str]
-    tool_choice: str | None
+    tool_choice: str | dict[str, Any] | None
     body: dict[str, Any]
     conversation: str | None = None
     reply_index: int | None = None

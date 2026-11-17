@@ -26,9 +26,13 @@
   server's connect-time instructions tell the model to call
   `search_indexed_documents` before any other retrieval tool for questions
   about the user's organization.
-- **A Claude Code user** installs the plugin in `extensions/claude-code/`
-  instead of configuring the server by hand. The plugin connects the MCP
-  server with the user's token and, through a `UserPromptSubmit` hook, tells
+- **A Claude Code or Codex user** installs the plugin in `extensions/agent-plugin/`
+  (one directory with a Claude Code manifest in `.claude-plugin/` and a
+  Codex manifest in `.codex-plugin/`, listed for Codex by the repo
+  marketplace in `.agents/plugins/`). In
+  Claude Code the plugin connects the MCP server with the user's token. In
+  Codex the user adds the server as `onyx` with `codex mcp add`. Through a
+  `UserPromptSubmit` hook the plugin tells
   the model with every question prompt to call `search_indexed_documents`
   before answering from company knowledge or any other search tool. With
   strict retrieval on it denies other servers' search tools until Onyx has
@@ -36,7 +40,7 @@
   `/api/search/raw` and injects the top sections with rules for when the full
   search tool is still worth a call, and with strict retrieval nudges one when
   a question turn ends on the prefetch alone.
-  `extensions/claude-code/README.md` is the user-facing description.
+  `extensions/agent-plugin/README.md` is the user-facing description.
 - **When it fails**, a bad or expired token gets a 401. A PAT or API key
   gets a 401 for every rejection, including an API server outage. An OAuth
   token that the API server refuses for scope gets a 403 `insufficient_scope`

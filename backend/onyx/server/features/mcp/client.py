@@ -17,7 +17,9 @@ from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.shared._httpx_utils import McpHttpClientFactory
 from mcp.types import (
+    AudioContent,
     CallToolResult,
+    ImageContent,
     InitializeResult,
     ListResourcesResult,
     TextResourceContents,
@@ -233,6 +235,7 @@ async def call_mcp_client_function_async(
 def process_mcp_result(call_tool_result: CallToolResult) -> str:
     """Flatten MCP CallToolResult->text (prefers text content blocks)."""
     parts = []
+    media_notices: list[str] = []
     for content_block in call_tool_result.content:
         if content_block.type == ContentBlockTypes.TEXT.value:
             parts.append(content_block.text or "")
@@ -247,12 +250,17 @@ def process_mcp_result(call_tool_result: CallToolResult) -> str:
             parts.append(
                 f"link: {content_block.uri} title: {content_block.title} description: {content_block.description}"
             )
-        # TODO: handle other content block types
+        if isinstance(content_block, ImageContent | AudioContent):
+            media_notices.append(
+                f"[{content_block.type} omitted: {content_block.mimeType}]"
+            )
 
     text = "\n\n".join(p for p in parts if p)
-    if text or call_tool_result.structuredContent is None:
+    if text:
         return text
-    return json.dumps(call_tool_result.structuredContent)
+    if call_tool_result.structuredContent is not None:
+        return json.dumps(call_tool_result.structuredContent)
+    return "\n\n".join(media_notices)
 
 
 def _call_mcp_tool(
@@ -260,6 +268,9 @@ def _call_mcp_tool(
 ) -> MCPClientFunction[CallToolResult]:
     async def call_tool(session: ClientSession) -> CallToolResult:
         await session.initialize()
+        # python-sdk#3513: an unknown tool makes call_tool fetch tools/list to
+        # validate output. Onyx does not rely on that validation, so skip it.
+        session._tool_output_schemas[tool_name] = None
         return await session.call_tool(tool_name, arguments)
 
     return call_tool

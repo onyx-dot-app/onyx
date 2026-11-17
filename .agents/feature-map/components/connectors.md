@@ -84,6 +84,13 @@ one pass with a finished checkpoint, so a failure restarts the window.
 `connectors/factory.py:_validate_connector_supports_input_type` accepts a
 checkpointed connector for `InputType.POLL` and rejects `InputType.EVENT`.
 
+**Checkpointed slim listing.** `CheckpointedSlimConnector` is optional. It lists
+ids with the contract of `CheckpointedConnector`, so a long listing resumes. A
+connector can yield `SlimDocumentStub` (`connectors/models.py`): a slim document
+with the modified time, mime type, size and a `ListingPayload` that a later
+conversion step reads. No worker calls this interface yet. Google Drive is the
+only implementer ([[google-drive]]).
+
 **Permission fetching.** Two interfaces return `external_access` for EE
 permission sync ([[permission-sync]]). `SlimConnectorWithPermSync` lists every
 id with its access. Doc sync needs it
@@ -129,7 +136,19 @@ cannot run a window. A SCOPE field that narrows needs a prune, and an unknown
 direction makes the admin pick. A planning rule (`connectors/planning_rule_registry.py`)
 handles mode fields that change what other fields mean. `connectors/edit_plan/apply.py`
 writes the state and the steps in one transaction, and beat tasks run the
-steps. A stored plan applies only to the pair state it was computed from
+steps. During a port-flow reindex, a Full Re-index or a backfill is refused with
+CONFLICT. Such a run fetches documents with old source timestamps into PRESENT,
+and the incremental FUTURE polls never ask for those, so they would be missing
+from the new index ([[document-index]]). The check is
+`db/search_settings.py:raise_if_port_reindex_in_progress`, on an edit plan
+with a full re-index or backfill step and on a run-once from the beginning
+(`server/documents/connector.py:trigger_indexing_for_cc_pair`). A request that
+is already queued waits in the beat, untouched, until the swap
+(`background/celery/tasks/docprocessing/tasks.py:_kickoff_indexing_tasks` and
+`_try_creating_pending_backfill`), and then runs on the new index. A reindex
+cannot start while such a run is in progress
+(`db/search_settings.py:cc_pairs_with_full_run_in_progress`). A stored plan
+applies only to the pair state it was computed from
 (`connectors/edit_plan/store.py:ensure_base_state_matches`).
 
 **Pushed events.** A source that pushes instead of being polled declares one

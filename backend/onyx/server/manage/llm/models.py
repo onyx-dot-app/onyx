@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
@@ -363,6 +364,13 @@ class ModelConfigurationUpsertRequest(BaseModel):
         return "temperature_default" in self.model_fields_set
 
 
+class ModelDisplayNameCode(StrEnum):
+    """A model name whose text the frontend owns, because it is translated.
+    It takes precedence over display_name, not over custom_display_name."""
+
+    OPENAI_DECISIONS = "openai_decisions"
+
+
 class ModelConfigurationView(BaseModel):
     id: int | None = None
     name: str
@@ -391,6 +399,7 @@ class ModelConfigurationView(BaseModel):
     is_recommended_default: bool = False
     display_name: str | None = None
     custom_display_name: str | None = None
+    display_name_code: ModelDisplayNameCode | None = None
     provider_display_name: str | None = None
     vendor: str | None = None
     version: str | None = None

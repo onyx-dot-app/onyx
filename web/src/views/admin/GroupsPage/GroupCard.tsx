@@ -34,6 +34,7 @@ function GroupCard({ group }: GroupCardProps) {
   const canManageMembers = can(group, "manage_members");
 
   async function handleRename(newName: string) {
+    if (!newName) return;
     try {
       await renameGroup(group.id, newName);
       await refreshGroupLists(mutate);
@@ -77,10 +78,7 @@ function GroupCard({ group }: GroupCardProps) {
             // `openGroup`, and the card is the tab stop.
             tabIndex={-1}
           >
-            {formatMemberCount(
-              group.users.filter((u) => u.is_active).length,
-              t
-            )}
+            {formatMemberCount(group.active_member_count, t)}
           </Button>
         }
       />

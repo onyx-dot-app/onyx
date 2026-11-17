@@ -23,6 +23,7 @@ import onyx.llm.models
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.cost_overrides import CostOverrideRates
+from onyx.llm.factory import get_llm
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_request import (
@@ -35,11 +36,13 @@ from onyx.llm.model_request import (
 )
 from onyx.llm.model_response import ModelResponse, ModelResponseStream
 from onyx.llm.models import (
+    GenerationRequest,
     NamedToolChoice,
     ReasoningEffort,
     ToolChoiceOptions,
     Usage,
 )
+from onyx.llm.models import UserMessage as AppUserMessage
 from onyx.llm.multi_llm import (
     LitellmLLM,
     LLMRateLimitError,
@@ -47,6 +50,7 @@ from onyx.llm.multi_llm import (
     _consume_stream_until_deadline,
     temporary_env_and_lock,
 )
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tracing.framework.create import generation_span, trace
 
 VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS = [
@@ -2625,6 +2629,89 @@ def test_strip_tool_content_merges_consecutive_tool_results() -> None:
     assert "headline news" in merged
 
 
+@pytest.mark.parametrize(
+    "provider",
+    [
+        LlmProviderNames.BEDROCK,
+        LlmProviderNames.BEDROCK_CONVERSE,
+        LlmProviderNames.OLLAMA,
+        LlmProviderNames.OLLAMA_CHAT,
+    ],
+)
+@pytest.mark.parametrize("choice", [ToolChoiceOptions.NONE, ToolChoiceOptions.AUTO])
+def test_native_final_request_preserves_evidence_without_tool_definitions(
+    provider: str,
+    choice: ToolChoiceOptions,
+) -> None:
+    llm = LitellmLLM(
+        api_key=None,
+        model_provider=provider,
+        model_name="llama3.2"
+        if provider in {LlmProviderNames.OLLAMA, LlmProviderNames.OLLAMA_CHAT}
+        else "anthropic.claude-sonnet-4-20250514-v1:0",
+        max_input_tokens=200000,
+    )
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="Weather?"),
+        AssistantMessage(
+            content="Checking",
+            tool_calls=[
+                ToolCall(
+                    id="weather-call",
+                    function=RequestFunctionCall(
+                        name="get_weather", arguments='{"location":"Paris"}'
+                    ),
+                )
+            ],
+        ),
+        ToolMessage(tool_call_id="weather-call", content="Sunny, 20C"),
+    ]
+    original = [message.model_dump() for message in messages]
+    with patch("litellm.completion", return_value=[]) as completion:
+        list(
+            llm.stream_raw(
+                messages, tools=_TOOL_CHOICE_DOWNGRADE_TOOLS, tool_choice=choice
+            )
+        )
+    sent = completion.call_args.kwargs
+    if choice == ToolChoiceOptions.NONE:
+        assert not sent.get("tools")
+        assert "tool_choice" not in sent
+        if provider in {LlmProviderNames.BEDROCK, LlmProviderNames.BEDROCK_CONVERSE}:
+            assert all(
+                message["role"] != "tool" and not message.get("tool_calls")
+                for message in sent["messages"]
+            )
+        assert "get_weather" in str(sent["messages"])
+        assert "Paris" in str(sent["messages"])
+        assert "Sunny, 20C" in str(sent["messages"])
+    else:
+        assert sent["tools"]
+        assert sent["tool_choice"] == ToolChoiceOptions.AUTO
+        calls = [
+            message["tool_calls"]
+            for message in sent["messages"]
+            if message.get("tool_calls")
+        ]
+        assert calls == [
+            [
+                {
+                    "id": "weather-call",
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": '{"location":"Paris"}',
+                    },
+                }
+            ]
+        ]
+        results = [message for message in sent["messages"] if message["role"] == "tool"]
+        assert results == [
+            {"role": "tool", "tool_call_id": "weather-call", "content": "Sunny, 20C"}
+        ]
+    assert [message.model_dump() for message in messages] == original
+
+
 def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> None:
     """Regression test for providers (e.g. Fireworks) that reject tool_choice=null.
 
@@ -3976,3 +4063,44 @@ def test_cancellable_provider_setup_restores_environment_on_failure(
 
     completion.assert_called_once()
     assert os.environ[_ENV_LOCK_TEST_KEY] == "deployment-value"
+
+
+@pytest.mark.parametrize(
+    ("provider", "model", "strict"),
+    [
+        (LlmProviderNames.OPENAI, "gpt-5", True),
+        (LlmProviderNames.AZURE, "gpt-5", False),
+        (LlmProviderNames.LITELLM_PROXY, "gpt-5", False),
+        (LlmProviderNames.OPENAI, "ft:gpt-4o:example:test", False),
+        (LlmProviderNames.OPENAI, "unknown-model", False),
+        (LlmProviderNames.ANTHROPIC, "claude-sonnet-4-5", False),
+        # An OpenAI-compatible server, such as vLLM, serving a non-OpenAI model.
+        (LlmProviderNames.OPENAI, "meta-llama/Llama-3.1-8B-Instruct", False),
+    ],
+)
+def test_invoke_sends_strict_tool_schemas_to_openai(
+    provider: str, model: str, strict: bool
+) -> None:
+    search_tool = SearchTool.__new__(SearchTool)
+    llm = get_llm(
+        provider=provider,
+        model=model,
+        deployment_name=None,
+        max_input_tokens=4096,
+        api_key="test_key",
+    )
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = litellm.ModelResponse(
+            choices=[litellm.Choices(message=litellm.Message(content="ok"))]
+        )
+        llm.invoke(
+            GenerationRequest(
+                messages=[AppUserMessage(content="Find the roadmap")],
+                tools=[search_tool.tool_definition()],
+            )
+        )
+
+    function = mock_completion.call_args.kwargs["tools"][0]["function"]
+    assert function["name"] == search_tool.name
+    assert function.get("strict", False) is strict
+    assert function["parameters"] == search_tool.tool_definition().parameters

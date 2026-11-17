@@ -2,10 +2,19 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
-from onyx.connectors.interfaces import ConnectorCheckpoint, SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import ConnectorCheckpoint
+from onyx.connectors.models import DocumentTypeLabel, ListingPayload
 from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
 
 
@@ -19,6 +28,7 @@ class GDriveMimeType(str, Enum):
     PDF = "application/pdf"
     WORD_DOC = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     PPT = "application/vnd.google-apps.presentation"
+    FORM = "application/vnd.google-apps.form"
     POWERPOINT = (
         "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     )
@@ -81,151 +91,6 @@ class DriveBatchResult(BaseModel):
 TOKEN_EXPIRATION_TIME = 3600  # 1 hour
 
 
-# Stages of the OAuth flow:
-# get_all_files_for_oauth(),
-# get_all_drive_ids(),
-# get_files_in_shared_drive(),
-# crawl_folders_for_files()
-#
-# The service account flow advances through DriveRetrievalPhase instead. It
-# still labels each RetrievedDriveFile with a stage, for error reporting, and
-# sets completion_stage to DONE when its last phase ends.
-class DriveRetrievalStage(str, Enum):
-    START = "start"
-    DONE = "done"
-    # OAuth specific stages
-    OAUTH_FILES = "oauth_files"
-
-    # Service account specific stages
-    USER_EMAILS = "user_emails"
-    MY_DRIVE_FILES = "my_drive_files"
-
-    # Used for both oauth and service account flows
-    DRIVE_IDS = "drive_ids"
-    SHARED_DRIVE_FILES = "shared_drive_files"
-    FOLDER_FILES = "folder_files"
-
-
-class DriveRetrievalPhase(str, Enum):
-    """Phases of the redesigned retrieval, run once for the whole connector.
-
-    This replaces the per-user DriveRetrievalStage loop, where every user walked
-    every stage independently. One phase is active at a time, so a phase can be
-    closed and its state dropped once it finishes.
-
-    Shared drives run before My Drives on purpose: once the shared drive phase
-    is done, later phases can discard any file whose driveId was already
-    covered, which kills the shortcut duplication path with a check against a
-    list of drive ids rather than a set of file ids.
-    """
-
-    INVENTORY = "inventory"
-    SHARED_DRIVES = "shared_drives"
-    MY_DRIVES = "my_drives"
-    REQUESTED_TARGETS = "requested_targets"
-    EXTERNAL_SHARES = "external_shares"
-    DONE = "done"
-
-
-# Order the connector advances through. INVENTORY collects the partition keys
-# the later phases walk, so it has to come first.
-PHASE_ORDER: tuple[DriveRetrievalPhase, ...] = (
-    DriveRetrievalPhase.INVENTORY,
-    DriveRetrievalPhase.SHARED_DRIVES,
-    DriveRetrievalPhase.MY_DRIVES,
-    DriveRetrievalPhase.REQUESTED_TARGETS,
-    DriveRetrievalPhase.EXTERNAL_SHARES,
-    DriveRetrievalPhase.DONE,
-)
-
-
-def next_phase(phase: DriveRetrievalPhase) -> DriveRetrievalPhase:
-    if phase is DriveRetrievalPhase.DONE:
-        return DriveRetrievalPhase.DONE
-    return PHASE_ORDER[PHASE_ORDER.index(phase) + 1]
-
-
-class PhaseProgress(BaseModel):
-    """Position inside one phase: which partition, and where inside it.
-
-    Every item belongs to exactly one partition (a drive id, or an owner email),
-    so resuming needs only an index into a stable key list plus a page token.
-    That is what keeps the checkpoint proportional to drives and users instead
-    of to documents.
-    """
-
-    phase: DriveRetrievalPhase
-    # Stable order. Built once when the phase starts so a resumed run walks the
-    # same partitions in the same sequence.
-    partition_keys: list[str] = []
-    partition_index: int = Field(default=0, ge=0)
-    # Resume point inside the current partition. The listing that produced it
-    # must be repeated with the same query, so resumes reuse the run's range.
-    next_page_token: str | None = None
-    # Latest modifiedTime yielded in the current partition. Diagnostic only.
-    completed_until: SecondsSinceUnixEpoch = 0
-
-    @property
-    def current_partition(self) -> str | None:
-        if self.partition_index >= len(self.partition_keys):
-            return None
-        return self.partition_keys[self.partition_index]
-
-    @property
-    def is_complete(self) -> bool:
-        return self.partition_index >= len(self.partition_keys)
-
-    @property
-    def remaining_partitions(self) -> list[str]:
-        return self.partition_keys[self.partition_index :]
-
-    def advance_partition(self) -> None:
-        """Finish the current partition and reset the within-partition cursor."""
-        self.partition_index += 1
-        self.next_page_token = None
-        self.completed_until = 0
-
-
-# Requested target partitions pair a target id with the email that crawls it.
-# Drive file ids never contain the separator, so splitting on the first one is
-# safe for any email.
-_TARGET_KEY_SEPARATOR = "|"
-
-
-def target_partition_key(target_id: str, email: str) -> str:
-    return f"{target_id}{_TARGET_KEY_SEPARATOR}{email}"
-
-
-def split_target_partition_key(key: str) -> tuple[str, str]:
-    target_id, email = key.split(_TARGET_KEY_SEPARATOR, 1)
-    return target_id, email
-
-
-class StageCompletion(BaseModel):
-    """
-    Describes the point in the retrieval+indexing process that the
-    connector is at. completed_until is the timestamp of the latest
-    file that has been retrieved or error that has been yielded.
-    Optional fields are used for retrieval stages that need more information
-    for resuming than just the timestamp of the latest file.
-    """
-
-    stage: DriveRetrievalStage
-    completed_until: SecondsSinceUnixEpoch
-    current_folder_or_drive_id: str | None = None
-    next_page_token: str | None = None
-
-    def update(
-        self,
-        stage: DriveRetrievalStage,
-        completed_until: SecondsSinceUnixEpoch,
-        current_folder_or_drive_id: str | None = None,
-    ) -> None:
-        self.stage = stage
-        self.completed_until = completed_until
-        self.current_folder_or_drive_id = current_folder_or_drive_id
-
-
 class RetrievedDriveFile(BaseModel):
     """
     Describes a file that has been retrieved from google drive.
@@ -233,9 +98,6 @@ class RetrievedDriveFile(BaseModel):
     by impersonating. If an error worthy of being reported is encountered,
     error should be set and later propagated as a ConnectorFailure.
     """
-
-    # The stage at which this file was retrieved
-    completion_stage: DriveRetrievalStage
 
     # The file that was retrieved
     drive_file: GoogleDriveFileType
@@ -255,19 +117,232 @@ class RetrievedDriveFile(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+class DriveListingPayload(ListingPayload):
+    # The user whose listing returned the file. This user can read it.
+    retriever_email: str
+
+
+class ListingPartitionKind(str, Enum):
+    """What one partition of the parallel listing lists."""
+
+    # A shared drive, listed as one of its members.
+    SHARED_DRIVE = "shared_drive"
+    # The files a user owns.
+    MY_DRIVE = "my_drive"
+    # All files a user sees. Files that another partition covers are dropped.
+    SHARED_WITH_USER = "shared_with_user"
+    # A requested folder and every folder under it, listed one folder at a
+    # time. Files that another partition covers are dropped.
+    FOLDER_SUBTREE = "folder_subtree"
+
+
+class ListingPartition(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    kind: ListingPartitionKind
+    # A drive id for a shared drive, a folder id for a folder subtree, a user
+    # email for the other kinds.
+    key: str
+
+
+class ListingShardKind(str, Enum):
+    # Files other than folders, in the shard's modifiedTime range.
+    FILES = "files"
+    # All folders of the partition, or with folder_id the subfolders of one
+    # folder. It has no time range and does not split.
+    FOLDERS = "folders"
+    # The files in the shard's range and the subfolders of one folder of a
+    # folder subtree. A folder with more than one page becomes a FILES and a
+    # FOLDERS shard of that folder.
+    SUBTREE = "subtree"
+
+
+class ListingShard(BaseModel):
+    """One listing of a partition over the modifiedTime range [t0, t1), in
+    whole milliseconds. The ranges of a partition's open shards do not
+    overlap, and together they cover what is still to list."""
+
+    id: int
+    partition: ListingPartition
+    # The user the shard lists as.
+    principal: str
+    kind: ListingShardKind = ListingShardKind.FILES
+    t0: int
+    t1: int
+    # The page to list next. None for the first page.
+    page_token: str | None = None
+    # The newest modifiedTime in the partition, when it was read. It only
+    # steers where a split puts its cuts. A wrong value loses no file.
+    newest_ms: int | None = None
+    # The partition owns the files this shard lists, so they need no dedup.
+    exact: bool = True
+    # The newest modifiedTime of the pages this shard kept, and the ids it
+    # kept at that time. A split on a later page starts there.
+    frontier_ms: int | None = None
+    frontier_ids: list[str] = []
+    # True when more files share the frontier time than the shard keeps ids
+    # for. A page that starts at that time cannot split. A page that starts
+    # later can, because it needs no ids.
+    frontier_overflow: bool = False
+    # False when a page had a file older than the frontier. A later page
+    # then cannot split.
+    in_order: bool = True
+    # Files on the pages this shard kept, and the oldest modifiedTime among
+    # them. With the frontier they give the density of the range so far.
+    kept_files: int = 0
+    kept_since_ms: int | None = None
+    # Ids at the start of the range that an earlier shard already listed.
+    skip_ids: list[str] = []
+    # Lists only the files of this owner. Set on a shared-with-user shard
+    # that lists again the files of an owner whose My Drive partition failed.
+    owner_filter: str | None = None
+    # Keeps only the files of this shared drive. Set on a shared-with-user
+    # shard that lists again the files of a drive whose listing failed. Drive
+    # has no query term for it, so the filter runs on each page.
+    drive_filter: str | None = None
+    # Lists only shortcuts, and keeps the targets that owner_filter or
+    # drive_filter names. Set on a My Drive or shared drive shard that lists
+    # again the shortcut targets that a failed partition covered.
+    shortcuts_only: bool = False
+    # True when the shard has no upper bound: it lists every file modified at
+    # t0 or later, and t1 is not used. Such a shard does not split.
+    open_end: bool = False
+    # The folder whose children the shard lists. Set on each shard of a
+    # folder subtree.
+    folder_id: str | None = None
+    # The folders that this walk reached through a shortcut, from the root
+    # down. A shortcut to one of them, or to the root, is not followed again,
+    # so a shortcut cycle ends.
+    shortcut_path: list[str] = []
+
+
+class UnlistedParent(BaseModel):
+    """A parent folder that no folder listing yielded, and who can try to
+    read it. The first read is as the user who listed the child's shared
+    drive, or as the owner of a My Drive child: that user can usually read
+    the folder. Then each user who saw a child, in turn."""
+
+    # The shared drive of a child. Shared drive folders are in the same drive.
+    drive_id: str | None = None
+    # The owner of a My Drive child, who usually owns the folder too.
+    owner: str | None = None
+    # Users who saw a child, as indexes into DriveListingState.reader_emails.
+    readers: list[int] = []
+
+
+class DriveListingState(BaseModel):
+    """Checkpoint of the parallel sharded listing (the service account flow).
+    Its size follows the drives, the users and the open shards, not the
+    files."""
+
+    # The window of the listing, [t0, t1) in milliseconds.
+    window_t0: int
+    window_t1: int
+    # Partitions with no shard yet, in the order they start.
+    pending_partitions: list[ListingPartition] = []
+    # Partitions whose listing began, with the user and whether it is exact.
+    # A later call with a later window end adds a shard for each of them.
+    started_partitions: list[tuple[ListingPartition, str, bool]] = []
+    # Open shards by id.
+    shards: dict[int, ListingShard] = {}
+    next_shard_id: int = 0
+    # Coverage: drives (complete listings only) and owners whose listing has
+    # begun. A copy of their files on another path is dropped.
+    listed_drive_ids: set[str] = set()
+    listed_owners: set[str] = set()
+    # The worker limit the last call ended with. The next call starts from it.
+    concurrency_limit: int | None = None
+    # Running count of the files the listing yielded that pass the metadata
+    # check.
+    docs_by_type: dict[DocumentTypeLabel, int] = {}
+    # Bytes per type. Only files that Drive lists with a size add to it.
+    bytes_by_type: dict[DocumentTypeLabel, int] = {}
+    # True after open_window_end: shards that start from now on have no
+    # upper bound.
+    open_end: bool = False
+    # Requested folder id -> shared drive id, for a folder that no usable
+    # user can walk and that a full listing of its drive covers. If that
+    # listing fails, the folder is unreachable.
+    folders_covered_by_drive: dict[str, str] = {}
+    # Each user who saw a child of an unlisted parent, once. UnlistedParent
+    # keeps indexes into this list, so a folder that many users see costs a
+    # few bytes for each of them.
+    reader_emails: list[str] = []
+    # Parent folder id -> who can try to read it, for parents that no folder
+    # listing has yielded yet. After the listing, only the ones still missing
+    # are read with files.get. Its size follows the folders.
+    unresolved_parents: dict[str, UnlistedParent] = {}
+    _reader_ids: dict[str, int] = PrivateAttr(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _readers_from_old_checkpoint(cls, data: Any) -> Any:
+        """A checkpoint from before ``unresolved_parents`` kept the readers of
+        each parent as emails, or as one email."""
+        if not isinstance(data, dict) or "unresolved_parent_emails" not in data:
+            return data
+        data = dict(data)
+        old: dict[str, str | list[str]] = data.pop("unresolved_parent_emails") or {}
+        reader_emails: list[str] = list(data.get("reader_emails") or [])
+        parents: dict[str, Any] = dict(data.get("unresolved_parents") or {})
+        for parent_id, emails in old.items():
+            readers: list[int] = []
+            for email in [emails] if isinstance(emails, str) else emails:
+                if email not in reader_emails:
+                    reader_emails.append(email)
+                readers.append(reader_emails.index(email))
+            parents[parent_id] = UnlistedParent(readers=readers)
+        data["reader_emails"] = reader_emails
+        data["unresolved_parents"] = parents
+        return data
+
+    def add_parent_reader(
+        self,
+        parent_id: str,
+        email: str,
+        drive_id: str | None = None,
+        owner: str | None = None,
+    ) -> None:
+        """Records ``email`` as a user who saw a child of the parent. The
+        first child that names a drive or an owner sets the hint for the
+        first read."""
+        if len(self._reader_ids) != len(self.reader_emails):
+            self._reader_ids = {
+                reader: index for index, reader in enumerate(self.reader_emails)
+            }
+        reader_id = self._reader_ids.get(email)
+        if reader_id is None:
+            reader_id = len(self.reader_emails)
+            self.reader_emails.append(email)
+            self._reader_ids[email] = reader_id
+        parent = self.unresolved_parents.setdefault(parent_id, UnlistedParent())
+        if reader_id not in parent.readers:
+            parent.readers.append(reader_id)
+        if parent.drive_id is None and parent.owner is None:
+            parent.drive_id = drive_id
+            parent.owner = None if drive_id else owner
+
+    def parent_reader_emails(self, parent: UnlistedParent) -> list[str]:
+        return [self.reader_emails[reader_id] for reader_id in parent.readers]
+
+    # Folder id -> the user who listed it, for folders yielded with no parent
+    # because that user cannot see the parent. A later copy with the parent,
+    # or a read after the listing, yields the folder again with it.
+    parentless_folder_emails: dict[str, str] = {}
+
+    @property
+    def is_done(self) -> bool:
+        return not self.pending_partitions and not self.shards
+
+    @property
+    def total_docs(self) -> int:
+        return sum(self.docs_by_type.values())
+
+
 class GoogleDriveCheckpoint(ConnectorCheckpoint):
-    # Checkpoint version of _retrieved_ids
-    retrieved_folder_and_drive_ids: set[str]
-
-    # Describes the point in the retrieval+indexing process that the
-    # checkpoint is at. when this is set to a given stage, the connector
-    # has finished yielding all values from the previous stage.
-    completion_stage: DriveRetrievalStage
-
-    # The latest timestamp of a file that has been retrieved per user email.
-    # StageCompletion is used to track the completion of each stage, but the
-    # timestamp part is not used for folder crawling.
-    completion_map: ThreadSafeDict[str, StageCompletion]
+    """The listing of one connector call. A checkpoint of the serial listing
+    that came before parses with its old keys ignored, and the next call
+    lists again from its window start."""
 
     # Drive file ids already yielded this run, used only for dedup. Previously
     # keyed on the document URL under the name `all_retrieved_file_ids`; the
@@ -283,15 +358,10 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # cached user emails
     user_emails: list[str] | None = None
 
-    # --- Phased retrieval state, used by the service account flow. Sized by
-    # drives and users, never by documents.
+    # --- Listing state. Sized by drives and users, never by documents.
 
-    # None until the first phased run; a checkpoint written by the per-user
-    # stage loop also has None here and restarts at INVENTORY.
-    phase_progress: PhaseProgress | None = None
-
-    # Drive id -> the email that listed it. Once the shared drive phase is
-    # over, a drive here and not in incomplete_drive_ids is fully covered.
+    # Drive id -> the email that listed it. A drive here and not in
+    # incomplete_drive_ids is fully covered.
     organizer_email_by_drive_id: dict[str, str] = {}
 
     # Drives listed by someone who is not an organizer, or by nobody, so
@@ -302,14 +372,13 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # an owner pass, so other users' listings must not drop them.
     failed_impersonation_emails: set[str] = set()
 
-    # Requested targets at least one principal crawled. At the end of the
-    # requested-target phase, every planned target missing here is unreachable.
-    crawled_target_ids: set[str] = set()
-
     # Requested drives and folders that no impersonable user could reach.
     # Pruning refuses to run while this is non-empty, because absence from the
     # listing would delete every document indexed from them.
     unreachable_target_ids: set[str] = set()
+
+    # State of the shard engine. None before the first call of an attempt.
+    listing: DriveListingState | None = None
 
     # Hierarchy node raw IDs that have already been yielded.
     # Used to avoid yielding duplicate hierarchy nodes across checkpoints.
@@ -340,12 +409,6 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         default_factory=ThreadSafeDict
     )
 
-    @field_serializer("completion_map")
-    def serialize_completion_map(
-        self, completion_map: ThreadSafeDict[str, StageCompletion], _info: Any
-    ) -> dict[str, StageCompletion]:
-        return completion_map._dict
-
     @field_serializer("seen_hierarchy_node_raw_ids")
     def serialize_seen_hierarchy(
         self, seen_hierarchy_node_raw_ids: ThreadSafeSet[str], _info: Any
@@ -357,13 +420,6 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         self, fully_walked_hierarchy_node_raw_ids: ThreadSafeSet[str], _info: Any
     ) -> set[str]:
         return fully_walked_hierarchy_node_raw_ids.copy()
-
-    @field_validator("completion_map", mode="before")
-    def validate_completion_map(cls, v: Any) -> ThreadSafeDict[str, StageCompletion]:
-        assert isinstance(v, dict) or isinstance(v, ThreadSafeDict)
-        return ThreadSafeDict(
-            {k: StageCompletion.model_validate(val) for k, val in v.items()}
-        )
 
     @field_validator("seen_hierarchy_node_raw_ids", mode="before")
     def validate_seen_hierarchy(cls, v: Any) -> ThreadSafeSet[str]:

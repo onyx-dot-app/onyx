@@ -138,6 +138,7 @@ class ScriptedLLM(LitellmLLM):
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
         stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
         operation: ProviderOperation | None = None,  # noqa: ARG002
+        manage_tool_strictness: bool = False,  # noqa: ARG002
     ) -> Iterator[ModelResponseStream]:
         self.prompts.append(prompt)
         if not self._steps:

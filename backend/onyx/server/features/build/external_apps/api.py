@@ -31,14 +31,17 @@ from onyx.db.external_app import (
     get_external_apps,
     get_skills_for_external_app,
     get_user_credentials_by_app_id,
-    placeholders_in_template,
     replace_custom_skill_associations__no_commit,
-    required_user_credential_keys,
     update_external_app,
     upsert_external_app_user_credential,
     validate_auth_template,
 )
+from onyx.db.external_app_readiness import (
+    placeholders_in_template,
+    required_user_credential_keys,
+)
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
+from onyx.db.plugin import get_plugin_version_validity
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.utils import UNSET, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -66,7 +69,11 @@ from onyx.server.features.build.external_apps.models import (
     UpsertUserCredentialsRequest,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
+from onyx.skills.push import (
+    push_skill_to_affected_sandboxes,
+    push_skills_and_commit,
+    push_skills_for_users,
+)
 from onyx.utils.encryption import mask_string
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -94,6 +101,14 @@ def _to_admin_response(
 ) -> ExternalAppAdminResponse:
     # ``stored`` is the app's approval policy overrides.
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
+    custom_skills = sorted(
+        (skill for skill in app.associated_skills if skill.is_custom),
+        key=lambda skill: (skill.name, str(skill.id)),
+    )
+    # The organization runs the published version of an associated skill.
+    validity = get_plugin_version_validity(
+        (skill.id for skill in custom_skills), "organization", db_session
+    )
     return ExternalAppAdminResponse(
         id=app.id,
         name=app.name,
@@ -117,12 +132,9 @@ def _to_admin_response(
             ExternalAppAssociatedSkill(
                 id=skill.id,
                 name=skill.name,
-                is_valid=skill.is_valid,
+                is_valid=validity.get(skill.id),
             )
-            for skill in sorted(
-                (skill for skill in app.associated_skills if skill.is_custom),
-                key=lambda skill: (skill.name, str(skill.id)),
-            )
+            for skill in custom_skills
         ],
         is_onyx_managed=managed,
     )
@@ -327,8 +339,7 @@ def update_external_app_admin(
     # The database is the source of truth; sandbox files are a derived,
     # best-effort projection of the committed app and association state.
     db_session.commit()
-    push_skills_for_users(affected, db_session)
-    db_session.commit()
+    push_skills_and_commit(affected, db_session)
     if request.associated_skill_ids is not None:
         db_session.expire(app, ["associated_skills"])
     return _to_admin_response(
@@ -471,8 +482,8 @@ def upsert_user_credentials(
     )
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes now.
-    push_skills_for_users({user.id}, db_session)
     db_session.commit()
+    push_skills_and_commit({user.id}, db_session)
 
 
 @router.delete("/apps/{external_app_id}/credentials")
@@ -488,8 +499,8 @@ def disconnect_user_from_external_app(
         external_app_id=external_app_id,
         user_id=user.id,
     )
-    push_skills_for_users({user.id}, db_session)
     db_session.commit()
+    push_skills_and_commit({user.id}, db_session)
 
 
 @router.get("/apps")

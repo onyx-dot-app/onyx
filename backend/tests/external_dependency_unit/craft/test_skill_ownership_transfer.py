@@ -19,10 +19,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
 
 
 def _owned_skill(db_session: Session, owner: User) -> Skill:
-    skill = make_skill(db_session)
-    skill.author_user_id = owner.id
-    db_session.flush()
-    return skill
+    return make_skill(db_session, author_user_id=owner.id)
 
 
 def _share_row(
@@ -42,7 +39,7 @@ def _share_row(
 def push_calls(monkeypatch: pytest.MonkeyPatch) -> list[set[object]]:
     calls: list[set[object]] = []
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users",
+        "onyx.skills.push.push_skills_for_users",
         lambda user_ids, _db_session: calls.append(set(user_ids)),
     )
     return calls

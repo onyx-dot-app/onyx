@@ -13,6 +13,8 @@ from ee.onyx.configs.app_configs import (
     CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY,
     CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY,
     DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
+    EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY,
+    EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY,
     GITHUB_PERMISSION_DOC_SYNC_FREQUENCY,
     GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY,
     GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
@@ -153,6 +155,18 @@ def _load_confluence_group_sync() -> GroupSyncFuncType:
     from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 
     return confluence_group_sync
+
+
+def _load_egnyte_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.egnyte.doc_sync import egnyte_doc_sync
+
+    return egnyte_doc_sync
+
+
+def _load_egnyte_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.egnyte.group_sync import egnyte_group_sync
+
+    return egnyte_group_sync
 
 
 def _load_github_doc_sync() -> DocSyncFuncType:
@@ -493,6 +507,19 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY,
             group_sync_func=_lazy_group_sync(_load_youtrack_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    DocumentSource.EGNYTE: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_egnyte_doc_sync),
+            # The crawl reads each folder's permissions with its listing.
+            initial_index_should_sync=True,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_egnyte_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),

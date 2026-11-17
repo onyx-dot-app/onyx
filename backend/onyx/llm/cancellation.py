@@ -16,8 +16,9 @@ class AgentCancelled(BaseException):
     """Cancellation control flow bypasses ordinary model/tool error recovery."""
 
 
-# Why work was cancelled: a caller asked for it, or the work reached its deadline.
-CancelReason = Literal["requested", "deadline"]
+# Why work was cancelled: a caller asked for it, the work reached its deadline,
+# or the user stopped it.
+CancelReason = Literal["requested", "deadline", "user"]
 
 
 class CancellationSignal:

@@ -66,6 +66,7 @@ from onyx.db.enums import (
     AccessType,
     CapabilityCheckTrigger,
     ConnectorCredentialPairStatus,
+    IndexingMode,
     IndexingStatus,
     IndexModelStatus,
 )
@@ -102,8 +103,8 @@ from onyx.redis.redis_hierarchy import (
     HierarchyNodeCacheEntry,
     cache_hierarchy_nodes_batch,
     ensure_source_node_exists,
-    get_node_id_from_raw_id,
     get_source_node_id_from_cache,
+    resolve_parent_node_ids,
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.fleet_telemetry import emit_stage_counter
@@ -616,11 +617,19 @@ def connector_document_extraction(
             cc_pair_id, index_attempt_id, is_backfill=is_backfill
         )
 
-        # Clear the indexing trigger if it was set, to prevent duplicate indexing
-        # attempts. A backfill does not serve the trigger, so it leaves it set.
+        # Clear the indexing trigger this attempt serves, to prevent duplicate
+        # indexing attempts. A backfill serves none, a FUTURE attempt serves none
+        # (the trigger is for the current index), and a REINDEX trigger is served
+        # only by a run from the beginning: a full run held back during a reindex
+        # keeps its trigger until that run.
+        trigger = index_attempt.connector_credential_pair.indexing_trigger
+        serves_trigger = trigger == IndexingMode.UPDATE or (
+            trigger == IndexingMode.REINDEX and index_attempt.from_beginning
+        )
         if (
-            not index_attempt.is_backfill
-            and index_attempt.connector_credential_pair.indexing_trigger is not None
+            serves_trigger
+            and not index_attempt.is_backfill
+            and index_attempt.search_settings.status == IndexModelStatus.PRESENT
         ):
             logger.info(
                 "Clearing indexing trigger: cc_pair=%s trigger=%s",
@@ -949,23 +958,35 @@ def connector_document_extraction(
                 doc_batch_cleaned = strip_null_characters(document_batch)
 
                 # Resolve parent_hierarchy_raw_node_id to parent_hierarchy_node_id
-                # using the Redis cache (just populated from hierarchy nodes batch)
+                # using the Redis cache (just populated from hierarchy nodes
+                # batch). A parent not stored yet gets a STUB node.
+                raw_parent_ids = [
+                    doc.parent_hierarchy_raw_node_id
+                    for doc in doc_batch_cleaned
+                    if doc.parent_hierarchy_raw_node_id is not None
+                ]
+                parent_node_ids: dict[str, int] = {}
                 with get_session_with_current_tenant() as db_session_tmp:
                     source_node_id = get_source_node_id_from_cache(
                         redis_client, db_session_tmp, db_connector.source
                     )
+                    if source_node_id is not None and raw_parent_ids:
+                        parent_node_ids = resolve_parent_node_ids(
+                            redis_client=redis_client,
+                            db_session=db_session_tmp,
+                            source=db_connector.source,
+                            source_node_id=source_node_id,
+                            raw_parent_ids=raw_parent_ids,
+                            connector_id=db_connector.id,
+                            credential_id=db_credential.id,
+                        )
                 for doc in doc_batch_cleaned:
-                    if doc.parent_hierarchy_raw_node_id is not None:
-                        node_id, found = get_node_id_from_raw_id(
-                            redis_client,
-                            db_connector.source,
-                            doc.parent_hierarchy_raw_node_id,
-                        )
-                        doc.parent_hierarchy_node_id = (
-                            node_id if found else source_node_id
-                        )
-                    else:
-                        doc.parent_hierarchy_node_id = source_node_id
+                    raw_parent_id = doc.parent_hierarchy_raw_node_id
+                    doc.parent_hierarchy_node_id = (
+                        parent_node_ids.get(raw_parent_id, source_node_id)
+                        if raw_parent_id is not None
+                        else source_node_id
+                    )
 
                 batch_description = []
 

@@ -37,7 +37,8 @@ it wins and the hook is not consulted. Push failures on this path go to the serv
 ### What gets pushed
 
 Either way, every document a **public** connector successfully indexes is pushed to the wiki.
-The push is fire-and-forget: a failure is logged on the Onyx side and never blocks or fails indexing.
+Documents from private and permission-synced connectors are not pushed. The push is fire-and-forget:
+a failure is logged on the Onyx side and never blocks or fails indexing.
 It also doesn't fire during a connector's initial from-the-beginning run — only on the incremental updates after it,
 which is what keeps the wiki current without replaying your whole corpus.
 Document push works on single-tenant deployments only.
@@ -74,14 +75,6 @@ The pipeline doesn't have to run on the default model. You can select a model ju
 from the pool enabled under [Language Models](/agent-wiki/admin/language_models)
 — and since ingestion is high-volume background work, a cheaper model (e.g. Luna)
 than your daily-usage default is usually the right choice.
-
-<Warning>
-  **Push organization-public sources only.** Wiki ingestion is not permission-aware yet:
-  content from a permission-synced or private Onyx connector would land in the wiki without carrying its access
-  restrictions along.
-  Keep those connectors out of wiki ingestion until that changes — permission-aware ingestion is on the roadmap and
-  coming soon.
-</Warning>
 
 ## Related
 

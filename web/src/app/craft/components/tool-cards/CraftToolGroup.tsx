@@ -6,7 +6,7 @@ import { Collapsible, Badge, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgCheckAll, SvgChevronDown, SvgLoader } from "@opal/icons";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
-import CometEdge from "@/app/craft/components/CometEdge";
+import CometEdge from "@/refresh-components/CometEdge";
 import { isSkillCall } from "@/app/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 

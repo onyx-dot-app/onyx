@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.31
+version: 0.9.52
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,9 +20,21 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: security
+      description: Craft Firecracker refuses a node registration value in the
+        chart values that is shorter than 32 characters.
+    - kind: security
+      description: A ValidatingAdmissionPolicy limits the Craft Firecracker
+        host agent's Node patch to its scale-down annotations, on its own
+        Node. The chart adds it when the cluster serves the API.
     - kind: added
-      description: Add craft.firecrackerPreflight, an opt-in DaemonSet that
-        checks whether sandbox nodes can run Craft Firecracker sandboxes.
+      description: craft.hostAgent.relayMaxConnsNode (default 2048) caps the
+        egress relay connections of all microVMs on a node, so guests cannot
+        push the host agent over its memory limit.
+    - kind: added
+      description: craft.hostAgent.sliceMemoryPercent (default 85) limits the
+        host slice of all Craft Firecracker microVMs to that share of node
+        memory, so an out-of-memory event stops a microVM, not kubelet.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

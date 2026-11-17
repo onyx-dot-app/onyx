@@ -313,6 +313,7 @@ class MockLLM(LitellmLLM, MockLLMController):
         user_identity: LLMUserIdentity | None = None,
         total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
         operation: ProviderOperation | None = None,
+        manage_tool_strictness: bool = False,
     ) -> ModelResponse:
         raise NotImplementedError("We only care about streaming atm")
 
@@ -327,6 +328,7 @@ class MockLLM(LitellmLLM, MockLLMController):
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
         stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
         operation: ProviderOperation | None = None,  # noqa: ARG002
+        manage_tool_strictness: bool = False,  # noqa: ARG002
     ) -> Iterator[ModelResponseStream]:
         if not self.stream_controller:
             return

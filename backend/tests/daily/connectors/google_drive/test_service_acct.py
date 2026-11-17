@@ -52,6 +52,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     SHARED_DRIVE_1_URL,
     SHARED_DRIVE_2_FILE_IDS,
     SHORTCUT_ANCESTOR_NODE_IDS,
+    SHORTCUTTED_3_FOLDER_ID,
     TEST_USER_1_DRIVE_B_FOLDER_ID,
     TEST_USER_1_DRIVE_B_ID,
     TEST_USER_1_EMAIL,
@@ -149,6 +150,7 @@ def test_include_all(
             EXTERNAL_SHARED_FOLDER_ID,
             FOLDER_3_ID,
             *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+            SHORTCUTTED_3_FOLDER_ID,
             *PARTIAL_VISIBILITY_FIXTURE_NODE_IDS,
         )
     )
@@ -326,6 +328,7 @@ def test_include_my_drives_only(
         TEST_USER_1_EXTRA_FOLDER_ID,
         EXTERNAL_SHARED_FOLDER_ID,
         *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+        SHORTCUTTED_3_FOLDER_ID,
         EXTERNAL_ONLY_USER_1_FOLDER_ID,
         EXTERNAL_ONLY_ADMIN_FOLDER_ID,
         LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,

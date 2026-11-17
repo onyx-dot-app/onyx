@@ -152,7 +152,7 @@
       },
       "mode": "chat",
       "name": "Kimi K3.1 Pro",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-10-23",
       "structured_output": true,
@@ -164,6 +164,7 @@
       "cost": {
         "cache_read": 0.2,
         "cache_write": 4,
+        "cache_write_above_1hr": 8.0,
         "input": 4,
         "output": 20
       },
@@ -182,8 +183,9 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K3.1 Pro Highspeed",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2026-10-23",
       "structured_output": true,

@@ -184,6 +184,119 @@ tagged, referenced, unlabeled, and kind runtime images, and all volumes. Run it
 before you delete a worktree. Build cache cleanup removes entries unused for seven
 days with a 10 GB retention target. It is not a total Docker disk limit.
 
+## Remote Firecracker cluster (`--target craft-dev`)
+
+Firecracker sandboxes need KVM, so they do not run in kind. With the `craft-dev`
+target, the local API uses a shared remote cluster: its Postgres, Redis, OpenSearch,
+and host agents. Telepresence (`connect` only, no intercept) gives the laptop cluster
+DNS and routes. No local Celery workers or beat run.
+
+### Profile
+
+A profile file holds all cluster facts. This repository ships no cluster names or
+account IDs. The launcher reads the profile path from `--profile`, then
+`CRAFT_DEV_PROFILE`, then `../onyx-internal/dev/craft-dev.yaml` next to the main
+checkout. Example with placeholders:
+
+```yaml
+name: craft-dev
+kube:
+  context: <kube context name>          # always passed with --context
+  allowed_contexts: [<kube context name>] # --context or CRAFT_DEV_CONTEXT must be in this list
+  kubeconfig: ~/.kube/<file>.yaml       # optional; relative to this file; the local API gets the same file
+  server: https://<eks endpoint>        # optional; refuse a context with another API server
+aws:
+  profile: <aws sso profile>            # optional
+  region: <region>
+  eks_cluster: <eks cluster name>
+  account_id: "<account id>"            # optional; quote it
+namespaces:
+  app: onyx
+  sandbox: onyx-sandboxes
+  agent: <host agent namespace>
+agent:
+  selector: app.kubernetes.io/component=craft-fc-host-agent
+  port: 7443
+  container: host-agent                 # optional; the agent container for `logs`
+user:
+  email: <your Onyx login email>        # optional; else CRAFT_DEV_USER or --user
+telepresence:
+  min_version: 2.27.4
+local_env: {}                           # optional; values for the local API only
+```
+
+The cluster needs a Telepresence traffic manager that also proxies the VPC CIDR
+(database and cache), and a NetworkPolicy that lets the traffic manager reach the
+host agent port. The profile owner installs both.
+
+### Run
+
+Use the `ods craft-dev` commands. They run the Python launchers in this
+directory with `uv`. Until the next `onyx-devtools` release includes them, use
+`go -C tools/ods run . craft-dev ...` from the repository root instead of `ods craft-dev ...`.
+
+```bash
+export CRAFT_DEV_PROFILE=<path to the profile>     # optional with the onyx-internal checkout
+ods craft-dev doctor
+telepresence connect --context <context> -n onyx   # in a real terminal; it asks for sudo once
+ods craft-dev api                                  # local API with hot reload
+ods craft-dev web                                  # in another terminal; next dev against the local API
+```
+
+All commands accept `--profile` and `--context`. `--context` (or `CRAFT_DEV_CONTEXT`)
+must be in `kube.allowed_contexts`. `api` and `web` accept `--port` for the local API port.
+
+In VS Code, use the **Craft dev (remote cluster)** compound and the
+**craft-dev: doctor** task.
+
+`ods craft-dev api` does these steps:
+
+1. Refuses a context that is not in the profile and an API server that differs from `kube.server`.
+2. Refuses to start when Telepresence is not connected to the same context, API server, and namespace.
+3. Resolves the deployed api-server env, like the kind flow. Then it applies `local_env`,
+   sets `SENTRY_DSN` to empty and `WEB_DOMAIN` to `CRAFT_FRONTEND_URL` (default
+   `http://localhost:3000`), and applies `.vscode/.env.craft-dev`. The deployed
+   `SANDBOX_BACKEND`, `SANDBOX_NAMESPACE`, and `SANDBOX_RUNTIME` always stay. No override changes them.
+4. Copies each Secret volume of the api-server container (for example the host agent
+   client certificate) to a mode-0700 temporary directory. Env values that point into
+   the mount point at the copies. The launcher deletes the directory when the API stops.
+5. Compares the checkout Alembic head with the shared database. It refuses on a
+   difference. It never runs migrations: redeploy the cluster to migrate.
+6. Runs Uvicorn on `127.0.0.1`. The port is `--port`, then `CRAFT_API_PORT`, then 8080
+   if it is free, else a free port. Start the web server with the same port:
+   `ods craft-dev web --port <port>`.
+
+`.vscode/.env.craft-dev` holds personal overrides, for example a personal
+`SANDBOX_FC_TEMPLATE`. Keep it untracked.
+
+`ods craft-dev doctor` checks the AWS SSO session and account, the IPv4 egress address
+against the EKS endpoint allowlist, IPv6 egress, the context pin, kube access, the
+Telepresence version and connection, NodeInfo over mTLS to each host agent, and the
+Alembic head. Each failure prints one fix line. It changes nothing.
+
+If `telepresence connect` hangs, run `telepresence quit -s`, then connect again.
+
+### Your VM
+
+These commands act only on the sandbox VM of your user: `--user`, else
+`CRAFT_DEV_USER`, else `user.email` in the profile. They run a helper in an
+api-server pod with `kubectl exec`, so they do not need Telepresence.
+
+```bash
+export CRAFT_DEV_USER=<your Onyx login email>
+ods craft-dev vms                                  # your VM, its node and state
+ods craft-dev skills push ./my-skills --wake       # put a directory on /mnt/skills
+ods craft-dev skills push ./data --mount spaces    # or on user-uploads or spaces
+ods craft-dev exec --wake -- ls -la /mnt/skills    # run a command as the sandbox user
+ods craft-dev logs --agent --tail 50               # guest and agent lines of your VM
+ods craft-dev logs -f                              # follow; -f does not take --tail
+ods craft-dev reset                                # save your sessions, then stop the VM
+```
+
+The managed mounts are `noexec`. Run a script through its interpreter, for example
+`python3 /mnt/skills/x.py`. `skills push` prints this hint for each script.
+`reset --force` stops the VM without a save.
+
 ## Test the workflow tools
 
 ```bash

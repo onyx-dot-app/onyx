@@ -145,8 +145,16 @@ minute by opening one file, leave it to the code.
   example "`token_budget` is stored in thousands".
 - Exact counts and closed lists ("the twelve connectors that…"). They go stale
   with the next addition. Say how to find the current set.
+- A claim about all cases ("every caller", "always", "nothing else does X") with
+  no support. Name the cases you checked, or cite the `path:symbol` that
+  enforces the claim.
+- Limits, sizes and timeouts as numbers. Name the constant, for example
+  `tools/tool_implementations/code_mode/store.py:MAX_COMMITTED_BYTES`, and do
+  not restate its value.
 - UI layout, copy or styling, such as focus order, icons, colours or widths.
-- Step-by-step walkthroughs of one function.
+- Step-by-step walkthroughs of one function, or a paraphrase of its branches,
+  such as packet order or the result shapes that a parser accepts. Cite the
+  function.
 - History: PR numbers, migration history, and words such as "legacy", "now",
   "no longer" and "currently". State what is true at the verified commit, and
   leave history to git. The check fails only on PR numbers.
@@ -206,6 +214,11 @@ idea (root `AGENTS.md`).
 Update a document in the same PR when your change alters a contract, a trap, an
 ownership boundary or a flow that crosses components. Most changes alter none of
 these and need no update.
+
+Before you push a PR that changes cited code or the map, run
+`python3 .agents/feature-map/stale_docs.py --pr <base branch>` and recheck each
+section and key that it lists. The Stop hook checks one turn; this command checks
+the whole PR.
 
 ### Editing judgment
 
@@ -293,6 +306,14 @@ only its edits), and the questions in "Editing judgment".
 The agent decides while it still knows what it changed; usually the answer is no
 update. `stale_docs.py --cited <files>` prints the contracts, recipes and
 documents that cite the files.
+
+`stale_docs.py --pr [<branch>]` lists the sections and keys that cite code the
+whole PR changed. It measures from the merge base with `<branch>`
+(`origin/main` by default; in a stack, the PR's base branch). It uses the same
+symbol matching as the brief. It also lists the documents that the PR edited,
+first, because they hold the claims that the PR wrote. It names at most
+`.agents/feature-map/stale_docs.py:MAX_PR_DOCUMENTS`
+documents and always exits 0.
 
 The check catches broken references. It cannot tell when a description is wrong
 while every reference still resolves. That is why the Verified-against line and

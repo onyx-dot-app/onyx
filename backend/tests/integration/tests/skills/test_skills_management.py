@@ -227,7 +227,7 @@ def test_direct_share_restores_existing_enabled_preference(
     assert reshared.enabled is True
 
 
-def test_org_wide_editor_permission_grants_edit(
+def test_org_wide_editor_permission_is_refused(
     basic_user: DATestUser,
     admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
@@ -244,24 +244,27 @@ def test_org_wide_editor_permission_grants_edit(
         is_public=True,
         public_permission=SkillSharePermission.VIEWER,
     )
-    assert public_viewer.public_permission is not None
     assert public_viewer.public_permission == SkillSharePermission.VIEWER
     _assert_edit_hidden(skill_id, other_user)
 
-    public_editor = SkillManager.share(
-        skill,
-        basic_user,
-        is_public=True,
-        public_permission=SkillSharePermission.EDITOR,
+    # Editors are named users and groups. The organization can only view.
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        SkillManager.share(
+            skill,
+            basic_user,
+            is_public=True,
+            public_permission=SkillSharePermission.EDITOR,
+        )
+    assert exc_info.value.response.status_code == 400
+    assert "edit access" in exc_info.value.response.json()["detail"]
+    assert (
+        SkillManager.get_for_user(str(skill_id), basic_user).public_permission
+        == SkillSharePermission.VIEWER
     )
-
-    assert public_editor.public_permission is not None
-    assert public_editor.public_permission == SkillSharePermission.EDITOR
-    editable = SkillManager.get_editable(skill_id, other_user)
-    assert editable.user_permission == SkillAccessLevel.EDITOR
+    _assert_edit_hidden(skill_id, other_user)
 
 
-def test_switching_from_org_wide_to_scoped_share_removes_org_visibility(
+def test_published_skill_cannot_be_made_private(
     basic_user: DATestUser,
     admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
@@ -276,22 +279,24 @@ def test_switching_from_org_wide_to_scoped_share_removes_org_visibility(
     SkillManager.share(skill, basic_user, is_public=True)
     assert SkillManager.get_for_user(str(skill_id), unshared_user).id == skill_id
 
-    scoped = SkillManager.share(
-        skill,
-        basic_user,
-        is_public=False,
-        user_shares=[
-            SkillUserShareRequest(
-                user_id=UUID(shared_user.id),
-                permission=SkillSharePermission.VIEWER,
-            )
-        ],
-    )
-
-    assert scoped.public_permission is None
-    assert [str(share.user.id) for share in scoped.user_shares] == [shared_user.id]
-    assert SkillManager.get_for_user(str(skill_id), shared_user).id == skill_id
-    _assert_skill_hidden(skill_id, unshared_user)
+    # Publishing is one-way. The whole request is refused, shares included.
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        SkillManager.share(
+            skill,
+            basic_user,
+            is_public=False,
+            user_shares=[
+                SkillUserShareRequest(
+                    user_id=UUID(shared_user.id),
+                    permission=SkillSharePermission.VIEWER,
+                )
+            ],
+        )
+    assert exc_info.value.response.status_code == 400
+    assert "cannot be made private" in exc_info.value.response.json()["detail"]
+    after = SkillManager.get_for_user(str(skill_id), basic_user)
+    assert after.public_permission == SkillSharePermission.VIEWER
+    assert SkillManager.get_for_user(str(skill_id), unshared_user).id == skill_id
 
 
 def test_owner_transfer_demotes_previous_owner_and_promotes_new_owner(

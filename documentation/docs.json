@@ -8,10 +8,6 @@
     "dark": "#0050B4"
   },
   "favicon": "assets/logo/onyx_favicon.svg",
-  "banner": {
-    "content": "**Permissions update:** Onyx now uses group-based permissions. [Understand permissions](/admins/permissions/understanding_permissions) or [review migration details](/admins/permissions/whats_changing)",
-    "dismissible": true
-  },
   "navigation": {
     "tabs": [
       {
@@ -55,7 +51,18 @@
               "overview/onyx_anywhere/website_widget",
               "overview/onyx_anywhere/slack",
               "overview/onyx_anywhere/discord_bot",
-              "overview/onyx_anywhere/mcp_server",
+              {
+                "group": "MCP Server",
+                "icon": "plug",
+                "expanded": true,
+                "pages": [
+                  "overview/onyx_anywhere/mcp_server",
+                  "overview/onyx_anywhere/mcp_server/claude",
+                  "overview/onyx_anywhere/mcp_server/chatgpt",
+                  "overview/onyx_anywhere/mcp_server/codex",
+                  "overview/onyx_anywhere/mcp_server/claude_code"
+                ]
+              },
               "developers/guides/llm_gateway",
               "overview/onyx_anywhere/cli"
             ]
@@ -111,6 +118,20 @@
             "pages": [
               "deployment/local/craft",
               "deployment/local/craft_kubernetes",
+              {
+                "group": "Firecracker",
+                "icon": "microchip",
+                "pages": [
+                  "deployment/kubernetes/craft-firecracker",
+                  "deployment/kubernetes/craft-firecracker-eks",
+                  "deployment/kubernetes/craft-firecracker-gke",
+                  "deployment/kubernetes/craft-firecracker-aks",
+                  "deployment/kubernetes/craft-firecracker-bare-metal",
+                  "deployment/kubernetes/craft-firecracker-operations",
+                  "deployment/kubernetes/craft-firecracker-monitoring",
+                  "deployment/kubernetes/craft-firecracker-sizing"
+                ]
+              },
               "deployment/local/craft_docker_compose"
             ]
           },

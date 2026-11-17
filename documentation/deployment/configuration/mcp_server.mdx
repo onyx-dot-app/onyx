@@ -194,6 +194,9 @@ Onyx supports:
   Onyx fetches the document during authorization. The document's `client_id` must equal that URL,
   and the URL must be publicly reachable: private or blocked destinations are rejected as an invalid client.
   A fetch failure returns `503`; an invalid document returns an invalid-client error.
+  A document can declare another token authentication method, such as `private_key_jwt`.
+  Onyx then serves the client as a public client and ignores any client assertion.
+  Onyx rejects such a document as an invalid client if any of its redirect URIs is a loopback address.
 - **Public client metadata:** one to ten redirect URIs, `authorization_code` grant, and `code` response type,
   for both registration methods.
 - **Authorization code flow with PKCE:** use `code_challenge_method=S256` and supply the matching verifier when exchanging the code.

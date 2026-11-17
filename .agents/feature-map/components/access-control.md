@@ -20,8 +20,12 @@ access, hierarchy filtering and post-query censoring.
   message says "you cannot see this".
 - **An anonymous visitor** sees public documents only.
 - **An admin** controls visibility through connector access types (public,
-  private to groups, or synced from the source), user groups, and document
-  sets. A document set narrows what an agent searches. It never grants access
+  private to groups, owner-only (`personal`, Business+), or synced from the
+  source), user groups, and document sets. `private` may have no groups, and
+  owner-only is its own type: nothing converts one to the other, so the edit
+  form shows what the admin saved. Data-access rows copy their pair's access type, and a composite
+  foreign key on `(cc_pair_id, access_type)` limits them to `private` and
+  `sync_restricted`: leaving a group type must delete the rows first. A document set narrows what an agent searches. It never grants access
   to a document the user could not already see.
 - **A user who asks for a document set they cannot access** gets a 403
   `INSUFFICIENT_PERMISSIONS`, not an empty answer.
@@ -212,10 +216,11 @@ their own ACL columns or the user's connector access.
    chat and search do not return it unless they hold `READ_DOCUMENT_SETS`.
 9. `censor-every-chunk-reader` **Every path that returns chunk content must
    call `onyx/access/access.py:censor_chunks_for_user`.** Censoring-only documents are public in the
-   index. Callers are the search pipeline, the document chunk-info and
-   size-info routes (`server/documents/document.py`), and the Open URL tool. A
-   new reader of indexed chunk text that skips it leaks Salesforce fields in
-   EE.
+   index. Callers are the search pipeline, search context expansion
+   (`tools/tool_implementations/search/search_utils.py:_retrieve_adjacent_chunks`),
+   the document chunk-info and size-info routes (`server/documents/document.py`),
+   and the Open URL tool. A new reader of indexed chunk text that skips it leaks
+   Salesforce fields in EE.
 10. `acl-clause-size-limit` **The ACL clause is a separate `bool` clause** so
     OpenSearch can cache it apart from the other filters (see the
     `_get_acl_visibility_filter` docstring). An ACL above

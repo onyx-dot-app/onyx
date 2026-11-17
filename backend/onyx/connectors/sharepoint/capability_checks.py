@@ -116,8 +116,7 @@ from onyx.connectors.sharepoint.source_operations import (
     GRAPH_API_VERSION,
     SharepointSourceOperations,
 )
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import is_indexable_file_type
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -595,7 +594,7 @@ def _is_indexable_file(
     no file facet and no content to read."""
     if item.file is None or item.is_tombstone:
         return False
-    if get_file_ext(item.name or "") not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+    if not is_indexable_file_type(item.name or "", None, allow_images=True):
         return False
     data: DriveItemData = DriveItemData.from_graph_json(item.to_graph_json())
     # The same path indexing matches the exclusions against.

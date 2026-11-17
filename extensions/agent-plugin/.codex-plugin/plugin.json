@@ -1,0 +1,23 @@
+{
+  "name": "onyx",
+  "version": "0.1.0",
+  "description": "Puts Onyx first for context retrieval in every Codex session",
+  "author": {
+    "name": "Onyx",
+    "url": "https://onyx.app"
+  },
+  "homepage": "https://docs.onyx.app",
+  "repository": "https://github.com/onyx-dot-app/onyx",
+  "license": "MIT",
+  "keywords": ["onyx", "search", "knowledge", "rag", "mcp"],
+  "hooks": "./hooks/codex.json",
+  "mcpServers": {},
+  "interface": {
+    "displayName": "Onyx",
+    "shortDescription": "Puts Onyx first for context retrieval in every Codex session",
+    "developerName": "Onyx",
+    "category": "Productivity",
+    "websiteURL": "https://onyx.app",
+    "privacyPolicyURL": "https://onyx.app/legal/privacy-policy"
+  }
+}

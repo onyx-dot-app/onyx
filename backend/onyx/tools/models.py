@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable, Literal, Self
+from typing import Annotated, Any, Callable, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
-from onyx.context.search.models import PersonaSearchInfo, SearchDoc
+from onyx.context.search.models import BaseFilters, PersonaSearchInfo, SearchDoc
+from onyx.db.enums import GatedAppKind
 from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
@@ -16,6 +17,7 @@ from onyx.file_store.models import (
 from onyx.tools.constants import FILE_READER_MAX_CHARS
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.utils.headers import HeaderItemDict
+from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
 
 
 class CustomToolErrorInfo(BaseModel):
@@ -33,9 +35,18 @@ class GeneratedImage(BaseModel):
 
 
 class FileReaderArguments(BaseModel):
-    file_id: str
-    start_char: int = 0
-    num_chars: int = FILE_READER_MAX_CHARS
+    file_id: str = Field(description="The UUID of the file to read.")
+    start_char: int = Field(
+        default=0,
+        description="Character offset to start reading from. Use null for the default of 0.",
+    )
+    num_chars: int = Field(
+        default=FILE_READER_MAX_CHARS,
+        description=(
+            f"Number of characters to return (max {FILE_READER_MAX_CHARS}). "
+            f"Use null for the default of {FILE_READER_MAX_CHARS}."
+        ),
+    )
 
 
 class FileReadResult(BaseModel):
@@ -55,7 +66,18 @@ class MemoryOperation(str, Enum):
 
 
 class MemoryArguments(BaseModel):
-    memory: str
+    memory: str = Field(
+        description=(
+            "The text of the memory to add or update. "
+            "Should be a concise, standalone statement that "
+            "captures the key information. For example: "
+            "'User prefers dark mode' or 'User's favorite frontend framework is React'."
+        )
+    )
+
+
+class KnowledgeGraphArguments(BaseModel):
+    query: str = Field(description="What to search for")
 
 
 class MemoryUpdated(BaseModel):
@@ -77,6 +99,8 @@ class ToolConfiguration(BaseModel):
     enabled: bool
     openapi_schema: dict[str, JsonValue] | None
     mcp_input_schema: dict[str, JsonValue] | None
+    mcp_output_schema: dict[str, JsonValue] | None
+    mcp_read_only: bool | None
     custom_headers: list[HeaderItemDict] | None
     passthrough_auth: bool
     mcp_server_id: int | None
@@ -90,6 +114,17 @@ class PersonaToolConfiguration(BaseModel):
     persona_name: str
     tools: list[ToolConfiguration]
     search: PersonaSearchInfo
+
+
+class ChatToolSelection(BaseModel):
+    """The tools and search filters the user selected for a chat; every later
+    turn uses them."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    allowed_tool_ids: list[int] | None = None
+    preferred_tool_id: int | None = None
+    internal_search_filters: BaseFilters | None = None
 
 
 class ToolCallException(Exception):
@@ -137,6 +172,9 @@ class CustomToolCallSummary(BaseModel):
         union_mode="left_to_right"
     )
     error: CustomToolErrorInfo | None = None
+    # The server's structured content, which code mode programs receive in
+    # place of `tool_result`. Live only: not saved or streamed.
+    structured_result: dict[str, JsonValue] | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def restore_file_references(self) -> Self:
@@ -157,6 +195,18 @@ class DynamicSchemaInfo(BaseModel):
     message_id: int | None
     user_id: UUID | None = None
     user_email: str | None = None
+
+
+class ToolApprovalScope(BaseModel):
+    """The gated action of a tool whose calls wait for the user's approval."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # What the action policy governs, such as an MCP server and its ID.
+    app_kind: GatedAppKind
+    target_id: int
+    # Keys the action policy and session grants, e.g. the MCP tool name.
+    action_id: str
 
 
 class ChatFile(BaseModel):
@@ -223,7 +273,8 @@ class ToolCallInfo(BaseModel):
     tab_index: int
     tool_name: str
     tool_call_id: str
-    tool_id: int
+    # None for a tool that has no tool row, such as code mode.
+    tool_id: int | None
     reasoning_tokens: str | None
     tool_call_arguments: dict[str, Any]
     tool_call_response: str
@@ -286,7 +337,7 @@ class LlmOpenUrlResult(BaseCiteableToolResult):
 
 
 class PythonArguments(BaseModel):
-    code: str
+    code: str = Field(description="Python source code to execute")
 
 
 class PythonExecutionFile(BaseModel):
@@ -319,7 +370,7 @@ class LlmPythonExecutionResult(BaseModel):
 
 
 class BashArguments(BaseModel):
-    cmd: str
+    cmd: str = Field(description="Bash command to execute in the session.")
 
 
 class LlmBashExecutionResult(BaseModel):
@@ -329,3 +380,111 @@ class LlmBashExecutionResult(BaseModel):
     exit_code: int | None
     timed_out: bool
     error: str | None = None
+
+
+class SearchResult(BaseModel):
+    """One document of a search-like tool result, as the model and code mode
+    programs read it."""
+
+    document: int = Field(description="Citation number. Cite it in the answer as [n].")
+    title: str
+    updated_at: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    authors: Annotated[list[str] | None, OMITTED_WHEN_NONE] = None
+    source_type: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    url: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    document_identifier: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    file_name: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    content: str
+    metadata: Annotated[str | None, OMITTED_WHEN_NONE] = Field(
+        default=None, description="JSON-encoded metadata of the document."
+    )
+
+
+class SearchResults(BaseModel):
+    """The content of internal search, web search, and open URL results."""
+
+    results: list[SearchResult]
+    note: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    message: Annotated[str | None, OMITTED_WHEN_NONE] = None
+
+
+class CodeModeExposure(str, Enum):
+    """How code mode offers a tool to the model."""
+
+    # Its own tool beside `execute_code`, never a function inside programs. Tools
+    # that wait for child runs must use this: a program cannot wait for them.
+    DIRECT = "direct"
+    # A function whose stub the `execute_code` description lists.
+    IMMEDIATE = "immediate"
+    # A function that programs can call but the description does not list; the
+    # model finds it with `tool_search`.
+    DEFERRED = "deferred"
+
+
+class CodeModeFunctionName(BaseModel):
+    """A tool's code mode function name before it becomes a Python identifier:
+    `<namespace>__<name>`, or `name` without a namespace."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    # A group of tools, such as the MCP server of an MCP tool.
+    namespace: str | None = None
+
+    @property
+    def qualified(self) -> str:
+        return self.name if self.namespace is None else f"{self.namespace}__{self.name}"
+
+
+class CodeModeResultKind(str, Enum):
+    """How a code mode program receives a tool's result content."""
+
+    # The content is a JSON object; anything else is raised as an error.
+    JSON_OBJECT = "json_object"
+    # The content is passed to the program as a string.
+    TEXT = "text"
+    # JSON when the content parses, else the string.
+    AUTO = "auto"
+    # An MCP result envelope `{"tool_result": value}`; the program gets the value.
+    MCP = "mcp"
+    # The program gets the result details as JSON, as `model` (a class of the
+    # details) declares them; the content is for the model only.
+    DETAILS = "details"
+
+
+class CodeModeResultSpec(BaseModel):
+    """The value a tool returns to a code mode program, and its stub type."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: CodeModeResultKind
+    # The stub's return annotation; the model's name when unset, else Any.
+    annotation: str | None = None
+    # The model of the value that the program gets. For DETAILS it is a class
+    # of the result details; otherwise the content is its JSON. The stub module
+    # declares it, and the models of its fields, as TypedDicts of the same names.
+    model: type[BaseModel] | None = None
+    # JSON Schema of the value, from the tool's server. The stub types the value
+    # from it, and declares a top-level object as a TypedDict.
+    output_schema: dict[str, JsonValue] | None = None
+    # Docstring note on the returned value.
+    returns: str | None = None
+    # Docstring note on how a program should call the tool, such as batching.
+    usage: str | None = None
+    # The tool numbers its results for citation and needs a citation block.
+    cites: bool = False
+
+    @model_validator(mode="after")
+    def details_need_model(self) -> Self:
+        if self.kind is CodeModeResultKind.DETAILS and self.model is None:
+            raise ValueError("A DETAILS result needs the model of its details")
+        return self
+
+    @property
+    def type_annotation(self) -> str:
+        if self.annotation is not None:
+            return self.annotation
+        return self.model.__name__ if self.model is not None else "Any"
+
+
+DEFAULT_CODE_MODE_RESULT = CodeModeResultSpec(kind=CodeModeResultKind.AUTO)

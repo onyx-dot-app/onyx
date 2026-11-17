@@ -1053,6 +1053,63 @@ async def test_configured_global_internal_cidr_denied_before_identity(
     assert matcher.calls == 0
 
 
+_API_URL = "http://10.0.0.5:8080"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["GET", "PUT", "POST", "DELETE"])
+@pytest.mark.parametrize(
+    "path_components",
+    [
+        ("microvm", "node", "signing-key"),
+        ("api", "microvm", "node", "state"),
+        ("MicroVM", "node", "deregister"),
+        ("api/microvm/node/signing-key",),
+    ],
+)
+async def test_api_host_node_routes_denied(
+    method: str, path_components: tuple[str, ...]
+) -> None:
+    resolver = StubResolver(sandbox=make_resolved_sandbox())
+    matcher = _StubMatcher(result=None)
+    addon = _build(
+        resolver=resolver, matcher=matcher, policy=parse_destination_policy(_API_URL)
+    )
+    flow = make_flow(
+        host="10.0.0.5", port=8080, method=method, path_components=path_components
+    )
+
+    await addon.request(flow)
+
+    _assert_403(flow, SandboxProxyError.DESTINATION_BLOCKED)
+    assert matcher.calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("host", "port", "path_components"),
+    [
+        ("10.0.0.5", 8080, ("api", "build", "sessions")),
+        ("10.0.0.5", 8080, ("microvms",)),
+        ("93.184.216.34", 443, ("microvm", "node", "signing-key")),
+    ],
+)
+async def test_other_api_paths_and_hosts_not_denied_as_node_routes(
+    host: str, port: int, path_components: tuple[str, ...]
+) -> None:
+    resolver = StubResolver(sandbox=make_resolved_sandbox())
+    addon = _build(
+        resolver=resolver,
+        matcher=_StubMatcher(result=None),
+        policy=parse_destination_policy(_API_URL),
+    )
+    flow = make_flow(host=host, port=port, path_components=path_components)
+
+    await addon.request(flow)
+
+    assert flow.response is None
+
+
 # ---------------------------------------------------------------------------
 # _resolve_and_match — exact in-band session resolution
 # ---------------------------------------------------------------------------

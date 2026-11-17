@@ -99,20 +99,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "gemini-2.0-flash-exp-image-generation": {
-      "cost": {
-        "image": 0.039,
-        "input": 0.0,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 32768,
-        "output": 32768
-      },
-      "mode": "image_generation",
-      "name": "gemini-2.0-flash-exp-image-generation",
-      "status": "deprecated"
-    },
     "gemini-2.5-computer-use-preview-10-2025": {
       "attachment": true,
       "cost": {
@@ -1157,7 +1143,8 @@
         "context": 8192
       },
       "mode": "embedding",
-      "name": "gemini-embedding-2-preview"
+      "name": "gemini-embedding-2-preview",
+      "status": "deprecated"
     },
     "gemini-exp-1114": {
       "cost": {
@@ -1348,7 +1335,7 @@
         "output": 9.0
       },
       "limit": {
-        "context": 1048576,
+        "context": 131072,
         "output": 65536
       },
       "modalities": {
@@ -1362,6 +1349,28 @@
       },
       "mode": "chat",
       "name": "gemini-omni-1.1-flash",
+      "reasoning": true
+    },
+    "gemini-omni-1.2-flash": {
+      "cost": {
+        "input": 1.5,
+        "output": 9.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-omni-1.2-flash",
       "reasoning": true
     },
     "gemini-omni-flash-preview": {

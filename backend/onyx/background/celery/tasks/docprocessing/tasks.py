@@ -99,6 +99,7 @@ from onyx.db.enums import (
     IndexingStatus,
     SwitchoverType,
 )
+from onyx.db.hierarchy import remove_unfilled_stub_hierarchy_nodes_for_cc_pair
 from onyx.db.index_attempt import (
     cc_pair_has_dispatched_index_attempts,
     create_index_attempt_error,
@@ -106,6 +107,7 @@ from onyx.db.index_attempt import (
     get_index_attempt,
     get_stale_not_started_index_attempts,
     get_waiting_index_attempt,
+    index_attempt_has_errors_without_document,
     mark_attempt_canceled,
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
@@ -123,6 +125,7 @@ from onyx.db.models import ConnectorCredentialPair, IndexAttempt, SearchSettings
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
+    port_reindex_in_progress,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.error_handling.exceptions import OnyxError
@@ -133,6 +136,7 @@ from onyx.file_store.document_batch_storage import (
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing
+from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import (
     SCAN_ITER_COUNT_DEFAULT,
     get_redis_client,
@@ -526,6 +530,62 @@ def monitor_indexing_attempt_progress(
             logger.exception("Failed to cleanup storage after monitoring failure")
 
 
+def _remove_unfilled_stub_nodes(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """After an attempt whose listing completed, a STUB parent that is still
+    not filled will not be filled: its folder is not in the source, or the
+    connector cannot see it. Move what is under it to the source root and
+    remove it, so nothing stays hidden from the tree. A failed or canceled
+    attempt, or one with a listing failure, keeps its STUBs, because the
+    next attempt can still fill them. A STUB that a failed cleanup keeps is
+    removed by the next attempt that completes its listing. So is a STUB that
+    the cleanup keeps because another attempt of the pair is not finished."""
+    source = cc_pair.connector.source
+    # The attempt is complete. A cleanup error must not undo that.
+    try:
+        removed = remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+            db_session, source, cc_pair.connector_id, cc_pair.credential_id
+        )
+        failed = False
+    except Exception:
+        db_session.rollback()
+        logger.exception(
+            "Could not remove the unfilled STUB hierarchy nodes of cc_pair %s",
+            cc_pair.id,
+        )
+        removed = []
+        failed = True
+    if removed:
+        logger.info(
+            "Removed %s unfilled STUB hierarchy nodes of cc_pair %s",
+            len(removed),
+            cc_pair.id,
+        )
+    if not removed and not failed:
+        return
+    try:
+        # Cached parent chains can go through a removed STUB. Batches commit
+        # one at a time, so a failed cleanup can also have removed some.
+        invalidate_hierarchy_cache_for_source(get_redis_client(), source)
+    except Exception:
+        logger.exception(
+            "Could not invalidate the hierarchy cache of source %s", source
+        )
+
+
+def _attempt_listed_every_parent(db_session: Session, attempt: IndexAttempt) -> bool:
+    """Whether the attempt's listing completed, so a STUB that is still not
+    filled will not be filled. Failures of single documents do not change
+    that. A failure that names no document (a listing, a partition or a
+    batch) can mean a parent was not seen."""
+    if attempt.status == IndexingStatus.SUCCESS:
+        return True
+    if attempt.status != IndexingStatus.COMPLETED_WITH_ERRORS:
+        return False
+    return not index_attempt_has_errors_without_document(attempt.id, db_session)
+
+
 def check_indexing_completion(
     index_attempt_id: int,
     coordination_status: CoordinationStatus,
@@ -590,6 +650,13 @@ def check_indexing_completion(
             raise RuntimeError(
                 f"CC pair {attempt.connector_credential_pair_id} not found in database"
             )
+
+        # A backfill can run with a partial config, so it does not list
+        # every parent.
+        if not attempt.is_backfill and _attempt_listed_every_parent(
+            db_session, attempt
+        ):
+            _remove_unfilled_stub_nodes(db_session, cc_pair)
 
         source = cc_pair.connector.source.value
         connector_name = cc_pair.connector.name or f"cc_pair_{cc_pair.id}"
@@ -757,6 +824,7 @@ class _KickoffResult:
     skipped_active: int = 0
     skipped_not_found: int = 0
     skipped_not_indexable: int = 0
+    skipped_waiting_for_swap: int = 0
     failed_to_create: int = 0
 
     @property
@@ -766,6 +834,7 @@ class _KickoffResult:
             + self.skipped_active
             + self.skipped_not_found
             + self.skipped_not_indexable
+            + self.skipped_waiting_for_swap
             + self.failed_to_create
         )
 
@@ -843,9 +912,11 @@ def _try_creating_pending_backfill(
     """Settles the pair's ended backfill attempts, then creates the attempt of
     its oldest ready backfill on the current index. The caller checked that no
     attempt is active there. The backfill waits while the pair is not ACTIVE,
-    and while an indexing trigger, a prune-after-reindex or a full re-index
-    request is pending: that run goes first, and a full re-index covers the
-    backfill. The creation checks these again under the pair's row lock."""
+    while an indexing trigger, a prune-after-reindex or a full re-index
+    request is pending (that run goes first, and a full re-index covers the
+    backfill), and while a port-flow reindex builds FUTURE (see
+    port_reindex_in_progress). The creation checks these again under the
+    pair's row lock."""
     if not search_settings.status.is_current() or not cc_pair.pending_backfills:
         return False
     if (
@@ -853,6 +924,7 @@ def _try_creating_pending_backfill(
         or cc_pair.indexing_trigger is not None
         or cc_pair.prune_after_reindex_requested_at is not None
         or cc_pair.full_reindex_requested_at is not None
+        or port_reindex_in_progress(db_session)
         or (DISABLE_INDEX_UPDATE_ON_SWAP and secondary_index_building)
     ):
         return False
@@ -986,6 +1058,25 @@ def _kickoff_indexing_tasks(
             f"search_settings={search_settings.id}, "
             f"secondary_index_building={secondary_index_building}"
         )
+
+        # A full run during a port-flow reindex adds documents FUTURE never
+        # fetches. Leave the request as it is; it runs after the swap, on the
+        # new index (see raise_if_port_reindex_in_progress).
+        if (
+            search_settings.status.is_current()
+            and (
+                cc_pair.indexing_trigger == IndexingMode.REINDEX
+                or cc_pair.full_reindex_requested_at is not None
+                or cc_pair.prune_after_reindex_requested_at is not None
+            )
+            and port_reindex_in_progress(db_session)
+        ):
+            task_logger.debug(
+                f"_kickoff_indexing_tasks - Full run waits for the reindex swap: "
+                f"cc_pair={cc_pair.id}"
+            )
+            result.skipped_waiting_for_swap += 1
+            continue
 
         reindex = False
         # the indexing trigger is only checked and cleared with the current search settings
@@ -1446,6 +1537,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         f"skipped_active={primary_result.skipped_active} "
         f"skipped_not_found={primary_result.skipped_not_found} "
         f"skipped_not_indexable={primary_result.skipped_not_indexable} "
+        f"skipped_waiting_for_swap={primary_result.skipped_waiting_for_swap} "
         f"failed={primary_result.failed_to_create}]"
         + (
             f" secondary=[evaluated={secondary_result.evaluated} "
@@ -2055,6 +2147,7 @@ def _docprocessing_task(
             adapter=adapter,
             from_beginning=from_beginning,
             skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,
+            written_search_settings_id=search_settings_id,
         )
 
         # Track chunk indexing usage for cloud usage limits

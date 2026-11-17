@@ -44,6 +44,9 @@ type ContentSuffix = "optional" | (string & {});
 /** A badge beside the title, with an optional hover tooltip. */
 type ContentBadge = BadgeProps;
 
+/** One badge, or several in order, beside the title. */
+type ContentBadges = ContentBadge | ContentBadge[];
+
 /** Starts a title edit from a control outside the content. */
 interface ContentEditHandle {
   startEditing: () => void;
@@ -108,7 +111,10 @@ interface ContentBaseProps {
   /** Starts a title edit from an outside control; hides the built-in pencil. */
   editHandle?: React.Ref<ContentEditHandle>;
 
-  /** Called with the new title when an edit is committed. */
+  /**
+   * Called with the new, trimmed title when an edit is committed. An empty
+   * title is passed on: the caller decides whether it resets or is ignored.
+   */
   onTitleChange?: (newTitle: string) => void;
 
   /**
@@ -180,8 +186,8 @@ type ContentFontProps =
       /** A status icon beside the title. */
       auxIcon?: ContentAuxIcon;
 
-      /** A badge beside the title. */
-      badge?: ContentBadge;
+      /** One badge, or a list of badges, beside the title. */
+      badge?: ContentBadges;
 
       orientation?: ContentOrientation;
     } & NoMoreIcons)
@@ -408,14 +414,14 @@ function Content({
     startEditing();
   }
 
-  // An empty edit keeps the old title.
   function commit() {
     const value = editValue.trim();
-    if (value && value !== toPlainString(title)) onTitleChange?.(value);
+    if (value !== toPlainString(title)) onTitleChange?.(value);
     setEditing(false);
   }
 
   const hasDescription = !!description && !!toPlainString(description);
+  const badges = badge === undefined ? [] : [badge].flat();
   const hasIconRow = !!(icon || MoreIcon1 || moreIcon2);
 
   return (
@@ -531,9 +537,11 @@ function Content({
                 );
               })()}
 
-            {badge && (
+            {badges.length > 0 && (
               <span className="opal-content-badge">
-                <Badge {...badge} />
+                {badges.map((b, i) => (
+                  <Badge key={i} {...b} />
+                ))}
               </span>
             )}
 
@@ -613,6 +621,7 @@ export {
   type ContentAuxIcon,
   type ContentSuffix,
   type ContentBadge,
+  type ContentBadges,
   type ContentEditHandle,
   type ContentDescriptionProps,
 };

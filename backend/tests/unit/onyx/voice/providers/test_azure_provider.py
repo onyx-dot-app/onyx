@@ -5,7 +5,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.voice.interface import STREAM_FAILED_ERROR
-from onyx.voice.providers.azure import AzureStreamingTranscriber, AzureVoiceProvider
+from onyx.voice.providers.azure import (
+    STT_SEGMENTATION_SILENCE_TIMEOUT_MS,
+    AzureStreamingTranscriber,
+    AzureVoiceProvider,
+)
 
 
 def test_azure_provider_extracts_region_from_target_uri() -> None:
@@ -118,7 +122,7 @@ def test_streaming_multilingual_cloud_uses_v2_endpoint_and_continuous_lid() -> N
         subscription="key",
         endpoint="wss://swedencentral.stt.speech.microsoft.com/speech/universal/v2",
     )
-    mocks["speech_config"].return_value.set_property.assert_called_once_with(
+    mocks["speech_config"].return_value.set_property.assert_any_call(
         speechsdk.PropertyId.SpeechServiceConnection_LanguageIdMode,
         "Continuous",
     )
@@ -128,6 +132,28 @@ def test_streaming_multilingual_cloud_uses_v2_endpoint_and_continuous_lid() -> N
         recognizer_kwargs["auto_detect_source_language_config"]
         is mocks["auto_detect"].return_value
     )
+
+
+@pytest.mark.parametrize(
+    ("languages", "transcriber_kwargs"),
+    [
+        (["fr-FR"], {"region": "swedencentral"}),
+        (["en-US", "fr-FR"], {"region": "swedencentral"}),
+        (["en-US"], {"endpoint": "ws://speech-container:5000"}),
+    ],
+)
+def test_streaming_sets_segmentation_silence_timeout(
+    languages: list[str], transcriber_kwargs: dict[str, str]
+) -> None:
+    import azure.cognitiveservices.speech as speechsdk
+
+    mocks = _connect_transcriber(languages, **transcriber_kwargs)
+
+    mocks["speech_config"].return_value.set_property.assert_any_call(
+        speechsdk.PropertyId.Speech_SegmentationSilenceTimeoutMs,
+        str(STT_SEGMENTATION_SILENCE_TIMEOUT_MS),
+    )
+    assert 100 <= STT_SEGMENTATION_SILENCE_TIMEOUT_MS <= 5000
 
 
 def test_streaming_single_language_cloud_pins_recognition_language() -> None:
@@ -233,10 +259,19 @@ async def test_streaming_close_keeps_transcripts_from_drained_audio() -> None:
 
 
 def test_streaming_multilingual_self_hosted_keeps_at_start_detection() -> None:
+    import azure.cognitiveservices.speech as speechsdk
+
     mocks = _connect_transcriber(["en-US", "fr-FR"], endpoint="http://localhost:5000")
 
     mocks["speech_config"].assert_called_once_with(
         subscription="key", endpoint="http://localhost:5000"
     )
-    mocks["speech_config"].return_value.set_property.assert_not_called()
+    set_property_ids = [
+        call.args[0]
+        for call in mocks["speech_config"].return_value.set_property.call_args_list
+    ]
+    assert (
+        speechsdk.PropertyId.SpeechServiceConnection_LanguageIdMode
+        not in set_property_ids
+    )
     mocks["auto_detect"].assert_called_once_with(languages=["en-US", "fr-FR"])

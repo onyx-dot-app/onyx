@@ -1,3 +1,4 @@
+import asyncio
 import contextvars
 import hashlib
 import os
@@ -166,6 +167,16 @@ from onyx.redis.redis_pool import (
     get_async_redis_connection,
     retrieve_auth_token_data,
     retrieve_ws_token_data,
+)
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_purge_targets,
+    get_user_sandbox_blob_paths,
+)
+from onyx.server.features.build.sandbox.firecracker.purge import (
+    purge_harness_sandboxes,
+)
+from onyx.server.features.build.sandbox.snapshot_manager import (
+    delete_sandbox_blobs_best_effort,
 )
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
@@ -612,10 +623,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         request: Request | None = None,
     ) -> None:
         await self.on_before_delete(user, request)
+        sandbox_blob_paths = await self.user_db.session.run_sync(
+            partial(get_user_sandbox_blob_paths, user_id=user.id)
+        )
+        purge_targets = await self.user_db.session.run_sync(
+            partial(get_sandbox_purge_targets, user_id=user.id)
+        )
         await self.user_db.session.run_sync(
             partial(delete_user_from_db__no_commit, user)
         )
         await self.user_db.session.commit()
+        await asyncio.to_thread(delete_sandbox_blobs_best_effort, sandbox_blob_paths)
+        await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
         await self.on_after_delete(user, request)
 
     @asynccontextmanager
@@ -1050,6 +1069,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         allowed_email_domains_override: Sequence[str] | None = None,
         enforce_verified_domain: bool = False,
         sso_provider_id: int | None = None,
+        start_new_team: bool = False,
     ) -> User:
         referral_source = (
             getattr(request.state, "referral_source", None)  # ods: ignore[getattr]
@@ -1071,6 +1091,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             request=request,
             oauth_name=oauth_name,
             account_id=account_id,
+            start_new_team=start_new_team,
         )
 
         if not tenant_id:
@@ -2473,6 +2494,7 @@ async def _resolve_optional_user(
                     api_key.api_key_name,
                     api_key.api_key_display,
                 )
+                request.state.discord_bot_api_key = api_key.is_discord_bot
     except ValueError:
         logger.warning("Issue with validating authentication token")
         return None
@@ -3009,6 +3031,8 @@ async def complete_login_flow(
             allowed_email_domains_override=allowed_email_domains_override,  # ty: ignore[unknown-argument]
             enforce_verified_domain=enforce_verified_domain,  # ty: ignore[unknown-argument]
             sso_provider_id=sso_provider_id,  # ty: ignore[unknown-argument]
+            # Playground: the sign-up page put the choice into the signed state.
+            start_new_team=state_data.get("start_new_team") == "true",  # ty: ignore[unknown-argument]
         )
     except UserAlreadyExists:
         raise OnyxError(
@@ -3153,6 +3177,9 @@ def get_oauth_router(
             "referral_source": referral_source or "default_referral",
             CSRF_TOKEN_KEY: csrf_token,
         }
+        # Playground: "start a new team" rides the signed state through the IdP.
+        if request.query_params.get("start_new_team") == "true":
+            state_data["start_new_team"] = "true"
         # No-op for web; for mobile, marks the signed state for complete_mobile_sso.
         apply_mobile_state(
             state_data, mobile_redirect_uri, app_state, app_code_challenge

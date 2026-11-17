@@ -1,4 +1,5 @@
 import { JSX } from "react";
+import type { NestedCall } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { MinimalAgent } from "@/lib/agents/types";
 import { Packet, StopReason } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
@@ -67,7 +68,12 @@ export type MessageRenderer<
   T extends Packet,
   S extends Partial<FullChatState>,
 > = React.ComponentType<{
+  /** The step's own packets, without the packets of nested calls */
   packets: T[];
+  /** Tool calls nested under the step, ordered by sub_turn_index */
+  nestedCalls: NestedCall[];
+  /** Every packet of the step, nested calls included, in stream order */
+  streamPackets: Packet[];
   state: S;
   /** Node id for the message currently being rendered */
   messageNodeId?: number;

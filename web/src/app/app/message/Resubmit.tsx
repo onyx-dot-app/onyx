@@ -113,7 +113,10 @@ function RateLimitBanner({
       ? null
       : resetLineFor(describeRateLimitReset(resetMs, nowMs));
   return (
-    <div className="text-red-700 mt-4 text-sm my-auto">
+    <div
+      className="text-red-700 mt-4 text-sm my-auto"
+      data-testid="chat-error-banner"
+    >
       <Alert variant="broken">
         {getErrorIcon(errorCode)}
         <AlertTitle>{title}</AlertTitle>
@@ -197,7 +200,10 @@ export const ErrorBanner = ({
   }
 
   return (
-    <div className="text-red-700 mt-4 text-sm my-auto">
+    <div
+      className="text-red-700 mt-4 text-sm my-auto"
+      data-testid="chat-error-banner"
+    >
       <Alert variant="broken">
         {getErrorIcon(errorCode)}
         <AlertTitle>{title}</AlertTitle>

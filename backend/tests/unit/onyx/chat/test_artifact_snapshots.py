@@ -8,7 +8,7 @@ import pytest
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
 from onyx.agents.runtime import Agent, Run
-from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -76,7 +76,7 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
 
     if child_run:
 
-        def research(invocation: ToolInvocation) -> ToolResult:
+        def research(invocation: ToolInvocation) -> ChildRunWait:
             submission = invocation.agents.spawn_agent(
                 worker,
                 name="research",
@@ -84,9 +84,7 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
                 max_steps=1,
                 messages=[],
             )
-            result = invocation.agents.wait_run(submission.run_id)
-            assert result is not None
-            return ToolResult(content=result.output.text)
+            return ChildRunWait(run_ids=[submission.run_id])
 
         agent = Agent(
             FakeModelClient(
@@ -101,6 +99,9 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
                         name="research", description="", parameters={}
                     ),
                     execute=research,
+                    result_from_children=lambda _invocation, children: ToolResult(
+                        content=children[0].messages[-1].text
+                    ),
                 )
             ],
         )

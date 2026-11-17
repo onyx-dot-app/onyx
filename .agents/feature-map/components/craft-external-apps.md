@@ -53,7 +53,8 @@ This component owns:
   verdict, approval waits and credential injection;
 - external-app models, provider catalogs, URL matching and OAuth token
   refresh;
-- action policy resolution and storage, and the personal policy routes;
+- action policy resolution and storage, and the personal policy routes,
+  which need Craft for external apps but not for MCP servers;
 - the user app routes, OAuth connect and connect-app decisions;
 - approval rows and the approval decision routes.
 
@@ -65,7 +66,8 @@ Neighbours:
   internet egress is intentional.
 - [[mcp-and-custom-tools]]: MCP server records, access lists and credential
   storage. This component only matches and injects for Craft-enabled servers.
-  Chat outside Craft runs MCP and OpenAPI calls with no policy check or approval
+  Chat applies the same MCP tool policies through its own gate and approval
+  rows ([[mcp-and-custom-tools]]). OpenAPI calls in chat have no policy check
   ([[plugins]]).
 - [[craft-streaming]]: how an approval or connect card reaches the live
   stream.
@@ -83,7 +85,8 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
  2 destinations     resolve_destination: public, or the exact ONYX_SERVER_URL
                     host:port, or a Craft MCP origin the user can reach with
                     tenant SSRF settings that allow it; server_connect pins
-                    the validated IPs (no second DNS lookup)
+                    the validated IPs (no second DNS lookup); a
+                    /microvm/ path on the API host -> 403 (host-agent routes)
  3 identity         signed `Proxy-Authorization: Bearer` on the connection's
                     first request -> SignedIdentityVerifier, bound to the
                     client connection; else IdentityResolver.resolve_sandbox
@@ -110,7 +113,8 @@ prefix among the user's Craft-enabled servers
 (`sandbox_proxy/resolvers/mcp_matching.py:match_request`), then parses the
 JSON-RPC body (`sandbox_proxy/mcp_jsonrpc.py:classify_mcp_request`). Protocol
 messages need a session and task access but no approval. `tools/call` gives one
-action per tool, default Ask. Grants, policies and approvals key off
+action per tool. Its default is Ask, or Always when the server marks the tool
+read-only (`Tool.mcp_read_only`, from `readOnlyHint`). Grants, policies and approvals key off
 `GatedTarget.key`, never a display name ([[craft-admin#gated-app-identity-by-id]]).
 
 **Policy precedence.** `db/action_policy.py:resolve_action_policies` and
@@ -121,8 +125,8 @@ action per tool, default Ask. Grants, policies and approvals key off
 3. If the app does not allow user management
    (`GatedApp.users_can_manage_policies` false), the workspace policy applies.
 4. Otherwise the stored choice applies: the task's choice in a scheduled run,
-   or the user's personal choice in an interactive or Slack session. A stored
-   choice can be looser than the workspace policy.
+   or the user's personal choice in an interactive or Slack session and in
+   main chat. A stored choice can be looser than the workspace policy.
 5. With no stored choice, a scheduled run uses Ask and an interactive session
    uses the workspace policy.
 
@@ -213,9 +217,12 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    `Bearer` headers. Firecracker VMs share the host relay's IP, so the relay
    stamps an EdDSA token per connection (`sandbox_proxy/sandbox_identity/signed.py`).
    The proxy holds node public keys only and checks the cache placement record
-   (`server/features/build/sandbox/firecracker_registry.py`; no schema change).
+   (`microvm/registry.py`; no schema change).
    A bad token is a 403, never an IP fallback; a signed plain-HTTP connection
-   allows one request.
+   allows one request. The relays reach the proxy over mTLS on a separate port
+   (`sandbox_proxy/relay_tls.py`, Helm `craft.hostAgent.relayTls`); it pipes
+   to the plain listener on loopback, so relay flows log a loopback source IP
+   and the token check stays the identity check.
    `sandbox_proxy/sandbox_identity/resolution.py:IdentityResolver.resolve_session_by_id` accepts a tag
    only for a session of the IP-resolved user. A forged tag can only move an
    approval to another session of the same user. The comment in
@@ -224,6 +231,10 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    two sandboxes share an IP
    (`backend/onyx/sandbox_proxy/sandbox_identity/kubernetes.py:K8sInformerLookup._initial_list`,
    `backend/onyx/sandbox_proxy/sandbox_identity/docker.py:DockerEventsLookup._initial_sync`).
+   A frozen cache rejects every sandbox created after it froze. The Kubernetes
+   watch has a read deadline, and `K8sInformerLookup.is_synced` turns false
+   when the last relist is stale, so `/healthz` fails and the liveness probe
+   restarts the proxy.
 4. `url-patterns-credential-boundary` **An app's URL patterns are its
    credential boundary.** A wide pattern lets a prompt-injected agent spend the
    tenant's token on another account of the same vendor.
@@ -313,11 +324,12 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 
 - The proxy does not scrub responses. An upstream API that echoes request
   headers in its response body returns the injected credential to the agent.
-- The MCP tool default (Ask) is written twice and the copies must agree:
-  `sandbox_proxy/request_evaluator.py:MCP_TOOL_DEFAULT_POLICY` for the proxy and
-  `db/action_policy.py:_catalog_defaults` for storage, which drops an override
-  equal to the default. The constant of the same name in
-  `server/features/mcp/api.py` has no readers; it is a false lead.
+- The MCP tool default comes from the server's unverified `readOnlyHint`
+  (`db/action_policy.py:mcp_tool_default_policy`). The proxy, chat tool
+  construction, the policy view and workspace saves all use it. A workspace
+  save drops an override equal to the default, so an admin Ask chosen while the
+  default was Ask has no row. That tool becomes Always when a later sync marks
+  it read-only.
 
 ---
 

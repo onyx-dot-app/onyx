@@ -5,6 +5,8 @@ import {
 } from "@/lib/search/types";
 import { Packet } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
+import type { ChatToolSelection } from "@/lib/tools/types";
+import type { ComposedMention, RecordedMention } from "@/lib/chat/types";
 
 export type FeedbackType = "like" | "dislike";
 
@@ -162,11 +164,15 @@ export interface Message {
   messageId?: number;
   nodeId: number; // Unique identifier for tree structure (can be negative for temp messages)
   message: string;
-  type: "user" | "assistant" | "system" | "error"; // TODO: rename "assistant" to "agent" — https://linear.app/onyx-app/issue/ENG-3766
+  // agent_results is the hidden question node of an automatic follow-up response.
+  type: "user" | "assistant" | "agent_results" | "system" | "error"; // TODO: rename "assistant" to "agent" — https://linear.app/onyx-app/issue/ENG-3766
   retrievalType?: RetrievalType;
   researchType?: ResearchType;
   query?: string | null;
   files: FileDescriptor[];
+  // What the user tagged in a question, one per tile until the server's
+  // recorded mentions replace them.
+  mentions?: ComposedMention[];
   toolCall: ToolCallMetadata | null;
   // for rebuilding the message tree - these now use nodeId
   parentNodeId: number | null;
@@ -189,8 +195,11 @@ export interface Message {
   packets: Packet[];
   packetCount?: number; // Tracks packet count for React memo comparison (avoids reading from mutated array)
 
-  // Retained only with this response's packet prefix; never persisted alone.
-  replayCursor?: number;
+  // The replay position in the stream that writes this row. Retained only
+  // with the packet prefix it covers; never persisted alone.
+  replay?: { streamId: number; cursor: number };
+  /** This client lost the response's stream; the server may still run it. */
+  streamLost?: boolean;
   restoredPacketCount?: number;
 
   // cached values for easy access
@@ -202,6 +211,13 @@ export interface Message {
 
   // Duration in seconds for processing this message (agent messages only)
   processingDurationSeconds?: number;
+}
+
+/** A live stream and the response rows it writes. A multi-model turn lists
+ * its answers in model-index order. The stream ID is not a message ID. */
+export interface ChatStream {
+  stream_id: number;
+  response_ids: number[];
 }
 
 export interface BackendChatSession {
@@ -220,12 +236,16 @@ export interface BackendChatSession {
   owner_name: string | null;
   packets: Packet[][];
   // Set while a run is in flight and resumable via the resume-stream endpoint
-  current_stream?: { stream_id: number } | null;
+  current_stream?: ChatStream | null;
   is_processing?: boolean;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
   // Set on a paged load when the current branch has messages before the page.
   has_older_messages?: boolean;
+  // The owner's saved tools and search filters; null means the agent's tools.
+  tool_selection?: ChatToolSelection | null;
+  // The status route's `approvals_version` for the requests this load shows.
+  approvals_version?: string;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {
@@ -261,6 +281,8 @@ export interface BackendMessage {
   chat_session_id: string;
   citations: CitationMap | null;
   files: FileDescriptor[];
+  // Absent from older servers.
+  mentions?: RecordedMention[];
   tool_call: ToolCallFinalResult | null;
   current_feedback: string | null;
   // Duration in seconds for processing this message (agent messages only)
@@ -283,6 +305,8 @@ export interface BackendMessage {
 export interface MessageResponseIDInfo {
   user_message_id: number | null;
   reserved_assistant_message_id: number; // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
+  // Absent from older servers.
+  mentions?: RecordedMention[];
 }
 
 export interface ModelResponseSlot {
@@ -293,6 +317,7 @@ export interface ModelResponseSlot {
 export interface MultiModelMessageResponseIDInfo {
   user_message_id: number | null;
   responses: ModelResponseSlot[];
+  mentions?: RecordedMention[];
 }
 
 export interface UserKnowledgeFilePacket {
@@ -321,6 +346,8 @@ export interface StreamingError {
 // error_code emitted by the backend usage rate-limiter (429). Branch on this to
 // show the dedicated usage-limit banner instead of the generic chat error.
 export const RATE_LIMITED_ERROR_CODE = "RATE_LIMITED";
+// The chat waits for an approval, so it cannot start a new turn.
+export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
 
 // Shape of StreamingError.details for a RATE_LIMITED error — mirrors the 429
 // JSON body so the banner can compute a human-friendly reset time.

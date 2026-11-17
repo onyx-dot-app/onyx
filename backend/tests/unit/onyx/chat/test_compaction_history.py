@@ -17,6 +17,7 @@ def test_saved_cutoff_survives_file_loading_and_later_turn(
     file_was_loaded: bool, summarize_answer: bool
 ) -> None:
     question = ChatHistoryMessage(
+        skill_messages=[],
         id=1,
         message_type=MessageType.USER,
         message="Explain the attachment",
@@ -26,6 +27,7 @@ def test_saved_cutoff_survives_file_loading_and_later_turn(
         response_messages=[],
     )
     answer = ChatHistoryMessage(
+        skill_messages=[],
         id=2,
         message_type=MessageType.ASSISTANT,
         message="First answer",
@@ -53,9 +55,6 @@ def test_saved_cutoff_survives_file_loading_and_later_turn(
     source = convert_chat_history(
         [question, answer, current_question],
         files=[pending_file] if file_was_loaded else [],
-        context_image_files=[],
-        additional_context=None,
-        token_counter=len,
     ).messages
     cutoff = source[-2] if summarize_answer else source[-3]
     assert cutoff.id is not None
@@ -89,9 +88,6 @@ def test_saved_cutoff_survives_file_loading_and_later_turn(
     reloaded = convert_chat_history(
         [question, answer, current_question, later_answer, later_question],
         files=[ready_file],
-        context_image_files=[],
-        additional_context=None,
-        token_counter=len,
     ).messages
     assert reloaded[0].text != source[0].text
     expected_tail = ["Continue", "Next answer", "What next?"]

@@ -25,6 +25,8 @@ chat retention needs Enterprise. The settings API enforces these tiers.
 - **A user** saves prompt shortcuts and inserts them into the message box. They
   can hide a shared shortcut for themselves.
 - **A user** picks a UI and answer language, or follows the workspace default.
+- **A user** chooses whether Enter and the send arrow wait for the current step
+  or interrupt current work. Ctrl/Cmd+Enter always queues a follow-up.
 - **An admin**, at Admin > Chat Preferences, sets workspace chat options. These
   include the team name and context that every prompt includes, the default
   language, the default assistant's system prompt and built-in tools, and the
@@ -71,6 +73,10 @@ It does not own:
 ---
 
 ## Architecture
+
+**UI preferences.** Boolean `User` columns store small interface choices, such
+as `paste_as_tile` and `interrupt_on_send`. Each has its own `PATCH` endpoint in
+`server/manage/users.py` and a flat field in `UserPreferences`.
 
 **From setting to prompt.** `db/memory.py:get_memories` builds one
 `UserMemoryContext` per turn, called from
@@ -167,7 +173,7 @@ paths read it; find them with `git grep -n load_settings backend`.
    `web/src/hooks/useUserPersonalization.ts` sends the full list on every save,
    even a toggle change.
 6. `prompt-section-explicit-position` **A new prompt section needs an explicit
-   position.** Add it in `chat/prompt_utils.py:_build_user_specific_section` at
+   position.** Add it in `chat/prompt_utils.py:build_user_information_prompt` at
    a chosen place, not at the end, and run a prompt eval ([[context-assembly]]).
 7. `settings-fields-public` **Every `Settings` field is public.**
    `backend/onyx/server/settings/api.py:fetch_settings` returns the whole
@@ -274,7 +280,7 @@ paths read it; find them with `git grep -n load_settings backend`.
   path with `git grep -n personal_role backend/onyx`. Add the `User` column and
   a writer in `db/user_preferences.py`, expose it in `server/manage/users.py`,
   carry it in `UserMemoryContext`, and place it in
-  `_build_user_specific_section` ([[#prompt-section-explicit-position]]).
+  `build_user_information_prompt` ([[#prompt-section-explicit-position]]).
 - `new-workspace-option` **A workspace option.** Copy `auto_detect_search_filters`: list its readers
   and writers with `git grep -n auto_detect_search_filters`. Add the field to
   `server/settings/models.py:Settings` with a default, and read it with

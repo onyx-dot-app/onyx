@@ -18,6 +18,7 @@ import { AgentEditorPage } from "@tests/e2e/pages/AgentEditorPage";
 import {
   expectMcpToolInvoked,
   expectMcpToolNotInvoked,
+  qualifiedMcpToolName,
 } from "@tests/e2e/mcp/mcpToolInvocation";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
@@ -93,6 +94,10 @@ test.describe("Default Agent MCP Integration", () => {
       serverId,
       MCP_ASSERTED_TOOL_NAME
     );
+    // These tests cover invocation, not approval (mcp_tool_approval.spec.ts).
+    await adminClient.setMcpActionPolicies(serverId, {
+      [MCP_ASSERTED_TOOL_NAME]: "ALWAYS",
+    });
 
     basicUserEmail = `pw-basic-user-${Date.now()}@example.com`;
     basicUserPassword = "BasicUserPass123!";
@@ -182,7 +187,7 @@ test.describe("Default Agent MCP Integration", () => {
     await plugins.setPluginEnabled(serverName, true);
   });
 
-  test("Basic user can create an assistant with MCP actions attached", async ({
+  test("Basic user can create an assistant with MCP actions attached @code-mode", async ({
     page,
   }) => {
     await page.context().clearCookies();
@@ -210,13 +215,18 @@ test.describe("Default Agent MCP Integration", () => {
       assistant.tools.some((tool) => tool.mcp_server_id === serverId)
     ).toBeTruthy();
 
-    await expectMcpToolInvoked(page, MCP_ASSERTED_TOOL_NAME);
+    const qualifiedToolName = qualifiedMcpToolName(
+      serverId,
+      serverName,
+      MCP_ASSERTED_TOOL_NAME
+    );
+    await expectMcpToolInvoked(page, qualifiedToolName);
 
     const plugins = new ChatPluginsPopover(page);
     await plugins.setPluginEnabled(serverName, false);
     await plugins.close();
 
-    await expectMcpToolNotInvoked(page, MCP_ASSERTED_TOOL_NAME, assertedToolId);
+    await expectMcpToolNotInvoked(page, qualifiedToolName, assertedToolId);
   });
 
   test("Admin default Chat availability persists in plugin Configuration", async ({

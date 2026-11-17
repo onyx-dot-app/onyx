@@ -181,7 +181,10 @@ def test_resume_rejects_finalized_tools_without_current_step_results(
 
 
 def test_finalized_tool_ids_serialize_in_stable_order() -> None:
-    progress = RunProgress(step_limit=1, finalized_tool_call_ids={"z", "a"})
+    progress = RunProgress(
+        step_limit=1,
+        finalized_tool_call_ids={"z", "a"},
+    )
     assert progress.model_dump(mode="json")["finalized_tool_call_ids"] == ["a", "z"]
     assert RunProgress.model_validate_json(progress.model_dump_json()) == progress
 

@@ -185,7 +185,7 @@ beforeEach(() => {
         })
       );
     if (url === "/api/enterprise-settings") return new Response("{}");
-    if (url === "/api/manage/admin/user-group")
+    if (url === "/api/manage/admin/user-group?include_users=false")
       return new Response(JSON.stringify(availableGroups));
     throw new Error(`Unexpected request: ${url}`);
   });
@@ -489,8 +489,7 @@ describe("inline server configuration", () => {
     expect(savedRequests).toEqual([]);
   });
 
-  test("saves user approval settings from Configuration without replacing tool policies", async () => {
-    craftAvailable = true;
+  test("saves user approval settings from Configuration without Craft or replacing tool policies", async () => {
     const { saved, dirty } = renderDetailsPage();
     const toggle = await screen.findByRole("switch", {
       name: "Let users manage approval settings",

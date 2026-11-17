@@ -69,7 +69,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      integration: ${{ steps.filter.outputs.integration || 'true' }}
+      integration: ${{ github.event_name != 'pull_request' && 'true' || (steps.filter.outputs.integration == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
       gateway: ${{ steps.filter.outputs.gateway || 'true' }}
       # The live Slack suite shares its workspaces' rate limits across all CI runs,
       # so PRs run it only for related changes. Main and tag runs include it
@@ -89,12 +89,23 @@ jobs:
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
+        id: backend_src
+        if: github.event_name == 'pull_request'
+        with:
+          # `every`: a file matches only if it matches all patterns, so a PR
+          # that changes only unit or external-dependency tests skips this suite.
+          predicate-quantifier: every
+          filters: |
+            backend:
+              - 'backend/**'
+              - '!backend/tests/unit/**'
+              - '!backend/tests/external_dependency_unit/**'
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
         if: github.event_name == 'pull_request'
         with:
           filters: |
             integration:
-              - 'backend/**'
               - 'cli/**'
               - 'deployment/docker_compose/**'
               - '.devcontainer/**'
@@ -196,16 +207,23 @@ jobs:
           if [[ "$ONEDRIVE_CHANGED" == "true" ]]; then
             connector_dirs="$connector_dirs onedrive"
           fi
+          # The chat suites run a second time with code mode on, where the model
+          # calls most tools from `execute_code` programs.
+          code_mode_dirs="chat llm_workflows streaming_endpoints tools mcp_oauth"
           # The daily run covers only the suites that PRs skip by default.
           if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
             tests_dirs="reindex_port"
             connector_dirs=""
+            code_mode_dirs=""
           fi
 
           # Create JSON array with directory info
           all_dirs=""
           for dir in $tests_dirs; do
             all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir\"},"
+          done
+          for dir in $code_mode_dirs; do
+            all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir-code-mode\",\"code_mode\":true},"
           done
           for dir in $connector_dirs; do
             all_dirs="$all_dirs{\"path\":\"connector_job_tests/$dir\",\"name\":\"connector-$dir\"},"
@@ -281,20 +299,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Format branch name for cache
-        id: format-branch
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ -n "${PR_NUMBER}" ]; then
-            CACHE_SUFFIX="${PR_NUMBER}"
-          else
-            # shellcheck disable=SC2001
-            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
-          fi
-          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
@@ -323,14 +327,12 @@ jobs:
           # Any pull_request job can push to the RunsOn ECR cache, so only fork PR runs,
           # which get no secrets, import it. Other runs import only the published image.
           cache-from: |
-            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache-{1}', env.RUNS_ON_ECR_CACHE, github.event.pull_request.head.sha) || '' }}
-            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache-{1}', env.RUNS_ON_ECR_CACHE, steps.format-branch.outputs.cache-suffix) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache-{1}', env.RUNS_ON_ECR_CACHE, runner.arch) || '' }}
             ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache', env.RUNS_ON_ECR_CACHE) || '' }}
             type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-devcontainer:latest
+          # Bound cache tags per architecture, even when many PRs build the same digest.
           cache-to: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache,mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ runner.arch }},mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   integration-tests:
@@ -361,6 +363,9 @@ jobs:
       matrix:
         test-dir: ${{ fromJson(needs.discover-test-dirs.outputs.test-dirs) }}
         edition: ${{ fromJson(needs.discover-test-dirs.outputs.editions) }}
+
+    env:
+      CODE_MODE_ENABLED: ${{ matrix.test-dir.code_mode && 'true' || 'false' }}
 
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
@@ -397,6 +402,7 @@ jobs:
           DISABLE_TELEMETRY=true
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}@${MODEL_SERVER_DIGEST}
           INTEGRATION_TESTS_MODE=true
+          CODE_MODE_ENABLED=${CODE_MODE_ENABLED}
           MCP_SERVER_ENABLED=true
           # The MCP client tests register a mock MCP server on a private/loopback
           # host (TEST_WEB_HOSTNAME); opt in so the SSRF guard allows it. Loopback
@@ -413,7 +419,6 @@ jobs:
           BUILD_MAX_UPLOAD_FILES_PER_SESSION=5
           MAX_EMBEDDED_IMAGES_PER_FILE=50
           USER_LIBRARY_MAX_FILES_PER_UPLOAD=5
-          SKILL_BUNDLE_PER_FILE_MAX_BYTES=1048576
           EOF
 
           # EE-only config
@@ -450,7 +455,7 @@ jobs:
         if: contains(matrix.test-dir.path, 'tests/cli')
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
         with:
-          go-version: "1.27.1"
+          go-version: "1.27.4"
           cache-dependency-path: "cli/go.sum"
 
       - name: Compile CLI binary

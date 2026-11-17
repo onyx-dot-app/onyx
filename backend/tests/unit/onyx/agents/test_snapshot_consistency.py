@@ -110,7 +110,7 @@ def test_message_and_operation_updates_are_visible_together(
     def prepare(_input: StepInput) -> PreparedStep:
         preparing.set()
         assert release.wait(3)
-        return PreparedStep(tools=[tool])
+        return PreparedStep()
 
     def generate(
         request: GenerationRequest, _signal: CancellationSignal

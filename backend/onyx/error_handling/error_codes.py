@@ -88,6 +88,12 @@ class OnyxErrorCode(Enum):
     # A connector edit plan whose pair changed after it was computed. The client
     # computes a new plan.
     EDIT_PLAN_STALE = ("EDIT_PLAN_STALE", 409)
+    # An edit that started from a plugin version older than the newest one.
+    # The client loads the newest version and makes the change again.
+    PLUGIN_VERSION_STALE = ("PLUGIN_VERSION_STALE", 409)
+    # A message sent to a chat that waits for the user's approval. The client
+    # keeps the draft until the user decides the pending requests.
+    APPROVAL_PENDING = ("APPROVAL_PENDING", 409)
 
     # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)
@@ -102,6 +108,9 @@ class OnyxErrorCode(Enum):
     # Payload (413)
     # --------------------------------------------------------------------------
     PAYLOAD_TOO_LARGE = ("PAYLOAD_TOO_LARGE", 413)
+    # A write that would put the caller past the per-user skill limit. The body's
+    # `skill_limit` gives the caller's usage after the write and the limits.
+    SKILL_LIMIT_EXCEEDED = ("SKILL_LIMIT_EXCEEDED", 413)
 
     # --------------------------------------------------------------------------
     # Connector / Credential Errors (400-range)
@@ -116,6 +125,8 @@ class OnyxErrorCode(Enum):
     INTERNAL_ERROR = ("INTERNAL_ERROR", 500)
     NOT_IMPLEMENTED = ("NOT_IMPLEMENTED", 501)
     SERVICE_UNAVAILABLE = ("SERVICE_UNAVAILABLE", 503)
+    # No Firecracker node can start a sandbox VM now; `extra.reason` says why.
+    SANDBOX_CAPACITY_UNAVAILABLE = ("SANDBOX_CAPACITY_UNAVAILABLE", 503)
     BAD_GATEWAY = ("BAD_GATEWAY", 502)
     LLM_PROVIDER_ERROR = ("LLM_PROVIDER_ERROR", 502)
     HOOK_EXECUTION_FAILED = ("HOOK_EXECUTION_FAILED", 502)

@@ -3,7 +3,10 @@ import collections.abc
 import concurrent.futures
 import contextvars
 import copy
+import heapq
+import itertools
 import threading
+import time
 import uuid
 from collections import deque
 from collections.abc import Callable, Coroutine, Iterator, MutableMapping, Sequence
@@ -386,6 +389,63 @@ def run_functions_tuples_in_parallel(
     return [result for index, result in results]
 
 
+class BoundedParallelRunner(Generic[R]):
+    """Runs calls on a thread pool with at most ``max_in_flight`` pending, and
+    hands back their results as they finish.
+
+    ``submit`` waits while the window is full and returns the results that
+    freed it. A producer that submits as it reads therefore overlaps its own
+    work with the calls, and holds at most ``max_in_flight`` results. The
+    caller's contextvars (tenant id, log prefix) ride along, as in the rest of
+    this module. Leaving the ``with`` block cancels the calls that have not
+    started and waits for the running ones.
+    """
+
+    def __init__(self, max_workers: int, max_in_flight: int | None = None) -> None:
+        if max_workers < 1:
+            raise ValueError("max_workers must be at least 1")
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        self._max_in_flight = max(max_in_flight or max_workers, 1)
+        self._pending: set[Future[R]] = set()
+
+    def __enter__(self) -> "BoundedParallelRunner[R]":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self._executor.shutdown(wait=True, cancel_futures=True)
+
+    def submit(self, func: Callable[..., R], *args: Any) -> list[R]:
+        results: list[R] = []
+        while len(self._pending) >= self._max_in_flight:
+            results.extend(self._collect(block=True))
+        future = cast(
+            Future[R],
+            self._executor.submit(contextvars.copy_context().run, func, *args),
+        )
+        self._pending.add(future)
+        return results
+
+    def ready(self) -> list[R]:
+        """The results of the calls that already finished."""
+        return self._collect(block=False)
+
+    def drain(self) -> Iterator[R]:
+        """Every remaining result, as each call finishes."""
+        while self._pending:
+            yield from self._collect(block=True)
+
+    def _collect(self, block: bool) -> list[R]:
+        if not self._pending:
+            return []
+        done, pending = wait(
+            self._pending,
+            timeout=None if block else 0,
+            return_when=FIRST_COMPLETED,
+        )
+        self._pending = pending
+        return [future.result() for future in done]
+
+
 class FunctionCall(Generic[R]):
     """
     Container for run_functions_in_parallel, fetch the results from the output of
@@ -553,6 +613,65 @@ def start_thread_future[T](
     return result
 
 
+class _Timers:
+    """Callbacks due at a time, run on one daemon thread for the whole process."""
+
+    def __init__(self) -> None:
+        self._ready = threading.Condition()
+        # (due time, id) in due order; a cancelled id has no callback left.
+        self._due: list[tuple[float, int]] = []
+        self._callbacks: dict[int, Callable[[], None]] = {}
+        self._ids = itertools.count()
+        self._thread: threading.Thread | None = None
+
+    def call_later(
+        self, delay: float, callback: Callable[[], None]
+    ) -> Callable[[], None]:
+        """Run `callback` with the caller's context after `delay` seconds; returns
+        a function that cancels it.
+
+        All callbacks share one daemon thread, so a timer costs no thread of its
+        own. Use it for short callbacks such as a watchdog; they run one at a
+        time, and an exception is logged.
+        """
+        context = contextvars.copy_context()
+        with self._ready:
+            timer_id = next(self._ids)
+            self._callbacks[timer_id] = lambda: context.run(callback)
+            heapq.heappush(self._due, (time.monotonic() + delay, timer_id))
+            # A forked child has the parent's thread object, but not the thread.
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = start_thread_with_context(
+                    self._run, name="call-later", daemon=True
+                )
+            self._ready.notify()
+
+        def cancel() -> None:
+            with self._ready:
+                self._callbacks.pop(timer_id, None)
+
+        return cancel
+
+    def _run(self) -> None:
+        while True:
+            with self._ready:
+                while not self._due or self._due[0][0] > time.monotonic():
+                    self._ready.wait(
+                        self._due[0][0] - time.monotonic() if self._due else None
+                    )
+                _, timer_id = heapq.heappop(self._due)
+                callback = self._callbacks.pop(timer_id, None)
+            if callback is None:
+                continue
+            try:
+                callback()
+            except Exception:
+                logger.exception("Scheduled callback failed")
+
+
+call_later = _Timers().call_later
+
+
 class TimeoutThread(threading.Thread, Generic[R]):
     def __init__(
         self, timeout: float, func: Callable[..., R], *args: Any, **kwargs: Any
@@ -714,3 +833,243 @@ def parallel_yield_from_funcs(
     yield from parallel_yield(
         [func_wrapper(func) for func in funcs], max_workers=max_workers
     )
+
+
+class PushbackObserver:
+    """Counts the pushback a service's retry wrappers saw, rate limits and
+    server errors alike, for an ``AdaptiveConcurrency`` that paces the work.
+    Set it in ``PUSHBACK_OBSERVER`` for the span of the work. Threads this
+    module starts inherit it."""
+
+    def __init__(self) -> None:
+        self._hits = 0
+        self._lock = threading.Lock()
+
+    def record(self) -> None:
+        with self._lock:
+            self._hits += 1
+
+    def take_hits(self) -> int:
+        with self._lock:
+            hits, self._hits = self._hits, 0
+            return hits
+
+
+PUSHBACK_OBSERVER: contextvars.ContextVar[PushbackObserver | None] = (
+    contextvars.ContextVar("pushback_observer", default=None)
+)
+
+
+def record_pushback() -> None:
+    """For a retry wrapper to call when the service it talks to pushed back."""
+    observer = PUSHBACK_OBSERVER.get()
+    if observer is not None:
+        observer.record()
+
+
+# Workers a fresh adaptive run starts with: enough to make progress, few
+# enough that a rate-limited tenant is not flooded before the first signal.
+ADAPTIVE_INITIAL_WORKERS = 16
+# Each worker is a thread with its own API client, so the cap bounds memory
+# as much as request rate. Pushback, not this cap, should stop growth.
+ADAPTIVE_MAX_WORKERS = 128
+# After a cut, hold the lower limit this long before growth starts again, so
+# one burst of pushback is not answered with a burst of new workers. Pushback
+# in this time does not cut again: it comes from requests that were in flight
+# before the cut.
+ADAPTIVE_COOLDOWN_SECONDS = 5.0
+# Growth is paced by time, not by finished tasks.
+ADAPTIVE_GROW_INTERVAL_SECONDS = 0.25
+# How long the pool waits for a task to end before it reads the limit again.
+ADAPTIVE_POLL_SECONDS = 0.25
+
+
+class AdaptiveConcurrency:
+    """A worker limit that grows by one per interval while the work uses
+    every worker and the service keeps up, and halves on pushback. A job then
+    settles near the rate the service allows, with no fixed guess. Pass a
+    stored ``limit`` as ``initial`` to continue at the pace an earlier run
+    learned.
+
+    The limit grows only when all workers are busy, so it does not climb past
+    a load the service never saw. One cut covers a cooldown: pushback from
+    requests that were already in flight at the cut does not cut again."""
+
+    def __init__(
+        self,
+        observer: PushbackObserver,
+        initial: int = ADAPTIVE_INITIAL_WORKERS,
+        maximum: int = ADAPTIVE_MAX_WORKERS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._observer = observer
+        self._maximum = max(1, maximum)
+        self._limit = max(1, min(initial, self._maximum))
+        self._clock = clock
+        self._cooldown_until = 0.0
+        # The initial limit holds for one interval before the first growth.
+        self._next_growth = clock() + ADAPTIVE_GROW_INTERVAL_SECONDS
+        self._lock = threading.Lock()
+
+    @property
+    def limit(self) -> int:
+        with self._lock:
+            return self._limit
+
+    @property
+    def maximum(self) -> int:
+        return self._maximum
+
+    def observe(self, in_flight: int) -> None:
+        """Cut on pushback, at most once per cooldown. If there is none, grow
+        by one per interval after the cooldown, but only while ``in_flight``
+        (the tasks running now) uses the whole limit."""
+        hits = self._observer.take_hits()
+        now = self._clock()
+        with self._lock:
+            if hits and now < self._cooldown_until:
+                # The burst that caused the last cut. The cut already covers it.
+                return
+            if hits:
+                self._limit = max(1, self._limit // 2)
+                self._cooldown_until = now + ADAPTIVE_COOLDOWN_SECONDS
+                self._next_growth = self._cooldown_until
+                logger.info(
+                    "Adaptive concurrency: %s pushback hits, workers down to %s",
+                    hits,
+                    self._limit,
+                )
+                return
+            if (
+                now < self._next_growth
+                or self._limit >= self._maximum
+                or in_flight < self._limit
+            ):
+                return
+            self._limit += 1
+            self._next_growth = now + ADAPTIVE_GROW_INTERVAL_SECONDS
+
+
+# A unit of work for ``AdaptiveTaskPool``. It may return follow-up tasks,
+# which the pool queues.
+type AdaptiveTask = Callable[[], collections.abc.Iterable[AdaptiveTask] | None]
+
+
+def _run_adaptive_task(
+    context: contextvars.Context, task: AdaptiveTask
+) -> list[AdaptiveTask]:
+    """Runs a task with the context of the thread that started it. A task can
+    return a generator: its body also runs here, in the worker and in that
+    context, and not in the pool's loop."""
+
+    def run() -> list[AdaptiveTask]:
+        return list(task() or ())
+
+    return context.run(run)
+
+
+class AdaptiveTaskPool:
+    """Runs tasks with as many workers as an ``AdaptiveConcurrency`` allows
+    at each moment.
+
+    Keep each task short, for example one page of a listing. The pool reads
+    the pushback and the limit before each task start, so a cut applies
+    within one task's duration. A task that has more to do returns its
+    continuation as a follow-up task. Worker threads are reused across
+    tasks, so a task can keep per-thread state such as an API client.
+
+    ``drain`` stops new starts. ``run`` then returns when the running tasks
+    end, and the tasks not started stay in ``pending_count``. The first
+    failure also stops new starts, and ``run`` raises it after the running
+    tasks end."""
+
+    def __init__(self, concurrency: AdaptiveConcurrency) -> None:
+        self._concurrency = concurrency
+        self._pending: deque[AdaptiveTask] = deque()
+        self._lock = threading.Lock()
+        self._draining = threading.Event()
+
+    @property
+    def limit(self) -> int:
+        """The current worker limit. Store it to start a later pool from it."""
+        return self._concurrency.limit
+
+    @property
+    def pending_count(self) -> int:
+        with self._lock:
+            return len(self._pending)
+
+    def add(self, task: AdaptiveTask) -> None:
+        with self._lock:
+            self._pending.append(task)
+
+    def drain(self) -> None:
+        """Stop new starts. Safe to call from a task."""
+        self._draining.set()
+
+    def _next_task(self) -> AdaptiveTask | None:
+        with self._lock:
+            return self._pending.popleft() if self._pending else None
+
+    def _collect(
+        self, done: collections.abc.Iterable[Future[list[AdaptiveTask]]]
+    ) -> BaseException | None:
+        """Queues the follow-ups of finished tasks. Returns the first failure."""
+        failure: BaseException | None = None
+        for future in done:
+            error = future.exception()
+            if error is None:
+                for follow_up in future.result():
+                    self.add(follow_up)
+            else:
+                failure = failure or error
+        return failure
+
+    def run(self) -> None:
+        running: set[Future[list[AdaptiveTask]]] = set()
+        failure: BaseException | None = None
+        with ThreadPoolExecutor(
+            max_workers=self._concurrency.maximum, thread_name_prefix="adaptive"
+        ) as executor:
+            while True:
+                while failure is None and not self._draining.is_set():
+                    # A task that already failed stops this start.
+                    finished = {future for future in running if future.done()}
+                    if finished:
+                        running -= finished
+                        failure = self._collect(finished)
+                        if failure is not None:
+                            break
+                    # Before each start, so pushback that a running task saw
+                    # cuts the limit that this start reads.
+                    self._concurrency.observe(in_flight=len(running))
+                    if len(running) >= self._concurrency.limit:
+                        break
+                    task = self._next_task()
+                    if task is None:
+                        break
+                    running.add(
+                        executor.submit(
+                            _run_adaptive_task, contextvars.copy_context(), task
+                        )
+                    )
+                if not running:
+                    if (
+                        failure is not None
+                        or self._draining.is_set()
+                        or self.pending_count == 0
+                    ):
+                        break
+                    continue
+                done, _ = wait(
+                    running, timeout=ADAPTIVE_POLL_SECONDS, return_when=FIRST_COMPLETED
+                )
+                running -= done
+                error = self._collect(done)
+                failure = failure or error
+        # A task can record pushback and then drain. No start reads that
+        # pushback, so read it here: a caller that stores ``limit`` for the
+        # next pool gets the cut.
+        self._concurrency.observe(in_flight=0)
+        if failure is not None:
+            raise failure

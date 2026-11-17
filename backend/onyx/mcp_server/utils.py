@@ -122,6 +122,7 @@ async def get_accessible_document_sets(
     try:
         response = await get_http_client().get(
             f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/manage/document-set",
+            params={"searchable_only": "true"},
             headers=headers,
         )
         response.raise_for_status()

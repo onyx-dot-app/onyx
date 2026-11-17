@@ -832,9 +832,9 @@
     },
     "mistral-large-4-0": {
       "cost": {
-        "cache_read": 0.14,
-        "input": 1.3599999999999999,
-        "output": 4.18
+        "cache_read": 0.07,
+        "input": 0.7,
+        "output": 2.0999999999999996
       },
       "limit": {
         "context": 1048576,

@@ -233,3 +233,29 @@ def test_unexpected_member_lookup_errors_are_not_silently_empty(status: int) -> 
     """
     with pytest.raises(GoogleDriveHttpError):
         list_drive_members(_ops(side_effect=_http_error(status)), _DRIVE)
+
+
+def test_an_organizer_that_lists_no_other_drive_comes_first() -> None:
+    """Google's quotas are per user, so drives listed at the same time should
+    list as different users."""
+    members = [
+        _member(f"alpha@{_DOMAIN}", DriveRole.ORGANIZER),
+        _member(f"beta@{_DOMAIN}", DriveRole.ORGANIZER),
+    ]
+
+    def select(busy: set[str]) -> OrganizerChoice:
+        return select_drive_organizer(
+            drive_id=_DRIVE,
+            members=members,
+            google_domain=_DOMAIN,
+            expand_group=lambda _email: [],
+            can_list_drive=lambda _email: True,
+            busy=busy,
+        )
+
+    assert select(set()).email == f"alpha@{_DOMAIN}"
+    assert select({f"alpha@{_DOMAIN}"}).email == f"beta@{_DOMAIN}"
+    # A busy organizer still beats a member with a lower role.
+    both_busy = select({f"alpha@{_DOMAIN}", f"beta@{_DOMAIN}"})
+    assert both_busy.email == f"alpha@{_DOMAIN}"
+    assert both_busy.complete is True

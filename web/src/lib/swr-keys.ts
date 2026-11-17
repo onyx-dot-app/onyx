@@ -100,6 +100,10 @@ export const SWR_KEYS = {
   adminSecuritySettings: "/api/admin/security",
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
   incognitoAvailability: "/api/chat/incognito-availability",
+  chatSessionStatus: (sessionId: string) =>
+    `/api/chat/chat-session/${sessionId}/status`,
+  pendingChatMessages: (sessionId: string) =>
+    `/api/chat/chat-session/${sessionId}/pending-messages`,
   adminSsoProviders: "/api/admin/sso/provider",
   adminSsoProviderHandoff: (providerId: number) =>
     `/api/admin/sso/provider/${providerId}/handoff`,
@@ -263,9 +267,17 @@ export const SWR_KEYS = {
 
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",
+  chatSkills: "/api/skills/chat",
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
+  skillReviewRequests: "/api/skills/review-requests",
+  skillLimitUsers: "/api/skills/users-over-limit",
+  organizationLibraryDefaultAccess:
+    "/api/skills/organization-library/default-access",
+  skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,
+  skillVersion: (skillId: string, versionId: string) =>
+    `/api/skills/custom/${skillId}/versions/${versionId}`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
@@ -513,11 +525,8 @@ export const SWR_KEYS = {
   // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with
   // a prefix predicate so every paginated variant gets refreshed at once.
   personalActionPolicies: "/api/build/action-policies",
-  appActionPolicies: (
-    kind: "external_app" | "mcp_server",
-    targetId: number,
-    admin = false
-  ) => `/api/build/${admin ? "admin/" : ""}action-policies/${kind}/${targetId}`,
+  appActionPolicies: (kind: "external_app" | "mcp_server", targetId: number) =>
+    `/api/action-policies/${kind}/${targetId}`,
   taskActionPolicies: (taskId: string) =>
     `/api/build/scheduled-tasks/${taskId}/action-policies`,
   scheduledTasks: "/api/build/scheduled-tasks",

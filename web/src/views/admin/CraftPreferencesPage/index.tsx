@@ -5,7 +5,7 @@ import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
-import { Button, Card, Badge, Text } from "@opal/components";
+import { Button, Card, Badge, Text, useCreateModal } from "@opal/components";
 import {
   IllustrationContent,
   InputVertical,
@@ -22,7 +22,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
-import { toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
@@ -35,6 +34,7 @@ import {
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
+import SkillPublishingCard from "@/views/admin/CraftPreferencesPage/SkillPublishingCard";
 
 const MAX_INSTRUCTIONS_LENGTH = 4000;
 
@@ -77,7 +77,7 @@ export default function CraftPreferencesPage() {
 
   const [draft, setDraft] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const resetModal = useCreateModal();
 
   // null until the user edits — render the saved value until then.
   const value = draft ?? savedInstructions;
@@ -89,7 +89,6 @@ export default function CraftPreferencesPage() {
     setIsSaving(true);
     try {
       await updateAdminSettings({
-        ...toSettings(settings),
         craft_instructions: instructions.trim() || null,
       });
       await mutate(SWR_KEYS.settings);
@@ -302,7 +301,7 @@ export default function CraftPreferencesPage() {
                     prominence="tertiary"
                     size="sm"
                     disabled={isSaving}
-                    onClick={() => setResetConfirmOpen(true)}
+                    onClick={() => resetModal.toggle(true)}
                   >
                     {t("resetButton.label")}
                   </Button>
@@ -311,6 +310,8 @@ export default function CraftPreferencesPage() {
             </InputVertical>
           </Section>
         </Card>
+
+        <SkillPublishingCard />
 
         <Collapsible
           defaultOpen={false}
@@ -321,18 +322,18 @@ export default function CraftPreferencesPage() {
         </Collapsible>
       </SettingsLayouts.Body>
 
-      {resetConfirmOpen && (
+      <resetModal.Provider>
         <ConfirmationModalLayout
           icon={ADMIN_ROUTES.CRAFT_PREFERENCES.icon}
           title={t("resetModal.header.title")}
-          onClose={isSaving ? undefined : () => setResetConfirmOpen(false)}
+          onClose={isSaving ? undefined : () => resetModal.toggle(false)}
           submit={
             <Button
               variant="danger"
               disabled={isSaving}
               onClick={async () => {
                 if (await save("")) {
-                  setResetConfirmOpen(false);
+                  resetModal.toggle(false);
                 }
               }}
             >
@@ -344,7 +345,7 @@ export default function CraftPreferencesPage() {
         >
           {t("resetModal.body.description")}
         </ConfirmationModalLayout>
-      )}
+      </resetModal.Provider>
       <UnsavedChangesModal
         open={unsavedChanges.confirmationOpen}
         onCancel={unsavedChanges.cancelLeave}

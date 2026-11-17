@@ -3,7 +3,21 @@
  * `backend/onyx/server/features/skill/models.py`.
  */
 
-export type SkillInstallationPolicy = "AVAILABLE" | "DEFAULT" | "REQUIRED";
+export type SkillInstallationPolicy =
+  | "AVAILABLE"
+  | "DEFAULT"
+  | "REQUIRED"
+  | "NOT_AVAILABLE";
+
+/** A marketplace default cannot be REQUIRED. */
+export type OrganizationLibraryDefaultPolicy = Exclude<
+  SkillInstallationPolicy,
+  "REQUIRED"
+>;
+
+export interface OrganizationLibraryDefaultAccess {
+  installation_policy: OrganizationLibraryDefaultPolicy;
+}
 
 export type SkillSource = "builtin" | "custom";
 export type SkillAccessLevel = "OWNER" | "EDITOR" | "VIEWER";
@@ -21,6 +35,16 @@ export interface SkillGroupShare {
   group_id: number;
   group_name: string;
   permission: SkillSharePermission;
+}
+
+/** One group row of a skill: a share, a group install setting, or both. */
+export interface SkillGroupSummary {
+  group_id: number;
+  group_name: string;
+  /** Null for a row that holds only a setting. */
+  permission: SkillSharePermission | null;
+  /** Null: the group uses the organization setting. */
+  installation_policy: SkillInstallationPolicy | null;
 }
 
 export interface SkillExternalAppDependency {
@@ -44,7 +68,16 @@ export interface Skill {
   is_personal: boolean;
   enabled: boolean;
   can_toggle: boolean;
-  installation_policy: SkillInstallationPolicy;
+  /** The skill's own Organization setting. Null: Default access applies. */
+  installation_policy: SkillInstallationPolicy | null;
+  /** The Default access that applies when the skill has no own setting. */
+  default_installation_policy: SkillInstallationPolicy | null;
+  /** The caller can delete the skill. A published skill or one required for
+   * anyone needs an organization-wide skill manager. */
+  can_delete: boolean;
+  /** The setting for the current user is REQUIRED, from the company setting
+   * or one of their groups. */
+  required_for_user: boolean;
   author_user_id: string | null;
   author_email: string | null;
   owner: {
@@ -56,9 +89,19 @@ export interface Skill {
   updated_at: string | null;
   user_shares: SkillUserShare[];
   group_shares: SkillGroupShare[];
+  /** The group rows the caller may see; empty for other members. */
+  group_summaries: SkillGroupSummary[];
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
   external_app: SkillExternalAppDependency | null;
+  /** Newest plugin version of a custom skill. Edits send it back as
+   * `base_version_id`, so a save over a newer version gets a 409. */
+  current_version_id: string | null;
+  current_version_number: number | null;
+  /** The version the organization runs. Null while the skill is private. */
+  published_version_number: number | null;
+  /** The version that waits for an admin's review. */
+  pending_version_number: number | null;
 }
 
 export type BuiltinSkill = Skill & {
@@ -69,6 +112,15 @@ export type BuiltinSkill = Skill & {
 export type CustomSkill = Skill & {
   source: "custom";
 };
+
+/** A custom skill that chat agents get, at the version the user runs. */
+export interface ChatSkill {
+  name: string;
+  description: string;
+  /** `metadata.short-description` in the SKILL.md frontmatter. */
+  short_description: string | null;
+  version_id: string;
+}
 
 export interface SkillsList {
   builtins: Skill[];
@@ -89,6 +141,34 @@ export type SkillEditableDetail = CustomSkill & {
   instructions_markdown: string;
   files: SkillBundleFile[];
 };
+
+export type SkillVersionReviewStatus = "draft" | "pending" | "published";
+
+export interface SkillVersion {
+  id: string;
+  version_number: number;
+  created_at: string;
+  created_by_email: string | null;
+  is_current: boolean;
+  review_status: SkillVersionReviewStatus;
+}
+
+export interface SkillVersionPreview {
+  description: string;
+  instructions_markdown: string;
+}
+
+export interface SkillReviewRequest {
+  skill_id: string;
+  name: string | null;
+  version_id: string;
+  version_number: number;
+  /** Null for a first publish. */
+  published_version_number: number | null;
+  author_email: string | null;
+  /** When the version was saved. */
+  version_created_at: string;
+}
 
 export interface SkillBundleFile {
   path: string;

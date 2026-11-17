@@ -7,7 +7,55 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { Tag } from "@/lib/types";
 import type { InputDateRangePickerValue } from "@opal/components";
-import type { SearchFilters } from "@/lib/searchFilters/types";
+import type {
+  SearchFilters,
+  SearchFiltersRequest,
+} from "@/lib/searchFilters/types";
+import type { MinimalAgent } from "@/lib/agents/types";
+import type { ChatSearchFilters } from "@/lib/tools/types";
+import { useAvailableSources } from "@/lib/connectors/hooks";
+import { getConfiguredSources } from "@/lib/connectors/utils";
+import {
+  agentDeclaresOwnSources,
+  buildFilters,
+  effectiveAvailableSourcesFor,
+  selectedSourcesFrom,
+} from "@/lib/searchFilters/utils";
+
+/**
+ * The search filters a chat sends, built from its stored selection against
+ * the sources the agent can reach. A send and a saved tool selection both
+ * read this, so a turn the server starts searches the same scope.
+ *
+ * An explicit source selection resolves only against a complete roster:
+ * `settled` allows stale data (a failed revalidation must not drop a
+ * restriction) but never a partial first load, which would narrow the
+ * search wrongly. Until then no source filter is sent. An agent declaring its
+ * own knowledge_sources carries its complete roster and never waits.
+ */
+export function useChatSearchFiltersRequest(
+  agent: MinimalAgent | undefined,
+  filters: ChatSearchFilters
+): SearchFiltersRequest {
+  const { availableSources, settled } = useAvailableSources();
+  return useMemo(() => {
+    const sources =
+      agent && (settled || agentDeclaresOwnSources(agent))
+        ? selectedSourcesFrom(
+            filters,
+            getConfiguredSources(
+              effectiveAvailableSourcesFor(agent, availableSources)
+            )
+          )
+        : null;
+    return buildFilters(
+      sources,
+      filters.documentSets,
+      filters.timeRange ? { from: filters.timeRange.from } : null,
+      filters.tags
+    );
+  }, [agent, settled, availableSources, filters]);
+}
 
 export function useSearchFilters(): SearchFilters {
   const [timeRange, setTimeRange] = useState<InputDateRangePickerValue | null>(

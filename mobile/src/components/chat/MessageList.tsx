@@ -1,13 +1,14 @@
 // Top-anchored FlashList mirroring web (short chats read top→down). Streaming auto-follow, the
 // scroll-up-to-pause behavior, and the floating jump chevron all live in useChatAutoScroll; it honors
 // the app-wide autoScroll setting.
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Pressable, View } from "react-native";
 import { FlashList, FlashListRef } from "@shopify/flash-list";
 
 import { Message } from "@/chat/interfaces";
 import { MinimalAgent } from "@/chat/agents";
 import { contentSignature } from "@/chat/autoScroll";
+import { useToolApprovalUi } from "@/chat/toolApprovals";
 import { MessageRow } from "@/components/chat/MessageRow";
 import { Icon } from "@/components/ui/icon";
 import { useChatAutoScroll } from "@/hooks/useChatAutoScroll";
@@ -48,6 +49,15 @@ export function MessageList({ messages, agent }: MessageListProps) {
     enabled: autoScrollEnabled,
     contentSignature: contentSignature(messages),
   });
+
+  // A blocked send points at the waiting approval card, which ends the latest turn.
+  const approvalNudge = useToolApprovalUi((state) => state.nudgeSeq);
+  const seenNudge = useRef(approvalNudge);
+  useEffect(() => {
+    if (approvalNudge === seenNudge.current) return;
+    seenNudge.current = approvalNudge;
+    scrollToBottom();
+  }, [approvalNudge, scrollToBottom]);
 
   // `key` is load-bearing. FlashList pools its ViewHolder React keys and re-hands them to different
   // items, so an unkeyed row inherits a scrolled-away turn's state — timeline expansion, active

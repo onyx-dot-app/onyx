@@ -49,7 +49,8 @@ def test_credential_upsert_refreshes_only_the_calling_user(
 
     calls: list[set[UUID]] = []
     monkeypatch.setattr(
-        api, "push_skills_for_users", lambda user_ids, _db: calls.append(set(user_ids))
+        "onyx.skills.push.push_skills_for_users",
+        lambda user_ids, _db: calls.append(set(user_ids)),
     )
 
     api.upsert_user_credentials(
@@ -100,8 +101,7 @@ def test_disconnect_clears_associated_skill_preferences_only(
 
     calls: list[set[UUID]] = []
     monkeypatch.setattr(
-        api,
-        "push_skills_for_users",
+        "onyx.skills.push.push_skills_for_users",
         lambda user_ids, _db: calls.append(set(user_ids)),
     )
 
@@ -216,8 +216,7 @@ def test_admin_toggle_updates_app_and_refreshes_affected_sandboxes(
     calls: list[set[UUID]] = []
     monkeypatch.setattr(api, "MULTI_TENANT", False)
     monkeypatch.setattr(
-        api,
-        "push_skills_for_users",
+        "onyx.skills.push.push_skills_for_users",
         lambda user_ids, _db: calls.append(set(user_ids)),
     )
 
@@ -297,7 +296,7 @@ def test_delete_detaches_custom_skill_and_clears_enablement(
     db_session.commit()
 
     assert skill_id in {
-        runtime_skill.id
+        runtime_skill.skill.id
         for runtime_skill in list_runtime_skills_for_user(
             user=test_user,
             db_session=db_session,
@@ -330,7 +329,7 @@ def test_delete_detaches_custom_skill_and_clears_enablement(
         is None
     )
     assert skill_id not in {
-        runtime_skill.id
+        runtime_skill.skill.id
         for runtime_skill in list_runtime_skills_for_user(
             user=test_user,
             db_session=db_session,

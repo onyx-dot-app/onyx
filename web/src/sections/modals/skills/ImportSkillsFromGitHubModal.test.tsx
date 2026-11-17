@@ -20,6 +20,12 @@ jest.mock("@/providers/UserProvider", () => ({
   useUser: jest.fn(),
 }));
 
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({
+    isGlobalHolder: jest.mocked(useUser)().isAdmin,
+    isScopedManager: false,
+  }),
+}));
 jest.mock("@/sections/modals/skills/ShareSkillModal", () => ({
   __esModule: true,
   default: ({

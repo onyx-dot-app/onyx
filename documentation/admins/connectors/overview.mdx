@@ -47,6 +47,19 @@ The **Document Access** setting controls who can see the Connector's documents i
 **Specific Groups** (Private): Only the user who created the Connector and the User Groups you name can see its data.
 User Groups need a Business plan or higher.
 
+**Only Me**: Only the Onyx user who owns the Connector's credential can see its data through this Connector.
+If you pick a credential that another user shared with you, that user is the one who sees the data, not you.
+For a source that uses no credential, such as File or Web, the user who created the Connector sees its data.
+This option needs a Business plan or higher.
+
+A document that another Connector also indexes is visible to that Connector's readers too. For example,
+if a public Connector indexes the same document, every user can see it.
+
+<Warning>
+  If the workspace moves to the Community Edition, **Only Me** Connectors become public,
+  like all other non-public Connectors.
+</Warning>
+
 **Sync with the source**: Onyx copies the permissions from the source.
 Each user only sees documents they can open in the source.
 You can also **Restrict Access to Groups** so that only members of selected groups see the documents.
@@ -87,6 +100,7 @@ Permission syncing is available for these Connectors:
 - Slack (the indexed Slack Connector, not Federated Slack)
 - GitHub
 - Box
+- Egnyte
 - Canvas
 - SharePoint (certificate-based authentication)
 - OneDrive
@@ -197,6 +211,8 @@ The **Manage Index** menu has these actions:
 - **Update Index**: pull updates and index documents since the last successful run.
 - **Sync Permissions**: pull document permissions from the source (permission-synced Connectors).
 - **Full Re-index**: re-index all documents from the source. This can take hours or days on a large source.
+  Not available while a re-index that switches after re-indexing builds the new index (see [Search
+  Configs](/admins/advanced_configs/search_configs)).
 - **Pause Indexing & Syncs** / **Resume Indexing & Syncs**: stop or restart indexing runs and permission syncs.
   Indexed documents stay searchable while paused.
 - **Delete Connector**: permanently remove the Connector and the documents only it indexed.

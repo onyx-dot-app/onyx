@@ -493,7 +493,12 @@ def test_no_proxy_is_loopback_only(pod: client.V1Pod) -> None:
     """Only loopback may bypass the proxy; the Onyx API host must route through
     it so the PAT can be injected on the wire."""
     env = {e.name: e.value for e in _container(pod, "sandbox").env}
-    assert set(env["NO_PROXY"].split(",")) == {"127.0.0.1", "localhost", "::1"}
+    assert set(env["NO_PROXY"].split(",")) == {
+        "127.0.0.1",
+        "localhost",
+        "::1",
+        "[::1]",
+    }
     assert env["no_proxy"] == env["NO_PROXY"]
 
 
@@ -524,6 +529,13 @@ def test_proxy_env_is_set_on_sandbox_and_sidecar(pod: client.V1Pod) -> None:
         assert _PROXY_ENV_NAMES.issubset(env), (
             f"{name} container missing proxy env: {_PROXY_ENV_NAMES - env}"
         )
+
+
+def test_node_fetch_uses_proxy_env(pod: client.V1Pod) -> None:
+    """Node's built-in fetch ignores HTTPS_PROXY unless NODE_USE_ENV_PROXY=1."""
+    for container in (_container(pod, "sandbox"), _sidecar(pod)):
+        env = {e.name: e.value for e in container.env}
+        assert env.get("NODE_USE_ENV_PROXY") == "1", container.name
 
 
 def test_snapshot_storage_credentials_are_not_in_pod_env(pod: client.V1Pod) -> None:

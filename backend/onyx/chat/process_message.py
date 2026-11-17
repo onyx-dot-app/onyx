@@ -4,16 +4,22 @@ An overview can be found in the README.md file in this directory.
 """
 
 import re
+from collections.abc import Callable
 from concurrent.futures import Future
 from functools import partial
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.agents.compaction import is_input_context
+from onyx.agents.models import RunStatus
+from onyx.auth.permissions import has_global_permission
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
     ChatTurnAdmission,
+    is_chat_session_processing,
 )
 from onyx.chat.chat_utils import (
     capture_chat_history,
@@ -22,7 +28,7 @@ from onyx.chat.chat_utils import (
     is_last_assistant_message_clarification,
 )
 from onyx.chat.errors import chat_error
-from onyx.chat.execution import start_chat_turn
+from onyx.chat.execution import chat_turn_work, host_agent_work, start_chat_turn
 from onyx.chat.files import (
     collect_available_file_ids,
     convert_loaded_files_to_chat_files,
@@ -32,26 +38,35 @@ from onyx.chat.files import (
     load_context_user_files_for_tools,
     resolve_context_user_files,
 )
-from onyx.chat.history_store import get_chat_history_store
+from onyx.chat.history_store import RedisChatHistoryStore
 from onyx.chat.incognito import (
     content_free_file_descriptors,
     incognito_llm_request_policy,
 )
 from onyx.chat.incognito_context import incognito_session_ended
+from onyx.chat.mention_models import AcceptedPicks
 from onyx.chat.models import (
     AnswerStream,
-    ChatBasicResponse,
     ChatFullResponse,
+    ChatInbox,
     ChatResponseOutcome,
     ChatTurnSetup,
     CreateChatSessionID,
     PersonaPromptConfig,
+    QueuedChatTurn,
     ReservedChatResponse,
     ToolCallResponse,
+    picked_skill_messages,
 )
+from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.prompt_utils import (
     calculate_reserved_tokens,
     get_default_base_system_prompt,
+)
+from onyx.chat.run_store import (
+    RETRYABLE_START_ERRORS,
+    fail_suspended_response,
+    interrupt_ownerless_responses,
 )
 from onyx.chat.stream_buffer import ChatStream
 from onyx.configs.chat_configs import CHAT_RESPONSE_WAIT_TIMEOUT_S
@@ -60,7 +75,6 @@ from onyx.configs.constants import (
     MessageType,
     MilestoneRecordType,
 )
-from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (
     checkpoint_from_summary,
     create_new_chat_message,
@@ -68,14 +82,27 @@ from onyx.db.chat import (
     get_chat_session_by_id,
     load_message_branch,
     reserve_chat_response_ids,
+    reserve_stream_id,
+    set_response_model_names__no_commit,
 )
-from onyx.db.document_set import filter_document_set_names_by_user_access
+from onyx.db.chat_checkpoint import parked_response_settings
+from onyx.db.chat_inputs import (
+    START_FAILED_MESSAGE,
+    accept_queued_turn__no_commit,
+    fail_inbox_start__no_commit,
+    fail_response_start__no_commit,
+    read_chat_inbox,
+)
+from onyx.db.document_set import require_document_set_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import HookPoint, record_mode_persists_content
+from onyx.db.enums import HookPoint, Permission, record_mode_persists_content
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatSession, User
+from onyx.db.skill import list_chat_skills
 from onyx.db.tools import capture_persona_tool_configuration, get_tools
 from onyx.db.user_file import capture_user_file_metadata, prepare_chat_file_inputs
+from onyx.db.users import fetch_user_by_id
+from onyx.deep_research.agent import MIN_RESEARCH_CONTEXT_TOKENS
 from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
 )
@@ -92,56 +119,65 @@ from onyx.llm.factory import (
     get_llm_token_counter,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.model_capabilities import model_identity_names
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride
+from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
-from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
 from onyx.server.query_and_chat.models import (
+    MessageOrigin,
     MessageResponseIDInfo,
+    ModelResponseSlot,
+    MultiModelMessageResponseIDInfo,
     SendMessageRequest,
+    response_id_info,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    AgentResponseDelta,
-    AgentResponseStart,
-    CitationInfo,
+    AWAITING_APPROVAL,
+    OverallStop,
     Packet,
     StreamingError,
+    ToolApprovalRequest,
+    ToolApprovalResolved,
 )
-from onyx.server.query_and_chat.token_limit import check_model_spend_limits
+from onyx.server.query_and_chat.token_limit import (
+    check_model_spend_limits,
+    check_token_rate_limits,
+)
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
-from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
+from onyx.skills.chat import accept_picked_skills, render_skills_catalog
+from onyx.tools.constants import (
+    CODING_AGENT_TOOL_ID,
+    FILE_READER_TOOL_ID,
+    SEARCH_TOOL_ID,
+)
 from onyx.tools.models import SearchToolUsage
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    sandbox_tools_for_model,
+)
+from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
+from onyx.utils.threadpool_concurrency import call_later, start_thread_future
 from onyx.utils.timing import log_function_time, log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
-APPROX_CHARS_PER_TOKEN = 4
+# Delays before each retry of a resume whose start failed for a moment.
+RESUME_RETRY_DELAYS_S = (1.0, 2.0, 4.0, 8.0, 16.0)
 
 
 def _load_session(
     request: SendMessageRequest, user: User, db_session: Session
 ) -> ChatSession:
     filters = request.internal_search_filters
-    if (
-        not user.is_anonymous
-        and filters is not None
-        and filters.document_set is not None
-    ):
-        accessible_names = filter_document_set_names_by_user_access(
-            db_session=db_session, document_set_names=filters.document_set, user=user
-        )
-        unauthorized = sorted(set(filters.document_set) - set(accessible_names))
-        if unauthorized:
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                f"User does not have access to document sets: {unauthorized}",
-            )
+    require_document_set_access(
+        db_session, filters.document_set if filters else None, user
+    )
 
     session_id = request.chat_session_id
     if session_id is None:
@@ -161,26 +197,6 @@ def _load_session(
         user_id=user.id,
         db_session=db_session,
         project_id=chat_session.project_id,
-    )
-    persona = chat_session.persona
-    tenant_id = get_current_tenant_id()
-    # Record the user's first chat for milestone tracking.
-    mt_cloud_telemetry(
-        tenant_id=tenant_id,
-        distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
-        event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
-    )
-    mt_cloud_telemetry(
-        tenant_id=tenant_id,
-        distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
-        event=MilestoneRecordType.USER_MESSAGE_SENT,
-        properties={
-            "origin": request.origin.value,
-            "has_files": len(request.file_descriptors) > 0,
-            "has_project": chat_session.project_id is not None,
-            "has_persona": persona is not None and persona.id != DEFAULT_PERSONA_ID,
-            "deep_research": request.deep_research,
-        },
     )
 
     return chat_session
@@ -228,12 +244,13 @@ def _select_models(
     return selected_models
 
 
-def _process_query(
+def process_chat_query(
     message_text: str,
     chat_session: ChatSession,
     user: User,
     db_session: Session,
 ) -> str:
+    """Apply query hooks before user text enters chat history or the pending queue."""
     # The hook sends query text and email externally; respect content egress policy.
     mode = chat_session.incognito_record_mode
     if not message_text.strip() or (mode is not None and not mode.fires_hooks):
@@ -270,16 +287,204 @@ def prepare_chat_turn(
     mcp_headers: dict[str, str] | None = None,
     slack_context: SlackContext | None = None,
     additional_context: str | None = None,
+    queued_turn: QueuedChatTurn | None = None,
+    agent_host: bool = False,
+    ask_for_approval: bool = True,
+    resumed_response_id: int | None = None,
+    parked_agent_response_id: int | None = None,
+    handed_admission: ChatTurnAdmission | None = None,
+    on_reserved: Callable[
+        [CreateChatSessionID | MessageResponseIDInfo | MultiModelMessageResponseIDInfo],
+        None,
+    ]
+    | None = None,
 ) -> ChatTurnSetup:
-    """Capture configuration, load files, then reserve responses before execution."""
-    admission = ChatTurnAdmission(
+    """Capture configuration, load files, then reserve responses before execution.
+
+    A queued turn starts from its accepted question: a submitted message, or a
+    hidden AGENT_RESULTS message whose response's first step receives the results.
+    It accepts the question and reserves its response right after admission, so a
+    later failure saves an error response that pauses the queue.
+
+    An agent host adds no messages. Its setup belongs to the selected response,
+    the request's parent, and its agents run with that configuration.
+
+    A turn that continues the suspended `resumed_response_id`, the request's
+    parent, adds no messages either. It prepares that response's question
+    again, and streams under a new stream ID.
+
+    A parked run continues with the model, tools and search filters that its
+    checkpoint saved: the resumed response, or `parked_agent_response_id`, an
+    agent run that the agent host resumes.
+
+    `handed_admission` is the admission that the previous turn handed over
+    when it ended (`ChatTurnAdmission.release`); the turn claims none.
+
+    `on_reserved` receives a send's ID packets, a created session first, once
+    its question and responses are saved with their content, so a later
+    preparation failure can still name the saved turn.
+    """
+    results_turn = queued_turn is not None and queued_turn.message is None
+    # Turns that the server starts use the chat's current tools and model.
+    server_started = (
+        queued_turn is not None or agent_host or resumed_response_id is not None
+    )
+    admission = handed_admission or ChatTurnAdmission(
         get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
     )
+    response_ids: list[int] = []
     try:
         with get_session_with_current_tenant() as db_session:
             chat_session = _load_session(new_msg_req, user, db_session)
             # Reserve the session before model setup or changes to its message tree.
-            admission.claim(chat_session.id)
+            if handed_admission is None:
+                admission.claim(chat_session.id)
+            else:
+                admission.check_owner(chat_session.id)
+            parked_response_id = (
+                resumed_response_id
+                if resumed_response_id is not None
+                else parked_agent_response_id
+            )
+            parked_model, parked_selection = (
+                parked_response_settings(db_session, parked_response_id)
+                if parked_response_id is not None
+                else (None, None)
+            )
+            # Other turns that the server starts use the chat's current tools
+            # and filters.
+            saved_selection = parked_selection or chat_session.tool_selection
+            if server_started and saved_selection is not None:
+                new_msg_req = SendMessageRequest.model_validate(
+                    new_msg_req.model_dump() | saved_selection.model_dump()
+                )
+            if parked_selection is not None:
+                # Document-set access can end while a run is parked.
+                filters = parked_selection.internal_search_filters
+                require_document_set_access(
+                    db_session, filters.document_set if filters else None, user
+                )
+            runs_parked_model = (
+                new_msg_req.llm_override is None and parked_model is not None
+            )
+            if runs_parked_model:
+                new_msg_req = new_msg_req.model_copy(
+                    update={"llm_override": parked_model}
+                )
+            alternate_model = (
+                (chat_session.current_alternate_model or "").split("__")
+                if server_started and new_msg_req.llm_override is None
+                else []
+            )
+            if len(alternate_model) >= 3:
+                # Without its own model, a turn the server starts uses the model
+                # the picker last sent with: name__provider__model[__mc:id].
+                provider_name, _provider, *model_parts = alternate_model
+                configuration_id = (
+                    int(model_parts.pop()[3:])
+                    if len(model_parts) > 1 and re.fullmatch(r"mc:\d+", model_parts[-1])
+                    else None
+                )
+                new_msg_req = new_msg_req.model_copy(
+                    update={
+                        "llm_override": LLMOverride(
+                            model_provider=provider_name,
+                            model_version="__".join(model_parts),
+                            model_configuration_id=configuration_id,
+                        )
+                    }
+                )
+            chat_history, parent_message = load_message_branch(
+                chat_session.id,
+                new_msg_req.parent_message_id,
+                db_session,
+                # A parked response, or the branch of a parked agent run, can
+                # be off the selected branch.
+                any_branch=resumed_response_id is not None or agent_host,
+            )
+            if (
+                not server_started
+                and parent_message.response_status == RunStatus.SUSPENDED
+            ):
+                # The route checked before the response parked and released
+                # admission; a send does not attach under a parked response.
+                raise OnyxError(
+                    OnyxErrorCode.APPROVAL_PENDING,
+                    "Approve or reject the pending requests before you send a message",
+                )
+            stream_id: int | None = None
+            if resumed_response_id is not None:
+                if parent_message.id != resumed_response_id or len(chat_history) < 2:
+                    raise ValueError("The resumed response is not the request's parent")
+                chat_history.pop()
+                parent_message = chat_history[-1]
+                check_token_rate_limits(user)
+                response_ids = [resumed_response_id]
+                stream_id = reserve_stream_id(db_session)
+            accepted_text = None
+            if queued_turn is not None:
+                # Submitted input already passed the hook before entering the queue.
+                accepted_text = new_msg_req.message
+                accept_queued_turn__no_commit(db_session, chat_session.id, queued_turn)
+                chat_history.append(
+                    create_new_chat_message(
+                        chat_session_id=chat_session.id,
+                        parent_message=parent_message,
+                        message=accepted_text,
+                        # Use one tokenizer for stored counts, including after model switches.
+                        token_count=len(
+                            get_tokenizer(None, None).encode(accepted_text)
+                        ),
+                        message_type=MessageType.AGENT_RESULTS
+                        if results_turn
+                        else MessageType.USER,
+                        db_session=db_session,
+                        commit=False,
+                    )
+                )
+                # The model name is known after selection.
+                response_ids = reserve_chat_response_ids(
+                    db_session=db_session,
+                    chat_session_id=chat_session.id,
+                    parent_message_id=chat_history[-1].id,
+                    model_display_names=[""],
+                )
+                # Write access can end while a message waits; the error response
+                # pauses the queue instead of retrying the turn.
+                if not has_global_permission(user, Permission.WRITE_CHAT):
+                    raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+                # Document-set access can end too; check the saved filters again.
+                filters = new_msg_req.internal_search_filters
+                require_document_set_access(
+                    db_session, filters.document_set if filters else None, user
+                )
+                check_token_rate_limits(user)
+            elif agent_host:
+                # Hosted agents spend the owner's budget for every model.
+                check_token_rate_limits(user)
+                response_ids = [parent_message.id]
+            if not results_turn and not agent_host and resumed_response_id is None:
+                persona = chat_session.persona
+                tenant_id = get_current_tenant_id()
+                # Record the user's first chat for milestone tracking.
+                mt_cloud_telemetry(
+                    tenant_id=tenant_id,
+                    distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
+                    event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
+                )
+                mt_cloud_telemetry(
+                    tenant_id=tenant_id,
+                    distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
+                    event=MilestoneRecordType.USER_MESSAGE_SENT,
+                    properties={
+                        "origin": new_msg_req.origin.value,
+                        "has_files": len(new_msg_req.file_descriptors) > 0,
+                        "has_project": chat_session.project_id is not None,
+                        "has_persona": persona is not None
+                        and persona.id != DEFAULT_PERSONA_ID,
+                        "deep_research": new_msg_req.deep_research,
+                    },
+                )
             selected_models = _select_models(
                 new_msg_req,
                 chat_session,
@@ -288,14 +493,106 @@ def prepare_chat_turn(
                 litellm_additional_headers,
                 db_session,
             )
-            token_counter = get_llm_token_counter(selected_models[0][0])
-            chat_history, parent_message = load_message_branch(
-                chat_session.id, new_msg_req.parent_message_id, db_session
+            if (
+                runs_parked_model
+                and parked_model is not None
+                and selected_models[0][0].config.model_configuration_id
+                != parked_model.model_configuration_id
+            ):
+                # Selection falls back to the default model when the saved one
+                # is gone or its provider is no longer available to the user;
+                # a parked run continues only on its own model.
+                raise OnyxError(
+                    OnyxErrorCode.NOT_FOUND,
+                    "The model that this response ran on is no longer available",
+                )
+            if new_msg_req.deep_research:
+                # Validate before the user message is saved.
+                if chat_session.incognito_record_mode is not None:
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_REQUEST,
+                        "Deep research is not available in incognito. Start a normal chat to use it.",
+                    )
+                if chat_session.project_id:
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_REQUEST,
+                        "Deep research is not supported for projects",
+                    )
+                if any(
+                    llm.config.max_input_tokens < MIN_RESEARCH_CONTEXT_TOKENS
+                    for llm, _ in selected_models
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_REQUEST,
+                        "Deep research requires a model with at least 50,000 input tokens",
+                    )
+            if (
+                chat_session.incognito_record_mode is not None
+                and new_msg_req.preferred_tool_id is not None
+                and any(
+                    tool.id == new_msg_req.preferred_tool_id
+                    and tool.in_code_tool_id == CODING_AGENT_TOOL_ID
+                    for tool in chat_session.persona.tools
+                )
+            ):
+                # Incognito offers no coding agent; reject before the question is saved.
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "The Coding Agent is not available in incognito. Start a normal chat to use it.",
+                )
+            # One sandbox serves one user, and anonymous visitors share one
+            # user. Incognito cleanup does not reach the sandbox's files. Two
+            # models must not change one session directory at once. Bots
+            # get no sandbox until they have service-account sandboxes.
+            sandbox_tools = (
+                HARNESS_SANDBOX_ENABLED
+                and not user.is_anonymous
+                and new_msg_req.origin
+                not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
+                and chat_session.incognito_record_mode is None
+                and len(selected_models) == 1
             )
-            accepted_text = None
+            # One read serves the catalog's context reservation and the skills
+            # that an accepted question picked.
+            chat_skills = list_chat_skills(db_session, user)
+            # A question records its picks when it is accepted, after the
+            # checks that can reject it; regeneration reuses the record.
+            accepts_question = queued_turn is not None or (
+                not agent_host and parent_message.message_type != MessageType.USER
+            )
+            picks = (
+                accept_picked_skills(
+                    [new_msg_req.mentions], chat_skills, user.id, db_session
+                )[0]
+                if accepts_question
+                else AcceptedPicks()
+            )
+            mentions = picks.mentions if accepts_question else parent_message.mentions
+            if queued_turn is not None:
+                # A queued question is saved before its checks, so that a
+                # failed check answers it.
+                if picks.mentions:
+                    chat_history[-1].mentions = picks.mentions
+                    chat_history[-1].skill_messages = picks.skill_messages
+                set_response_model_names__no_commit(
+                    db_session,
+                    {
+                        response_id: display_name
+                        for response_id, (_, display_name) in zip(
+                            response_ids, selected_models, strict=True
+                        )
+                    },
+                )
+                db_session.commit()
+            token_counter = get_llm_token_counter(selected_models[0][0])
             # Regeneration reuses the user message and its accepted query.
-            if parent_message.message_type != MessageType.USER:
-                accepted_text = _process_query(
+            if (
+                queued_turn is None
+                and not agent_host
+                and resumed_response_id is None
+                and parent_message.message_type != MessageType.USER
+            ):
+                accepted_text = process_chat_query(
                     new_msg_req.message, chat_session, user, db_session
                 )
                 # Use one tokenizer for stored counts, including after model switches.
@@ -315,12 +612,55 @@ def prepare_chat_turn(
                         if keeps_content
                         else content_free_file_descriptors(new_msg_req.file_descriptors)
                     ),
+                    mentions=picks.mentions,
+                    # Skill messages are conversation content.
+                    skill_messages=picks.skill_messages if keeps_content else None,
                     db_session=db_session,
-                    commit=True,
+                    commit=False,
                 )
                 chat_history.append(user_message)
+                # The question and its responses are saved together, so a later
+                # preparation failure saves an error response that queued input
+                # can follow.
+                response_ids = reserve_chat_response_ids(
+                    db_session=db_session,
+                    chat_session_id=chat_session.id,
+                    parent_message_id=user_message.id,
+                    model_display_names=[name for _, name in selected_models],
+                )
+                # A content-free question has no saved text to continue from,
+                # so its failure stays a rejected send.
+                if on_reserved is not None and keeps_content:
+                    if new_msg_req.chat_session_id is None:
+                        on_reserved(
+                            CreateChatSessionID(
+                                chat_session_id=chat_session.id,
+                                incognito=chat_session.incognito_record_mode
+                                is not None,
+                            )
+                        )
+                    on_reserved(
+                        response_id_info(
+                            user_message.id,
+                            [
+                                ModelResponseSlot(
+                                    message_id=response_id, model_name=name
+                                )
+                                for response_id, (_, name) in zip(
+                                    response_ids, selected_models, strict=True
+                                )
+                            ],
+                            mentions,
+                        )
+                    )
             persona = chat_session.persona
-            user_message_id = chat_history[-1].id
+            response_parent_id = chat_history[-1].id
+            # Clients render no question for a follow-up response.
+            user_message_id = (
+                None
+                if results_turn or agent_host or resumed_response_id is not None
+                else response_parent_id
+            )
             context_user_files = capture_user_file_metadata(
                 resolve_context_user_files(
                     persona, chat_session.project_id, user.id, db_session
@@ -361,10 +701,28 @@ def prepare_chat_turn(
                         if persona.replace_base_system_prompt
                         else ""
                     )
-                    + (custom_prompt or ""),
+                    + (custom_prompt or "")
+                    + (
+                        render_skills_catalog(
+                            chat_skills,
+                            min(
+                                llm.config.max_input_tokens
+                                for llm, _ in selected_models
+                            ),
+                        )
+                        or ""
+                    ),
                     memory.user_info.placeholder_values,
                 ),
                 token_counter=token_counter,
+                sandbox_tools=sandbox_tools_for_model(
+                    model_identity_names(
+                        selected_models[0][0].config.model_name,
+                        selected_models[0][0].config.deployment_name,
+                    )
+                )
+                if sandbox_tools
+                else (),
                 files=new_msg_req.file_descriptors,
                 user_memory_context=memory
                 if user.use_memories
@@ -383,13 +741,7 @@ def prepare_chat_turn(
             if new_msg_req.deep_research and research_tool_id is None:
                 raise ValueError("Research tool configuration is missing")
             tool_names = {tool.id: tool.name for tool in tools}
-            forced_tool_id = new_msg_req.forced_tool_id
-            if forced_tool_id in {
-                tool.id
-                for tool in tools
-                if not is_tool_available_for_persona(tool, persona.id)
-            }:
-                forced_tool_id = None
+            preferred_tool_id = new_msg_req.preferred_tool_id
             summary_message = find_summary_for_branch(db_session, chat_history)
             checkpoint = checkpoint_from_summary(summary_message)
             descriptors = {
@@ -427,34 +779,38 @@ def prepare_chat_turn(
                 token_counter,
                 checkpoint,
             )
+            if accepted_text is not None and not record_mode_persists_content(
+                incognito_record_mode
+            ):
+                # Filenames and skill messages belong to the live input, not the
+                # content-free database row.
+                captured_history[-1].skill_messages = picked_skill_messages(
+                    f"chat:{response_parent_id}", picks.mentions, picks.skill_messages
+                )
+                descriptors.update(
+                    {
+                        descriptor["id"]: descriptor
+                        for descriptor in new_msg_req.file_descriptors
+                    }
+                )
             file_inputs = prepare_chat_file_inputs(
                 list(descriptors.values()), db_session
             )
             reasoning_effort = (
                 chat_session.reasoning_effort_override or ReasoningEffort.AUTO
             )
-            search_tool_id = next(
-                (tool.id for tool in tools if tool.in_code_tool_id == SEARCH_TOOL_ID),
-                None,
-            )
             skip_clarification = is_last_assistant_message_clarification(chat_history)
         # File loading can be slow; release the preparation DB session first.
         admission.refresh()
-        extracted_files = extract_context_files(
-            user_files=context_user_files,
-            llm_max_context_window=min(
-                llm.config.max_input_tokens for llm, _ in selected_models
-            ),
-            reserved_token_count=reserved_tokens,
-        )
-        admission.refresh()
-        search_params = determine_search_params(persona_id, project_id, extracted_files)
-        if (
-            search_params.search_usage == SearchToolUsage.DISABLED
-            and forced_tool_id == search_tool_id
-        ):
-            forced_tool_id = None
-        loaded_files = load_chat_files(file_inputs)
+        # Temporary history already owns earlier attachment text. Only new inputs need extraction.
+        text_file_ids: set[str] | None = None
+        if not record_mode_persists_content(incognito_record_mode):
+            text_file_ids = (
+                {descriptor["id"] for descriptor in new_msg_req.file_descriptors}
+                if accepted_text is not None
+                else set()
+            )
+        loaded_files = load_chat_files(file_inputs, text_file_ids=text_file_ids)
         chat_files_for_tools = convert_loaded_files_to_chat_files(loaded_files)
         chat_files_for_tools.extend(
             load_context_user_files_for_tools(
@@ -464,9 +820,6 @@ def prepare_chat_turn(
         history = convert_chat_history(
             chat_history=captured_history,
             files=loaded_files,
-            context_image_files=extracted_files.image_files,
-            token_counter=token_counter,
-            additional_context=additional_context or new_msg_req.additional_context,
         )
         if not any(
             tool.in_code_tool_id == FILE_READER_TOOL_ID
@@ -474,46 +827,66 @@ def prepare_chat_turn(
         ):
             history.all_injected_file_metadata = {}
         # Persistent history and the accepted user row are already loaded and saved.
+        history_store: RedisChatHistoryStore | None = None
         if not record_mode_persists_content(incognito_record_mode):
             admission.refresh()
-            history_store = get_chat_history_store(
-                message_id=user_message_id,
+            history_store = RedisChatHistoryStore(
+                message_id=response_parent_id,
                 chat_session_id=chat_session_id,
-                persist_content=False,
                 admission=admission,
             )
-            input_ids = {
-                message.id for message in history.messages[history.input_start :]
-            }
-            history.messages, previous_run_id = history_store.prepare_messages(
-                history.messages, previous_run_id, accepted_text
+            history, previous_run_id, checkpoint = history_store.prepare_messages(
+                history, accepted_text
             )
-            history.input_start = next(
-                (
-                    index
-                    for index, message in enumerate(history.messages)
-                    if message.id in input_ids
-                ),
-                len(history.messages) - 1,
+        admission.refresh()
+        extracted_files = extract_context_files(
+            user_files=context_user_files,
+            llm_max_context_window=min(
+                llm.config.max_input_tokens for llm, _ in selected_models
+            ),
+            # The reservation also holds the `<skill>` messages that the
+            # question's picks give the model, as history or temporary
+            # history holds them.
+            reserved_token_count=reserved_tokens
+            + sum(
+                prompt_metadata(message).token_count or 0
+                for message in history.messages[history.input_start :]
+                if is_input_context(message)
+            ),
+        )
+        admission.refresh()
+        search_params = determine_search_params(persona_id, project_id, extracted_files)
+        # Inline project context replaces retrieval for this request.
+        if (
+            search_params.search_usage == SearchToolUsage.DISABLED
+            and (
+                new_msg_req.allowed_tool_ids is None
+                or preferred_tool_id in new_msg_req.allowed_tool_ids
             )
-            selected_user_message = history.messages[-1] if history.messages else None
-            if not isinstance(selected_user_message, UserMessage):
-                raise ValueError(
-                    "History storage must retain the accepted user message last"
-                )
+            and any(
+                tool.id == preferred_tool_id
+                and tool.in_code_tool_id == SEARCH_TOOL_ID
+                and tool.enabled
+                for tool in tool_configuration.tools
+            )
+        ):
+            preferred_tool_id = None
+        # Temporary history is saved after the work that can reject the turn.
+        if history_store is not None:
             admission.refresh()
-            history_store.save_user_message(selected_user_message)
+            history_store.save_user_messages(history)
             if incognito_session_ended(chat_session_id):
                 raise RuntimeError("Incognito session ended")
         admission.refresh()
         # Reserve assistant message IDs so each model response has a saved identity.
         with get_session_with_current_tenant() as db_session:
-            response_ids = reserve_chat_response_ids(
-                db_session=db_session,
-                chat_session_id=chat_session_id,
-                parent_message_id=user_message_id,
-                model_display_names=[name for _, name in selected_models],
-            )
+            if not response_ids:
+                response_ids = reserve_chat_response_ids(
+                    db_session=db_session,
+                    chat_session_id=chat_session_id,
+                    parent_message_id=response_parent_id,
+                    model_display_names=[name for _, name in selected_models],
+                )
         models = [
             ReservedChatResponse(llm=llm, display_name=name, message_id=message_id)
             for (llm, name), message_id in zip(
@@ -530,16 +903,11 @@ def prepare_chat_turn(
             persona=persona_prompt,
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
+            sandbox_tools=sandbox_tools,
             research_tool_id=research_tool_id,
-            checkpoint=next(
-                (
-                    message.checkpoint
-                    for message in reversed(captured_history)
-                    if message.checkpoint is not None
-                ),
-                None,
-            ),
+            checkpoint=checkpoint,
             user_message_id=user_message_id,
+            mentions=mentions,
             user_identity=LLMUserIdentity(
                 user_id="anonymous_user"
                 if user.is_anonymous
@@ -550,16 +918,23 @@ def prepare_chat_turn(
             messages=history.messages[: history.input_start],
             input_messages=history.messages[history.input_start :],
             previous_run_id=previous_run_id,
+            additional_context=additional_context or new_msg_req.additional_context,
             extracted_context_files=extracted_files,
-            stream_id=user_message_id if is_multi else models[0].message_id,
+            stream_id=stream_id
+            if stream_id is not None
+            else response_parent_id
+            if is_multi
+            else models[0].message_id,
             reasoning_effort=reasoning_effort,
             search_params=search_params,
             all_injected_file_metadata=history.all_injected_file_metadata,
             available_files=available_files,
-            forced_tool_id=forced_tool_id,
+            preferred_tool_id=preferred_tool_id,
+            preferred_tool_saved=server_started and saved_selection is not None,
             chat_files_for_tools=chat_files_for_tools,
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,
+            has_chat_skills=bool(chat_skills),
             skip_clarification=skip_clarification,
             cache=get_cache_backend(),
             admission=admission,
@@ -567,10 +942,362 @@ def prepare_chat_turn(
             litellm_additional_headers=litellm_additional_headers,
             custom_tool_additional_headers=custom_tool_additional_headers,
             mcp_headers=mcp_headers,
+            ask_for_approval=ask_for_approval,
+            resumed_response_id=resumed_response_id,
         )
     except BaseException:
-        admission.release()
+        try:
+            # A suspended response keeps its saved state for another attempt.
+            if response_ids and resumed_response_id is None:
+                with get_session_with_current_tenant() as db_session:
+                    for response_id in response_ids:
+                        fail_response_start__no_commit(db_session, response_id)
+                    db_session.commit()
+        except Exception:
+            logger.exception("Could not save chat preparation failure")
+        finally:
+            admission.release()
         raise
+
+
+def read_repaired_chat_inbox(chat_session_id: UUID, cache: CacheBackend) -> ChatInbox:
+    """Read the inbox after saving running responses that lost their owner.
+
+    An ownerless response never finishes, so the agent waiting for it would not
+    wake, and a running root response would block the queue.
+    """
+    with get_session_with_current_tenant() as db_session:
+        inbox = read_chat_inbox(db_session, chat_session_id)
+    if interrupt_ownerless_responses(
+        cache, get_current_tenant_id(), inbox.unfinished_response_ids
+    ):
+        with get_session_with_current_tenant() as db_session:
+            inbox = read_chat_inbox(db_session, chat_session_id)
+    return inbox
+
+
+def dispatch_pending_chat_messages(
+    chat_session_id: UUID,
+    user_id: UUID,
+    litellm_additional_headers: dict[str, str] | None = None,
+    custom_tool_additional_headers: dict[str, str] | None = None,
+    *,
+    mcp_headers: dict[str, str] | None = None,
+    decided_response_id: int | None = None,
+    admission: ChatTurnAdmission | None = None,
+    retry_resume: bool = False,
+    resume_retries: int = 0,
+) -> None:
+    """Start the chat's next queued work through chat admission.
+
+    A parked root response whose waits all ended continues first, on any
+    branch. Admission runs one turn at a time, so the parked responses of a
+    multi-model turn continue one after another: each turn's release
+    dispatches the next. A decision passes its response as
+    `decided_response_id`: that response continues first, and its turn
+    publishes its stream ID before this returns, so the decision can name it;
+    its admission claim, not an earlier processing check, decides whether a
+    turn that is still ending starts it instead. Other callers start work on
+    a thread. A turn or agent host that ends while a parked root response can
+    continue hands its `admission` over, so the chat never shows idle in
+    between.
+
+    A resume whose start fails for a moment (`RETRYABLE_START_ERRORS`) asks
+    for `retry_resume`: the dispatch then runs after the next of
+    `RESUME_RETRY_DELAYS_S`, and `resume_retries` counts the retries in a row.
+    After the last one, the response waits for a later dispatch, such as a
+    status read's.
+
+    Then the selected branch's next root turn starts. Otherwise, parked agent
+    runs whose waits ended and idle agents' work start in an agent host when
+    no running child keeps a run store scanning; the host serves the selected
+    branch, or the branch of a parked run. Started work, and the work that it dispatches when it ends, uses the
+    pass-through headers of the request that led to it, such as a decision's
+    `mcp_headers`. Work that a status read starts has none.
+    """
+    # Released here unless a thread that starts the work takes it over.
+    handed = admission
+    try:
+        if retry_resume:
+            if resume_retries >= len(RESUME_RETRY_DELAYS_S):
+                logger.warning("A parked response could not continue; retries ended")
+                return
+            retry = partial(
+                dispatch_pending_chat_messages,
+                chat_session_id,
+                user_id,
+                litellm_additional_headers,
+                custom_tool_additional_headers,
+                mcp_headers=mcp_headers,
+                resume_retries=resume_retries + 1,
+            )
+
+            def start_retry() -> None:
+                # The shared timer thread only starts the dispatch, which reads.
+                start_thread_future(retry, name="chat-resume-retry")
+
+            call_later(RESUME_RETRY_DELAYS_S[resume_retries], start_retry)
+            return
+        cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+        if (
+            admission is None
+            and decided_response_id is None
+            and is_chat_session_processing(chat_session_id, cache)
+        ):
+            return
+        inbox = read_repaired_chat_inbox(chat_session_id, cache)
+        resumable = min(
+            (run.response_id for run in inbox.resumable_runs if run.is_root),
+            key=lambda response_id: response_id != decided_response_id,
+            default=None,
+        )
+        parked_agents = [run for run in inbox.resumable_runs if not run.is_root]
+        queued_turn = inbox.next_turn
+        if (
+            resumable is None
+            and queued_turn is None
+            and not (
+                (inbox.child_work or parked_agents) and not inbox.running_response_ids
+            )
+        ):
+            return
+        # The selected branch's host also resumes its parked agent runs.
+        on_selected_branch = bool(
+            inbox.child_work
+            or not parked_agents
+            or {run.root_response_id for run in parked_agents}
+            & set(inbox.branch.message_ids)
+        )
+        host_response_id = (
+            inbox.selected_response_id
+            if on_selected_branch
+            else parked_agents[0].root_response_id
+        )
+        host_roots = (
+            set(inbox.branch.message_ids)
+            if on_selected_branch
+            else {parked_agents[0].root_response_id}
+        )
+        hosted_agents = [
+            run for run in parked_agents if run.root_response_id in host_roots
+        ]
+
+        def start_pending_work() -> None:
+            # Released unless a preparation takes it over.
+            unused = admission
+            # Queued work starts a new root trace while retaining tenant context.
+            trace_token = Scope.set_current_trace(None)
+            span_token = Scope.set_current_span(None)
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    user = fetch_user_by_id(db_session, user_id)
+                if user is None or not user.is_active:
+                    logger.info("Queued chat work has no active owner")
+                    return
+                dispatch = partial(
+                    dispatch_pending_chat_messages,
+                    chat_session_id,
+                    user_id,
+                    litellm_additional_headers,
+                    custom_tool_additional_headers,
+                    mcp_headers=mcp_headers,
+                    # A resume that fails again retries after a longer delay.
+                    resume_retries=resume_retries if resumable is not None else 0,
+                )
+                if resumable is not None:
+                    if not has_global_permission(user, Permission.WRITE_CHAT):
+                        logger.info("A suspended response waits for write access")
+                        return
+                    unused = None
+                    try:
+                        setup = prepare_chat_turn(
+                            new_msg_req=SendMessageRequest(
+                                message="",
+                                chat_session_id=chat_session_id,
+                                parent_message_id=resumable,
+                                accepts_follow_ups=True,
+                            ),
+                            user=user,
+                            llm_overrides=None,
+                            litellm_additional_headers=litellm_additional_headers,
+                            custom_tool_additional_headers=custom_tool_additional_headers,
+                            mcp_headers=mcp_headers,
+                            resumed_response_id=resumable,
+                            handed_admission=admission,
+                        )
+                    except Exception as error:
+                        # Storage failed for a moment: the resume retries after
+                        # a backoff. Another turn holds the chat, which hands
+                        # it over when it ends, or the owner's budget is
+                        # spent: a later dispatch tries again. Otherwise it
+                        # cannot continue, for example because its model or
+                        # agent is gone.
+                        if isinstance(error, RETRYABLE_START_ERRORS):
+                            dispatch(retry_resume=True)
+                        elif not (
+                            isinstance(error, OnyxError)
+                            and error.error_code
+                            in (OnyxErrorCode.CONFLICT, OnyxErrorCode.RATE_LIMITED)
+                        ):
+                            fail_suspended_response(
+                                cache, get_current_tenant_id(), resumable
+                            )
+                        raise
+                    start_chat_turn(
+                        setup, user, dispatch_pending_messages=dispatch
+                    ).close()
+                    return
+                if queued_turn is None:
+                    if not has_global_permission(user, Permission.WRITE_CHAT):
+                        logger.info("Agent work waits for its owner's write access")
+                        return
+                    unused = None
+                    try:
+                        host_setup = prepare_chat_turn(
+                            new_msg_req=SendMessageRequest(
+                                message="",
+                                chat_session_id=chat_session_id,
+                                parent_message_id=host_response_id,
+                            ),
+                            user=user,
+                            llm_overrides=None,
+                            litellm_additional_headers=litellm_additional_headers,
+                            custom_tool_additional_headers=custom_tool_additional_headers,
+                            mcp_headers=mcp_headers,
+                            agent_host=True,
+                            parked_agent_response_id=hosted_agents[0].response_id
+                            if hosted_agents
+                            else None,
+                            handed_admission=admission,
+                        )
+                    except Exception as error:
+                        if isinstance(error, RETRYABLE_START_ERRORS) or (
+                            isinstance(error, OnyxError)
+                            and error.error_code is OnyxErrorCode.CONFLICT
+                        ):
+                            raise
+                        # Like a queued turn's error response, failed runs keep
+                        # the work from retrying on every poll; their results
+                        # reach the agents that sent it.
+                        with get_session_with_current_tenant() as db_session:
+                            for work in inbox.child_work:
+                                fail_inbox_start__no_commit(
+                                    db_session,
+                                    inbox.branch,
+                                    work.agent_id,
+                                    work.message.id if work.message else None,
+                                    error.detail
+                                    if isinstance(error, OnyxError)
+                                    else START_FAILED_MESSAGE,
+                                )
+                            db_session.commit()
+                        if (
+                            isinstance(error, OnyxError)
+                            and error.error_code is OnyxErrorCode.RATE_LIMITED
+                        ):
+                            # The decided agents stay parked: a later dispatch,
+                            # such as a release's or a status read's, resumes
+                            # them once the limit allows.
+                            return
+                        # The parked agents saved with the settings that the host
+                        # tried end, as a root response that cannot continue
+                        # does; others wait for a host with their own settings.
+                        for run in hosted_agents:
+                            if (
+                                run.model_configuration_id,
+                                run.temperature,
+                                run.tool_selection,
+                            ) == (
+                                hosted_agents[0].model_configuration_id,
+                                hosted_agents[0].temperature,
+                                hosted_agents[0].tool_selection,
+                            ):
+                                fail_suspended_response(
+                                    cache, get_current_tenant_id(), run.response_id
+                                )
+                        raise
+                    host_agent_work(host_setup, user, dispatch)
+                    return
+                unused = None
+                setup = prepare_chat_turn(
+                    new_msg_req=SendMessageRequest(
+                        message=queued_turn.message.message
+                        if queued_turn.message is not None
+                        else "",
+                        chat_session_id=chat_session_id,
+                        parent_message_id=queued_turn.parent_response_id,
+                        deep_research=queued_turn.message is not None
+                        and queued_turn.message.deep_research,
+                        llm_override=queued_turn.message.llm_override
+                        if queued_turn.message is not None
+                        else None,
+                        mentions=queued_turn.message.mentions
+                        if queued_turn.message is not None
+                        else [],
+                        # Turns the server starts deliver their follow-ups through
+                        # the chat, so they offer agent tools. The pending route
+                        # does not check the client's `accepts_follow_ups`.
+                        accepts_follow_ups=True,
+                    ),
+                    user=user,
+                    llm_overrides=None,
+                    litellm_additional_headers=litellm_additional_headers,
+                    custom_tool_additional_headers=custom_tool_additional_headers,
+                    queued_turn=queued_turn,
+                    handed_admission=admission,
+                )
+                stream = start_chat_turn(
+                    setup, user, dispatch_pending_messages=dispatch
+                )
+                # Delivery and persistence continue without a browser reader.
+                stream.close()
+            except OnyxError as error:
+                if error.error_code is OnyxErrorCode.CONFLICT:
+                    logger.debug("Queued chat work was claimed elsewhere")
+                else:
+                    log_onyx_error(error)
+            except Exception:
+                logger.exception("Could not start queued chat work")
+            finally:
+                try:
+                    if unused is not None:
+                        unused.release()
+                except Exception:
+                    logger.exception("Could not release a handed-over chat admission")
+                Scope.reset_current_span(span_token)
+                Scope.reset_current_trace(trace_token)
+
+        if resumable is not None and decided_response_id is not None:
+            handed = None
+            start_pending_work()
+            return
+        chat_turn_work.started()
+        try:
+            worker = start_thread_future(
+                start_pending_work, name="chat-queued-message", daemon=False
+            )
+        except BaseException:
+            chat_turn_work.finished()
+            raise
+        handed = None
+        worker.add_done_callback(lambda _future: chat_turn_work.finished())
+    except Exception:
+        logger.exception("Could not dispatch queued chat input")
+    finally:
+        if handed is not None:
+            try:
+                handed.release()
+            except Exception:
+                logger.exception("Could not release a handed-over chat admission")
+
+
+def streaming_error_as_onyx(error: StreamingError) -> OnyxError:
+    """A preparation failure as an HTTP status for callers that read one response."""
+    return OnyxError(
+        OnyxErrorCode.for_code(error.error_code),
+        error.error,
+        extra=error.details,
+    )
 
 
 def _stream_chat_turn(
@@ -584,10 +1311,18 @@ def _stream_chat_turn(
     slack_context: SlackContext | None = None,
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
+    ask_for_approval: bool = True,
 ) -> AnswerStream:
-    """Prepare one request, then read its independently owned agent stream."""
+    """Prepare one request, then read its independently owned agent stream.
+
+    When the turn ends, it starts the chat's queued work, such as a response
+    whose approvals were decided while it handed off.
+    """
     setup: ChatTurnSetup | None = None
     stream: ChatStream | None = None
+    saved_turn_packets: list[
+        CreateChatSessionID | MessageResponseIDInfo | MultiModelMessageResponseIDInfo
+    ] = []
     try:
         setup = prepare_chat_turn(
             new_msg_req=new_msg_req,
@@ -598,12 +1333,24 @@ def _stream_chat_turn(
             mcp_headers=mcp_headers,
             slack_context=slack_context,
             additional_context=additional_context,
+            ask_for_approval=ask_for_approval,
+            on_reserved=saved_turn_packets.append,
         )
         stream = start_chat_turn(
             setup,
             user,
             response_future,
             query_observation=query_observation,
+            dispatch_pending_messages=partial(
+                dispatch_pending_chat_messages,
+                setup.chat_session_id,
+                user.id,
+                litellm_additional_headers,
+                custom_tool_additional_headers,
+                mcp_headers=mcp_headers,
+            )
+            if setup.incognito_record_mode is None
+            else None,
         )
         yield from stream
     except Exception as error:
@@ -612,7 +1359,19 @@ def _stream_chat_turn(
                 log_onyx_error(error)
         else:
             logger.exception("Chat request failed")
-        yield chat_error(error, setup.responses[0].llm if setup else None)
+        streaming_error = chat_error(error, setup.responses[0].llm if setup else None)
+        if stream is None and saved_turn_packets:
+            if setup is not None:
+                # Preparation records its own failure; a failed start does not.
+                with get_session_with_current_tenant() as db_session:
+                    for response in setup.responses:
+                        fail_response_start__no_commit(db_session, response.message_id)
+                    db_session.commit()
+            # The saved question and its error answer belong to the client's chat.
+            yield from saved_turn_packets
+            if response_future is not None and not response_future.done():
+                response_future.set_exception(streaming_error_as_onyx(streaming_error))
+        yield streaming_error
     finally:
         if stream is not None:
             stream.close()
@@ -630,6 +1389,7 @@ def handle_stream_message_objects(
     slack_context: SlackContext | None = None,
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
+    ask_for_approval: bool = True,
 ) -> AnswerStream:
     """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
 
@@ -648,6 +1408,7 @@ def handle_stream_message_objects(
         slack_context=slack_context,
         response_future=response_future,
         query_observation=query_observation,
+        ask_for_approval=ask_for_approval,
     )
 
 
@@ -661,6 +1422,7 @@ def handle_multi_model_stream(
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
     query_observation: QueryObservation | None = None,
+    ask_for_approval: bool = True,
 ) -> AnswerStream:
     """Stream independent responses from two or three selected models."""
     n_models = len(llm_overrides)
@@ -686,6 +1448,7 @@ def handle_multi_model_stream(
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
+        ask_for_approval=ask_for_approval,
     )
 
 
@@ -732,67 +1495,22 @@ def remove_answer_citations(answer: str) -> str:
 
 
 @log_function_time()
-def gather_stream(
-    packets: AnswerStream,
-) -> ChatBasicResponse:
-    answer: str | None = None
-    citations: list[CitationInfo] = []
-    error_msg: str | None = None
-    message_id: int | None = None
-    top_documents: list[SearchDoc] = []
-
-    for packet in packets:
-        if isinstance(packet, Packet):
-            if packet.placement.sub_turn_index is not None:
-                continue
-            if isinstance(packet.obj, AgentResponseStart):
-                answer = answer or ""
-                if packet.obj.final_documents:
-                    known_documents = {doc.document_id for doc in top_documents}
-                    top_documents.extend(
-                        doc
-                        for doc in packet.obj.final_documents
-                        if doc.document_id not in known_documents
-                    )
-            elif isinstance(packet.obj, AgentResponseDelta):
-                answer = (answer or "") + packet.obj.content
-            elif isinstance(packet.obj, CitationInfo):
-                citations.append(packet.obj)
-        elif isinstance(packet, StreamingError):
-            error_msg = packet.error
-        elif isinstance(packet, MessageResponseIDInfo):
-            message_id = packet.reserved_assistant_message_id
-
-    if message_id is None:
-        raise ValueError("Message ID is required")
-
-    if answer is None:
-        if error_msg is not None:
-            answer = ""
-        else:
-            # This should never be the case as these non-streamed flows do not have a stop-generation signal
-            raise RuntimeError("Answer was not generated")
-
-    return ChatBasicResponse(
-        answer=answer,
-        answer_citationless=remove_answer_citations(answer),
-        citation_info=citations,
-        message_id=message_id,
-        error_msg=error_msg,
-        top_documents=top_documents,
-    )
-
-
-@log_function_time()
 def gather_stream_full(
     packets: AnswerStream,
     response_future: Future[ChatResponseOutcome],
 ) -> ChatFullResponse:
-    """Read delivery metadata and project accepted execution content."""
+    """Read delivery metadata and project accepted execution content.
+
+    A response that stops because tool calls wait for the user's approval
+    returns the requests that still wait in `pending_tool_approvals`.
+    """
     error: StreamingError | None = None
     message_id: int | None = None
     chat_session_id: UUID | None = None
     incognito = False
+    # Requests read from the stream, by approval ID; resolved ones are removed.
+    waiting: dict[str, ToolApprovalRequest] = {}
+    awaiting_approval = False
 
     for packet in packets:
         if isinstance(packet, StreamingError):
@@ -802,16 +1520,19 @@ def gather_stream_full(
         elif isinstance(packet, CreateChatSessionID):
             chat_session_id = packet.chat_session_id
             incognito = packet.incognito
+        elif isinstance(packet, Packet):
+            if isinstance(packet.obj, ToolApprovalRequest):
+                waiting[packet.obj.approval_id] = packet.obj
+            elif isinstance(packet.obj, ToolApprovalResolved):
+                waiting.pop(packet.obj.approval_id, None)
+            elif isinstance(packet.obj, OverallStop):
+                awaiting_approval = packet.obj.stop_reason == AWAITING_APPROVAL
 
     if message_id is None:
         if error is not None:
             # The turn failed before it reserved a message; surface the
             # original error as an HTTP status instead of a 500.
-            raise OnyxError(
-                OnyxErrorCode.for_code(error.error_code),
-                error.error,
-                extra=error.details,
-            )
+            raise streaming_error_as_onyx(error)
         raise ValueError("Message ID is required")
 
     outcome = response_future.result(timeout=CHAT_RESPONSE_WAIT_TIMEOUT_S)
@@ -843,4 +1564,35 @@ def gather_stream_full(
         chat_session_id=chat_session_id,
         incognito=incognito,
         error_msg=outcome.error or (error.error if error else None),
+        pending_tool_approvals=list(waiting.values()) if awaiting_approval else [],
     )
+
+
+def run_chat_turn(
+    new_msg_req: SendMessageRequest,
+    user: User,
+    litellm_additional_headers: dict[str, str] | None = None,
+    custom_tool_additional_headers: dict[str, str] | None = None,
+    mcp_headers: dict[str, str] | None = None,
+    additional_context: str | None = None,
+    slack_context: SlackContext | None = None,
+    ask_for_approval: bool = True,
+) -> ChatFullResponse:
+    """Run one chat turn for in-process, non-streaming callers, to completion
+    or until tool calls wait for the user's approval.
+
+    These callers read one response, so the turn offers no agent tools.
+    """
+    response_future = Future[ChatResponseOutcome]()
+    packets = handle_stream_message_objects(
+        new_msg_req=new_msg_req.model_copy(update={"accepts_follow_ups": False}),
+        user=user,
+        litellm_additional_headers=litellm_additional_headers,
+        custom_tool_additional_headers=custom_tool_additional_headers,
+        mcp_headers=mcp_headers,
+        additional_context=additional_context,
+        slack_context=slack_context,
+        response_future=response_future,
+        ask_for_approval=ask_for_approval,
+    )
+    return gather_stream_full(packets, response_future)

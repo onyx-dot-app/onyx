@@ -154,11 +154,34 @@ SANDBOX_PROXY_LISTEN_PORT = int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "808
 # read container env), so a compose change here desyncs the probe.
 SANDBOX_PROXY_HEALTHZ_PORT = int(os.environ.get("SANDBOX_PROXY_HEALTHZ_PORT", "8081"))
 
+# Firecracker only: an mTLS listener for the host agent relays. It needs a
+# client cert from SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH (with one of the
+# comma-separated SANs, if set) and hands each connection to the proxy port.
+# 0 = off.
+SANDBOX_PROXY_RELAY_TLS_PORT = int(os.environ.get("SANDBOX_PROXY_RELAY_TLS_PORT", "0"))
+SANDBOX_PROXY_RELAY_TLS_CERT_PATH = os.environ.get(
+    "SANDBOX_PROXY_RELAY_TLS_CERT_PATH", ""
+)
+SANDBOX_PROXY_RELAY_TLS_KEY_PATH = os.environ.get(
+    "SANDBOX_PROXY_RELAY_TLS_KEY_PATH", ""
+)
+SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH = os.environ.get(
+    "SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH", ""
+)
+SANDBOX_PROXY_RELAY_TLS_ALLOWED_SANS: list[str] = [
+    s.strip()
+    for s in os.environ.get("SANDBOX_PROXY_RELAY_TLS_ALLOWED_SANS", "").split(",")
+    if s.strip()
+]
+
 # Optional additive CA bundle used by mitmproxy when it verifies HTTPS origins.
 # The Helm chart writes it into the proxy's writable confdir because the proxy
 # container intentionally runs non-root with a read-only root filesystem.
+# Other deployments can share the SSL_CERT_FILE bundle used by HTTPX OAuth calls.
 SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA = (
-    os.environ.get("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "").strip() or None
+    os.environ.get("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "").strip()
+    or os.environ.get("SSL_CERT_FILE", "").strip()
+    or None
 )
 
 # The CA Secret lives here; the CA ConfigMap is projected into SANDBOX_NAMESPACE

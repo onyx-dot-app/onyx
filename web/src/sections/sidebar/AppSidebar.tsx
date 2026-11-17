@@ -259,8 +259,7 @@ export default function AppSidebar() {
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
+  const moveCustomAgentModal = useCreateModal();
 
   // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
   // Only explicit true enables the feature; false or undefined = disabled
@@ -461,7 +460,7 @@ export default function AppSidebar() {
         if (shouldShowMoveModal(chatSession)) {
           setPendingMoveChatSession(chatSession);
           setPendingMoveProjectId(targetProject.id);
-          setShowMoveCustomAgentModal(true);
+          moveCustomAgentModal.toggle(true);
           return;
         }
 
@@ -500,6 +499,7 @@ export default function AppSidebar() {
       refreshCurrentProjectDetails,
       refreshProjects,
       moveChatErrorMessage,
+      moveCustomAgentModal.toggle,
     ]
   );
 
@@ -553,10 +553,10 @@ export default function AppSidebar() {
         <CreateProjectModal />
       </createProjectModal.Provider>
 
-      {showMoveCustomAgentModal && (
+      <moveCustomAgentModal.Provider>
         <MoveCustomAgentChatModal
           onCancel={() => {
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveChatSession(null);
             setPendingMoveProjectId(null);
           }}
@@ -569,7 +569,7 @@ export default function AppSidebar() {
             }
             const chat = pendingMoveChatSession;
             const target = pendingMoveProjectId;
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveChatSession(null);
             setPendingMoveProjectId(null);
             if (chat && target != null) {
@@ -581,7 +581,7 @@ export default function AppSidebar() {
             }
           }}
         />
-      )}
+      </moveCustomAgentModal.Provider>
 
       {/* Intro animation overlay */}
       <AnimatePresence>

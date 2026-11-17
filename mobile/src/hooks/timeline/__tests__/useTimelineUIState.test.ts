@@ -35,6 +35,8 @@ function baseInput(
     parallelActiveStepSupportsCollapsedStreaming: false,
     parallelActiveStepHasCollapsedContent: false,
     finalAnswerComing: false,
+    codeModeWorking: false,
+    awaitingApproval: false,
     ...overrides,
   };
 }

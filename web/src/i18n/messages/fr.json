@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "S'authentifier"
       },
+      "codingAgentIncognito": {
+        "tooltip": "L'agent de code n'est pas disponible en mode incognito"
+      },
       "configure": {
         "tooltip": "Configurer"
       },
@@ -139,6 +142,9 @@
       },
       "selectSearchSources": {
         "label": "Sélectionner les sources de recherche"
+      },
+      "preference": {
+        "tooltip": "{description}\nPrivilégier cet outil pour cette conversation. L’agent peut répondre sans l’utiliser."
       }
     },
     "addMcpModal": {
@@ -350,7 +356,7 @@
         "clientMetadataRejected": "Le fournisseur n’a pas pu utiliser le document de métadonnées du client. Si cette instance n’est pas accessible depuis Internet, désactivez « Utiliser le document de métadonnées client » et reconnectez-vous.",
         "discoveryFailed": "Les paramètres de connexion OAuth sont introuvables. Vérifiez l’URL du serveur ou saisissez les points de terminaison de votre fournisseur.",
         "connectionFailed": "Le serveur est inaccessible. Vérifiez l’URL du serveur et réessayez.",
-        "oauthFailed": "La connexion OAuth n’a pas pu démarrer. Vérifiez les paramètres de votre client et réessayez.",
+        "oauthFailed": "La connexion OAuth a échoué. Réessayez ou vérifiez les paramètres OAuth du serveur.",
         "oauthInitFailed": "Échec du lancement de OAuth : {detail}"
       },
       "header": {
@@ -814,6 +820,7 @@
       "search": {
         "placeholder": "Rechercher des actions..."
       },
+      "selectionSaveFailed": "Impossible d’enregistrer la sélection d’outils de ce chat.",
       "serverFallback": {
         "label": "serveur"
       },
@@ -2618,8 +2625,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "Tout le monde conserve l'accès synchronisé depuis la source.",
-          "title": "Aucune restriction tant qu'aucun groupe n'est ajouté"
+          "description": "La restriction nécessite un groupe. Désactivez-la pour conserver l’accès synchronisé depuis la source.",
+          "title": "Choisissez au moins un groupe"
         },
         "loadError": "Impossible de charger les groupes. Rechargez la page pour réessayer.",
         "memberCount": "{count, plural, one {# membre} other {# membres}}",
@@ -2965,6 +2972,7 @@
           "sync": "Accès aux documents **synchronisé avec {source}**",
           "managedByAdmins": "Géré par les **administrateurs**",
           "managedByGroups": "Géré par **{count, plural, one {# groupe} other {# groupes}}**",
+          "onlyMe": "Documents visibles via ce connecteur **uniquement par son propriétaire**",
           "syncRestricted": "Accès aux documents **synchronisé avec {source}**, limité à **{count, plural, one {# groupe} other {# groupes}}**",
           "groupsPending": "Documents partagés avec **des groupes spécifiques**",
           "syncRestrictedPending": "Accès aux documents **synchronisé avec {source}**, limité à **des groupes spécifiques**"
@@ -3748,15 +3756,19 @@
             "description": "Les documents indexés par ce connecteur sont accessibles à tous les membres de votre organisation.",
             "title": "Tout le monde dans votre organisation"
           },
+          "onlyMe": {
+            "description": "Seul le propriétaire des identifiants de ce connecteur y accède par son biais ; pour une source sans identifiants, seule la personne qui l'a créé.",
+            "title": "Moi uniquement"
+          },
           "specificGroups": {
             "description": "Indiquez les groupes qui peuvent accéder aux documents de ce connecteur.",
-            "required": "Choisissez au moins un groupe.",
             "title": "Groupes spécifiques"
           },
           "sync": {
             "description": "{appName} synchronise les autorisations avec la source. Les utilisateurs ne peuvent rechercher que ce qu'ils voient dans la source.",
             "disabledReason": "La méthode d'authentification de l'identifiant actuel ne prend pas en charge la synchronisation automatique des permissions. Veuillez passer à une méthode d'authentification prise en charge.",
-            "title": "Synchroniser avec {source}"
+            "title": "Synchroniser avec {source}",
+            "restrictionRequired": "Choisissez au moins un groupe ou désactivez la restriction."
           },
           "title": "Accès aux documents"
         },
@@ -5173,6 +5185,37 @@
       "unavailable": {
         "description": "Craft est activé déploiement par déploiement par Onyx. Contactez votre représentant Onyx pour y accéder.",
         "title": "Craft n'est pas disponible sur ce déploiement"
+      },
+      "publishing": {
+        "title": "Publication des compétences",
+        "open": {
+          "label": "Ouverte",
+          "description": "Les auteurs publient pour l'organisation immédiatement."
+        },
+        "requiresReview": {
+          "label": "Examen requis",
+          "description": "Un administrateur approuve chaque publication et chaque mise à jour."
+        },
+        "off": {
+          "label": "Désactivée",
+          "description": "Seuls les administrateurs publient des compétences pour l'organisation."
+        },
+        "saveSuccess": {
+          "message": "Paramètre enregistré."
+        },
+        "saveError": {
+          "message": "Échec de l'enregistrement du paramètre."
+        },
+        "defaultAccess": {
+          "title": "Accès par défaut",
+          "description": "S'applique à chaque skill publié sans réglage propre, y compris ceux publiés plus tard.",
+          "loadFailed": "Impossible de charger l'accès par défaut.",
+          "retry": "Réessayer"
+        },
+        "sharing": {
+          "title": "Partage",
+          "description": "Les membres peuvent partager des skills avec des personnes et des groupes. Les gestionnaires de skills peuvent toujours partager."
+        }
       }
     },
     "credentials": {
@@ -6303,13 +6346,6 @@
           "description": "Définissez les accès et les autorisations des membres de ce groupe.",
           "title": "Autorisations du groupe"
         }
-      },
-      "permissionsChanged": {
-        "description": "{appName} utilise désormais des autorisations basées sur les groupes. L'accès se configure par groupe : les autorisations d'un utilisateur sont donc la somme de celles de tous ses groupes.",
-        "learnMore": {
-          "label": "En savoir plus"
-        },
-        "title": "Les autorisations ont changé."
       },
       "sharedResources": {
         "agent": {
@@ -7500,7 +7536,8 @@
           "public": "Public pour votre organisation",
           "private": "{count, plural, =0 {Privé} one {Partagé avec # groupe} other {Partagé avec # groupes}}",
           "sync": "Synchronisation automatique des autorisations",
-          "sync_restricted": "Synchronisation automatique des autorisations"
+          "sync_restricted": "Synchronisation automatique des autorisations",
+          "personal": "Moi uniquement"
         },
         "detail": {
           "queued": "{position, selectordinal, one {#er} other {#e}} dans la file d'attente",
@@ -7627,7 +7664,7 @@
             "targetUriParseFailed": "Échec de l'analyse de l'URI cible — les valeurs d'origine sont utilisées."
           },
           "validation": {
-            "targetUriInvalid": "L'URI cible doit être une URL valide, avec le paramètre de requête api-version et soit un nom de déploiement dans le chemin, soit /openai/responses",
+            "targetUriInvalid": "L'URI cible doit être une URL valide : une URL /openai/v1/, ou une URL avec le paramètre de requête api-version et soit un nom de déploiement dans le chemin, soit /openai/responses",
             "targetUriRequired": "L'URI cible est obligatoire"
           }
         },
@@ -7841,7 +7878,6 @@
           "row": {
             "defaultLabel": "Modèle par défaut",
             "decisionTag": {
-              "label": "Décision",
               "decisionOnly": "Modèle de décision. Non disponible dans le sélecteur de modèles de chat.",
               "chatAndDecision": "Prend en charge les tâches de chat et de décision."
             },
@@ -7850,9 +7886,6 @@
             },
             "setDefaultButton": {
               "label": "Définir par défaut"
-            },
-            "visionMarker": {
-              "title": "Vision"
             }
           },
           "selectAllButton": {
@@ -10130,6 +10163,8 @@
         },
         "title": "Supprimer l'utilisateur",
         "toasts": {
+          "blockedBySkills": "Impossible de supprimer cet utilisateur",
+          "openSkills": "Ouvrir les compétences pour les transférer",
           "success": "Utilisateur supprimé"
         }
       },
@@ -10247,13 +10282,6 @@
           "label": "Inviter des utilisateurs"
         },
         "title": "Utilisateurs et demandes"
-      },
-      "permissionsNotice": {
-        "description": "{appName} utilise désormais des autorisations basées sur les groupes. Les rôles Curator et Global Curator sont remplacés par des autorisations de groupe configurables, avec des gestionnaires par groupe pour une administration limitée à leur périmètre.",
-        "learnMoreButton": {
-          "label": "En savoir plus"
-        },
-        "title": "Les autorisations ont changé"
       },
       "resetPasswordModal": {
         "copyButton": {
@@ -11774,9 +11802,17 @@
         "loginBadCredentials": "Ce compte ne peut pas se connecter. Il est peut-être désactivé. Contactez l'administrateur de votre espace de travail.",
         "loginRequired": "Vous devez d'abord vous connecter avec votre fournisseur d'identité.",
         "oauthUserAlreadyExists": "Un compte avec cette adresse e-mail existe déjà avec une autre méthode de connexion. Connectez-vous comme la première fois, ou demandez à votre administrateur d'associer ce fournisseur.",
+        "playgroundActiveTenant": "Une équipe de votre entreprise essaie déjà Onyx. Rejoindre votre équipe ou créer une nouvelle équipe ?",
+        "playgroundAskAdmin": "Demandez à votre administrateur de vous inviter.",
+        "playgroundCheckFailed": "Nous n'avons pas pu vérifier votre inscription. Réessayez plus tard.",
+        "playgroundEmailUsed": "Vous avez déjà utilisé votre accès au playground.",
+        "playgroundLimitReached": "Votre entreprise a déjà utilisé son accès au playground.",
         "serverError": "Votre fournisseur d'identité a rencontré une erreur. Veuillez réessayer.",
         "staleSignIn": "Ce lien de connexion a expiré ou n'est plus valide. Veuillez vous reconnecter.",
         "temporarilyUnavailable": "Votre fournisseur d'identité est temporairement indisponible. Veuillez réessayer plus tard."
+      },
+      "contactSalesButton": {
+        "label": "Contacter les ventes"
       },
       "credentialsIssue": {
         "description": "Identifiants de connexion incorrects ou expirés"
@@ -11784,6 +11820,12 @@
       "heading": {
         "description": "Un problème est survenu lors de votre tentative de connexion.",
         "title": "Erreur d'authentification"
+      },
+      "joinTeamButton": {
+        "label": "Rejoindre mon équipe"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "Causes possibles :"
@@ -11793,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "Si le problème persiste, contactez votre administrateur système pour obtenir de l'aide."
+      },
+      "startNewTeamButton": {
+        "label": "Créer une nouvelle équipe"
       },
       "systemDisruptionIssue": {
         "description": "Perturbation temporaire du système d'authentification"
@@ -12152,6 +12197,10 @@
         },
         "organization": {
           "label": "Organisation"
+        },
+        "unpublished": {
+          "label": "Modifications non publiées",
+          "tooltip": "L'organisation utilise encore la version {number}."
         }
       },
       "toggle": {
@@ -12433,6 +12482,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "Sous-agents en cours",
         "attachFilesButton": {
           "tooltip": "Joindre des fichiers"
         },
@@ -12441,6 +12491,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "La recherche approfondie est désactivée en mode multi-modèle",
+          "incognitoTooltip": "La recherche approfondie n'est pas disponible en mode incognito",
           "label": "Recherche approfondie"
         },
         "incognitoNotice": {
@@ -12469,6 +12520,24 @@
         "voiceSetupButton": {
           "ariaLabel": "Configurer la voix",
           "tooltip": "La voix n'est pas configurée. Configurez-la dans les paramètres d'administration."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Entrée pour envoyer · Ctrl ou Commande + Entrée pour mettre en attente",
+          "multiModelHint": "La file d'attente n'est pas disponible pendant la comparaison de modèles. Choisissez un modèle pour mettre des messages en file.",
+          "attachmentsHint": "Envoyez les pièces jointes une fois cette réponse terminée.",
+          "chooseResponseHint": "Choisissez une réponse avant de mettre un message en file.",
+          "incognitoHint": "Attendez la fin de la réponse dans le chat incognito.",
+          "sendHint": "Envoyer à la prochaine étape de cette réponse",
+          "interruptHint": "Interrompre le travail en cours et envoyer ce message",
+          "sendLabel": "Envoyer",
+          "queueLabel": "En attente",
+          "interruptKeyboardHint": "Entrée pour interrompre · Ctrl ou Commande + Entrée pour mettre en attente",
+          "interruptLabel": "Interrompre",
+          "waitHint": "Attendez la fin de la réponse.",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "Arrêter les sous-agents"
         }
       },
       "baseInputBar": {
@@ -12518,9 +12587,6 @@
         "content": {
           "ariaLabel": "Sélecteur de compétences"
         },
-        "empty": {
-          "text": "Aucune compétence correspondante"
-        },
         "mcpServersGroup": {
           "label": "Serveurs MCP"
         },
@@ -12559,6 +12625,19 @@
           "tooltip": "Remplacer cette vignette par son texte complet en ligne"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Retirer {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Texte collé : {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Retirer le texte collé"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "Ouvrir le menu d'ajout",
@@ -12567,16 +12646,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "Retirer le message en attente"
+          "tooltip": "Retirer le message en attente",
+          "ariaLabel": "Retirer le message en attente : {message}"
         },
         "editHint": {
           "label": "modifier ·"
         },
-        "item": {
-          "ariaLabel": "Basculer le message en attente"
-        },
         "removeHint": {
           "label": "retirer"
+        },
+        "editButton": {
+          "tooltip": "Modifier le message en file",
+          "clearDraftTooltip": "Videz votre brouillon pour modifier un message en file",
+          "ariaLabel": "Modifier le message en attente : {message}"
+        },
+        "sendButton": {
+          "tooltip": "Interrompre le travail en cours et envoyer ce message",
+          "ariaLabel": "Envoyer maintenant : {message}"
+        },
+        "sendHint": {
+          "label": "envoyer maintenant ·"
         }
       },
       "sharedAppInputBar": {
@@ -12586,6 +12675,17 @@
         "startSessionButton": {
           "label": "Démarrer une nouvelle session"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Impossible d’envoyer le message.",
+        "withdrawFailed": "Impossible de retirer le message en attente.",
+        "loadFailed": "Impossible de charger les messages en attente.",
+        "alreadyAccepted": "Ce message a déjà été accepté et n’est plus en attente.",
+        "interruptFailed": "Impossible d’envoyer ce message maintenant. Il reste en attente.",
+        "stopSubagentsFailed": "Impossible d'arrêter les sous-agents."
+      },
+      "pendingToolApproval": {
+        "toast": "Approuvez ou refusez d'abord les appels d'outils en attente."
       }
     },
     "mcpApiKey": {
@@ -12681,6 +12781,9 @@
         "timedOut": {
           "text": "La réponse s'est arrêtée, car elle a atteint sa limite de temps."
         }
+      },
+      "agentResults": {
+        "received": "Résultats des sous-agents reçus"
       },
       "codeBlock": {
         "copyButton": {
@@ -12831,6 +12934,11 @@
           "text": "Génération d'images arrêtée"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Copier le tableau"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Question"
@@ -12915,6 +13023,9 @@
         "codingAgent": {
           "bashExit": {
             "header": "Bash · sortie {exitCode}"
+          },
+          "bashFailed": {
+            "header": "Bash · échec"
           },
           "bashRequest": {
             "label": "Requête"
@@ -13019,6 +13130,18 @@
           },
           "updatingMemory": {
             "label": "Mise à jour de la mémoire..."
+          },
+          "working": {
+            "label": "En cours"
+          },
+          "waitingForApproval": {
+            "label": "En attente de votre approbation"
+          },
+          "runningCommand": {
+            "label": "Exécution de la commande"
+          },
+          "editingFiles": {
+            "label": "Modification des fichiers"
           }
         },
         "internalSearch": {
@@ -13148,13 +13271,61 @@
           "researchAgent": "Agent de recherche",
           "thinking": "Réflexion",
           "tool": "Outil",
-          "webSearch": "Recherche web"
+          "webSearch": "Recherche web",
+          "terminal": "Terminal",
+          "applyPatch": "Appliquer le correctif",
+          "editFile": "Modifier le fichier",
+          "writeFile": "Écrire le fichier"
         },
         "webSearch": {
           "searching": {
             "status": "Recherche sur le web"
           }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {Exécution de la commande} started {Commande lancée} failed {Échec de la commande} canceled {Annulé} done {Commande exécutée} other {Commande exécutée}}",
+            "workdir": {
+              "label": "Dans {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session {sessionId}} failed {Impossible d'envoyer la saisie à la session {sessionId}} canceled {Annulé} done {Saisie envoyée à la session {sessionId}} other {Saisie envoyée à la session {sessionId}}}} check {{phase, select, running {Vérification de la session {sessionId}} failed {Impossible de vérifier la session {sessionId}} canceled {Annulé} done {Session {sessionId} vérifiée} other {Session {sessionId} vérifiée}}} other {Session {sessionId}}}"
+          },
+          "output": {
+            "title": "Sortie"
+          },
+          "exitCode": {
+            "label": "Code de sortie {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {Arrêté par un signal} canceled {Annulé} deadline_exceeded {Arrêté à sa limite de temps} other {Terminé}}"
+          },
+          "stillRunning": {
+            "label": "Toujours en cours (session {sessionId})"
+          },
+          "truncated": {
+            "label": "Sortie tronquée"
+          },
+          "noOutput": {
+            "text": "Aucune sortie"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {# fichier modifié} other {# fichiers modifiés}}"
+            },
+            "failed": {
+              "status": "Échec de la modification"
+            },
+            "title": "Correctif"
+          },
+          "stopped": {
+            "status": "Arrêté"
+          }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} veut exécuter {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14246,6 +14417,11 @@
       "completeFailed": {
         "message": "Impossible de finaliser l'autorisation"
       },
+      "desktopHandoff": {
+        "button": "Ouvrir Onyx",
+        "description": "Votre navigateur ouvre l'application de bureau Onyx pour terminer la connexion. Vous pouvez fermer cet onglet une fois l'application ouverte.",
+        "title": "Retour à Onyx"
+      },
       "genericError": {
         "description": "Une erreur est survenue pendant le processus OAuth. Veuillez réessayer.",
         "title": "Une erreur est survenue"
@@ -14363,7 +14539,59 @@
       },
       "labels": {
         "default": "Par défaut"
+      },
+      "modelTypes": {
+        "decision": "Décision",
+        "vision": "Vision"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "Aucune donnée."
+      },
+      "showLess": {
+        "button": "Afficher moins"
+      },
+      "showMore": {
+        "button": "Afficher plus"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "Approuver pour ce chat",
+        "tooltip": "Approuver maintenant et exécuter cet outil sans redemander pendant le reste de ce chat"
+      },
+      "approveOnce": {
+        "ariaLabel": "Approuver cette action une fois",
+        "button": "Approuver une fois"
+      },
+      "approveSession": {
+        "button": "Approuver pour la session",
+        "tooltip": "Approuver les actions correspondantes pour cette session"
+      },
+      "deadline": "Approuver avant {time}",
+      "header": {
+        "required": "Approbation demandée : {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
+        "singleAction": "{action} dans {app}"
+      },
+      "reject": {
+        "ariaLabel": "Rejeter cette action",
+        "button": "Rejeter"
+      },
+      "record": {
+        "approved": "Approuvé : {headline}",
+        "closed": "N'attend plus : {headline}",
+        "disabled": "Désactivé : {headline}",
+        "expired": "Délai dépassé : {headline}",
+        "rejected": "Non approuvé : {headline}",
+        "approvedForChat": "Approuvé pour ce chat : {headline}",
+        "approvedForSession": "Approuvé pour cette session : {headline}"
+      },
+      "submitError": "Impossible d'envoyer votre décision. Réessayez.",
+      "actionWithDescription": "{action} : {description}"
     }
   },
   "craft": {
@@ -14376,50 +14604,6 @@
       },
       "switch": {
         "ariaLabel": "Changer d'agent"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Approuver cette action une fois",
-        "button": "Approuver une fois"
-      },
-      "approveSession": {
-        "button": "Approuver pour la session",
-        "tooltip": "Approuver les actions correspondantes pour cette session"
-      },
-      "details": {
-        "hideAriaLabel": "Masquer les détails",
-        "showAriaLabel": "Afficher les détails"
-      },
-      "header": {
-        "required": "Approbation requise : {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
-        "singleAction": "{action} dans {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "Aucune donnée."
-        },
-        "showLess": {
-          "button": "Afficher moins"
-        },
-        "showMore": {
-          "button": "Afficher plus"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Rejeter cette action",
-        "button": "Rejeter"
-      },
-      "status": {
-        "approved": "Approuvé",
-        "rejected": "Rejeté",
-        "expired": "Expirée"
-      },
-      "submit": {
-        "errorFallback": "Échec de l'envoi de la décision"
       }
     },
     "apps": {
@@ -14471,7 +14655,7 @@
         "promote": {
           "cancelButton": "Annuler",
           "confirmButton": "Rendre disponible pour l'organisation",
-          "description": "Les compétences associées à une app doivent être disponibles pour tous. Ce changement est appliqué lorsque vous enregistrez l'app.",
+          "description": "Les compétences associées à une app doivent être disponibles pour tous. Lorsque vous enregistrez l'app, la compétence est publiée dans l'organisation. La publication est irréversible.",
           "title": "Rendre « {name} » disponible pour toute l'organisation ?"
         },
         "search": {
@@ -14557,7 +14741,7 @@
         "duplicateSkillName": "L'app « {appName} » a déjà une compétence associée nommée « {skillName} ». Importez une compétence avec un autre nom."
       },
       "mcpPolicy": {
-        "description": "Configurez ce que l'agent Craft peut faire avec les outils de ce serveur MCP.",
+        "description": "Choisissez les outils qui s'exécutent automatiquement, demandent une approbation ou sont désactivés dans le chat et dans Craft.",
         "emptyPolicies": "Aucun outil activé sur ce serveur. Activez d'abord les outils sur la page des actions MCP.",
         "saveButton": "Enregistrer",
         "title": "Modifier {name}"
@@ -15754,7 +15938,7 @@
     "actionPolicies": {
       "appTitle": "Paramètres d’approbation de {name}",
       "title": "Paramètres d’approbation",
-      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft et les nouvelles tâches ; les tâches existantes conservent leurs propres paramètres.",
+      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft, les nouvelles tâches et les appels d’outils MCP dans le chat ; les tâches existantes conservent leurs propres paramètres.",
       "taskDescription": "Choisissez les plugins de cette tâche et les actions à exécuter automatiquement. Les modifications concernent uniquement cette tâche.",
       "newTaskDescription": "Activez un plugin pour partir de vos paramètres actuels des actions.",
       "workspace_disabled": "Désactivée pour cet espace de travail",
@@ -15770,9 +15954,6 @@
       "saveError": "Impossible d’enregistrer les paramètres d’approbation.",
       "emptyActions": "Aucune action connue. Les actions inconnues nécessitent une approbation.",
       "emptyApps": "Aucune application disponible.",
-      "expired": "Le délai d’approbation a expiré. L’action n’a pas été exécutée.",
-      "rejected": "Demande rejetée. Cette demande n’a pas été exécutée.",
-      "deadline": "Approuver avant {time}",
       "agentPermissionRequired": "Cette exécution s’est arrêtée car une action nécessitait une approbation. Vérifiez les autorisations, puis relancez la tâche.",
       "enableForTask": "Activer pour cette tâche",
       "enableAppForTask": "Activer {app} pour cette tâche",
@@ -15796,6 +15977,12 @@
       "resetDefaults": "Tout rétablir par défaut",
       "resetAll": "Tout réinitialiser aux valeurs de l’espace de travail",
       "workspaceDisabledTooltip": "Un administrateur a désactivé cette action pour l’espace de travail."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, one {# skill n’a pas été chargé} other {# skills n’ont pas été chargés}}",
+      "description": "Cette session ne peut pas utiliser {names}. Vos skills doivent tenir dans {maxSize} et {maxFiles, number} fichiers. Désactivez les skills dont vous n’avez pas besoin pour libérer de la place.",
+      "manage": "Gérer les skills",
+      "dismiss": "Ignorer"
     }
   },
   "knowledge": {
@@ -16407,6 +16594,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "Échec de l'enregistrement des préférences"
+      },
+      "sendBehavior": {
+        "title": "Comportement d’Envoi Pendant le Travail",
+        "description": "Choisissez l’action d’Entrée et du bouton d’envoi pendant une réponse. Ctrl/Cmd+Entrée met toujours le message en attente.",
+        "afterStep": "Après l’étape en cours",
+        "interrupt": "Interrompre le travail en cours"
       }
     },
     "connectors": {
@@ -17119,6 +17312,13 @@
         "savingChanges": "Enregistrement des modifications...",
         "savingSkill": "Enregistrement de la compétence..."
       },
+      "staleVersion": {
+        "description": "Quelqu’un a enregistré une version plus récente. Rechargez pour l’obtenir. Vos modifications non enregistrées seront perdues.",
+        "reload": {
+          "label": "Recharger"
+        },
+        "title": "Cette compétence a changé depuis son ouverture"
+      },
       "toasts": {
         "created": "« {name} » créée",
         "deleteFailed": "Échec de la suppression de la compétence",
@@ -17319,9 +17519,6 @@
           "message": "Chargement des détails de partage..."
         },
         "noOwnerTitle": "Aucun propriétaire actif",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Changer l'autorisation de l'organisation"
-        },
         "ownerLabel": "Propriétaire",
         "permissionMenu": {
           "ariaLabel": "Mettre à jour l'accès de {name}"
@@ -17349,12 +17546,6 @@
         },
         "installation": {
           "title": "Installation",
-          "available": "Disponible à l’installation",
-          "default": "Installé par défaut",
-          "required": "Obligatoire",
-          "availableDescription": "Les utilisateurs peuvent installer ou désinstaller à tout moment.",
-          "defaultDescription": "Installé automatiquement. Les utilisateurs peuvent désactiver ou désinstaller à tout moment.",
-          "requiredDescription": "Installé automatiquement. Les utilisateurs ne peuvent ni désactiver ni désinstaller.",
           "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès."
         },
         "description": "Choisissez qui peut utiliser cette compétence et comment elle est installée.",
@@ -17362,14 +17553,90 @@
         "peopleTitle": "Personnes ayant accès",
         "manageIndividualAccess": "Gérer les accès individuels",
         "individualAccessTitle": "Accès individuels",
-        "ownershipTitle": "Propriété"
+        "ownershipTitle": "Propriété",
+        "published": {
+          "title": "Organisation",
+          "description": "Publiée. Tout le monde dans l'organisation peut utiliser cette compétence."
+        },
+        "publishWarning": {
+          "title": "La publication est irréversible",
+          "description": "Après l'enregistrement, tout le monde dans l'organisation peut utiliser cette compétence. Vous ne pourrez plus la rendre privée. Seul un administrateur peut la supprimer.",
+          "reviewDescription": "La compétence reste privée jusqu'à ce qu'un administrateur approuve la demande. Après l'approbation, vous ne pourrez plus la rendre privée."
+        },
+        "reviewRequestedToast": {
+          "message": "Votre demande de publication a été envoyée à un administrateur pour examen."
+        },
+        "publishOff": {
+          "title": "La publication est désactivée",
+          "description": "Un administrateur a désactivé la publication dans l'organisation. Demandez à un administrateur de publier cette compétence."
+        },
+        "sharingOff": {
+          "title": "Le partage est désactivé",
+          "description": "Un administrateur a désactivé le partage avec des personnes et des groupes. Demandez à un gestionnaire de skills de partager ce skill."
+        },
+        "groupAccess": {
+          "title": "Accès des groupes",
+          "description": "Par défaut, chaque groupe utilise le paramètre de l'organisation. Un paramètre de groupe le remplace pour les membres du groupe, même s'il est plus strict.",
+          "add": "Ajouter un groupe",
+          "select": "Paramètre pour {name}",
+          "remove": "Retirer {name}",
+          "shared": "Partagé avec ce groupe",
+          "settingOnly": "Paramètre de groupe uniquement"
+        }
       },
       "placeholders": {
         "githubRepository": "proprietaire/depot ou https://github.com/proprietaire/depot"
       },
       "tabs": {
         "details": "Détails",
-        "sharing": "Partage"
+        "sharing": "Partage",
+        "versions": "Versions"
+      },
+      "versions": {
+        "tableLabel": "Versions de la compétence",
+        "columns": {
+          "version": "Version",
+          "madeBy": "Créée par",
+          "date": "Date"
+        },
+        "versionLabel": "Version {number}",
+        "currentBadge": "Actuelle",
+        "unknownAuthor": "Inconnu",
+        "previewRow": {
+          "ariaLabel": "Aperçu de la version {number}"
+        },
+        "restore": {
+          "label": "Restaurer",
+          "ariaLabel": "Restaurer la version {number}",
+          "successToast": "Version {number} restaurée en tant que version {newNumber}.",
+          "unchangedToast": "La version {number} a les mêmes fichiers que la version actuelle.",
+          "failedToast": "Impossible de restaurer cette version.",
+          "unsavedChanges": {
+            "title": "Enregistrez d'abord vos modifications",
+            "description": "Enregistrez ou annulez les modifications de l'éditeur avant de restaurer une version."
+          }
+        },
+        "loadError": {
+          "title": "Impossible de charger les versions",
+          "description": "Réessayez plus tard."
+        },
+        "preview": {
+          "back": "Toutes les versions",
+          "loadError": {
+            "title": "Impossible de charger cette version"
+          }
+        },
+        "status": {
+          "pending": "Examen en attente",
+          "published": "Publiée"
+        },
+        "publishUpdate": {
+          "label": "Publier la mise à jour",
+          "successToast": "Version {number} publiée pour l'organisation.",
+          "failedToast": "Impossible de publier cette mise à jour.",
+          "sentForReviewToast": "La version {number} a été envoyée à un administrateur pour examen.",
+          "offNotice": "La publication est désactivée. Demandez à un administrateur de publier cette mise à jour."
+        }
       }
     },
     "page": {
@@ -17399,7 +17666,8 @@
       "empty": {
         "noMatches": {
           "description": "Essayez une autre recherche.",
-          "title": "Aucune compétence correspondante"
+          "title": "Aucune compétence correspondante",
+          "groupDescription": "Aucune compétence de ce groupe ne correspond. Essayez un autre groupe ou une autre recherche."
         },
         "noSkills": {
           "title": "Aucune compétence personnalisée pour le moment",
@@ -17522,10 +17790,81 @@
       "shareDescription": "Appliquez ces modifications à chaque compétence sélectionnée. Les paramètres non modifiés conservent leurs valeurs actuelles.",
       "unchanged": "Ne pas modifier",
       "everyone": "Tout le monde dans l’organisation",
-      "invitedOnly": "Personnes et groupes invités",
       "addAccessDescription": "Ajoutez ces personnes et groupes à chaque compétence sélectionnée. Les personnes et groupes indiqués reçoivent la permission choisie. Les autres conservent leur accès actuel.",
       "apply": "{count, plural, one {Appliquer à # compétence} other {Appliquer à # compétences}}",
-      "moreActions": "Plus d’actions"
+      "moreActions": "Plus d’actions",
+      "publishWarning": {
+        "title": "La publication est irréversible",
+        "description": "Après l'application, tout le monde dans l'organisation peut utiliser les compétences sélectionnées. Les compétences publiées ne peuvent plus redevenir privées. Seul un administrateur peut les supprimer."
+      }
+    },
+    "reviewRequests": {
+      "title": "Demandes de publication",
+      "description": "Approuvez ou refusez les demandes de publication de compétences pour l'organisation.",
+      "columns": {
+        "skill": "Compétence",
+        "version": "Version",
+        "author": "Auteur",
+        "saved": "Enregistrée"
+      },
+      "unnamedSkill": "Compétence sans nom",
+      "review": {
+        "label": "Examiner",
+        "ariaLabel": "Examiner {name}"
+      },
+      "approve": {
+        "label": "Approuver"
+      },
+      "deny": {
+        "label": "Refuser"
+      },
+      "approvedToast": "Version {number} de {name} publiée.",
+      "deniedToast": "Version {number} de {name} refusée.",
+      "failedToast": "Impossible de mettre à jour cette demande.",
+      "version": {
+        "firstPublish": "v{number} · Première publication",
+        "update": "v{number} · Mise à jour depuis v{published}"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Obligatoire",
+        "description": "Installé et toujours actif. Les membres ne peuvent pas le désactiver."
+      },
+      "DEFAULT": {
+        "label": "Installé par défaut",
+        "description": "Installé pour chaque membre. Les membres peuvent le désactiver."
+      },
+      "AVAILABLE": {
+        "label": "Disponible à l’installation",
+        "description": "Les membres le trouvent et l'activent s'ils le souhaitent."
+      },
+      "NOT_AVAILABLE": {
+        "label": "Non disponible",
+        "description": "Masqué. Les membres ne peuvent ni le trouver ni l'activer."
+      },
+      "inherit": {
+        "label": "{scope, select, group {Paramètre de l'organisation} other {Accès par défaut}}",
+        "labelWithPolicy": "{scope, select, group {Paramètre de l'organisation ({policy})} other {Accès par défaut ({policy})}}",
+        "description": "{scope, select, group {Aucun paramètre de groupe. Le groupe utilise le paramètre de l'organisation.} other {Aucun paramètre propre. La compétence utilise l'accès par défaut, même après une modification par un administrateur.}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Filtrer par groupe",
+        "all": "Tous les groupes"
+      },
+      "card": "Groupes : {groups}",
+      "entry": "{name} : {policy}"
+    },
+    "limit": {
+      "refused": "Cette modification vous fait dépasser la limite de skills de {maxSize} ou {maxFiles, number} fichiers. Désactivez les skills que vous n’utilisez pas, puis réessayez.",
+      "banner": {
+        "title": "{count, plural, one {# utilisateur dépasse la limite de skills} other {# utilisateurs dépassent la limite de skills}}",
+        "description": "Les paramètres de groupe et les partages peuvent faire dépasser à un utilisateur {maxSize} ou {maxFiles, number} fichiers de compétences. Certaines de ses compétences risquent alors de ne pas se charger. Modifiez les paramètres de groupe ou demandez aux utilisateurs de désactiver des compétences.",
+        "user": "{email} : {size}, {files, plural, one {# fichier} other {# fichiers}}, {notLoaded, plural, one {# skill non chargé} other {# skills non chargés}}",
+        "more": "Et {count, number} de plus."
+      }
     }
   },
   "opensearchHealth": {

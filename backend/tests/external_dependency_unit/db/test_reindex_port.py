@@ -39,7 +39,7 @@ from onyx.background.celery.tasks.port.tasks import (
     run_port_attempt,
 )
 from onyx.background.celery.tasks.shared.tasks import (
-    _clear_port_orphan_candidate_for_live_doc,
+    _clear_port_orphan_candidates_for_live_docs,
 )
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
@@ -1633,8 +1633,9 @@ def test_port_swap_ready_scoped_to_required_cc_pairs(
     db_session: Session,
     cc_pair_and_future: tuple[ConnectorCredentialPair, int],
 ) -> None:
-    """Swap gate ignores an INVALID-only deferred doc (no deadlock) but STILL waits
-    on a required cc_pair's deferred doc (regression guard)."""
+    """A deferred doc never holds the swap: not one owned only by an INVALID
+    cc_pair, and not one on a required cc_pair either. The swap turns the flag
+    into a plain needs-sync instead (see swap_index._clear_what_future_missed__no_commit)."""
     required_pair, future_id = cc_pair_and_future
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
@@ -1656,11 +1657,11 @@ def test_port_swap_ready_scoped_to_required_cc_pairs(
         # not blocked by the INVALID-only deferred doc
         assert _port_swap_ready(db_session, future_ss, [required_pair], []) is True
 
-        # a deferred doc on the REQUIRED pair DOES still block the swap
+        # a deferred doc on the REQUIRED pair does not block the swap either
         [req_doc] = _seed_cc_pair_documents(db_session, required_pair, 1, unique=True)
         mark_document_synced_secondary_pending(req_doc, db_session)
         db_session.commit()
-        assert _port_swap_ready(db_session, future_ss, [required_pair], []) is False
+        assert _port_swap_ready(db_session, future_ss, [required_pair], []) is True
     finally:
         _cleanup_pairs(db_session, invalid_pair)
 
@@ -1964,10 +1965,12 @@ def test_clear_for_live_doc_clears_live_but_keeps_removed(
         record_port_orphan_candidates(db_session, ss.id, cc_pair.id, ["removed-doc"])
         db_session.commit()
 
-        for doc in (live_doc, "removed-doc"):
-            _clear_port_orphan_candidate_for_live_doc(
-                db_session, cc_pair.connector_id, cc_pair.credential_id, doc
-            )
+        _clear_port_orphan_candidates_for_live_docs(
+            db_session,
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            [live_doc, "removed-doc"],
+        )
         db_session.commit()
 
         this_cc = get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id)

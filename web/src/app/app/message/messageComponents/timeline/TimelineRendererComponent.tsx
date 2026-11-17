@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, JSX } from "react";
+import type { NestedCall } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
 import {
   FullChatState,
@@ -30,8 +31,12 @@ export interface TimelineRendererResult extends RendererResult {
 export type TimelineRendererOutput = TimelineRendererResult[];
 
 export interface TimelineRendererComponentProps {
-  /** Packets to render */
+  /** The step's own packets, without the packets of nested calls */
   packets: Packet[];
+  /** Tool calls nested under the step, ordered by sub_turn_index */
+  nestedCalls: NestedCall[];
+  /** Every packet of the step, nested calls included, in stream order */
+  streamPackets: Packet[];
   /** Chat state for rendering */
   chatState: FullChatState;
   /** Whether to animate streaming */
@@ -60,6 +65,8 @@ function arePropsEqual(
 ): boolean {
   return (
     prev.packets === next.packets &&
+    prev.nestedCalls === next.nestedCalls &&
+    prev.streamPackets === next.streamPackets &&
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
@@ -74,6 +81,8 @@ function arePropsEqual(
 export const TimelineRendererComponent = React.memo(
   function TimelineRendererComponent({
     packets,
+    nestedCalls,
+    streamPackets,
     chatState,
     animate,
     stopPacketSeen,
@@ -121,6 +130,8 @@ export const TimelineRendererComponent = React.memo(
     return (
       <RendererFn
         packets={packets}
+        nestedCalls={nestedCalls}
+        streamPackets={streamPackets}
         state={chatState}
         onComplete={() => {}}
         animate={animate}

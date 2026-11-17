@@ -110,7 +110,8 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
   </Accordion>
 
   <Accordion title="Tool Packets" icon="wrench">
-    Tool activity streams in the same way as the answer. Each tool has a start packet and one or more delta packets.
+    Tool activity streams in the same way as the answer. Each tool has a start packet.
+    Most tools also send delta packets, and some send an end packet.
 
     **Internal Search**
     - `search_tool_start`, `search_tool_queries_delta`, `search_tool_filter_delta`, and `search_tool_documents_delta`
@@ -125,11 +126,23 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
     **Code Execution**
     - `python_tool_start` and `python_tool_delta`
 
+    **Sandbox**
+    - `exec_command_start` (with `cmd` and `workdir`) or `write_stdin_start` (with `session_id` and `chars`) starts a
+    command call. `exec_output_delta` streams a preview of its output. `exec_end` ends the call.
+    Its `output` is the final output, which replaces the preview. `session_id` is set while the command runs,
+    and `error` is set when the call failed. A replayed call has no `exec_output_delta`
+    - `apply_patch_start` (with `patch` and `tool_name`) and `apply_patch_end` show a file edit and the files it changed
+    - A call that the user stopped, or that stopped with its code mode program, has no end packet. Stopping a
+    command call also stops the command. A command that a Ctrl-C (`write_stdin` with `\u0003`)
+    ended gets an `exec_end` whose `completion` is `canceled`
+
     **File Reading and Memory**
     - `file_reader_start`, `file_reader_result`, `memory_tool_start`, `memory_tool_delta`, and `memory_tool_no_access`
 
     **Custom Actions (MCP and OpenAPI)**
     - `custom_tool_start`, `custom_tool_args`, and `custom_tool_delta`
+    - `tool_approval_request` and `tool_approval_resolved` show a call that waits for the user's approval, and how it ended.
+    Every client must handle them. See [Tool Approvals](/developers/guides/chat_new_guide#tool-approvals)
 
     **Deep Research and Coding Agent**
     - `deep_research_plan_start`, `deep_research_plan_delta`, `research_agent_start`,

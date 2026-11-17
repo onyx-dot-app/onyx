@@ -6,14 +6,40 @@ description: "Access files stored in Egnyte"
 ## How it works
 
 The Egnyte connector indexes the files in your Egnyte domain.
-You can index the whole domain or one folder and its subfolders. Onyx indexes the file name, the file type,
-and the text content of the supported document types. It skips images.
+You can index the whole domain or one folder and its subfolders.
+
+| Content     | Behavior                                                                                              |
+| ----------- | ----------------------------------------------------------------------------------------------------- |
+| Files       | Onyx indexes the file name, path, and the text of supported document types. It skips images.          |
+| Folders     | Onyx keeps the folder hierarchy for browsing and filtering.                                           |
+| Permissions | Optional on the Business and Enterprise plans and on Onyx Cloud. **Sync with Egnyte** mirrors Egnyte folder permissions. |
 
 Onyx checks Egnyte for new and changed files every 30 minutes by default.
-You can change **Refresh Every** on the connector.
+You can change **Refresh Every** on the connector. On each check, the connector lists every folder in scope,
+then downloads only the changed files.
 
-Permission sync is not available for Egnyte.
-Everyone who can see the connector's documents in Onyx can see every indexed file.
+<Note>
+  Egnyte limits each access token to 2 API calls per second and 1,000 calls per day by default. On each check,
+  the connector uses one call for every 200 entries in each folder and one call per changed file. For a large domain,
+  ask Egnyte to raise the limits, or index one folder and set a longer **Refresh Every**.
+</Note>
+
+## Before you begin
+
+You need:
+
+- An application in the [Egnyte Developer Portal](https://developers.egnyte.com/), with its API key (client ID) and secret
+- An Egnyte user who can read every folder to index
+- An Egnyte administrator if you plan to use **Sync with Egnyte**
+
+The access token needs these Egnyte scopes:
+
+| Scope                | Required when             |
+| -------------------- | ------------------------- |
+| `Egnyte.filesystem`  | Always                    |
+| `Egnyte.permission`  | Using **Sync with Egnyte** |
+| `Egnyte.user`        | Using **Sync with Egnyte** |
+| `Egnyte.group`       | Using **Sync with Egnyte** |
 
 ## Setting up
 
@@ -28,7 +54,7 @@ Everyone who can see the connector's documents in Onyx can see every indexed fil
   <Step title="Get an access token">
     Use the application to get an access token for your Egnyte domain.
     Follow the [Egnyte authentication guide](https://developers.egnyte.com/docs/read/Public_API_Authentication).
-    The token must belong to a user who can read every folder you want to index.
+    Request the scopes in the table above. For **Sync with Egnyte**, get the token as an Egnyte administrator.
   </Step>
 </Steps>
 
@@ -47,8 +73,40 @@ Everyone who can see the connector's documents in Onyx can see every indexed fil
   </Step>
 
   <Step title="Choose document access">
-    Under **Document Access**, select who can see the indexed files.
-    **Specific Groups** is available on the Business and Enterprise plans and on Onyx Cloud.
+    Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or **Sync with Egnyte**.
+    **Specific Groups** and **Sync with Egnyte** are available on the Business and Enterprise plans and on Onyx Cloud.
     Then click **Create Connector**.
   </Step>
 </Steps>
+
+## Sync with Egnyte
+
+With **Sync with Egnyte**, an Onyx user can see an Egnyte file when Egnyte gives that user **Viewer Only**, **Viewer**,
+**Editor**, **Full**, or **Owner** access to the file's folder:
+
+- Onyx reads each folder's effective permissions, including inherited ones.
+- Onyx maps Egnyte custom groups and the default groups, such as **All Power Users**, to Onyx.
+- Egnyte administrators can see every indexed file, including files in private folders.
+- A **None** permission for a user does not remove access that the user gets from a group. Egnyte works the same way.
+- Shared links do not give access in Onyx.
+- Egnyte user emails must match the users' email addresses in Onyx.
+
+The access token must belong to an Egnyte administrator and have the `Egnyte.permission`, `Egnyte.user`,
+and `Egnyte.group` scopes.
+
+<Warning>
+  An Egnyte account that you connected before permission sync was available has only the `Egnyte.filesystem` scope.
+  Connect the account again as an administrator before you select **Sync with Egnyte**.
+</Warning>
+
+Permissions are attached during the first indexing attempt. After that,
+Onyx refreshes document permissions and Egnyte group membership every 6 hours.
+Set `EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY` and `EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY` (seconds) to change them.
+Each document permission refresh uses one API call for every 200 entries in each folder.
+Each group refresh uses one call per custom group, plus one call for every 100 users and every 100 groups.
+
+<Warning>
+  Review the access type before connecting.
+  Choosing **Everyone in Your Organization** does not preserve Egnyte permissions and can expose indexed content to
+  every Onyx user.
+</Warning>

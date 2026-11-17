@@ -94,7 +94,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      playwright: ${{ steps.filter.outputs.playwright || 'true' }}
+      playwright: ${{ github.event_name != 'pull_request' && 'true' || (steps.filter.outputs.playwright == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
       airgap: ${{ steps.filter.outputs.airgap || 'true' }}
       # Whether this change touches MCP-OAuth-relevant code. Drives whether a
       # same-repo PR validates the OAuth spec against the real Okta org instead of
@@ -108,13 +108,26 @@ jobs:
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
+        id: backend_src
+        if: github.event_name == 'pull_request'
+        with:
+          # `every`: a file matches only if it matches all patterns, so a PR
+          # that changes only unit or external-dependency tests skips this suite.
+          predicate-quantifier: every
+          filters: |
+            backend:
+              - 'backend/**'
+              - '!backend/tests/unit/**'
+              - '!backend/tests/external_dependency_unit/**'
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
         if: github.event_name == 'pull_request'
         with:
           filters: |
             playwright:
-              - 'backend/**'
               - 'web/**'
+              # Read by web/tests/e2e/craft/document_previews.spec.ts.
+              - 'backend/tests/unit/onyx/file_processing/fixtures/**'
               - 'deployment/docker_compose/**'
               - 'docker-bake.hcl'
               - 'pyproject.toml'
@@ -526,6 +539,13 @@ jobs:
           - project: exclusive
             shard: 1
             shards: 1
+          # The `@code-mode` specs again, against a backend with code mode on.
+          - project: code-mode
+            shard: 1
+            shards: 1
+    # Read by the backend through the compose .env and by the specs.
+    env:
+      CODE_MODE_ENABLED: ${{ matrix.project == 'code-mode' }}
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
@@ -578,6 +598,7 @@ jobs:
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
+          CODE_MODE_ENABLED=${CODE_MODE_ENABLED}
           # MCP E2E tests register mock servers on host.docker.internal (a private
           # host-gateway address); opt in so the SSRF guard allows it. Cloud-
           # metadata/link-local stays blocked regardless.
@@ -1035,7 +1056,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: false
-          version: "0.11.25"
+          version: "0.13.8"
 
       - name: Install ods from uv.lock
         run: uv sync --frozen --no-install-project --only-group ods

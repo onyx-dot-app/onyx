@@ -37,6 +37,53 @@ icon: "comments-question"
     See the [Enterprise Edition](/admins/getting_started/enterprise_edition) page for details.
   </Accordion>
 
+  <Accordion title="Why does Onyx always use prompt caching?">
+    Onyx marks stable chat history for prompt caching, including earlier messages and tool results.
+    Supported providers can reuse this prefix across model calls to reduce repeated processing.
+    Shared context and image messages can also be reused when the provider supports caching.
+    Cache reuse depends on the provider and model.
+
+    Onyx retains earlier action results so follow-up questions can use the same evidence.
+    As a conversation approaches the model’s context limit, Onyx tries to summarize older history to make room.
+    If the summary fails or does not fit, Onyx removes older history from the model’s context instead.
+    This changes the cached prefix, but the new prefix can be reused on later calls.
+    Cached input still occupies space in the model’s context window.
+
+    Onyx keeps prompt caching enabled to reduce the total cost of conversations and agents that repeatedly use the same
+    context. A tool step usually sends earlier context back to the model along with new results.
+    Caching lets those repeated input tokens cost less.
+
+    Some providers charge more to write a cache than to process ordinary input.
+    A single model call with no cache hit or later reuse can therefore cost more. The premium applies to cache writes,
+    not the whole bill.
+
+    For example,
+    Claude Haiku 4.5 charges 1.25 times the input rate for five-minute cache writes and 0.1 times for reads.
+    These [Anthropic cache rates](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#pricing)
+    were checked on November 6, 2026.
+
+    The following calculations assume one unchanged prefix, one initial write, and cache hits on every later call.
+
+    | Model calls using the prefix | Prefix input cost versus processing it each time |
+    | --- | --- |
+    | 1 | 25% higher |
+    | 2 | 32.5% lower |
+    | 5 | 67% lower |
+    | 10 | 78.5% lower |
+
+    One successful reuse already pays back the initial write premium in this example. Savings scale with tokens reused,
+    so long workflows can offset many short requests that never reuse their cache. For example,
+    suppose five calls each include the same 100,000-token prefix. With one write and four cache hits,
+    the saving covers the write premium on 268 isolated 5,000-token requests.
+    This comparison uses the same rates and excludes output tokens and other charges.
+
+    Generating the final answer still costs the normal output rate.
+    A long answer reduces the percentage saved on the total bill, but does not remove savings on input processing.
+    Expired caches, changed context, or large new inputs can reduce savings or cause a net increase.
+    Prompts below a provider's minimum cache size may receive no caching benefit or write charge.
+    Actual savings depend on the model, rates, and successful reuse.
+  </Accordion>
+
   <Accordion title="Can I run Onyx offline?">
     Yes, but Onyx needs an LLM to function. You can air gap the entire system if you run a local LLM.
     We strongly recommend a recent, non-quantized LLM for the best experience.

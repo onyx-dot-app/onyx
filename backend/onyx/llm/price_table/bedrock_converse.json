@@ -5486,7 +5486,7 @@
     },
     "us-gov-east-1/amazon.titan-embed-text-v2:0": {
       "cost": {
-        "input": 0.19999999999999998,
+        "input": 0.03,
         "output": 0.0
       },
       "limit": {

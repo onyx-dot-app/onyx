@@ -197,14 +197,12 @@ def test_redact_error_covers_custom_config_mapped_api_key() -> None:
 
 
 @pytest.mark.parametrize("streaming", [False, True])
-@pytest.mark.parametrize("cache_enabled", [False, True])
 @pytest.mark.parametrize("supports_images", [False, True])
 @pytest.mark.parametrize("with_tokenizer", [False, True])
 @pytest.mark.parametrize("use_client_capability", [False, True])
 def test_cache_trace_uses_prepared_image_decisions(
     monkeypatch: pytest.MonkeyPatch,
     streaming: bool,
-    cache_enabled: bool,
     supports_images: bool,
     with_tokenizer: bool,
     use_client_capability: bool,
@@ -216,8 +214,6 @@ def test_cache_trace_uses_prepared_image_decisions(
         max_input_tokens=1000,
         supports_images=supports_images if use_client_capability else None,
     )
-    monkeypatch.setattr(prompt_formatting, "PROMPT_CACHE_CHAT_HISTORY", cache_enabled)
-    monkeypatch.setattr(model_request, "PROMPT_CACHE_CHAT_HISTORY", cache_enabled)
     monkeypatch.setattr(prompt_formatting, "ENABLE_AZURE_IMAGE_CAP", True)
     monkeypatch.setattr(prompt_formatting, "_AZURE_DEFAULT_IMAGE_CAP", 1)
     capability = MagicMock(
@@ -278,11 +274,10 @@ def test_cache_trace_uses_prepared_image_decisions(
     assert selector.call_count == int(supports_images)
     stats = span.span_data.model_config
     assert stats["flow"] == "chat_response"
-    assert stats["prompt_cache_chat_history"] == ("on" if cache_enabled else "off")
-    assert stats["cacheable_prefix_msgs"] == ("1" if cache_enabled else "0")
+    assert stats["cacheable_prefix_msgs"] == "1"
     marker_tokens = 15 if with_tokenizer else 85
     assert stats["cacheable_prefix_tokens"] == str(
-        (55 if supports_images else marker_tokens) if cache_enabled else 0
+        55 if supports_images else marker_tokens
     )
     assert stats["history_msgs"] == str(len(sent))
     assert sum(isinstance(part, ImageContentPart) for part in sent[0].content) == int(

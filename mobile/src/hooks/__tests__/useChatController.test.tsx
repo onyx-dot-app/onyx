@@ -13,9 +13,20 @@ import {
   renameChatSession,
   stopChatSession,
 } from "@/api/chat/sessions";
-import { streamChatMessage, type StreamEvent } from "@/api/chat/stream";
+import {
+  resumeChatMessage,
+  streamChatMessage,
+  StreamHttpError,
+  type StreamEvent,
+} from "@/api/chat/stream";
 import { ChatFileType, type FileDescriptor } from "@/chat/interfaces";
 import { PacketType, StopReason } from "@/chat/streamingModels";
+import { getLatestMessageChain } from "@/chat/messageTree";
+import {
+  readToolApprovals,
+  toolApprovalStatus,
+  useToolApprovalUi,
+} from "@/chat/toolApprovals";
 import { useChatController } from "@/hooks/useChatController";
 import { toast } from "@/hooks/useToast";
 import { useChatSessionStore } from "@/state/chatSessionStore";
@@ -31,12 +42,25 @@ jest.mock("@/state/session", () => ({
 // Re-implement the trivial discriminators inline so we don't pull in expo/fetch.
 jest.mock("@/api/chat/stream", () => ({
   streamChatMessage: jest.fn(),
+  resumeChatMessage: jest.fn(),
+  isHeartbeat: (event: { obj?: { type?: string } }) =>
+    event.obj?.type === "chat_heartbeat",
   isPacket: (event: { obj?: unknown; placement?: unknown }) =>
     "obj" in event && "placement" in event,
   isMessageIdInfo: (event: { user_message_id?: unknown }) =>
     "user_message_id" in event,
+  isStreamCursor: (event: { next_cursor?: unknown }) => "next_cursor" in event,
   isStreamError: (event: { error?: unknown }) =>
     "error" in event && typeof event.error === "string",
+  StreamHttpError: class StreamHttpError extends Error {
+    status: number;
+    code: string | null;
+    constructor(message: string, status: number, code: string | null = null) {
+      super(message);
+      this.status = status;
+      this.code = code;
+    }
+  },
 }));
 jest.mock("@/api/chat/sessions", () => ({
   createChatSession: jest.fn(),
@@ -45,12 +69,25 @@ jest.mock("@/api/chat/sessions", () => ({
   renameChatSession: jest.fn(),
   stopChatSession: jest.fn(),
 }));
+// Status polls wait this long instead of the real interval, so tests do not sleep.
+jest.mock("@/chat/constants", () => ({
+  ...jest.requireActual<typeof import("@/chat/constants")>("@/chat/constants"),
+  SESSION_POLL_INTERVAL_MS: 10,
+}));
 jest.mock("@/hooks/useToast", () => ({
-  toast: { info: jest.fn(), error: jest.fn() },
+  toast: { info: jest.fn(), error: jest.fn(), warning: jest.fn() },
 }));
 
 const streamMock = streamChatMessage as unknown as Mock<
   (body: { origin: string }, signal: AbortSignal) => AsyncGenerator<StreamEvent>
+>;
+const resumeMock = resumeChatMessage as unknown as Mock<
+  (
+    id: string,
+    streamId: number,
+    cursor: number,
+    signal: AbortSignal,
+  ) => AsyncGenerator<StreamEvent>
 >;
 const createSessionMock = createChatSession as unknown as Mock<
   (personaId?: number, projectId?: number | null) => Promise<string>
@@ -71,10 +108,31 @@ function startPacket(content: string): StreamEvent {
     obj: { type: PacketType.MESSAGE_START, id: "m", content },
   } as StreamEvent;
 }
+const pausedStop = {
+  placement: { turn_index: 0 },
+  obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_APPROVAL },
+} as StreamEvent;
+const approvalRequest = {
+  placement: { turn_index: 0 },
+  obj: {
+    type: PacketType.TOOL_APPROVAL_REQUEST,
+    approval_id: "a1",
+    tool_call_id: "c1",
+    tool_name: "lookup",
+    display_name: "Lookup",
+    arguments: {},
+  },
+} as StreamEvent;
 function deltaPacket(content: string): StreamEvent {
   return {
     placement: { turn_index: 0 },
     obj: { type: PacketType.MESSAGE_DELTA, content },
+  } as StreamEvent;
+}
+function stopPacket(): StreamEvent {
+  return {
+    placement: { turn_index: 0 },
+    obj: { type: PacketType.STOP },
   } as StreamEvent;
 }
 function endPacket(): StreamEvent {
@@ -87,8 +145,65 @@ const idInfo = {
   user_message_id: 10,
   reserved_assistant_message_id: 11,
 } as StreamEvent;
+function cursor(streamId: number, nextCursor: number): StreamEvent {
+  return {
+    stream_id: streamId,
+    next_cursor: nextCursor,
+    replay_complete: true,
+  };
+}
 function streamError(error: string, errorCode?: string): StreamEvent {
   return { error, error_code: errorCode ?? null } as unknown as StreamEvent;
+}
+
+// The saved session of one question (10) and its answer (11).
+function savedTurn(packets: unknown[], answer = "") {
+  return {
+    chat_session_id: "s1",
+    description: "",
+    persona_id: 0,
+    messages: [
+      {
+        message_id: 10,
+        message_type: "user",
+        parent_message: null,
+        latest_child_message: 11,
+        message: "Question",
+        files: [],
+        time_sent: "",
+        error: null,
+      },
+      {
+        message_id: 11,
+        message_type: "assistant",
+        parent_message: 10,
+        latest_child_message: null,
+        message: answer,
+        files: [],
+        time_sent: "",
+        error: null,
+      },
+    ],
+    packets: [packets],
+    time_created: "",
+    current_stream: null,
+  };
+}
+
+// The requests that the latest response of session s1 shows as waiting.
+function waitingIds(): string[] {
+  const tree = useChatSessionStore.getState().sessions.get("s1")?.messageTree;
+  const response = tree ? getLatestMessageChain(tree).at(-1) : undefined;
+  const { localStatuses } = useToolApprovalUi.getState();
+  return readToolApprovals(response?.packets ?? [])
+    .filter(
+      (entry) =>
+        toolApprovalStatus(
+          entry,
+          localStatuses.get(entry.request.approval_id),
+        ) === "pending",
+    )
+    .map((entry) => entry.request.approval_id);
 }
 
 async function* scripted(events: StreamEvent[]): AsyncGenerator<StreamEvent> {
@@ -125,6 +240,373 @@ describe("useChatController", () => {
       currentSessionId: null,
       sessions: new Map(),
     });
+    useToolApprovalUi.setState({ localStatuses: new Map(), nudgeSeq: 0 });
+  });
+
+  it("sends while a tool approval waits, then keeps the draft when the server refuses", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    getSessionMock.mockResolvedValue(savedTurn([approvalRequest, pausedStop]));
+    streamMock
+      .mockReturnValueOnce(scripted([idInfo, approvalRequest, pausedStop]))
+      .mockReturnValueOnce(
+        (async function* (): AsyncGenerator<StreamEvent> {
+          throw new StreamHttpError("Waiting.", 409, "APPROVAL_PENDING");
+        })(),
+      );
+    const onAccepted = jest.fn();
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    await act(async () => {
+      await result.current.submit("Follow-up", [], onAccepted);
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    expect(streamMock).toHaveBeenCalledTimes(2);
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(toast.warning).toHaveBeenCalledWith(
+      "Approve or reject the pending tool calls first.",
+    );
+    expect(useToolApprovalUi.getState().nudgeSeq).toBe(1);
+    expect(result.current.messages.map((m) => m.message)).toEqual([
+      "Question",
+      "",
+    ]);
+    expect(waitingIds()).toEqual(["a1"]);
+  });
+
+  it("releases input when a response pauses for approval, keeping its card open", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValueOnce(
+      scripted([
+        idInfo,
+        approvalRequest,
+        {
+          placement: { turn_index: 0 },
+          obj: {
+            type: PacketType.STOP,
+            stop_reason: StopReason.AWAITING_APPROVAL,
+          },
+        } as StreamEvent,
+      ]),
+    );
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    expect(waitingIds()).toEqual(["a1"]);
+    expect(result.current.messages[1]?.streamingStartedAt).toBeUndefined();
+    expect(getSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("reattaches to the run when the connection drops while an approval waits", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    useChatSessionStore.setState({ currentSessionId: "s1" });
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({ is_processing: false })
+      .mockResolvedValue({
+        is_processing: true,
+        current_stream: { stream_id: 11, response_ids: [11] },
+      });
+    streamMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        yield idInfo;
+        yield approvalRequest;
+        throw new TypeError("Network request failed");
+      })(),
+    );
+    let endReplay: () => void = () => {};
+    resumeMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        yield approvalRequest;
+        yield cursor(11, 1);
+        await new Promise<void>((resolve) => {
+          endReplay = resolve;
+        });
+      })(),
+    );
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+
+    await waitFor(() =>
+      expect(resumeMock).toHaveBeenCalledWith("s1", 11, 0, expect.anything()),
+    );
+    // The card stays reachable: the response is still a live answer, not an error.
+    await waitFor(() => expect(waitingIds()).toEqual(["a1"]));
+    expect(result.current.messages.map((m) => m.type)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(result.current.chatState).toBe("streaming");
+    useChatSessionStore.setState({ currentSessionId: null });
+    await act(async () => endReplay());
+  });
+
+  it("reloads the saved answer when a lost send finds the server already idle", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        yield idInfo;
+        yield startPacket("Part");
+        yield approvalRequest;
+        throw new TypeError("Network request failed");
+      })(),
+    );
+    getSessionMock.mockResolvedValue(
+      savedTurn(
+        [
+          startPacket("Part of the answer"),
+          approvalRequest,
+          {
+            placement: { turn_index: 0 },
+            obj: {
+              type: PacketType.TOOL_APPROVAL_RESOLVED,
+              approval_id: "a1",
+              outcome: "rejected",
+            },
+          },
+          stopPacket(),
+        ],
+        "Part of the answer",
+      ),
+    );
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    expect(getSessionMock).toHaveBeenCalledWith("s1");
+    expect(resumeMock).not.toHaveBeenCalled();
+    expect(accumulated(result.current.messages[1]!.packets)).toBe(
+      "Part of the answer",
+    );
+    expect(waitingIds()).toEqual([]);
+  });
+
+  it("does not let a failed response's request block the next send", async () => {
+    let now = Date.now();
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => (now += 10));
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock
+      .mockReturnValueOnce(
+        scripted([idInfo, approvalRequest, streamError("Boom.")]),
+      )
+      .mockReturnValueOnce(
+        scripted([
+          { user_message_id: 12, reserved_assistant_message_id: 13 },
+          endPacket(),
+          stopPacket(),
+        ] as StreamEvent[]),
+      );
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    await act(async () => {
+      await result.current.submit("try again");
+    });
+
+    expect(streamMock).toHaveBeenCalledTimes(2);
+    expect(toast.warning).not.toHaveBeenCalled();
+    clock.mockRestore();
+  });
+
+  it("loads the waiting card when the server refuses a send", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    getSessionMock.mockResolvedValue(savedTurn([approvalRequest, pausedStop]));
+    streamMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        throw new StreamHttpError("Waiting.", 409, "APPROVAL_PENDING");
+      })(),
+    );
+    const onAccepted = jest.fn();
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+
+    await act(async () => {
+      await result.current.submit("Question", [], onAccepted);
+    });
+    await waitFor(() => expect(waitingIds()).toEqual(["a1"]));
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    expect(getSessionMock).toHaveBeenCalledWith("s1");
+    expect(result.current.messages.map((m) => m.message)).toEqual([
+      "Question",
+      "",
+    ]);
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.warning).toHaveBeenCalledWith(
+      "Approve or reject the pending tool calls first.",
+    );
+  });
+
+  it("loads and follows the waiting response when the server refuses a send", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({ is_processing: false })
+      .mockResolvedValue({
+        is_processing: true,
+        current_stream: { stream_id: 21, response_ids: [21] },
+      });
+    streamMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        throw new StreamHttpError("Waiting.", 409, "APPROVAL_PENDING");
+      })(),
+    );
+    getSessionMock.mockResolvedValueOnce({
+      chat_session_id: "s1",
+      description: "",
+      persona_id: 0,
+      messages: [
+        {
+          message_id: 20,
+          message_type: "user",
+          parent_message: null,
+          latest_child_message: 21,
+          message: "Asked elsewhere",
+          files: [],
+          time_sent: "",
+          error: null,
+        },
+        {
+          message_id: 21,
+          message_type: "assistant",
+          parent_message: 20,
+          latest_child_message: null,
+          message: "",
+          files: [],
+          time_sent: "",
+          error: null,
+        },
+      ],
+      packets: [[]],
+      time_created: "",
+      current_stream: { stream_id: 21, response_ids: [21] },
+    });
+    let endReplay: () => void = () => {};
+    resumeMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        yield approvalRequest;
+        yield cursor(21, 1);
+        await new Promise<void>((resolve) => {
+          endReplay = resolve;
+        });
+      })(),
+    );
+    const onAccepted = jest.fn();
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+
+    await act(async () => {
+      await result.current.submit("Question", [], onAccepted);
+    });
+
+    await waitFor(() => expect(waitingIds()).toEqual(["a1"]));
+    expect(resumeMock).toHaveBeenCalledWith("s1", 21, 0, expect.anything());
+    expect(result.current.messages.map((m) => m.message)).toEqual([
+      "Asked elsewhere",
+      "",
+    ]);
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(toast.warning).toHaveBeenCalledWith(
+      "Approve or reject the pending tool calls first.",
+    );
+    useChatSessionStore.setState({ currentSessionId: null });
+    await act(async () => endReplay());
+  });
+
+  it("stops the stream it follows after switching to one it cannot load", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    useChatSessionStore.setState({ currentSessionId: "s1" });
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({ is_processing: false })
+      .mockResolvedValueOnce({
+        is_processing: true,
+        current_stream: { stream_id: 11, response_ids: [11] },
+      })
+      .mockResolvedValue({
+        is_processing: true,
+        current_stream: { stream_id: 21, response_ids: [21] },
+      });
+    streamMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        yield idInfo;
+        throw new TypeError("Network request failed");
+      })(),
+    );
+    resumeMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        throw new StreamHttpError("no resumable run", 404);
+      })(),
+    );
+    getSessionMock.mockRejectedValue(new Error("offline"));
+    stopSessionMock.mockResolvedValue();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+    await waitFor(() => expect(getSessionMock).toHaveBeenCalled());
+    act(() => result.current.stop());
+
+    await waitFor(() => expect(stopSessionMock).toHaveBeenCalled());
+    expect(stopSessionMock).toHaveBeenCalledWith("s1", 21);
+    useChatSessionStore.setState({ currentSessionId: null });
+    warn.mockRestore();
+  });
+
+  it("does not follow a lost run again after the server confirms Stop", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    const status = Promise.withResolvers<{
+      is_processing: boolean;
+      current_stream: { stream_id: number; response_ids: number[] };
+    }>();
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({ is_processing: false })
+      .mockReturnValueOnce(status.promise)
+      .mockResolvedValue({ is_processing: false });
+    streamMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        yield idInfo;
+        yield approvalRequest;
+        throw new TypeError("Network request failed");
+      })(),
+    );
+    stopSessionMock.mockResolvedValue();
+    getSessionMock.mockResolvedValue(savedTurn([]));
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("settling"));
+
+    act(() => result.current.stop());
+    await waitFor(() => expect(stopSessionMock).toHaveBeenCalledWith("s1", 11));
+    await act(async () => {
+      status.resolve({
+        is_processing: true,
+        current_stream: { stream_id: 11, response_ids: [11] },
+      });
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"), {
+      timeout: 3000,
+    });
+    expect(resumeMock).not.toHaveBeenCalled();
   });
 
   it("streams tokens into the assistant node and assigns message ids", async () => {
@@ -135,6 +617,7 @@ describe("useChatController", () => {
         deltaPacket(" world"),
         idInfo,
         endPacket(),
+        stopPacket(),
       ]),
     );
 
@@ -212,6 +695,113 @@ describe("useChatController", () => {
     );
   });
 
+  it("reloads the outcomes the server saved for a stopped response's requests", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    stopSessionMock.mockResolvedValue();
+    const agentRequest = {
+      placement: { turn_index: 0 },
+      obj: {
+        ...(approvalRequest as { obj: object }).obj,
+        approval_id: "a2",
+        agent_name: "Researcher",
+      },
+    } as StreamEvent;
+    streamMock.mockImplementation((_body, signal) =>
+      (async function* () {
+        yield idInfo;
+        yield approvalRequest;
+        yield agentRequest;
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) resolve();
+          else signal.addEventListener("abort", () => resolve());
+        });
+      })(),
+    );
+    // Stop rejects the root agent's request; the subagent's request still waits.
+    getSessionMock.mockResolvedValue(
+      savedTurn([
+        approvalRequest,
+        agentRequest,
+        {
+          placement: { turn_index: 0 },
+          obj: {
+            type: PacketType.TOOL_APPROVAL_RESOLVED,
+            approval_id: "a1",
+            outcome: "rejected",
+          },
+        },
+        {
+          placement: { turn_index: 0 },
+          obj: {
+            type: PacketType.STOP,
+            stop_reason: StopReason.USER_CANCELLED,
+          },
+        },
+      ]),
+    );
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+    await waitFor(() =>
+      expect(result.current.messages[1]?.packets.length).toBeGreaterThan(0),
+    );
+    await act(async () => {
+      result.current.stop();
+    });
+
+    await waitFor(() => expect(getSessionMock).toHaveBeenCalledWith("s1"));
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    expect(waitingIds()).toEqual(["a2"]);
+    expect(useToolApprovalUi.getState().localStatuses.size).toBe(0);
+  });
+
+  it("keeps a waiting request decidable when the server Stop fails", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    stopSessionMock.mockRejectedValueOnce(new Error("offline"));
+    streamMock.mockImplementation((_body, signal) =>
+      (async function* () {
+        yield idInfo;
+        yield approvalRequest;
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) resolve();
+          else signal.addEventListener("abort", () => resolve());
+        });
+      })(),
+    );
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+    await waitFor(() =>
+      expect(result.current.messages[1]?.packets.length).toBeGreaterThan(0),
+    );
+    const controller = useChatSessionStore
+      .getState()
+      .sessions.get("s1")?.abortController;
+    await act(async () => {
+      result.current.stop();
+    });
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("s1")?.stopRequested,
+      ).toBe(false),
+    );
+
+    expect(stopSessionMock).toHaveBeenCalledWith("s1", 11);
+    expect(controller?.signal.aborted).toBe(false);
+    expect(result.current.chatState).toBe("streaming");
+    expect(waitingIds()).toEqual(["a1"]);
+    expect(useToolApprovalUi.getState().localStatuses.size).toBe(0);
+    expect(toast.error).toHaveBeenCalledWith(
+      "Could not stop the response. Try again.",
+    );
+    controller?.abort();
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+  });
+
   it("does not append a synthetic stop to a turn that ended on its own", async () => {
     useChatSessionStore.getState().ensureSession("s1");
     streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
@@ -233,6 +823,7 @@ describe("useChatController", () => {
     useChatSessionStore.getState().ensureSession("s1");
     streamMock.mockReturnValue(
       scripted([
+        idInfo,
         startPacket("Partial "),
         streamError("The model exploded.", "RATE_LIMIT"),
       ]),
@@ -249,21 +840,121 @@ describe("useChatController", () => {
     expect(messages.map((m) => m.type)).toEqual(["user", "error"]);
     expect(messages[1]!.message).toBe("The model exploded.");
     expect(messages[1]!.errorCode).toBe("RATE_LIMIT");
+    // The partial answer stays with the error.
+    expect(accumulated(messages[1]!.packets)).toBe("Partial ");
   });
 
-  it("surfaces a bare backend error that arrives before any content", async () => {
+  it.each(["error packet", "HTTP 400"] as const)(
+    "drops a send the server rejects before saving (%s)",
+    async (kind) => {
+      let now = Date.now();
+      const clock = jest
+        .spyOn(Date, "now")
+        .mockImplementation(() => (now += 10));
+      useChatSessionStore.getState().ensureSession("s1");
+      streamMock
+        .mockReturnValueOnce(
+          scripted([idInfo, startPacket("Hi"), endPacket(), stopPacket()]),
+        )
+        .mockReturnValueOnce(
+          kind === "error packet"
+            ? scripted([streamError("Rejected.")])
+            : (async function* (): AsyncGenerator<StreamEvent> {
+                throw new StreamHttpError("Rejected.", 400);
+              })(),
+        )
+        .mockReturnValueOnce(
+          scripted([
+            { user_message_id: 12, reserved_assistant_message_id: 13 },
+            endPacket(),
+            stopPacket(),
+          ] as StreamEvent[]),
+        );
+      const onAccepted = jest.fn();
+
+      const { result } = renderHook(() => useChatController("s1"), {
+        wrapper,
+      });
+      await act(async () => {
+        await result.current.submit("Question");
+      });
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
+      const treeBefore = useChatSessionStore
+        .getState()
+        .sessions.get("s1")!.messageTree;
+      await act(async () => {
+        await result.current.submit("Rejected question", [], onAccepted);
+      });
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+      expect(
+        useChatSessionStore.getState().sessions.get("s1")!.messageTree,
+      ).toEqual(treeBefore);
+      expect(toast.error).toHaveBeenCalledWith("Rejected.");
+      // The composer keeps the draft until the server accepts a send.
+      expect(onAccepted).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await result.current.submit("Next");
+      });
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
+      expect(
+        (
+          streamMock.mock.calls[2]![0] as unknown as {
+            parent_message_id: number | null;
+          }
+        ).parent_message_id,
+      ).toBe(11);
+      expect(result.current.messages.map((m) => m.messageId)).toEqual([
+        10, 11, 12, 13,
+      ]);
+      clock.mockRestore();
+    },
+  );
+
+  it("continues the conversation after a failed turn", async () => {
+    // Node ids come from the clock; keep the two turns' ids distinct.
+    let now = Date.now();
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => (now += 10));
     useChatSessionStore.getState().ensureSession("s1");
-    streamMock.mockReturnValue(scripted([streamError("Boom.")]));
+    streamMock
+      .mockReturnValueOnce(
+        scripted([idInfo, startPacket("Partial "), streamError("Boom.")]),
+      )
+      .mockReturnValueOnce(
+        scripted([
+          { user_message_id: 12, reserved_assistant_message_id: 13 },
+          startPacket("Done"),
+          endPacket(),
+          stopPacket(),
+        ] as StreamEvent[]),
+      );
 
     const { result } = renderHook(() => useChatController("s1"), { wrapper });
     await act(async () => {
-      await result.current.submit("hi");
+      await result.current.submit("Question");
     });
-
     await waitFor(() => expect(result.current.chatState).toBe("input"));
+    await act(async () => {
+      await result.current.submit("try again");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    expect(
+      (
+        streamMock.mock.calls[1]![0] as unknown as {
+          parent_message_id: number | null;
+        }
+      ).parent_message_id,
+    ).toBe(11);
     const messages = result.current.messages;
-    expect(messages.map((m) => m.type)).toEqual(["user", "error"]);
-    expect(messages[1]!.message).toBe("Boom.");
+    expect(messages.map((m) => [m.type, m.messageId])).toEqual([
+      ["user", 10],
+      ["error", 11],
+      ["user", 12],
+      ["assistant", 13],
+    ]);
+    clock.mockRestore();
   });
 
   it("does not auto-name a new session whose first run errors", async () => {
@@ -312,46 +1003,49 @@ describe("useChatController", () => {
     expect(result.current.messages[0]!.files).toEqual(files);
   });
 
-  it("threads toolOptions onto the send body (deep research / tools / sources)", async () => {
-    useChatSessionStore.getState().ensureSession("s-tools");
-    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+  it.each([false, true])(
+    "threads valid toolOptions onto the send body (deep research: %s)",
+    async (deepResearch) => {
+      useChatSessionStore.getState().ensureSession("s-tools");
+      streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
 
-    const { result } = renderHook(() => useChatController("s-tools"), {
-      wrapper,
-    });
-    await act(async () => {
-      await result.current.submit("hi", [], undefined, {
-        deepResearch: true,
-        allowedToolIds: [1, 3],
-        forcedToolId: 3,
-        internalSearchFilters: { source_type: ["web"] },
-        llmOverride: {
-          model_configuration_id: 7,
-          model_provider: "OpenAI Prod",
-          model_version: "gpt-6-sol",
-        },
+      const { result } = renderHook(() => useChatController("s-tools"), {
+        wrapper,
       });
-    });
+      await act(async () => {
+        await result.current.submit("hi", [], undefined, {
+          deepResearch,
+          allowedToolIds: [1, 3],
+          preferredToolId: deepResearch ? null : 3,
+          internalSearchFilters: { source_type: ["web"] },
+          llmOverride: {
+            model_configuration_id: 7,
+            model_provider: "OpenAI Prod",
+            model_version: "gpt-6-sol",
+          },
+        });
+      });
 
-    await waitFor(() => expect(result.current.chatState).toBe("input"));
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
 
-    const body = streamMock.mock.calls[0]![0] as unknown as {
-      deep_research: boolean;
-      allowed_tool_ids: number[] | null;
-      forced_tool_id: number | null;
-      internal_search_filters: { source_type: string[] | null } | null;
-      llm_override: { model_configuration_id: number } | null;
-    };
-    expect(body.deep_research).toBe(true);
-    expect(body.allowed_tool_ids).toEqual([1, 3]);
-    expect(body.forced_tool_id).toBe(3);
-    expect(body.internal_search_filters).toEqual({ source_type: ["web"] });
-    expect(body.llm_override).toEqual({
-      model_configuration_id: 7,
-      model_provider: "OpenAI Prod",
-      model_version: "gpt-6-sol",
-    });
-  });
+      const body = streamMock.mock.calls[0]![0] as unknown as {
+        deep_research: boolean;
+        allowed_tool_ids: number[] | null;
+        preferred_tool_id: number | null;
+        internal_search_filters: { source_type: string[] | null } | null;
+        llm_override: { model_configuration_id: number } | null;
+      };
+      expect(body.deep_research).toBe(deepResearch);
+      expect(body.allowed_tool_ids).toEqual([1, 3]);
+      expect(body.preferred_tool_id).toBe(deepResearch ? null : 3);
+      expect(body.internal_search_filters).toEqual({ source_type: ["web"] });
+      expect(body.llm_override).toEqual({
+        model_configuration_id: 7,
+        model_provider: "OpenAI Prod",
+        model_version: "gpt-6-sol",
+      });
+    },
+  );
 
   it("defaults the tool fields when no toolOptions are passed (backwards compatible)", async () => {
     useChatSessionStore.getState().ensureSession("s-defaults");
@@ -369,13 +1063,13 @@ describe("useChatController", () => {
     const body = streamMock.mock.calls[0]![0] as unknown as {
       deep_research: boolean;
       allowed_tool_ids: number[] | null;
-      forced_tool_id: number | null;
+      preferred_tool_id: number | null;
       internal_search_filters: unknown;
       llm_override: unknown;
     };
     expect(body.deep_research).toBe(false);
     expect(body.allowed_tool_ids).toBeNull();
-    expect(body.forced_tool_id).toBeNull();
+    expect(body.preferred_tool_id).toBeNull();
     expect(body.internal_search_filters).toBeNull();
     // Null, not omitted: the backend then runs the agent's own default model.
     expect(body.llm_override).toBeNull();
@@ -418,6 +1112,19 @@ describe("useChatController", () => {
     expect(streamMock).not.toHaveBeenCalled();
   });
 
+  // The chat surface stays mounted on other screens, where no chat is open.
+  it("leaves no chat open when the surface shows no chat", () => {
+    const view = renderHook(
+      ({ id }: { id: string | null }) => useChatController(id),
+      { wrapper, initialProps: { id: "s1" as string | null } },
+    );
+    expect(useChatSessionStore.getState().currentSessionId).toBe("s1");
+
+    view.rerender({ id: null });
+
+    expect(useChatSessionStore.getState().currentSessionId).toBeNull();
+  });
+
   it("auto-names a new session once its first answer completes", async () => {
     createSessionMock.mockResolvedValue("new-session");
     streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
@@ -431,6 +1138,52 @@ describe("useChatController", () => {
       expect(renameSessionMock).toHaveBeenCalledWith("new-session"),
     );
     expect(renameSessionMock).toHaveBeenCalledTimes(1);
+  });
+
+  // A created chat has the empty approvals baseline; an agent that already asked reloads it.
+  it("auto-names a new session whose first status read reloads it", async () => {
+    createSessionMock.mockResolvedValue("new-session");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValue({ is_processing: false, approvals_version: "v1" });
+    getSessionMock.mockResolvedValue({
+      ...savedTurn([]),
+      approvals_version: "v1",
+    });
+
+    const { result } = renderHook(() => useChatController(null), { wrapper });
+    await act(async () => {
+      await result.current.submit("first message");
+    });
+
+    await waitFor(() =>
+      expect(renameSessionMock).toHaveBeenCalledWith("new-session"),
+    );
+  });
+
+  // The server reports "" while the chat has no approval request.
+  it("keeps the streamed answer of a new chat with no approval request", async () => {
+    createSessionMock.mockResolvedValue("new-session");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValue({ is_processing: false, approvals_version: "" });
+
+    const { result } = renderHook(() => useChatController(null), { wrapper });
+    await act(async () => {
+      await result.current.submit("first message");
+    });
+
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("new-session")?.chatState,
+      ).toBe("input"),
+    );
+    await waitFor(() =>
+      expect(renameSessionMock).toHaveBeenCalledWith("new-session"),
+    );
+    expect(getSessionMock).not.toHaveBeenCalled();
   });
 
   it("does not auto-name a continued (existing) session", async () => {
@@ -695,7 +1448,9 @@ describe("useChatController", () => {
             resolveStatus = resolve;
           }),
       );
-    streamMock.mockReturnValue(scripted([idInfo, startPacket("saved later")]));
+    streamMock.mockReturnValue(
+      scripted([idInfo, startPacket("saved later"), stopPacket()]),
+    );
     const { result } = renderHook(() => useChatController("s1"), { wrapper });
     await act(async () => {
       await result.current.submit("hi");
@@ -777,6 +1532,53 @@ describe("useChatController", () => {
     });
     await waitFor(() => expect(result.current.chatState).toBe("input"));
     expect(stopSessionMock).toHaveBeenCalledWith("s1", 11);
+  });
+
+  it("keeps following after a late acknowledgement and a failed scoped Stop", async () => {
+    jest.useFakeTimers();
+    try {
+      useChatSessionStore.getState().ensureSession("s1");
+      const acknowledgement = Promise.withResolvers<void>();
+      stopSessionMock.mockRejectedValueOnce(new Error("offline"));
+      streamMock.mockImplementation((_body, signal) =>
+        (async function* (): AsyncGenerator<StreamEvent> {
+          await acknowledgement.promise;
+          yield idInfo;
+          yield approvalRequest;
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", () => resolve(), { once: true }),
+          );
+        })(),
+      );
+      const { result, unmount } = renderHook(() => useChatController("s1"), {
+        wrapper,
+      });
+      await act(async () => {
+        await result.current.submit("hi");
+      });
+      const controller = useChatSessionStore
+        .getState()
+        .sessions.get("s1")?.abortController;
+      act(() => result.current.stop());
+      await act(async () => {
+        acknowledgement.resolve();
+      });
+      expect(stopSessionMock).toHaveBeenCalledWith("s1", 11);
+      expect(
+        useChatSessionStore.getState().sessions.get("s1")?.stopRequested,
+      ).toBe(false);
+
+      await act(async () => {
+        jest.advanceTimersByTime(10_000);
+      });
+
+      expect(controller?.signal.aborted).toBe(false);
+      expect(waitingIds()).toEqual(["a1"]);
+      controller?.abort();
+      unmount();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("stops waiting for a missing acknowledgement without sending an unscoped Stop", async () => {

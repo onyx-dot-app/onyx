@@ -107,7 +107,26 @@ class CacheBackend(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def replace_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        """Atomically replace an unexpired value only while it equals ``expected``.
+
+        ``ex=None`` stores the new value without a TTL. Returns whether it replaced.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def delete(self, key: str) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        """Atomically delete an unexpired value only while it equals ``expected``."""
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -31,6 +31,7 @@ from onyx.sandbox_proxy.destination_policy import (
     parse_destination_policy,
 )
 from onyx.sandbox_proxy.models import DestinationPolicyConfig
+from onyx.sandbox_proxy.relay_tls import RelayTLSConfig, RelayTLSListener, loopback_for
 from onyx.sandbox_proxy.request_evaluator import (
     CompositeRequestEvaluator,
     ExternalAppRequestEvaluator,
@@ -58,6 +59,11 @@ from onyx.server.features.build.configs import (
     SANDBOX_PROXY_INTERNAL_CIDRS,
     SANDBOX_PROXY_LISTEN_HOST,
     SANDBOX_PROXY_LISTEN_PORT,
+    SANDBOX_PROXY_RELAY_TLS_ALLOWED_SANS,
+    SANDBOX_PROXY_RELAY_TLS_CERT_PATH,
+    SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH,
+    SANDBOX_PROXY_RELAY_TLS_KEY_PATH,
+    SANDBOX_PROXY_RELAY_TLS_PORT,
     SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
     SANDBOX_RUNTIME,
     SandboxRuntime,
@@ -272,8 +278,49 @@ def _build_destination_policy() -> DestinationPolicyConfig:
     return parse_destination_policy(ONYX_SERVER_URL, cidrs)
 
 
+def _relay_tls_config() -> RelayTLSConfig | None:
+    if not SANDBOX_PROXY_RELAY_TLS_PORT:
+        return None
+    if SANDBOX_RUNTIME is not SandboxRuntime.FIRECRACKER:
+        raise ValueError(
+            "SANDBOX_PROXY_RELAY_TLS_PORT needs SANDBOX_RUNTIME=firecracker"
+        )
+    paths = (
+        SANDBOX_PROXY_RELAY_TLS_CERT_PATH,
+        SANDBOX_PROXY_RELAY_TLS_KEY_PATH,
+        SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH,
+    )
+    if not all(paths):
+        raise ValueError(
+            "SANDBOX_PROXY_RELAY_TLS_PORT needs SANDBOX_PROXY_RELAY_TLS_CERT_PATH, "
+            "SANDBOX_PROXY_RELAY_TLS_KEY_PATH and SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH"
+        )
+    return RelayTLSConfig(
+        port=SANDBOX_PROXY_RELAY_TLS_PORT,
+        cert_path=SANDBOX_PROXY_RELAY_TLS_CERT_PATH,
+        key_path=SANDBOX_PROXY_RELAY_TLS_KEY_PATH,
+        client_ca_path=SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH,
+        allowed_sans=frozenset(SANDBOX_PROXY_RELAY_TLS_ALLOWED_SANS),
+    )
+
+
+def build_relay_tls_listener() -> RelayTLSListener | None:
+    """Raises if the setup is partial or a file does not load: the proxy
+    then exits instead of leaving the relays without their port."""
+    config = _relay_tls_config()
+    if config is None:
+        return None
+    return RelayTLSListener(
+        config,
+        listen_host=SANDBOX_PROXY_LISTEN_HOST,
+        upstream_host=loopback_for(SANDBOX_PROXY_LISTEN_HOST),
+        upstream_port=SANDBOX_PROXY_LISTEN_PORT,
+    )
+
+
 def main() -> int:
     destination_policy = _build_destination_policy()
+    relay_tls = build_relay_tls_listener()
     set_is_ee_if_available()
 
     logger.info(
@@ -359,7 +406,13 @@ def main() -> int:
                 lookup,
                 gate,
             )
-            await _run_master(master)
+            if relay_tls is not None:
+                await relay_tls.start()
+            try:
+                await _run_master(master)
+            finally:
+                if relay_tls is not None:
+                    await relay_tls.close()
 
         asyncio.run(_async_main(), loop_factory=UpstreamEventLoop)
     finally:

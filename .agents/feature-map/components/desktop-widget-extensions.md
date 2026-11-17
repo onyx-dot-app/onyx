@@ -64,7 +64,10 @@ verification ([[auth-and-identity]]), or the acting-user rules for the widget
 registers shortcuts, the tray and a navigation plugin. `desktop/src/index.html`
 is the fallback page for a missing or unreachable server. It calls the Tauri
 commands `get_bootstrap_state`, `check_server_reachable` and `set_server_url`
-(`desktop/src-tauri/src/commands.rs`), then sends the webview to the server. On
+(`desktop/src-tauri/src/commands.rs`), then sends the webview to the server.
+**File → Settings** sends the focused window back to this page at the
+platform app origin (`desktop/src-tauri/src/window.rs:settings_url`):
+`tauri://localhost`, but `http://tauri.localhost` on Windows. On
 macOS, `desktop/src-tauri/src/window.rs:eval_titlebar_script` injects
 `desktop/src/titlebar.js` on every page load. It reserves the titlebar strip and
 keeps the root layout, toasts and modals below it, so installed apps stay
@@ -77,12 +80,72 @@ session.
 <onyx-chat-widget backend-url=... api-key=...>      widget/src/widget.ts
   └─ resolveConfig (attributes win over VITE_* build values)  config/config.ts
 send → ApiService                                   services/api-service.ts
-  ├─ waitForSessionIdle  (existing session) → GET /chat/chat-session/{id}/status
   ├─ createChatSession   (first message only)
+  ├─ waitForSessionIdle → GET /chat/chat-session/{id}/status; the
+  │    approvals_version baseline is "" (a chat with no requests) until a
+  │    session load, so a new chat whose first read reports another version
+  │    loads the session; a latest_response_id the transcript lacks loads
+  │    the saved session first, and the question goes under that answer
   ├─ streamMessage → POST /chat/send-chat-message, origin "widget"
   │    └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
   │         └─ saveSession to sessionStorage, scoped by credential identity
-  └─ finally: waitForSessionIdle again, then enable Send
+  ├─ stream over → resumeStream({sent}): the one follow path below
+  └─ 409 APPROVAL_PENDING → keep the draft, show the message, resumeStream
+       from the status with a session load (shows the waiting card), point
+       at the card
+decision → POST /chat/approvals/{id}/decision       widget.ts, services/approvals.ts
+  no follow runs:
+  ├─ continuation set → resumeStream from cursor 0 of continuation.stream_id
+  ├─ 404/409 → card shows "No longer waiting"; resumeStream from the status,
+  │    and the saved session shows the outcome
+  ├─ continuation null, background agent request → resumeStream from the
+  │    status (agents polled, below)
+  ├─ continuation null, "Approve for this chat" → resumeStream from the
+  │    current stream with a session load: the server also approved the
+  │    chat's other requests for the tool, which only the load shows
+  ├─ continuation null, last root request → resumeStream from the current
+  │    stream, then each stream the status reports, then the saved session
+  └─ continuation null, other root requests wait → nothing starts
+  a follow runs: a continuation is stored, and the follow takes it before it
+    ends (never a stream it just read); with none, the follow reads the
+    status once more before it ends
+  a reset or another chat opened during the request → the result changes
+    nothing in the open chat
+restore / sent stream / decision / 409 → resumeStream    widget.ts
+  ├─ GET /chat/chat-session/{id}/resume-stream (no stream_id: the current
+  │    stream; cursor lines track stream_id and next_cursor; only a 404 stops
+  │    requests for that stream)
+  ├─ stop with "awaiting_approval" → a continuation a decision named during
+  │    the stream, else one status read: a new stream whose response_ids
+  │    include the response → follow from 0; else stop following
+  ├─ a replayed user_message whose question the transcript lacks inserts it
+  │    before the answer (ids from the response-ID packet)
+  ├─ ended before its stop → wait 1s, waitForSessionIdle reports current_stream:
+  │    same stream → reattach from the last cursor; new stream → from 0
+  ├─ after its stop (a transport failure after the stop counts; an error
+  │    packet ends the follow with its error) → waitForSessionIdle, then
+  │    enable Send; a new stream id → follow from 0
+  └─ idle with a response unfinished or waiting for decisions, a sent
+       answer or a status read's latest_response_id not shown, a question
+       with no answer after it, or a changed approvals_version (restore and
+       409 count as changed) → GET /chat/get-chat-session/{id} (every
+       branch); walk the selected branch from the root along
+       latest_child_message and replay its saved answers (by parent_message
+       for questions; a question with none is removed; a version change
+       replays answers with approval requests and answers the transcript
+       lacks); the transcript takes the branch order; the load's
+       approvals_version becomes the baseline; on failure the response stays
+       unfinished and the version change stays pending for the next load
+  replay_end and a resolution sent again (replay, then live) change nothing
+any status read with has_active_subagents (a decided agent that waits to
+  resume counts) or has_startable_input (queued input or an agent's unread
+  result can start a turn) → read the status every 1s until both are false;
+  each approvals_version change or unseen latest_response_id loads the
+  session again; a new stream is followed; Send stays enabled, and a send
+  ends the poll (its own follow polls on)
+card status = the server's tool_approval_resolved outcome ("cancelled" →
+  "No longer waiting"), else this widget's decision until the outcome
+  arrives; no stop changes a card
 ```
 `widget/src/config/config.ts:resolveAuthToken` picks the credential for each
 request: the `tokenProvider` result, else the API key, else it throws. The
@@ -138,13 +201,30 @@ panel picks up the new session when the user returns.
    a chat.** `should_open_in_external_browser` returns true only when the
    current URL is a chat session (`is_chat_session_url`: `/app` with a
    `chatId`), and then only for `mailto`, `tel` or an `http(s)` link to another
-   origin. This keeps the settings and login flows inside the app.
+   origin. This keeps the settings and login flows inside the app. The app
+   origin (`desktop/src-tauri/src/window.rs:is_app_origin_url`) is exempt, because on Windows the
+   bundled Settings page is an `http://tauri.localhost` URL.
 4. `desktop-popup-routing` **Script popups stay in the app; plain links go to
    the browser.** `desktop/src-tauri/src/window.rs:classify_new_window` opens
    `about:blank`, same-origin pages and popups with size features in an app
-   window that keeps the session cookies and `window.opener`. OAuth flows
-   depend on this: they open `about:blank` inside the click, then navigate it
-   and wait for a `postMessage`. Other `http(s)` popups go to the browser.
+   window that keeps the session cookies and `window.opener`. Other `http(s)`
+   popups go to the browser. OAuth flows that use
+   `web/src/lib/oauth/launch.ts:launchOAuth` do not use a popup in the app.
+   They open the provider in the system browser with a `.desktop` state
+   suffix. The browser-side callback page opens
+   `onyx://oauth-callback?path=...&origin=...`. The browser often has no Onyx
+   session, so `web/src/proxy.ts` serves `.desktop` callbacks from
+   `/oauth/desktop-handoff` before any auth gate
+   (`web/src/lib/oauth/desktopCallback.ts` holds the path allowlist). Then
+   `desktop/src-tauri/src/oauth_handoff.rs` accepts only allowlisted callback
+   paths on the configured server. When the main window is on that server, it
+   first offers the callback to it (`__ONYX_DESKTOP__.claimOAuthCallback`): a
+   page still waiting on that state runs it in a hidden same-origin iframe. If
+   no page claims it within 2s, the shell loads it in an app window. Either
+   way the callback reports completion through `BroadcastChannel`.
+   Two cases still open `about:blank` inside the click, navigate it, and wait
+   for a `postMessage`: desktop builds without the `oauthInBrowser` flag, and
+   flows that do not use `launchOAuth`, such as the Craft setup card.
    `desktop/tests/webdriver_smoke.py` drives the real binary through these
    rules, `confirm()` and downloads. Add a check there when the web app starts
    to depend on a new browser behaviour.
@@ -200,8 +280,11 @@ panel picks up the new session when the user returns.
 12. `widget-send-waits-for-idle` **The end of the stream does not enable
     Send.** `widget/src/widget.ts:OnyxChatWidget.sendMessage` polls
     `widget/src/services/api-service.ts:ApiService.waitForSessionIdle` before a
-    send to an existing session and after every send, because the server can
-    still save the turn after the stream ends. Failed polls retry and keep
+    send to an existing session. After every send, `OnyxChatWidget.resumeStream`
+    polls it again when the stream stops, because the server can still save the
+    turn after the stream ends. A stop for decisions is the exception: the
+    response is suspended, and the server refuses a send with 409
+    `APPROVAL_PENDING`. Failed polls retry and keep
     Send disabled; there is no overall deadline. A 403 or 404, a 405, or three
     401s in a row end the wait with an error, and none counts as idle. A
     backend without the status route answers 404, so a new bundle on an older
@@ -218,7 +301,7 @@ panel picks up the new session when the user returns.
 ## Known issues
 
 - **The extension has no tests, build, type check or lint.** The widget tests
-  cover only session readiness and failed drafts.
+  cover session readiness, failed drafts and tool approvals.
 - **`<all_urls>` is broader than the features need.** Only the selection icon
   and tab reading need page access. Open question: the host grant may also be
   what lets the panel iframe send its `SameSite=Lax` auth cookie, because

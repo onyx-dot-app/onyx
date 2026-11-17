@@ -53,3 +53,26 @@ describe("BaseInputBar queue handoff", () => {
     }
   );
 });
+
+it("edits a queued message from its edit button", async () => {
+  const user = setupUser();
+  const onRemoveQueuedMessage = jest.fn();
+  render(
+    <BaseInputBar
+      onSubmit={jest.fn()}
+      isRunning
+      onQueueMessage={jest.fn()}
+      queuedMessages={[{ id: 1, text: "Queued follow-up" }]}
+      onRemoveQueuedMessage={onRemoveQueuedMessage}
+    />
+  );
+  await user.click(
+    screen.getByRole("button", {
+      name: "Edit queued message: Queued follow-up",
+    })
+  );
+  expect(onRemoveQueuedMessage).toHaveBeenCalledWith(0);
+  expect(
+    screen.getByRole("textbox", { name: "Message input" })
+  ).toHaveTextContent("Queued follow-up");
+});

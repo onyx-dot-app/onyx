@@ -120,21 +120,25 @@ def _script_deep_research(mock_llm: MockLLMScript) -> None:
             tool_choice="required",
         ),
     )
-    # The plan, the intermediate report and the final report offer no tools.
+    # All report steps disable calls; the child report retains its tool definitions.
     mock_llm.conversation(
         "reports",
-        Reply(text=_RESEARCH_PLAN),
+        Reply(text=_RESEARCH_PLAN, conditions=RequestConditions(has_tools=False)),
         Reply(
             text=_INTERMEDIATE_REPORT,
-            conditions=RequestConditions(has_results_for=[_CHILD_THINK_CALL_ID]),
+            conditions=RequestConditions(
+                offers=[GENERATE_REPORT_TOOL_NAME, THINK_TOOL_NAME],
+                tool_choice="none",
+                has_results_for=[_CHILD_THINK_CALL_ID],
+            ),
         ),
         Reply(
             text=_FINAL_REPORT,
             conditions=RequestConditions(
-                has_results_for=[_RESEARCH_CALL_ID, _ORCHESTRATOR_THINK_CALL_ID]
+                has_tools=False,
+                has_results_for=[_RESEARCH_CALL_ID, _ORCHESTRATOR_THINK_CALL_ID],
             ),
         ),
-        conditions=RequestConditions(has_tools=False),
     )
 
 

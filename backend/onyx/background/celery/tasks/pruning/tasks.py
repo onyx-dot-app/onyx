@@ -93,7 +93,10 @@ from onyx.redis.redis_hierarchy import (
 from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
+from onyx.server.metrics.pruning_metrics import (
+    inc_pruning_failure,
+    observe_pruning_diff_duration,
+)
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import (
@@ -660,12 +663,12 @@ def connector_pruning_generator_task(
         )
         return None
 
+    connector_type: str = ""
     try:
         # Session 1: pre-enumeration — load cc_pair and instantiate the connector.
         # The session is closed before enumeration so the DB connection is not held
         # open during the 10–30+ minute connector crawl.
         connector_source: DocumentSource | None = None
-        connector_type: str = ""
         is_connector_public: bool = False
         indexing_start: float | None = None
         runnable_connector: BaseConnector | None = None
@@ -827,21 +830,21 @@ def connector_pruning_generator_task(
                 task_logger.info(
                     f"RedisConnector.prune.generate_tasks starting. cc_pair={cc_pair_id}"
                 )
-                tasks_generated = redis_connector.prune.generate_tasks(
+                docs_queued = redis_connector.prune.generate_tasks(
                     set(doc_ids_to_remove), self.app, db_session, None
                 )
-                if tasks_generated is None:
+                if docs_queued is None:
                     return None
 
                 task_logger.info(
-                    f"RedisConnector.prune.generate_tasks finished. cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
+                    f"RedisConnector.prune.generate_tasks finished. cc_pair={cc_pair_id} docs_queued={docs_queued}"
                 )
             finally:
                 observe_pruning_diff_duration(
                     time.monotonic() - diff_start, connector_type
                 )
 
-            redis_connector.prune.generator_complete = tasks_generated
+            redis_connector.prune.generator_complete = docs_queued
 
             # --- Hierarchy node pruning ---
             live_node_ids = _get_live_hierarchy_node_ids(
@@ -883,6 +886,8 @@ def connector_pruning_generator_task(
         task_logger.exception(
             f"Pruning exceptioned: cc_pair={cc_pair_id} connector={connector_id} payload_id={payload_id}"
         )
+
+        inc_pruning_failure(tenant_id, connector_type)
 
         # Back off so a failing prune isn't re-dispatched on the next beat.
         redis_connector.prune.set_failure_backoff()

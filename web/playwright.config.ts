@@ -65,5 +65,16 @@ export default defineConfig({
       },
       grep: /@lite/,
     },
+    {
+      // Runs the @code-mode specs against a backend with CODE_MODE_ENABLED=true.
+      // The admin project runs them with code mode off.
+      name: "code-mode",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+        storageState: "admin_auth.json",
+      },
+      grep: /@code-mode/,
+    },
   ],
 });

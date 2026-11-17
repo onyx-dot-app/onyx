@@ -12,6 +12,7 @@ import {
   Modal,
   Badge,
   Text,
+  useCreateModal,
 } from "@opal/components";
 import { SvgArrowRight } from "@opal/icons";
 import { Section } from "@opal/layouts";
@@ -26,7 +27,10 @@ import { SvgGitHub } from "@opal/logos";
 import { cn } from "@opal/utils";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { importGitHubSkills, previewGitHubSkills } from "@/lib/skills/api";
+import { useInstallationPolicyCopy } from "@/lib/skills/hooks";
 import type {
   GitHubSkillNotImported,
   GitHubSkillsImportResult,
@@ -71,8 +75,11 @@ export default function ImportSkillsFromGitHubModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { isAdmin, user } = useUser();
+  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const [sharing, setSharing] = useState<SkillSharingDraft | null>(null);
-  const [sharingOpen, setSharingOpen] = useState(false);
+  const sharingModal = useCreateModal();
   const sharingDraft =
     sharing ??
     emptySkillSharingDraft(
@@ -89,8 +96,8 @@ export default function ImportSkillsFromGitHubModal({
     setResult(null);
     setError(null);
     setSharing(null);
-    setSharingOpen(false);
-  }, [open]);
+    sharingModal.toggle(false);
+  }, [open, sharingModal.toggle]);
 
   async function submit() {
     if (loading || !repository.trim()) return;
@@ -112,7 +119,7 @@ export default function ImportSkillsFromGitHubModal({
         ? await importGitHubSkills(
             preview,
             selectedPaths,
-            serializeSkillSharing(sharing, isAdmin)
+            serializeSkillSharing(sharing, isOrganizationManager)
           )
         : await importGitHubSkills(preview, selectedPaths);
       setResult(nextResult);
@@ -154,17 +161,17 @@ export default function ImportSkillsFromGitHubModal({
         onSelectedPathsChange={setSelectedPaths}
         onSubmit={() => void submit()}
         sharing={sharingDraft}
-        onConfigureSharing={() => setSharingOpen(true)}
+        onConfigureSharing={() => sharingModal.toggle(true)}
       />
-      {sharingOpen && (
+      <sharingModal.Provider>
         <ShareSkillModal
           mode="create"
           open
           draft={sharingDraft}
           onSaveDraft={setSharing}
-          onClose={() => setSharingOpen(false)}
+          onClose={() => sharingModal.toggle(false)}
         />
-      )}
+      </sharingModal.Provider>
     </>
   );
 }
@@ -187,6 +194,7 @@ export function ImportSkillsFromGitHubModalView({
   onConfigureSharing,
 }: ImportSkillsFromGitHubModalViewProps) {
   const t = useTranslations("skills.modals");
+  const policyCopy = useInstallationPolicyCopy();
   const importablePaths = useMemo(
     () =>
       preview?.skills
@@ -455,9 +463,7 @@ export function ImportSkillsFromGitHubModalView({
                 >
                   {isAdmin && (
                     <Text font="secondary-body" color="text-03">
-                      {t(
-                        `share.installation.${({ AVAILABLE: "available", DEFAULT: "default", REQUIRED: "required" } as const)[sharing.installation_policy]}`
-                      )}
+                      {policyCopy.label(sharing.installation_policy)}
                     </Text>
                   )}
                   <Text font="secondary-body" color="text-03">

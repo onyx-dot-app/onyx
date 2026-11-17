@@ -18,24 +18,29 @@ SSO providers (OIDC, SAML) have no mobile sign-in.
 The user can then:
 - start a chat or open a past session from the sidebar, and open a project;
 - pick an agent and a model, attach a document or a photo from the library,
-  turn on deep research, force a tool, and turn tools and sources on or off;
+  turn on deep research, prefer an Action, and turn tools and sources on or off;
 - watch the answer stream, open its citations in a sources sheet, and stop
   the answer.
 
 A tool disabled on mobile is also disabled on web, because the server saves
-the setting per agent. The forced tool, the deep-research switch and the
+the setting per agent. The preferred tool, the deep-research switch and the
 source selection stay on the device.
 
 The user cannot regenerate or edit a message, give feedback, compare models,
 use voice, or take a photo with the camera. Tool activity (search, code,
 image generation, deep research, memory) shows as an empty step in the
-timeline. Answer text and reasoning render. Generated images from all steps
+timeline. A code mode program has no step; each tool call it makes shows as its
+own step. Answer text and reasoning render. Generated images from all steps
 appear once above the answer, with their full contents visible.
 
 After an answer ends, Send stays disabled until the server confirms that the
 session is idle. A send that the server does not accept keeps its draft.
 
-On failure: a stream error shows in the message. A failed token refresh signs
+On failure: a stream error shows in the message. The next message continues
+after the failed answer, as on web. A send that the server rejects before it
+sends message IDs (an error packet, or an HTTP status below 500 other than
+408) leaves no turn: the tree returns to its state before the send, a toast
+shows the error, and the composer keeps the draft. A failed token refresh signs
 the user out only when the server rejects the token. A network failure keeps
 the session. When the user switches instance, the app never shows data or
 uses a token from the previous instance.
@@ -98,32 +103,132 @@ only. The app trades the code and its PKCE verifier at
 `apiFetch`, because only `expo/fetch` exposes a readable body on React Native.
 `streamChatMessage` yields packets, the message-id object and stream errors,
 told apart by field presence. It drops heartbeats. `resumeChatMessage` keeps
-them as liveness ticks. Stop calls `stop-chat-session` with the response id
-from the message-id packet and aborts the local `AbortController`, because a
-client abort alone leaves the backend generating. Before that packet arrives,
-`mobile/src/hooks/useChatController.ts:stop` waits for it (`STOP_ACK_TIMEOUT_MS`), then
-aborts locally and never sends an unscoped Stop.
+them as liveness ticks, and its cursor objects (`isStreamCursor`). Stop calls
+`stop-chat-session` with the response id from the message-id packet, because a
+client abort alone leaves the backend generating. The app aborts the local
+`AbortController` only after the server confirms Stop. A failed Stop keeps the
+stream and shows an error, so a waiting approval request stays pending and
+decidable. Recovery sets the session's `streamId` to each stream it follows,
+so Stop targets that stream. Before that
+packet arrives, `mobile/src/hooks/useChatController.ts:stop` waits for it
+(`STOP_ACK_TIMEOUT_MS`), then aborts locally and never sends an unscoped Stop.
+The cut stream does not deliver the resolutions that the server's Stop gives
+the waiting tool approval requests. So when the stopped response still shows
+a request without an outcome, the send reloads the saved session once the
+server is idle. The device never marks a card rejected by itself.
 
 **Readiness.** When delivery ends, the session goes to `settling` and
 `chat/sessionReadiness.ts:waitForSessionIdle` polls
 `GET /chat/chat-session/{id}/status` until `is_processing` is `false`. Only
 then does the chat state return to `input`. A resumed stream in
 `hooks/useChatSessionController.ts` also waits for idle before it loads the
-saved history.
+saved history. The poll also reports the running stream id. A send whose
+delivery ends before the run's stop, or a send the server refuses while
+another response runs (such as `APPROVAL_PENDING`), hands the session to
+`recoverChatSession` when the poll reports that stream. Recovery loads the
+saved session when the response is not in the local tree, then follows the
+stream through resume-stream with `stream_id`. It commits packets only at
+cursor objects. A replay from cursor 0 replaces the shown packets only at
+`replay_complete`, so a replay that fails partway keeps a waiting approval
+card on screen. Delivery that ends before the run's stop (a clean end, a
+network error, a 5xx or a 429), or a failed load of the unseen response,
+reattaches from the last cursor while the poll reports the same stream,
+paced by `SESSION_POLL_INTERVAL_MS`. Only a 404 marks a stream as having no
+buffer; recovery then waits for a new stream id or for idle. A lost send
+whose first poll is already idle still reloads the saved session before it
+returns to `input`. So does a send that the server refuses with
+`APPROVAL_PENDING`, and a send whose idle poll is `stale`. The idle result of
+`waitForSessionIdle` has two flags:
+
+- `stale` comes from `chat/sessionReadiness.ts:savedSessionChanged`. It is
+  true when the status `approvals_version` differs from the session's
+  `approvalsVersion`, or when the chat tree does not hold
+  `latest_response_id`, such as a reply that started and finished between two
+  polls. `approvalsVersion` is the version of the load that the chat shows.
+  Only `state/chatSessionStore.ts:hydrateSession` sets it, when it applies a
+  loaded snapshot. A status read or a load that the chat discards does not
+  change it. The server reports `""` while the chat has no approval request.
+  A chat with no applied load, such as one this device created, has that empty
+  baseline, so its first poll reloads only when an agent already asked.
+- `backgroundWork` is `has_active_subagents` or `has_startable_input`. A
+  finished agent's unread result makes the server report startable input
+  before the root's turn processes. Then the send or recovery starts
+  `mobile/src/hooks/useChatSessionController.ts:watchBackgroundAgents`.
+
+The watch reads status while its chat stays open and idle. It reloads the
+saved session when `savedSessionChanged` is true and follows a stream that
+starts. A failed read or reload retries at the next poll. The watch ends when
+`is_processing`, `has_active_subagents` and `has_startable_input` are all
+false and no reload waits. It does a last reload when its caller knew of agent
+work, such as a decision, or when a read found work. A chat that opens idle
+with no `current_stream` starts a watch at once with `knownWork` false, so a
+quiet chat costs one status read. A chat has at most one watch. Recovery follows a stream into the response that
+`current_stream.response_ids` names, never into a message with the stream id.
+A multi-model stream names several responses; recovery does not stream it and
+settles from the saved session. A retained cursor belongs to one stream id;
+a new stream id restarts at cursor 0. `hooks/useChatController.ts` sets
+`currentSessionId` to the chat on screen. On other screens, such as Home, a
+project or Settings, the chat surface stays mounted and `currentSessionId` is
+null. Recovery and the watch stop when their chat is not the open one. When the
+user leaves the chat, `useChatSessionController` aborts and releases the
+session's recovery, including one a send started, so reopening attaches a new
+one.
+
+**Approval waits.** A response that waits for tool approvals ends its stream
+with `stop` and reason `awaiting_approval`. The session goes to `input`. The
+app does not check for waiting cards before a send. The server refuses the
+send with 409 `APPROVAL_PENDING`; the app then keeps the draft, scrolls to the
+card (`useToolApprovalUi.nudge`, without animation when the OS reduces
+motion) and shows a toast. A suspended turn has no Stop; the user decides
+each card. That stop does not finish the response in
+`chat/messageProcessor.ts`. No stop closes a card: a card's outcome comes only
+from a `tool_approval_resolved` packet or a reload. A decision made on the
+device shows until then (`chat/toolApprovals.ts:useToolApprovalUi`). The
+client clears the response's `streamingStartedAt`, so the wait is not timed.
+After a decision, `components/chat/ToolApprovalCard.tsx` follows the
+`continuation` that the decision response names, from cursor 0, when no
+reader runs. The server names one only for a suspended response; for a live
+response it is null and the running reader keeps its stream. The card acts
+only for the chat that made the decision, while that chat stays open. When a
+reader owns the chat, it can be past its last status read. So the card queues
+the continuation, or a status read when there is none, on the session
+(`queueFollow`). The reader takes it (`takeQueuedFollow`) before it releases
+the chat: recovery after its settle load, and a send after its idle poll. Both
+hand it to a new recovery. A reader whose
+stream stops with `awaiting_approval` reads status while the server
+processes, such as for a sibling response, and follows the next new
+`current_stream` from cursor 0. It never reads the paused stream again. The
+recovery reader drops a continuation's `replay_end` packet. A repeated
+`tool_approval_resolved` is harmless, since cards key outcomes by `approval_id`. A root decision with no `continuation`, or a 404 or 409,
+starts `recoverChatSession` with no stream when no reader runs. Another turn
+can hold the chat until this response resumes, such as a multi-model sibling's
+resume. The recovery reads status while the server processes, follows each new
+`current_stream`, and reloads the saved session once the server is idle. A subagent's request (`agent_name`) shows the label "{agent}
+wants to run {tool}". It and its outcome arrive only in the session replay,
+never live in the answer's stream, and it never blocks a send. A decided agent
+that waits to resume counts in `has_active_subagents`, so a decision on an
+agent's card, which names no `continuation`, starts `watchBackgroundAgents`.
+It reads status until the agents stop and shows their later requests. A later
+decision makes the running watch read again.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and
 `tab_index`). The backend closes each answer, reasoning and tool group with
 `section_end`, also on Stop. `injectSectionEnd` closes groups that are still
 open when a new turn starts or on `stop`, for a stream that ends on a root
-error or a dropped connection. Two hooks differ from web because the mobile
+error or a dropped connection. As on web ([[chat-frontend]]), after the answer
+starts only a tool packet of a tool that has not started takes the answer
+back; a late packet of a started tool, such as a code mode closing record, does
+not. Code
+mode steps, `codeModeWorking` and the turn group keys follow the web rules. Two hooks
+differ from web because the mobile
 lint forbids reading refs during render: `usePacketProcessor` regroups in a
 `useMemo`, and `usePacedTurnGroups` keeps pacing state in effects.
 
 **Composer tools.** `state/ComposerToolsProvider.tsx` holds the tool state.
-`resolveToolOptions` gives the controller `deep_research`, `forced_tool_id`,
+`resolveToolOptions` gives the controller `deep_research`, `preferred_tool_id`,
 `allowed_tool_ids` and the search filters at send time. Sources are tied to the
-search tool: turning a source on forces search, and turning search off clears
+search tool: turning a source on prefers search, and turning search off clears
 the sources.
 
 ---
@@ -168,10 +273,11 @@ the sources.
    apart from web. [[streaming-protocol]] owns the list of mirrors that a new
    packet type must update.
 10. `stream-end-is-not-idle` **The end of a stream does not enable Send.**
-    `chat/execution.py` releases the session admission lease only after
-    delivery finishes and child-run work drains. A send before the release
-    fails with a `CONFLICT` `StreamingError`, so only the status poll in `chat/sessionReadiness.ts:waitForSessionIdle` returns the session
-    to `input`. A transient failure keeps polling. An auth error or a 404
+    `chat/execution.py` releases the session admission lease after the
+    turn's saves drain, before the stream ends. The app still returns the
+    session to `input` only through the status poll in
+    `chat/sessionReadiness.ts:waitForSessionIdle`, which also covers a send
+    that another client started. A transient failure keeps polling. An auth error or a 404
     stops the poll and leaves the state `unconfirmed`. A server without the
     status route answers 404, so a new app on an older server cannot send a
     second message in a session. Keep each `stillOurs` guard in

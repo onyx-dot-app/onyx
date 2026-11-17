@@ -20,6 +20,7 @@ from onyx.tools.models import (
     MESSAGE_ID_PLACEHOLDER,
     USER_EMAIL_PLACEHOLDER,
     USER_ID_PLACEHOLDER,
+    CodeModeExposure,
     CustomToolCallSummary,
     CustomToolErrorInfo,
     CustomToolUserFileSnapshot,
@@ -33,6 +34,7 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
     openapi_to_url,
 )
+from onyx.tools.tool_name import normalize_external_tool_name
 from onyx.utils.headers import HeaderItemDict, header_list_to_header_dict
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, ssrf_safe_request, validate_outbound_http_url
@@ -91,11 +93,15 @@ class CustomTool(Tool):
 
         self._base_url = base_url
         self._method_spec = method_spec
-        self._tool_definition = self._method_spec.to_tool_definition()
         self._user_oauth_token = user_oauth_token
         self._id = id
 
-        self._name = self._method_spec.name
+        self._name = normalize_external_tool_name(
+            f"custom__{id}__{method_spec.raw_name}"
+        )
+        self._tool_definition = self._method_spec.to_tool_definition().model_copy(
+            update={"name": self._name}
+        )
         self._description = self._method_spec.summary
         self.headers = (
             header_list_to_header_dict(custom_headers) if custom_headers else {}
@@ -117,6 +123,10 @@ class CustomTool(Tool):
     @property
     def id(self) -> int:
         return self._id
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.DEFERRED
 
     @property
     def name(self) -> str:

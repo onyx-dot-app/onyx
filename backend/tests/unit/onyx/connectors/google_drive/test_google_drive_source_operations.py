@@ -1,3 +1,5 @@
+import datetime
+import threading
 from typing import Any
 from unittest import mock
 
@@ -405,3 +407,143 @@ def test_list_folders_pairs_a_drive_id_with_the_shared_drive_scope(
                 user_email=_ADMIN, scope=scope, drive_id=drive_id
             )
         )
+
+
+def _run_in_threads(count: int, target: Any) -> list[Any]:
+    results: list[Any] = [None] * count
+
+    def run(index: int) -> None:
+        results[index] = target()
+
+    threads = [threading.Thread(target=run, args=(i,)) for i in range(count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    return results
+
+
+def test_a_user_is_impersonated_once_for_every_thread() -> None:
+    """One credential per user, so one token request per user for the process.
+    Each thread still gets its own client, which is not thread-safe."""
+    gateway = _gateway()
+    base = mock.Mock(spec=ServiceAccountCredentials)
+    base.with_subject.side_effect = lambda email: mock.Mock(name=email)
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_creds", return_value=base),
+        mock.patch.object(
+            source_operations,
+            "build_google_service",
+            side_effect=lambda _service, creds: mock.Mock(creds=creds),
+        ) as build,
+    ):
+        clients = _run_in_threads(4, lambda: gateway._drive("a@co.com"))
+        other = gateway._drive("b@co.com")
+
+    assert base.with_subject.call_args_list == [
+        mock.call("a@co.com"),
+        mock.call("b@co.com"),
+    ]
+    # Four threads: four clients, one credential.
+    assert len({id(client) for client in clients}) == 4
+    assert len({id(client.creds) for client in clients}) == 1
+    assert other.creds is not clients[0].creds
+    assert build.call_count == 5
+
+
+def test_a_thread_reuses_its_docs_session_and_closes_old_ones(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(source_operations, "_MAX_DOCS_SESSIONS_PER_THREAD", 2)
+    gateway = _gateway()
+    created: list[mock.Mock] = []
+
+    def new_session(_creds: object) -> mock.Mock:
+        created.append(mock.Mock())
+        return created[-1]
+
+    with (
+        mock.patch.object(
+            GoogleDriveSourceOperations,
+            "_impersonated",
+            side_effect=lambda email: mock.Mock(name=email),
+        ),
+        mock.patch.object(
+            source_operations, "AuthorizedSession", side_effect=new_session
+        ),
+    ):
+        first = gateway._docs_session("a@co.com")
+        assert gateway._docs_session("a@co.com") is first
+        gateway._docs_session("b@co.com")
+        # "a" is the most recent user again, so "b" is the oldest.
+        assert gateway._docs_session("a@co.com") is first
+        gateway._docs_session("c@co.com")
+
+    session_a, session_b, session_c = created
+    session_b.close.assert_called_once()
+    session_a.close.assert_not_called()
+    session_c.close.assert_not_called()
+
+
+def _wait_for_second_caller(arrived: threading.Event, calls: list[object]) -> None:
+    """The first caller waits a short time for a second one. Without a lock
+    around the call, the second caller arrives and both calls run."""
+    calls.append(object())
+    if len(calls) == 1:
+        arrived.wait(timeout=0.5)
+    else:
+        arrived.set()
+
+
+def test_racing_threads_impersonate_a_user_once() -> None:
+    gateway = _gateway()
+    base = mock.Mock(spec=ServiceAccountCredentials)
+    arrived = threading.Event()
+    calls: list[object] = []
+
+    def with_subject(email: str) -> mock.Mock:
+        _wait_for_second_caller(arrived, calls)
+        return mock.Mock(name=email)
+
+    base.with_subject.side_effect = with_subject
+    with mock.patch.object(GoogleDriveSourceOperations, "_creds", return_value=base):
+        results = _run_in_threads(2, lambda: gateway._impersonated("a@co.com"))
+
+    assert base.with_subject.call_count == 1
+    assert results[0] is results[1]
+
+
+def test_threads_that_share_a_credential_refresh_its_token_once() -> None:
+    """Threads that find no token wait for one refresh. A later refresh with
+    an unchanged token, as after a 401, still runs."""
+    gateway = _gateway()
+    creds = OAuthCredentials(token=None, refresh_token="refresh")
+    arrived = threading.Event()
+    calls: list[object] = []
+
+    def fake_refresh(self: OAuthCredentials, _request: object) -> None:
+        _wait_for_second_caller(arrived, calls)
+        self.token = f"token-{len(calls)}"
+        self.expiry = datetime.datetime.now(datetime.UTC).replace(
+            tzinfo=None
+        ) + datetime.timedelta(hours=1)
+
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_creds", return_value=creds),
+        mock.patch.object(
+            OAuthCredentials, "refresh", autospec=True, side_effect=fake_refresh
+        ),
+    ):
+        shared = gateway._impersonated("a@co.com")
+        _run_in_threads(
+            2,
+            lambda: shared.before_request(
+                mock.Mock(), "GET", "https://example.com", {}
+            ),
+        )
+        assert len(calls) == 1
+        assert shared.token == "token-1"
+
+        shared.refresh(mock.Mock())
+        assert len(calls) == 2
+        assert shared.token == "token-2"

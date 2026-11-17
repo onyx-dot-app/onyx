@@ -125,6 +125,17 @@ class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
     explanation: dict[str, Any] | None = None
 
 
+class ChunkKeySearchHit(BaseModel):
+    """A search hit identified by its doc values instead of its stored source."""
+
+    model_config = {"frozen": True}
+
+    document_id: str
+    chunk_index: int
+    max_chunk_size: int
+    score: float | None = None
+
+
 class IndexInfo(BaseModel):
     """
     Represents information about an OpenSearch index.
@@ -195,6 +206,12 @@ _PIT_SCAN_PAGE_SIZE = 1000
 _PIT_SCAN_PAGE_SIZE_WITH_VECTORS = 200
 # Ids per mget request, so the body stays under the cluster's http.max_content_length.
 _MGET_BATCH_SIZE = 500
+# Primary shard count per index name. The count is fixed when an index is
+# created, so it is read once per process. Creating or deleting the index in
+# this process clears its entry; another process that recreates the index under
+# the same name leaves a stale entry here until restart, which only chooses the
+# slower hybrid search path, never wrong results.
+_NUMBER_OF_SHARDS_BY_INDEX: dict[str, int] = {}
 
 
 def is_cluster_block_error(e: Exception) -> bool:
@@ -746,6 +763,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             "settings": settings,
         }
         logger.debug("Creating index %s.", self._index_name)
+        _NUMBER_OF_SHARDS_BY_INDEX.pop(self._index_name, None)
         response = self._client.indices.create(index=self._index_name, body=body)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to create index {self._index_name}.")
@@ -775,6 +793,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             return False
 
         logger.info("Deleting index %s.", self._index_name)
+        _NUMBER_OF_SHARDS_BY_INDEX.pop(self._index_name, None)
         response = self._client.indices.delete(index=self._index_name)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to delete index {self._index_name}.")
@@ -1000,6 +1019,21 @@ class OpenSearchIndexClient(OpenSearchClient):
         return response[self._index_name]["settings"], response[self._index_name].get(
             "defaults", None
         )
+
+    def get_number_of_shards(self) -> int:
+        """Returns the number of primary shards of the index.
+
+        Reads the index settings once per process for each index name.
+
+        Raises:
+            Exception: There was an error getting the settings of the index.
+        """
+        number_of_shards = _NUMBER_OF_SHARDS_BY_INDEX.get(self._index_name)
+        if number_of_shards is None:
+            settings, _ = self.get_settings()
+            number_of_shards = int(settings["index"]["number_of_shards"])
+            _NUMBER_OF_SHARDS_BY_INDEX[self._index_name] = number_of_shards
+        return number_of_shards
 
     @log_function_time(debug_only=True)
     def open_index(self, timeout: float = DEFAULT_INDEX_SETTINGS_TIMEOUT_S) -> None:
@@ -1756,6 +1790,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         body: dict[str, Any],
         search_pipeline_id: str | None,
         search_type: OpenSearchSearchType = OpenSearchSearchType.UNKNOWN,
+        preference: str | None = None,
     ) -> list[SearchHit[DocumentChunkWithoutVectors]]:
         """Searches the index.
 
@@ -1775,6 +1810,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                 the default search pipeline will be used.
             search_type: Label for Prometheus metrics. Does not affect search
                 behavior.
+            preference: Searches with the same preference string read the
+                same shard copies. If None, OpenSearch chooses the copies.
 
         Raises:
             Exception: There was an error searching the index.
@@ -1787,8 +1824,116 @@ class OpenSearchIndexClient(OpenSearchClient):
             self._index_name,
             search_pipeline_id,
         )
+        hits = self._run_search(
+            body=body,
+            search_pipeline_id=search_pipeline_id,
+            search_type=search_type,
+            preference=preference,
+        )
+
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
+        for hit in hits:
+            document_chunk_source: dict[str, Any] | None = hit.get("_source")
+            if not document_chunk_source:
+                raise RuntimeError(
+                    f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
+                )
+            document_chunk_score = hit.get("_score", None)
+            match_highlights: dict[str, list[str]] = hit.get("highlight", {})
+            explanation: dict[str, Any] | None = hit.get("_explanation", None)
+            search_hit = SearchHit[DocumentChunkWithoutVectors](
+                document_chunk=DocumentChunkWithoutVectors.model_validate(
+                    document_chunk_source
+                ),
+                score=document_chunk_score,
+                match_highlights=match_highlights,
+                explanation=explanation,
+            )
+            search_hits.append(search_hit)
+        logger.debug(
+            "Successfully searched index %s and got %s hits.",
+            self._index_name,
+            len(search_hits),
+        )
+        return search_hits
+
+    def search_for_chunk_keys(
+        self,
+        body: dict[str, Any],
+        search_pipeline_id: str | None,
+        search_type: OpenSearchSearchType = OpenSearchSearchType.UNKNOWN,
+        preference: str | None = None,
+    ) -> list[ChunkKeySearchHit]:
+        """Searches the index and returns only the key fields of each hit.
+
+        The body must request the key fields as doc values and no stored
+        fields (see DocumentQuery.get_hybrid_search_query with
+        chunk_keys_only=True), so the search reads no chunk source.
+
+        Args:
+            body: The body of the search request.
+            search_pipeline_id: The ID of the search pipeline to use. If None,
+                the default search pipeline will be used.
+            search_type: Label for Prometheus metrics. Does not affect search
+                behavior.
+            preference: Searches with the same preference string read the
+                same shard copies. If None, OpenSearch chooses the copies.
+
+        Raises:
+            Exception: There was an error searching the index, or a hit is
+                missing a key field.
+
+        Returns:
+            The key fields and score of each hit, in result order.
+        """
+        if body.get("stored_fields") != "_none_":
+            logger.warning(
+                'The body of the search request for chunk keys is missing the key, value pair of "stored_fields": '
+                '"_none_". This query will therefore read the source of every hit.'
+            )
+        hits = self._run_search(
+            body=body,
+            search_pipeline_id=search_pipeline_id,
+            search_type=search_type,
+            preference=preference,
+        )
+        chunk_key_hits: list[ChunkKeySearchHit] = []
+        for hit in hits:
+            fields: dict[str, list[Any]] = hit.get("fields", {})
+            try:
+                chunk_key_hits.append(
+                    ChunkKeySearchHit(
+                        document_id=fields[DOCUMENT_ID_FIELD_NAME][0],
+                        chunk_index=fields[CHUNK_INDEX_FIELD_NAME][0],
+                        max_chunk_size=fields[MAX_CHUNK_SIZE_FIELD_NAME][0],
+                        score=hit.get("_score"),
+                    )
+                )
+            except (KeyError, IndexError) as e:
+                raise RuntimeError(
+                    f"Search hit is missing a chunk key field: {fields}."
+                ) from e
+        return chunk_key_hits
+
+    def _run_search(
+        self,
+        body: dict[str, Any],
+        search_pipeline_id: str | None,
+        search_type: OpenSearchSearchType,
+        preference: str | None = None,
+    ) -> list[Any]:
+        """Runs a search, records its metrics, and returns the raw hits.
+
+        Searches with the same preference string read the same shard copies.
+
+        Raises:
+            Exception: There was an error searching the index, or the search
+                timed out.
+        """
         result: dict[str, Any]
         params = {"phase_took": "true"}
+        if preference is not None:
+            params["preference"] = preference
         ctx = self._get_emit_metrics_context_manager(search_type)
         with ctx:
             try:
@@ -1823,32 +1968,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 if self._emit_metrics:
                     record_opensearch_search_error(search_type, e)
                 raise
-
-        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
-        for hit in hits:
-            document_chunk_source: dict[str, Any] | None = hit.get("_source")
-            if not document_chunk_source:
-                raise RuntimeError(
-                    f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
-                )
-            document_chunk_score = hit.get("_score", None)
-            match_highlights: dict[str, list[str]] = hit.get("highlight", {})
-            explanation: dict[str, Any] | None = hit.get("_explanation", None)
-            search_hit = SearchHit[DocumentChunkWithoutVectors](
-                document_chunk=DocumentChunkWithoutVectors.model_validate(
-                    document_chunk_source
-                ),
-                score=document_chunk_score,
-                match_highlights=match_highlights,
-                explanation=explanation,
-            )
-            search_hits.append(search_hit)
-        logger.debug(
-            "Successfully searched index %s and got %s hits.",
-            self._index_name,
-            len(search_hits),
-        )
-        return search_hits
+        return hits
 
     @log_function_time(debug_only=True)
     def search_for_document_ids(

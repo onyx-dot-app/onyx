@@ -6,9 +6,12 @@
  * them to `toast.error` directly.
  */
 
+import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
 import type {
   CustomSkill,
   GitHubSkillsImportResult,
+  OrganizationLibraryDefaultAccess,
+  OrganizationLibraryDefaultPolicy,
   GitHubSkillsPreview,
   Skill,
   SkillBundleContents,
@@ -20,9 +23,11 @@ import type {
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let errorCode: string | undefined;
+    let info: ErrorResponseBody | null = null;
     let detail = `Request failed (${res.status})`;
     try {
       const body = await res.json();
+      info = body;
       if (typeof body?.error_code === "string") errorCode = body.error_code;
       if (typeof body?.detail === "string") detail = body.detail;
       else if (Array.isArray(body?.detail) && body.detail[0]?.msg) {
@@ -31,11 +36,9 @@ async function handle<T>(res: Response): Promise<T> {
     } catch {
       // Use the generic status message.
     }
-    const error = new Error(detail) as Error & {
-      errorCode: string | undefined;
-    };
-    error.errorCode = errorCode;
-    throw error;
+    throw Object.assign(new FetchError(detail, res.status, info), {
+      errorCode,
+    });
   }
   if (res.status === 204) {
     return undefined as T;
@@ -167,10 +170,20 @@ export function isSkillNameConflict(error: unknown): boolean {
   );
 }
 
+export function isSkillVersionStale(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "errorCode" in error &&
+    error.errorCode === "PLUGIN_VERSION_STALE"
+  );
+}
+
 export interface PatchCustomSkillInput {
   description?: string;
   instructions_markdown?: string;
   public_permission?: SkillSharePermission | null;
+  /** The version the edit starts from. A newer saved version gives a 409. */
+  base_version_id?: string | null;
 }
 
 export async function setSkillEnabled(
@@ -186,8 +199,15 @@ export async function setSkillEnabled(
   return handle<Skill>(res);
 }
 
+export interface SkillGroupSettingPayload {
+  group_id: number;
+  /** Null: the group uses the organization setting. */
+  installation_policy: SkillInstallationPolicy | null;
+}
+
 export interface SkillShareUpdatePayload {
-  installation_policy?: SkillInstallationPolicy;
+  /** Null: no own setting, so Default access applies. */
+  installation_policy?: SkillInstallationPolicy | null;
   user_shares?: {
     user_id: string;
     permission: SkillSharePermission;
@@ -197,14 +217,17 @@ export interface SkillShareUpdatePayload {
     permission: SkillSharePermission;
   }[];
   public_permission?: SkillSharePermission | null;
+  group_settings?: SkillGroupSettingPayload[];
 }
 
 export async function uploadUserSkillFiles(
   skillId: string,
-  upload: File
+  upload: File,
+  baseVersionId?: string | null
 ): Promise<SkillEditableDetail> {
   const form = new FormData();
   form.append("upload", upload);
+  if (baseVersionId) form.append("base_version_id", baseVersionId);
   const res = await fetch(`/api/skills/custom/${skillId}/files`, {
     method: "POST",
     body: form,
@@ -226,9 +249,11 @@ export async function inspectSkillBundle(
 
 export async function removeUserSkillFile(
   skillId: string,
-  path: string
+  path: string,
+  baseVersionId?: string | null
 ): Promise<SkillEditableDetail> {
   const params = new URLSearchParams({ path });
+  if (baseVersionId) params.set("base_version_id", baseVersionId);
   const res = await fetch(
     `/api/skills/custom/${skillId}/files?${params.toString()}`,
     { method: "DELETE" }
@@ -272,9 +297,63 @@ export async function transferSkillOwnership(
   return handle<CustomSkill>(res);
 }
 
+export async function restoreSkillVersion(
+  skillId: string,
+  versionId: string,
+  baseVersionId: string
+): Promise<SkillEditableDetail> {
+  const res = await fetch(
+    `/api/skills/custom/${skillId}/versions/${versionId}/restore`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ base_version_id: baseVersionId }),
+    }
+  );
+  return handle<SkillEditableDetail>(res);
+}
+
+/** Publish the current version: a first publish, or a publish update. Under
+ * the Publishing setting this can make a review request instead. */
+export async function publishSkill(
+  skillId: string,
+  baseVersionId: string
+): Promise<CustomSkill> {
+  const res = await fetch(`/api/skills/custom/${skillId}/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ base_version_id: baseVersionId }),
+  });
+  return handle<CustomSkill>(res);
+}
+
+export async function reviewSkillVersion(
+  skillId: string,
+  versionId: string,
+  decision: "approve" | "deny"
+): Promise<CustomSkill> {
+  const res = await fetch(
+    `/api/skills/custom/${skillId}/versions/${versionId}/${decision}`,
+    { method: "POST" }
+  );
+  return handle<CustomSkill>(res);
+}
+
 export async function deleteUserSkill(skillId: string): Promise<void> {
   const res = await fetch(`/api/skills/custom/${skillId}`, {
     method: "DELETE",
   });
   await handle<void>(res);
+}
+
+/** Set the install setting of every published skill with no own setting. */
+export async function setOrganizationLibraryDefaultAccess(
+  policy: OrganizationLibraryDefaultPolicy
+): Promise<OrganizationLibraryDefaultAccess> {
+  const res = await fetch("/api/skills/organization-library/default-access", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ installation_policy: policy }),
+  });
+  return handle<OrganizationLibraryDefaultAccess>(res);
 }

@@ -47,7 +47,7 @@ class ChatResponsePersistence(RunStore):
         self.llm = llm
         self.delivery = delivery
         self.outcome = outcome
-        self.tool_ids: dict[str, int] = {}
+        self.tool_ids: dict[str, int | None] = {}
         self.initial_citations: CitationMapping = {}
         self.coordinator = coordinator
         self._lock = threading.Lock()
@@ -108,6 +108,19 @@ class ChatResponsePersistence(RunStore):
                 ChatResponseOutcome(
                     response=response,
                     persistence_status=PersistenceStatus.FAILED,
+                )
+            )
+
+    def report_suspended(self, run: Run) -> None:
+        """Resolve a response whose run handed off to wait for approvals; the
+        handoff saved it with its checkpoint."""
+        response = self._project(
+            run.snapshot(), None, delivery_failed=run.delivery_failed
+        )
+        with self._lock:
+            self._report(
+                ChatResponseOutcome(
+                    response=response, persistence_status=PersistenceStatus.SAVED
                 )
             )
 

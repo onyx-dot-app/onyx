@@ -3,6 +3,7 @@ import os
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from typing import Protocol
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -98,6 +99,14 @@ def db_session() -> Generator[Session, None, None]:
     )
     with get_session_with_current_tenant() as session:
         yield session
+
+
+@pytest.fixture(params=[False, True], ids=["direct", "code_mode"])
+def code_mode(request: pytest.FixtureRequest) -> Generator[bool, None, None]:
+    """Run the test with CODE_MODE_ENABLED off and on, for chat flows whose
+    behavior depends on it. CI runs the rest of this suite with it off."""
+    with patch("onyx.chat.agent.CODE_MODE_ENABLED", request.param):
+        yield request.param
 
 
 @pytest.fixture

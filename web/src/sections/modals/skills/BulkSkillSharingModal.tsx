@@ -2,10 +2,17 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Modal, Text } from "@opal/components";
-import { Content, Section } from "@opal/layouts";
-import { SvgBlocks, SvgLock, SvgOrganization, SvgUsers } from "@opal/icons";
-import { useUser } from "@/providers/UserProvider";
+import {
+  Button,
+  InputSingleSelect,
+  MessageCard,
+  Modal,
+  Text,
+} from "@opal/components";
+import { Content, InputPadder, Section } from "@opal/layouts";
+import { SvgBlocks, SvgOrganization, SvgUsers } from "@opal/icons";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import useShareableUsers from "@/hooks/useShareableUsers";
 import useShareableGroups, {
   type MinimalUserGroupSnapshot,
@@ -16,9 +23,17 @@ import type {
   SkillSharePermission,
 } from "@/lib/skills/types";
 import type { SkillShareUpdatePayload } from "@/lib/skills/api";
+import {
+  fromPolicyChoice,
+  isPolicyChoice,
+  type PolicyChoice,
+} from "@/lib/skills/installationPolicy";
+import { usePolicyOptions, useSharingAllowed } from "@/lib/skills/hooks";
+import SharingOffNotice from "@/sections/modals/skills/SharingOffNotice";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { SharePermissionMenu } from "@/lib/permissions/components";
-import { useSharePermissionOptions } from "@/sections/modals/shareAccessConstants";
+
+const KEEP = "KEEP";
 
 interface BulkSkillSharingModalProps {
   count: number;
@@ -41,24 +56,26 @@ export default function BulkSkillSharingModal({
 }: BulkSkillSharingModalProps) {
   const t = useTranslations("skills.bulk");
   const shareCopy = useTranslations("skills.modals.share");
-  const { isAdmin } = useUser();
+  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
+  const sharingAllowed = useSharingAllowed();
+  const companyOptions = usePolicyOptions({
+    inherit: { scope: "skill", policy: null },
+  });
   const { data: users } = useShareableUsers({ includeApiKeys: true });
   const { data: groups } = useShareableGroups();
-  const [scope, setScope] = useState<"KEEP" | "PRIVATE" | "PUBLIC">("KEEP");
-  const [policy, setPolicy] = useState<"KEEP" | SkillInstallationPolicy>(
-    "KEEP"
-  );
+  // Publishing is one-way, so bulk can publish but never make skills private.
+  const [scope, setScope] = useState<"KEEP" | "PUBLIC">("KEEP");
+  const [policy, setPolicy] = useState<typeof KEEP | PolicyChoice>(KEEP);
   const [permission, setPermission] = useState<SkillSharePermission>("VIEWER");
-  const [publicPermission, setPublicPermission] =
-    useState<SkillSharePermission>("VIEWER");
   const [stagedUsers, setStagedUsers] = useState<MinimalUserSnapshot[]>([]);
   const [stagedGroups, setStagedGroups] = useState<MinimalUserGroupSnapshot[]>(
     []
   );
-  const permissionOptions = useSharePermissionOptions();
   const changed =
     scope !== "KEEP" ||
-    policy !== "KEEP" ||
+    policy !== KEEP ||
     stagedUsers.length > 0 ||
     stagedGroups.length > 0;
 
@@ -66,18 +83,16 @@ export default function BulkSkillSharingModal({
   // keeps the staged edits. Cancel and a submitted save discard them.
   function reset() {
     setScope("KEEP");
-    setPolicy("KEEP");
+    setPolicy(KEEP);
     setPermission("VIEWER");
-    setPublicPermission("VIEWER");
     setStagedUsers([]);
     setStagedGroups([]);
   }
 
   async function save() {
     const sharing: SkillShareUpdatePayload = {};
-    if (scope !== "KEEP")
-      sharing.public_permission = scope === "PUBLIC" ? publicPermission : null;
-    if (policy !== "KEEP") sharing.installation_policy = policy;
+    if (scope === "PUBLIC") sharing.public_permission = "VIEWER";
+    if (policy !== KEEP) sharing.installation_policy = fromPolicyChoice(policy);
     if (stagedUsers.length)
       sharing.user_shares = stagedUsers.map((user) => ({
         user_id: user.id,
@@ -124,48 +139,40 @@ export default function BulkSkillSharingModal({
                     label: t("everyone"),
                     icon: SvgOrganization,
                   },
-                  { value: "PRIVATE", label: t("invitedOnly"), icon: SvgLock },
                 ]}
               />
               {scope === "PUBLIC" && (
-                <SharePermissionMenu
-                  value={publicPermission}
-                  onChange={setPublicPermission}
-                  options={permissionOptions}
-                  disabled={saving}
+                <MessageCard
+                  variant="warning"
+                  outerPadding={1}
+                  innerPadding={1}
+                  title={t("publishWarning.title")}
+                  description={t("publishWarning.description")}
                 />
               )}
             </Section>
-            {isAdmin && (
+            {isOrganizationManager && (
               <Section gap={2} height="auto" alignItems="stretch">
                 <Content
                   font="main-ui-action"
                   title={shareCopy("installation.title")}
                 />
-                <SharePermissionMenu
-                  value={policy}
-                  onChange={setPolicy}
-                  ariaLabel={shareCopy("installation.title")}
-                  disabled={saving}
-                  options={[
-                    { value: "KEEP", label: t("unchanged"), icon: SvgBlocks },
-                    {
-                      value: "AVAILABLE",
-                      label: shareCopy("installation.available"),
-                      icon: SvgBlocks,
-                    },
-                    {
-                      value: "DEFAULT",
-                      label: shareCopy("installation.default"),
-                      icon: SvgBlocks,
-                    },
-                    {
-                      value: "REQUIRED",
-                      label: shareCopy("installation.required"),
-                      icon: SvgLock,
-                    },
-                  ]}
-                />
+                <InputPadder>
+                  <InputSingleSelect
+                    placeholder={shareCopy("installation.title")}
+                    value={policy}
+                    defaultOption={KEEP}
+                    disabled={saving}
+                    options={[
+                      { value: KEEP, title: t("unchanged") },
+                      ...companyOptions,
+                    ]}
+                    onValueChange={(value) => {
+                      if (value === KEEP || isPolicyChoice(value))
+                        setPolicy(value);
+                    }}
+                  />
+                </InputPadder>
               </Section>
             )}
             <Section gap={2} height="auto" alignItems="stretch">
@@ -173,8 +180,9 @@ export default function BulkSkillSharingModal({
               <Text font="secondary-body" color="text-03">
                 {t("addAccessDescription")}
               </Text>
+              {!sharingAllowed && <SharingOffNotice />}
               <AddPeoplePicker
-                disabled={saving}
+                disabled={saving || !sharingAllowed}
                 existingUserIds={new Set()}
                 existingGroupIds={new Set()}
                 users={users ?? []}

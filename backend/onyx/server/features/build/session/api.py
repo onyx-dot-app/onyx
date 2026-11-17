@@ -33,6 +33,7 @@ from onyx.server.features.build.db.artifact import (
 )
 from onyx.server.features.build.db.build_session import (
     get_build_session,
+    session_runtime_stale,
     set_build_session_sharing_scope,
 )
 from onyx.server.features.build.db.sandbox import (
@@ -41,6 +42,7 @@ from onyx.server.features.build.db.sandbox import (
 )
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.firecracker.purge import purge_harness_session
 from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.session.errors import (
     SandboxProvisioningInProgressError,
@@ -74,6 +76,7 @@ from onyx.server.features.build.session.models import (
     SetSessionSharingResponse,
     SnapshotResponse,
     WebappInfo,
+    skill_limit_notice,
 )
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
@@ -217,7 +220,10 @@ def reload_session_skills(
 ) -> SessionSkillsStateResponse:
     skills_stale = SessionManager(db_session).reload_session_skills(session_id, user)
     db_session.commit()
-    return SessionSkillsStateResponse(skills_stale=skills_stale)
+    return SessionSkillsStateResponse(
+        skills_stale=skills_stale,
+        skill_omissions=skill_limit_notice(get_sandbox_by_user_id(db_session, user.id)),
+    )
 
 
 @router.get("/{session_id}/sandbox-status")
@@ -234,7 +240,11 @@ def get_sandbox_status(
 
     sandbox = get_sandbox_by_user_id(db_session, user.id)
 
-    return SandboxStatusResponse(status=sandbox.status if sandbox else None)
+    return SandboxStatusResponse(
+        status=sandbox.status if sandbox else None,
+        skills_stale=session_runtime_stale(session, sandbox),
+        skill_omissions=skill_limit_notice(sandbox),
+    )
 
 
 @router.get(
@@ -340,12 +350,17 @@ def delete_session(
     is NOT deleted (transaction is rolled back).
     """
     session_manager = SessionManager(db_session)
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    sandbox_id = sandbox.id if sandbox is not None else None
 
     try:
         success = session_manager.delete_session(session_id, user.id)
         if not success:
             raise HTTPException(status_code=404, detail="Session not found")
         db_session.commit()
+        # Only after the commit: a rolled-back delete keeps the session's save.
+        if sandbox_id is not None:
+            purge_harness_session(sandbox_id, session_id)
     except OnyxError:
         db_session.rollback()
         raise

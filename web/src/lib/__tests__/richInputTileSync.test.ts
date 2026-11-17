@@ -43,14 +43,16 @@ function expectColorsFromTag(tile: HTMLElement, color: StatusColor) {
   }
 }
 
-describe("skill tile stays in sync with the Opal Badge + sparkle icon", () => {
+describe("skill mention tile stays in sync with the Opal Badge + sparkle icon", () => {
   function skillTile() {
     return createRichInputTileNode({
-      type: "skill",
-      text: "/pptx ",
-      preview: "Skill: Slides",
+      type: "mention",
+      text: "@pptx",
+      preview: "@pptx",
       meta: "",
-      skillSlug: "pptx",
+      mention: { type: "skill", name: "pptx" },
+      label: "@pptx",
+      removeLabel: "Remove @pptx",
     });
   }
 
@@ -70,6 +72,8 @@ describe("paste tile stays in sync with the Opal Badge + clipboard icon", () => 
       text: "some long pasted text",
       preview: "some long pasted…",
       meta: "21 chars",
+      label: "Pasted text",
+      removeLabel: "Remove pasted text",
     });
   }
 

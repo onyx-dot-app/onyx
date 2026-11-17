@@ -18,12 +18,20 @@ from onyx.chat.files import (
     determine_search_params,
     extract_context_files,
     load_chat_files,
+    load_context_user_files_for_tools,
     resolve_context_user_files,
 )
 from onyx.chat.models import AvailableFiles, SearchParams
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.models import ChatMessage, UserFile
 from onyx.db.user_file import capture_user_file_metadata
+from onyx.file_processing.file_types import (
+    PDF_MIME_TYPE,
+    PLAIN_TEXT_MIME_TYPE,
+    PRESENTATION_MIME_TYPE,
+    SPREADSHEET_MIME_TYPE,
+    WORD_PROCESSING_MIME_TYPE,
+)
 from onyx.file_store.models import (
     ChatFileInput,
     ChatFileType,
@@ -43,7 +51,11 @@ def test_overflow_metadata_only_stages_tabular_files_for_tools() -> None:
             file_type=mime,
             token_count=7000,
         )
-        for name, mime in (("data.csv", "text/csv"), ("report.pdf", "application/pdf"))
+        for name, mime in (
+            ("data.csv", "text/csv"),
+            ("report.pdf", "application/pdf"),
+            ("brief.docx", WORD_PROCESSING_MIME_TYPE),
+        )
     ]
     with (
         patch("onyx.chat.files.DISABLE_VECTOR_DB", True),
@@ -60,6 +72,39 @@ def test_overflow_metadata_only_stages_tabular_files_for_tools() -> None:
     } == {
         "data.csv": (str(files[0].id), True),
         "report.pdf": (str(files[1].id), False),
+        "brief.docx": (str(files[2].id), True),
+    }
+
+
+def test_office_and_tabular_context_files_are_staged_for_code_interpreter() -> None:
+    files = [
+        UserFileMetadata(
+            id=uuid4(),
+            file_id=str(uuid4()),
+            name=name,
+            file_type=mime,
+            token_count=10,
+        )
+        for name, mime in (
+            ("template.docx", WORD_PROCESSING_MIME_TYPE),
+            ("deck.pptx", PRESENTATION_MIME_TYPE),
+            ("data.xlsx", SPREADSHEET_MIME_TYPE),
+            ("report.pdf", PDF_MIME_TYPE),
+            ("notes.txt", PLAIN_TEXT_MIME_TYPE),
+        )
+    ]
+    file_store = MagicMock()
+    file_store.read_file.side_effect = lambda file_id, **_: BytesIO(file_id.encode())
+
+    with patch("onyx.chat.files.get_default_file_store", return_value=file_store):
+        staged = load_context_user_files_for_tools(files, set())
+        file_store.read_file.assert_not_called()
+        contents = {chat_file.filename: chat_file.content for chat_file in staged}
+
+    assert contents == {
+        "template.docx": files[0].file_id.encode(),
+        "deck.pptx": files[1].file_id.encode(),
+        "data.xlsx": files[2].file_id.encode(),
     }
 
 

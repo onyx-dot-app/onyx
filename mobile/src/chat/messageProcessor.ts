@@ -26,15 +26,23 @@ import {
   isDisplayPacket,
   isToolPacket,
 } from "@/chat/timeline/packetUtils";
-import { parseToolKey } from "@/chat/timeline/toolDisplay";
 import {
+  CodeModeProgram,
+  isCodeModePacket,
   isGroupEndPacket,
   isNestedPacket,
+  NestedCall,
+  nestedCallSnapshot,
+  nextCodeModeProgram,
 } from "@/chat/timeline/packetHelpers";
+import { parseToolKey } from "@/chat/timeline/toolDisplay";
 
 export interface ProcessedMessageState {
   nodeId: number;
   nextPacketIndex: number; // cursor — process only packets past this index
+  // The packet at nextPacketIndex - 1. Streams append the same objects; a replay or a reload
+  // brings new ones, which restarts processing.
+  lastPacket: Packet | null;
 
   citationMap: CitationMap;
   citations: StreamingCitation[];
@@ -43,11 +51,18 @@ export interface ProcessedMessageState {
   documentMap: Map<string, SearchDoc>;
 
   groupedPacketsMap: Map<string, Packet[]>;
+  // Nested calls of each group by sub_turn_index, placed at parent level once per packet
+  nestedCallsMap: Map<string, Map<number, Packet[]>>;
   seenGroupKeys: Set<string>;
   groupKeysWithSectionEnd: Set<string>;
+  // Groups whose tool has started: a tool packet other than a streamed argument arrived.
+  startedToolGroupKeys: Set<string>;
+  // The program of each code mode group, updated once per packet
+  codeModePrograms: Map<string, CodeModeProgram>;
   toolGroupKeys: Set<string>;
   displayGroupKeys: Set<string>;
 
+  // Images from every image generation call, nested calls included, unique by file_id
   generatedImages: GeneratedImage[];
 
   finalAnswerComing: boolean;
@@ -63,20 +78,30 @@ export interface ProcessedMessageState {
 export interface GroupedPacket {
   turn_index: number;
   tab_index: number;
+  // The group's own packets, without the packets of nested calls. Step kind, renderer, header,
+  // and end read only these.
   packets: Packet[];
+  // The tool calls nested under this group, ordered by sub_turn_index.
+  nestedCalls: NestedCall[];
+  // The program of a code mode group; null for other groups.
+  codeMode: CodeModeProgram | null;
 }
 
 export function createInitialState(nodeId: number): ProcessedMessageState {
   return {
     nodeId,
     nextPacketIndex: 0,
+    lastPacket: null,
     citationMap: {},
     citations: [],
     seenCitationDocIds: new Set(),
     documentMap: new Map(),
     groupedPacketsMap: new Map(),
+    nestedCallsMap: new Map(),
     seenGroupKeys: new Set(),
     groupKeysWithSectionEnd: new Set(),
+    startedToolGroupKeys: new Set(),
+    codeModePrograms: new Map(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
     generatedImages: [],
@@ -138,6 +163,7 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
 
 function hasContentPackets(packets: Packet[]): boolean {
   return packets.some((packet) => {
+    if (isCodeModePacket(packet)) return true;
     const type = packet.obj.type as PacketType;
     if (type === PacketType.TOOL_CALL_ARGUMENT_DELTA) {
       return (
@@ -254,14 +280,23 @@ function handleStreamingStatusPacket(
   }
 }
 
+// A stop that waits for approval pauses the response; it does not end it.
 function handleStopPacket(state: ProcessedMessageState, packet: Packet): void {
-  if (packet.obj.type !== PacketType.STOP || state.stopPacketSeen) {
+  if (
+    packet.obj.type !== PacketType.STOP ||
+    packet.obj.stop_reason === StopReason.AWAITING_APPROVAL ||
+    state.stopPacketSeen
+  ) {
     return;
   }
 
   state.stopPacketSeen = true;
   state.isComplete = true;
   state.stopReason = (packet.obj as Stop).stop_reason;
+  // Nothing follows Stop, so the latest text is the answer, even when its step also called a tool.
+  if (state.displayGroupKeys.size > 0) {
+    state.finalAnswerComing = true;
+  }
 
   // Close every still-open group — this is why the final-answer group gets its SECTION_END (the
   // backend never sends one).
@@ -270,20 +305,39 @@ function handleStopPacket(state: ProcessedMessageState, packet: Packet): void {
       injectSectionEnd(state, groupKey);
     }
   });
+
+  // Nothing follows Stop, so each open nested call ends with the response.
+  state.nestedCallsMap.forEach((calls) =>
+    calls.forEach((call) => {
+      if (!call.some(isGroupEndPacket)) {
+        call.push({
+          placement: call[0]!.placement,
+          obj: { type: PacketType.SECTION_END },
+        });
+      }
+    }),
+  );
 }
 
-// Claude may emit a message then start a real tool — the answer isn't actually coming yet.
-// Reasoning is excluded (just thinking, not a real tool call).
+// The model can write a message and then call a tool, so the answer is not final yet. Every tool
+// packet up to the tool's start is part of a new call, even when the call's arguments streamed
+// before the message. Packets after the start (such as a code mode cell's closing record) are not.
+// Reasoning is not a tool call.
 function handleToolAfterMessagePacket(
   state: ProcessedMessageState,
   packet: Packet,
+  groupKey: string,
 ): void {
+  if (!isActualToolCallPacket(packet)) return;
   if (
     state.finalAnswerComing &&
     !state.stopPacketSeen &&
-    isActualToolCallPacket(packet)
+    !state.startedToolGroupKeys.has(groupKey)
   ) {
     state.finalAnswerComing = false;
+  }
+  if (packet.obj.type !== PacketType.TOOL_CALL_ARGUMENT_DELTA) {
+    state.startedToolGroupKeys.add(groupKey);
   }
 }
 
@@ -298,6 +352,19 @@ function addPacketToGroup(
   } else {
     state.groupedPacketsMap.set(groupKey, [packet]);
   }
+
+  const subTurnIndex = packet.placement.sub_turn_index;
+  if (subTurnIndex === undefined || subTurnIndex === null) return;
+  const calls =
+    state.nestedCallsMap.get(groupKey) ?? new Map<number, Packet[]>();
+  state.nestedCallsMap.set(groupKey, calls);
+  const call = calls.get(subTurnIndex) ?? [];
+  // Placed at parent level, so the tool's own renderer reads it as a direct call.
+  call.push({
+    ...packet,
+    placement: { ...packet.placement, sub_turn_index: null },
+  });
+  calls.set(subTurnIndex, call);
 }
 
 function processPacket(state: ProcessedMessageState, packet: Packet): void {
@@ -315,10 +382,21 @@ function processPacket(state: ProcessedMessageState, packet: Packet): void {
     state.groupKeysWithSectionEnd.add(groupKey);
   }
 
-  const isFirstPacket = !state.groupedPacketsMap.get(groupKey);
   addPacketToGroup(state, packet, groupKey);
 
-  if (isFirstPacket) {
+  if (isCodeModePacket(packet)) {
+    const program = state.codeModePrograms.get(groupKey) ?? {
+      cellId: null,
+      running: false,
+    };
+    state.codeModePrograms.set(groupKey, nextCodeModeProgram(program, packet));
+  }
+
+  // Debug and control packets can precede the first rendered packet.
+  if (
+    !state.toolGroupKeys.has(groupKey) &&
+    !state.displayGroupKeys.has(groupKey)
+  ) {
     if (isToolPacket(packet, false)) {
       state.toolGroupKeys.add(groupKey);
     }
@@ -337,15 +415,20 @@ function processPacket(state: ProcessedMessageState, packet: Packet): void {
   handleDocumentPacket(state, packet);
   handleStreamingStatusPacket(state, packet);
   handleStopPacket(state, packet);
-  handleToolAfterMessagePacket(state, packet);
+  handleToolAfterMessagePacket(state, packet, groupKey);
 }
 
 export function processPackets(
   state: ProcessedMessageState,
   rawPackets: Packet[],
 ): ProcessedMessageState {
-  // Array shrank (regenerate / history reload) -> rebuild so we never double-count a re-streamed turn.
-  if (state.nextPacketIndex > rawPackets.length) {
+  // A shorter or replaced list (regenerate, replay, history reload) rebuilds, so a re-streamed
+  // turn is never double-counted and a dropped packet never lingers.
+  if (
+    state.nextPacketIndex > rawPackets.length ||
+    (state.nextPacketIndex > 0 &&
+      rawPackets[state.nextPacketIndex - 1] !== state.lastPacket)
+  ) {
     state = createInitialState(state.nodeId);
   }
 
@@ -359,6 +442,7 @@ export function processPackets(
   }
 
   state.nextPacketIndex = rawPackets.length;
+  state.lastPacket = rawPackets.at(-1) ?? null;
 
   // Rebuild only when new packets arrived, to preserve array identity for memoized consumers.
   if (prevProcessedIndex !== rawPackets.length) {
@@ -372,8 +456,8 @@ export function processPackets(
   return state;
 }
 
-// Spread packets to force a new array ref (change detection); keep only content groups; sort by
-// turn then tab.
+// Keep each group's own packets in a new array ref (change detection); keep only content groups;
+// sort by turn then tab.
 function buildGroupsFromKeys(
   state: ProcessedMessageState,
   keys: Set<string>,
@@ -382,7 +466,17 @@ function buildGroupsFromKeys(
     .map((key) => {
       const { turn_index, tab_index } = parseToolKey(key);
       const packets = state.groupedPacketsMap.get(key);
-      return packets ? { turn_index, tab_index, packets: [...packets] } : null;
+      if (!packets) return null;
+      const nestedCalls = nestedCallSnapshot(
+        state.nestedCallsMap.get(key) ?? new Map<number, Packet[]>(),
+      );
+      return {
+        turn_index,
+        tab_index,
+        packets: packets.filter((packet) => !isNestedPacket(packet)),
+        nestedCalls,
+        codeMode: state.codeModePrograms.get(key) ?? null,
+      };
     })
     .filter(
       (g): g is GroupedPacket => g !== null && hasContentPackets(g.packets),

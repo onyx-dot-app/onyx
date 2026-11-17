@@ -67,9 +67,28 @@ class FakeCache(CacheBackend):
         self.set(key, value, ex=ex)
         return True
 
+    def replace_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        if self.store.get(key) != expected:
+            return False
+        self.expiries.pop(key, None)
+        self.set(key, value, ex=ex)
+        return True
+
     def delete(self, key: str) -> None:
         self.store.pop(key, None)
         self.expiries.pop(key, None)
+
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        if self.store.get(key) != expected:
+            return False
+        self.delete(key)
+        return True
 
     def delete_prefix(self, prefix: str) -> None:
         if not prefix:

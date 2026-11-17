@@ -28,7 +28,7 @@ from onyx.db.enums import (
     MCPAuthenticationType,
     MCPTransport,
 )
-from onyx.db.mcp import create_mcp_server__no_commit
+from onyx.db.mcp import create_connection_config, create_mcp_server__no_commit
 from onyx.db.models import OAuthAccount, Persona, Tool, User
 from onyx.db.tools import capture_persona_tool_configuration
 from onyx.llm.cancellation import CancellationSignal
@@ -159,7 +159,7 @@ class TestMCPPassThroughOAuth:
         Test PT_OAUTH behavior when user doesn't have an OAuth account.
 
         The user logged in with basic auth (no OAuth token), so the MCP tool
-        should have no OAuth token to pass through.
+        must be excluded from the available tools.
         """
         # Create user WITHOUT OAuth account (basic auth login)
         user = make_test_user("basic_auth_user")
@@ -206,14 +206,7 @@ class TestMCPPassThroughOAuth:
             search_tool_config=SearchToolConfig(),
         )
 
-        # Verify MCP tool was constructed
-        assert mcp_tool_db.id in tool_dict
-        constructed_tools = tool_dict[mcp_tool_db.id]
-        assert len(constructed_tools) == 1
-        mcp_tool = constructed_tools[0]
-        assert isinstance(mcp_tool, MCPTool)
-
-        assert "Authorization" not in mcp_tool._resolved_credentials.build_headers()
+        assert mcp_tool_db.id not in tool_dict
 
     def test_pt_oauth_vs_api_token_auth(
         self, db_session: Session, make_test_user: MakeTestUser
@@ -253,6 +246,14 @@ class TestMCPPassThroughOAuth:
         )
         db_session.commit()
 
+        config = create_connection_config(
+            {"headers": {"Authorization": "Bearer server-api-key"}},
+            db_session,
+            mcp_server_id=mcp_server.id,
+        )
+        mcp_server.admin_connection_config_id = config.id
+        db_session.commit()
+
         # Create MCP tool
         mcp_tool_db = Tool(
             name="api_token_tool",
@@ -289,7 +290,10 @@ class TestMCPPassThroughOAuth:
 
         # Verify the user's OAuth token was NOT passed (API_TOKEN auth type)
         # API_TOKEN auth should use connection config, not user's login token
-        assert "Authorization" not in mcp_tool._resolved_credentials.build_headers()
+        assert (
+            mcp_tool._resolved_credentials.build_headers()["Authorization"]
+            == "Bearer server-api-key"
+        )
 
     def test_mcp_tool_run_sets_authorization_header_for_pt_oauth(
         self, db_session: Session, make_test_user: MakeTestUser

@@ -22,12 +22,9 @@ def test_with_metadata_false_skips_cache_key_hash() -> None:
     prefix: list[ChatCompletionMessage] = [SystemMessage(content="stable instructions")]
     suffix: list[ChatCompletionMessage] = [UserMessage(content="new request")]
 
-    with (
-        patch.object(processor_module, "ENABLE_PROMPT_CACHING", True),
-        patch.object(
-            processor_module, "generate_cache_key_hash"
-        ) as generate_cache_key_hash,
-    ):
+    with patch.object(
+        processor_module, "generate_cache_key_hash"
+    ) as generate_cache_key_hash:
         processed, metadata = process_with_prompt_cache(
             llm_config=llm_config,
             cacheable_prefix=prefix,
@@ -46,14 +43,11 @@ def test_with_metadata_true_default_keeps_current_behavior() -> None:
     prefix: list[ChatCompletionMessage] = [SystemMessage(content="stable instructions")]
     suffix: list[ChatCompletionMessage] = [UserMessage(content="new request")]
 
-    with (
-        patch.object(processor_module, "ENABLE_PROMPT_CACHING", True),
-        patch.object(
-            processor_module,
-            "generate_cache_key_hash",
-            return_value="deterministic-hash",
-        ) as generate_cache_key_hash,
-    ):
+    with patch.object(
+        processor_module,
+        "generate_cache_key_hash",
+        return_value="deterministic-hash",
+    ) as generate_cache_key_hash:
         processed_with_metadata, metadata = process_with_prompt_cache(
             llm_config=llm_config,
             cacheable_prefix=prefix,
@@ -81,18 +75,14 @@ def test_canonical_cached_prompt_preserves_continuation_and_cache_boundary() -> 
     from onyx.llm.models import TextContentPart
     from onyx.llm.prompt_cache.processor import cached_user_message
 
-    with patch.object(processor_module, "ENABLE_PROMPT_CACHING", True):
-        message = cached_user_message(_anthropic_config(), "document\n", "chunk")
+    message = cached_user_message(_anthropic_config(), "document\n", "chunk")
 
     assert message.text == "document\nchunk"
     assert isinstance(message.content, list)
     assert message.content == [
-        TextContentPart(text="document\nchunk", cache_control={"type": "ephemeral"})
+        TextContentPart(text="document\n", cache_control={"type": "ephemeral"}),
+        TextContentPart(text="chunk"),
     ]
-
-    with patch.object(processor_module, "ENABLE_PROMPT_CACHING", False):
-        uncached = cached_user_message(_anthropic_config(), "document\n", "chunk")
-    assert uncached.content == "document\nchunk"
 
 
 def test_multimodal_continuation_preserves_input_and_cache_control() -> None:
@@ -112,23 +102,25 @@ def test_multimodal_continuation_preserves_input_and_cache_control() -> None:
     original_prefix = prefix.model_copy(deep=True)
     original_suffix = suffix.model_copy(deep=True)
 
-    with patch.object(processor_module, "ENABLE_PROMPT_CACHING", True):
-        processed, _ = process_with_prompt_cache(
-            llm_config=_anthropic_config(),
-            cacheable_prefix=[prefix],
-            suffix=[suffix],
-            continuation=True,
-            with_metadata=False,
-        )
+    processed, _ = process_with_prompt_cache(
+        llm_config=_anthropic_config(),
+        cacheable_prefix=[prefix],
+        suffix=[suffix],
+        continuation=True,
+        with_metadata=False,
+    )
 
     assert isinstance(processed, list)
     assert len(processed) == 1
     assert isinstance(processed[0], UserMessage)
     assert processed[0].content == [
         TextContentPart(text="Document"),
-        ImageContentPart(image_url=ImageUrlDetail(url="https://example.com/image")),
+        ImageContentPart(
+            image_url=ImageUrlDetail(url="https://example.com/image"),
+            cache_control={"type": "ephemeral"},
+        ),
         TextContentPart(text="Question"),
     ]
-    assert processed[0].cache_control == {"type": "ephemeral"}
+    assert processed[0].cache_control is None
     assert prefix == original_prefix
     assert suffix == original_suffix

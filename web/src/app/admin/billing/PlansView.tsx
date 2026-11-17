@@ -24,8 +24,7 @@ import "@/app/admin/billing/billing.css";
 import type { IconProps } from "@opal/types";
 import Card from "@/refresh-components/cards/Card";
 import { Button, Text } from "@opal/components";
-
-const SALES_URL = "https://www.onyx.app/contact-sales";
+import { CONTACT_SALES_URL } from "@/lib/constants";
 
 // ----------------------------------------------------------------------------
 // Types
@@ -268,7 +267,7 @@ export default function PlansView({
       description: t("plans.enterprise.description"),
       buttonLabel: t("plans.enterprise.button.label"),
       buttonVariant: "secondary",
-      href: SALES_URL,
+      href: CONTACT_SALES_URL,
       features: enterpriseFeatures,
       featuresPrefix: t("plans.enterprise.featuresPrefix"),
       isCurrentPlan: !!hasLicense && !hasSubscription,

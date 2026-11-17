@@ -1,4 +1,3 @@
-from collections import Counter
 from collections.abc import Callable, Sequence
 from typing import cast
 from uuid import UUID
@@ -11,7 +10,12 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
+from onyx.db.action_policy import (
+    mcp_tool_default_policy,
+    resolve_user_action_policies,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
+from onyx.db.enums import ActionPolicy, GatedAppKind
 from onyx.db.image_generation import get_default_image_generation_config
 from onyx.db.mcp import (
     get_mcp_server_by_id,
@@ -37,6 +41,7 @@ from onyx.tools.models import (
     DynamicSchemaInfo,
     PersonaToolConfiguration,
     SearchToolUsage,
+    ToolApprovalScope,
     ToolConfiguration,
 )
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
@@ -59,13 +64,6 @@ from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-def _disambiguate_mcp_tool_names(tools: list[Tool]) -> None:
-    tool_name_counts = Counter(tool.name for tool in tools)
-    for tool in tools:
-        if isinstance(tool, MCPTool) and tool_name_counts[tool.name] > 1:
-            tool.use_disambiguated_name()
 
 
 class SearchToolConfig(BaseModel):
@@ -171,8 +169,13 @@ def construct_tools(
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
     selection_llm_factory: Callable[[], LLM] | None = None,
+    ask_for_approval: bool = True,
 ) -> dict[int, list[Tool]]:
-    """Build tools from captured settings; resolve current service credentials."""
+    """Build tools from captured settings; resolve current service credentials.
+
+    Without `ask_for_approval`, MCP tools whose action policy asks for the
+    user's approval run without asking. Disabled tools are never built.
+    """
     with get_session_with_current_tenant_if_none(db_session) as db_session:
         return _construct_tools_impl(
             configuration=configuration,
@@ -185,6 +188,7 @@ def construct_tools(
             file_reader_tool_config=file_reader_tool_config,
             allowed_tool_ids=allowed_tool_ids,
             search_usage_forcing_setting=search_usage_forcing_setting,
+            ask_for_approval=ask_for_approval,
         )
 
 
@@ -199,7 +203,9 @@ def _construct_tools_impl(
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
     selection_llm_factory: Callable[[], LLM] | None = None,
+    ask_for_approval: bool = True,
 ) -> dict[int, list[Tool]]:
+    """Construct available tools, resolving each MCP server once per model response."""
     tool_dict: dict[int, list[Tool]] = {}
 
     persona_tool_names = [t.name for t in configuration.tools]
@@ -210,7 +216,24 @@ def _construct_tools_impl(
         persona_tool_names,
     )
 
-    mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
+    mcp_tool_cache: dict[int, dict[int, MCPTool] | None] = {}
+    mcp_default_policies: dict[int, dict[str, ActionPolicy]] = {}
+    for tool in configuration.tools:
+        if tool.mcp_server_id is not None:
+            mcp_default_policies.setdefault(tool.mcp_server_id, {})[tool.name] = (
+                mcp_tool_default_policy(tool.mcp_read_only)
+            )
+    # Disabled tools are not offered; tools that ask carry their scope.
+    mcp_policies = (
+        resolve_user_action_policies(
+            db_session,
+            user_id=user.id,
+            app_kind=GatedAppKind.MCP_SERVER,
+            default_policies_by_target=mcp_default_policies,
+        )
+        if mcp_default_policies
+        else {}
+    )
     mcp_preferences = (
         get_mcp_server_user_preferences(
             list(
@@ -468,11 +491,14 @@ def _construct_tools_impl(
             if preference is not None and not preference.enabled_in_chat:
                 continue
             if db_tool_model.mcp_server_id in mcp_tool_cache:
-                tool_dict[db_tool_model.id] = [
-                    mcp_tool_cache[db_tool_model.mcp_server_id][db_tool_model.id]
-                ]
+                cached_tools = mcp_tool_cache[db_tool_model.mcp_server_id]
+                # Disabled tools have no instance.
+                if cached_tools is not None and db_tool_model.id in cached_tools:
+                    tool_dict[db_tool_model.id] = [cached_tools[db_tool_model.id]]
                 continue
 
+            # Cache unavailable servers too, including access and resolution failures.
+            mcp_tool_cache[db_tool_model.mcp_server_id] = None
             mcp_server = get_mcp_server_by_id(db_tool_model.mcp_server_id, db_session)
 
             if (
@@ -502,9 +528,22 @@ def _construct_tools_impl(
             if custom_tool_config and custom_tool_config.mcp_headers:
                 additional_mcp_headers = custom_tool_config.mcp_headers
 
-            mcp_tool_cache[db_tool_model.mcp_server_id] = {}
+            if not mcp_credentials.can_authenticate_with_headers(
+                additional_mcp_headers
+            ):
+                logger.debug(
+                    "Skipping MCP server %s: credentials required", mcp_server.id
+                )
+                continue
+
+            server_tools: dict[int, MCPTool] = {}
+            mcp_tool_cache[db_tool_model.mcp_server_id] = server_tools
+            policies = mcp_policies[mcp_server.id]
             # Find the matching tool definition
             for saved_tool in saved_tools:
+                policy = policies[saved_tool.name]
+                if policy == ActionPolicy.DENY:
+                    continue
                 # Create MCPTool instance for this specific tool
                 mcp_tool = MCPTool(
                     tool_id=saved_tool.id,
@@ -512,17 +551,28 @@ def _construct_tools_impl(
                     tool_name=saved_tool.name,
                     tool_description=saved_tool.description or "",
                     tool_definition=saved_tool.mcp_input_schema or {},
+                    output_schema=saved_tool.mcp_output_schema,
                     user_email=user.email,
                     user_id=str(user.id),
                     user_oauth_token=mcp_credentials.user_oauth_token,
                     additional_headers=additional_mcp_headers,
                     resolved_credentials=mcp_credentials,
+                    approval=ToolApprovalScope(
+                        app_kind=GatedAppKind.MCP_SERVER,
+                        target_id=mcp_server.id,
+                        action_id=saved_tool.name,
+                    )
+                    if policy == ActionPolicy.ASK and ask_for_approval
+                    else None,
                 )
-                mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
+                server_tools[saved_tool.id] = mcp_tool
 
                 if saved_tool.id == db_tool_model.id:
                     tool_dict[saved_tool.id] = [mcp_tool]
-            if db_tool_model.id not in tool_dict:
+            if (
+                db_tool_model.id not in tool_dict
+                and policies.get(db_tool_model.name) != ActionPolicy.DENY
+            ):
                 logger.warning(
                     "Tool '%s' not found in MCP server '%s'",
                     expected_tool_name,
@@ -558,10 +608,5 @@ def _construct_tools_impl(
             logger.warning(
                 "MemoryTool not found in the database. Run the latest alembic migration to seed it."
             )
-
-    tools: list[Tool] = []
-    for tool_list in tool_dict.values():
-        tools.extend(tool_list)
-    _disambiguate_mcp_tool_names(tools)
 
     return tool_dict

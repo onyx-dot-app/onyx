@@ -217,7 +217,6 @@ export default function MCPServerDetailsPage({
     if (values.description !== baseline.description)
       payload.description = values.description;
     if (
-      settings.onyx_craft_available === true &&
       values.users_can_manage_policies !== baseline.users_can_manage_policies
     ) {
       payload.users_can_manage_policies = values.users_can_manage_policies;
@@ -456,18 +455,16 @@ export default function MCPServerDetailsPage({
                   disabled={readOnly || isSubmitting}
                 />
               )}
-              {settings.onyx_craft_available === true && (
-                <UserManagementSwitch
-                  value={formikProps.values.users_can_manage_policies}
-                  onChange={(value) =>
-                    void formikProps.setFieldValue(
-                      "users_can_manage_policies",
-                      value
-                    )
-                  }
-                  disabled={isSubmitting || readOnly}
-                />
-              )}
+              <UserManagementSwitch
+                value={formikProps.values.users_can_manage_policies}
+                onChange={(value) =>
+                  void formikProps.setFieldValue(
+                    "users_can_manage_policies",
+                    value
+                  )
+                }
+                disabled={isSubmitting || readOnly}
+              />
               {!readOnly && (
                 <MCPFormActions
                   variant={variant}

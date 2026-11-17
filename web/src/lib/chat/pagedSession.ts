@@ -1,10 +1,78 @@
-import type { BackendChatSession } from "@/app/app/types";
+import type { BackendChatSession, Message } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { readWaitingToolApprovals } from "@/lib/chat/toolApprovals";
+import type { ChatHistoryPage } from "@/lib/chat/types";
 
 /** Messages of the current branch that one page of a chat holds. */
 export const CHAT_PAGE_SIZE = 20;
+
+/**
+ * Keep loaded history when the latest page attaches to the selected branch.
+ * The latest page holds every reply with a waiting approval card, so a loaded
+ * older reply outside it that still shows one is stale; the older history is
+ * then dropped and loads again on scroll.
+ */
+export function mergeLatestChatPage(
+  page: BackendChatSession,
+  current: ChatHistoryPage
+): ChatHistoryPage {
+  const saved = processRawChatHistory(page.messages, page.packets);
+  const local = current.messageTree;
+  const first = getLatestMessageChain(saved)[0];
+  const localChain = getLatestMessageChain(local);
+  if (
+    first?.parentNodeId == null ||
+    !localChain.some((message) => message.messageId === first.parentNodeId) ||
+    readWaitingToolApprovals(local).some(
+      ({ response }) =>
+        response.messageId != null && !saved.has(response.messageId)
+    )
+  ) {
+    return {
+      messageTree: saved,
+      hasOlderMessages: page.has_older_messages ?? false,
+    };
+  }
+
+  // Live nodes can still use temporary IDs; saved links use database IDs.
+  const nodeIds = new Map(
+    [...local].map(([id, message]) => [id, message.messageId ?? id])
+  );
+  const messageTree = new Map<number, Message>();
+  for (const [id, message] of local) {
+    const nodeId = nodeIds.get(id) ?? id;
+    messageTree.set(nodeId, {
+      ...message,
+      nodeId,
+      parentNodeId:
+        message.parentNodeId === null
+          ? null
+          : (nodeIds.get(message.parentNodeId) ?? message.parentNodeId),
+      childrenNodeIds: message.childrenNodeIds?.map(
+        (child) => nodeIds.get(child) ?? child
+      ),
+      latestChildNodeId:
+        message.latestChildNodeId == null
+          ? message.latestChildNodeId
+          : (nodeIds.get(message.latestChildNodeId) ??
+            message.latestChildNodeId),
+    });
+  }
+  for (const [id, message] of saved) messageTree.set(id, message);
+  const parent = messageTree.get(first.parentNodeId);
+  if (parent) {
+    messageTree.set(parent.nodeId, {
+      ...parent,
+      childrenNodeIds: [
+        ...new Set([...(parent.childrenNodeIds ?? []), first.nodeId]),
+      ],
+      latestChildNodeId: first.nodeId,
+    });
+  }
+  return { messageTree, hasOlderMessages: current.hasOlderMessages };
+}
 
 /** URL of a page of a chat: its last messages, or those before a message. */
 export function chatPageUrl(
@@ -115,6 +183,7 @@ export async function reloadLatestChatPage(sessionId: string): Promise<void> {
     );
     store.updateSessionData(sessionId, {
       hasOlderMessages: page.has_older_messages ?? false,
+      approvalsVersion: page.approvals_version,
     });
   } catch (error) {
     console.error("Failed to reload the chat", { sessionId, error });
