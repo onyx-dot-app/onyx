@@ -342,3 +342,16 @@ Rules:
 1. Add a new `LLMFlow` enum value before instrumenting a new operation. Don't pass raw strings.
 2. Flow tags name the **operation** (e.g. `IMAGE_EDIT`, `RERANK`) — not the provider. Provider lives in `model_config["model_provider"]`.
 3. Shared calls without a flow emit `LLMFlow.UNTAGGED_INVOKE` or `UNTAGGED_STREAM`. These sentinels indicate missing instrumentation. Fix the call site.
+
+## Lint gate changes
+
+The Protect lint gates job reads its policy from the base branch. You can lower
+a baseline or remove a suppression. To add a suppression or change a gate
+definition, get approval on the current commit from an Onyx core-team member.
+Then rerun the failed job from the pull request's Checks tab.
+
+Repository administrators must require the Gate Changes workflow through an
+active organization branch ruleset for `main`. Use the workflow from protected
+`main`. Require code owner reviews and dismiss stale approvals on new commits.
+Set `GATE_TEAM_TOKEN` to a token with organization Members read access for
+`onyx-dot-app`. The job uses this token to check active team membership.

@@ -1,0 +1,40 @@
+name: Gate Changes
+
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] PR objects are read as data. Only the base is checked out.
+  merge_group:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gate-changes:
+    name: Protect lint gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The merge queue admits PRs after their required workflow passes.
+      - name: Check PR admission
+        if: github.event_name == 'merge_group'
+        run: echo "The gate check runs on each PR before it enters the queue."
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        if: github.event_name == 'pull_request_target'
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch PR objects and check changes
+        if: github.event_name == 'pull_request_target'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+          GATE_TEAM_TOKEN: ${{ secrets.GATE_TEAM_TOKEN }}
+        run: |
+          git fetch --no-tags origin "refs/pull/${PR_NUMBER}/head"
+          test "$(git rev-parse FETCH_HEAD)" = "$HEAD_SHA"
+          python3 -I backend/lint/check_gate_changes.py "$BASE_SHA" "$HEAD_SHA" --pr "$PR_NUMBER"
