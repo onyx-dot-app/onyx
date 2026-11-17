@@ -17,7 +17,7 @@ from onyx.db.enums import (
     MarketplaceKind,
     MCPTransport,
 )
-from onyx.db.external_app import delete_external_app
+from onyx.db.external_app import delete_external_app__no_commit
 from onyx.db.models import (
     ExternalApp,
     Integration,
@@ -589,7 +589,7 @@ def delete_integration__no_commit(
     if tool is not None:
         db_session.delete(tool)
     if external_app_id is not None:
-        delete_external_app(db_session, external_app_id)
+        delete_external_app__no_commit(db_session, external_app_id)
     db_session.flush()
     if emptied_plugin_ids:
         db_session.execute(

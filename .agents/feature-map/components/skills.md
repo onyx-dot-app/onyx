@@ -819,10 +819,11 @@ the app from the same rule
   the new files of a Skill. The previous tree stays readable until the next
   push to that mount or for 60 seconds.
 - **App lifecycle keeps skill settings.** Disconnecting an app deletes only
-  the user's connection (`backend/onyx/integrations/connections.py:disconnect`).
+  the user's connection
+  (`backend/onyx/server/features/integrations/api.py:delete_member_connection`).
   Deleting an app keeps the skills of its plugins with their settings and
-  choices (`db/external_app.py:delete_external_app`). It deletes the built-in
-  skill row of the app's preset.
+  choices (`db/external_app.py:delete_external_app__no_commit`). It deletes
+  the built-in skill row of the app's preset.
 
 ---
 
