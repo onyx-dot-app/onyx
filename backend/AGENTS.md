@@ -185,11 +185,33 @@ A deploy runs every pending revision in one transaction (`alembic/env.py`).
   `tests/integration/tests/migrations/test_no_deferrable_constraints.py` enforces this.
 - Add a CHECK constraint only when a race or another writer can break the rule that application
   code keeps. Name that case in a comment.
-- A new CHECK or FK on a large table scans every row under a lock that blocks the table. Add it
+- A new CHECK or FK on an existing table scans every row under a lock that blocks the table. Add it
   with `postgresql_not_valid=True`. Commit, then validate it, as `9d8f310ac672` does. A later
   revision is not enough, because it runs in the same transaction and keeps the lock.
 - Test a backfill with seeded rows and a single upgrade to `head`, as
   `tests/integration/tests/migrations/test_plugin_backfill_single_run_upgrade.py` does.
+
+The `migration-design` pre-commit hook checks both revision chains in
+`lint/check_migration_design.py`. It checks one head per chain and exempts DDL
+at and before `ff11c4042c42` in `alembic/versions` and `af8d808d89dd` in
+`alembic_tenants/versions`.
+
+- `not-valid` requires `postgresql_not_valid=True` on direct CHECK and FK
+  operations on existing tables. Add the column first, then add its foreign key
+  in a separate operation. Review the commit and validation sequence.
+- `deferrable` prohibits literal `deferrable=True` and `initially="DEFERRED"`
+  on constraint declarations in upgrades and their helpers.
+- `not-null` requires a server default for a direct NOT NULL column addition
+  on an existing table. You can add a nullable column, backfill it, then set NOT NULL.
+- `blocking-index` flags direct `op.create_index` calls on existing tables.
+  Commit first and use a separate AUTOCOMMIT connection, as in `9d8f310ac672`.
+  The concurrent option alone leaves the call inside the migration transaction.
+- `single-head` requires one head in each revision directory.
+
+For the table exemptions, create the literal table in the same function before
+the operation. The check reads Python call shapes. Review raw SQL and dynamic DDL.
+For a deliberate DDL exception, add `# migration-design: allow <rule> - <reason>`
+on a line of the call. Repair revision graph errors in the revision metadata.
 
 ## Testing Strategy
 
