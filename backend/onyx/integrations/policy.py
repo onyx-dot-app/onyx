@@ -18,7 +18,7 @@ The order, for each action:
 from collections.abc import Collection, Mapping, Sequence
 from uuid import UUID
 
-from pydantic import ValidationError
+from pydantic import BaseModel, InstanceOf, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DEFAULT_PERSONA_ID
@@ -38,6 +38,7 @@ from onyx.integrations.models import (
     ApprovalMode,
     EffectivePolicy,
     LinkValue,
+    PolicyRows,
 )
 from onyx.utils.logger import setup_logger
 
@@ -59,6 +60,14 @@ _STRICTNESS: dict[EffectivePolicy, int] = {
     EffectivePolicy.ASK: 1,
     EffectivePolicy.BLOCKED: 2,
 }
+
+
+class AgentIntegrationLinks(BaseModel):
+    """An integration that plugins of an agent hold, with the agent settings
+    of each such plugin."""
+
+    integration: InstanceOf[Integration]
+    settings: list[ActionSettings | None] = []
 
 
 def parse_action_settings(raw: Mapping[str, object] | None) -> ActionSettings:
@@ -97,65 +106,89 @@ def _with_link(
     return admin
 
 
+def decide_action_policy(
+    key: str,
+    action: IntegrationAction | None,
+    rows: PolicyRows,
+    *,
+    users_can_save_always_allow: bool,
+    links: Sequence[ActionSettings],
+    granted: bool,
+    approval_mode: ApprovalMode,
+) -> EffectivePolicy:
+    """The policy of one action from the loaded values. ``action`` is None
+    for a key with no stored action. ``links`` are the settings of each link
+    that holds the integration; the strictest link wins, and no link
+    blocks."""
+    if not links:
+        return EffectivePolicy.BLOCKED
+    stored_admin = rows.admin.get(key, rows.admin.get(DEFAULT_ACTION_KEY))
+    admin = (
+        _STORED_TO_EFFECTIVE[stored_admin]
+        if stored_admin is not None
+        else _action_default(action)
+    )
+    locked = admin is EffectivePolicy.BLOCKED or not users_can_save_always_allow
+    policy = max(
+        (_with_link(admin, locked, link.value_for(key)) for link in links),
+        key=_STRICTNESS.__getitem__,
+    )
+
+    if policy is EffectivePolicy.ASK and not locked:
+        user_value = rows.user.get(key, rows.user.get(DEFAULT_ACTION_KEY))
+        if user_value is IntegrationActionPolicyValue.ALLOW:
+            policy = EffectivePolicy.ALLOW
+    if policy is EffectivePolicy.ASK and granted:
+        policy = EffectivePolicy.ALLOW
+
+    if policy is EffectivePolicy.ASK:
+        if approval_mode is ApprovalMode.NO_APPROVER:
+            return EffectivePolicy.BLOCKED
+        if approval_mode is ApprovalMode.RUN_WITHOUT_ASKING:
+            return EffectivePolicy.ALLOW
+    return policy
+
+
 def resolve_action_policies(
     db_session: Session,
     *,
     integration: Integration,
+    actions: Sequence[IntegrationAction],
     action_keys: Collection[str],
     user_id: UUID | None,
     link_settings: Sequence[ActionSettings | None],
     approval_mode: ApprovalMode,
     chat_session_id: UUID | None,
 ) -> dict[str, EffectivePolicy]:
-    """The policy of each action in ``action_keys`` for one run. ``user_id``
-    is the acting user (None for a caller with no user). ``link_settings``
-    are the settings of each agent or task link that holds the integration;
-    the strictest link wins, and None or no link inherits each action."""
+    """The policy of each action in ``action_keys`` for one run. ``actions``
+    are the stored actions of the integration. ``user_id`` is the acting
+    user (None for a caller with no user). ``link_settings`` are the
+    settings of each agent or task link that holds the integration: None
+    inherits each action, and an empty list blocks each action."""
     if not action_keys:
         return {}
-    actions = {
-        action.key: action
-        for action in list_integration_actions(integration.id, db_session)
-    }
+    if not link_settings:
+        return dict.fromkeys(action_keys, EffectivePolicy.BLOCKED)
+    by_key = {action.key: action for action in actions}
     rows = get_policy_rows(db_session, integration.id, user_id)
     granted = (
         get_session_granted_actions(db_session, chat_session_id, integration.id)
         if chat_session_id is not None
         else set()
     )
-    links = [settings or ActionSettings() for settings in link_settings or [None]]
-
-    policies: dict[str, EffectivePolicy] = {}
-    for key in action_keys:
-        stored_admin = rows.admin.get(key, rows.admin.get(DEFAULT_ACTION_KEY))
-        admin = (
-            _STORED_TO_EFFECTIVE[stored_admin]
-            if stored_admin is not None
-            else _action_default(actions.get(key))
+    links = [settings or ActionSettings() for settings in link_settings]
+    return {
+        key: decide_action_policy(
+            key,
+            by_key.get(key),
+            rows,
+            users_can_save_always_allow=integration.users_can_save_always_allow,
+            links=links,
+            granted=key in granted,
+            approval_mode=approval_mode,
         )
-        locked = (
-            admin is EffectivePolicy.BLOCKED
-            or not integration.users_can_save_always_allow
-        )
-        policy = max(
-            (_with_link(admin, locked, link.value_for(key)) for link in links),
-            key=_STRICTNESS.__getitem__,
-        )
-
-        if policy is EffectivePolicy.ASK and not locked:
-            user_value = rows.user.get(key, rows.user.get(DEFAULT_ACTION_KEY))
-            if user_value is IntegrationActionPolicyValue.ALLOW:
-                policy = EffectivePolicy.ALLOW
-        if policy is EffectivePolicy.ASK and key in granted:
-            policy = EffectivePolicy.ALLOW
-
-        if policy is EffectivePolicy.ASK:
-            if approval_mode is ApprovalMode.NO_APPROVER:
-                policy = EffectivePolicy.BLOCKED
-            elif approval_mode is ApprovalMode.RUN_WITHOUT_ASKING:
-                policy = EffectivePolicy.ALLOW
-        policies[key] = policy
-    return policies
+        for key in action_keys
+    }
 
 
 def agent_plugin_settings(
@@ -187,6 +220,29 @@ def agent_plugin_settings(
     }
 
 
+def agent_link_settings_by_integration(
+    db_session: Session,
+    user_id: UUID,
+    persona_id: int,
+    links: Mapping[UUID, ActionSettings],
+    *,
+    published_only: bool = False,
+) -> dict[int, AgentIntegrationLinks]:
+    """Each integration that a plugin from ``agent_plugin_settings`` holds,
+    with the agent settings of each such plugin, in integration order."""
+    settings_by_plugin = agent_plugin_settings(
+        db_session, user_id, persona_id, links, published_only=published_only
+    )
+    by_integration: dict[int, AgentIntegrationLinks] = {}
+    for plugin_id, integration in list_plugin_integrations(
+        db_session, list(settings_by_plugin)
+    ):
+        by_integration.setdefault(
+            integration.id, AgentIntegrationLinks(integration=integration)
+        ).settings.append(settings_by_plugin[plugin_id])
+    return by_integration
+
+
 def resolve_chat_action_policy(
     db_session: Session,
     *,
@@ -201,9 +257,8 @@ def resolve_chat_action_policy(
     a plugin the user cannot use does not change the result, and an action
     that no such plugin holds is Blocked."""
     persona_id = get_chat_session_persona_id(db_session, chat_session_id)
-    link_settings: list[ActionSettings | None] = []
-    if persona_id is not None:
-        settings_by_plugin = agent_plugin_settings(
+    held = (
+        agent_link_settings_by_integration(
             db_session,
             user_id,
             persona_id,
@@ -211,23 +266,17 @@ def resolve_chat_action_policy(
                 link.plugin_id: parse_action_settings(link.action_settings)
                 for link in list_persona_plugin_links(db_session, persona_id)
             },
-        )
-        link_settings = [
-            settings_by_plugin[plugin_id]
-            for plugin_id, held in list_plugin_integrations(
-                db_session, list(settings_by_plugin)
-            )
-            if held.id == integration.id
-        ]
-    if not link_settings:
-        # Chat tool construction offers no tool for it.
-        return EffectivePolicy.BLOCKED
+        ).get(integration.id)
+        if persona_id is not None
+        else None
+    )
     return resolve_action_policies(
         db_session,
         integration=integration,
+        actions=list_integration_actions(integration.id, db_session),
         action_keys=[action_key],
         user_id=user_id,
-        link_settings=link_settings,
+        link_settings=held.settings if held is not None else [],
         approval_mode=ApprovalMode.INTERACTIVE,
         chat_session_id=None,
     )[action_key]

@@ -11,15 +11,17 @@ from collections.abc import Sequence
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import IntegrationAuthMode
+from onyx.db.enums import IntegrationAuthMode, IntegrationKind
 from onyx.db.integration import list_integration_actions
-from onyx.db.integration_policy import list_plugin_integrations
 from onyx.db.models import Integration, User
 from onyx.integrations.call_credentials import resolve_call_credentials
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import ActionSettings, EffectivePolicy
-from onyx.integrations.policy import agent_plugin_settings, resolve_action_policies
+from onyx.integrations.policy import (
+    agent_link_settings_by_integration,
+    resolve_action_policies,
+)
 from onyx.integrations.registry import get_kind_handler
 from onyx.tools.interface import Tool
 from onyx.tools.models import IntegrationChatRequest, ToolApprovalScope
@@ -43,11 +45,11 @@ def _integration_tools(
         )
         return []
     actions = list_integration_actions(integration.id, db_session)
-    keys = [action.key for action in actions]
     policies = resolve_action_policies(
         db_session,
         integration=integration,
-        action_keys=keys,
+        actions=actions,
+        action_keys=[action.key for action in actions],
         user_id=acting_user.id if acting_user else None,
         link_settings=settings,
         approval_mode=request.approval_mode,
@@ -86,41 +88,31 @@ def build_integration_chat_tools(
     db_session: Session, user: User, request: IntegrationChatRequest
 ) -> list[Tool]:
     """The tools of each enabled integration that the turn can use. An
-    integration whose credential does not resolve gives no tool. A Blocked
+    integration whose credential does not resolve gives no tool, and an API
+    integration with no OpenAPI tool (a preset or custom app) gives none. A Blocked
     action gives no tool; an Ask action carries its approval scope."""
-    settings_by_plugin = agent_plugin_settings(
+    held = agent_link_settings_by_integration(
         db_session,
         user.id,
         request.persona_id,
         {link.plugin_id: link.action_settings for link in request.plugin_links},
         published_only=user.is_anonymous,
     )
-    integrations: dict[int, Integration] = {}
-    settings_by_integration: dict[int, list[ActionSettings | None]] = {}
-    for plugin_id, integration in list_plugin_integrations(
-        db_session, list(settings_by_plugin)
-    ):
-        if not integration.enabled:
-            continue
+    tools: list[Tool] = []
+    for integration_id, links in held.items():
+        integration = links.integration
         if (
-            user.is_anonymous
-            and integration.auth_mode is IntegrationAuthMode.INDIVIDUAL
+            not integration.enabled
+            or (
+                user.is_anonymous
+                and integration.auth_mode is IntegrationAuthMode.INDIVIDUAL
+            )
+            or (integration.kind is IntegrationKind.API and integration.tool_id is None)
         ):
             continue
-        integrations[integration.id] = integration
-        settings_by_integration.setdefault(integration.id, []).append(
-            settings_by_plugin[plugin_id]
-        )
-
-    tools: list[Tool] = []
-    for integration_id, integration in integrations.items():
         try:
             tools += _integration_tools(
-                db_session,
-                integration,
-                settings_by_integration[integration_id],
-                user,
-                request,
+                db_session, integration, links.settings, user, request
             )
         except Exception:
             # One broken integration does not stop the turn.
