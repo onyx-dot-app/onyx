@@ -7,7 +7,7 @@ from uuid import UUID
 import requests
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS, WEB_DOMAIN
 from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
 from onyx.db.models import UserFile
 from onyx.db.projects import get_project_user_files_by_file_ids
@@ -239,7 +239,7 @@ def chat_image_gen_metadata(chat_session_id: UUID) -> dict[str, Any]:
 
 
 def save_file_from_url(url: str, chat_session_id: UUID) -> str:
-    response = requests.get(url)
+    response = requests.get(url, timeout=(10, REQUEST_TIMEOUT_SECONDS))
     response.raise_for_status()
 
     file_io = BytesIO(response.content)

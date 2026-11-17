@@ -2,13 +2,13 @@ import asyncio
 import os
 import time
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
 import httpx
 from fastapi.concurrency import run_in_threadpool
 from fastapi_users.manager import BaseUserManager
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
@@ -186,12 +186,13 @@ async def _resolve_token_endpoint(provider: str) -> Optional[str]:
     return None
 
 
-@dataclass(frozen=True)
-class _RefreshContext:
+class _RefreshContext(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     token_endpoint: str
     client_id: str
     # repr=False keeps the secret out of any future log/repr of the context.
-    client_secret: str = field(repr=False)
+    client_secret: str = Field(repr=False)
 
 
 async def _resolve_refresh_context(
@@ -236,7 +237,11 @@ async def _resolve_refresh_context(
             else await _get_oidc_token_endpoint(config.get("openid_config_url") or "")
         )
         if endpoint and client_id and client_secret:
-            return _RefreshContext(endpoint, client_id, client_secret)
+            return _RefreshContext(
+                token_endpoint=endpoint,
+                client_id=client_id,
+                client_secret=client_secret,
+            )
         logger.error(
             "SSO provider %s cannot refresh tokens: has_endpoint=%s "
             "has_client_id=%s has_client_secret=%s",
@@ -256,7 +261,11 @@ async def _resolve_refresh_context(
             "No OAuth credentials configured to refresh provider: %s", oauth_name
         )
         return None
-    return _RefreshContext(endpoint, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
+    return _RefreshContext(
+        token_endpoint=endpoint,
+        client_id=OAUTH_CLIENT_ID,
+        client_secret=OAUTH_CLIENT_SECRET,
+    )
 
 
 # NOTE: Keeping this as a utility function for potential future debugging,

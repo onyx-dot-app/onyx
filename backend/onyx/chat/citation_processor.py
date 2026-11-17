@@ -13,7 +13,9 @@ This module provides a citation processor that can:
 import re
 from bisect import bisect_right
 from collections.abc import Generator, Mapping
-from dataclasses import dataclass
+from dataclasses import (
+    dataclass,  # noqa: TID251 - Created while scanning streamed text.
+)
 from typing import TypeAlias
 
 from onyx.chat.models import CitationMode

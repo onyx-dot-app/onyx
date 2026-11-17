@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import itertools
 import tempfile
+import time
 from collections.abc import Iterator
 from typing import Any, ClassVar, cast
 
@@ -181,9 +182,13 @@ class MediaWikiConnector(LoadConnector, PollConnector):
                         category, recurse=self.recurse_depth
                     ),
                     last_edit_start=(
-                        datetime.datetime.fromtimestamp(start) if start else None
+                        datetime.datetime.fromtimestamp(start, tz=datetime.UTC)
+                        if start
+                        else None
                     ),
-                    last_edit_end=datetime.datetime.fromtimestamp(end) if end else None,
+                    last_edit_end=datetime.datetime.fromtimestamp(end, tz=datetime.UTC)
+                    if end
+                    else None,
                 ),
                 groupsize=self.batch_size,
             )
@@ -241,7 +246,7 @@ if __name__ == "__main__":
 
     all_docs = list(test_connector.load_from_state())
     print("All docs", all_docs)
-    current = datetime.datetime.now().timestamp()
+    current = time.time()
     one_day_ago = current - 30 * 24 * 60 * 60  # 30 days
 
     latest_docs = list(test_connector.poll_source(one_day_ago, current))

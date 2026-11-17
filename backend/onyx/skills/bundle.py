@@ -11,9 +11,10 @@ import zlib
 from collections.abc import Callable, Iterable
 from contextlib import ExitStack
 from copy import copy
-from dataclasses import dataclass
 from itertools import pairwise
 from typing import IO, Final, Literal
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -68,8 +69,9 @@ _IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
 )
 
 
-@dataclass(frozen=True)
-class NormalizedSkillBundle:
+class NormalizedSkillBundle(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     content: bytes
     source_directory: str | None
 

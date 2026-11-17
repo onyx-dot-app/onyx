@@ -5,7 +5,10 @@ from __future__ import annotations
 import queue
 import threading
 from collections import defaultdict
-from dataclasses import dataclass, replace
+from dataclasses import (
+    dataclass,  # noqa: TID251 - Span processing uses dataclasses.replace.
+    replace,
+)
 from datetime import datetime, timezone
 from typing import Any
 
