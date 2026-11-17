@@ -171,6 +171,17 @@ def test_allow_marker_with_a_reason_exempts_its_call(body: str) -> None:
     assert check_db_ops_outside_db.find_db_operations(_source(body)) == ([], [])
 
 
+def test_allow_marker_on_a_nested_call_does_not_exempt_its_parent() -> None:
+    body = (
+        "rows = db_session.execute(\n"
+        "    select(User)  # db-ops-outside-db: allow built for a db function\n"
+        ").all()"
+    )
+    lines, no_reason = check_db_ops_outside_db.find_db_operations(_source(body))
+    assert lines == [_FIRST_BODY_LINE]
+    assert no_reason == []
+
+
 @pytest.mark.parametrize(
     "marker", ["# db-ops-outside-db: allow", "# db-ops-outside-db: allow  # noqa"]
 )

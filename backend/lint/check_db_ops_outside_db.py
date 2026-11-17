@@ -251,8 +251,9 @@ def find_db_operations(source: str) -> tuple[list[int], list[int]]:
         )
         if not is_operation:
             continue
-        # The marker exempts one call: on its own lines or its statement's first.
-        marked = {statement.lineno, *range(call.lineno, (call.end_lineno or 0) + 1)}
+        # The marker exempts a call on its first or last line, or on its
+        # statement's first line. A line between belongs to a nested call.
+        marked = {statement.lineno, call.lineno, call.end_lineno or call.lineno}
         marker_lines = [n for n in sorted(marked) if ALLOW_MARKER in lines[n - 1]]
         if any(_ALLOW_WITH_REASON.search(lines[n - 1]) for n in marker_lines):
             continue
