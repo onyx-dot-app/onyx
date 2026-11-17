@@ -194,9 +194,6 @@ def test_discovery_does_not_change_default_or_custom_agent_selection(
     db = MagicMock(spec=Session)
     monkeypatch.setattr(api, "get_tools_by_mcp_server_id", lambda *_, **__: [existing])
     monkeypatch.setattr(api, "create_tool__no_commit", lambda **_: tool(2, 42, "new"))
-    monkeypatch.setattr(
-        api, "sync_actions_for_integration_id__no_commit", lambda *_: None
-    )
 
     api._sync_mcp_server_tools(
         42,

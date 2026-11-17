@@ -367,9 +367,6 @@ def build_custom_tools_from_openapi_schema_and_headers(
     are left untouched in the schema rather than substituted with an empty
     string. Substitution only happens inside the OpenAPI schema; static
     ``custom_headers`` are not templated.
-
-    ``approval_for`` gives the approval scope of each operation, by its
-    operationId.
     """
     if dynamic_schema_info:
         schema_str = json.dumps(openapi_schema)

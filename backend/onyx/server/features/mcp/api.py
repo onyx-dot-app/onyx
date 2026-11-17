@@ -92,7 +92,6 @@ from onyx.db.tools import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.sync import sync_actions_for_integration_id__no_commit
 from onyx.oauth.authorization_attempt import canonical_json_fingerprint
 from onyx.server.features.mcp.client import (
     discover_mcp_tools,
@@ -1737,14 +1736,11 @@ def _sync_mcp_server_tools(
 
     Locks the server row so concurrent refreshes run one at a time. The second
     caller then sees the rows the first one committed instead of inserting them
-    again. The commit at the end releases the lock. The actions of the
-    server's integration follow the tool rows in the same transaction.
+    again. The commit at the end releases the lock.
     """
-    integration_id = db.execute(
-        select(DbMCPServer.integration_id)
-        .where(DbMCPServer.id == mcp_server_id)
-        .with_for_update()
-    ).scalar_one_or_none()
+    db.execute(
+        select(DbMCPServer.id).where(DbMCPServer.id == mcp_server_id).with_for_update()
+    )
 
     existing_by_name: dict[str, Tool] = {}
     for db_tool in get_tools_by_mcp_server_id(mcp_server_id, db, order_by_id=True):
@@ -1762,8 +1758,6 @@ def _sync_mcp_server_tools(
     for name, db_tool in existing_by_name.items():
         if name not in processed_names:
             delete_tool__no_commit(db_tool.id, db)
-
-    sync_actions_for_integration_id__no_commit(integration_id, db)
 
     if commit:
         db.commit()

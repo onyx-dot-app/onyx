@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from typing import ClassVar
 
 from mitmproxy import http
 from sqlalchemy.orm import Session
@@ -9,12 +8,11 @@ from onyx.db.enums import (
     ExternalAppType,
     IntegrationActionPolicyValue,
     IntegrationActionSource,
-    IntegrationAuthMethod,
-    IntegrationKind,
 )
 from onyx.db.integration import (
     get_external_app_for_integration,
     get_openapi_tool_for_integration,
+    list_integration_actions,
 )
 from onyx.db.models import ExternalApp, Integration, IntegrationAction
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -25,7 +23,6 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.providers.actions import path_matches
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.integrations.kinds.base import ChatToolContext, IntegrationKindHandler
 from onyx.integrations.models import (
@@ -34,7 +31,6 @@ from onyx.integrations.models import (
     IntegrationActionSpec,
     MatchedIntegrationAction,
 )
-from onyx.integrations.presets import get_preset
 from onyx.sandbox_proxy.request_evaluator import resolve_app_for_url
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
     match_request,
@@ -53,7 +49,6 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 )
 from onyx.utils.headers import header_dict_to_header_list
 
-# The catalog policy of an external app, as an integration action policy.
 CATALOG_POLICY_VALUES: dict[ActionPolicy, IntegrationActionPolicyValue] = {
     ActionPolicy.ALWAYS: IntegrationActionPolicyValue.ALLOW,
     ActionPolicy.ASK: IntegrationActionPolicyValue.ASK,
@@ -99,21 +94,29 @@ class ApiKindHandler(IntegrationKindHandler):
     catalog of the preset gives the actions), or a CUSTOM ``external_app``
     (one action for all of its URLs)."""
 
-    kind: ClassVar[IntegrationKind] = IntegrationKind.API
+    def _openapi_config(
+        self, integration: Integration, db_session: Session
+    ) -> ApiConfig | None:
+        if integration.tool_id is None:
+            return None
+        tool = get_openapi_tool_for_integration(integration.id, db_session)
+        if tool is None or tool.openapi_schema is None:
+            return None
+        try:
+            base_url = openapi_to_url(tool.openapi_schema)
+        except ValueError as e:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+        return ApiConfig(
+            shape=ApiShape.OPENAPI,
+            tool_id=tool.id,
+            openapi_spec=tool.openapi_schema,
+            base_url=base_url,
+        )
 
     def load_config(self, integration: Integration, db_session: Session) -> ApiConfig:
-        tool = get_openapi_tool_for_integration(integration.id, db_session)
-        if tool is not None and tool.openapi_schema is not None:
-            try:
-                base_url = openapi_to_url(tool.openapi_schema)
-            except ValueError as e:
-                raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
-            return ApiConfig(
-                shape=ApiShape.OPENAPI,
-                tool_id=tool.id,
-                openapi_spec=tool.openapi_schema,
-                base_url=base_url,
-            )
+        config = self._openapi_config(integration, db_session)
+        if config is not None:
+            return config
         app = self._external_app(integration, db_session)
         return ApiConfig(
             shape=(
@@ -121,9 +124,7 @@ class ApiKindHandler(IntegrationKindHandler):
                 if app.app_type == ExternalAppType.CUSTOM
                 else ApiShape.PRESET
             ),
-            external_app_id=app.id,
             app_type=app.app_type,
-            upstream_url_patterns=list(app.upstream_url_patterns),
         )
 
     def _external_app(
@@ -144,23 +145,6 @@ class ApiKindHandler(IntegrationKindHandler):
             return openapi_to_method_specs(config.openapi_spec)
         except ValueError as e:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
-
-    def auth_methods(
-        self, integration: Integration, db_session: Session
-    ) -> frozenset[IntegrationAuthMethod]:
-        config = self.load_config(integration, db_session)
-        if config.shape is ApiShape.OPENAPI:
-            return frozenset(
-                {
-                    IntegrationAuthMethod.OAUTH2,
-                    IntegrationAuthMethod.API_KEY,
-                    IntegrationAuthMethod.ONYX_LOGIN,
-                }
-            )
-        preset = get_preset(config.app_type) if config.app_type else None
-        if preset is not None and isinstance(preset.provider, OAuthExternalAppProvider):
-            return frozenset({IntegrationAuthMethod.OAUTH2})
-        return frozenset({IntegrationAuthMethod.API_KEY})
 
     def discover_actions(
         self, integration: Integration, db_session: Session
@@ -237,9 +221,11 @@ class ApiKindHandler(IntegrationKindHandler):
     ) -> list[MatchedIntegrationAction] | None:
         if request.url is None:
             return None
-        config = self.load_config(integration, db_session)
-        if config.shape is ApiShape.OPENAPI:
-            return self._match_openapi(integration.id, config, request)
+        config = self._openapi_config(integration, db_session)
+        if config is not None:
+            return self._match_openapi(
+                integration.id, config.base_url, request.method, request.url, db_session
+            )
 
         app = self._external_app(integration, db_session)
         if resolve_app_for_url(request.url, [app]) is None:
@@ -259,36 +245,39 @@ class ApiKindHandler(IntegrationKindHandler):
         ]
 
     def _match_openapi(
-        self, integration_id: int, config: ApiConfig, request: ProxiedRequest
+        self,
+        integration_id: int,
+        base_url: str | None,
+        method: str,
+        url: str,
+        db_session: Session,
     ) -> list[MatchedIntegrationAction] | None:
         """The request must be under the server URL of the spec. Then its method
-        and the rest of its path pick the operations."""
-        if request.url is None or config.base_url is None:
+        and the rest of its path pick the stored actions."""
+        if base_url is None:
             return None
-        target = parse_target(integration_id, config.base_url)
+        target = parse_target(integration_id, base_url)
         if target is None:
             return None
-        proxied = http.Request.make(request.method, request.url)
+        proxied = http.Request.make(method, url)
         if match_request((target,), proxied) is None:
             return None
 
         path = normalized_request_path(proxied.path or "")
         relative_path = path[len(target.path_prefix) :] or "/"
-        method = request.method.upper()
+        method = method.upper()
         matched = [
             MatchedIntegrationAction(
                 integration_id=integration_id,
-                action_key=spec.key,
-                display_name=spec.display_name,
-                description=spec.description or "",
-                default_policy=spec.default_policy,
+                action_key=action.key,
+                display_name=action.display_name,
+                description=action.description or "",
+                default_policy=action.default_policy
+                or IntegrationActionPolicyValue.ASK,
             )
-            for spec in (
-                openapi_action_spec(method_spec)
-                for method_spec in self._method_specs(config)
-            )
-            if spec.http_method == method
-            and spec.path_template is not None
-            and path_matches(spec.path_template, relative_path)
+            for action in list_integration_actions(integration_id, db_session)
+            if action.http_method == method
+            and action.path_template is not None
+            and path_matches(action.path_template, relative_path)
         ]
         return matched or [_whole_domain_action(integration_id, f"{method} {path}")]

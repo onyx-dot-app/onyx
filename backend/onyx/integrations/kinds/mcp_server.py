@@ -1,6 +1,5 @@
 from collections import Counter
 from collections.abc import Sequence
-from typing import ClassVar
 
 from mitmproxy import http
 from sqlalchemy.orm import Session
@@ -8,8 +7,6 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import (
     IntegrationActionPolicyValue,
     IntegrationActionSource,
-    IntegrationAuthMethod,
-    IntegrationKind,
 )
 from onyx.db.integration import (
     get_mcp_server_for_integration,
@@ -64,8 +61,6 @@ class McpServerKindHandler(IntegrationKindHandler):
     """An MCP server. Its actions are the tools of the server, kept by the
     tool sync by name (``server/features/mcp/api.py``)."""
 
-    kind: ClassVar[IntegrationKind] = IntegrationKind.MCP
-
     def _server(self, integration: Integration, db_session: Session) -> MCPServer:
         server = get_mcp_server_for_integration(integration.id, db_session)
         if server is None:
@@ -83,19 +78,6 @@ class McpServerKindHandler(IntegrationKindHandler):
             mcp_server_id=server.id,
             server_url=server.server_url,
             transport=server.transport,
-        )
-
-    def auth_methods(
-        self,
-        integration: Integration,  # noqa: ARG002
-        db_session: Session,  # noqa: ARG002
-    ) -> frozenset[IntegrationAuthMethod]:
-        return frozenset(
-            {
-                IntegrationAuthMethod.OAUTH2,
-                IntegrationAuthMethod.API_KEY,
-                IntegrationAuthMethod.ONYX_LOGIN,
-            }
         )
 
     def discover_actions(

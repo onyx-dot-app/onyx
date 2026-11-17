@@ -73,9 +73,7 @@ class ApiConfig(BaseModel):
     openapi_spec: dict[str, Any] | None = None
     base_url: str | None = None
     # Set for PRESET and CUSTOM.
-    external_app_id: int | None = None
     app_type: ExternalAppType | None = None
-    upstream_url_patterns: list[str] = []
 
 
 IntegrationConfig = McpServerConfig | ApiConfig

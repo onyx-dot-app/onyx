@@ -1,6 +1,3 @@
-"""Queries for the integration tables and the kind tables that hold the
-settings of each integration."""
-
 from collections.abc import Sequence
 
 from sqlalchemy import delete, select
@@ -31,7 +28,9 @@ def get_mcp_server_for_integration(
     integration_id: int, db_session: Session
 ) -> MCPServer | None:
     return db_session.scalar(
-        select(MCPServer).where(MCPServer.integration_id == integration_id)
+        select(MCPServer)
+        .join(Integration, Integration.mcp_server_id == MCPServer.id)
+        .where(Integration.id == integration_id)
     )
 
 
@@ -39,7 +38,9 @@ def get_external_app_for_integration(
     integration_id: int, db_session: Session
 ) -> ExternalApp | None:
     return db_session.scalar(
-        select(ExternalApp).where(ExternalApp.integration_id == integration_id)
+        select(ExternalApp)
+        .join(Integration, Integration.external_app_id == ExternalApp.id)
+        .where(Integration.id == integration_id)
     )
 
 
@@ -47,8 +48,10 @@ def get_openapi_tool_for_integration(
     integration_id: int, db_session: Session
 ) -> Tool | None:
     return db_session.scalar(
-        select(Tool).where(
-            Tool.integration_id == integration_id,
+        select(Tool)
+        .join(Integration, Integration.tool_id == Tool.id)
+        .where(
+            Integration.id == integration_id,
             Tool.openapi_schema.is_not(None),
         )
     )
@@ -67,26 +70,15 @@ def list_integration_actions(
 
 
 def _apply_spec(action: IntegrationAction, spec: IntegrationActionSpec) -> None:
-    """Set only the fields that differ, so an unchanged row gets no UPDATE and
-    keeps its ``updated_at``."""
-    if action.source != spec.source:
-        action.source = spec.source
-    if action.display_name != spec.display_name:
-        action.display_name = spec.display_name
-    if action.description != spec.description:
-        action.description = spec.description
-    if action.read_only != spec.read_only:
-        action.read_only = spec.read_only
-    if action.default_policy != spec.default_policy:
-        action.default_policy = spec.default_policy
-    if action.input_schema != spec.input_schema:
-        action.input_schema = spec.input_schema
-    if action.output_schema != spec.output_schema:
-        action.output_schema = spec.output_schema
-    if action.http_method != spec.http_method:
-        action.http_method = spec.http_method
-    if action.path_template != spec.path_template:
-        action.path_template = spec.path_template
+    action.source = spec.source
+    action.display_name = spec.display_name
+    action.description = spec.description
+    action.read_only = spec.read_only
+    action.default_policy = spec.default_policy
+    action.input_schema = spec.input_schema
+    action.output_schema = spec.output_schema
+    action.http_method = spec.http_method
+    action.path_template = spec.path_template
 
 
 def replace_integration_actions__no_commit(
@@ -95,13 +87,8 @@ def replace_integration_actions__no_commit(
     specs: Sequence[IntegrationActionSpec],
     db_session: Session,
 ) -> None:
-    """Make the actions of ``source`` on the integration match ``specs``.
-
-    A row whose key stays keeps its id. Changed fields are updated in place.
-    Rows of ``source`` whose key is gone are deleted. Rows of other sources
-    stay, unless a spec takes their key. Locks the integration row, so two
-    syncs of one integration run one at a time. If two specs have the same
-    key, the first one wins."""
+    """Locks the integration row, so two syncs of one integration run one at a
+    time. If two specs have the same key, the first one wins."""
     db_session.execute(
         select(Integration.id).where(Integration.id == integration_id).with_for_update()
     )
@@ -112,11 +99,6 @@ def replace_integration_actions__no_commit(
 
     kept_keys: set[str] = set()
     for spec in specs:
-        if spec.source != source:
-            raise ValueError(
-                f"Action '{spec.key}' has source {spec.source.value}, "
-                f"expected {source.value}"
-            )
         if spec.key in kept_keys:
             continue
         kept_keys.add(spec.key)
