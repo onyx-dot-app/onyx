@@ -38,6 +38,7 @@ from onyx.connectors.google_drive.section_extraction import (
 from onyx.connectors.google_drive.source_operations import (
     ExportSizeThresholdExceeded,
     GoogleDriveHttpError,
+    GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
     is_transient_google_error,
 )
@@ -777,15 +778,19 @@ def convert_drive_item_to_document(
 
         # There are a variety of permissions-based errors that occasionally occur
         # when retrieving files. Often when these occur, there is another user
-        # that can successfully retrieve the file, so we try the next user.
+        # that can successfully retrieve the file, so we try the next user. A
+        # user that cannot be impersonated passes to the next user too.
         if (
             doc_or_failure is None
             or isinstance(doc_or_failure, Document)
             or not (
-                isinstance(doc_or_failure.exception, GoogleDriveHttpError)
-                and doc_or_failure.exception.status_code in [401, 403, 404]
-                # Google also reports a rate limit as a 403.
-                and not doc_or_failure.exception.rate_limited
+                isinstance(doc_or_failure.exception, GoogleDriveRefreshError)
+                or (
+                    isinstance(doc_or_failure.exception, GoogleDriveHttpError)
+                    and doc_or_failure.exception.status_code in [401, 403, 404]
+                    # Google also reports a rate limit as a 403.
+                    and not doc_or_failure.exception.rate_limited
+                )
             )
         ):
             return doc_or_failure
