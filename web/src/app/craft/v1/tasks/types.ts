@@ -1,4 +1,9 @@
 import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
+import type {
+  ConnectionState,
+  IntegrationKind,
+  PolicyValue,
+} from "@/lib/integrations/types";
 /**
  * Shared types for the Scheduled Tasks feature.
  *
@@ -138,9 +143,6 @@ export interface UnviewedTaskCountResponse {
 /** The setting of one action on a task; ``inherit`` uses the integration setting. */
 export type TaskLinkValue = "inherit" | "allow" | "ask" | "blocked";
 
-/** What a run does when it calls an action. */
-export type TaskEffectivePolicy = "allow" | "ask" | "blocked";
-
 export interface TaskActionSettings {
   default: TaskLinkValue;
   actions: Record<string, TaskLinkValue>;
@@ -156,7 +158,7 @@ export interface TaskActionView {
   key: string;
   display_name: string;
   description: string | null;
-  integration_policy: TaskEffectivePolicy;
+  integration_policy: PolicyValue;
   /** A task Allow keeps the integration policy. */
   locked: boolean;
 }
@@ -164,10 +166,10 @@ export interface TaskActionView {
 export interface TaskIntegrationView {
   id: number;
   name: string;
-  kind: "mcp" | "api";
+  kind: IntegrationKind;
   app_type: ExternalAppType | null;
   status: {
-    state: "connected" | "not_connected" | "needs_reconnect" | "not_set_up";
+    state: ConnectionState;
     reason: string | null;
   };
   actions: TaskActionView[];
