@@ -120,19 +120,15 @@ between the two steps. Without the lock, a prune that an API call starts during
 the reset is failed before its fence exists, or runs with no fence. Do not split
 the function or drop the lock.
 
-**Explicit prune requests.** The manual route commits `prune_requested_at`
-before dispatch. A deferred send returns success with a queued message.
-The beat retries the request after a lost task or failure, even without
-`prune_freq`. The dispatcher counts durable prune records since the request
-under the pair lock. After three attempts it clears the request and keeps
-the failed records in the run history. A new request starts a new budget.
-A dispatch whose fence write or task send fails deletes its record and resets
-the fence, so it is not an attempt.
-Connector edits and file removals use the same request field and limit. A file
-removal commits its request with the new file list, before any task send.
-Request and dispatch timestamps use database wall-clock time, because an open
-beat transaction can predate a new request. Scheduled pruning
-without a request keeps its existing retry behavior.
+**Explicit prune requests.** The manual prune route and file removals commit
+`prune_requested_at` before dispatch. Connector edits use the same field. The
+beat sends the request again after a lost task or failure, even without
+`prune_freq`. Under the pair lock, the dispatcher counts the prune records since
+the request. After three, it clears the request and keeps the failed records in
+the run history. A dispatch whose fence write or task send fails deletes its
+record and resets the fence, so it is not an attempt. Request and record
+timestamps use `clock_timestamp()`, because an open beat transaction can predate
+a new request. Scheduled pruning without a request keeps its retry behavior.
 
 **Pruning without a slim listing.** A connector with no slim listing is
 pruned by a full load or poll

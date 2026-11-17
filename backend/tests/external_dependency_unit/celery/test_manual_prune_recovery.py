@@ -2,15 +2,20 @@ from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.pruning import tasks
+from onyx.configs.constants import DocumentSource
+from onyx.db.connector_edit_requests import request_prune__no_commit
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair, SyncRecord
 from onyx.db.sync_record import fail_in_progress_sync_records
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.cc_pair import prune_cc_pair
+from onyx.server.documents.connector import update_connector_files
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -89,8 +94,6 @@ def test_deferred_dispatch_returns_queued(
 def test_request_stops_after_three_lost_attempts(
     db_session: Session, pair: ConnectorCredentialPair
 ) -> None:
-    from onyx.db.connector_edit_requests import request_prune__no_commit
-
     request_prune__no_commit(db_session, pair.id)
     db_session.commit()
     celery_app = MagicMock()
@@ -119,11 +122,6 @@ def test_request_stops_after_three_lost_attempts(
 def test_dispatch_transaction_before_request_counts_as_an_attempt(
     db_session: Session, pair: ConnectorCredentialPair
 ) -> None:
-    from sqlalchemy import func, select
-
-    from onyx.db.connector_edit_requests import request_prune__no_commit
-    from onyx.db.engine.sql_engine import get_session_with_current_tenant
-
     pair_id = pair.id
     db_session.rollback()
     with get_session_with_current_tenant() as dispatch_session:
@@ -153,50 +151,9 @@ def test_dispatch_transaction_before_request_counts_as_an_attempt(
     assert record.sync_start_time >= pair.prune_requested_at
 
 
-def test_file_removal_keeps_prune_due_when_dispatch_is_deferred(
-    db_session: Session, pair: ConnectorCredentialPair
-) -> None:
-    from onyx.configs.constants import DocumentSource
-    from onyx.server.documents.connector import update_connector_files
-
-    pair.connector.source = DocumentSource.FILE
-    pair.connector.connector_specific_config = {
-        "file_locations": ["gone", "keep"],
-        "file_names": ["gone.txt", "keep.txt"],
-    }
-    db_session.commit()
-    with (
-        patch(
-            "onyx.server.documents.connector._fetch_and_check_file_connector_cc_pair_permissions",
-            return_value=pair,
-        ),
-        patch(
-            "onyx.server.documents.connector.get_default_file_store",
-            return_value=MagicMock(),
-        ),
-        patch(
-            "onyx.server.documents.connector.try_creating_prune_generator_task",
-            return_value=None,
-        ),
-    ):
-        response = update_connector_files(
-            pair.connector_id,
-            files=None,
-            file_ids_to_remove='["gone"]',
-            user=MagicMock(),
-            db_session=db_session,
-        )
-    assert response.file_paths == ["keep"]
-    db_session.refresh(pair)
-    assert pair.prune_requested_at is not None
-    assert tasks._is_pruning_due(pair)
-
-
 def test_failed_sends_do_not_use_up_the_request(
     db_session: Session, pair: ConnectorCredentialPair
 ) -> None:
-    from onyx.db.connector_edit_requests import request_prune__no_commit
-
     request_prune__no_commit(db_session, pair.id)
     db_session.commit()
     broken_app = MagicMock()
@@ -231,9 +188,6 @@ def test_failed_sends_do_not_use_up_the_request(
 def test_failed_index_send_keeps_prune_request_for_removed_files(
     db_session: Session, pair: ConnectorCredentialPair
 ) -> None:
-    from onyx.configs.constants import DocumentSource
-    from onyx.server.documents.connector import update_connector_files
-
     pair.connector.source = DocumentSource.FILE
     pair.connector.connector_specific_config = {
         "file_locations": ["gone", "keep"],

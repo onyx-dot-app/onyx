@@ -58,7 +58,6 @@ def mark_sync_records_as_cancelled(
 
 
 def delete_sync_record(db_session: Session, sync_record_id: int) -> None:
-    """Removes a record whose task was never sent, so it is not an attempt."""
     db_session.execute(delete(SyncRecord).where(SyncRecord.id == sync_record_id))
     db_session.commit()
 
