@@ -141,6 +141,12 @@ test("shows each of the four statuses with its action", async () => {
       auth_mode: "shared",
       status: status("not_set_up"),
     }),
+    makeMemberIntegration({
+      id: 5,
+      name: "Stale shared app",
+      auth_mode: "shared",
+      status: status("needs_reconnect", "The organization account expired"),
+    }),
   ]);
   expect(
     await screen.findByText(copy.connection.status.connected)
@@ -156,9 +162,12 @@ test("shows each of the four statuses with its action", async () => {
   expect(
     screen.getByRole("button", { name: "Reconnect Old app" })
   ).toBeVisible();
-  expect(screen.getByText(copy.connection.askAdmin)).toBeVisible();
+  expect(screen.getAllByText(copy.connection.askAdmin)).toHaveLength(2);
   expect(
     screen.queryByRole("button", { name: /Shared app/ })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /Stale shared app/ })
   ).not.toBeInTheDocument();
 });
 
