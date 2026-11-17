@@ -1137,6 +1137,9 @@ def connector_document_extraction(
 
                 if stub_batch:
                     listed_count = len(stub_batch)
+                    # The failure ratio counts every listed document, also
+                    # the ones dropped as unchanged.
+                    document_count += listed_count
                     if skip_unchanged_stubs:
                         stub_batch = drop_unchanged_stubs(
                             stub_batch, db_connector.id, db_credential.id
@@ -1171,7 +1174,6 @@ def connector_document_extraction(
                         )
                     batch_num += 1
                     total_doc_batches_queued += 1
-                    document_count += len(stub_batch)
                     memory_tracer.increment_and_maybe_trace()
                     logger.info(
                         "Stored stub batch: batch_num=%s stubs=%s attempt=%s",
