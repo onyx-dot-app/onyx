@@ -5,8 +5,9 @@ it through plugin__integration, and the copy makes one such plugin for each.
 The old tables stay the tables of each kind: each integration points at its
 mcp_server, external_app or OpenAPI tool row, as gated_app does. The old tables
 only get new columns, and approval_request.gated_app_id becomes nullable; a
-rollback undoes both. The migration is SQL only and imports no app code. It
-moves no secret in clear: each credential is copied as its encrypted bytes.
+rollback undoes both. The data copy is SQL, except the actions of an OpenAPI
+spec and of a built-in app catalog, which only app code can read. It moves no
+secret in clear: each credential is copied as its encrypted bytes.
 
 Revision ID: 730bce2814a0
 Revises: ff11c4042c42
@@ -14,14 +15,23 @@ Create Date: 2026-11-13 14:42:45.411165
 
 """
 
+import json
 import logging
 import time
 from collections.abc import Callable
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import DBAPIError
+
+from onyx.db.enums import ActionPolicy, ExternalAppType
+from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
+from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_method_specs,
+)
 
 logger = logging.getLogger("alembic.runtime.migration")
 
@@ -102,6 +112,16 @@ def _with_bounded_lock_wait(change: Callable[[], None]) -> None:
 
 def _alter_old_tables() -> None:
     """Add the new columns to the old tables that chat and tools use."""
+    op.add_column(
+        "assistant__user_specific_config",
+        sa.Column(
+            "disabled_plugin_ids",
+            postgresql.ARRAY(postgresql.UUID(as_uuid=True)),
+            server_default="{}",
+            nullable=False,
+        ),
+    )
+
     # No default: the column is added with no rewrite of chat_session.
     op.add_column(
         "chat_session", sa.Column("tool_options", postgresql.JSONB(), nullable=True)
@@ -433,16 +453,6 @@ def _create_tables() -> None:
         "ix_plugin__integration_integration_id",
         "plugin__integration",
         ["integration_id"],
-    )
-
-    op.add_column(
-        "assistant__user_specific_config",
-        sa.Column(
-            "disabled_plugin_ids",
-            postgresql.ARRAY(postgresql.UUID(as_uuid=True)),
-            server_default="{}",
-            nullable=False,
-        ),
     )
 
 
@@ -1263,10 +1273,180 @@ _INSERT_TASK_PLUGINS = f"""
     JOIN integration_source src ON src.gated_app_id = e.gated_app_id
 """
 
-_SET_RECORD_INTEGRATIONS = [
-    f"UPDATE {table} SET integration_id = gated_app_id WHERE gated_app_id IS NOT NULL"
-    for table in RECORD_TABLES
-]
+# Run after the commit, one table at a time; a rerun skips the rows it set.
+_SET_RECORD_INTEGRATIONS = """
+    UPDATE {table} SET integration_id = gated_app_id
+    WHERE gated_app_id IS NOT NULL AND integration_id IS NULL
+"""
+
+# The plugin that the copy made for an integration. An MCP server and an
+# OpenAPI tool never take the plugin of a skill, so it is the plugin that
+# holds them.
+_MADE_PLUGIN = "(md5('integration_plugin:' || i.id::text)::uuid)::text"
+
+# The old tool selection of a chat as tool options. A built-in tool stays a
+# capability. An MCP tool becomes its action in the plugin of its server, and
+# an OpenAPI tool its whole plugin. A deleted tool is left out. Run after the
+# commit; a rerun skips the chats it filled.
+_FILL_TOOL_OPTIONS = f"""
+    UPDATE chat_session c
+    SET tool_options = jsonb_build_object(
+        'allowed',
+        CASE WHEN jsonb_typeof(c.tool_selection -> 'allowed_tool_ids') = 'array'
+        THEN (
+            SELECT coalesce(jsonb_agg(entry.value ORDER BY selected.n), '[]')
+            FROM jsonb_array_elements_text(c.tool_selection -> 'allowed_tool_ids')
+                WITH ORDINALITY AS selected(tool_id, n)
+            JOIN tool t ON t.id = selected.tool_id::integer
+            LEFT JOIN integration i
+              ON i.mcp_server_id = t.mcp_server_id OR i.tool_id = t.id
+            CROSS JOIN LATERAL (
+                SELECT CASE
+                    WHEN t.in_code_tool_id IS NOT NULL THEN jsonb_build_object(
+                        'type', 'capability', 'tool_id', t.id
+                    )
+                    WHEN i.mcp_server_id IS NOT NULL THEN jsonb_build_object(
+                        'type', 'plugin', 'plugin_id', {_MADE_PLUGIN},
+                        'actions', jsonb_build_array(t.name)
+                    )
+                    WHEN i.tool_id IS NOT NULL THEN jsonb_build_object(
+                        'type', 'plugin', 'plugin_id', {_MADE_PLUGIN}
+                    )
+                END AS value
+            ) entry
+            WHERE entry.value IS NOT NULL
+        )
+        END,
+        'preferred',
+        (
+            SELECT CASE
+                WHEN t.in_code_tool_id IS NOT NULL THEN jsonb_build_object(
+                    'type', 'capability', 'tool_id', t.id
+                )
+                WHEN i.mcp_server_id IS NOT NULL THEN jsonb_build_object(
+                    'type', 'action', 'plugin_id', {_MADE_PLUGIN},
+                    'action', t.name
+                )
+            END
+            FROM tool t
+            LEFT JOIN integration i ON i.mcp_server_id = t.mcp_server_id
+            WHERE t.id = (c.tool_selection ->> 'preferred_tool_id')::integer
+        ),
+        'internal_search_filters',
+        c.tool_selection -> 'internal_search_filters'
+    )
+    WHERE c.tool_options IS NULL
+      AND jsonb_typeof(c.tool_selection) = 'object'
+"""
+
+
+def _seed_api_actions() -> None:
+    """Write the actions of each OpenAPI spec and each external app catalog,
+    as the action sync of the app does: an OpenAPI GET is Allow and each
+    other method Ask; a catalog action keeps its catalog policy; a custom app
+    has one action for any request. A spec that does not parse gets none."""
+    bind = op.get_bind()
+    rows: list[dict[str, Any]] = []
+
+    def add(integration: Any, **action: Any) -> None:
+        rows.append(
+            {
+                "input_schema": None,
+                "http_method": None,
+                "path_template": None,
+                **action,
+                "integration_id": integration.id,
+                "created_at": integration.created_at,
+                "updated_at": integration.updated_at,
+            }
+        )
+
+    for integration in bind.execute(
+        sa.text(
+            "SELECT i.id, i.created_at, i.updated_at, t.openapi_schema "
+            "FROM integration i JOIN tool t ON t.id = i.tool_id ORDER BY i.id"
+        )
+    ):
+        try:
+            method_specs = openapi_to_method_specs(integration.openapi_schema)
+        except ValueError as e:
+            logger.warning(
+                "Integration %s: the OpenAPI spec gives no actions: %s",
+                integration.id,
+                e,
+            )
+            continue
+        for spec in method_specs:
+            is_get = spec.method.upper() == "GET"
+            add(
+                integration,
+                key=spec.raw_name,
+                source="openapi",
+                display_name=spec.spec.get("summary") or spec.raw_name,
+                description=spec.summary,
+                read_only=is_get,
+                default_policy="allow" if is_get else "ask",
+                input_schema=json.dumps(spec.to_tool_definition().parameters),
+                http_method=spec.method.upper(),
+                path_template=spec.path,
+            )
+
+    catalog_policies = {
+        ActionPolicy.ALWAYS: "allow",
+        ActionPolicy.ASK: "ask",
+        ActionPolicy.DENY: "blocked",
+    }
+    for integration in bind.execute(
+        sa.text(
+            "SELECT i.id, i.name, i.created_at, i.updated_at, a.app_type "
+            "FROM integration i JOIN external_app a ON a.id = i.external_app_id "
+            "ORDER BY i.id"
+        )
+    ):
+        if integration.app_type == ExternalAppType.CUSTOM.value:
+            add(
+                integration,
+                key=WHOLE_DOMAIN_ACTION_TYPE,
+                source="external_app",
+                display_name=integration.name,
+                description=f"Any request to {integration.name}.",
+                read_only=None,
+                default_policy="ask",
+            )
+            continue
+        try:
+            app_type = ExternalAppType(integration.app_type)
+        except ValueError:
+            logger.warning(
+                "Integration %s: unknown app type %s",
+                integration.id,
+                integration.app_type,
+            )
+            continue
+        for endpoint in get_endpoint_catalog(app_type):
+            add(
+                integration,
+                key=endpoint.id.value,
+                source="external_app",
+                display_name=endpoint.normalised_name,
+                description=endpoint.description,
+                read_only=endpoint.default_policy is ActionPolicy.ALWAYS,
+                default_policy=catalog_policies[endpoint.default_policy],
+            )
+
+    if rows:
+        bind.execute(
+            sa.text(
+                "INSERT INTO integration_action (integration_id, key, source, "
+                "display_name, description, read_only, default_policy, "
+                "input_schema, http_method, path_template, created_at, updated_at) "
+                "VALUES (:integration_id, :key, :source, :display_name, "
+                ":description, :read_only, :default_policy, "
+                "CAST(:input_schema AS jsonb), :http_method, :path_template, "
+                ":created_at, :updated_at) ON CONFLICT DO NOTHING"
+            ),
+            rows,
+        )
 
 
 def _copy_integrations() -> None:
@@ -1299,13 +1479,9 @@ def _copy_integrations() -> None:
         _INSERT_OPENAPI_DEFAULT_POLICIES,
         _INSERT_USER_POLICIES,
         _INSERT_PREFERENCES,
-        _SET_DISABLED_PLUGINS,
         _INSERT_PERSONA_PLUGINS,
         _INSERT_TASK_PLUGINS,
         _INSERT_PLUGIN_INTEGRATIONS,
-        *_SET_RECORD_INTEGRATIONS,
-        "DROP TABLE tool_integration",
-        "DROP TABLE integration_source",
     ):
         op.execute(statement)
 
@@ -1319,15 +1495,33 @@ def upgrade() -> None:
         # The foreign keys of integration lock mcp_server, external_app and
         # tool against writes while the tables are made.
         _with_bounded_lock_wait(_create_tables)
-        _with_bounded_lock_wait(_alter_old_tables)
         _copy_integrations()
-    # Validate only after the ALTER TABLE locks are released.
+        _seed_api_actions()
+        # The chat tables stay locked from here to the commit, so they are
+        # altered last, with only the statement that needs a new column of
+        # theirs after them.
+        _with_bounded_lock_wait(_alter_old_tables)
+        for statement in (
+            _SET_DISABLED_PLUGINS,
+            "DROP TABLE tool_integration",
+            "DROP TABLE integration_source",
+        ):
+            op.execute(statement)
+    # Fill and validate only after the ALTER TABLE locks are released.
     bind.commit()
     quoted_schema = bind.dialect.identifier_preparer.quote_identifier(schema)
     with bind.engine.connect() as conn:
+        # SET LOCAL stays with its transaction, also behind a pooler in
+        # transaction mode.
+        with conn.begin():
+            conn.exec_driver_sql(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'")
+            conn.exec_driver_sql(_FILL_TOOL_OPTIONS)
         for table in RECORD_TABLES:
-            # SET LOCAL stays with its transaction, also behind a pooler in
-            # transaction mode.
+            with conn.begin():
+                conn.exec_driver_sql(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'")
+                conn.exec_driver_sql(
+                    _SET_RECORD_INTEGRATIONS.format(table=f"{quoted_schema}.{table}")
+                )
             with conn.begin():
                 conn.exec_driver_sql(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'")
                 conn.exec_driver_sql(

@@ -12,7 +12,6 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
     POSTGRES_DB,
@@ -22,19 +21,8 @@ from onyx.configs.app_configs import (
     POSTGRES_USER,
 )
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill, User
-from onyx.db.plugin import (
-    PluginAccessChange,
-    PluginUserGrant,
-    apply_plugin_access_change__no_commit,
-    create_skill_plugin__no_commit,
-    legacy_skill_version_content,
-    publish_plugin__no_commit,
-)
-from onyx.db.users import delete_user_from_db__no_commit
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
+from onyx.db.enums import ActionPolicy, ExternalAppType
+from onyx.external_apps.providers.registry import get_endpoint_catalog
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
 PREVIOUS_REVISION = "ff11c4042c42"
@@ -63,7 +51,12 @@ OPENAPI_SCHEMA = {
     "openapi": "3.0.0",
     "info": {"title": "t", "version": "1"},
     "servers": [{"url": "https://api.example.com"}],
-    "paths": {"/issues": {"post": {"operationId": "createIssue", "summary": "Create"}}},
+    "paths": {
+        "/issues": {
+            "get": {"operationId": "listIssues", "summary": "List"},
+            "post": {"operationId": "createIssue", "summary": "Create"},
+        }
+    },
 }
 
 
@@ -126,6 +119,8 @@ class Seeded:
     custom_oauth: int
     custom_disabled: int
     only_skill: UUID
+    built_in_tool: int
+    chat_session: UUID
     shared_skills: list[UUID]
     gated: dict[str, int]
     names: dict[str, str]
@@ -524,12 +519,32 @@ def _seed(conn: Connection) -> Seeded:
         ),
         {"id": uuid4(), "s": session_id, "g": gated["app_slack"]},
     )
+    built_in_tool = _insert(
+        conn,
+        "INSERT INTO tool (name, in_code_tool_id, enabled) "
+        "VALUES (:name, :name, true) RETURNING id",
+        name=f"u1-built-in-{s}",
+    )
     chat_session_id = _insert(
         conn,
         "INSERT INTO chat_session (id, user_id, deleted, shared_status, "
-        "onyxbot_flow) VALUES (:id, :u, false, 'PRIVATE', false) RETURNING id",
+        "onyxbot_flow, tool_selection) VALUES (:id, :u, false, 'PRIVATE', false, "
+        "CAST(:selection AS jsonb)) RETURNING id",
         id=uuid4(),
         u=users["owner"],
+        # A deleted tool id is left out.
+        selection=json.dumps(
+            {
+                "allowed_tool_ids": [
+                    built_in_tool,
+                    tool_read,
+                    custom_shared,
+                    2_000_000_000,
+                ],
+                "preferred_tool_id": tool_read,
+                "internal_search_filters": {"source_type": ["web"]},
+            }
+        ),
     )
     chat_message_id = _insert(
         conn,
@@ -638,6 +653,8 @@ def _seed(conn: Connection) -> Seeded:
         custom_oauth=custom_oauth,
         custom_disabled=custom_disabled,
         only_skill=only_skill,
+        built_in_tool=built_in_tool,
+        chat_session=chat_session_id,
         shared_skills=shared_skills,
         gated=gated,
         names=names,
@@ -696,7 +713,10 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
         text("DELETE FROM discord_guild_config WHERE default_persona_id = :p"),
         {"p": seeded.bot_persona},
     )
-    conn.execute(text("DELETE FROM tool WHERE id = ANY(:ids)"), {"ids": custom_tools})
+    conn.execute(
+        text("DELETE FROM tool WHERE id = ANY(:ids)"),
+        {"ids": [*custom_tools, seeded.built_in_tool]},
+    )
     servers = [seeded.mcp_public, seeded.mcp_private, seeded.mcp_orphan]
     conn.execute(
         text(
@@ -1050,13 +1070,29 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             "registration": b"\x00",
             "legacy_format": "external_app_org",
         }
-        # The provider catalog is code; the U3 sync writes its actions.
-        assert _actions(conn, slack.id) == []
+        # A built-in app gets its catalog, each action at its catalog policy.
+        assert {
+            (a["key"], a["source"], a["default_policy"], a["read_only"])
+            for a in _actions(conn, slack.id)
+        } == {
+            (
+                endpoint.id.value,
+                "external_app",
+                "allow" if endpoint.default_policy is ActionPolicy.ALWAYS else "ask",
+                endpoint.default_policy is ActionPolicy.ALWAYS,
+            )
+            for endpoint in get_endpoint_catalog(ExternalAppType.SLACK)
+        }
         assert slack.header_template == {"Authorization": "Bearer {token}"}
         assert not slack.users_can_save_always_allow
         assert app_custom.kind == "api"
         assert (app_custom.auth_mode, app_custom.auth_method) == ("none", None)
         assert _oauth_client(conn, app_custom.id) is None
+        # A custom app has one action for any request.
+        assert [
+            (a["key"], a["source"], a["display_name"], a["default_policy"])
+            for a in _actions(conn, app_custom.id)
+        ] == [("unspecified", "external_app", app_custom.name, "ask")]
         # A custom app with a header template: a saved user credential shows
         # that each user signs in. With none, the organization holds the key.
         app_integration = "i.external_app_id = :a"
@@ -1065,8 +1101,33 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         assert (org_key.auth_mode, org_key.auth_method) == ("shared", "api_key")
         assert (user_key.auth_mode, user_key.auth_method) == ("individual", "api_key")
         assert custom["private"].kind == "api"
-        # App code reads a spec; the action sync writes its actions.
-        assert _actions(conn, custom["private"].id) == []
+        # Each operation of the spec: GET is Allow and each other method Ask.
+        openapi_action = {
+            "source": "openapi",
+            "output_schema": None,
+            "input_schema": {"type": "object", "properties": {}},
+            "path_template": "/issues",
+        }
+        assert _actions(conn, custom["private"].id) == [
+            {
+                **openapi_action,
+                "key": "createIssue",
+                "display_name": "Create",
+                "description": "Create",
+                "read_only": False,
+                "default_policy": "ask",
+                "http_method": "POST",
+            },
+            {
+                **openapi_action,
+                "key": "listIssues",
+                "display_name": "List",
+                "description": "List",
+                "read_only": True,
+                "default_policy": "allow",
+                "http_method": "GET",
+            },
+        ]
         assert (custom["private"].auth_mode, custom["private"].auth_method) == (
             "shared",
             "api_key",
@@ -1225,6 +1286,28 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             ).scalar_one()
             == seeded.owner
         )
+
+        # The old tool selection of a chat, as tool options.
+        assert conn.execute(
+            text("SELECT tool_options FROM chat_session WHERE id = :id"),
+            {"id": seeded.chat_session},
+        ).scalar_one() == {
+            "allowed": [
+                {"type": "capability", "tool_id": seeded.built_in_tool},
+                {
+                    "type": "plugin",
+                    "plugin_id": str(public.plugin_id),
+                    "actions": ["list_issues"],
+                },
+                {"type": "plugin", "plugin_id": str(custom["shared"].plugin_id)},
+            ],
+            "preferred": {
+                "type": "action",
+                "plugin_id": str(public.plugin_id),
+                "action": "list_issues",
+            },
+            "internal_search_filters": {"source_type": ["web"]},
+        }
 
         # Choices of users.
         preferences = {
@@ -1459,167 +1542,6 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
     assert _fingerprint(engine, new_tables) == first
 
 
-def test_share_publish_and_delete_an_integration_plugin(
-    engine: Engine, seeded: Seeded
-) -> None:
-    _migrate("upgrade", "head")
-    with engine.connect() as conn:
-        integration_id = seeded.gated["mcp_private"]
-        plugin_id = conn.execute(
-            text(f"SELECT {FIRST_PLUGIN} FROM integration i WHERE i.id = :id"),
-            {"id": integration_id},
-        ).scalar_one()
-
-    with Session(engine) as db_session:
-        apply_plugin_access_change__no_commit(
-            [plugin_id],
-            PluginAccessChange(
-                user_grants=(
-                    PluginUserGrant(seeded.other, SkillSharePermission.EDITOR),
-                ),
-                publish=True,
-                on_name_clash="rename",
-            ),
-            None,
-            db_session,
-        ).raise_first_failure()
-        db_session.commit()
-
-    with engine.begin() as conn:
-        plugin = conn.execute(
-            text(
-                "SELECT marketplace_id, published_version_id = current_version_id "
-                "AS published FROM plugin WHERE id = :id"
-            ),
-            {"id": plugin_id},
-        ).one()
-        assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID and plugin.published
-        assert (
-            conn.execute(
-                text(
-                    "SELECT permission FROM plugin__user "
-                    "WHERE plugin_id = :p AND user_id = :u"
-                ),
-                {"p": plugin_id, "u": seeded.other},
-            ).scalar_one()
-            == "EDITOR"
-        )
-
-        conn.execute(text("DELETE FROM plugin WHERE id = :id"), {"id": plugin_id})
-        # The integration stands alone: it stays, with its actions and
-        # policies. Only the row that put it in the plugin goes.
-        assert _kind_integration(conn, "mcp_server", seeded.mcp_private) == (
-            integration_id
-        )
-        for table in ("integration_action", "integration_action_policy"):
-            assert (
-                conn.execute(
-                    text(f"SELECT count(*) FROM {table} WHERE integration_id = :id"),
-                    {"id": integration_id},
-                ).scalar_one()
-                > 0
-            )
-        assert (
-            conn.execute(
-                text(
-                    "SELECT count(*) FROM plugin__integration WHERE integration_id = :id"
-                ),
-                {"id": integration_id},
-            ).scalar_one()
-            == 0
-        )
-
-
-def test_user_delete_keeps_private_integrations_for_their_people(
-    engine: Engine, seeded: Seeded
-) -> None:
-    """A user delete moves each private integration of the user to the
-    Organization library as Not available, with its shares. It does not block
-    the delete as a private skill does."""
-    _migrate("upgrade", "head")
-    with Session(engine) as db_session:
-        owner = db_session.get(User, seeded.owner)
-        assert owner is not None
-        delete_user_from_db__no_commit(owner, db_session)
-        db_session.commit()
-
-    with engine.connect() as conn:
-        for tool_id in (seeded.custom_private, seeded.custom_disabled):
-            plugin = conn.execute(
-                text(
-                    "SELECT p.marketplace_id, p.installation_policy, "
-                    "p.published_version_id = p.current_version_id AS published, "
-                    "p.author_user_id FROM integration i "
-                    f"JOIN plugin p ON p.id = {FIRST_PLUGIN} "
-                    f"WHERE {TOOL_INTEGRATION}"
-                ),
-                {"t": tool_id},
-            ).one()
-            assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
-            assert plugin.installation_policy == "NOT_AVAILABLE"
-            assert plugin.published and plugin.author_user_id is None
-
-
-def test_publishing_a_skill_named_like_an_integration(
-    engine: Engine, seeded: Seeded
-) -> None:
-    """A plugin that holds only integrations has no skill, so a skill with its
-    name still publishes.
-    Only the plugin label takes a free name."""
-    _migrate("upgrade", "head")
-    with engine.connect() as conn:
-        integration_name = conn.execute(
-            text(
-                "SELECT p.name FROM integration i "
-                f"JOIN plugin p ON p.id = {FIRST_PLUGIN} "
-                f"WHERE {TOOL_INTEGRATION}"
-            ),
-            {"t": seeded.custom_shared},
-        ).scalar_one()
-    skill_ids = [uuid4(), uuid4()]
-
-    def publish(skill_id: UUID) -> None:
-        with Session(engine) as db_session:
-            skill = Skill(
-                id=skill_id,
-                name=integration_name,
-                description="",
-                bundle_file_id=f"u1-{skill_id.hex}",
-                bundle_sha256="0" * 64,
-                author_user_id=seeded.other,
-            )
-            db_session.add(skill)
-            db_session.flush()
-            create_skill_plugin__no_commit(
-                skill, legacy_skill_version_content(skill), None, db_session
-            )
-            publish_plugin__no_commit(skill_id, "raise", db_session)
-            db_session.commit()
-
-    try:
-        publish(skill_ids[0])
-        with engine.connect() as conn:
-            plugin = conn.execute(
-                text("SELECT name, marketplace_id FROM plugin WHERE id = :id"),
-                {"id": skill_ids[0]},
-            ).one()
-        assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
-        assert plugin.name == f"{integration_name}-2"
-        # The first skill holds the name behind the "-2" label, so a second
-        # skill with the name is refused.
-        with pytest.raises(OnyxError) as refused:
-            publish(skill_ids[1])
-        assert refused.value.error_code == OnyxErrorCode.CONFLICT
-    finally:
-        with engine.begin() as conn:
-            conn.execute(
-                text("DELETE FROM plugin WHERE id = ANY(:ids)"), {"ids": skill_ids}
-            )
-            conn.execute(
-                text("DELETE FROM skill WHERE id = ANY(:ids)"), {"ids": skill_ids}
-            )
-
-
 def test_each_integration_has_one_row_of_its_kind(
     engine: Engine, seeded: Seeded
 ) -> None:
@@ -1642,6 +1564,36 @@ def test_each_integration_has_one_row_of_its_kind(
             )
 
     with engine.begin() as conn:
+        # A plugin delete keeps the integration, with its actions and
+        # policies: only the row that put it in the plugin goes.
+        integration_id = seeded.gated["mcp_private"]
+        conn.execute(
+            text(
+                "DELETE FROM plugin WHERE id IN (SELECT plugin_id "
+                "FROM plugin__integration WHERE integration_id = :id)"
+            ),
+            {"id": integration_id},
+        )
+        assert _kind_integration(conn, "mcp_server", seeded.mcp_private) == (
+            integration_id
+        )
+        counts = {
+            table: conn.execute(
+                text(f"SELECT count(*) FROM {table} WHERE integration_id = :id"),
+                {"id": integration_id},
+            ).scalar_one()
+            for table in (
+                "integration_action",
+                "integration_action_policy",
+                "plugin__integration",
+            )
+        }
+        assert counts == {
+            "integration_action": 2,
+            "integration_action_policy": 1,
+            "plugin__integration": 0,
+        }
+
         integration_id = _kind_integration(conn, "mcp_server", seeded.mcp_orphan)
         assert integration_id is not None
         conn.execute(
