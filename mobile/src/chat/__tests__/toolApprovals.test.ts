@@ -10,11 +10,11 @@ import type { ApprovalDecisionResponse } from "@/api/chat/approvals";
 import {
   ApprovalStatus,
   decidedStatus,
-  orderApprovalsByTurn,
   readToolApprovals,
   toolApprovalStatus,
   useToolApprovalUi,
 } from "@/chat/toolApprovals";
+import { orderCardsByTurn } from "@/chat/toolCards";
 
 function request(
   approvalId: string,
@@ -144,20 +144,20 @@ describe("decidedStatus", () => {
   });
 });
 
-describe("orderApprovalsByTurn", () => {
+describe("orderCardsByTurn", () => {
   it("places each card after the display groups of its own and earlier turns", () => {
     const approval = (turnIndex: number) => ({
       turnIndex,
       request: request(`t${turnIndex}`).obj as ToolApprovalRequest,
       status: "pending" as const,
     });
-    const order = orderApprovalsByTurn(
+    const order = orderCardsByTurn(
       [{ turn_index: 0 }, { turn_index: 2 }],
-      [approval(1), approval(2)],
+      [approval(2), approval(1)],
     ).map((entry) =>
       entry.kind === "display"
         ? `text${entry.group.turn_index}`
-        : `card${entry.approval.turnIndex}`,
+        : `card${entry.card.turnIndex}`,
     );
     expect(order).toEqual(["text0", "card1", "text2", "card2"]);
   });

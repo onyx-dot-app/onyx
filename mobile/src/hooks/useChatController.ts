@@ -5,6 +5,8 @@ import { router } from "expo-router";
 import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { QUERY_KEYS } from "@/api/query-keys";
+import { postQuestionAnswers } from "@/api/chat/questions";
+import { getErrorMessage, isApiError } from "@/api/errors";
 import {
   createChatSession,
   getChatSession,
@@ -25,7 +27,7 @@ import { waitForSessionIdle } from "@/chat/sessionReadiness";
 import { DEFAULT_AGENT_ID } from "@/chat/agents";
 import { FLUSH_INTERVAL_MS } from "@/chat/constants";
 import { processRawChatHistory } from "@/chat/chatHistory";
-import { ChatState, FileDescriptor } from "@/chat/interfaces";
+import { ChatState, ChatStream, FileDescriptor } from "@/chat/interfaces";
 import {
   buildImmediateMessages,
   getLatestMessageChain,
@@ -45,8 +47,15 @@ import {
   readToolApprovals,
   useToolApprovalUi,
 } from "@/chat/toolApprovals";
+import {
+  CLOSED_QUESTION,
+  readToolQuestions,
+  useToolQuestionUi,
+  waitingQuestionIds,
+} from "@/chat/toolQuestions";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
+import { followUserAnswer } from "@/hooks/followUserAnswer";
 import {
   recoverChatSession,
   watchBackgroundAgents,
@@ -57,15 +66,61 @@ import { toast } from "@/hooks/useToast";
 const AUTO_NAME_DELAY_MS = 200;
 const STOP_ACK_TIMEOUT_MS = 10_000;
 
-// While a request waits for a decision the user may draft but not send; the draft stays.
-function showPendingApproval(): void {
+// While the reply waits for the user, the server refuses a send; the draft stays.
+function showPendingWait(message: string): void {
   useToolApprovalUi.getState().nudge();
-  toast.warning("Approve or reject the pending tool calls first.");
+  toast.warning(message);
 }
 
 interface ServerContext {
   serverUrl: string | null;
   queryClient: QueryClient;
+}
+
+// While the selected reply waits on its questions, a sent message answers every one of them. It
+// shows in the chat as the user's message, and the response continues.
+async function answerQuestionsWithMessage(
+  sessionId: string,
+  questionRequestIds: string[],
+  text: string,
+  server: ServerContext,
+  onAccepted?: () => void,
+): Promise<void> {
+  const { recordStatuses } = useToolQuestionUi.getState();
+  let continuation: ChatStream | null = null;
+  try {
+    const response = await postQuestionAnswers(questionRequestIds[0]!, {
+      message: text,
+    });
+    continuation = response.continuation;
+  } catch (error) {
+    if (isApiError(error) && error.code === APPROVAL_PENDING_ERROR_CODE) {
+      showPendingWait("Approve or reject the pending tool calls first.");
+      return;
+    }
+    if (isApiError(error) && (error.status === 404 || error.status === 409)) {
+      // The questions no longer wait; the saved session shows how they ended. The draft stays.
+      recordStatuses(questionRequestIds, CLOSED_QUESTION);
+      toast.warning("The question no longer waits for an answer.");
+      followUserAnswer(sessionId, null, server.serverUrl, server.queryClient);
+      return;
+    }
+    console.warn("Could not send the answer", error);
+    toast.error(getErrorMessage(error, "Could not send your answer."));
+    return;
+  }
+  onAccepted?.();
+  recordStatuses(questionRequestIds, {
+    outcome: "answered",
+    answered_via: "message",
+    message: text,
+  });
+  followUserAnswer(
+    sessionId,
+    continuation,
+    server.serverUrl,
+    server.queryClient,
+  );
 }
 
 async function nameNewSession(
@@ -273,13 +328,15 @@ async function runChatStream(
   if (!stillOurs()) return;
   // Delivery ended before the run's stop, and the run can go on without it.
   const lost = accepted && !signal.aborted && !hadError && !sawStop;
-  // The cut stream of a stopped response does not deliver the resolutions of its requests.
+  // The cut stream of a stopped response does not deliver the resolutions of its requests and
+  // questions.
+  const stoppedPackets = signal.aborted
+    ? (store.getState().sessions.get(sessionId)?.messageTree.get(agentNodeId)
+        ?.packets ?? [])
+    : [];
   const unresolvedAfterStop =
-    signal.aborted &&
-    readToolApprovals(
-      store.getState().sessions.get(sessionId)?.messageTree.get(agentNodeId)
-        ?.packets ?? [],
-    ).some((entry) => entry.outcome === null);
+    readToolApprovals(stoppedPackets).some((entry) => entry.outcome === null) ||
+    readToolQuestions(stoppedPackets).some((entry) => entry.resolved === null);
   // The wait is not stream time; a continuation restarts the timer.
   if (paused) {
     store
@@ -289,7 +346,10 @@ async function runChatStream(
   if (rejection !== null) {
     // The turn does not belong in the tree; the composer still holds its text.
     store.getState().updateSessionTree(sessionId, treeBeforeSend);
-    if (approvalPending) showPendingApproval();
+    if (approvalPending)
+      showPendingWait(
+        "Answer the questions or decide the tool calls that wait first.",
+      );
     else toast.error(rejection);
   }
   store.getState().updateChatState(sessionId, "settling");
@@ -374,6 +434,8 @@ export interface ChatController {
     onCreated?: () => void,
   ) => void;
   stop: () => void;
+  // The selected reply shows a waiting question card, so a sent message answers it.
+  answersQuestions: boolean;
   isHydrating: boolean;
   // The persona the backend says owns this session. The sessions list can't answer this for a
   // project chat (it is fetched with only_non_project_chats=true), so the hydrated session is the
@@ -429,6 +491,13 @@ export function useChatController(
     [sessionData],
   );
   const chatState: ChatState = sessionData?.chatState ?? "input";
+  const localQuestionStatuses = useToolQuestionUi(
+    (state) => state.localStatuses,
+  );
+  const answersQuestions = useMemo(
+    () => waitingQuestionIds(messages, localQuestionStatuses).length > 0,
+    [messages, localQuestionStatuses],
+  );
 
   const submit = useCallback(
     async (
@@ -448,6 +517,26 @@ export function useChatController(
         let activeId = sessionId;
         if (activeId != null) {
           const current = useChatSessionStore.getState().sessions.get(activeId);
+          // While the selected reply shows a waiting question card, a sent message answers
+          // its questions instead of starting a turn.
+          const waiting = waitingQuestionIds(
+            getLatestMessageChain(current?.messageTree ?? new Map()),
+            useToolQuestionUi.getState().localStatuses,
+          );
+          if (waiting.length > 0) {
+            if (fileDescriptors.length > 0) {
+              toast.warning("Remove the attachments to answer the question.");
+              return;
+            }
+            await answerQuestionsWithMessage(
+              activeId,
+              waiting,
+              text,
+              { serverUrl, queryClient },
+              onAccepted,
+            );
+            return;
+          }
           if (current && current.chatState !== "input") return; // a run is already active
           try {
             if (
@@ -601,6 +690,7 @@ export function useChatController(
     chatState,
     submit,
     stop,
+    answersQuestions,
     isHydrating: needsHydration && hydration.isLoading,
     // Query keeps serving this once hydration is disabled, so it survives revisiting the chat.
     conversationPersonaId: hydration.data?.persona_id ?? null,

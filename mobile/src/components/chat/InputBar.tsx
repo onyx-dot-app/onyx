@@ -39,6 +39,8 @@ interface InputBarProps {
   onStop: () => void;
   chatState: ChatState;
   attachments: UseComposerDraft;
+  // A waiting question card takes the sent message as its answer.
+  answersQuestions?: boolean;
 }
 
 export function InputBar({
@@ -48,6 +50,7 @@ export function InputBar({
   onStop,
   chatState,
   attachments,
+  answersQuestions = false,
 }: InputBarProps) {
   const insets = useSafeAreaInsets();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -95,7 +98,7 @@ export function InputBar({
         <ComposerInput
           value={value}
           onChangeText={onChangeText}
-          placeholder="Message Onyx…"
+          placeholder={answersQuestions ? "Type your answer…" : "Message Onyx…"}
           placeholderClassName="text-text-02"
           multiline
           className="px-12 pb-8 pt-12 text-text-04"
