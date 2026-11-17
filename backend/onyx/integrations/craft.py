@@ -34,7 +34,6 @@ from onyx.integrations.models import (
 from onyx.integrations.policy import (
     parse_action_settings,
     resolve_action_policies,
-    strictest_policies,
 )
 from onyx.tools.models import PluginLinkConfiguration
 
@@ -147,26 +146,21 @@ def resolve_craft_action_policies(
             integration=integration,
             action_keys=action_keys,
             user_id=user_id,
-            link_settings=None,
+            link_settings=[],
             approval_mode=ApprovalMode.INTERACTIVE,
             chat_session_id=None,
         )
     settings = task_link_settings(db_session, task_id, user_id, integration.id)
     if not settings:
         return dict.fromkeys(action_keys, EffectivePolicy.BLOCKED)
-    return strictest_policies(
-        [
-            resolve_action_policies(
-                db_session,
-                integration=integration,
-                action_keys=action_keys,
-                user_id=user_id,
-                link_settings=link,
-                approval_mode=ApprovalMode.INTERACTIVE,
-                chat_session_id=None,
-            )
-            for link in settings
-        ]
+    return resolve_action_policies(
+        db_session,
+        integration=integration,
+        action_keys=action_keys,
+        user_id=user_id,
+        link_settings=settings,
+        approval_mode=ApprovalMode.INTERACTIVE,
+        chat_session_id=None,
     )
 
 
@@ -213,7 +207,7 @@ def _policies(
         integration=integration,
         action_keys=keys,
         user_id=user_id,
-        link_settings=link,
+        link_settings=[link],
         approval_mode=ApprovalMode.INTERACTIVE,
         chat_session_id=None,
     )
