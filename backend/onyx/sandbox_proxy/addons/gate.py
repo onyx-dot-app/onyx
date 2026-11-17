@@ -38,6 +38,7 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.integrations.craft import (
     always_asks,
+    load_task_plugins,
     resolve_craft_action_policies,
     task_link_settings,
 )
@@ -129,7 +130,11 @@ def resolve_gate_policies(
         integration=integration,
         action_keys={action.action_type for action in recognized_actions.actions},
         user_id=user_id,
-        task_id=task_id,
+        task=(
+            load_task_plugins(db_session, task_id, user_id)
+            if task_id is not None
+            else None
+        ),
     )
     return {key: _GATE_POLICY[policy] for key, policy in resolved.items()}
 

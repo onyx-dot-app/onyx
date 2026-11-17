@@ -19,8 +19,9 @@ from onyx.db.models import Integration, User
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import integration_status
 from onyx.integrations.craft import (
+    TaskPlugins,
     list_runnable_integrations,
-    list_task_integrations,
+    load_task_plugins,
     resolve_craft_action_policies,
 )
 from onyx.integrations.models import EffectivePolicy
@@ -40,7 +41,7 @@ def _server_key(integration: Integration) -> str:
 
 
 def _blocked_actions(
-    db_session: Session, integration: Integration, user: User, task_id: UUID | None
+    db_session: Session, integration: Integration, user: User, task: TaskPlugins | None
 ) -> tuple[str, ...]:
     keys = [
         action.key for action in list_integration_actions(integration.id, db_session)
@@ -50,7 +51,7 @@ def _blocked_actions(
         integration=integration,
         action_keys=keys,
         user_id=user.id,
-        task_id=task_id,
+        task=task,
     )
     return tuple(
         sorted(
@@ -69,10 +70,13 @@ def resolve_craft_mcp_servers(
     no sign-in) is listed: injection blocks the tool discovery of an
     unauthenticated server, so emitting it only buys a permanently failed MCP
     client. A Blocked action is a disabled tool."""
+    task = (
+        load_task_plugins(db_session, task_id, user.id) if task_id is not None else None
+    )
     integrations = (
         list_runnable_integrations(db_session, user.id)
-        if task_id is None
-        else list_task_integrations(db_session, task_id, user.id)
+        if task is None
+        else task.integrations()
     )
     configs: list[CraftMCPServerConfig] = []
     for integration in integrations:
@@ -95,7 +99,7 @@ def resolve_craft_mcp_servers(
             CraftMCPServerConfig(
                 key=_server_key(integration),
                 url=server.server_url,
-                disabled_tools=_blocked_actions(db_session, integration, user, task_id),
+                disabled_tools=_blocked_actions(db_session, integration, user, task),
                 integration_id=integration.id,
             )
         )

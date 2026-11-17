@@ -142,7 +142,9 @@ with the interactive approval mode, so Ask keeps the approval wait. An
 interactive session has no link settings. A scheduled run uses the
 `action_settings` of each `scheduled_task__plugin` row whose plugin holds the
 integration, and the strictest result wins; an integration that no plugin of
-the task holds is Blocked. The gate maps Allow, Ask and Blocked to the
+the task holds is Blocked. `integrations/craft.py:load_task_plugins` reads the
+task plugins and their integrations once; the Craft MCP config uses that one
+`TaskPlugins` for its integration list and the settings of each integration. The gate maps Allow, Ask and Blocked to the
 `ActionPolicy` values that approval rows store (`sandbox_proxy/addons/gate.py:resolve_gate_policies`),
 then forces `unspecified` on an API integration to Ask unless it resolved to
 DENY (`GateAddon._resolve_request_policies`). `AllMatchedActions` sorts actions
