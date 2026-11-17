@@ -61,6 +61,7 @@ from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.common.craft.payloads import action_entry
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.craft.db_helpers import (
+    app_integration_id,
     make_external_app,
     make_skill,
 )
@@ -175,7 +176,6 @@ def test_persist_approval_row_commits_before_announce_and_notifies(
     skill = make_skill(db_session, author_user_id=user_id)
     external_app = make_external_app(db_session, skill=skill, auth_template={})
     db_session.commit()
-    assert external_app.integration_id is not None
 
     matched_actions = AllMatchedActions(
         actions=(
@@ -187,7 +187,7 @@ def test_persist_approval_row_commits_before_announce_and_notifies(
             ),
         ),
         target=GatedTarget(
-            integration_id=external_app.integration_id,
+            integration_id=app_integration_id(db_session, external_app),
             kind=IntegrationKind.API,
             app_name=external_app.name,
         ),
@@ -241,7 +241,7 @@ def test_persist_approval_row_commits_before_announce_and_notifies(
     ]
     assert persisted.app_name == external_app.name
     assert persisted.payload == matched_actions.payload
-    assert persisted.integration_id == external_app.integration_id
+    assert persisted.integration_id == app_integration_id(db_session, external_app)
 
     notification = db_session.scalar(
         select(Notification).where(

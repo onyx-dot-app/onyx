@@ -45,6 +45,7 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import action_entry
 from tests.common.craft.payloads import default_action_entries as _default_actions
 from tests.external_dependency_unit.craft.db_helpers import (
+    app_integration_id,
     force_approval_created_at,
     make_external_app,
     make_skill,
@@ -367,7 +368,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send, always_read],
         app_name="Slack",
         payload={"text": "current"},
-        integration_id=app.integration_id,
+        integration_id=app_integration_id(db_session, app),
     )
     matching = insert_action_approval(
         db_session,
@@ -375,7 +376,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send],
         app_name="Slack",
         payload={"text": "matching"},
-        integration_id=app.integration_id,
+        integration_id=app_integration_id(db_session, app),
     )
     broader = insert_action_approval(
         db_session,
@@ -383,7 +384,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send, ask_upload],
         app_name="Slack",
         payload={"text": "broader"},
-        integration_id=app.integration_id,
+        integration_id=app_integration_id(db_session, app),
     )
     other = insert_action_approval(
         db_session,
@@ -391,7 +392,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send],
         app_name="Other",
         payload={"text": "other"},
-        integration_id=other_app.integration_id,
+        integration_id=app_integration_id(db_session, other_app),
     )
     db_session.commit()
 
@@ -446,16 +447,15 @@ def test_submit_session_grant_approves_matching_pending_rows(
     ]
 
     cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    assert app.integration_id is not None
     assert approval_cache.cached_session_grants_cover(
         session_id=session.id,
-        integration_id=app.integration_id,
+        integration_id=app_integration_id(db_session, app),
         action_types=["slack.chat.post"],
         cache=cache,
     )
     assert not approval_cache.cached_session_grants_cover(
         session_id=session.id,
-        integration_id=app.integration_id,
+        integration_id=app_integration_id(db_session, app),
         action_types=["slack.files.upload"],
         cache=cache,
     )
@@ -621,7 +621,7 @@ def test_session_decision_retry_cannot_change_scope(
         actions=_default_actions(),
         app_name="Slack",
         payload={},
-        integration_id=app.integration_id,
+        integration_id=app_integration_id(db_session, app),
     )
     db_session.commit()
     body = DecisionBody(decision=ApprovalChoice.APPROVE_SESSION)
@@ -717,7 +717,7 @@ def test_unknown_external_action_can_only_be_approved_once(
         actions=[action_entry("unspecified")],
         app_name="Custom",
         payload={},
-        integration_id=app.integration_id,
+        integration_id=app_integration_id(db_session, app),
     )
     db_session.commit()
     view = list_session_approvals(session.id, user, db_session).items[0]
@@ -791,7 +791,7 @@ def test_concurrent_session_approvals_do_not_deadlock(
             actions=[action_entry("slack.chat.post")],
             app_name="Slack",
             payload={},
-            integration_id=app.integration_id,
+            integration_id=app_integration_id(db_session, app),
         ).approval_id
         for _ in range(2)
     ]

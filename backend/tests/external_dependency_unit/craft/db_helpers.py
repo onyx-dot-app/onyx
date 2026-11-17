@@ -369,15 +369,22 @@ def make_external_app(
     return app
 
 
+def app_integration_id(db_session: Session, app: ExternalApp) -> int:
+    integration_id = db_session.scalar(
+        select(Integration.id).where(Integration.external_app_id == app.id)
+    )
+    assert integration_id is not None
+    return integration_id
+
+
 def hold_external_app(
     db_session: Session, *, app: ExternalApp, plugin_id: UUID
 ) -> None:
     """Make the plugin hold the integration of ``app``."""
-    integration_id = db_session.scalar(
-        select(Integration.id).where(Integration.external_app_id == app.id)
-    )
     db_session.add(
-        Plugin__Integration(plugin_id=plugin_id, integration_id=integration_id)
+        Plugin__Integration(
+            plugin_id=plugin_id, integration_id=app_integration_id(db_session, app)
+        )
     )
     db_session.flush()
 

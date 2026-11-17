@@ -91,7 +91,7 @@ def list_enabled_mcp_server_urls(db_session: Session) -> list[tuple[int, str]]:
     return list(
         db_session.execute(
             select(Integration.id, MCPServer.server_url)
-            .join(MCPServer, MCPServer.integration_id == Integration.id)
+            .join(MCPServer, MCPServer.id == Integration.mcp_server_id)
             .where(Integration.enabled.is_(True))
             .order_by(Integration.id)
         ).tuples()
