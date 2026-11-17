@@ -10,7 +10,7 @@ only and flags three shapes:
   cannot see what it holds.
 - `x.delay(...)`, which cannot carry an expiry.
 - A beat schedule entry, a dict literal with "task" and "schedule" keys, whose
-  "options" is not a dict literal with an "expires" key.
+  "options" is not a dict literal with an "expires" key, or has "expires": None.
 
 It does not follow values. It does not see a task sent through a signature
 (`.s()`, `.si()`, `signature()`, `group`, `chain`, `chord`), a `link=`
@@ -88,7 +88,7 @@ class _Finder(ast.NodeVisitor):
             expires = [kw.value for kw in node.keywords if kw.arg == "expires"]
             if not expires:
                 self._flag(node, _FIX_SEND.format(name=name))
-            elif isinstance(expires[0], ast.Constant) and expires[0].value is None:
+            elif _is_none(expires[0]):
                 self._flag(node, _FIX_NONE.format(name=name))
         elif name == "delay":
             self._flag(node, _FIX_DELAY.format())
@@ -98,11 +98,18 @@ class _Finder(ast.NodeVisitor):
         entry = _literal_keys(node)
         if "task" in entry and "schedule" in entry:
             options = entry.get("options")
-            if not isinstance(options, ast.Dict) or "expires" not in _literal_keys(
-                options
-            ):
+            expires = (
+                _literal_keys(options).get("expires")
+                if isinstance(options, ast.Dict)
+                else None
+            )
+            if expires is None or _is_none(expires):
                 self._flag(node, _FIX_BEAT.format())
         self.generic_visit(node)
+
+
+def _is_none(node: ast.expr) -> bool:
+    return isinstance(node, ast.Constant) and node.value is None
 
 
 def _literal_keys(node: ast.Dict) -> dict[str, ast.expr]:

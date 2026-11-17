@@ -110,6 +110,11 @@ for task in tasks_to_schedule:
             2,
             'beat schedule entry has no "expires"',
         ),
+        (
+            _BEAT_ENTRY.format(options='"options": {"expires": None},'),
+            2,
+            'beat schedule entry has no "expires"',
+        ),
         (_BEAT_ENTRY.format(options=""), 2, 'beat schedule entry has no "expires"'),
         (
             _BEAT_ENTRY.format(options='"options": shared_options,'),
