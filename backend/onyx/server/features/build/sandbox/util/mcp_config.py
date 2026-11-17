@@ -43,13 +43,12 @@ def _server_key(integration: Integration) -> str:
 def _blocked_actions(
     db_session: Session, integration: Integration, user: User, task: TaskPlugins | None
 ) -> tuple[str, ...]:
-    keys = [
-        action.key for action in list_integration_actions(integration.id, db_session)
-    ]
+    actions = list_integration_actions(integration.id, db_session)
     policies = resolve_craft_action_policies(
         db_session,
         integration=integration,
-        action_keys=keys,
+        actions=actions,
+        action_keys=[action.key for action in actions],
         user_id=user.id,
         task=task,
     )
