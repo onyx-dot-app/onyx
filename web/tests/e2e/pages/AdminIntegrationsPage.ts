@@ -77,13 +77,18 @@ export class AdminIntegrationsPage {
     await expect(this.nameInput).toBeVisible();
   }
 
-  async selectSignIn(mode: string, method?: string): Promise<void> {
-    await this.addDialog
+  /** Picks the sign-in in the Add dialog, or in `scope` when given. */
+  async selectSignIn(
+    mode: string,
+    method?: string,
+    scope: Locator = this.addDialog
+  ): Promise<void> {
+    await scope
       .getByRole("combobox", { name: "Sign-in Mode", exact: true })
       .click();
     await this.page.getByRole("option", { name: mode, exact: true }).click();
     if (!method) return;
-    await this.addDialog
+    await scope
       .getByRole("combobox", { name: "Sign-in Method", exact: true })
       .click();
     await this.page.getByRole("option", { name: method, exact: true }).click();
@@ -94,6 +99,15 @@ export class AdminIntegrationsPage {
       .getByRole("combobox", { name: "Owner", exact: true })
       .click();
     await this.page.getByRole("option", { name: owner, exact: true }).click();
+  }
+
+  /** Adds an OpenAPI app with no sign-in and returns its integration id. */
+  async addOpenApiApp(schema: string, name: string): Promise<number> {
+    await this.goto();
+    await this.openAdd("OpenAPI app");
+    await this.fillOpenApiSchema(schema);
+    await expect(this.nameInput).toHaveValue(name);
+    return this.submit();
   }
 
   /** Submits the Add form and returns the new integration id. */

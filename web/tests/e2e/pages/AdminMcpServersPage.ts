@@ -5,8 +5,8 @@ import { AdminIntegrationDetailPage } from "@tests/e2e/pages/AdminIntegrationDet
 
 /**
  * An MCP server on the integration pages. `goto`, `openAddServerModal`,
- * `addServer`, `openConfiguration`, `expectServerDetail` and `refreshTools`
- * drive the integration pages. The other methods drive the setup dialog of
+ * `openConfiguration`, `expectServerDetail` and `refreshTools` drive the
+ * integration pages. The other methods drive the setup dialog of
  * the old plugin pages; only specs marked `fixme` until U8 still call them.
  */
 export class AdminMcpServersPage {
@@ -56,19 +56,6 @@ export class AdminMcpServersPage {
 
   async goto(): Promise<void> {
     await this.integrations.goto();
-  }
-
-  /** Adds an MCP server and returns its integration id. */
-  async addServer(details: {
-    name: string;
-    url: string;
-    owner?: "For me" | "For the organization";
-  }): Promise<number> {
-    await this.goto();
-    await this.openAddServerModal();
-    await this.integrations.fillMcpServer(details);
-    if (details.owner) await this.integrations.chooseOwner(details.owner);
-    return this.integrations.submit();
   }
 
   async openConfiguration(serverName: string): Promise<void> {

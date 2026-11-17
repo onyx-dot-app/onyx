@@ -6,7 +6,7 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
 import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
 import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
-import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
 import { AdminLanguageModelsPage } from "@tests/e2e/pages/AdminLanguageModelsPage";
 
 /** After a timeout the context is closed, so an unguarded cleanup throws and
@@ -560,12 +560,13 @@ test.describe("Permission gating: MANAGE_ACTIONS", () => {
       await page.context().clearCookies();
       await apiLogin(page, email, password);
 
-      const mcp = new AdminMcpServersPage(page);
-      await mcp.goto();
-      await mcp.integrations.expectIntegrationVisible(toolName);
-      await mcp.integrations.expectIntegrationVisible(mcpName);
-      await mcp.openAddServerModal();
-      await mcp.integrations.closeAddDialog();
+      const integrations = new AdminIntegrationsPage(page);
+      await integrations.goto();
+      await integrations.expectIntegrationVisible(toolName);
+      await integrations.expectIntegrationVisible(mcpName);
+      await integrations.openAdd("MCP server");
+      await expect(integrations.serverUrlInput).toBeVisible();
+      await integrations.closeAddDialog();
 
       await page.context().clearCookies();
       await loginAs(page, "admin");
