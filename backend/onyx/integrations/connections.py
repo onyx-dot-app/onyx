@@ -156,10 +156,11 @@ def _connection_or_problem(
             code=ConnectionState.NEEDS_RECONNECT,
             reason=_needs_reconnect_reason(integration, record),
         )
+    # After a refresh attempt, a token that is still expired is not usable.
     if (
         record.expires_at is not None
         and record.expires_at <= datetime.now(timezone.utc)
-        and not record.secret.refresh_token
+        and (refresh or not record.secret.refresh_token)
     ):
         return ConnectionProblem(
             code=ConnectionState.NEEDS_RECONNECT, reason=SIGN_IN_EXPIRED_REASON
@@ -366,19 +367,21 @@ def _login_token_expired(account: OAuthAccount) -> bool:
     )
 
 
-def _reload_account(db_session: Session, account: OAuthAccount) -> OAuthAccount:
-    """The account row in this session, re-read. The user may come from the
-    auth session of the request, so its rows can belong to another session."""
-    return reload_oauth_account(db_session, account.id) or account
+def _reload_account(db_session: Session, account: OAuthAccount) -> OAuthAccount | None:
+    """The account row in this session, re-read, or None when another caller
+    deleted it. The user may come from the auth session of the request, so
+    its rows can belong to another session."""
+    return reload_oauth_account(db_session, account.id)
 
 
 def _fresh_onyx_login_token(
     user: User, account: OAuthAccount, db_session: Session
 ) -> str | None:
     """Refreshes a token near expiry with no web request. None when the
-    token expired and could not be renewed."""
+    token expired and could not be renewed, or the account was deleted."""
     if not _login_token_stale(account, datetime.now(timezone.utc).timestamp()):
         return account.access_token
+    current: OAuthAccount | None = account
     if account.refresh_token:
         try:
             with cache_shared_lock(
@@ -387,23 +390,24 @@ def _fresh_onyx_login_token(
                 wait_for_lock_s=_REFRESH_LOCK_WAIT_S,
                 logger=logger,
             ):
-                account = _reload_account(db_session, account)
+                current = _reload_account(db_session, account)
                 db_user = fetch_user_by_id(db_session, user.id)
                 if (
-                    db_user is not None
+                    current is not None
+                    and db_user is not None
                     and _login_token_stale(
-                        account, datetime.now(timezone.utc).timestamp()
+                        current, datetime.now(timezone.utc).timestamp()
                     )
-                    and refresh_oauth_account_sync(db_user, account, db_session)
+                    and refresh_oauth_account_sync(db_user, current, db_session)
                 ):
                     db_session.commit()
                     # A refresh with no expires_in keeps the old expiry.
-                    return account.access_token
+                    return current.access_token
         except CacheLockAcquisitionError:
-            account = _reload_account(db_session, account)
-    if _login_token_expired(account):
+            current = _reload_account(db_session, account)
+    if current is None or _login_token_expired(current):
         return None
-    return account.access_token
+    return current.access_token
 
 
 def _resolve_onyx_login(
@@ -515,6 +519,7 @@ def ensure_fresh_connection(
     keeps the row. None when another caller deleted the row."""
     if not _needs_refresh(read_connection(connection), datetime.now(timezone.utc)):
         return connection
+    connection_id = connection.id
     try:
         with cache_shared_lock(
             connection_refresh_lock_name(integration.id, connection.user_id),
@@ -531,11 +536,11 @@ def ensure_fresh_connection(
     except CacheLockAcquisitionError:
         logger.info(
             "integration_connection.refresh.lock_contended connection_id=%s",
-            connection.id,
+            connection_id,
         )
-        if not reload_connection(db_session, connection):
-            return None
-    return connection
+        return connection if reload_connection(db_session, connection) else None
+    # A disconnect can delete the row while the token request runs.
+    return get_connection_by_id(db_session, connection_id)
 
 
 def _still_holds(
@@ -544,7 +549,8 @@ def _still_holds(
     """Lock the row and check that it is still connected with ``secret``.
     An OAuth callback or a sign-in settings change does not take the refresh
     lock, so it can change the row while a refresh runs."""
-    current = get_connection_by_id(db_session, connection.id, for_update=True)
+    connection_id = connection.id
+    current = get_connection_by_id(db_session, connection_id, for_update=True)
     if current is not None:
         record = read_connection(current)
         if record.status is IntegrationConnectionStatus.CONNECTED and (
@@ -554,7 +560,7 @@ def _still_holds(
             return True
     db_session.rollback()
     logger.info(
-        "integration_connection.refresh.superseded connection_id=%s", connection.id
+        "integration_connection.refresh.superseded connection_id=%s", connection_id
     )
     return False
 
