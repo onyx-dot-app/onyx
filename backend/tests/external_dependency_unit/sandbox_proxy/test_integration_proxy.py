@@ -43,7 +43,10 @@ from onyx.db.models import (
     UserPluginPreference,
 )
 from onyx.db.scheduled_task import get_scheduled_task_id_for_session
-from onyx.external_apps.matching.engine import AllMatchedActions
+from onyx.external_apps.matching.engine import (
+    WHOLE_DOMAIN_ACTION_TYPE,
+    AllMatchedActions,
+)
 from onyx.integrations.connection_models import ConnectionSecret
 from onyx.integrations.craft import list_task_plugin_views
 from onyx.integrations.models import EffectivePolicy, LinkValue
@@ -662,6 +665,33 @@ def test_the_task_catalog_locks_a_task_allow_that_the_policy_ignores(
     }
     assert locked[(open_mcp.id, "update")] is False
     assert locked[(no_always_allow.id, "update")] is True
+
+
+def test_the_task_catalog_shows_that_a_custom_app_always_asks(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    custom = _custom_app(db_session, created, _host())
+    _run(db_session, [custom])
+    db_session.add(
+        IntegrationActionPolicy(
+            integration_id=custom.id,
+            action=WHOLE_DOMAIN_ACTION_TYPE,
+            user_id=None,
+            policy=IntegrationActionPolicyValue.ALLOW,
+        )
+    )
+    db_session.commit()
+
+    (action,) = [
+        action
+        for view in list_task_plugin_views(db_session, user, None)
+        for integration in view.integrations
+        if integration.id == custom.id
+        for action in integration.actions
+    ]
+    assert action.key == WHOLE_DOMAIN_ACTION_TYPE
+    assert action.integration_policy is EffectivePolicy.ASK
+    assert action.locked is True
 
 
 def test_the_task_catalog_ignores_the_owners_always_allow(
