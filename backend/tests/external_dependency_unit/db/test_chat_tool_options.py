@@ -226,6 +226,29 @@ def test_oversized_options_are_rejected_before_they_are_stored(
     assert _stored(db_session, chat_session) is None
 
 
+def test_a_partial_update_is_rejected_when_the_merged_options_are_too_large(
+    db_session: Session, owner: User
+) -> None:
+    chat_session = _chat(db_session, owner)
+    half = "x" * (MAX_TOOL_OPTIONS_BYTES // 2 + 1)
+    saved = ToolOptions(allowed=[PluginEntry(plugin_id=uuid4(), actions=[half])])
+    update_chat_tool_options(chat_session.id, saved, owner, db_session)
+    with pytest.raises(OnyxError) as raised:
+        update_chat_tool_options(
+            chat_session.id,
+            ToolOptions(
+                internal_search_filters=BaseFilters(
+                    tags=[Tag(tag_key="team", tag_value=half)]
+                )
+            ),
+            owner,
+            db_session,
+        )
+    assert raised.value.error_code is OnyxErrorCode.PAYLOAD_TOO_LARGE
+    db_session.rollback()
+    assert _stored(db_session, chat_session) == saved
+
+
 def test_only_the_owner_of_a_live_chat_saves_options(
     db_session: Session, make_test_user: MakeTestUser, owner: User
 ) -> None:
