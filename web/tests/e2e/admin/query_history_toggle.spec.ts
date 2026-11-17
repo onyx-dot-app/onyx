@@ -1,64 +1,10 @@
-import { Page } from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
 import { loginAs } from "@tests/e2e/utils/auth";
-
-async function waitForQueryHistoryRow(page: Page): Promise<void> {
-  await expect(page.locator('[aria-label="admin-page-title"]')).toBeVisible({
-    timeout: 10000,
-  });
-  await expect(
-    page
-      .locator("label")
-      .filter({ hasText: "Query History Visibility" })
-      .first()
-  ).toBeVisible({ timeout: 10000 });
-}
-
-async function getQueryHistoryValue(page: Page): Promise<string> {
-  await waitForQueryHistoryRow(page);
-
-  const trigger = page
-    .locator("label")
-    .filter({ hasText: "Query History Visibility" })
-    .locator('[role="combobox"]');
-
-  const text = await trigger.inputValue();
-  for (const label of ["Show with User Info", "Anonymized", "Hidden"]) {
-    if (text.includes(label)) return label;
-  }
-  return text;
-}
-
-async function setQueryHistoryType(
-  page: Page,
-  value: "Show with User Info" | "Anonymized" | "Hidden"
-): Promise<void> {
-  await page.goto(ADMIN_ROUTES.SECURITY_HARDENING.path);
-  await page.waitForLoadState("networkidle");
-  await waitForQueryHistoryRow(page);
-
-  const currentValue = await getQueryHistoryValue(page);
-  if (currentValue === value) return;
-
-  const trigger = page
-    .locator("label")
-    .filter({ hasText: "Query History Visibility" })
-    .locator('[role="combobox"]');
-
-  await trigger.scrollIntoViewIfNeeded();
-  await trigger.click();
-
-  const option = page.locator('[role="option"]').filter({ hasText: value });
-  await expect(option).toBeVisible({ timeout: 3000 });
-  const saved = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === "/api/admin/settings" &&
-      response.request().method() === "PATCH"
-  );
-  await option.click();
-  expect((await saved).ok()).toBeTruthy();
-}
+import {
+  AdminSecurityPage,
+  QUERY_HISTORY_LABELS,
+} from "@tests/e2e/pages/AdminSecurityPage";
 
 test.describe("Query History Toggle @exclusive", () => {
   test.beforeEach(async ({ page }) => {
@@ -67,27 +13,25 @@ test.describe("Query History Toggle @exclusive", () => {
   });
 
   test.afterEach(async ({ page }) => {
-    await setQueryHistoryType(page, "Show with User Info");
+    await new AdminSecurityPage(page).setQueryHistoryType(
+      "Show with User Info"
+    );
   });
 
   test("dropdown shows current value and persists after reload", async ({
     page,
   }) => {
-    await page.goto(ADMIN_ROUTES.SECURITY_HARDENING.path);
-    await page.waitForLoadState("networkidle");
+    const security = new AdminSecurityPage(page);
+    await security.goto();
 
-    const currentValue = await getQueryHistoryValue(page);
-    expect(["Show with User Info", "Anonymized", "Hidden"]).toContain(
-      currentValue
+    expect(QUERY_HISTORY_LABELS).toContain(
+      await security.getQueryHistoryValue()
     );
 
-    await setQueryHistoryType(page, "Anonymized");
+    await security.setQueryHistoryType("Anonymized");
 
-    await page.reload();
-    await page.waitForLoadState("networkidle");
-
-    const newValue = await getQueryHistoryValue(page);
-    expect(newValue).toBe("Anonymized");
+    await security.reload();
+    expect(await security.getQueryHistoryValue()).toBe("Anonymized");
   });
 
   test("setting to Hidden hides query history sidebar link", async ({
@@ -95,8 +39,9 @@ test.describe("Query History Toggle @exclusive", () => {
     eeEnabled,
   }) => {
     test.skip(!eeEnabled, "Query History page requires enterprise license");
+    const security = new AdminSecurityPage(page);
 
-    await setQueryHistoryType(page, "Show with User Info");
+    await security.setQueryHistoryType("Show with User Info");
 
     await page.goto(ADMIN_ROUTES.USAGE.path);
     await page.waitForLoadState("networkidle");
@@ -107,7 +52,7 @@ test.describe("Query History Toggle @exclusive", () => {
     );
     await expect(queryHistoryLink).toBeVisible({ timeout: 5000 });
 
-    await setQueryHistoryType(page, "Hidden");
+    await security.setQueryHistoryType("Hidden");
 
     await page.goto(ADMIN_ROUTES.USAGE.path);
     await page.waitForLoadState("networkidle");
@@ -120,19 +65,11 @@ test.describe("Query History Toggle @exclusive", () => {
   });
 
   test("can cycle through all three options", async ({ page }) => {
-    await setQueryHistoryType(page, "Show with User Info");
-    await page.reload();
-    await page.waitForLoadState("networkidle");
-    expect(await getQueryHistoryValue(page)).toBe("Show with User Info");
-
-    await setQueryHistoryType(page, "Anonymized");
-    await page.reload();
-    await page.waitForLoadState("networkidle");
-    expect(await getQueryHistoryValue(page)).toBe("Anonymized");
-
-    await setQueryHistoryType(page, "Hidden");
-    await page.reload();
-    await page.waitForLoadState("networkidle");
-    expect(await getQueryHistoryValue(page)).toBe("Hidden");
+    const security = new AdminSecurityPage(page);
+    for (const label of QUERY_HISTORY_LABELS) {
+      await security.setQueryHistoryType(label);
+      await security.reload();
+      expect(await security.getQueryHistoryValue()).toBe(label);
+    }
   });
 });

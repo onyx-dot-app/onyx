@@ -294,7 +294,9 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
   page also edits workspace `Settings` fields (`invite_only_enabled`,
   `anonymous_user_enabled`, `query_history_type`,
   `maximum_chat_retention_days`) through `saveWorkspaceSettings`. Those are not
-  `SecuritySettings`: they have no env default and no audit event.
+  `SecuritySettings`: they have no audit event, and only `query_history_type`
+  has an env default (`ONYX_QUERY_HISTORY_TYPE`, read in
+  `server/settings/store.py:load_settings` when no value is stored).
 - `investigate-unexpected-signout` **Investigate "signed out unexpectedly".** Check `AUTH_BACKEND` first,
   because Postgres and JWT sessions keep no reason. With Redis, read the
   `detail` of the 403 that the browser received:

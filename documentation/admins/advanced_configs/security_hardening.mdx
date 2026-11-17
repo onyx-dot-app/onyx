@@ -13,8 +13,8 @@ Every control saves as soon as you change it. The JWT text fields save when you 
 Each setting starts at the value of its environment variable, and a value you set here overrides that default.
 Clearing a JWT field or a password length box returns it to the environment default.
 Changes are written to the audit log with the acting admin and the old and new values. Allow Anonymous Users,
-Restrict Open Sign-Up, Query History Visibility, and Keep Chat History are workspace settings.
-They have no environment default and are not audited.
+Restrict Open Sign-Up, Query History Visibility, and Keep Chat History are workspace settings. They are not audited.
+Only Query History Visibility has an environment default.
 
 <Note>
   Settings are cached per API server for up to 10 seconds. On deployments with several API servers,
@@ -177,6 +177,8 @@ Sets what admins see on the [Query History](/admins/analytics/query_history) pag
 - **Show with User Info** (default): every query is linked to the user who sent it.
 - **Anonymized**: queries show without the user's identity.
 - **Hidden**: query history reporting is off.
+
+Environment default: `ONYX_QUERY_HISTORY_TYPE` (`normal`, `anonymized`, or `disabled`).
 
 ### Keep Chat History
 

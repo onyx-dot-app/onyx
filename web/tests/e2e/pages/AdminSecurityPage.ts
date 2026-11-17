@@ -13,6 +13,13 @@ import {
   expect,
 } from "@playwright/test";
 
+export const QUERY_HISTORY_LABELS = [
+  "Show with User Info",
+  "Anonymized",
+  "Hidden",
+] as const;
+export type QueryHistoryLabel = (typeof QUERY_HISTORY_LABELS)[number];
+
 export class AdminSecurityPage {
   readonly page: Page;
 
@@ -189,6 +196,48 @@ export class AdminSecurityPage {
     }
     const saved = this.waitForSettingsPatch();
     await this.selectRetentionPreset("Forever");
+    expect((await saved).ok()).toBeTruthy();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Query History Visibility
+  // ---------------------------------------------------------------------------
+
+  /** The "Query History Visibility" row on the Admin Controls card. */
+  queryHistoryField(): Locator {
+    return this.page
+      .locator("label")
+      .filter({ hasText: "Query History Visibility" })
+      .first();
+  }
+
+  get queryHistoryTrigger(): Locator {
+    return this.queryHistoryField().locator('[role="combobox"]');
+  }
+
+  /** The selected option label of the Query History Visibility dropdown. */
+  async getQueryHistoryValue(): Promise<string> {
+    await expect(this.queryHistoryField()).toBeVisible({ timeout: 10000 });
+    const text = await this.queryHistoryTrigger.inputValue();
+    for (const label of QUERY_HISTORY_LABELS) {
+      if (text.includes(label)) return label;
+    }
+    return text;
+  }
+
+  /** Open the page and select the option, unless it is already selected. */
+  async setQueryHistoryType(value: QueryHistoryLabel): Promise<void> {
+    await this.goto();
+    if ((await this.getQueryHistoryValue()) === value) return;
+
+    await this.queryHistoryTrigger.scrollIntoViewIfNeeded();
+    await this.queryHistoryTrigger.click();
+    const option = this.page
+      .locator('[role="option"]')
+      .filter({ hasText: value });
+    await expect(option).toBeVisible({ timeout: 3000 });
+    const saved = this.waitForSettingsPatch();
+    await option.click();
     expect((await saved).ok()).toBeTruthy();
   }
 
