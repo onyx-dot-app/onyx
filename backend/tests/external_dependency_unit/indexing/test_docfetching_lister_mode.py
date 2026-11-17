@@ -37,6 +37,7 @@ from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
     Document,
+    DocumentFailure,
     HierarchyNode,
     ListingPayload,
     ResolveTarget,
@@ -48,6 +49,7 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     DocumentByConnectorCredentialPair,
     IndexAttempt,
+    IndexAttemptError,
 )
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import HierarchyNode as DBHierarchyNode
@@ -93,6 +95,8 @@ class _FakeLister(
         self.listed = 0
         self.fetch_calls = 0
         self.listing_permissions: list[bool] = []
+        # Document failures that the last call yields after its stubs.
+        self.final_failure_ids: list[str] = []
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:  # noqa: ARG002
         return None
@@ -132,7 +136,15 @@ class _FakeLister(
                 listing_payload=_Payload(title=doc_id),
             )
         self.listed += 3
-        return ConnectorCheckpoint(has_more=self.listed < len(self.doc_ids))
+        has_more = self.listed < len(self.doc_ids)
+        if not has_more:
+            for doc_id in self.final_failure_ids:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=doc_id),
+                    failure_message="the listing could not read it",
+                    exception=RuntimeError("listing failure"),
+                )
+        return ConnectorCheckpoint(has_more=has_more)
 
     def build_dummy_checkpoint(self) -> ConnectorCheckpoint:
         return ConnectorCheckpoint(has_more=True)
@@ -273,6 +285,9 @@ def run(
                 get_document_batch_storage(
                     pair.id, attempt_id, is_backfill=False
                 ).cleanup_all_batches()
+            db_session.query(IndexAttemptError).filter(
+                IndexAttemptError.index_attempt_id.in_(run.attempt_ids)
+            ).delete(synchronize_session="fetch")
             db_session.query(IndexAttempt).filter(
                 IndexAttempt.connector_credential_pair_id == pair.id
             ).delete(synchronize_session="fetch")
@@ -475,7 +490,11 @@ def test_a_change_of_the_switch_starts_the_listing_again(run: _Run) -> None:
 
 
 def _store_indexed_document(
-    run: _Run, doc_id: str, modified: datetime | None, size: int | None
+    run: _Run,
+    doc_id: str,
+    modified: datetime | None,
+    size: int | None,
+    content_hash: str | None = "hash",
 ) -> None:
     """A document that this cc_pair indexed, as the index pipeline stores it."""
     run.db_session.add(
@@ -485,6 +504,7 @@ def _store_indexed_document(
             kg_stage=KGStage.NOT_STARTED,
             doc_updated_at=modified,
             source_size_bytes=size,
+            content_hash=content_hash,
         )
     )
     run.db_session.flush()
@@ -581,3 +601,41 @@ def test_a_document_of_another_cc_pair_is_not_dropped(
     finally:
         db_session.rollback()
         cleanup_cc_pair(db_session, other_pair)
+
+
+def test_a_document_whose_hash_a_swap_cleared_is_not_dropped(run: _Run) -> None:
+    """A reindex swap cleared the hash of a document that the new index may
+    lack. Its modified time and size still match, but the run must write it
+    again."""
+    doc_ids = run.connector.doc_ids
+    _store_indexed_document(run, doc_ids[0], _MODIFIED, _SIZE, content_hash=None)
+    _store_indexed_document(run, doc_ids[1], _MODIFIED, _SIZE)
+    attempt = run.add_attempt(IndexingStatus.IN_PROGRESS, _WINDOW_END)
+
+    with patch.object(run_docfetching, "ENABLE_CONVERSION_STAGE", True):
+        run.extract(attempt.id)
+
+    # The first stub batch held documents 0 and 1. Only 1 is dropped.
+    assert run.stub_doc_ids(attempt.id, 0) == [doc_ids[0]]
+    assert run.attempt(attempt.id).stubs_skipped == 1
+
+
+def test_documents_dropped_as_unchanged_count_for_the_failure_ratio(
+    run: _Run, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every listed document is unchanged, and the listing reports 4 document
+    failures after them. 4 of 60 listed documents is under the failure ratio,
+    so the run goes on."""
+    monkeypatch.setattr(run_docfetching, "PERSISTENT_INDEXING", False)
+    run.connector = _FakeLister(run.tag, doc_count=60)
+    run.connector.final_failure_ids = [f"failed_{run.tag}_{i}" for i in range(4)]
+    for doc_id in run.connector.doc_ids:
+        _store_indexed_document(run, doc_id, _MODIFIED, _SIZE)
+    attempt = run.add_attempt(IndexingStatus.IN_PROGRESS, _WINDOW_END)
+
+    with patch.object(run_docfetching, "ENABLE_CONVERSION_STAGE", True):
+        run.extract(attempt.id)
+
+    row = run.attempt(attempt.id)
+    assert (row.stubs_listed, row.stubs_skipped) == (60, 60)
+    assert row.status == IndexingStatus.IN_PROGRESS

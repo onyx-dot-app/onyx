@@ -1466,8 +1466,11 @@ def get_unchanged_document_ids(
     """Returns the ids in `listed` (document id to source modified time and
     size) whose stored document is the same version: this cc_pair indexed it,
     with the same modified time and the same size. `doc_updated_at` is written
-    only after a document is indexed, so a match means that version is in the
-    index. A document with no stored size matches only a listing with no size.
+    only after a document is written to the index, so a match means that
+    version is in the index. A document with no stored size matches only a
+    listing with no size. A document with no content hash never matches: a
+    reindex swap clears the hash of what the new index may lack, so the next
+    run writes it again.
     """
     if not listed:
         return set()
@@ -1480,6 +1483,7 @@ def get_unchanged_document_ids(
         .where(
             DbDocument.id.in_(list(listed)),
             DbDocument.doc_updated_at.is_not(None),
+            DbDocument.content_hash.is_not(None),
             DocumentByConnectorCredentialPair.connector_id == connector_id,
             DocumentByConnectorCredentialPair.credential_id == credential_id,
             DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
