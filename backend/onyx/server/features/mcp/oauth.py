@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.cache.locks import async_cache_shared_lock, cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import MCPOAuthProviderMode
+from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode, MCPTransport
 from onyx.db.mcp import (
     get_connection_config_by_id,
     update_connection_config,
@@ -1095,6 +1095,30 @@ def make_oauth_provider(
     )
     storage.bind_oauth_context(provider.context)
     return provider
+
+
+def prepare_mcp_request_auth(
+    server: MCPServer | MCPServerConnection,
+    connection_config_id: int | None,
+    headers: dict[str, str],
+) -> OAuthClientProvider | None:
+    """Set up OAuth for an authenticated MCP request (updates SSE headers)."""
+    if server.auth_type != MCPAuthenticationType.OAUTH or connection_config_id is None:
+        return None
+    if server.transport != MCPTransport.SSE:
+        return make_oauth_provider(server, connection_config_id, None)
+    # SSE cannot refresh via httpx.Auth while the stream is open.
+    try:
+        refreshed = refresh_mcp_oauth_token_if_expired(server, connection_config_id)
+    except Exception:
+        logger.warning("SSE OAuth refresh failed for MCP server %s", server.id)
+        return None
+    if refreshed is not None:
+        for name in tuple(headers):
+            if name.lower() == "authorization":
+                del headers[name]
+        headers["Authorization"] = refreshed
+    return None
 
 
 def make_oauth_provider_with_storage(

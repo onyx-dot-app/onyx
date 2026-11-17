@@ -110,6 +110,10 @@ Tool (openapi_schema) ---------------------> build_custom_tools_from_openapi_sch
                                                operationId, all with the same Tool.id
 ```
 
+For personal API keys and OAuth, Chat intersects the captured tools with
+`tools/list` for the active credentials. If discovery fails, Chat omits that
+server's tools for the response.
+
 **Staged MCP setup.** `server/features/mcp/api.py:setup_mcp_server` handles both
 new servers and authentication edits:
 1. `_prepare_mcp_setup` resolves masked fields against stored values and takes

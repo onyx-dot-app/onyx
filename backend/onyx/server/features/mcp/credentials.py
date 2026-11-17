@@ -250,6 +250,18 @@ class ResolvedMCPCredentials(BaseModel):
             )
         return headers
 
+    def build_request_headers(
+        self, additional_headers: Mapping[str, str] | None
+    ) -> dict[str, str]:
+        request_headers = {
+            name: value
+            for name, value in (additional_headers or {}).items()
+            if name.lower() not in DENYLISTED_MCP_HEADERS
+        }
+        if denylisted := sorted(set(additional_headers or {}) - request_headers.keys()):
+            logger.warning("Filtered denylisted MCP request headers: %s", denylisted)
+        return merge_mcp_headers(request_headers, self.build_headers())
+
     def needs_reauth(self) -> bool:
         """Credentials were rejected, or an OAuth grant cannot refresh."""
         config_data = self.connection_data

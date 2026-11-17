@@ -13,9 +13,12 @@ from mcp.types import (
     CallToolResult,
     EmbeddedResource,
     ImageContent,
+    ListToolsResult,
+    PaginatedRequestParams,
     TextContent,
     TextResourceContents,
 )
+from mcp.types import Tool as MCPToolDefinition
 
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.features.mcp import client
@@ -130,6 +133,24 @@ def test_runtime_keeps_raw_unauthorized_response(
         client._call_mcp_client_function_sync(operation, "https://mcp.example.com")
     assert error.value is upstream
     assert client.has_unauthorized_response(error.value)
+
+
+def test_discovers_tools_across_pages() -> None:
+    session = AsyncMock(spec=ClientSession)
+    first = MCPToolDefinition(name="first", inputSchema={"type": "object"})
+    second = MCPToolDefinition(name="second", inputSchema={"type": "object"})
+    session.list_tools.side_effect = [
+        ListToolsResult(tools=[first], nextCursor="page-2"),
+        ListToolsResult(tools=[second]),
+    ]
+
+    assert asyncio.run(client._discover_mcp_tools(session, all_pages=True)) == [
+        first,
+        second,
+    ]
+    session.list_tools.assert_awaited_with(
+        params=PaginatedRequestParams(cursor="page-2")
+    )
 
 
 def test_call_tool_preserves_server_error_flag() -> None:

@@ -5,6 +5,7 @@ This module provides a proper MCP client that follows the JSON-RPC 2.0 specifica
 and handles connection initialization, session management, and protocol communication.
 """
 
+import asyncio
 import json
 from collections.abc import Callable, Coroutine
 from enum import Enum
@@ -22,6 +23,7 @@ from mcp.types import (
     ImageContent,
     InitializeResult,
     ListResourcesResult,
+    PaginatedRequestParams,
     TextResourceContents,
 )
 from mcp.types import Tool as MCPLibTool
@@ -40,6 +42,8 @@ from onyx.utils.threadpool_concurrency import (
 )
 
 logger = setup_logger()
+
+_MAX_TOOL_LIST_PAGES = 64
 
 T = TypeVar("T", covariant=True)
 
@@ -186,16 +190,22 @@ def _call_mcp_client_function_sync(
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
     cancellation: CancellationSignal | None = None,
+    timeout_seconds: float | None = None,
     **kwargs: Any,
 ) -> T:
     run_client_function = _create_mcp_client_function_runner(
         function, server_url, connection_headers, transport, auth, **kwargs
     )
+
+    async def run_with_timeout() -> T:
+        async with asyncio.timeout(timeout_seconds):
+            return await run_client_function()
+
     try:
         if cancellation is None:
-            return run_async_sync_no_cancel(run_client_function())
+            return run_async_sync_no_cancel(run_with_timeout())
         return run_until_cancelled(
-            run_client_function(),
+            run_with_timeout(),
             is_cancelled=lambda: cancellation.cancelled,
             on_cancel=cancellation.on_cancel,
             cancellation_error=AgentCancelled,
@@ -311,7 +321,9 @@ async def initialize_mcp_client(
     )
 
 
-async def _discover_mcp_tools(session: ClientSession) -> list[MCPLibTool]:
+async def _discover_mcp_tools(
+    session: ClientSession, *, all_pages: bool = False
+) -> list[MCPLibTool]:
     # 1) initialize
     import time
 
@@ -322,8 +334,18 @@ async def _discover_mcp_tools(session: ClientSession) -> list[MCPLibTool]:
     # 2) tools/list
     t2 = time.time()
     tools_response = await session.list_tools()  # sends JSON-RPC "tools/list"
+    tools = list(tools_response.tools)
+    seen_cursors: set[str] = set()
+    while all_pages and (cursor := tools_response.nextCursor) is not None:
+        if cursor in seen_cursors or len(seen_cursors) >= _MAX_TOOL_LIST_PAGES - 1:
+            raise ValueError("MCP tool discovery exceeded its pagination limit")
+        seen_cursors.add(cursor)
+        tools_response = await session.list_tools(
+            params=PaginatedRequestParams(cursor=cursor)
+        )
+        tools.extend(tools_response.tools)
     logger.info("Listed tools with server time: %s", time.time() - t2)
-    return tools_response.tools
+    return tools
 
 
 def discover_mcp_tools(
@@ -331,6 +353,10 @@ def discover_mcp_tools(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    *,
+    all_pages: bool = False,
+    cancellation: CancellationSignal | None = None,
+    timeout_seconds: float | None = None,
 ) -> list[MCPLibTool]:
     """
     Synchronous wrapper for discovering MCP tools.
@@ -342,6 +368,9 @@ def discover_mcp_tools(
             connection_headers,
             transport,
             auth,
+            all_pages=all_pages,
+            cancellation=cancellation,
+            timeout_seconds=timeout_seconds,
         )
     except Exception as error:
         if has_unauthorized_response(error):

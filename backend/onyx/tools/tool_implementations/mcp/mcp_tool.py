@@ -2,15 +2,11 @@ import json
 import time
 from typing import Any
 
-from mcp.client.auth import OAuthClientProvider
 from pydantic import JsonValue
 
 from onyx.agents.tools import ToolInvocation
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import (
-    MCPAuthenticationType,
-    MCPTransport,
-)
+from onyx.db.enums import MCPTransport
 from onyx.db.mcp import mark_connection_config_reauth_required
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.llm.cancellation import AgentCancelled
@@ -24,15 +20,10 @@ from onyx.server.features.mcp.credentials import (
     ResolvedMCPCredentials,
     uses_user_managed_headers,
 )
-from onyx.server.features.mcp.models import (
-    DENYLISTED_MCP_HEADERS,
-    MCPServerConnection,
-    merge_mcp_headers,
-)
+from onyx.server.features.mcp.models import MCPServerConnection
 from onyx.server.features.mcp.oauth import (
     MCPReauthenticationRequired,
-    make_oauth_provider,
-    refresh_mcp_oauth_token_if_expired,
+    prepare_mcp_request_auth,
 )
 from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
@@ -207,26 +198,8 @@ class MCPTool(Tool):
         _server = self.mcp_server.name
         outcome = MCPToolCallStatus.ERROR
         try:
-            request_headers = {
-                name: value
-                for name, value in self._additional_headers.items()
-                if name.lower() not in DENYLISTED_MCP_HEADERS
-            }
-            if denylisted := sorted(
-                set(self._additional_headers) - set(request_headers)
-            ):
-                logger.warning(
-                    "MCP tool '%s' received denylisted headers that were filtered: %s",
-                    self._name,
-                    denylisted,
-                )
             credentials = self._resolved_credentials
-            headers = merge_mcp_headers(
-                request_headers,
-                credentials.build_headers(),
-            )
-
-            if not credentials.can_authenticate_with_headers(request_headers):
+            if not credentials.can_authenticate_with_headers(self._additional_headers):
                 auth_error_msg = (
                     f"The {self._name} tool from {self.mcp_server.name} requires "
                     "connection values. Tell the user to connect to the server "
@@ -240,35 +213,12 @@ class MCPTool(Tool):
                 outcome = MCPToolCallStatus.AUTH_ERROR
                 return self._error_result(auth_error_msg)
 
-            # For OAuth servers, construct OAuthClientProvider so the MCP SDK
-            # can refresh expired tokens automatically
-            auth: OAuthClientProvider | None = None
-            if (
-                self.mcp_server.auth_type == MCPAuthenticationType.OAUTH
-                and credentials.connection_config_id is not None
-                and self._user_id
-            ):
-                if self.mcp_server.transport == MCPTransport.SSE:
-                    # httpx.Auth refresh can't run over an open SSE stream;
-                    # refresh proactively here instead. Non-fatal on failure.
-                    try:
-                        refreshed_header = refresh_mcp_oauth_token_if_expired(
-                            self.mcp_server,
-                            credentials.connection_config_id,
-                        )
-                        if refreshed_header:
-                            headers["Authorization"] = refreshed_header
-                    except Exception:
-                        logger.exception(
-                            "MCP tool '%s': proactive SSE OAuth token refresh failed; using existing token",
-                            self._name,
-                        )
-                else:
-                    auth = make_oauth_provider(
-                        self.mcp_server,
-                        credentials.connection_config_id,
-                        None,
-                    )
+            headers = credentials.build_request_headers(self._additional_headers)
+            auth = prepare_mcp_request_auth(
+                self.mcp_server,
+                credentials.connection_config_id if self._user_id else None,
+                headers,
+            )
 
             tool_result = call_mcp_tool(
                 self.mcp_server.server_url,

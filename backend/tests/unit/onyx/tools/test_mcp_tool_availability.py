@@ -4,12 +4,14 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from mcp.types import Tool as MCPToolDefinition
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
+    MCPTransport,
 )
 from onyx.db.models import MCPServer, User
 from onyx.llm.interfaces import LLM
@@ -172,6 +174,7 @@ def test_chat_mcp_tools_require_usable_credentials(
         server_url="https://mcp.example.com/mcp",
         auth_type=auth_type,
         auth_performer=MCPAuthenticationPerformer.PER_USER,
+        transport=MCPTransport.STREAMABLE_HTTP,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
         oauth_cimd_enabled=True,
     )
@@ -213,6 +216,13 @@ def test_chat_mcp_tools_require_usable_credentials(
         patch(f"{MODULE}.get_mcp_server_user_preferences", return_value={}),
         patch(f"{MODULE}.get_tool_user_preferences", return_value={}),
         patch(f"{MODULE}.user_can_access_mcp_server", return_value=True),
+        patch(
+            "onyx.server.features.mcp.client.discover_mcp_tools",
+            return_value=[
+                MCPToolDefinition(name=name, inputSchema={"type": "object"})
+                for name in ("action_1", "action_2")
+            ],
+        ) as discover,
     ):
         result = construct_tools(
             configuration=configuration,
@@ -230,3 +240,115 @@ def test_chat_mcp_tools_require_usable_credentials(
 
     get_server.assert_called_once()
     resolve.assert_called_once()
+    assert discover.call_count == int(
+        available
+        and auth_type in (MCPAuthenticationType.API_TOKEN, MCPAuthenticationType.OAUTH)
+    )
+
+
+def test_per_user_mcp_catalogs_are_isolated() -> None:
+    """Users of the same agent only receive saved tools their token can use."""
+    server = MCPServer(
+        id=1,
+        name="Example",
+        server_url="https://mcp.example.com/mcp",
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.PER_USER,
+        transport=MCPTransport.STREAMABLE_HTTP,
+        oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
+    )
+    configuration = PersonaToolConfiguration(
+        persona_id=5,
+        persona_name="Test agent",
+        tools=[
+            ToolConfiguration(
+                id=tool_id,
+                name=f"action_{tool_id}",
+                display_name=f"action_{tool_id}",
+                description="Example action",
+                in_code_tool_id=None,
+                enabled=True,
+                openapi_schema=None,
+                mcp_input_schema={},
+                mcp_output_schema=None,
+                mcp_read_only=None,
+                custom_headers=None,
+                passthrough_auth=False,
+                mcp_server_id=server.id,
+                oauth_config_id=None,
+            )
+            for tool_id in (1, 2)
+        ],
+        search=PersonaSearchInfo(
+            document_set_names=[],
+            search_start_date=None,
+            attached_document_ids=[],
+            hierarchy_node_ids=[],
+        ),
+    )
+    users = [
+        User(id=uuid4(), email=f"{name}@example.com", enable_memory_tool=False)
+        for name in ("alice", "bob", "offline")
+    ]
+
+    def credentials(
+        _server: MCPServer, user: User, _db: Session
+    ) -> ResolvedMCPCredentials:
+        return ResolvedMCPCredentials(
+            connection_config_id=None,
+            connection_data={"headers": {"Authorization": f"Bearer {user.email}"}},
+            user_oauth_token=None,
+            auth_type=MCPAuthenticationType.API_TOKEN,
+            auth_template=None,
+        )
+
+    def discover_catalog(
+        _url: str, *, connection_headers: dict[str, str], **_kwargs: object
+    ) -> list[MCPToolDefinition]:
+        assert "host" not in connection_headers
+        assert connection_headers["X-Tenant"] == "tenant"
+        token = connection_headers["Authorization"]
+        if token == "Bearer offline@example.com":
+            raise TimeoutError
+        names = {
+            "Bearer alice@example.com": ["action_1", "unconfigured"],
+            "Bearer bob@example.com": ["action_2"],
+        }[token]
+        return [
+            MCPToolDefinition(name=name, inputSchema={"type": "object"})
+            for name in names
+        ]
+
+    with (
+        patch(f"{MODULE}.get_current_search_settings"),
+        patch(f"{MODULE}.get_default_document_index"),
+        patch(f"{MODULE}.get_mcp_server_by_id", return_value=server),
+        patch(f"{MODULE}.resolve_mcp_credentials", side_effect=credentials),
+        patch(f"{MODULE}.get_mcp_server_user_preferences", return_value={}),
+        patch(f"{MODULE}.get_tool_user_preferences", return_value={}),
+        patch(f"{MODULE}.user_can_access_mcp_server", return_value=True),
+        patch(
+            "onyx.server.features.mcp.client.discover_mcp_tools",
+            side_effect=discover_catalog,
+        ) as discover,
+    ):
+        results = [
+            construct_tools(
+                configuration=configuration,
+                user=user,
+                llm=MagicMock(spec=LLM),
+                db_session=MagicMock(spec=Session),
+                custom_tool_config=CustomToolConfig(
+                    mcp_headers={
+                        "authorization": "Bearer request-value",
+                        "host": "ignored",
+                        "X-Tenant": "tenant",
+                    }
+                ),
+            )
+            for user in users
+        ]
+
+    assert [set(result) for result in results] == [{1}, {2}, set()]
+    assert discover.call_count == len(users)
