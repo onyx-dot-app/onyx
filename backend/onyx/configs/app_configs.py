@@ -1178,8 +1178,9 @@ ENABLE_CONVERSION_STAGE = (
 )
 # The watchdog checks the conversion chain of an attempt when no task has
 # dispatched stub batches for this long.
+_docconversion_stall_seconds = _int_env("DOCCONVERSION_STALL_SECONDS", 300)
 DOCCONVERSION_STALL_SECONDS = max(
-    1, int(os.environ.get("DOCCONVERSION_STALL_SECONDS") or 300)
+    1, 300 if _docconversion_stall_seconds is None else _docconversion_stall_seconds
 )
 
 CELERY_WORKER_PRIMARY_CONCURRENCY = int(
