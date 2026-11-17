@@ -198,6 +198,14 @@ def test_the_requests_model_counts_each_call_as_one(tenant_id: str) -> None:
     assert limiter.try_acquire(_API, 5, "a@x.com") > 0
 
 
+def test_the_requests_model_counts_each_request_of_a_batch(tenant_id: str) -> None:
+    limiter = _limiter(tenant_id, per_credential=3, per_user=None, count_requests=True)
+    assert limiter.try_acquire(_API, 10, "a@x.com", request_count=2) == 0
+    # 2 of 3 requests are taken: a batch of 2 more does not fit, 1 does.
+    assert limiter.try_acquire(_API, 10, "a@x.com", request_count=2) > 0
+    assert limiter.try_acquire(_API, 10, "a@x.com") == 0
+
+
 def test_an_api_with_no_budget_is_not_limited(tenant_id: str) -> None:
     limiter = _limiter(tenant_id, per_credential=1, per_user=1)
     assert limiter.try_acquire("admin", 100, "a@x.com") == 0
@@ -255,7 +263,13 @@ def test_the_factory_builds_the_drive_limiter_and_wires_the_stop_signal(
     )
 
     monkeypatch.setattr(source_api_limiter, "ENABLE_SOURCE_API_LIMITER", True)
-    monkeypatch.setattr(source_api_limiter, "GOOGLE_DRIVE_QUOTA_PER_PROJECT", 300)
+    monkeypatch.setitem(
+        source_api_limiter.GOOGLE_DRIVE_BUDGETS,
+        "drive",
+        source_api_limiter.GOOGLE_DRIVE_BUDGETS["drive"].model_copy(
+            update={"per_credential": 300}
+        ),
+    )
     assert source_api_limiter.build_source_api_limiter(DocumentSource.SLACK, 1) is None
     stop = False
     limiter = source_api_limiter.build_source_api_limiter(
