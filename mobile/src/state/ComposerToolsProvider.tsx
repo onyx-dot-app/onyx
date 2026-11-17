@@ -285,6 +285,12 @@ export function useComposerToolsState({
     (toolId: number, disabled: boolean): Promise<void> => {
       const currentAgentId = effectiveAgentId;
       if (currentAgentId == null) return Promise.resolve();
+      // A tool that is not built in is switched through its plugins, which
+      // the tool list gives. Until that list loads, the switch waits.
+      const tool = effectiveAgent?.tools.find((t) => t.id === toolId);
+      if (!availableToolsLoaded && !tool?.in_code_tool_id) {
+        return Promise.resolve();
+      }
       // The backend fails the turn when the preferred tool isn't among the constructed ones.
       if (disabled && preferredToolId === toolId) clearPreferredTool();
       return setToolDisabled(
@@ -295,7 +301,9 @@ export function useComposerToolsState({
       );
     },
     [
+      availableToolsLoaded,
       clearPreferredTool,
+      effectiveAgent,
       effectiveAgentId,
       pluginIdsByTool,
       preferredToolId,

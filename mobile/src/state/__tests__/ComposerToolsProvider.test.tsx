@@ -425,6 +425,22 @@ describe("useComposerToolsState", () => {
     ]);
   });
 
+  it("does not switch an OpenAPI tool before the tool list gives its plugins", async () => {
+    const api = mockApi({ holdTools: true });
+    const { result } = renderTools({
+      agent: agent([searchTool, imageTool]),
+    });
+    await waitFor(() => expect(result.current.actionTools).toHaveLength(2));
+
+    await act(async () => {
+      result.current.toggleToolEnabled(2);
+    });
+
+    expect(patchCalls()).toEqual([]);
+    expect(api.stored["0"]).toBeUndefined();
+    expect(result.current.disabledToolIds).toEqual([]);
+  });
+
   it("turns on an OpenAPI tool that an old tool id still lists as off", async () => {
     const api = mockApi({
       preferences: {
@@ -451,6 +467,7 @@ describe("useComposerToolsState", () => {
 
   it("clears the preference when the preferred tool is disabled", async () => {
     const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
+    await waitFor(() => expect(client.isFetching()).toBe(0));
     act(() => result.current.togglePreferredTool(2));
     expect(result.current.preferredToolId).toBe(2);
 

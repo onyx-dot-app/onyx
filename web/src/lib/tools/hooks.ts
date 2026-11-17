@@ -836,14 +836,19 @@ export function useToolConfiguration(
     });
   }, [key, chatSessionId, activeAgent, pluginIds]);
 
-  const chatConfiguration = useMemo(() => {
-    const options = effectiveOptions(savedOptions, optionsEdits);
-    return options === undefined ||
-      agentTools === undefined ||
-      pluginIds === null
-      ? null
-      : configurationFrom(options, agentTools, pluginIds);
-  }, [savedOptions, optionsEdits, agentTools, pluginIds]);
+  const chatOptions = useMemo(
+    () => effectiveOptions(savedOptions, optionsEdits),
+    [savedOptions, optionsEdits]
+  );
+  // Until the plugin catalogs load, the tools and filters come from the saved
+  // options and a send carries the saved allow-list as it is.
+  const chatConfiguration = useMemo(
+    () =>
+      chatOptions === undefined || agentTools === undefined
+        ? null
+        : configurationFrom(chatOptions, agentTools, pluginIds ?? []),
+    [chatOptions, agentTools, pluginIds]
+  );
 
   const isChat = key !== null && isChatKey(key);
   const configuration = isChat
@@ -852,8 +857,12 @@ export function useToolConfiguration(
       ? entry.configuration
       : NEUTRAL;
   const ready = isChat
-    ? chatConfiguration !== null
+    ? chatConfiguration !== null && pluginIds !== null
     : key !== null && entry.key === key && pluginIds !== null;
+  const savedAllowed =
+    isChat && pluginIds === null && chatOptions !== undefined
+      ? chatOptions.allowed
+      : undefined;
 
   // An edit in an existing chat updates the store's edits from the store's
   // current state, so edits made back to back each see the one before.
@@ -1024,13 +1033,15 @@ export function useToolConfiguration(
       allowed:
         activeAgent === undefined
           ? null
-          : allowedEntries(
-              configuration.tools,
-              configuration.plugins,
-              configuration.pluginActions,
-              activeAgent,
-              pluginIds ?? []
-            ),
+          : savedAllowed !== undefined
+            ? savedAllowed
+            : allowedEntries(
+                configuration.tools,
+                configuration.plugins,
+                configuration.pluginActions,
+                activeAgent,
+                pluginIds ?? []
+              ),
       ready,
       filters: configuration.filters,
       setFilters,
@@ -1040,6 +1051,7 @@ export function useToolConfiguration(
   }, [
     configuration,
     ready,
+    savedAllowed,
     activeAgent,
     pluginIds,
     setToolState,
