@@ -315,7 +315,6 @@ jobs:
           context: .devcontainer
           dockerfile: .devcontainer/Dockerfile
           build-config: BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          extra-paths: .github/workflows/pr-integration-tests.yml
           image-repo: ${{ env.RUNS_ON_ECR_CACHE }}
 
       - name: Build and push Devcontainer Docker image
@@ -352,11 +351,7 @@ jobs:
         uses: ./.github/actions/prebuilt-image
         with:
           name: devcontainer
-          context: .devcontainer
-          dockerfile: .devcontainer/Dockerfile
-          build-config: BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          extra-paths: .github/workflows/pr-integration-tests.yml
-          image-repo: ${{ env.RUNS_ON_ECR_CACHE }}
+          save-key: ${{ steps.prebuilt.outputs.save-key }}
           save-digest: ${{ steps.build.outputs.digest }}
 
   integration-tests:

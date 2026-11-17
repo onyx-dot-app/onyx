@@ -1,55 +1,59 @@
 name: "Prebuilt Image"
 description: >-
   Finds an image that an earlier run built from the same inputs, so a pull
-  request build can skip. With save-digest set, records the image that this run
-  built instead.
+  request build can skip. With save-key and save-digest set, records the image
+  that this run built instead.
 inputs:
   name:
-    description: "Short image name, used in the cache key"
+    description: "Short image name"
     required: true
   context:
-    description: "Docker build context"
-    required: true
+    description: "Docker build context. Not used when saving."
+    required: false
+    default: ""
   dockerfile:
-    description: "Dockerfile path"
-    required: true
+    description: "Dockerfile path. Not used when saving."
+    required: false
+    default: ""
   build-config:
     description: "Everything else that changes the image: build args, platforms"
     required: false
     default: ""
-  extra-paths:
-    description: "More repo paths that change the image, such as the file that runs the build"
+  image-repo:
+    description: "Repository that holds the image, from runs-on/action. Not used when saving."
     required: false
     default: ""
-  image-repo:
-    description: "Repository that holds the image, from runs-on/action"
-    required: true
+  save-key:
+    description: "The save-key output of the find call"
+    required: false
+    default: ""
   save-digest:
-    description: "Digest of the image this run built. Set it to save the digest instead of finding one."
+    description: "Digest of the image this run built"
     required: false
     default: ""
 outputs:
   digest:
     description: "Digest of a reusable image in image-repo, or empty when the caller must build"
     value: ${{ steps.verify.outputs.digest }}
+  save-key:
+    description: "Cache key to save this run's build under, or empty when the image inputs cannot be hashed"
+    value: ${{ steps.key.outputs.save-key }}
 runs:
   using: "composite"
   steps:
     - name: Hash image inputs
       id: key
+      if: inputs.save-digest == ''
       shell: bash
       env:
         NAME: ${{ inputs.name }}
         CONTEXT: ${{ inputs.context }}
         DOCKERFILE: ${{ inputs.dockerfile }}
         BUILD_CONFIG: ${{ inputs.build-config }}
-        EXTRA_PATHS: ${{ inputs.extra-paths }}
+        RUN_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
       run: |
         set -euo pipefail
         paths=("$DOCKERFILE" "$CONTEXT/.dockerignore")
-        # shellcheck disable=SC2206
-        paths+=($EXTRA_PATHS)
-        reusable=true
         if grep -Eiq -- '--mount=type=bind|^[[:space:]]*(COPY|ADD)[[:space:]].*\[' "$DOCKERFILE"; then
           paths+=("$CONTEXT")
         else
@@ -64,7 +68,7 @@ runs:
               path=$(realpath -m --relative-to=. "$CONTEXT/$source")
               if [ -z "$(git ls-files -- "$path")" ]; then
                 echo "::notice::$path is not tracked by git, so the $NAME image always builds."
-                reusable=false
+                exit 0
               fi
               paths+=("$path")
             done
@@ -75,17 +79,15 @@ runs:
           | sha256sum | cut -c1-32)
         echo "Inputs of the $NAME image:"
         printf '  %s\n' "${paths[@]}"
-        echo "prefix=prebuilt-image-${NAME}-${RUNNER_ARCH}-${hash}-" >> "$GITHUB_OUTPUT"
-        echo "reusable=${reusable}" >> "$GITHUB_OUTPUT"
+        prefix="prebuilt-image-${NAME}-${RUNNER_ARCH}-${hash}-"
+        echo "prefix=${prefix}" >> "$GITHUB_OUTPUT"
+        echo "save-key=${prefix}${RUN_SUFFIX}" >> "$GITHUB_OUTPUT"
 
     # Only GitHub's cache, not RunsOn's S3 cache or the ECR cache: fork pull
     # requests can write those, but cannot write a main branch cache entry.
     # Push runs on main always build, so the newest main entry stays fresh.
     - name: Restore the digest of an earlier build
-      if: >-
-        inputs.save-digest == '' &&
-        github.event_name == 'pull_request' &&
-        steps.key.outputs.reusable == 'true'
+      if: github.event_name == 'pull_request' && steps.key.outputs.prefix != ''
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: .prebuilt-image/${{ inputs.name }}
@@ -110,7 +112,7 @@ runs:
         fi
 
     - name: Write the digest of this build
-      if: inputs.save-digest != '' && steps.key.outputs.reusable == 'true'
+      if: inputs.save-digest != '' && inputs.save-key != ''
       shell: bash
       env:
         NAME: ${{ inputs.name }}
@@ -120,8 +122,8 @@ runs:
         echo "$DIGEST" > ".prebuilt-image/${NAME}/digest"
 
     - name: Save the digest of this build
-      if: inputs.save-digest != '' && steps.key.outputs.reusable == 'true'
+      if: inputs.save-digest != '' && inputs.save-key != ''
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: .prebuilt-image/${{ inputs.name }}
-        key: ${{ steps.key.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
+        key: ${{ inputs.save-key }}

@@ -93,7 +93,6 @@ runs:
           BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           ${{ env.DHI_PYTHON_BUILD_ARGS }}
           platforms=${{ inputs.platforms }}
-        extra-paths: .github/actions/build-model-server-image/action.yml
         image-repo: ${{ inputs.runs-on-ecr-cache }}
 
     - name: Build and push Model Server Docker image
@@ -132,12 +131,5 @@ runs:
       uses: ./.github/actions/prebuilt-image
       with:
         name: model-server
-        context: ./backend
-        dockerfile: ./backend/Dockerfile.model_server
-        build-config: |
-          BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          ${{ env.DHI_PYTHON_BUILD_ARGS }}
-          platforms=${{ inputs.platforms }}
-        extra-paths: .github/actions/build-model-server-image/action.yml
-        image-repo: ${{ inputs.runs-on-ecr-cache }}
+        save-key: ${{ steps.prebuilt.outputs.save-key }}
         save-digest: ${{ steps.build.outputs.digest }}
