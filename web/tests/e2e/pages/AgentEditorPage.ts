@@ -142,6 +142,23 @@ export class AgentEditorPage {
     await expect(this.page.getByText(applies, { exact: true })).toBeVisible();
   }
 
+  /** Opens the setting of an action and checks that a choice is not offered. */
+  async expectSettingNotOffered(
+    actionName: string,
+    setting: ActionSettingLabel
+  ): Promise<void> {
+    const select = this.actionSetting(actionName);
+    await select.scrollIntoViewIfNeeded();
+    await select.click();
+    await expect(
+      this.page.getByRole("option", { name: "Ask", exact: true })
+    ).toBeVisible();
+    await expect(
+      this.page.getByRole("option", { name: setting, exact: true })
+    ).toHaveCount(0);
+    await this.page.keyboard.press("Escape");
+  }
+
   /** Submit the form and return the new agent's id (from the resulting URL). */
   async create(): Promise<number> {
     await this.createButton.click();
