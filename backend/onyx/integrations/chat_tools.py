@@ -23,7 +23,7 @@ from onyx.integrations.call_credentials import resolve_call_credentials
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import ActionSettings, ApprovalMode, EffectivePolicy
-from onyx.integrations.policy import resolve_action_policies, strictest_policies
+from onyx.integrations.policy import resolve_action_policies
 from onyx.integrations.registry import get_kind_handler
 from onyx.tools.interface import Tool
 from onyx.tools.models import PluginLinkConfiguration, ToolApprovalScope
@@ -48,7 +48,7 @@ class IntegrationChatRequest(BaseModel):
 
 def _plugin_settings(
     db_session: Session, user: User, request: IntegrationChatRequest
-) -> list[tuple[UUID, ActionSettings | None]]:
+) -> dict[UUID, ActionSettings | None]:
     """The plugins whose integrations the turn uses, with the settings of
     the agent for each."""
     states = load_user_plugin_states([user.id], db_session)
@@ -56,17 +56,17 @@ def _plugin_settings(
         states = [state for state in states if state.published]
     links = {link.plugin_id: link.action_settings for link in request.plugin_links}
     if request.persona_id == DEFAULT_PERSONA_ID:
-        return [
-            (state.plugin_id, links.get(state.plugin_id))
+        return {
+            state.plugin_id: links.get(state.plugin_id)
             for state in states
             if state.enabled
-        ]
+        }
     visible = {state.plugin_id for state in states}
-    return [
-        (link.plugin_id, link.action_settings)
+    return {
+        link.plugin_id: link.action_settings
         for link in request.plugin_links
         if link.plugin_id in visible
-    ]
+    }
 
 
 def _integration_tools(
@@ -76,10 +76,8 @@ def _integration_tools(
     user: User,
     request: IntegrationChatRequest,
 ) -> list[Tool]:
-    signed_out = user.is_anonymous
-    credentials = resolve_call_credentials(
-        integration, None if signed_out else user, db_session
-    )
+    acting_user = None if user.is_anonymous else user
+    credentials = resolve_call_credentials(integration, acting_user, db_session)
     if isinstance(credentials, ConnectionProblem):
         logger.debug(
             "Skipping integration %s: %s", integration.id, credentials.code.value
@@ -87,38 +85,32 @@ def _integration_tools(
         return []
     actions = list_integration_actions(integration.id, db_session)
     keys = [action.key for action in actions]
-    policies = strictest_policies(
-        [
-            resolve_action_policies(
-                db_session,
-                integration=integration,
-                action_keys=keys,
-                user_id=None if signed_out else user.id,
-                link_settings=link_settings,
-                approval_mode=request.approval_mode,
-                chat_session_id=request.chat_session_id,
-            )
-            for link_settings in settings
-        ]
+    policies = resolve_action_policies(
+        db_session,
+        integration=integration,
+        action_keys=keys,
+        user_id=acting_user.id if acting_user else None,
+        link_settings=settings,
+        approval_mode=request.approval_mode,
+        chat_session_id=request.chat_session_id,
     )
     offered = [
         action
         for action in actions
         if policies[action.key] is not EffectivePolicy.BLOCKED
     ]
-    integration_id = integration.id
 
     def approval_for(action_key: str) -> ToolApprovalScope | None:
         # Ask is left only in an interactive run.
         if policies.get(action_key) is EffectivePolicy.ASK:
             return ToolApprovalScope(
-                integration_id=integration_id, action_id=action_key
+                integration_id=integration.id, action_id=action_key
             )
         return None
 
     ctx = ChatToolContext(
-        user_id=None if signed_out else user.id,
-        user_email=None if signed_out else user.email,
+        user_id=acting_user.id if acting_user else None,
+        user_email=acting_user.email if acting_user else None,
         chat_session_id=request.chat_session_id,
         message_id=request.message_id,
         credentials=credentials,
@@ -137,8 +129,7 @@ def build_integration_chat_tools(
     """The tools of each enabled integration that the turn can use. An
     integration whose credential does not resolve gives no tool. A Blocked
     action gives no tool; an Ask action carries its approval scope."""
-    plugin_settings = _plugin_settings(db_session, user, request)
-    settings_by_plugin = dict(plugin_settings)
+    settings_by_plugin = _plugin_settings(db_session, user, request)
     integrations: dict[int, Integration] = {}
     settings_by_integration: dict[int, list[ActionSettings | None]] = {}
     for plugin_id, integration in list_plugin_integrations(

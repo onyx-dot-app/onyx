@@ -927,9 +927,7 @@ class ChatTurnSetup(BaseModel):
     litellm_additional_headers: dict[str, str] | None = None
     custom_tool_additional_headers: dict[str, str] | None
     mcp_headers: dict[str, str] | None
-    # Who answers an Ask: a person, nobody (a bot run, so Ask is Blocked), or
-    # nobody with no question (evals). Only server-side callers set it; the
-    # public request has no such field.
+    # Only server-side callers set it; the public request has no such field.
     approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE
     # The suspended response that this turn continues after its approvals,
     # under a new stream ID; None for a turn that starts a response.

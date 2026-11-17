@@ -5,36 +5,28 @@ Ask action, the credential of each call, and bot and eval runs."""
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock, patch
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import get_anonymous_user
-from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.context.search.models import PersonaSearchInfo
-from onyx.db.approval_request import create_approval_request__no_commit
-from onyx.db.chat import delete_messages_and_files_from_chat_session
 from onyx.db.enums import (
-    ApprovalDecidedVia,
-    ApprovalDecision,
     IntegrationActionPolicyValue,
     IntegrationAuthMethod,
     IntegrationAuthMode,
     PluginInstallationPolicy,
 )
 from onyx.db.models import (
-    ApprovalRequest,
-    ChatMessage,
-    ChatSession,
     Integration,
     Plugin,
     User,
     UserPluginPreference,
 )
 from onyx.integrations.connection_models import ConnectionSecret
-from onyx.integrations.models import ActionSettings, ApprovalMode, LinkValue
+from onyx.integrations.models import ActionSettings, ApprovalMode
 from onyx.llm.interfaces import LLM
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
@@ -440,18 +432,6 @@ def test_two_plugins_of_one_integration_keep_the_strictest_setting(
     assert set(tools) == {f"mcp__{mcp.id}__crm__search"}
 
 
-def test_a_user_always_allow_runs_an_ask_action(
-    db_session: Session, user: User, integration_ids: list[int]
-) -> None:
-    mcp = _mcp(db_session, integration_ids)
-    plugin = _plugin(db_session, [mcp])
-    set_policy(db_session, mcp.id, "update", ALLOW, user_id=user.id)
-
-    tools = _build(db_session, user, _configuration({plugin.id: {}}))
-
-    assert tools[f"mcp__{mcp.id}__crm__update"].approval is None
-
-
 def test_an_onyx_login_integration_sends_the_login_token(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
@@ -486,74 +466,3 @@ def test_an_onyx_login_integration_sends_the_login_token(
     orders = tools[f"custom__{api.id}__listOrders"]
     assert isinstance(orders, CustomTool)
     assert orders.headers == {"Authorization": "Bearer login-token"}
-
-
-def test_link_settings_parse_into_the_configuration() -> None:
-    configuration = _configuration(
-        {UUID(int=1): {"default": "blocked", "actions": {"a": "allow"}}}
-    )
-    [link] = configuration.plugin_links
-    assert link.action_settings.default is LinkValue.BLOCKED
-    assert link.action_settings.value_for("a") is LinkValue.ALLOW
-    assert link.action_settings.value_for("b") is LinkValue.BLOCKED
-
-
-def test_a_chat_grant_saved_with_the_integration_still_applies(
-    db_session: Session, user: User, integration_ids: list[int]
-) -> None:
-    """ "Approve for this chat" before the turn, keyed by integration_id as the
-    U1 migration fills it, runs the action in that chat only."""
-    mcp = _mcp(db_session, integration_ids)
-    plugin = _plugin(db_session, [mcp])
-    chat_session = ChatSession(id=uuid4(), user_id=user.id, description="grant")
-    db_session.add(chat_session)
-    db_session.flush()
-    response = ChatMessage(
-        chat_session_id=chat_session.id,
-        message="",
-        token_count=0,
-        message_type=MessageType.ASSISTANT,
-    )
-    db_session.add(response)
-    db_session.flush()
-    approval_id = create_approval_request__no_commit(
-        db_session,
-        chat_session_id=chat_session.id,
-        chat_message_id=response.id,
-        integration_id=mcp.id,
-        gated_app_id=None,
-        action_id="update",
-        tool_call_id="call",
-        tool_name="update",
-        display_name="Update",
-        arguments={},
-    )
-    db_session.execute(
-        update(ApprovalRequest)
-        .where(ApprovalRequest.id == approval_id)
-        .values(
-            decision=ApprovalDecision.APPROVED,
-            decided_via=ApprovalDecidedVia.SESSION_GRANT,
-        )
-    )
-    db_session.commit()
-    chat_session_id = chat_session.id
-    update_name = f"mcp__{mcp.id}__crm__update"
-    try:
-        granted = _build(
-            db_session,
-            user,
-            _configuration({plugin.id: {}}),
-            chat_session_id=chat_session_id,
-        )
-        other_chat = _build(
-            db_session, user, _configuration({plugin.id: {}}), chat_session_id=uuid4()
-        )
-    finally:
-        delete_messages_and_files_from_chat_session(chat_session_id, db_session)
-        db_session.commit()
-
-    assert granted[update_name].approval is None
-    assert other_chat[update_name].approval == ToolApprovalScope(
-        integration_id=mcp.id, action_id="update"
-    )

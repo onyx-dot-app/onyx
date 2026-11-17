@@ -44,8 +44,7 @@ _CREDENTIALS = CallCredentials(
 @pytest.fixture(autouse=True)
 def _resolved_credentials() -> Iterator[None]:
     with (
-        patch(f"{MODULE}.resolve_call_credentials_by_id", return_value=_CREDENTIALS),
-        patch(f"{MODULE}.mcp_oauth_provider", return_value=None),
+        patch(f"{MODULE}.resolve_mcp_call_auth", return_value=(_CREDENTIALS, None)),
     ):
         yield
 

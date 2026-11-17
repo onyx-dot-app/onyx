@@ -28,13 +28,16 @@ _MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
 @pytest.fixture(autouse=True)
 def _resolved_credentials() -> Iterator[None]:
     with patch(
-        f"{_MODULE}.resolve_call_credentials_by_id",
-        return_value=CallCredentials(
-            integration_id=1,
-            auth_method=None,
-            connection_id=None,
-            connection_user_id=None,
-            headers={},
+        f"{_MODULE}.resolve_mcp_call_auth",
+        return_value=(
+            CallCredentials(
+                integration_id=1,
+                auth_method=None,
+                connection_id=None,
+                connection_user_id=None,
+                headers={},
+            ),
+            None,
         ),
     ):
         yield
@@ -88,7 +91,7 @@ def test_client_records_missing_credentials_as_auth_error() -> None:
     tool = _mcp_tool()
     with (
         patch(
-            f"{_MODULE}.resolve_call_credentials_by_id",
+            f"{_MODULE}.resolve_mcp_call_auth",
             return_value=ConnectionProblem(
                 code=ConnectionState.NOT_CONNECTED, reason="Connect it."
             ),

@@ -1,6 +1,3 @@
-"""Queries for the action policies of integrations and the plugin links of
-agents. The logic lives in ``onyx.integrations.policy``."""
-
 from collections.abc import Collection
 from uuid import UUID
 

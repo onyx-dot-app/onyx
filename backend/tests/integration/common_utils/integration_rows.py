@@ -1,10 +1,9 @@
 """Integration rows for integration tests, written to the stack's database.
 
-Until the integration routes exist (U6), an MCP server made through the old
-admin routes has no integration, and chat offers no action of it. These
-helpers make the rows that the U1 migration makes for such a server: the
-integration, its actions, a plugin in the Organization library that holds
-it, agent links and policy rows."""
+An MCP server made through the admin MCP routes has no integration, and chat
+offers no action of it. These helpers make the integration of such a server,
+its actions, a plugin in the Organization library that holds it, agent links
+and policy rows."""
 
 from collections.abc import Mapping, Sequence
 from uuid import UUID, uuid4
@@ -21,7 +20,6 @@ from onyx.db.enums import (
 from onyx.db.models import (
     Integration,
     IntegrationActionPolicy,
-    MCPServer,
     Persona__Plugin,
     Plugin,
     Plugin__Integration,
@@ -40,11 +38,9 @@ def add_mcp_integration(mcp_server_id: int, name: str) -> tuple[int, UUID]:
             kind=IntegrationKind.MCP,
             name=name,
             auth_mode=IntegrationAuthMode.NONE,
+            mcp_server_id=mcp_server_id,
         )
         db_session.add(integration)
-        db_session.flush()
-        server = db_session.get_one(MCPServer, mcp_server_id)
-        server.integration_id = integration.id
         db_session.flush()
         sync_integration_actions__no_commit(integration, db_session)
         plugin_id, version_id = uuid4(), uuid4()

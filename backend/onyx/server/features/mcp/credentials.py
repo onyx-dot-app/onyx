@@ -128,20 +128,6 @@ def requires_user_authentication(
     return True
 
 
-def uses_user_managed_headers(
-    auth_type: MCPAuthenticationType | None,
-    auth_performer: MCPAuthenticationPerformer | None,
-    auth_template: MCPAuthTemplate | None,
-) -> bool:
-    """Whether a rejected request identifies credentials the user can replace."""
-    if auth_type == MCPAuthenticationType.API_TOKEN:
-        return auth_performer == MCPAuthenticationPerformer.PER_USER
-    # OAuth rejection can concern a refreshable grant or the Onyx login token.
-    return auth_type in (None, MCPAuthenticationType.NONE) and bool(
-        auth_template and auth_template.required_fields
-    )
-
-
 def get_mcp_auth_template(mcp_server: MCPServer) -> MCPAuthTemplate | None:
     """Read the canonical admin template, including legacy per-user API keys."""
     config = mcp_server.admin_connection_config
@@ -286,19 +272,6 @@ class ResolvedMCPCredentials(BaseModel):
             MCPConnectionStatus.REAUTH_REQUIRED
             if has_credentials
             else MCPConnectionStatus.NOT_CONNECTED
-        )
-
-    def can_authenticate_with_headers(
-        self,
-        additional_headers: Mapping[str, str] | None,
-    ) -> bool:
-        """Apply the same credential gate at tool construction and execution."""
-        if self.can_authenticate():
-            return True
-        # Request headers cannot replace a rejected or unrefreshable grant.
-        return not self.needs_reauth() and any(
-            name.lower() not in DENYLISTED_MCP_HEADERS
-            for name in (additional_headers or {})
         )
 
     def can_authenticate(self) -> bool:

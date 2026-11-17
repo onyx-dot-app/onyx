@@ -88,13 +88,14 @@ success. `/app/plugins/oauth/complete` is only the landing page for a callback
 that no waiting page closed; it checks the saved connection and shows the
 result.
 
-**Default Chat at turn time.** Since U4a, chat reads no tool preference row.
+**Default Chat at turn time.** Chat reads no tool preference row.
 `integrations/chat_tools.py:build_integration_chat_tools` gives the default
 assistant the integrations of each plugin the user runs (visible and enabled in
 `db/plugin_access.py:load_user_plugin_states`), with the settings of its
 persona 0 link. A custom agent uses each plugin of its links that the user can
-see, whatever the user's on/off choice. The old preferences
-(`MCPServerUserPreference`, `ToolUserPreference`) still back the old routes. On the web,
+see, whatever the user's on/off choice. The preferences
+(`MCPServerUserPreference`, `ToolUserPreference`) back only the MCP and tool
+preference routes. On the web,
 `lib/plugins/chat.ts:effectiveChatPreferredToolId` drops an unavailable preferred plugin tool in
 Default Chat when the user's preference turns it off.
 
@@ -149,7 +150,7 @@ that does not exist yet.
    for Default Chat.** `server/features/tool/models.py:CustomToolCreate`
    rejects `enabled=false` and `server/features/tool/api.py:update_tools_status`
    rejects OpenAPI ids. A row stored with `enabled=false`
-   stays off in Default Chat (the U1 migration leaves it out of the persona 0
+   stays off in Default Chat (the upgrade leaves it out of the persona 0
    plugin links) but works on custom agents. Selecting it for Default Chat sets it to true
    (`backend/onyx/db/persona.py:_attach_default_chat_tools__no_commit`). MCP
    and built-in tools stay attached when disabled, and construction skips them.

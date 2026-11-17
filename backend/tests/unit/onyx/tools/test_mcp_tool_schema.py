@@ -257,14 +257,16 @@ class TestMCPToolLLMNames:
                 ),
             ) as mock_call_mcp_tool,
             patch(
-                "onyx.tools.tool_implementations.mcp.mcp_tool."
-                "resolve_call_credentials_by_id",
-                return_value=CallCredentials(
-                    integration_id=1,
-                    auth_method=None,
-                    connection_id=None,
-                    connection_user_id=None,
-                    headers={},
+                "onyx.tools.tool_implementations.mcp.mcp_tool.resolve_mcp_call_auth",
+                return_value=(
+                    CallCredentials(
+                        integration_id=1,
+                        auth_method=None,
+                        connection_id=None,
+                        connection_user_id=None,
+                        headers={},
+                    ),
+                    None,
                 ),
             ),
         ):

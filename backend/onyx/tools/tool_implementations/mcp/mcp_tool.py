@@ -9,8 +9,7 @@ from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import MCPTransport
 from onyx.integrations.call_credentials import (
     mark_api_key_rejected,
-    mcp_oauth_provider,
-    resolve_call_credentials_by_id,
+    resolve_mcp_call_auth,
 )
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.models import CallCredentials
@@ -130,7 +129,6 @@ class MCPTool(Tool):
 
     @property
     def id(self) -> int | None:
-        # An integration action has no tool row.
         return None
 
     @property
@@ -206,8 +204,8 @@ class MCPTool(Tool):
                     self._name,
                     denylisted,
                 )
-            resolved = resolve_call_credentials_by_id(
-                self._integration_id, self._acting_user_id
+            resolved = resolve_mcp_call_auth(
+                self._integration_id, self._acting_user_id, self._transport
             )
             if isinstance(resolved, ConnectionProblem):
                 logger.warning(
@@ -220,7 +218,7 @@ class MCPTool(Tool):
                     f"The {self._name} tool from {self._integration_name} cannot "
                     f"run: {resolved.reason}"
                 )
-            credentials = resolved
+            credentials, auth = resolved
             headers = merge_mcp_headers(request_headers, credentials.headers)
 
             tool_result = call_mcp_tool(
@@ -229,7 +227,7 @@ class MCPTool(Tool):
                 invocation.arguments,
                 connection_headers=headers,
                 transport=self._transport or MCPTransport.STREAMABLE_HTTP,
-                auth=mcp_oauth_provider(credentials, self._transport),
+                auth=auth,
                 cancellation=invocation.cancellation,
             )
 

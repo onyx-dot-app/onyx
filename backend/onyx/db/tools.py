@@ -68,9 +68,7 @@ def upsert_tool_user_preference__no_commit(
 def capture_persona_tool_configuration(
     persona: Persona, db_session: Session
 ) -> PersonaToolConfiguration:
-    """Copy loaded configuration; the caller owns the session and transaction.
-    The old MCP and OpenAPI tool rows of the agent are not copied: chat builds
-    integration actions from the plugin links."""
+    """Copies built-in tools and plugin links; the caller owns the session."""
     return PersonaToolConfiguration(
         persona_id=persona.id,
         persona_name=persona.name,

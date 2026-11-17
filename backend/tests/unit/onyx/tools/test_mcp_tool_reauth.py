@@ -98,8 +98,7 @@ def test_only_a_rejected_call_reports_the_credential(
 ) -> None:
     credentials = _credentials(method)
     with (
-        patch(f"{MODULE}.resolve_call_credentials_by_id", return_value=credentials),
-        patch(f"{MODULE}.mcp_oauth_provider", return_value=None),
+        patch(f"{MODULE}.resolve_mcp_call_auth", return_value=(credentials, None)),
         patch(f"{MODULE}.call_mcp_tool", side_effect=error),
         patch(f"{MODULE}.mark_api_key_rejected") as mark,
         patch(f"{MODULE}.record_mcp_client_tool_outcome") as record_outcome,
@@ -119,10 +118,9 @@ def test_a_call_sends_the_stored_headers_after_the_request_headers() -> None:
     call = MagicMock()
     with (
         patch(
-            f"{MODULE}.resolve_call_credentials_by_id",
-            return_value=_credentials(IntegrationAuthMethod.API_KEY),
+            f"{MODULE}.resolve_mcp_call_auth",
+            return_value=(_credentials(IntegrationAuthMethod.API_KEY), None),
         ) as resolve,
-        patch(f"{MODULE}.mcp_oauth_provider", return_value=None),
         patch(f"{MODULE}.call_mcp_tool", call),
         patch(f"{MODULE}.record_mcp_client_tool_outcome"),
     ):
@@ -139,7 +137,7 @@ def test_a_call_sends_the_stored_headers_after_the_request_headers() -> None:
 def test_a_call_whose_credential_no_longer_resolves_does_not_run() -> None:
     with (
         patch(
-            f"{MODULE}.resolve_call_credentials_by_id",
+            f"{MODULE}.resolve_mcp_call_auth",
             return_value=ConnectionProblem(
                 code=ConnectionState.NOT_CONNECTED,
                 reason="Connect your test account to use it.",

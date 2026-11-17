@@ -85,7 +85,7 @@ chat/presentation.py:ResponsePresenter       tool events -> chat/renderer.py:Too
 **Captured configuration.** `db/tools.py:capture_persona_tool_configuration`
 copies the agent's built-in `Tool` rows into frozen `ToolConfiguration` models,
 and its `persona__plugin` rows into `PluginLinkConfiguration` models (plugin id
-and parsed `action_settings`), before the run starts. The old MCP and OpenAPI
+and parsed `action_settings`), before the run starts. The MCP and OpenAPI
 `Tool` rows of the agent are not copied. `construct_tools` opens its own short
 DB session, so no session stays open for a turn that can last minutes.
 

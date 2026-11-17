@@ -121,7 +121,6 @@ class CustomTool(Tool):
 
     @property
     def id(self) -> int | None:
-        # An integration action has no tool row.
         return None
 
     @property
