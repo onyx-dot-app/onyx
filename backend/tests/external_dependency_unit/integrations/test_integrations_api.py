@@ -40,7 +40,11 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.persona import upsert_persona
-from onyx.db.plugin import lock_plugin, publish_or_request_review__no_commit
+from onyx.db.plugin import (
+    lock_plugin,
+    publish_or_request_review__no_commit,
+    set_plugin_preferences__no_commit,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import ConnectionSecret
@@ -65,6 +69,7 @@ from onyx.server.features.integrations.models import (
     OpenApiConfigInput,
     PresetConfigInput,
 )
+from onyx.server.features.persona import api as persona_api
 from onyx.server.features.tool import api as tool_api
 from onyx.server.features.tool.models import (
     CustomToolCreate,
@@ -704,6 +709,27 @@ def test_member_list_detail_connection_and_grants(
     assert error.value.status_code == 403
 
 
+def test_member_plugin_refs_carry_the_user_choice(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    plugin_id = detail.plugins[0].plugin_id
+
+    for enabled in (False, True):
+        set_plugin_preferences__no_commit(member.id, [plugin_id], enabled, db_session)
+        db_session.commit()
+        listed = {
+            view.id: view
+            for view in api.list_integrations_for_member(member, db_session)
+        }
+        assert [(ref.plugin_id, ref.enabled) for ref in listed[detail.id].plugins] == [
+            (plugin_id, enabled)
+        ]
+        member_view = api.get_integration_for_member(detail.id, member, db_session)
+        assert [ref.enabled for ref in member_view.plugins] == [enabled]
+
+
 def test_member_cannot_reach_a_private_integration(
     db_session: Session, scoped: User, member: User, created: Created
 ) -> None:
@@ -816,6 +842,18 @@ def test_persona_plugins_and_legacy_tool_ids(
         for link in list_persona_plugin_links(db_session, persona_id)
     }
     assert links == {mcp_plugin.id: {"actions": {"bye": "blocked"}}}
+
+    snapshot = persona_api.get_persona(persona_id, admin, db_session)
+    assert [
+        (plugin.plugin_id, plugin.plugin_name, plugin.action_settings)
+        for plugin in snapshot.plugins
+    ] == [
+        (
+            mcp_plugin.id,
+            mcp_plugin.name,
+            ActionSettings(actions={"bye": LinkValue.BLOCKED}),
+        )
+    ]
 
     # None keeps the links.
     _persona(db_session, admin, tool_ids=[], plugin_links=None, persona_id=persona_id)

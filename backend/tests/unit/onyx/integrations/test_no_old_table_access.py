@@ -20,9 +20,6 @@ ALLOWED_FILES = {
     # An approval row keeps the gated_app id of its integration, which the
     # previous release reads after a rollback.
     BACKEND / "onyx" / "db" / "approval_request.py": "rollback key",
-    # An email change keeps the old MCP rows bound to the user, which the
-    # previous release reads after a rollback.
-    BACKEND / "onyx" / "db" / "users.py": "rollback rows",
     # A group delete removes the group's MCP server rows: their foreign key
     # has no cascade.
     BACKEND / "ee" / "onyx" / "db" / "user_group.py": "group delete",

@@ -199,8 +199,10 @@ def test_user_response_projects_only_clean_service_origins(
     ).model_dump()
 
     assert response["service_urls"] == origins
+    assert response["integration_id"] == 7
     assert set(response) == {
         "id",
+        "integration_id",
         "name",
         "app_type",
         "credential_keys",
@@ -215,6 +217,7 @@ def test_user_response_projects_only_clean_service_origins(
 def test_user_response_service_origins_default_to_empty() -> None:
     response = ExternalAppUserResponse(
         id=1,
+        integration_id=1,
         name="Test App",
         app_type=ExternalAppType.CUSTOM,
         credential_keys=[],

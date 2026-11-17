@@ -107,6 +107,7 @@ def _to_user_response(
 
     return ExternalAppUserResponse(
         id=app.id,
+        integration_id=integration.id,
         name=integration.name,
         app_type=app.app_type,
         credential_keys=required_keys,
