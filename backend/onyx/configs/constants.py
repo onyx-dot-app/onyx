@@ -212,6 +212,11 @@ PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds
 # task (e.g. a Redis restart without persistence), so the reaper fails it.
 PERMISSION_SYNC_LOST_TASK_GRACE = 10 * 60  # seconds
 
+# Celery drops a user-started export task that waited longer than this. The
+# hourly export cleanup fails its job once the expiry and the grace have passed.
+USER_EXPORT_TASK_EXPIRES = 60 * 60  # seconds
+USER_JOB_LOST_TASK_GRACE = 5 * 60  # seconds
+
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
 

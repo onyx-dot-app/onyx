@@ -1,12 +1,144 @@
-from datetime import datetime
+from collections.abc import Collection
+from datetime import datetime, timedelta
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import and_, desc, func, or_, select, update
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import delete
+from sqlalchemy.sql import ColumnElement, delete
 
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.models import TaskQueueState, TaskStatus
+
+
+def claim_task_with_id(db_session: Session, task_id: str) -> bool:
+    """Only one worker can claim a pending job. Terminal jobs stay terminal."""
+    claimed = db_session.scalar(
+        update(TaskQueueState)
+        .where(
+            TaskQueueState.task_id == task_id,
+            TaskQueueState.status == TaskStatus.PENDING,
+        )
+        .values(status=TaskStatus.STARTED, start_time=func.now())
+        .returning(TaskQueueState.id)
+    )
+    db_session.commit()
+    return claimed is not None
+
+
+def get_started_task_for_update(
+    db_session: Session, task_id: str
+) -> TaskQueueState | None:
+    return db_session.scalar(
+        select(TaskQueueState)
+        .where(
+            TaskQueueState.task_id == task_id,
+            TaskQueueState.status == TaskStatus.STARTED,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
+def fail_task_with_id(
+    db_session: Session, task_id: str, current_status: TaskStatus
+) -> None:
+    """Fails the job only if it is still in `current_status`, so a job that
+    another process moved on keeps its state."""
+    db_session.rollback()
+    db_session.execute(
+        update(TaskQueueState)
+        .where(
+            TaskQueueState.task_id == task_id,
+            TaskQueueState.status == current_status,
+        )
+        .values(status=TaskStatus.FAILURE, start_time=func.now())
+    )
+    db_session.commit()
+
+
+def is_task_started(db_session: Session, task_id: str) -> bool:
+    return (
+        db_session.scalar(
+            select(TaskQueueState.id).where(
+                TaskQueueState.task_id == task_id,
+                TaskQueueState.status == TaskStatus.STARTED,
+            )
+        )
+        is not None
+    )
+
+
+def _matching_tasks(task_name_prefix: str) -> ColumnElement[bool]:
+    return TaskQueueState.task_name.startswith(f"{task_name_prefix}_", autoescape=True)
+
+
+def get_expired_failed_task_ids(
+    db_session: Session, task_name_prefix: str
+) -> list[str]:
+    """Failures older than a day, which `cleanup_stale_tasks` can purge."""
+    return list(
+        db_session.scalars(
+            select(TaskQueueState.task_id).where(
+                _matching_tasks(task_name_prefix),
+                TaskQueueState.status == TaskStatus.FAILURE,
+                func.coalesce(TaskQueueState.start_time, TaskQueueState.register_time)
+                < func.now() - timedelta(days=1),
+            )
+        )
+    )
+
+
+def cleanup_stale_tasks(
+    db_session: Session,
+    task_name_prefix: str,
+    pending_timeout: int,
+    started_timeout: int,
+    expired_failed_task_ids: Collection[str],
+) -> None:
+    """Purges successes and the given expired failures. The caller removes the
+    output of each failure first, because the failure row hides that output."""
+    matching = _matching_tasks(task_name_prefix)
+    db_session.execute(
+        delete(TaskQueueState).where(
+            matching,
+            or_(
+                TaskQueueState.status == TaskStatus.SUCCESS,
+                and_(
+                    TaskQueueState.status == TaskStatus.FAILURE,
+                    TaskQueueState.task_id.in_(expired_failed_task_ids),
+                ),
+            ),
+        )
+    )
+    # A worker holds its row lock while it publishes, so skip locked rows.
+    stale_ids = db_session.scalars(
+        select(TaskQueueState.id)
+        .where(
+            matching,
+            or_(
+                and_(
+                    TaskQueueState.status == TaskStatus.PENDING,
+                    TaskQueueState.register_time
+                    < func.now() - timedelta(seconds=pending_timeout),
+                ),
+                and_(
+                    TaskQueueState.status == TaskStatus.STARTED,
+                    func.coalesce(
+                        TaskQueueState.start_time, TaskQueueState.register_time
+                    )
+                    < func.now() - timedelta(seconds=started_timeout),
+                ),
+            ),
+        )
+        .with_for_update(skip_locked=True)
+    ).all()
+    if stale_ids:
+        db_session.execute(
+            update(TaskQueueState)
+            .where(TaskQueueState.id.in_(stale_ids))
+            .values(status=TaskStatus.FAILURE, start_time=func.now())
+        )
+    db_session.commit()
 
 
 def get_latest_task(
@@ -90,31 +222,6 @@ def get_all_tasks_with_prefix(
             )
         )
     )
-
-
-def mark_task_as_started_with_id(
-    db_session: Session,
-    task_id: str,
-) -> None:
-    task = get_task_with_id(db_session=db_session, task_id=task_id)
-    if not task:
-        raise RuntimeError(f"A task with the task-id {task_id=} does not exist")
-
-    task.status = TaskStatus.STARTED
-    db_session.commit()
-
-
-def mark_task_as_finished_with_id(
-    db_session: Session,
-    task_id: str,
-    success: bool = True,
-) -> None:
-    task = get_task_with_id(db_session=db_session, task_id=task_id)
-    if not task:
-        raise RuntimeError(f"A task with the task-id {task_id=} does not exist")
-
-    task.status = TaskStatus.SUCCESS if success else TaskStatus.FAILURE
-    db_session.commit()
 
 
 def mark_task_start(
