@@ -97,7 +97,7 @@ export function RetrievalBody({
         ))}
 
       {showResults && !compact && (
-        <Text as="p" font="secondary-body" color="text-03">
+        <Text as="p" font="secondary-action" color="text-03">
           {t("internalSearch.read.label")}
         </Text>
       )}

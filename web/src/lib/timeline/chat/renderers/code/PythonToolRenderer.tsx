@@ -100,7 +100,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
   // Shared content for all states - used by both FULL and compact modes
   const content = (
-    <div className="flex flex-col mb-1 space-y-2">
+    <div className="flex flex-col space-y-2">
       {/* Loading indicator when streaming or executing */}
       {(isStreaming || isExecuting) && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
