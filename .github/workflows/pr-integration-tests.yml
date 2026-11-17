@@ -344,7 +344,7 @@ jobs:
           # per-run tags accumulated on a single ECR image digest until they
           # hit the 1000-tags-per-image cap. Downstream jobs pull
           # <repo>@<digest> via this job's `digest` output instead.
-          outputs: type=image,name=${{ env.RUNS_ON_ECR_CACHE }},push=true,push-by-digest=true
+          outputs: type=image,name=${{ env.RUNS_ON_ECR_CACHE }},push=true,push-by-digest=true,compression=gzip,compression-level=1
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           # Attestations attach as ECR referrers to the image digest, which is
@@ -359,7 +359,7 @@ jobs:
             type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-devcontainer:latest
           # Bound cache tags per architecture, even when many PRs build the same digest.
           cache-to: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-devcontainer-cache-${{ runner.arch }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-devcontainer-cache-${{ runner.arch }},mode=max,compression=gzip,compression-level=1
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
       - name: Save the Devcontainer image digest
