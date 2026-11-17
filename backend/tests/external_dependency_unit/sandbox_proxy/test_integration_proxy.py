@@ -40,9 +40,11 @@ from onyx.db.models import (
     User,
     UserPluginPreference,
 )
+from onyx.db.scheduled_task import get_scheduled_task_id_for_session
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.integrations.connection_models import ConnectionSecret
 from onyx.integrations.craft import list_task_plugin_views
+from onyx.integrations.models import LinkValue
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import (
     CredentialInjectionDispatcher,
@@ -624,3 +626,72 @@ def test_the_task_catalog_locks_a_task_allow_that_the_policy_ignores(
     }
     assert locked[(open_mcp.id, "update")] is False
     assert locked[(no_always_allow.id, "update")] is True
+
+
+def test_a_scheduled_session_config_lists_the_task_plugins_the_owner_turned_off(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
+    other = _mcp(db_session, created, f"https://{_host()}/mcp")
+    plugin = _run(db_session, [mcp])
+    _run(db_session, [other])
+    db_session.add(
+        UserPluginPreference(user_id=user.id, plugin_id=plugin.id, enabled=False)
+    )
+    db_session.commit()
+    ctx = _session_ctx(db_session, user)
+    task = _task_run(
+        db_session,
+        user,
+        ctx.session_id,
+        {plugin.id: {"actions": {"update": "blocked"}}},
+    )
+
+    interactive = {
+        config.integration_id: config.disabled_tools
+        for config in resolve_craft_mcp_servers(db_session, user)
+    }
+    scheduled = {
+        config.integration_id: config.disabled_tools
+        for config in resolve_craft_mcp_servers(
+            db_session,
+            user,
+            get_scheduled_task_id_for_session(db_session, ctx.session_id),
+        )
+    }
+
+    assert mcp.id not in interactive
+    assert interactive[other.id] == ()
+    # The task settings decide the tools, as in the proxy.
+    assert scheduled[mcp.id] == ("update",)
+    assert scheduled[other.id] == ("search", "update")
+    assert get_scheduled_task_id_for_session(db_session, ctx.session_id) == task.id
+
+
+def test_the_task_catalog_keeps_a_plugin_with_no_enabled_integration(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
+    plugin = _run(db_session, [mcp])
+    ctx = _session_ctx(db_session, user)
+    task = _task_run(
+        db_session,
+        user,
+        ctx.session_id,
+        {plugin.id: {"actions": {"update": "allow", "removed": "allow"}}},
+    )
+    mcp.enabled = False
+    db_session.commit()
+
+    views = {
+        view.plugin_id: view
+        for view in list_task_plugin_views(db_session, user, task.id)
+    }
+
+    assert views[plugin.id].enabled
+    assert views[plugin.id].integrations == []
+    # A key that no integration has any more is left out, so a save that
+    # sends the settings back passes the action check.
+    settings = views[plugin.id].action_settings
+    assert settings is not None
+    assert settings.actions == {"update": LinkValue.ALLOW}

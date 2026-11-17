@@ -248,7 +248,7 @@ def test_openapi_match_parameters_inside_a_segment_and_concrete_paths_first(
     )
 
     assert matched is not None
-    assert [m.action_key for m in matched] == expected
+    assert [m.action_key for m in matched.actions] == expected
 
 
 METHODS_SPEC: dict[str, Any] = {

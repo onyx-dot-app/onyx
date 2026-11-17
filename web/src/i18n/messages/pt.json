@@ -15909,6 +15909,7 @@
       "needsSignIn": "{name} exige login.",
       "taskPolicyCounts": "{allow} permitir · {ask} perguntar · {blocked} bloqueadas",
       "actionSetting": "Configuração de {action}",
+      "lockedAllow": "As configurações do espaço de trabalho se aplicam a esta ação, então Permitir não tem efeito.",
       "value": {
         "inherit": "Usar a configuração da integração ({policy})",
         "allow": "Permitir",

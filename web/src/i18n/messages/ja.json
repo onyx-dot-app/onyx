@@ -15909,6 +15909,7 @@
       "needsSignIn": "{name} にはサインインが必要です。",
       "taskPolicyCounts": "許可 {allow} · 確認 {ask} · ブロック {blocked}",
       "actionSetting": "{action} の設定",
+      "lockedAllow": "このアクションにはワークスペースの設定が適用されるため、許可は効果がありません。",
       "value": {
         "inherit": "連携の設定を使用 ({policy})",
         "allow": "許可",

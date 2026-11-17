@@ -137,6 +137,55 @@ it("keeps the stored settings of an existing task", async () => {
   ]);
 });
 
+it("turning a plugin off and on again keeps its action settings", async () => {
+  const user = setupUser();
+  mockData = [
+    pluginView({
+      enabled: true,
+      action_settings: { default: "ask", actions: { search: "allow" } },
+    }),
+  ];
+  render(<Form taskId="task-1" />);
+  const toggle = screen.getByRole("switch", {
+    name: "Enable Linear for this task",
+  });
+  await user.click(toggle);
+  await user.click(toggle);
+  await user.click(screen.getByRole("button", { name: "Save task" }));
+  expect(mockSave).toHaveBeenLastCalledWith([
+    {
+      plugin_id: "plugin-1",
+      action_settings: { default: "ask", actions: { search: "allow" } },
+    },
+  ]);
+});
+
+it("does not offer Allow for a locked action", async () => {
+  const user = setupUser();
+  mockData = [
+    pluginView({
+      integrations: [
+        {
+          ...LINEAR_MCP,
+          actions: LINEAR_MCP.actions.map((action) => ({
+            ...action,
+            locked: action.key === "create",
+          })),
+        },
+      ],
+    }),
+  ];
+  render(<Form />);
+  await user.click(screen.getByRole("button", { name: "Manage actions" }));
+  await user.click(
+    screen.getByRole("combobox", { name: "Setting for Create issue" })
+  );
+  expect(screen.getByRole("option", { name: "Allow" })).toHaveAttribute(
+    "aria-disabled",
+    "true"
+  );
+});
+
 it("counts a locked task Allow with the integration policy", () => {
   mockData = [
     pluginView({

@@ -15909,6 +15909,7 @@
       "needsSignIn": "{name}에 로그인해야 합니다.",
       "taskPolicyCounts": "허용 {allow} · 확인 {ask} · 차단 {blocked}",
       "actionSetting": "{action} 설정",
+      "lockedAllow": "이 작업에는 워크스페이스 설정이 적용되므로 허용은 효과가 없습니다.",
       "value": {
         "inherit": "통합 설정 사용 ({policy})",
         "allow": "허용",

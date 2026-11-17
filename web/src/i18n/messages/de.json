@@ -15909,6 +15909,7 @@
       "needsSignIn": "{name} erfordert eine Anmeldung.",
       "taskPolicyCounts": "{allow} erlauben · {ask} fragen · {blocked} blockiert",
       "actionSetting": "Einstellung für {action}",
+      "lockedAllow": "Für diese Aktion gelten die Arbeitsbereichseinstellungen, daher hat Erlauben keine Wirkung.",
       "value": {
         "inherit": "Integrationseinstellung verwenden ({policy})",
         "allow": "Erlauben",

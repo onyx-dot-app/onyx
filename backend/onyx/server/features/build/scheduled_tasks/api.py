@@ -46,8 +46,9 @@ from onyx.db.scheduled_task import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.craft import TaskPluginView, list_task_plugin_views
+from onyx.integrations.craft import list_task_plugin_views
 from onyx.integrations.policy import parse_action_settings
+from onyx.server.features.build.models import TaskPluginView
 from onyx.server.features.build.scheduled_tasks.schedule import (
     EDITOR_PAYLOAD_MODELS,
     EditorMode,

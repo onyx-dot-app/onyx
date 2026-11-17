@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
 import { Text, useCreateModal } from "@opal/components";
@@ -79,6 +79,9 @@ interface PluginGroupsProps {
 function PluginGroups({ plugins, value, onChange }: PluginGroupsProps) {
   const t = useTranslations("craft.actionPolicies");
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The settings of a plugin the user turned off, so turning it on again
+  // restores them.
+  const turnedOff = useRef<Record<string, TaskActionSettings>>({});
   const actionsModal = useCreateModal();
   if (!plugins) return <Text font="secondary-body">{t("loading")}</Text>;
   if (plugins.length === 0)
@@ -107,15 +110,22 @@ function PluginGroups({ plugins, value, onChange }: PluginGroupsProps) {
                 setEditingId(plugin.plugin_id);
                 actionsModal.toggle(true);
               }}
-              onToggle={(enabled) =>
-                enabled
-                  ? save(plugin.plugin_id, link?.action_settings ?? INHERIT_ALL)
-                  : onChange(
-                      value.filter(
-                        (item) => item.plugin_id !== plugin.plugin_id
-                      )
-                    )
-              }
+              onToggle={(enabled) => {
+                if (enabled) {
+                  save(
+                    plugin.plugin_id,
+                    link?.action_settings ??
+                      turnedOff.current[plugin.plugin_id] ??
+                      INHERIT_ALL
+                  );
+                  return;
+                }
+                if (link)
+                  turnedOff.current[plugin.plugin_id] = link.action_settings;
+                onChange(
+                  value.filter((item) => item.plugin_id !== plugin.plugin_id)
+                );
+              }}
             />
           );
         })}

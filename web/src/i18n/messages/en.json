@@ -15909,6 +15909,7 @@
       "needsSignIn": "{name} needs sign-in.",
       "taskPolicyCounts": "{allow} allow · {ask} ask · {blocked} blocked",
       "actionSetting": "Setting for {action}",
+      "lockedAllow": "Workspace settings apply to this action, so Allow has no effect.",
       "value": {
         "inherit": "Use integration setting ({policy})",
         "allow": "Allow",

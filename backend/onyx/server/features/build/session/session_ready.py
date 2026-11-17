@@ -23,6 +23,7 @@ from onyx.db.sandbox import (
     get_sandbox_by_user_id,
     update_sandbox_heartbeat,
 )
+from onyx.db.scheduled_task import get_scheduled_task_id_for_session
 from onyx.integrations.craft import list_connectable_apps
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
@@ -118,7 +119,9 @@ def ensure_session_ready(
     connectable_apps_section = build_connectable_apps_list(
         list_connectable_apps(db_session, user)
     )
-    mcp_servers = resolve_craft_mcp_servers(db_session, user)
+    mcp_servers = resolve_craft_mcp_servers(
+        db_session, user, get_scheduled_task_id_for_session(db_session, session_id)
+    )
     nextjs_port = session.nextjs_port
     sandbox_skills_hash = sandbox.skills_hash
     sandbox_mcp_config_hash = sandbox.mcp_config_hash

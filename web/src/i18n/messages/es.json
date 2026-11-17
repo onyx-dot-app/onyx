@@ -15909,6 +15909,7 @@
       "needsSignIn": "{name} requiere iniciar sesión.",
       "taskPolicyCounts": "{allow} permitir · {ask} preguntar · {blocked} bloqueadas",
       "actionSetting": "Configuración de {action}",
+      "lockedAllow": "La configuración del espacio de trabajo se aplica a esta acción, por lo que Permitir no tiene efecto.",
       "value": {
         "inherit": "Usar la configuración de la integración ({policy})",
         "allow": "Permitir",

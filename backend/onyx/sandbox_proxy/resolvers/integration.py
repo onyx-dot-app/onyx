@@ -32,6 +32,7 @@ from onyx.sandbox_proxy.usable_integrations import (
 )
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -106,6 +107,17 @@ class IntegrationResolver(CredentialResolver):
         )
 
     def _resolve_for_target(
+        self, target: GatedTarget, sandbox: ResolvedSandbox
+    ) -> dict[str, str]:
+        # A refresh reads the tenant from the context: the cache lock names and
+        # the token storage of an MCP sign-in.
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(sandbox.tenant_id)
+        try:
+            return self._resolve_in_tenant(target, sandbox)
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    def _resolve_in_tenant(
         self, target: GatedTarget, sandbox: ResolvedSandbox
     ) -> dict[str, str]:
         with get_session_with_tenant(tenant_id=sandbox.tenant_id) as db:

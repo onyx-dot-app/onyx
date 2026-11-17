@@ -7,7 +7,8 @@ from uuid import UUID
 from cachetools import TTLCache
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.integrations.craft import UsableIntegrationIds, load_usable_integration_ids
+from onyx.integrations.craft import load_usable_integration_ids
+from onyx.integrations.models import UsableIntegrationIds
 
 CACHE_TTL_S = 30.0
 

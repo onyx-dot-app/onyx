@@ -135,7 +135,15 @@ export default function TaskAppActionsModal({
                                 policy: t(`value.${action.integration_policy}`),
                               }),
                             },
-                            { value: "allow", title: t("value.allow") },
+                            {
+                              value: "allow",
+                              title: t("value.allow"),
+                              // The run keeps the integration policy.
+                              disabled: action.locked,
+                              tooltip: action.locked
+                                ? t("lockedAllow")
+                                : undefined,
+                            },
                             { value: "ask", title: t("value.ask") },
                             { value: "blocked", title: t("value.blocked") },
                           ]}
