@@ -69,6 +69,10 @@ def test_top_level_search_filters_move_into_the_tool_options() -> None:
             },
             "not in both",
         ),
+        (
+            {"internal_search_filters": {}, "tool_options": True},
+            "tool_options must be an object",
+        ),
     ],
 )
 def test_invalid_preference_contract_is_rejected(
