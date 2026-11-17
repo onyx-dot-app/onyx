@@ -1,4 +1,6 @@
+import copy
 import csv
+import itertools
 import json
 import uuid
 from collections.abc import Callable
@@ -83,6 +85,9 @@ def validate_custom_tool_url(url: str, *, resolve_dns: bool = True) -> None:
     )
 
 
+_OPERATION_POSITION_KEY = "x-onyx-operation-position"
+
+
 class CustomTool(Tool):
     def __init__(
         self,
@@ -92,9 +97,12 @@ class CustomTool(Tool):
         custom_headers: list[HeaderItemDict] | None = None,
         user_oauth_token: str | None = None,
         approval: ToolApprovalScope | None = None,
+        action_key: str | None = None,
     ) -> None:
 
         self.approval = approval
+        # The operationId before the schema placeholders were substituted.
+        self.action_key = action_key or method_spec.raw_name
         self._base_url = base_url
         self._method_spec = method_spec
         self._user_oauth_token = user_oauth_token
@@ -371,7 +379,14 @@ def build_custom_tools_from_openapi_schema_and_headers(
     """
     action_keys = [spec.raw_name for spec in openapi_to_method_specs(openapi_schema)]
     if dynamic_schema_info:
-        schema_str = json.dumps(openapi_schema)
+        # Mark each operation with its position, so that it keeps its own
+        # action key when two paths render to the same path.
+        marked_schema = copy.deepcopy(openapi_schema)
+        positions = itertools.count()
+        for methods in marked_schema.get("paths", {}).values():
+            for operation in methods.values():
+                operation[_OPERATION_POSITION_KEY] = next(positions)
+        schema_str = json.dumps(marked_schema)
         placeholders = {
             CHAT_SESSION_ID_PLACEHOLDER: dynamic_schema_info.chat_session_id,
             MESSAGE_ID_PLACEHOLDER: dynamic_schema_info.message_id,
@@ -388,14 +403,20 @@ def build_custom_tools_from_openapi_schema_and_headers(
     url = openapi_to_url(openapi_schema)
     method_specs = openapi_to_method_specs(openapi_schema)
 
-    return [
-        CustomTool(
-            id=tool_id,
-            method_spec=method_spec,
-            base_url=url,
-            custom_headers=custom_headers,
-            user_oauth_token=user_oauth_token,
-            approval=approval_for(action_key) if approval_for else None,
+    tools = []
+    for position, method_spec in enumerate(method_specs):
+        action_key = action_keys[
+            method_spec.spec.pop(_OPERATION_POSITION_KEY, position)
+        ]
+        tools.append(
+            CustomTool(
+                id=tool_id,
+                method_spec=method_spec,
+                base_url=url,
+                custom_headers=custom_headers,
+                user_oauth_token=user_oauth_token,
+                approval=approval_for(action_key) if approval_for else None,
+                action_key=action_key,
+            )
         )
-        for method_spec, action_key in zip(method_specs, action_keys, strict=True)
-    ]
+    return tools

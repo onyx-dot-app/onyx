@@ -2,7 +2,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from onyx.db.enums import GatedAppKind
-from onyx.tools.models import ToolApprovalScope
+from onyx.tools.models import DynamicSchemaInfo, ToolApprovalScope
 from onyx.tools.tool_implementations.custom.custom_tool import (
     CustomTool,
     build_custom_tools_from_openapi_schema_and_headers,
@@ -71,3 +71,30 @@ def test_builder_without_approval_for_sets_none() -> None:
         tool_id=4, openapi_schema=SPEC
     )
     assert all(tool.approval is None for tool in tools)
+
+
+def test_builder_keeps_the_action_key_of_the_operation_that_a_rendered_path_keeps() -> (
+    None
+):
+    spec: dict[str, Any] = {
+        **SPEC,
+        "paths": {
+            "/messages/MESSAGE_ID": {
+                "get": {"operationId": "readCurrent", "summary": "Current"}
+            },
+            "/messages/1": {"get": {"operationId": "readFirst", "summary": "First"}},
+        },
+    }
+
+    tools = build_custom_tools_from_openapi_schema_and_headers(
+        tool_id=4,
+        openapi_schema=spec,
+        dynamic_schema_info=DynamicSchemaInfo(chat_session_id=None, message_id=1),
+        approval_for=lambda key: SCOPE.model_copy(update={"action_id": key}),
+    )
+
+    assert [(t.display_name, t.action_key) for t in tools] == [
+        ("readFirst", "readFirst")
+    ]
+    assert tools[0].approval is not None
+    assert tools[0].approval.action_id == "readFirst"

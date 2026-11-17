@@ -1,6 +1,7 @@
 """The ``api`` integration kind, with the DB getters patched."""
 
 import json
+import time
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -248,6 +249,69 @@ def test_openapi_match_parameters_inside_a_segment_and_concrete_paths_first(
 
     assert matched is not None
     assert [m.action_key for m in matched] == expected
+
+
+METHODS_SPEC: dict[str, Any] = {
+    "openapi": "3.0.0",
+    "info": {"title": "Files", "description": "Files API", "version": "1"},
+    "servers": [{"url": "https://api.files.example.com/team%20one"}],
+    "paths": {
+        "/files/mine": {"post": {"operationId": "uploadMine", "summary": "Upload"}},
+        "/files/{id}": _get("getFile", "id"),
+    },
+}
+
+
+@pytest.mark.parametrize(
+    "method,path,expected",
+    [
+        ("GET", "/files/42", ["getFile"]),
+        ("POST", "/files/mine", ["uploadMine"]),
+        # The concrete path wins first. It has no GET, so the request asks.
+        ("GET", "/files/mine", [WHOLE_DOMAIN_ACTION_TYPE]),
+    ],
+)
+def test_openapi_match_picks_the_path_before_the_method_under_an_encoded_server_path(
+    monkeypatch: pytest.MonkeyPatch, method: str, path: str, expected: list[str]
+) -> None:
+    integration = _use_openapi_tool(monkeypatch, METHODS_SPEC)
+
+    matched = HANDLER.match_request(
+        integration,
+        _request(method, f"https://api.files.example.com/team%20one{path}"),
+        DB,
+    )
+
+    assert matched is not None
+    assert [m.action_key for m in matched] == expected
+    if expected == [WHOLE_DOMAIN_ACTION_TYPE]:
+        assert matched[0].default_policy is IntegrationActionPolicyValue.ASK
+
+
+@pytest.mark.parametrize(
+    "template,path,expected",
+    [
+        ("/files/{a}-{b}-{c}.json", "/files/x-y-z.json", True),
+        ("/files/{a}-{b}-{c}.json", "/files/x--z.json", False),
+        ("/files/{a}-{b}", "/files/x-y-z", True),
+        ("/files/v{version}", "/files/v", False),
+        ("/files/{id}", "/files/a/b", False),
+        ("/", "/", True),
+    ],
+)
+def test_openapi_path_matches(template: str, path: str, expected: bool) -> None:
+    assert api_kind._openapi_path_matches(template, path) is expected
+
+
+def test_openapi_path_match_takes_linear_time_on_a_long_segment() -> None:
+    started = time.monotonic()
+
+    matched = api_kind._openapi_path_matches(
+        "/files/{a}-{b}-{c}.json", "/files/" + "-" * 5000
+    )
+
+    assert matched is False
+    assert time.monotonic() - started < 1
 
 
 @pytest.mark.parametrize(
