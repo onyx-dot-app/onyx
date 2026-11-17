@@ -103,7 +103,11 @@ stub batch numbers from the `stub_batches_*` counters on the attempt row. The
 batch, calls the connector's `resolve_targets`, stores the document batch,
 deletes the stub batch, counts it converted and sends the docprocessing task.
 It deletes the stub batch before the send, so a redelivered task sends nothing
-twice. `dispatch_stub_batches` keeps at most `DOCCONVERSION_WINDOW_BATCHES`
+twice. A batch that gives no document is stored empty and sent on too: the
+stored batch is the durable record until docprocessing counts it complete. The
+docprocessing priority follows docfetching's rule
+(`background/indexing/run_docfetching.py:select_docprocessing_priority`), and a FUTURE attempt
+checks it again for each batch. `dispatch_stub_batches` keeps at most `DOCCONVERSION_WINDOW_BATCHES`
 batches in flight. No code sends stub batches yet. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
 local disk inside one docprocessing task, so a large batch is never in memory.
 
