@@ -23,14 +23,13 @@ gains a message or a full re-index rebuilds it.
 
 from collections import deque
 from collections.abc import Callable, Container, Generator, Iterable, Iterator
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Any, TypeVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from babel.core import get_global
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
@@ -584,10 +583,11 @@ def build_event_document(
     )
 
 
-@dataclass
-class AttachmentBudget:
+class AttachmentBudget(BaseModel):
     """What one conversation may still spend on attachments: characters kept
     and download-plus-extraction attempts, successful or not."""
+
+    model_config = ConfigDict(strict=True)
 
     text: int = MAX_ATTACHMENT_TEXT_PER_CONVERSATION
     reads: int = MAX_ATTACHMENT_READS_PER_CONVERSATION

@@ -1,10 +1,10 @@
 """Starting granular capability-check runs: mark the scope RUNNING, then enqueue."""
 
-from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
+from pydantic import BaseModel, ConfigDict, SkipValidation
 from pydantic_core import to_jsonable_python
 from sqlalchemy.orm import Session
 
@@ -254,9 +254,10 @@ def start_capability_checks_for_new_credential(
         db_session.rollback()
 
 
-@dataclass(frozen=True)
-class _PlannedDraft:
-    form_state: FormState[Any]
+class _PlannedDraft(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
+
+    form_state: SkipValidation[FormState[Any]]
     # None for a config-less create form: config-reading checks wait.
     connector_specific_config: dict[str, Any] | None
     checks: list[tuple[CapabilityCheck[Any], DraftCheckState]]

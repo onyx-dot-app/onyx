@@ -18,9 +18,10 @@ import json
 import logging
 import sys
 import time
-from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict, SkipValidation
 
 AUDIT_SCHEMA_VERSION = "1.0"
 
@@ -171,13 +172,14 @@ if _unmapped:
     )
 
 
-@dataclass(frozen=True)
-class AuditActor:
+class AuditActor(BaseModel):
     """Who performed the action; all fields optional. Never a secret —
     ``api_key_id`` is the key's id, never its value."""
 
+    model_config = ConfigDict(strict=True, frozen=True)
+
     user_id: str | None = None
-    email: str | None = None
+    email: SkipValidation[str | None] = None
     api_key_id: str | None = None
     auth_type: str | None = None  # e.g. "password", "oauth", "saml", "api_key"
 

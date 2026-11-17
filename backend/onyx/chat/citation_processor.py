@@ -10,12 +10,10 @@ This module provides a citation processor that can:
 - Maintain a list of cited documents in order of first citation
 """
 
+import dataclasses
 import re
 from bisect import bisect_right
 from collections.abc import Generator, Mapping
-from dataclasses import (
-    dataclass,  # noqa: TID251 - Created while scanning streamed text.
-)
 from typing import TypeAlias
 
 from onyx.chat.models import CitationMode
@@ -74,7 +72,7 @@ def _indent(text: str) -> int:
     return _width(text[: len(text) - len(text.lstrip(" \t"))])
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)  # noqa: TID251 - Created while scanning streamed text.
 class _OpenFence:
     fence: str
     quote_depth: int

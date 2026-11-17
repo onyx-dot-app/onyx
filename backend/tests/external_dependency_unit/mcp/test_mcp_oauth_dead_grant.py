@@ -310,7 +310,7 @@ def test_oauth_reconnect_preserves_status_until_authorization_succeeds(
     db_session.commit()
     start_flow = AsyncMock(
         return_value=api.OAuthAuthorizationRedirect(
-            "https://oauth.example.com/authorize"
+            url="https://oauth.example.com/authorize"
         ),
         side_effect=RuntimeError("Provider unavailable")
         if initialization_fails

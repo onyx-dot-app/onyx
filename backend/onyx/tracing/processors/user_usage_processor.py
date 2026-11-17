@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
+import dataclasses
 import queue
 import threading
 from collections import defaultdict
-from dataclasses import (
-    dataclass,  # noqa: TID251 - Span processing uses dataclasses.replace.
-    replace,
-)
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -51,7 +49,7 @@ _MAX_QUEUE_SIZE = 100_000
 _SHUTDOWN = object()
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)  # noqa: TID251 - Span processing uses dataclasses.replace.
 class _UsageRecord:
     """Everything needed to write one ledger row, captured at span-end while the
     request contextvars are still valid (the drain thread has none)."""

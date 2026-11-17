@@ -391,6 +391,8 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/connectors/salesforce/shelve_stuff/*test_salesforce_shelves.py" = ["S101"]
 # Vendored skill scripts; they run in the sandbox, not in the backend.
 "backend/onyx/skills/builtin/pptx/**" = ["S101"]
+# Vendored sandbox scripts use stdlib dataclasses.
+"backend/onyx/skills/builtin/**" = ["TID251"]
 # Docs site tooling (documentation/scripts, documentation/audit), imported with the
 # docs. format_docs.py is one long line-by-line formatter; leave its shape alone.
 "documentation/**" = ["C901", "PERF401", "ARG001"]
@@ -403,40 +405,6 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # you fix its last finding in that file. An ignore covers new findings of
 # the same code in that file.
 "backend/ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py" = ["DTZ005"] # DTZ005 × 1
-"backend/ee/onyx/server/scim/filtering.py" = ["TID251"] # TID251 × 1
-"backend/ee/onyx/server/scim/patch.py" = ["TID251"] # TID251 × 1
-"backend/onyx/access/models.py" = ["TID251"] # TID251 × 1
-"backend/onyx/auth/jwt.py" = ["TID251"] # TID251 × 1
-"backend/onyx/auth/oauth_refresher.py" = ["TID251"] # TID251 × 1
-"backend/onyx/background/celery/tasks/docprocessing/targeted_reindex_task.py" = ["TID251"] # TID251 × 1
-"backend/onyx/background/indexing/job_client.py" = ["TID251"] # TID251 × 1
-"backend/onyx/connectors/field_policy.py" = ["TID251"] # TID251 × 1
-"backend/onyx/connectors/microsoft_utils/graph_auth.py" = ["TID251"] # TID251 × 1
-"backend/onyx/connectors/outlook/connector.py" = ["TID251"] # TID251 × 1
-"backend/onyx/connectors/salesforce/utils.py" = ["TID251"] # TID251 × 1
-"backend/onyx/connectors/teams/sources.py" = ["TID251"] # TID251 × 1
-"backend/onyx/db/engine/shard_registry.py" = ["TID251"] # TID251 × 1
-"backend/onyx/db/engine/sql_engine.py" = ["TID251"] # TID251 × 1
-"backend/onyx/db/plugin.py" = ["TID251"] # TID251 × 1
-"backend/onyx/db/plugin_access.py" = ["TID251"] # TID251 × 1
-"backend/onyx/db/skill.py" = ["TID251"] # TID251 × 1
-"backend/onyx/document_index/document_metadata.py" = ["TID251"] # TID251 × 1
-"backend/onyx/indexing/port_reembed.py" = ["TID251"] # TID251 × 1
-"backend/onyx/natural_language_processing/search_nlp_models.py" = ["TID251"] # TID251 × 1
-"backend/onyx/server/documents/capability_check_runs.py" = ["TID251"] # TID251 × 1
-"backend/onyx/server/features/build/interactive_turns/state.py" = ["TID251"] # TID251 × 1
-"backend/onyx/server/features/build/sandbox/docker/internal/exec_helpers.py" = ["TID251"] # TID251 × 1
-"backend/onyx/server/features/build/sandbox/opencode/event_bus.py" = ["TID251"] # TID251 × 1
-"backend/onyx/server/features/build/sandbox/serve_transport.py" = ["TID251"] # TID251 × 1
-"backend/onyx/server/features/build/session/llm_config.py" = ["TID251"] # TID251 × 1
-"backend/onyx/server/features/build/session/md_to_docx.py" = ["TID251"] # TID251 × 1
-"backend/onyx/server/features/build/session/sandbox_lifecycle.py" = ["TID251"] # TID251 × 1
-"backend/onyx/server/features/mcp/oauth_flow.py" = ["TID251"] # TID251 × 1
-"backend/onyx/skills/builtin/pptx/scripts/lint.py" = ["TID251"] # TID251 × 1
-"backend/onyx/tools/tool_implementations/open_url/firecrawl.py" = ["TID251"] # TID251 × 1
-"backend/onyx/tracing/provider_config.py" = ["TID251"] # TID251 × 1
-"backend/onyx/utils/audit.py" = ["TID251"] # TID251 × 1
-"backend/onyx/utils/sitemap.py" = ["TID251"] # TID251 × 1
 # Functions above the max-complexity of 20 when C901 was enabled. The trailing
 # number is the highest complexity in that file at the time. Remove an entry
 # once its functions are simplified. NOTE: the ignore is per file, so it also
@@ -463,7 +431,7 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/connectors/github/connector.py" = ["C901"] # 28
 "backend/onyx/connectors/gitlab/connector.py" = ["C901"] # 22
 "backend/onyx/connectors/google_drive/connector.py" = ["C901"] # 22
-"backend/onyx/connectors/google_drive/doc_conversion.py" = ["C901", "TID251"] # 24; TID251 × 1
+"backend/onyx/connectors/google_drive/doc_conversion.py" = ["C901"] # 24
 "backend/onyx/connectors/hubspot/connector.py" = ["C901"] # 23
 "backend/onyx/connectors/notion/connector.py" = ["C901"] # 22
 "backend/onyx/connectors/sharepoint/connector.py" = ["C901"] # 34
@@ -484,11 +452,11 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/server/documents/connector.py" = ["C901"] # 28
 "backend/onyx/server/features/build/interactive_turns/api.py" = ["C901"] # 22
 "backend/onyx/server/features/build/interactive_turns/executor.py" = ["C901"] # 35
-"backend/onyx/server/features/build/sandbox/opencode/serve_client.py" = ["C901", "TID251"] # 56; TID251 × 1
+"backend/onyx/server/features/build/sandbox/opencode/serve_client.py" = ["C901"] # 56
 "backend/onyx/server/features/build/session/streaming.py" = ["C901"] # 24
 "backend/onyx/server/features/mcp/api.py" = ["C901"] # 33
 "backend/onyx/server/manage/users.py" = ["C901"] # 22
-"backend/onyx/server/manage/voice/websocket_api.py" = ["C901", "TID251"] # 29; TID251 × 1
+"backend/onyx/server/manage/voice/websocket_api.py" = ["C901"] # 29
 "backend/onyx/server/query_and_chat/session_loading.py" = ["C901"] # 42
 "backend/onyx/skills/builtin/gmail/gmail_api.py" = ["C901"] # 23
 "backend/onyx/skills/builtin/google-drive/gdrive_api.py" = ["C901"] # 26

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 import requests
+from pydantic import BaseModel, ConfigDict, SkipValidation
 
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.tools.tool_implementations.open_url.models import (
@@ -26,10 +26,11 @@ _DEFAULT_MAX_WORKERS = 5
 _DEFAULT_TIMEOUT_SECONDS = 55  # 10 max urls, 2 max batches
 
 
-@dataclass
-class ExtractedContentFields:
-    text: str
-    title: str
+class ExtractedContentFields(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    text: SkipValidation[str]
+    title: SkipValidation[str]
     published_date: datetime | None
 
 

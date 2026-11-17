@@ -4,9 +4,9 @@ import threading
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import event, pool
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.exc import DBAPIError
@@ -200,14 +200,15 @@ if LOG_POSTGRES_CONN_COUNTS:
         logger.debug("Total connection checkins: %s", checkin_count)
 
 
-@dataclass(frozen=True)
-class EngineProfile:
+class EngineProfile(BaseModel):
     """How the default engine was built, so shard engines can mirror it.
 
     Recorded at ``init_engine`` time because pool sizing, keepalives and SSL settings
     are assembled from several sources and a shard engine that diverged from the
     default would be a subtle production hazard.
     """
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     use_iam: bool
     engine_kwargs: dict[str, Any]

@@ -15,11 +15,11 @@ import threading
 import time
 from abc import abstractmethod
 from collections.abc import Callable, Generator
-from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 import httpx
+from pydantic import BaseModel, ConfigDict
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheLock, CacheLockLostError
@@ -72,10 +72,11 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 LIVE_TEXT_COALESCE_SECONDS = 0.04
 
 
-@dataclass(frozen=True)
-class ServeConnectionInfo:
+class ServeConnectionInfo(BaseModel):
     """Per-sandbox opencode-serve URL + Basic-auth password. Constant for
     the life of the container/pod; cached by ``_ServeMixin``."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     base_url: str
     # ``None`` for legacy sandboxes — bus then runs without auth.

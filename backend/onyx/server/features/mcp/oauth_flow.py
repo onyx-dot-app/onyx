@@ -2,7 +2,6 @@
 
 import asyncio
 import secrets
-from dataclasses import dataclass
 
 import httpx
 from mcp.client.auth import OAuthClientProvider, PKCEParameters
@@ -13,7 +12,7 @@ from mcp.client.auth.utils import (
     handle_protected_resource_response,
 )
 from mcp.shared.auth import OAuthClientInformationFull
-from pydantic import AnyUrl
+from pydantic import AnyUrl, BaseModel, ConfigDict
 
 from onyx.cache.factory import get_cache_backend
 from onyx.db.enums import MCPTransport
@@ -68,13 +67,13 @@ MCP_OAUTH_ATTEMPTS = AuthorizationAttemptStore(
 )
 
 
-@dataclass(frozen=True, slots=True)
-class OAuthAlreadyAuthenticated:
-    pass
+class OAuthAlreadyAuthenticated(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
 
 
-@dataclass(frozen=True, slots=True)
-class OAuthAuthorizationRedirect:
+class OAuthAuthorizationRedirect(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
     url: str
 
 
@@ -287,7 +286,7 @@ def start_known_provider_oauth_flow(
             resource=resource,
         ),
     )
-    return OAuthAuthorizationRedirect(authorization_url)
+    return OAuthAuthorizationRedirect(url=authorization_url)
 
 
 async def _start_auto_discovery_oauth_flow_once(
@@ -386,7 +385,9 @@ async def run_oauth_discovery(
                     )
                 )
                 if authorization is not None:
-                    return OAuthAuthorizationRedirect(authorization.authorization_url)
+                    return OAuthAuthorizationRedirect(
+                        url=authorization.authorization_url
+                    )
             except (ExceptionGroup, OnyxError):
                 raise
             except Exception as error:
@@ -413,7 +414,7 @@ async def run_oauth_discovery(
                 )
             )
             if authorization is not None:
-                return OAuthAuthorizationRedirect(authorization.authorization_url)
+                return OAuthAuthorizationRedirect(url=authorization.authorization_url)
     except TimeoutError as error:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

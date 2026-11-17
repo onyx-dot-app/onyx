@@ -1,11 +1,10 @@
 import io
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime
 from typing import NamedTuple, cast
 from urllib.parse import urlparse, urlunparse
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
@@ -273,9 +272,10 @@ def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
     return urlunparse(parsed_url)
 
 
-@dataclass(frozen=True)
-class _DriveFileRead:
+class _DriveFileRead(BaseModel):
     """One read of a Drive file's content as one user."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     file: GoogleDriveFileType
     ops: GoogleDriveSourceOperations
