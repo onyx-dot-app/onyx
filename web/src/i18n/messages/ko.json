@@ -147,34 +147,6 @@
         "tooltip": "{description}\n이 채팅에서 이 도구를 우선 사용합니다. 에이전트가 도구 없이 답변할 수도 있습니다."
       }
     },
-    "addMcpModal": {
-      "cancelButton": {
-        "label": "취소"
-      },
-      "description": {
-        "placeholder": "이 서버로 팀에서 무엇을 할 수 있나요?",
-        "suffix": "선택 사항",
-        "title": "설명"
-      },
-      "name": {
-        "placeholder": "예: Linear",
-        "required": "서버 이름은 필수입니다",
-        "title": "서버 이름"
-      },
-      "submitButton": {
-        "savingLabel": "저장하는 중..."
-      },
-      "access": {
-        "title": "액세스 제어",
-        "description": "이 MCP를 사용할 수 있는 사용자를 선택하세요.",
-        "groups": {
-          "description": "선택한 사용자 그룹은 이 MCP를 사용할 수 있습니다."
-        }
-      },
-      "defaultChat": {
-        "title": "기본 Onyx 채팅에서 사용 가능"
-      }
-    },
     "addOpenApiModal": {
       "cancelButton": {
         "label": "취소"
@@ -249,123 +221,6 @@
         "title": "*{name}* 연결 해제"
       }
     },
-    "mcpAuthModal": {
-      "additionalAuthParams": {
-        "label": "추가 인증 파라미터(JSON)"
-      },
-      "authType": {
-        "apiToken": {
-          "description": "사용자별 개별 API 키 또는 조직 전체 공유 API 키를 사용합니다."
-        },
-        "none": {
-          "label": "인증 없음",
-          "description": "권장하지 않음"
-        },
-        "oauth": {
-          "description": "각 사용자가 자신의 자격 증명으로 OAuth 인증을 해야 합니다."
-        },
-        "placeholder": "방법 선택",
-        "ptOauth": {
-          "description": "{appName} 인증에 사용된 사용자의 OAuth 액세스 token을 전달합니다."
-        }
-      },
-      "authorizationEndpoint": {
-        "label": "권한 부여 엔드포인트"
-      },
-      "cancelButton": {
-        "label": "취소"
-      },
-      "clientId": {
-        "label": "클라이언트 ID"
-      },
-      "clientSecret": {
-        "label": "클라이언트 시크릿"
-      },
-      "errors": {
-        "additionalParamsInvalid": "추가 인증 파라미터 JSON이 잘못되었습니다",
-        "additionalParamsInvalidWithReason": "추가 인증 파라미터 JSON이 잘못되었습니다: {reason}",
-        "additionalParamsNotObject": "추가 인증 파라미터는 JSON 객체여야 합니다",
-        "saveConfigFailed": "서버 구성을 저장하지 못했습니다",
-        "loadStage": "연결 설정을 불러올 수 없습니다",
-        "oauthInitFailed": "OAuth를 시작하지 못했습니다: {detail}"
-      },
-      "header": {
-        "defaultTitle": "인증 설정",
-        "description": "MCP 서버 인증 설정",
-        "title": "*{name}* 설정"
-      },
-      "noAuthNotice": {
-        "title": "인증 필요 없음"
-      },
-      "oauthInfo": {
-        "manualRegistration": "이 리디렉션 URI를 공급자에 등록하세요.",
-        "title": "OAuth 구성"
-      },
-      "passThroughNotice": {
-        "title": "ID 공급자를 공유하는 서비스에는 패스스루를 사용하세요."
-      },
-      "providerMode": {
-        "autoDiscovery": {
-          "description": "서버가 공개한 로그인 설정을 읽습니다.",
-          "label": "로그인 엔드포인트 자동 검색"
-        },
-        "knownProvider": {
-          "description": "로그인 URL과 토큰 URL을 직접 입력합니다.",
-          "label": "엔드포인트 직접 입력"
-        },
-        "label": "OAuth 엔드포인트",
-        "placeholder": "모드 선택"
-      },
-      "redirectUri": {
-        "copyTooltip": "리디렉션 URI 복사",
-        "label": "**리디렉션 URI** 사용:"
-      },
-      "scopesOverride": {
-        "label": "스코프 재정의(쉼표로 구분)"
-      },
-      "submitButton": {
-        "label": "변경 사항 저장"
-      },
-      "tokenEndpoint": {
-        "label": "Token 엔드포인트"
-      },
-      "apiTokenInfo": {
-        "title": "API 키 구성"
-      },
-      "oauthSetup": {
-        "label": "OAuth 설정",
-        "automatic": {
-          "label": "자동으로 설정",
-          "description": "서버가 공개한 설정을 사용하여 {appName}이 OAuth 클라이언트를 등록하도록 합니다."
-        },
-        "ownClient": {
-          "label": "자체 OAuth 클라이언트 사용",
-          "description": "공급자의 클라이언트 ID를 입력하세요. 필요한 경우에만 시크릿을 추가하세요."
-        }
-      },
-      "cimd": {
-        "label": "클라이언트 메타데이터 문서 사용",
-        "description": "켜면 공급자가 공용 인터넷을 통해 {appName}의 클라이언트 메타데이터 문서를 가져옵니다. 이 {appName} 인스턴스가 비공개이면 끄세요. 그러면 {appName}은(는) 자동 클라이언트 등록을 사용합니다."
-      },
-      "advanced": {
-        "description": "자동 검색 대신 권한 부여 엔드포인트와 token 엔드포인트를 직접 지정하여 알려진 OAuth 공급자를 구성합니다.",
-        "title": "고급"
-      },
-      "knownProvider": {
-        "hint": "알려진 공급자 모드에서는 엔드포인트 구성이 필요합니다. Google 참조 엔드포인트: 권한 부여 {authorizationEndpoint}, token {tokenEndpoint}."
-      }
-    },
-    "mcpCard": {
-      "deleteModal": {
-        "body": {
-          "description": "조직의 모든 사용자에 대해 <emphasis>{title}</emphasis> 및 모든 관련 도구가 삭제됩니다. 삭제는 되돌릴 수 없습니다."
-        },
-        "submitButton": {
-          "label": "삭제"
-        },
-        "title": "MCP 서버 삭제"
-      }
-    },
     "mcpOauthCallback": {
       "autoRedirect": {
         "text": "자동으로 돌아갑니다…"
@@ -411,67 +266,6 @@
       "tokenExchangeFailed": {
         "description": "제공자가 인증을 승인했지만 유효한 액세스 토큰을 얻을 수 없었습니다. 서버의 OAuth 클라이언트 자격 증명과 엔드포인트를 확인한 후 다시 연결해 보세요.",
         "title": "토큰 교환에 실패했습니다"
-      }
-    },
-    "mcpPage": {
-      "addButton": {
-        "label": "MCP 서버 추가"
-      },
-      "empty": {
-        "description": "MCP 서버를 연결하여 사용자 지정 액션을 추가하세요."
-      },
-      "toasts": {
-        "deleteFailed": "MCP 서버를 삭제하지 못했습니다",
-        "disconnectFailed": "MCP 서버 연결을 해제하지 못했습니다",
-        "reconnectFailed": "MCP 서버에 다시 연결하지 못했습니다"
-      }
-    },
-    "openApiCard": {
-      "card": {
-        "ariaLabel": "{name} OpenAPI 액션 카드"
-      },
-      "deleteModal": {
-        "body": {
-          "confirmation": "이 OpenAPI 액션을 삭제하시겠습니까?",
-          "description": "OpenAPI 액션 <emphasis>{name}</emphasis>과(와) 해당 구성이 영구적으로 삭제됩니다."
-        },
-        "submitButton": {
-          "label": "삭제"
-        },
-        "title": "OpenAPI 플러그인 삭제"
-      },
-      "method": {
-        "noSummary": "요약이 제공되지 않음"
-      },
-      "toolsList": {
-        "emptyMessage": "이 OpenAPI 스키마에 정의된 액션이 없습니다",
-        "emptySearchMessage": "검색과 일치하는 액션이 없습니다"
-      }
-    },
-    "openApiPage": {
-      "addButton": {
-        "label": "OpenAPI 액션 추가"
-      },
-      "empty": {
-        "description": "OpenAPI 스키마로 사용자 지정 액션을 추가하세요."
-      },
-      "toasts": {
-        "deleteFailed": "도구를 삭제하지 못했습니다.",
-        "disconnectFailed": "OpenAPI 액션의 연결을 해제하지 못했습니다."
-      }
-    },
-    "perUserAuth": {
-      "credentialField": {
-        "placeholder": "{field} 입력"
-      },
-      "credentials": {
-        "perUserTitle": "내 계정 전용",
-        "sharedTitle": "조직 공유 값"
-      },
-      "headers": {
-        "addButton": {
-          "label": "헤더 추가"
-        }
       }
     },
     "policyToggle": {
@@ -930,11 +724,6 @@
       "policiesTab": "승인 설정",
       "search": "도구 검색",
       "enabledCount": "활성화된 도구: {total}개 중 {enabled}개"
-    },
-    "mcpDetail": {
-      "loadError": "MCP 서버를 불러올 수 없습니다",
-      "notFound": "MCP 서버를 찾을 수 없습니다",
-      "availabilitySaved": "사용 설정이 업데이트되었습니다"
     }
   },
   "admin": {
@@ -14609,37 +14398,6 @@
       }
     },
     "apps": {
-      "addCatalog": {
-        "addButton": "추가",
-        "createButton": "만들기",
-        "mcpHint": {
-          "label": "MCP 서버가 필요하신가요? 작업에서 연결한 다음 여기에서 Craft용으로 활성화하세요.",
-          "openActionsButton": "작업 열기"
-        },
-        "modal": {
-          "description": "조직 전체에서 사용할 통합을 추가하세요. 기본 제공 제공업체에는 Craft 에이전트에게 사용법을 알려주는 작업이 포함되어 있습니다. 이미 구성된 제공업체는 표시되지 않습니다.",
-          "title": "앱 추가"
-        }
-      },
-      "configureProvider": {
-        "addTitle": "{name} 추가",
-        "editTitle": "{name} 편집",
-        "managedDescription": "Onyx에서 제공합니다. 에이전트가 할 수 있는 작업을 구성하세요."
-      },
-      "customApp": {
-        "createDescription": "이그레스 프록시가 이 앱에 연결하고 인증하는 방식을 구성합니다. 스킬은 필수가 아닙니다.",
-        "editDescription": "게이트웨이 설정을 업데이트하고 연결된 스킬을 관리합니다.",
-        "editTitle": "{name} 편집",
-        "fields": {
-          "name": {
-            "placeholder": "내 사용자 지정 앱"
-          }
-        }
-      },
-      "mcpPolicy": {
-        "saveButton": "저장",
-        "title": "{name} 편집"
-      },
       "oauthCallback": {
         "backButton": "내 앱으로 돌아가기",
         "description": "OAuth 핸드셰이크를 마치는 중…",
@@ -14655,23 +14413,6 @@
           "label": "연결되었습니다. 앱으로 돌아가는 중…"
         },
         "title": "앱 연결 중"
-      },
-      "page": {
-        "empty": {
-          "description": "조직에 구성된 앱이나 MCP 서버가 아직 없습니다.",
-          "title": "아직 연결할 항목이 없습니다"
-        },
-        "header": {
-          "description": "Onyx Craft가 작업하는 동안 컨텍스트로 사용할 수 있는 도구를 연결하세요.",
-          "title": "앱"
-        },
-        "loading": {
-          "label": "불러오는 중…"
-        },
-        "status": {
-          "connected": "연결됨",
-          "notAvailable": "회원님 계정에서는 사용할 수 없습니다. 관리자에게 문의하세요"
-        }
       },
       "policyEditor": {
         "loading": {

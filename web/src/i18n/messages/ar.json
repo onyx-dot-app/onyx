@@ -147,34 +147,6 @@
         "tooltip": "{description}\nفضّل هذه الأداة لهذه المحادثة. قد يجيب الوكيل دون استخدامها."
       }
     },
-    "addMcpModal": {
-      "cancelButton": {
-        "label": "إلغاء"
-      },
-      "description": {
-        "placeholder": "ما الذي يمكن لفريقك فعله باستخدام هذا الخادم؟",
-        "suffix": "اختياري",
-        "title": "الوصف"
-      },
-      "name": {
-        "placeholder": "مثل Linear",
-        "required": "اسم الخادم مطلوب",
-        "title": "اسم الخادم"
-      },
-      "submitButton": {
-        "savingLabel": "جارٍ الحفظ..."
-      },
-      "access": {
-        "title": "التحكم في الوصول",
-        "description": "اختر من يمكنه استخدام MCP هذا.",
-        "groups": {
-          "description": "يمكن لمجموعات المستخدمين المحددة استخدام MCP هذا."
-        }
-      },
-      "defaultChat": {
-        "title": "متاح في دردشة Onyx الافتراضية"
-      }
-    },
     "addOpenApiModal": {
       "cancelButton": {
         "label": "إلغاء"
@@ -249,123 +221,6 @@
         "title": "قطع الاتصال بـ *{name}*"
       }
     },
-    "mcpAuthModal": {
-      "additionalAuthParams": {
-        "label": "معاملات مصادقة إضافية (JSON)"
-      },
-      "authType": {
-        "apiToken": {
-          "description": "استخدم مفتاح API فرديًا لكل مستخدم أو مفتاح API مشتركًا على مستوى المؤسسة."
-        },
-        "none": {
-          "label": "بلا مصادقة",
-          "description": "غير موصى به"
-        },
-        "oauth": {
-          "description": "يحتاج كل مستخدم إلى المصادقة عبر OAuth ببيانات اعتماده الخاصة."
-        },
-        "placeholder": "اختر طريقة",
-        "ptOauth": {
-          "description": "تمرير رمز وصول OAuth الخاص بالمستخدم المستخدم لمصادقة {appName}."
-        }
-      },
-      "authorizationEndpoint": {
-        "label": "نقطة نهاية التفويض"
-      },
-      "cancelButton": {
-        "label": "إلغاء"
-      },
-      "clientId": {
-        "label": "معرّف العميل"
-      },
-      "clientSecret": {
-        "label": "سر العميل"
-      },
-      "errors": {
-        "additionalParamsInvalid": "JSON معاملات المصادقة الإضافية غير صالح",
-        "additionalParamsInvalidWithReason": "JSON معاملات المصادقة الإضافية غير صالح: {reason}",
-        "additionalParamsNotObject": "يجب أن تكون معاملات المصادقة الإضافية كائن JSON",
-        "saveConfigFailed": "فشل حفظ إعدادات الخادم",
-        "loadStage": "تعذّر تحميل إعدادات الاتصال",
-        "oauthInitFailed": "فشل بدء OAuth: {detail}"
-      },
-      "header": {
-        "defaultTitle": "إعداد المصادقة",
-        "description": "إعداد مصادقة خادم MCP",
-        "title": "إعداد *{name}*"
-      },
-      "noAuthNotice": {
-        "title": "لا تلزم المصادقة"
-      },
-      "oauthInfo": {
-        "manualRegistration": "سجّل عنوان URI لإعادة التوجيه هذا لدى المزوّد.",
-        "title": "إعداد OAuth"
-      },
-      "passThroughNotice": {
-        "title": "استخدم التمرير المباشر للخدمات ذات موفر الهوية المشترك."
-      },
-      "providerMode": {
-        "autoDiscovery": {
-          "description": "قراءة إعدادات تسجيل الدخول التي ينشرها الخادم.",
-          "label": "العثور على نقاط نهاية تسجيل الدخول تلقائيًا"
-        },
-        "knownProvider": {
-          "description": "أدخل عناوين URL لتسجيل الدخول والرمز بنفسك.",
-          "label": "إدخال نقاط النهاية يدويًا"
-        },
-        "label": "نقاط نهاية OAuth",
-        "placeholder": "اختر وضعًا"
-      },
-      "redirectUri": {
-        "copyTooltip": "نسخ عنوان إعادة التوجيه",
-        "label": "استخدم **عنوان إعادة التوجيه**:"
-      },
-      "scopesOverride": {
-        "label": "تجاوز النطاقات (مفصولة بفواصل)"
-      },
-      "submitButton": {
-        "label": "حفظ التغييرات"
-      },
-      "tokenEndpoint": {
-        "label": "نقطة نهاية الرمز"
-      },
-      "apiTokenInfo": {
-        "title": "إعداد مفتاح API"
-      },
-      "oauthSetup": {
-        "label": "إعداد OAuth",
-        "automatic": {
-          "label": "الإعداد تلقائيًا",
-          "description": "اسمح لـ {appName} بتسجيل عميل OAuth باستخدام الإعدادات التي ينشرها الخادم."
-        },
-        "ownClient": {
-          "label": "استخدام عميل OAuth خاص بك",
-          "description": "أدخل معرّف عميل من المزوّد. أضف سرًا فقط إذا كان مطلوبًا."
-        }
-      },
-      "cimd": {
-        "label": "استخدام مستند بيانات تعريف العميل",
-        "description": "عند التفعيل، يجلب المزوّد مستند بيانات تعريف العميل الخاص بـ {appName} عبر الإنترنت العام. أوقف هذا الخيار إذا كان مثيل {appName} هذا خاصًا. عندها يستخدم {appName} التسجيل التلقائي للعميل."
-      },
-      "advanced": {
-        "description": "هيّئ موفر OAuth معروفًا بنقاط نهاية تفويض ورموز صريحة بدلًا من الاكتشاف التلقائي.",
-        "title": "متقدم"
-      },
-      "knownProvider": {
-        "hint": "يتطلب وضع الموفر المعروف تهيئة نقاط النهاية. نقاط نهاية Google المرجعية: التفويض {authorizationEndpoint} والرمز {tokenEndpoint}."
-      }
-    },
-    "mcpCard": {
-      "deleteModal": {
-        "body": {
-          "description": "سيؤدي هذا إلى حذف <emphasis>{title}</emphasis> وجميع أدواته لجميع المستخدمين في مؤسستك. الحذف لا رجعة فيه."
-        },
-        "submitButton": {
-          "label": "حذف"
-        },
-        "title": "حذف خادم MCP"
-      }
-    },
     "mcpOauthCallback": {
       "autoRedirect": {
         "text": "ستتم إعادتك تلقائيًا…"
@@ -411,67 +266,6 @@
       "tokenExchangeFailed": {
         "description": "وافق المزود على التفويض ولكن تعذر الحصول على رمز وصول صالح. تحقق من بيانات اعتماد عميل OAuth ونقاط النهاية الخاصة بالخادم، ثم حاول الاتصال مرة أخرى.",
         "title": "فشل تبادل الرمز المميز"
-      }
-    },
-    "mcpPage": {
-      "addButton": {
-        "label": "إضافة خادم MCP"
-      },
-      "empty": {
-        "description": "اربط خادم MCP لإضافة إجراءات مخصصة."
-      },
-      "toasts": {
-        "deleteFailed": "فشل حذف خادم MCP",
-        "disconnectFailed": "فشل قطع الاتصال بخادم MCP",
-        "reconnectFailed": "فشلت إعادة الاتصال بخادم MCP"
-      }
-    },
-    "openApiCard": {
-      "card": {
-        "ariaLabel": "بطاقة إجراء OpenAPI {name}"
-      },
-      "deleteModal": {
-        "body": {
-          "confirmation": "هل أنت متأكد من رغبتك في حذف إجراء OpenAPI هذا؟",
-          "description": "سيؤدي هذا إلى حذف إجراء OpenAPI <emphasis>{name}</emphasis> وإعداداته نهائيًا."
-        },
-        "submitButton": {
-          "label": "حذف"
-        },
-        "title": "حذف إضافة OpenAPI"
-      },
-      "method": {
-        "noSummary": "لا يوجد ملخص"
-      },
-      "toolsList": {
-        "emptyMessage": "لا توجد إجراءات معرّفة لمخطط OpenAPI هذا",
-        "emptySearchMessage": "لا توجد إجراءات مطابقة لبحثك"
-      }
-    },
-    "openApiPage": {
-      "addButton": {
-        "label": "إضافة إجراء OpenAPI"
-      },
-      "empty": {
-        "description": "أضف إجراءات مخصصة من مخططات OpenAPI."
-      },
-      "toasts": {
-        "deleteFailed": "فشل حذف الأداة.",
-        "disconnectFailed": "فشل قطع الاتصال بإجراء OpenAPI."
-      }
-    },
-    "perUserAuth": {
-      "credentialField": {
-        "placeholder": "أدخل {field}"
-      },
-      "credentials": {
-        "perUserTitle": "لحسابك الخاص فقط",
-        "sharedTitle": "قيم المؤسسة المشتركة"
-      },
-      "headers": {
-        "addButton": {
-          "label": "إضافة ترويسة"
-        }
       }
     },
     "policyToggle": {
@@ -930,11 +724,6 @@
       "policiesTab": "إعدادات الموافقة",
       "search": "البحث عن أدوات",
       "enabledCount": "الأدوات المفعّلة: {enabled} من {total}"
-    },
-    "mcpDetail": {
-      "loadError": "تعذر تحميل خادم MCP",
-      "notFound": "لم يتم العثور على خادم MCP",
-      "availabilitySaved": "تم تحديث التوفر"
     }
   },
   "admin": {
@@ -14609,37 +14398,6 @@
       }
     },
     "apps": {
-      "addCatalog": {
-        "addButton": "إضافة",
-        "createButton": "إنشاء",
-        "mcpHint": {
-          "label": "هل تحتاج إلى خادم MCP بدلًا من ذلك؟ قم بتوصيله في «الإجراءات»، ثم فعّله لـ Craft هنا.",
-          "openActionsButton": "فتح الإجراءات"
-        },
-        "modal": {
-          "description": "أتح تكاملًا لمؤسستك بأكملها. يأتي المزوّدون المدمجون بإجراءات تعلّم وكيل Craft كيفية استخدامها؛ ولا يتم إدراج المزوّدين الذين تم إعدادهم بالفعل.",
-          "title": "إضافة تطبيق"
-        }
-      },
-      "configureProvider": {
-        "addTitle": "إضافة {name}",
-        "editTitle": "تعديل {name}",
-        "managedDescription": "مقدَّم من Onyx: قم بإعداد ما يمكن للوكيل فعله."
-      },
-      "customApp": {
-        "createDescription": "قم بإعداد كيفية وصول وكيل الخروج إلى هذا التطبيق ومصادقته. لا يُشترط وجود مهارة.",
-        "editDescription": "حدّث إعدادات البوابة وأدر المهارات المرتبطة.",
-        "editTitle": "تعديل {name}",
-        "fields": {
-          "name": {
-            "placeholder": "تطبيقي المخصص"
-          }
-        }
-      },
-      "mcpPolicy": {
-        "saveButton": "حفظ",
-        "title": "تعديل {name}"
-      },
       "oauthCallback": {
         "backButton": "العودة إلى تطبيقاتي",
         "description": "جارٍ إتمام مصافحة OAuth…",
@@ -14655,23 +14413,6 @@
           "label": "تم الاتصال. جارٍ إعادة التوجيه إلى تطبيقاتك…"
         },
         "title": "جارٍ توصيل تطبيقك"
-      },
-      "page": {
-        "empty": {
-          "description": "لم يتم إعداد أي تطبيقات أو خوادم MCP لمؤسستك بعد.",
-          "title": "لا يوجد ما يمكن توصيله بعد"
-        },
-        "header": {
-          "description": "قم بتوصيل الأدوات التي يمكن لـ Onyx Craft استخدامها كسياق أثناء عمله.",
-          "title": "التطبيقات"
-        },
-        "loading": {
-          "label": "جارٍ التحميل…"
-        },
-        "status": {
-          "connected": "متصل",
-          "notAvailable": "غير متاح لحسابك، اسأل أحد المسؤولين"
-        }
       },
       "policyEditor": {
         "loading": {
