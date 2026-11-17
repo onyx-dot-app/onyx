@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
 import TaskActionPolicies from "@/app/craft/v1/tasks/components/TaskActionPolicies";
 import type {
@@ -51,28 +51,8 @@ function pluginView(overrides: Partial<TaskPluginView> = {}): TaskPluginView {
 }
 
 let mockData: TaskPluginView[] = [pluginView()];
-let mockError: Error | undefined;
 const mockSave = jest.fn();
-jest.mock("swr", () => ({
-  ...jest.requireActual("swr"),
-  __esModule: true,
-  default: (
-    _key: string,
-    _fetcher: unknown,
-    options?: { onSuccess?: (data: TaskPluginView[]) => void }
-  ) => {
-    const React = jest.requireActual<typeof import("react")>("react");
-    React.useEffect(() => {
-      if (!mockError) options?.onSuccess?.(mockData);
-    }, []);
-    return {
-      data: mockError ? undefined : mockData,
-      error: mockError,
-      isValidating: false,
-      mutate: jest.fn(),
-    };
-  },
-}));
+let fetchSpy: jest.SpyInstance;
 
 function Form({ taskId = null }: { taskId?: string | null }) {
   const [value, setValue] = useState<TaskPluginLink[] | null>(null);
@@ -86,15 +66,26 @@ function Form({ taskId = null }: { taskId?: string | null }) {
   );
 }
 
+async function renderLoaded(ui: ReactElement) {
+  render(ui);
+  await screen.findByRole("switch", { name: "Enable Linear for this task" });
+}
+
 beforeEach(() => {
   mockData = [pluginView()];
-  mockError = undefined;
   mockSave.mockClear();
+  fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async () => new Response(JSON.stringify(mockData)));
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 it("starts a new task with no plugins and turns a plugin on with inherited actions", async () => {
   const user = setupUser();
-  render(<Form />);
+  await renderLoaded(<Form />);
   expect(screen.getByText("Disabled for this task")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Save task" }));
   expect(mockSave).toHaveBeenLastCalledWith([]);
@@ -126,7 +117,10 @@ it("keeps the stored settings of an existing task", async () => {
       action_settings: { default: "ask", actions: { search: "allow" } },
     }),
   ];
-  render(<Form taskId="task-1" />);
+  await renderLoaded(<Form taskId="task-1" />);
+  expect(fetchSpy).toHaveBeenCalledWith(
+    "/api/build/scheduled-tasks/task-1/action-policies"
+  );
   expect(screen.getByText("1 allow · 1 ask · 0 blocked")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Save task" }));
   expect(mockSave).toHaveBeenLastCalledWith([
@@ -145,7 +139,7 @@ it("turning a plugin off and on again keeps its action settings", async () => {
       action_settings: { default: "ask", actions: { search: "allow" } },
     }),
   ];
-  render(<Form taskId="task-1" />);
+  await renderLoaded(<Form taskId="task-1" />);
   const toggle = screen.getByRole("switch", {
     name: "Enable Linear for this task",
   });
@@ -168,7 +162,7 @@ it("editing a plugin that was turned off keeps its other settings", async () => 
       action_settings: { default: "ask", actions: { search: "blocked" } },
     }),
   ];
-  render(<Form taskId="task-1" />);
+  await renderLoaded(<Form taskId="task-1" />);
   await user.click(
     screen.getByRole("switch", { name: "Enable Linear for this task" })
   );
@@ -205,7 +199,7 @@ it("does not offer Allow for a locked action", async () => {
       ],
     }),
   ];
-  render(<Form />);
+  await renderLoaded(<Form />);
   await user.click(screen.getByRole("button", { name: "Manage actions" }));
   await user.click(
     screen.getByRole("combobox", { name: "Setting for Create issue" })
@@ -216,7 +210,7 @@ it("does not offer Allow for a locked action", async () => {
   );
 });
 
-it("counts a locked task Allow with the integration policy", () => {
+it("counts a locked task Allow with the integration policy", async () => {
   mockData = [
     pluginView({
       enabled: true,
@@ -232,13 +226,13 @@ it("counts a locked task Allow with the integration policy", () => {
       ],
     }),
   ];
-  render(<Form taskId="task-1" />);
+  await renderLoaded(<Form taskId="task-1" />);
   expect(screen.getByText("1 allow · 1 ask · 0 blocked")).toBeInTheDocument();
 });
 
 it("sets an action to Allow, Ask, Blocked or the integration setting", async () => {
   const user = setupUser();
-  render(<Form />);
+  await renderLoaded(<Form />);
   await user.click(screen.getByRole("button", { name: "Manage actions" }));
   await user.click(
     screen.getByRole("combobox", { name: "Setting for Create issue" })
@@ -263,7 +257,7 @@ it("sets an action to Allow, Ask, Blocked or the integration setting", async () 
   ]);
 });
 
-it("shows the sign-in reason of an integration that is not connected", () => {
+it("shows the sign-in reason of an integration that is not connected", async () => {
   mockData = [
     pluginView({
       integrations: [
@@ -277,14 +271,17 @@ it("shows the sign-in reason of an integration that is not connected", () => {
       ],
     }),
   ];
-  render(<Form />);
+  await renderLoaded(<Form />);
   expect(
     screen.getByText("Connect your Linear MCP account to use it.")
   ).toBeInTheDocument();
 });
 
 it("reports a load failure without enabling the parent save", async () => {
-  mockError = new Error("offline");
+  fetchSpy.mockImplementation(
+    async () =>
+      new Response(JSON.stringify({ detail: "offline" }), { status: 500 })
+  );
   render(<Form />);
   expect(
     await screen.findByText("Could not load approval settings.")
