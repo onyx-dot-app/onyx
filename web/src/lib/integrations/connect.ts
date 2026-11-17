@@ -41,13 +41,3 @@ export async function connectWithOAuth(
     return "redirected";
   }
 }
-
-/** A path of this app from an untrusted value, or null. */
-export function safeReturnPath(value: string | null): `/${string}` | null {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
-  if (value.includes("\\")) return null;
-  const parsed = new URL(value, "https://onyx.invalid");
-  return parsed.origin === "https://onyx.invalid"
-    ? `/${parsed.pathname.slice(1)}${parsed.search}`
-    : null;
-}

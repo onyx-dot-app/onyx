@@ -52,7 +52,7 @@ function MemberPluginRow({ entry }: MemberPluginRowProps) {
       padding={2}
       role="button"
       tabIndex={0}
-      aria-label={t("open", { name: entry.name })}
+      aria-label={t("open.label", { name: entry.name })}
       onClick={() => navigation.go(memberPluginHref(entry.id))}
     >
       <ContentAction
@@ -77,7 +77,6 @@ function MemberPluginRow({ entry }: MemberPluginRowProps) {
   );
 }
 
-/** The member Plugins page: skills and integrations in one list. */
 export default function MemberPluginsPage() {
   const t = useTranslations("plugins.member");
   const locale = useLocale();
@@ -118,11 +117,11 @@ export default function MemberPluginsPage() {
                   prominence="secondary"
                   onClick={() => setAdding(true)}
                 >
-                  {t("addIntegration")}
+                  {t("addIntegration.label")}
                 </Button>,
               ]
             : []),
-          ...(isGlobalHolder || isScopedManager
+          ...(canAddIntegration
             ? [
                 <Button
                   key="manage"
@@ -130,7 +129,7 @@ export default function MemberPluginsPage() {
                   prominence="tertiary"
                   {...navigation.linkTo("/admin/plugins")}
                 >
-                  {t("manage")}
+                  {t("manage.label")}
                 </Button>,
               ]
             : []),
@@ -161,7 +160,7 @@ export default function MemberPluginsPage() {
                 aria-pressed={filter === value}
                 onClick={() => setFilter(value)}
               >
-                {t(`filters.${value}`)}
+                {t(`filters.${value}.label`)}
               </Button>
             ))}
           </Section>
@@ -169,8 +168,8 @@ export default function MemberPluginsPage() {
             <InputTypeIn
               icon="search"
               value={query}
-              placeholder={t("search")}
-              aria-label={t("search")}
+              placeholder={t("search.placeholder")}
+              aria-label={t("search.placeholder")}
               onChange={(event) => setQuery(event.target.value)}
             />
           </Section>
@@ -188,7 +187,7 @@ export default function MemberPluginsPage() {
                   void integrations.mutate();
                 }}
               >
-                {t("state.retry")}
+                {t("state.retry.label")}
               </Button>
             </Section>
           )}
@@ -235,7 +234,7 @@ export default function MemberPluginsPage() {
                     setFilter("all");
                   }}
                 >
-                  {t("state.clear")}
+                  {t("state.clear.label")}
                 </Button>
               )}
             </Section>

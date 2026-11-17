@@ -6,7 +6,7 @@ import { Button, Card, OnyxLoader } from "@opal/components";
 import { IllustrationContent, Section } from "@opal/layouts";
 import { SvgConnected, SvgPlugBroken } from "@opal/illustrations";
 import { loadPage, useNavigation, useSearchParams } from "@opal/navigation";
-import { safeReturnPath } from "@/lib/integrations/connect";
+import { validateInternalRedirect } from "@/lib/auth/utils";
 import { completeIntegrationOAuth } from "@/lib/integrations/svc";
 import { leaveOAuthCallback, reportOAuthCallback } from "@/lib/oauth/launch";
 import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
@@ -60,7 +60,7 @@ function IntegrationOAuthCallbackContent() {
     completeIntegrationOAuth(code, attempt).then(
       (result) => {
         const redirectPath =
-          safeReturnPath(result.return_path) ?? FALLBACK_PATH;
+          validateInternalRedirect(result.return_path) ?? FALLBACK_PATH;
         if (reportOAuthCallback(attempt, true, redirectPath)) return;
         setState({ phase: "success", redirectPath });
         leaveOAuthCallback(() => loadPage(redirectPath, { replace: true }));
@@ -116,7 +116,7 @@ function IntegrationOAuthCallbackContent() {
                     leaveOAuthCallback(() => navigation.go(FALLBACK_PATH))
                   }
                 >
-                  {t("back")}
+                  {t("back.label")}
                 </Button>
               </>
             )}

@@ -31,7 +31,6 @@ export interface ChatPluginsPopoverProps {
   onBrowse: () => void;
 }
 
-/** The chat's Plugins menu: switches each plugin of the agent on or off. */
 export default function ChatPluginsPopover({
   agentId,
   toolConfiguration,
@@ -41,6 +40,8 @@ export default function ChatPluginsPopover({
   onBrowse,
 }: ChatPluginsPopoverProps) {
   const t = useTranslations("plugins.chat.popover");
+  const memberCopy = useTranslations("plugins.member");
+  const connectionCopy = useTranslations("plugins.member.connection");
   const { plugins, isLoading, error, refresh } = catalog;
   const appPosition = useAppPosition();
   const navigation = useNavigation();
@@ -90,21 +91,19 @@ export default function ChatPluginsPopover({
   );
 
   function row(plugin: ChatPluginEntry) {
-    const pending = plugin.integrations.find(
-      (integration) => connectAction(integration) !== null
-    );
     const notSetUp = plugin.integrations.every(
       (integration) => integration.status.state === "not_set_up"
     );
     const enabled = toolConfiguration.isPluginEnabled(plugin.pluginId);
-    const action = pending ? connectAction(pending) : null;
+    const action =
+      plugin.integrations.map(connectAction).find((a) => a !== null) ?? null;
     return (
       <LineItemButton
         font="main-ui-action"
         key={plugin.pluginId}
         title={plugin.name}
         titleMaxLines={1}
-        description={notSetUp ? t("notSetUp") : undefined}
+        description={notSetUp ? connectionCopy("askAdmin") : undefined}
         descriptionMaxLines={1}
         icon={SvgBlocks}
         padding={0}
@@ -121,13 +120,13 @@ export default function ChatPluginsPopover({
                 onConnect(plugin);
               }}
             >
-              {t(action)}
+              {connectionCopy(`${action}.label`)}
             </Button>
           ) : (
             <InputSwitch
               checked={enabled}
               disabled={disabled || !toolConfiguration.ready}
-              aria-label={t("toggle", { name: plugin.name })}
+              aria-label={t("toggle.label", { name: plugin.name })}
               onCheckedChange={(checked) =>
                 toolConfiguration.setPluginEnabled([plugin.pluginId], checked)
               }
@@ -146,10 +145,10 @@ export default function ChatPluginsPopover({
           ref={trigger}
           disabled={disabled}
           icon={SvgPlug}
-          title={t("trigger")}
+          title={t("trigger.label")}
           rounding={2}
           interaction={open ? "hover" : "rest"}
-          aria-label={t("trigger")}
+          aria-label={t("trigger.label")}
           rightChildren={
             <Section
               width={1.5}
@@ -185,7 +184,7 @@ export default function ChatPluginsPopover({
         align={isMobile ? "start" : "end"}
         alignOffset={isMobile ? 0 : -5}
         width={60}
-        aria-label={t("trigger")}
+        aria-label={t("trigger.label")}
         onPointerEnter={cancelHover}
         onPointerLeave={(event) => {
           if (event.pointerType === "mouse") hover(false);
@@ -215,7 +214,7 @@ export default function ChatPluginsPopover({
           footer={
             <LineItemButton
               font="main-ui-action"
-              title={t("browse")}
+              title={t("browse.label")}
               icon={SvgPlug}
               href={browseLink.href}
               onClick={handleBrowse}
@@ -231,8 +230,8 @@ export default function ChatPluginsPopover({
               icon="search"
               variant="internal"
               value={search}
-              placeholder={t("search")}
-              aria-label={t("search")}
+              placeholder={memberCopy("search.placeholder")}
+              aria-label={memberCopy("search.placeholder")}
               onChange={(event) => setSearch(event.target.value)}
             />,
             isLoading && (
@@ -268,7 +267,7 @@ export default function ChatPluginsPopover({
                   prominence="secondary"
                   onClick={() => void refresh()}
                 >
-                  {t("retry")}
+                  {t("retry.label")}
                 </Button>
               </Section>
             ),

@@ -12,6 +12,7 @@ import { connectAction } from "@/lib/integrations/connect";
 import { useAgentChatPlugins } from "@/lib/plugins/hooks";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import IntegrationConnectModal from "@/sections/plugins/IntegrationConnectModal";
+import { locationKey } from "@/app/app/services/submitLocation";
 
 interface IntegrationConnectPromptProps {
   agentId: number;
@@ -72,8 +73,7 @@ export default function IntegrationConnectPrompt({
   const needsReconnect = pending.some(
     (integration) => integration.status.state === "needs_reconnect"
   );
-  const query = searchParams.toString();
-  const returnPath = query ? `${pathname}?${query}` : pathname;
+  const returnPath = locationKey(pathname, searchParams.toString());
 
   return (
     <>
@@ -85,7 +85,7 @@ export default function IntegrationConnectPrompt({
             prominence="tertiary"
             responsiveHideText
             tooltip={openedIds ? undefined : t("tooltip")}
-            aria-label={t("trigger", { count: pending.length })}
+            aria-label={t("trigger.label", { count: pending.length })}
             aria-haspopup="dialog"
             disabled={disabled}
             onClick={() =>
@@ -97,7 +97,7 @@ export default function IntegrationConnectPrompt({
               )
             }
           >
-            {t("trigger", { count: pending.length })}
+            {t("trigger.label", { count: pending.length })}
           </Button>
         </Section>
       )}

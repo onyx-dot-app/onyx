@@ -122,7 +122,6 @@ export async function setPluginInstallationPolicy(
   });
 }
 
-/** Starts the OAuth sign-in of the organization connection. */
 export function startOrganizationOAuth(
   id: number,
   returnPath: string
@@ -130,7 +129,6 @@ export function startOrganizationOAuth(
   return startOAuth(id, true, returnPath);
 }
 
-/** Starts the OAuth sign-in of the user's own connection. */
 export function startUserOAuth(
   id: number,
   returnPath: string
@@ -138,7 +136,6 @@ export function startUserOAuth(
   return startOAuth(id, false, returnPath);
 }
 
-/** Saves the user's own API key fields. */
 export async function saveUserConnection(
   id: number,
   fields: Record<string, string>
