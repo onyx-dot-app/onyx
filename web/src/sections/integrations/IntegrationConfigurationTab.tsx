@@ -178,7 +178,11 @@ export default function IntegrationConfigurationTab({
       // change.
       if (signInChanged) Object.assign(update, signInPayload(signIn));
       if (config) update.config = config;
-      await updateIntegration(integration.id, update);
+      const saved = await updateIntegration(integration.id, update);
+      // The response leaves out secrets and gives the schema as stored.
+      setSignIn(signInDraftFromDetail(saved));
+      if (saved.config.shape === "openapi")
+        setSpecText(JSON.stringify(saved.config.openapi_spec, null, 2));
       setPresetCredentials({});
       toast.success(t("saved"));
       // A new schema or server syncs the actions again.
