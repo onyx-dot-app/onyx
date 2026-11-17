@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
+from onyx.db import action_approval
+from onyx.db.build_session import get_build_session
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, GatedAppKind, Permission
 from onyx.db.models import ActionApproval, User
@@ -31,8 +33,6 @@ from onyx.external_apps.presentation.decode import decode_payload
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.action_policies.models import ApprovalChoice, DecisionBody
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-from onyx.server.features.build.db import action_approval
-from onyx.server.features.build.db.build_session import get_build_session
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

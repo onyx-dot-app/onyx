@@ -15,6 +15,13 @@ import pytest
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
+from onyx.db.action_approval import (
+    get_action_approval,
+    get_action_approval_for_user,
+    insert_action_approval,
+    list_session_pending_action_approvals,
+    try_record_decision,
+)
 from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
@@ -23,13 +30,6 @@ from onyx.db.enums import (
     GatedAppKind,
 )
 from onyx.db.models import ActionApproval, BuildSession, ExternalApp
-from onyx.server.features.build.db.action_approval import (
-    get_action_approval,
-    get_action_approval_for_user,
-    insert_action_approval,
-    list_session_pending_action_approvals,
-    try_record_decision,
-)
 from tests.common.craft.payloads import action_entry, default_action_entries
 from tests.external_dependency_unit.craft.db_helpers import (
     force_approval_created_at,

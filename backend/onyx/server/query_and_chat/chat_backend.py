@@ -88,6 +88,7 @@ from onyx.db.approval_request import (
     record_approval_decision__no_commit,
 )
 from onyx.db.chat import (
+    add_chat_session__no_commit,
     add_chats_to_session_from_slack_thread,
     create_chat_history_chain,
     delete_all_chat_sessions_for_user,
@@ -393,7 +394,7 @@ def update_chat_session_temperature(
 
     chat_session.temperature_override = update_thread_req.temperature_override
 
-    db_session.add(chat_session)
+    add_chat_session__no_commit(db_session, chat_session)
     db_session.commit()
 
 
@@ -428,7 +429,7 @@ def update_chat_session_reasoning(
             )
 
     chat_session.reasoning_effort_override = reasoning_effort
-    db_session.add(chat_session)
+    add_chat_session__no_commit(db_session, chat_session)
     db_session.commit()
 
 
@@ -445,7 +446,7 @@ def update_chat_session_model(
     )
     chat_session.current_alternate_model = update_thread_req.new_alternate_model
 
-    db_session.add(chat_session)
+    add_chat_session__no_commit(db_session, chat_session)
     db_session.commit()
 
 

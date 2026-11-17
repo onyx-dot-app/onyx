@@ -9,36 +9,36 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.db.artifact import (
+    get_output_card_rows,
+    mark_output_viewed,
+    mark_outputs_viewed,
+)
+from onyx.db.build_session import (
+    build_session_has_messages,
+    get_build_session,
+    session_runtime_stale,
+    set_build_session_sharing_scope,
+)
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
     Permission,
     SandboxStatus,
     ScheduledTaskRunStatus,
 )
-from onyx.db.models import BuildMessage, Sandbox, User
+from onyx.db.models import Sandbox, User
+from onyx.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
 from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.serving import build_content_disposition
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
-from onyx.server.features.build.db.artifact import (
-    get_output_card_rows,
-    mark_output_viewed,
-    mark_outputs_viewed,
-)
-from onyx.server.features.build.db.build_session import (
-    get_build_session,
-    session_runtime_stale,
-    set_build_session_sharing_scope,
-)
-from onyx.server.features.build.db.sandbox import (
-    get_sandbox_by_user_id,
-    update_sandbox_heartbeat,
-)
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.firecracker.purge import purge_harness_session
@@ -268,9 +268,7 @@ def check_pre_provisioned_session(
         return PreProvisionedCheckResponse(valid=False, session_id=None)
 
     # Check if session is still empty (no messages = pre-provisioned)
-    has_messages = db_session.query(
-        exists().where(BuildMessage.session_id == session_id)
-    ).scalar()
+    has_messages = build_session_has_messages(db_session, session_id)
 
     if not has_messages:
         return PreProvisionedCheckResponse(valid=True, session_id=str(session_id))

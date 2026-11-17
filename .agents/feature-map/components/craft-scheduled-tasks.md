@@ -100,7 +100,7 @@ preview (`web/src/app/craft/v1/tasks/schedule.ts:localPayloadToUtcPayload`,
 
 **Origin.** `create_session(origin=SessionOrigin.SCHEDULED)` marks the
 session. The sidebar query filters on `INTERACTIVE`
-(`server/features/build/db/build_session.py:get_user_build_sessions`). The
+(`db/build_session.py:get_user_build_sessions`). The
 proxy uses the origin to refuse personal policies for a scheduled session.
 
 **Live view.** `backend/onyx/server/features/build/session/api.py:get_session_scheduled_run_events` attaches the

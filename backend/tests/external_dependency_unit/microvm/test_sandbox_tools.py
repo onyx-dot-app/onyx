@@ -55,6 +55,11 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.persona import upsert_persona
+from onyx.db.sandbox import (
+    create_sandbox__no_commit,
+    get_or_create_sandbox,
+    get_sandbox_by_user_id,
+)
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.llm.cancellation import (
@@ -76,11 +81,6 @@ from onyx.llm.override_models import LLMOverride
 from onyx.microvm.daemon_client import SandboxDaemonErrorReason
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2
 from onyx.server.features.action_policies.models import ApprovalChoice
-from onyx.server.features.build.db.sandbox import (
-    create_sandbox__no_commit,
-    get_or_create_sandbox,
-    get_sandbox_by_user_id,
-)
 from onyx.server.features.build.sandbox import harness_factory
 from onyx.server.features.build.sandbox.firecracker import (
     harness_sandbox,

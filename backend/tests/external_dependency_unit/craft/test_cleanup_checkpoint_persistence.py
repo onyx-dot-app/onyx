@@ -3,13 +3,13 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.build_session import (
+    update_sandbox_heartbeat as legacy_heartbeat,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox, User
-from onyx.server.features.build.db.build_session import (
-    update_sandbox_heartbeat as legacy_heartbeat,
-)
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     begin_provisioning_attempt__no_commit,
     begin_recovery_attempt__no_commit,
     record_cleanup_checkpoint__no_commit,

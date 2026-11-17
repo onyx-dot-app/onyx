@@ -144,6 +144,10 @@ from onyx.db.enums import AccountType, PatType, Permission
 from onyx.db.models import AccessToken, OAuthAccount, User
 from onyx.db.pat import resolve_pat, revoke_all_pats_for_user__no_commit
 from onyx.db.pinned_personas import seed_pinned_personas_from_featured
+from onyx.db.sandbox import (
+    get_sandbox_purge_targets,
+    get_user_sandbox_blob_paths,
+)
 from onyx.db.sso_provider import lock_sso_provider_for_share
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
@@ -171,10 +175,6 @@ from onyx.redis.redis_pool import (
     get_async_redis_connection,
     retrieve_auth_token_data,
     retrieve_ws_token_data,
-)
-from onyx.server.features.build.db.sandbox import (
-    get_sandbox_purge_targets,
-    get_user_sandbox_blob_paths,
 )
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes,

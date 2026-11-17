@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
 from onyx.configs.constants import MessageType
+from onyx.db.build_session import session_runtime_stale
 from onyx.db.enums import (
     ArtifactType,
     BuildSessionStatus,
@@ -14,7 +15,6 @@ from onyx.db.enums import (
     SessionOrigin,
     SharingScope,
 )
-from onyx.server.features.build.db.build_session import session_runtime_stale
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     MANIFEST_MAX_ENTRIES,
 )

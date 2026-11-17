@@ -16,6 +16,7 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from onyx.db import user_library
 from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.document import (
     mark_document_as_indexed_for_cc_pair__no_commit,
@@ -38,7 +39,6 @@ from onyx.db.fleet_telemetry import (
 from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
 from onyx.db.sync_record import insert_sync_record
 from onyx.document_index.document_metadata import DocumentMetadata
-from onyx.server.features.build.db import user_library
 from onyx.utils import fleet_telemetry_collector as collector
 from tests.unit.fakes import FakeCache
 from tests.utils.fleet_telemetry import make_sender

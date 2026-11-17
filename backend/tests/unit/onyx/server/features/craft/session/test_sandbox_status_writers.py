@@ -20,7 +20,7 @@ STATUS_MUTATION_HELPERS: tuple[str, ...] = (
 # Modules that MUST reference the status mutation (the spec).
 ALLOWED_REFERENCES: set[str] = {
     # Canonical DB mutations.
-    "onyx/server/features/build/db/sandbox.py",
+    "onyx/db/sandbox.py",
     # Substrate-invariant transitions + invariants.
     "onyx/server/features/build/session/sandbox_lifecycle.py",
 }

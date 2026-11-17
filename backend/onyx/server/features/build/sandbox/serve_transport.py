@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheLock, CacheLockLostError
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.sandbox import get_sandbox_by_id
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
     OPENCODE_SERVE_EVENT_READ_TIMEOUT,
@@ -31,7 +32,6 @@ from onyx.server.features.build.configs import (
     PROMPT_SLOT_LEASE_SECONDS,
     SSE_KEEPALIVE_INTERVAL,
 )
-from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,
     AgentThoughtChunk,

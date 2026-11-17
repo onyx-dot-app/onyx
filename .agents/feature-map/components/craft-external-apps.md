@@ -145,7 +145,7 @@ for an "approve for session" grant. Otherwise `_persist_approval_row` commits a
 pending `ActionApproval`, announces it in Redis
 (`sandbox_proxy/approval_cache.py:announce_approval`), and `_await_decision`
 blocks on a wake key for `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS`. The decision
-route writes through `backend/onyx/server/features/build/db/action_approval.py:try_record_decision` and pushes
+route writes through `backend/onyx/db/action_approval.py:try_record_decision` and pushes
 the wake key. On timeout the gate claims `EXPIRED`, or reads the decision that
 won the race (`_claim_expired_or_read_winner`). "Approve for session" in
 `backend/onyx/server/features/build/approvals/api.py:submit_decision` also approves the session's other pending
@@ -263,7 +263,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    it, and `backend/onyx/server/features/build/approvals/api.py:ApprovalView.can_approve_for_session` refuses
    "approve for session" for any whole-domain action on an external app.
 8. `approval-single-writer` **Approval decisions have one writer.** Only
-   `backend/onyx/server/features/build/db/action_approval.py:try_record_decision` writes the decision of a
+   `backend/onyx/db/action_approval.py:try_record_decision` writes the decision of a
    pending row. It arbitrates between the user, a session grant and proxy
    expiry. The one other path, `GateAddon._apply_session_grant`, inserts a row
    that is already approved when an existing session grant covers the request.
