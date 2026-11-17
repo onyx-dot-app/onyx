@@ -18,6 +18,7 @@ from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
 from tests.utils.onedrive_fixture import (
     FixtureState,
+    FolderPath,
     OneDriveFixtureReader,
     build_fixture_reader,
     load_fixture_config,
@@ -175,7 +176,8 @@ def _integration_environment(
             name="OneDrive personal site overlap",
             credential_json=_sharepoint_credentials(test_secrets),
             connector_specific_config={
-                "sites": [state.root_item.web_url],
+                # Only the identity document is shared across both sources.
+                "sites": [state.folders[FolderPath.IDENTITY].web_url],
                 "include_site_pages": False,
                 "include_site_documents": True,
                 "treat_sharing_link_as_public": True,
