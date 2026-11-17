@@ -395,7 +395,7 @@ def create_persona(
         event=MilestoneRecordType.CREATED_ASSISTANT,
     )
 
-    return persona_snapshot
+    return get_persona(persona_snapshot.id, user, db_session)
 
 
 # NOTE: This endpoint cannot update persona configuration options that
@@ -422,7 +422,7 @@ def update_persona(
     # The persona's default model is baked into the cached LLM provider listing
     # (see onyx/server/manage/llm/provider_cache.py), so edits must drop it.
     invalidate_provider_listing_cache()
-    return persona_snapshot
+    return get_persona(persona_snapshot.id, user, db_session)
 
 
 class PersonaLabelPatchRequest(BaseModel):
