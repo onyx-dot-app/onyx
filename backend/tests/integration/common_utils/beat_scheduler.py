@@ -13,6 +13,8 @@ class ConnectorTestScheduler(DynamicTenantScheduler):
         for entry in schedule.values():
             if entry["task"] in {
                 OnyxCeleryTask.CHECK_FOR_INDEXING,
+                OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
+                OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
                 OnyxCeleryTask.CHECK_FOR_DOC_PERMISSIONS_SYNC,
                 OnyxCeleryTask.CHECK_FOR_EXTERNAL_GROUP_SYNC,
             }:

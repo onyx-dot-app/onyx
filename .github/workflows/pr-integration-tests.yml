@@ -511,7 +511,7 @@ jobs:
             # TCP api_server; run one inside the test container and make every
             # missing prerequisite a hard failure instead of a skip.
             GATEWAY_CLIENTS_STRICT=""
-            RUN_CMD="uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }} ${{ matrix.test-dir.splits && format('--splits {0} --group {1} --durations-path tests/integration/.test_durations', matrix.test-dir.splits, matrix.test-dir.group) || '--stepwise -o cache_dir=/pytest-retry-cache' }}"
+            RUN_CMD="uv run --no-sync pytest -v --durations=5 --tb=short -rs tests/integration/${{ matrix.test-dir.path }} ${{ matrix.test-dir.splits && format('--splits {0} --group {1} --durations-path tests/integration/.test_durations', matrix.test-dir.splits, matrix.test-dir.group) || '--stepwise -o cache_dir=/pytest-retry-cache' }}"
             if [ "${{ matrix.test-dir.path }}" = "tests/gateway_clients" ]; then
               GATEWAY_CLIENTS_STRICT="true"
               RUN_CMD="bash tests/integration/tests/gateway_clients/run_with_server.sh"
