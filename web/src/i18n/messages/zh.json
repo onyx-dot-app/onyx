@@ -4249,6 +4249,10 @@
             "comment_email_blacklist": {
               "label": "评论邮箱黑名单",
               "description": "通常用于忽略某些机器人。添加不应索引其评论的用户邮箱。"
+            },
+            "exclude_internal_comments": {
+              "label": "排除内部评论",
+              "description": "针对 Jira Service Management 项目：跳过仅供客服人员查看的内部评论，仅索引客户可见的评论。"
             }
           }
         },
