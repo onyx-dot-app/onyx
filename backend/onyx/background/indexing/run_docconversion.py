@@ -15,6 +15,7 @@ the side that is behind gets the next send.
 import threading
 import time
 from typing import Any
+from uuid import uuid4
 
 from celery import Celery
 from pydantic import BaseModel, ConfigDict
@@ -63,7 +64,12 @@ from onyx.file_store.document_batch_storage import (
 )
 from onyx.file_store.staging import build_raw_file_callback
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_docprocessing import BatchStage, RedisDocprocessing
+from onyx.redis.redis_docprocessing import (
+    BatchStage,
+    RedisDocprocessing,
+    claim_conversion_batch,
+    release_conversion_batch_claim,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
@@ -406,7 +412,8 @@ def convert_stub_batch(
     stub batch is deleted when the document batch is stored, before the
     docprocessing send. So a stub batch that exists was never sent on, and a
     second run can convert it again. A second run that finds no stub batch
-    does nothing."""
+    does nothing. A claim keeps two runs from converting one batch at the
+    same time: a recovery resend can overlap a run that still converts."""
     if enqueue_time_ms is not None:
         safe_record_single_event(
             IndexAttemptStage.CONVERSION_QUEUE_WAIT,
@@ -421,6 +428,43 @@ def convert_stub_batch(
         )
         return
 
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    claim_owner = task_id or uuid4().hex
+    if not claim_conversion_batch(
+        redis_client, index_attempt_id, batch_num, claim_owner
+    ):
+        logger.info(
+            "Conversion skipped: attempt=%s batch_num=%s converts in another run",
+            index_attempt_id,
+            batch_num,
+        )
+        return
+    try:
+        _convert_claimed_stub_batch(
+            app,
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+            batch_num=batch_num,
+            is_backfill=is_backfill,
+            task_id=task_id,
+        )
+    finally:
+        release_conversion_batch_claim(
+            redis_client, index_attempt_id, batch_num, claim_owner
+        )
+
+
+def _convert_claimed_stub_batch(
+    app: Celery,
+    *,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    batch_num: int,
+    is_backfill: bool,
+    task_id: str | None,
+) -> None:
     context = get_conversion_context(index_attempt_id, cc_pair_id, tenant_id)
     connector = context.connector
     if not isinstance(connector, Resolver):

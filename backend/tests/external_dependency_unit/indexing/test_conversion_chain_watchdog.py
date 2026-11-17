@@ -48,6 +48,8 @@ from onyx.redis.redis_docprocessing import (
     LIVE_TASK_TTL_SECONDS,
     BatchStage,
     RedisDocprocessing,
+    claim_conversion_batch,
+    release_conversion_batch_claim,
     reset_conversion_recovery_misses,
 )
 from onyx.redis.redis_pool import get_redis_client
@@ -303,6 +305,24 @@ def test_a_sent_batch_with_no_task_is_sent_again(run: _Run) -> None:
     assert run.chain_state() == ConversionChainState.RECOVERED
 
     assert run.sent_batch_nums(OnyxCeleryTask.DOCCONVERSION_TASK) == [1]
+
+
+def test_a_restart_does_not_send_a_batch_that_a_run_converts(run: _Run) -> None:
+    """A conversion run took its task off the queue and had no live entry
+    yet. It holds the claim of its batch, so a restart must not send that
+    batch again or count it converted."""
+    run.store_stub_batch(0)
+    run.store_stub_batch(1)
+    assert run.claim("conversion tasks that are gone") == [0, 1]
+    r = get_redis_client()
+    assert claim_conversion_batch(r, run.attempt_id, 1, "a run the checks missed")
+    try:
+        assert run.chain_state() == ConversionChainState.RECOVERED
+
+        assert run.sent_batch_nums(OnyxCeleryTask.DOCCONVERSION_TASK) == [0]
+        assert run.attempt().stub_batches_converted == 0
+    finally:
+        release_conversion_batch_claim(r, run.attempt_id, 1, "a run the checks missed")
 
 
 def test_a_live_conversion_task_keeps_the_watchdog_away(run: _Run) -> None:
