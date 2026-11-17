@@ -26,11 +26,7 @@ from onyx.connectors.google_drive.constants import (
 )
 from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
 from onyx.connectors.google_drive.form_extraction import get_form_text
-from onyx.connectors.google_drive.models import (
-    DriveListingPayload,
-    GDriveMimeType,
-    GoogleDriveFileType,
-)
+from onyx.connectors.google_drive.models import DriveListingPayload, GDriveMimeType
 from onyx.connectors.google_drive.section_extraction import (
     HEADING_DELIMITER,
     get_document_sections,
@@ -41,6 +37,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
     is_transient_google_error,
 )
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,

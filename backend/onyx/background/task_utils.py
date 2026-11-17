@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     CELERY_USER_FILE_DELETE_TASK_EXPIRES,
+    QUERY_REPORT_NAME_PREFIX,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
@@ -40,8 +41,6 @@ logger = setup_logger()
 # ------------------------------------------------------------------
 # Query-history report helpers (pre-existing, used by all modes)
 # ------------------------------------------------------------------
-
-QUERY_REPORT_NAME_PREFIX = "query-history"
 
 
 def construct_query_history_report_name(

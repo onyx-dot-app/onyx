@@ -18,7 +18,7 @@ import pytest
 from kubernetes.client.rest import ApiException
 
 from onyx.cache import factory
-from onyx.cache.interface import CacheBackendType
+from onyx.configs.constants import CacheBackendType
 from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.sandbox.kubernetes import kubernetes_sandbox_manager
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (

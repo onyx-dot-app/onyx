@@ -141,13 +141,13 @@ _LICENSE_RECLAIM_INTERVAL_SECONDS = 6 * 3600
 
 
 def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
-    from onyx.cache.interface import CacheBackendType
     from onyx.configs.app_configs import (
         AUTO_LLM_CONFIG_URL,
         CACHE_BACKEND,
         DISABLE_TELEMETRY,
         SCHEDULED_EVAL_DATASET_NAMES,
     )
+    from onyx.configs.constants import CacheBackendType
     from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
     from onyx.utils.variable_functionality import global_version
     from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS

@@ -1215,8 +1215,8 @@ def make_checkpoint_callback(
 if __name__ == "__main__":
     import os
 
+    from onyx.connectors.load_all import load_all_from_connector
     from onyx.utils.variable_functionality import global_version
-    from tests.daily.connectors.utils import load_all_from_connector
 
     # For connector permission testing, set EE to true.
     global_version.set_ee()

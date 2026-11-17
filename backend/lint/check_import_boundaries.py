@@ -51,6 +51,7 @@ _CONTRACT_KEYS = {
     "standalone",
     "container",
     "shared",
+    "hubs",
     "exception",
 }
 _EXCEPTION_KEYS = {"importer", "imports", "reason"}
@@ -84,9 +85,11 @@ class Contract:
     # import inside it is allowed; the absolute form would not resolve there.
     standalone: bool
     # Independence only: the directory whose sub-directories are the siblings,
-    # and the siblings that every other sibling may import.
+    # the siblings that every other sibling may import, and the hubs. A hub is
+    # a framework over the siblings: it may import them and they may import it.
     container: str
     shared: tuple[str, ...]
+    hubs: tuple[str, ...]
     exceptions: tuple[ImportException, ...]
 
 
@@ -220,6 +223,7 @@ def _parse_contract(table: Mapping[str, object], backend_dir: Path) -> Contract:
         standalone=table.get("standalone", False) is True,
         container=str(table.get("container", "")).rstrip("/"),
         shared=_strings(table, "shared", where),
+        hubs=_strings(table, "hubs", where),
         exceptions=_parse_exceptions(table, where, backend_dir),
     )
 
@@ -230,9 +234,9 @@ def _parse_contract(table: Mapping[str, object], backend_dir: Path) -> Contract:
             return contract
         if not (backend_dir / contract.container).is_dir() or not contract.container:
             raise ConfigError(f"{where}: container `{contract.container}` not found")
-        for sibling in contract.shared:
+        for sibling in contract.shared + contract.hubs:
             if not (backend_dir / contract.container / sibling).is_dir():
-                raise ConfigError(f"{where}: shared sibling `{sibling}` not found")
+                raise ConfigError(f"{where}: sibling `{sibling}` not found")
         return contract
 
     if not contract.source or not contract.forbidden:
@@ -315,7 +319,9 @@ def _breaks(
             return False
         own = path.removeprefix(contract.container + "/").split("/")[0]
         other = module.removeprefix(container_module + ".").split(".")[0]
-        if other == own or other in contract.shared:
+        if other == own or own in contract.hubs:
+            return False
+        if other in contract.shared or other in contract.hubs:
             return False
         return (backend_dir / contract.container / other).is_dir()
     if any(_matches_module(module, prefix) for prefix in contract.allowed):

@@ -15,7 +15,7 @@ from onyx.background.celery.celery_redis import (
     celery_get_queue_length,
     celery_get_queued_task_ids,
 )
-from onyx.background.celery.tasks.pruning.tasks import (
+from onyx.background.celery.tasks.shared.prune_records import (
     reset_prune_and_cancel_sync_record,
 )
 from onyx.configs.app_configs import DOCUMENT_INDEX_SYNC_MAX_TASKS, JOB_TIMEOUT

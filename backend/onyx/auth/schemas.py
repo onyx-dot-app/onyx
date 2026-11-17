@@ -63,9 +63,3 @@ class UserUpdate(schemas.BaseUserUpdate):
         d.pop("email", None)
         d.pop("password", None)
         return d
-
-
-class AuthBackend(str, Enum):
-    REDIS = "redis"
-    POSTGRES = "postgres"
-    JWT = "jwt"

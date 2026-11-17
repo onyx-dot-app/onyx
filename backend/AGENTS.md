@@ -74,6 +74,15 @@ adds an import across one of these boundaries. The contracts are in `lint/import
 | `onyx`, `ee` | The entry points `onyx.main`, `ee.onyx.main`, `onyx.mcp_server_main`, `onyx.webhook_server_main` |
 | `onyx`, `ee` | `onyx.mcp_server` and `onyx.webhook_server`, except from their entry points |
 | `onyx`, `ee`, `scripts`, `model_server` | `onyx.db._deprecated`. Only `alembic` migrations use it |
+| `onyx` | `ee`. Use `fetch_versioned_implementation` or `fetch_ee_implementation_or_noop` |
+| `onyx` | `tests` |
+| The `onyx` modules that `Dockerfile.model_server` copies | Any `onyx` module that the image does not copy |
+| `alembic` migrations | `ee` |
+| `onyx/configs` | Any `onyx` package except `configs` and `utils` |
+| `onyx`, `ee` outside `server` and `background` | `onyx.background`, except the Celery client app |
+| A connector in `onyx/connectors` | Another connector. Shared code goes in `cross_connector_utils`, `google_utils` or `microsoft_utils` |
+| A source in `ee/onyx/external_permissions` | Another source. Shared code goes in `microsoft_utils` |
+| A task package in `onyx/background/celery/tasks` | Another task package. Shared code goes in `shared` |
 
 - Every `import` statement counts: module level, inside a function, and under `TYPE_CHECKING`.
 - The failure message gives the contract and where the code goes. Move the code. Do not move the

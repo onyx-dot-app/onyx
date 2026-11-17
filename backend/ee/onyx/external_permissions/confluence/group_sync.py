@@ -4,7 +4,6 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
 from ee.onyx.external_permissions.models import SyncEntityFailure
 from ee.onyx.external_permissions.utils import MAX_FAILED_ENTITY_FRACTION
-from onyx.background.error_logging import emit_background_error
 from onyx.configs.app_configs import CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC
 from onyx.connectors.confluence.source_operations import (
     ConfluenceSourceOperations,
@@ -12,6 +11,7 @@ from onyx.connectors.confluence.source_operations import (
     user_list_variant,
 )
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
+from onyx.db.background_error import emit_background_error
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SyncEntityKind
 from onyx.db.models import ConnectorCredentialPair

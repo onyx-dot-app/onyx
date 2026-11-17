@@ -8,8 +8,9 @@ import pytest
 from ee.onyx.utils import license as license_utils
 from onyx.auth import login_claims_capture
 from onyx.cache import factory as cache_factory
-from onyx.cache.interface import CacheBackend, CacheBackendType
+from onyx.cache.interface import CacheBackend
 from onyx.cache.redis_backend import RedisCacheBackend
+from onyx.configs.constants import CacheBackendType
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage import invite_rate_limit
 from onyx.server.manage.invite_rate_limit import enforce_invite_rate_limit

@@ -43,7 +43,6 @@ from onyx.db.projects import (
     get_owned_user_project,
     get_project_token_count,
     get_user_projects,
-    upload_files_to_user_files_with_indexing,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -53,6 +52,9 @@ from onyx.server.features.projects.models import (
     TokenCountResponse,
     UserFileSnapshot,
     UserProjectSnapshot,
+)
+from onyx.server.features.projects.upload import (
+    upload_files_to_user_files_with_indexing,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id

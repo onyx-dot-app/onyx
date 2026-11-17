@@ -15,7 +15,9 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.db.models import UserFile
-from onyx.db.projects import upload_files_to_user_files_with_indexing
+from onyx.server.features.projects.upload import (
+    upload_files_to_user_files_with_indexing,
+)
 
 
 def _make_mock_user_file() -> MagicMock:
@@ -24,10 +26,13 @@ def _make_mock_user_file() -> MagicMock:
     return uf
 
 
-@patch("onyx.db.projects.get_current_tenant_id", return_value="test_tenant")
-@patch("onyx.db.projects.create_user_files")
 @patch(
-    "onyx.background.celery.versioned_apps.client.app",
+    "onyx.server.features.projects.upload.get_current_tenant_id",
+    return_value="test_tenant",
+)
+@patch("onyx.server.features.projects.upload.create_user_files")
+@patch(
+    "onyx.server.features.projects.upload.client_app",
     new_callable=MagicMock,
 )
 def test_send_task_includes_expires(

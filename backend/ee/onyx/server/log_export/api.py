@@ -31,9 +31,9 @@ from ee.onyx.server.log_export.storage import (
 from onyx import __version__
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.constants import (
+    CacheBackendType,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,

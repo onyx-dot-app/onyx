@@ -83,7 +83,7 @@ from onyx.auth.oidc_client import log_token_exchange_failure
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import get_effective_permissions, has_global_permission
 from onyx.auth.pkce import generate_pkce_pair
-from onyx.auth.schemas import AuthBackend, UserCreate
+from onyx.auth.schemas import UserCreate
 from onyx.auth.session_tokens import (
     SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     SessionRejection,
@@ -119,6 +119,7 @@ from onyx.configs.constants import (
     FASTAPI_USERS_AUTH_COOKIE_NAME,
     PASSWORD_SPECIAL_CHARS,
     UNNAMED_KEY_PLACEHOLDER,
+    AuthBackend,
     MilestoneRecordType,
     OnyxRedisLocks,
 )

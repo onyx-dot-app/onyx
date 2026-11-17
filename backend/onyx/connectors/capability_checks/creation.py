@@ -19,9 +19,6 @@ from functools import partial
 from typing import Any
 from uuid import UUID
 
-from onyx.background.celery.tasks.capability_checks.enqueue import (
-    send_capability_check_run_task,
-)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.draft_runs import (
     cached_check_result,
@@ -31,6 +28,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     is_draft_result_in_flight,
     wait_for_draft_result,
 )
+from onyx.connectors.capability_checks.enqueue import send_capability_check_run_task
 from onyx.connectors.capability_checks.form_state import validate_form_state
 from onyx.connectors.capability_checks.models import (
     CachedDraftResult,

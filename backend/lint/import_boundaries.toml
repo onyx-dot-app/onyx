@@ -15,7 +15,8 @@
 # also exempt.
 #
 # independence: each sub-directory of `container` must not import another
-# sub-directory, except those in `shared`.
+# sub-directory, except those in `shared`. A sub-directory in `hubs` is a
+# framework over the others: it may import them and they may import it.
 #
 # All import statements count: module level, inside functions, and under
 # TYPE_CHECKING. A deliberate import needs an exception with a reason:
@@ -135,3 +136,129 @@ instead = "Use the current module, for example onyx/file_store for file storage.
 source = ["onyx/", "ee/", "scripts/", "model_server/"]
 source_exclude = ["onyx/db/_deprecated/"]
 forbidden = ["onyx.db._deprecated"]
+
+[[contract]]
+name = "community-does-not-import-enterprise"
+rule = "onyx must not import ee"
+reason = "Community Edition runs without the ee package, so a direct import breaks it."
+instead = "Call fetch_versioned_implementation or fetch_ee_implementation_or_noop from onyx/utils/variable_functionality.py with the module path and the name."
+source = ["onyx/"]
+forbidden = ["ee"]
+
+[[contract]]
+name = "onyx-does-not-import-tests"
+rule = "onyx must not import tests"
+reason = "No image ships tests/, and test helpers are not written for production use."
+instead = "Move the helper into onyx/ and import it from the test, as onyx/connectors/load_all.py does."
+source = ["onyx/"]
+forbidden = ["tests"]
+
+[[contract]]
+name = "model-server-shared-modules"
+rule = "An onyx module that the model server image copies may import only the other copied modules and shared_configs"
+reason = "The model server image has no other onyx code, so any other import fails there."
+instead = "Have the entry point pass the value or the function in, as init_sentry takes instance_id_resolver. Keep `source` and `allowed` equal to the COPY lines in Dockerfile.model_server."
+source = [
+    "onyx/__init__.py",
+    "onyx/configs/__init__.py",
+    "onyx/configs/sentry.py",
+    "onyx/utils/logger.py",
+    "onyx/utils/middleware.py",
+    "onyx/utils/platform_utils.py",
+    "onyx/utils/tenant.py",
+]
+forbidden = ["onyx", "ee", "model_server", "scripts", "lint", "tests"]
+allowed = [
+    "onyx.__version__",
+    "onyx.configs.sentry",
+    "onyx.utils.logger",
+    "onyx.utils.middleware",
+    "onyx.utils.platform_utils",
+    "onyx.utils.tenant",
+]
+
+[[contract]]
+name = "migrations-do-not-import-enterprise"
+rule = "alembic must not import ee"
+reason = "Community Edition runs the same migrations without the ee package."
+instead = "Keep a migration self-contained. Put an Enterprise data change behind fetch_versioned_implementation in onyx/."
+source = ["alembic/", "alembic_tenants/"]
+# The two multi-tenant runners are Enterprise tools, not migrations.
+source_exclude = ["alembic/check_tenant_snapshot.py", "alembic/run_multitenant_migrations.py"]
+forbidden = ["ee"]
+
+[[contract]]
+name = "connectors-are-independent"
+rule = "A connector must not import another connector"
+reason = "Each connector changes alone, and a copied import ties two sources together."
+instead = "Move the shared code to the helper package for the vendor, or to cross_connector_utils/."
+type = "independence"
+container = "onyx/connectors"
+shared = ["cross_connector_utils", "google_utils", "microsoft_utils"]
+# capability_checks and edit_plan run every connector through one framework.
+hubs = ["capability_checks", "edit_plan"]
+
+[[contract.exception]]
+importer = "onyx/connectors/wikipedia/connector.py"
+imports = "onyx.connectors.mediawiki.wiki"
+reason = "Wikipedia is a MediaWiki site: its connector subclasses MediaWikiConnector and adds only the hostname."
+
+[[contract]]
+name = "permission-sync-sources-are-independent"
+rule = "A permission-sync source must not import another source"
+reason = "Each source changes alone, and a copied import ties two sources together."
+instead = "Move the shared code to the helper package for the vendor, such as microsoft_utils/."
+type = "independence"
+container = "ee/onyx/external_permissions"
+shared = ["microsoft_utils"]
+
+[[contract]]
+name = "configs-is-a-low-layer"
+rule = "onyx.configs may import only onyx.configs and onyx.utils"
+reason = "Every package imports the settings, so an import of a higher package from here makes a cycle."
+instead = "Define the enum or the default value in onyx/configs/constants.py and import it from the higher package."
+source = ["onyx/configs/"]
+forbidden = ["onyx", "ee"]
+allowed = ["onyx.__version__", "onyx.configs", "onyx.utils"]
+
+[[contract.exception]]
+importer = "onyx/configs/llm_configs.py"
+imports = "onyx.server.settings.store.load_settings"
+reason = "The function reads a workspace setting, and the settings store is under onyx/server. Remove this when the store moves to a lower package."
+
+[[contract]]
+name = "background-is-a-top-layer"
+rule = "Only onyx.server and the entry points may import onyx.background, except the Celery client app"
+reason = "Workers sit above the packages they run. A lower package that imports a task module ties itself to the worker code."
+instead = "To enqueue a task, import the client app from onyx/background/celery/versioned_apps/client.py and send the task by name. Put a shared constant in onyx/configs/constants.py and a database helper in onyx/db."
+source = ["onyx/", "ee/"]
+source_exclude = [
+    "onyx/background/",
+    "onyx/server/",
+    "onyx/main.py",
+    "onyx/setup.py",
+    "ee/onyx/background/",
+    "ee/onyx/server/",
+    "ee/onyx/main.py",
+]
+forbidden = ["onyx.background", "ee.onyx.background"]
+allowed = ["onyx.background.celery.versioned_apps.client"]
+
+[[contract]]
+name = "celery-task-packages-are-independent"
+rule = "A Celery task package must not import another task package"
+reason = "Each task package owns one job. An import of a sibling ties two jobs together and loads the task module of the sibling."
+instead = "Move the shared code to onyx/background/celery/tasks/shared/, or to onyx/db for a database helper."
+type = "independence"
+container = "onyx/background/celery/tasks"
+shared = ["shared"]
+
+[[contract.exception]]
+importer = "onyx/background/celery/tasks/docfetching/tasks.py"
+imports = "onyx.background.celery.tasks.docprocessing"
+reason = "Fetch and processing are two stages of one indexing pipeline. Fetch starts the processing tasks and shares their heartbeat and log builder."
+
+[[contract.exception]]
+importer = "onyx/background/celery/tasks/docprocessing/tasks.py"
+imports = "onyx.background.celery.tasks.docfetching.task_creation_utils"
+reason = "Fetch and processing are two stages of one indexing pipeline. The processing scheduler creates the next fetch attempt."

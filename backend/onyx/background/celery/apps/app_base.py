@@ -73,10 +73,12 @@ task_logger = get_task_logger(__name__)
 
 if SENTRY_DSN:
     from onyx.configs.sentry import init_sentry
+    from onyx.utils.telemetry import get_or_generate_uuid
 
     init_sentry(
         traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE,
         integrations=[CeleryIntegration()],
+        instance_id_resolver=get_or_generate_uuid,
     )
 else:
     logger.debug("Sentry DSN not provided, skipping Sentry initialization")

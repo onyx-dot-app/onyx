@@ -7,7 +7,7 @@ from onyx.background.celery.tasks.beat_schedule import (
     CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
 )
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CacheBackend, CacheBackendType
+from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import (
     CACHE_BACKEND,
     ENABLE_CC_PAIR_ACCESS_FILTER,
@@ -20,6 +20,7 @@ from onyx.configs.constants import (
     ONYX_CLOUD_REDIS_RUNTIME,
     ONYX_CLOUD_TENANT_ID,
     ONYX_EMAILABLE_LOGO_MAX_DIM,
+    CacheBackendType,
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.file import FileWithMimeType, OnyxStaticFileManager

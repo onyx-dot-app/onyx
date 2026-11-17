@@ -5,14 +5,13 @@ import urllib.parse
 from datetime import datetime, timezone
 from typing import cast
 
-from onyx.auth.schemas import AuthBackend
-from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import FileStoreType, QueryHistoryType
-from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
-from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
-from onyx.prompts.image_analysis import (
-    DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
-    DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+from onyx.configs.constants import (
+    AuthBackend,
+    CacheBackendType,
+    FileStoreType,
+    HtmlBasedConnectorTransformLinksStrategy,
+    OpenSearchAuthMethod,
+    QueryHistoryType,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -2099,6 +2098,19 @@ TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS = int(
 
 
 # Image summarization configuration
+# Used for creating embeddings of images for vector search
+DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT = """
+You are an assistant for summarizing images for retrieval.
+Summarize the content of the following image and be as precise as possible.
+The summary will be embedded and used to retrieve the original image.
+Therefore, write a concise summary of the image that is optimized for retrieval.
+"""
+
+# Prompt for generating image descriptions with filename context
+DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT = """
+Describe precisely and concisely what the image shows.
+"""
+
 IMAGE_SUMMARIZATION_SYSTEM_PROMPT = os.environ.get(
     "IMAGE_SUMMARIZATION_SYSTEM_PROMPT",
     DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,

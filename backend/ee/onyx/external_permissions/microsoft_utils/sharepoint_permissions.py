@@ -22,6 +22,11 @@ from onyx.connectors.microsoft_utils.models import (
     SharepointSecurable,
     SharepointSecurableKind,
 )
+from onyx.connectors.microsoft_utils.sharepoint_access import (
+    SharepointGroup,
+    SharepointGroupExpansion,
+    SharepointPermissionCache,
+)
 from onyx.connectors.microsoft_utils.sharepoint_principals import (
     GROUP_PRINCIPAL_TYPES,
     SharepointPrincipalType,
@@ -31,11 +36,6 @@ from onyx.connectors.microsoft_utils.sharepoint_principals import (
 )
 from onyx.connectors.microsoft_utils.sharepoint_rest import (
     SharepointPermissionReader,
-)
-from onyx.connectors.sharepoint.connector_utils import (
-    SharepointGroup,
-    SharepointGroupExpansion,
-    SharepointPermissionCache,
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.logger import setup_logger
