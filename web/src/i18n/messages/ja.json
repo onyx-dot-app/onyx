@@ -553,7 +553,7 @@
           "tooltip": "画像生成を設定"
         },
         "openapi": {
-          "tooltip": "OpenAPIプラグインを管理"
+          "tooltip": "連携を管理"
         },
         "webSearch": {
           "tooltip": "ウェブ検索を設定"

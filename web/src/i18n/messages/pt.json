@@ -553,7 +553,7 @@
           "tooltip": "Configurar geração de imagens"
         },
         "openapi": {
-          "tooltip": "Gerenciar plugins OpenAPI"
+          "tooltip": "Gerenciar integrações"
         },
         "webSearch": {
           "tooltip": "Configurar pesquisa na web"
