@@ -94,6 +94,16 @@ export class AdminIntegrationsPage {
     await this.page.getByRole("option", { name: method, exact: true }).click();
   }
 
+  /** Fills the client of a manual OAuth sign-in. */
+  async fillOAuthClient(clientId: string, clientSecret: string): Promise<void> {
+    await this.addDialog
+      .getByRole("textbox", { name: "Client ID", exact: true })
+      .fill(clientId);
+    await this.addDialog
+      .getByLabel("Client Secret", { exact: true })
+      .fill(clientSecret);
+  }
+
   async chooseOwner(owner: "For me" | "For the organization"): Promise<void> {
     await this.addDialog
       .getByRole("combobox", { name: "Owner", exact: true })
