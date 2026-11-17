@@ -36,7 +36,7 @@ export function toPluginInput(draft: AgentPluginDraft): AgentPluginInput {
   };
 }
 
-type LockReason = "adminBlocked" | "adminFinal";
+type LockReason = "adminBlocked" | "alwaysAsks" | "adminFinal";
 
 /** Why the agent cannot set Allow on the action, or null when it can. */
 export function lockReason(
@@ -44,6 +44,7 @@ export function lockReason(
   action: IntegrationAction
 ): LockReason | null {
   if (action.effective_admin_policy === "blocked") return "adminBlocked";
+  if (action.always_asks) return "alwaysAsks";
   if (!integration.users_can_save_always_allow) return "adminFinal";
   return null;
 }

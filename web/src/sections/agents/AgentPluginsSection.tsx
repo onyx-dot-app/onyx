@@ -147,7 +147,7 @@ function ActionRow({
           {t(`lock.${lock}`)}
         </Text>
       )}
-      {effective.policy === "ask" && (
+      {effective.policy === "ask" && !action.always_asks && (
         <Section
           flexDirection="row"
           justifyContent="between"

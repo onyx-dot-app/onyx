@@ -10813,6 +10813,7 @@
         "loadFailed": "无法加载插件。",
         "lock": {
           "adminBlocked": "无法选择允许：管理员已阻止此操作。",
+          "alwaysAsks": "无法使用允许：Craft 会为每个此类请求请求批准。",
           "adminFinal": "无法选择允许：此集成的管理员设置为最终设置。",
           "defaultFinal": "无法选择允许：这些集成的管理员设置为最终设置。"
         },

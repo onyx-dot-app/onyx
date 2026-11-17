@@ -27,6 +27,7 @@ const action: IntegrationAction = {
   default_policy: "ask",
   admin_policy: null,
   effective_admin_policy: "ask",
+  always_asks: false,
 };
 
 const integration: AgentCatalogIntegration = {

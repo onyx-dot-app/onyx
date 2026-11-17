@@ -295,6 +295,36 @@ test("does not offer Allow when users cannot save Always allow", async () => {
   expect(screen.getAllByText(copy.askHintAdminOnly)).toHaveLength(1);
 });
 
+test("does not offer Allow on an action that always asks", async () => {
+  setup(
+    [draft()],
+    [
+      plugin({
+        integrations: [
+          linear({
+            kind: "api",
+            shape: "custom",
+            actions: [
+              makeAction({
+                key: "unspecified",
+                display_name: "Any request",
+                default_policy: "ask",
+                effective_admin_policy: "ask",
+                always_asks: true,
+              }),
+            ],
+          }),
+        ],
+      }),
+    ]
+  );
+  const anyRequest = "Setting for Any request";
+  await screen.findByRole("combobox", { name: anyRequest });
+  expect(await optionsOf(anyRequest)).not.toContain("Allow");
+  expect(screen.getByText(copy.lock.alwaysAsks)).toBeInTheDocument();
+  expect(screen.queryByText(copy.askHint)).not.toBeInTheDocument();
+});
+
 test("keeps showing a migrated Allow on a locked action and lets the owner change it", async () => {
   const onChange = setup([draft({ actions: { delete_issue: "allow" } })]);
   const deleteIssue = "Setting for Delete issue";

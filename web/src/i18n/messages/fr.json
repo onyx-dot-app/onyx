@@ -10813,6 +10813,7 @@
         "loadFailed": "Impossible de charger les plugins.",
         "lock": {
           "adminBlocked": "Autoriser n'est pas disponible : un administrateur a bloqué cette action.",
+          "alwaysAsks": "Autoriser n'est pas disponible : Craft demande une approbation pour chacune de ces requêtes.",
           "adminFinal": "Autoriser n'est pas disponible : le réglage administrateur de cette intégration est définitif.",
           "defaultFinal": "Autoriser n'est pas disponible : les réglages administrateur de ces intégrations sont définitifs."
         },
