@@ -24,7 +24,10 @@ tests. Additive to the root `AGENTS.md`.
   queries outside of those directories. Exception: `backend/onyx/cache/postgres_backend.py` is the
   PostgreSQL implementation of `CacheBackend`, so its queries belong there.
 - When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
-  function.
+  function. `lint/check_no_response_model.py` enforces this on commit. `response_model=None`
+  is allowed. `# no-response-model: allow <reason>` on the decorator marks a deliberate exception.
+  `lint/no_response_model_baseline.txt` counts the older uses in each file. After you remove
+  one, regenerate it with `--write-baseline`.
 - OpenSearch is the only document index backend for search and indexing. Onyx no longer uses
   Vespa. Some live Celery names still say "vespa" (the `vespa_metadata_sync` queue, the
   `check_for_vespa_sync_task` task, the `onyx.background.celery.tasks.vespa` module); they sync

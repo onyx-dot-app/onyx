@@ -366,6 +366,17 @@ repos:
         # A commit that only deletes a baselined file must run the check too.
         always_run: true
         stages: [pre-commit]
+      # Runs on every commit so a deleted file with a baseline entry fails in
+      # the same commit. Regenerate the baseline with
+      # `check_no_response_model.py --write-baseline`.
+      - id: no-response-model
+        name: no response_model on FastAPI routes
+        description: "Fail a FastAPI route that sets response_model= instead of a return annotation"
+        language: system
+        entry: python3 backend/lint/check_no_response_model.py
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
       # Runs on every commit so a rename or deletion of a file the map cites
       # fails in the same PR.
       - id: feature-map-integrity
