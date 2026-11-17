@@ -88,8 +88,13 @@ export default function IntegrationActionsTab({
 
   const current = draft ?? savedDraft(data);
 
+  // Craft asks for an action that always asks, even when it is set to Allow.
+  function applied(action: IntegrationAction, value: PolicyValue): PolicyValue {
+    return action.always_asks && value === "allow" ? "ask" : value;
+  }
+
   function fallback(action: IntegrationAction): PolicyValue {
-    return current.defaultPolicy ?? action.default_policy;
+    return applied(action, current.defaultPolicy ?? action.default_policy);
   }
 
   const search = query.trim().toLocaleLowerCase();
@@ -107,8 +112,10 @@ export default function IntegrationActionsTab({
       name: action.display_name,
       description: action.description ?? "",
       defaultPolicy: fallback(action),
-      note:
-        (current.actions[action.key] ?? null) === null
+      disabledPolicies: action.always_asks ? ["allow"] : undefined,
+      note: action.always_asks
+        ? t("alwaysAsks")
+        : (current.actions[action.key] ?? null) === null
           ? t("usesDefault")
           : t("setByAdmin"),
     }));
@@ -118,7 +125,7 @@ export default function IntegrationActionsTab({
     return Object.fromEntries(
       actions.flatMap((action) => {
         const value = current.actions[action.key];
-        return value ? [[action.key, value]] : [];
+        return value ? [[action.key, applied(action, value)]] : [];
       })
     );
   }

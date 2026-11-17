@@ -75,6 +75,7 @@ export function makeAction(
     default_policy: "allow",
     admin_policy: null,
     effective_admin_policy: "allow",
+    always_asks: false,
     ...overrides,
   };
 }

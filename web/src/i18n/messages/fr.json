@@ -11216,6 +11216,7 @@
           },
           "usesDefault": "Valeur par défaut",
           "setByAdmin": "Défini par l’administrateur",
+          "alwaysAsks": "Craft demande avant chaque requête qui ne correspond à aucune autre action. Vous ne pouvez pas définir Autoriser.",
           "useDefaults": "Utiliser les valeurs par défaut",
           "readOnly": "Actions en lecture seule ({count})",
           "write": "Actions d’écriture ({count})",
