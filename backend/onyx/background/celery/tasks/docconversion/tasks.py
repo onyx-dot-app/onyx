@@ -66,8 +66,11 @@ def docconversion_task(
             task_id=task_id,
         )
     except Exception as e:
-        # Nothing sends the batch again after a failure that repeats, so the
-        # attempt fails here, as it does when docfetching raises.
+        # A source error in one batch becomes document failures in
+        # convert_stub_batch. What reaches here is an error of the stage
+        # itself, or too many failed batches. Nothing sends the batch again
+        # after a failure that repeats, so the attempt fails here, as it does
+        # when docfetching raises.
         mark_attempt_failed_unless_terminal(index_attempt_id, e)
         raise
     finally:
