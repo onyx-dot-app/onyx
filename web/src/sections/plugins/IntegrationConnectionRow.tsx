@@ -7,7 +7,11 @@ import { ContentAction, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { SvgCheckCircle, SvgKey, SvgPlug } from "@opal/icons";
 import { useSWRConfig } from "swr";
-import { connectAction, connectWithOAuth } from "@/lib/integrations/connect";
+import {
+  connectAction,
+  connectWithOAuth,
+  needsAdmin,
+} from "@/lib/integrations/connect";
 import { deleteUserConnection } from "@/lib/integrations/svc";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import { isSilentOAuthOutcome, oauthFailureDetail } from "@/lib/oauth/launch";
@@ -110,7 +114,7 @@ export default function IntegrationConnectionRow({
             >
               {t(`${action}.label`)}
             </Button>
-          ) : state === "not_set_up" ? (
+          ) : needsAdmin(integration) ? (
             <Text font="secondary-body" color="text-03">
               {t("askAdmin")}
             </Text>
