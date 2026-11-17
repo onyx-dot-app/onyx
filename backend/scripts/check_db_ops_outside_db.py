@@ -281,6 +281,14 @@ def _all_checked_files() -> list[str]:
     return sorted(paths)
 
 
+def _in_checkout(path: str) -> bool:
+    """False for a path under a checked directory that this checkout lacks."""
+    return any(
+        path.startswith(checked_dir) and (_REPO_ROOT / checked_dir).is_dir()
+        for checked_dir in _CHECKED_DIRS
+    )
+
+
 def _relative(path: str) -> str | None:
     try:
         return Path(path).resolve().relative_to(_REPO_ROOT).as_posix()
@@ -336,7 +344,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--write-baseline",
         action="store_true",
-        help="record the current count of every file as the baseline",
+        help="lower the baseline to the current counts; refuses a rise",
     )
     args = parser.parse_args(argv)
 
@@ -363,22 +371,32 @@ def main(argv: list[str] | None = None) -> int:
         operations[path] = found
         no_reason.extend(f"{path}:{line}" for line in unexplained)
 
+    baseline = read_baseline(BASELINE_PATH) if BASELINE_PATH.is_file() else {}
+    # The FOSS mirror has no backend/ee. Its baseline entries stay as they are.
+    not_checked_out = {
+        path: count for path, count in baseline.items() if not _in_checkout(path)
+    }
+    # pre-commit does not pass deleted files, so only a full scan reports them.
+    existing = [
+        path
+        for path in baseline
+        if not full_scan or path in not_checked_out or (_REPO_ROOT / path).is_file()
+    ]
+    risen, stale = check(operations, baseline, existing)
+
     if args.write_baseline:
+        # Regeneration lowers counts. A rise needs a marker or an edit by hand.
+        if risen and baseline:
+            print("The baseline can only go down. These files have new operations:")
+            print("\n".join(f"  {entry}" for entry in risen))
+            return 1
         counts = {path: len(lines) for path, lines in operations.items()}
-        BASELINE_PATH.write_text(format_baseline(counts))
+        BASELINE_PATH.write_text(format_baseline(counts | not_checked_out))
         total = sum(counts.values())
         files = sum(1 for count in counts.values() if count)
         print(f"Wrote {total} database operations in {files} files to {BASELINE_PATH}")
         return 0
 
-    baseline = read_baseline(BASELINE_PATH)
-    # pre-commit does not pass deleted files, so only a full scan reports them.
-    existing = (
-        [path for path in baseline if (_REPO_ROOT / path).is_file()]
-        if full_scan
-        else list(baseline)
-    )
-    risen, stale = check(operations, baseline, existing)
     if risen:
         print(
             "New database operations outside backend/onyx/db and backend/ee/onyx/db.\n"

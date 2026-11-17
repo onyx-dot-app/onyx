@@ -224,3 +224,69 @@ def test_baseline_round_trips_and_drops_clean_files(tmp_path: Path) -> None:
 
 def test_current_tree_matches_the_committed_baseline() -> None:
     assert check_db_ops_outside_db.main([]) == 0
+
+
+def _repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, files: dict[str, str]
+) -> Path:
+    """A checkout with the given files, and the check pointed at it."""
+    for path, source in files.items():
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(source)
+    baseline = tmp_path / "baseline.txt"
+    monkeypatch.setattr(check_db_ops_outside_db, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_db_ops_outside_db, "BASELINE_PATH", baseline)
+    return baseline
+
+
+_ONE_OPERATION = _source("db_session.execute(stmt)")
+_TWO_OPERATIONS = _source("db_session.execute(stmt)\ndb_session.scalar(stmt)")
+_CORE_FILE = "backend/onyx/server/api.py"
+_EE_FILE = "backend/ee/onyx/server/api.py"
+
+
+def test_write_baseline_lowers_a_count_and_refuses_a_rise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    baseline = _repo(tmp_path, monkeypatch, {_CORE_FILE: _TWO_OPERATIONS})
+    assert check_db_ops_outside_db.main(["--write-baseline"]) == 0
+    assert check_db_ops_outside_db.read_baseline(baseline) == {_CORE_FILE: 2}
+
+    (tmp_path / _CORE_FILE).write_text(_ONE_OPERATION)
+    assert check_db_ops_outside_db.main([]) == 1
+    assert check_db_ops_outside_db.main(["--write-baseline"]) == 0
+    assert check_db_ops_outside_db.read_baseline(baseline) == {_CORE_FILE: 1}
+
+    (tmp_path / _CORE_FILE).write_text(_TWO_OPERATIONS)
+    assert check_db_ops_outside_db.main(["--write-baseline"]) == 1
+    assert check_db_ops_outside_db.read_baseline(baseline) == {_CORE_FILE: 1}
+
+
+def test_a_deleted_file_fails_a_full_scan_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    other = "backend/onyx/server/other.py"
+    _repo(tmp_path, monkeypatch, {_CORE_FILE: _ONE_OPERATION, other: "x = 1\n"})
+    assert check_db_ops_outside_db.main(["--write-baseline"]) == 0
+    (tmp_path / _CORE_FILE).unlink()
+    assert check_db_ops_outside_db.main([str(tmp_path / other)]) == 0
+    assert check_db_ops_outside_db.main([]) == 1
+
+
+def test_a_checkout_without_ee_keeps_the_ee_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    baseline = _repo(
+        tmp_path, monkeypatch, {_CORE_FILE: _ONE_OPERATION, _EE_FILE: _ONE_OPERATION}
+    )
+    assert check_db_ops_outside_db.main(["--write-baseline"]) == 0
+    (tmp_path / _EE_FILE).unlink()
+    for directory in list((tmp_path / _EE_FILE).parents)[:3]:
+        directory.rmdir()
+    assert check_db_ops_outside_db.main([]) == 0
+    assert check_db_ops_outside_db.main(["--write-baseline"]) == 0
+    assert check_db_ops_outside_db.read_baseline(baseline) == {
+        _CORE_FILE: 1,
+        _EE_FILE: 1,
+    }
