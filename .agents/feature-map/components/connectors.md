@@ -94,6 +94,10 @@ Docfetching asks for it on a perm-synced pair's first index or a run from the
 beginning, when the source's doc sync config sets `initial_index_should_sync`.
 `connectors/connector_runner.py:ConnectorRunner` then raises when the connector
 does not implement it.
+A run that does not read permissions gives `external_access=None` on its
+hierarchy nodes, never an invented public or empty access.
+`onyx/db/hierarchy.py:upsert_hierarchy_node` then keeps the stored node
+access. A new node is private, or public on a PUBLIC pair.
 
 **Checkpoints.** `background/indexing/run_docfetching.py` loops while `checkpoint.has_more`. It
 starts from `build_dummy_checkpoint` for a run from the beginning, a backfill,
