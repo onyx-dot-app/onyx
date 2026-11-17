@@ -9,6 +9,10 @@ import {
   mockLlmApiBase,
 } from "@tests/e2e/utils/mockLlm";
 import type { ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import type {
+  AdminIntegrationDetail,
+  IntegrationCreate,
+} from "@/lib/integrations/types";
 
 // type-only import: loading the enum at runtime would pull app modules into the test runner
 type UserFileStatusValue = `${UserFileStatus}`;
@@ -1287,6 +1291,49 @@ export class OnyxApiClient {
       this.log(`Deleted integration ${integrationId}`);
     }
     return success;
+  }
+
+  /** Adds an integration and the plugin that holds it; syncs its actions. */
+  async createIntegration(
+    body: IntegrationCreate
+  ): Promise<AdminIntegrationDetail> {
+    const response = await this.post("/admin/integrations", body);
+    const data = await this.handleResponse<AdminIntegrationDetail>(
+      response,
+      `Failed to create integration ${body.name}`
+    );
+    this.log(`Created integration ${body.name} (ID: ${data.id})`);
+    return data;
+  }
+
+  /** Creates an agent that attaches the given plugins. */
+  async createAgentWithPlugins(
+    name: string,
+    pluginIds: string[],
+    options: CreateAgentOptions = {}
+  ): Promise<number> {
+    const response = await this.post("/persona", {
+      name,
+      description: options.description ?? `${name} (e2e)`,
+      system_prompt: options.instructions ?? "",
+      task_prompt: "",
+      datetime_aware: true,
+      document_set_ids: [],
+      is_public: options.isPublic ?? false,
+      users: options.userIds ?? [],
+      groups: options.groupIds ?? [],
+      tool_ids: [],
+      plugins: pluginIds.map((plugin_id) => ({
+        plugin_id,
+        action_settings: { default: "inherit", actions: {} },
+      })),
+    });
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      `Failed to create agent ${name}`
+    );
+    this.log(`Created agent ${name} (ID: ${data.id})`);
+    return data.id;
   }
 
   async listOpenApiTools(): Promise<
