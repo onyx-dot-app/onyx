@@ -179,11 +179,13 @@ that does not exist yet.
     routes through the helpers in `web/src/lib/plugins/routes.ts` and keep query
     parameters. New links go to `/admin/plugins`.
 11. `action-policies-mcp-and-craft` **Action policies apply to Craft and to MCP
-    tools in Chat, not to OpenAPI tools.** The Auto-approve, Ask and Disabled
+    and OpenAPI tools in Chat.** The Auto-approve, Ask and Disabled
     settings in the plugin editors go to the Craft proxy
     ([[craft-external-apps]]) and to the chat approval gate
-    ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]). `CustomTool`
-    never reads them and runs every call with no approval. The admin tools
+    ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]).
+    `integrations/chat_tools.py:build_integration_chat_tools` gives each
+    integration tool, `CustomTool` too, the approval scope of an Ask action and
+    leaves out a Blocked action. The admin tools
     editor (`sections/actions/MCPServerToolsEditor.tsx`) shows the policies with
     or without Craft, and so does the user-management switch
     (`sections/actions/modals/MCPServerDetailsPage.tsx`). The member approval
@@ -195,7 +197,7 @@ that does not exist yet.
     still need Craft. The Craft catalog list (`/build/action-policies`) and task
     choices cover only Craft-enabled MCP servers
     (`db/action_policy.py:list_action_policies`). The plugin UI must not show
-    read or write badges to members or promise an approval for OpenAPI tools.
+    read or write badges to members.
 12. `shared-oauth-config-shared-connection` **OpenAPI tools that share an
     `OAuthConfig` share each user's connection.** `OAuthUserToken` is unique on
     the configuration and the user, not the tool. A member who connects or
