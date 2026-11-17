@@ -32,7 +32,11 @@ from onyx.file_store.document_batch_storage import (
     get_document_batch_storage,
     get_stub_batch_storage,
 )
-from onyx.redis.redis_docprocessing import BatchStage, RedisDocprocessing
+from onyx.redis.redis_docprocessing import (
+    BatchStage,
+    RedisDocprocessing,
+    conversion_batch_is_claimed,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
@@ -172,7 +176,14 @@ def restart_conversion_chain(
     stub_storage = get_stub_batch_storage(
         cc_pair_id, index_attempt_id, is_backfill=is_backfill
     )
-    lost = sorted(n for n in stub_storage.stored_batch_nums() if n < sent)
+    stored_sent = sorted(n for n in stub_storage.stored_batch_nums() if n < sent)
+    # A claimed batch converts in a run that the checks above did not see.
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lost = [
+        batch_num
+        for batch_num in stored_sent
+        if not conversion_batch_is_claimed(redis_client, index_attempt_id, batch_num)
+    ]
     for batch_num in lost:
         send_docconversion_batch(
             app,
@@ -184,7 +195,7 @@ def restart_conversion_chain(
         )
     sends = len(lost)
 
-    if not lost:
+    if not stored_sent:
         # Not a send: it only lets the dispatch below claim again.
         with get_session_with_current_tenant() as db_session:
             IndexingCoordination.settle_stub_batches_converted(
