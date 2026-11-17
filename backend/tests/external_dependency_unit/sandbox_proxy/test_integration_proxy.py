@@ -53,6 +53,7 @@ from onyx.sandbox_proxy.request_evaluator import IntegrationRequestEvaluator
 from onyx.sandbox_proxy.resolvers.integration import IntegrationResolver
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.sandbox_identity.resolution import SandboxIdentityResolver
+from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.util.mcp_config import (
     resolve_craft_mcp_servers,
 )
@@ -65,6 +66,7 @@ from tests.external_dependency_unit.integration_helpers import (
     make_mcp_integration,
 )
 from tests.external_dependency_unit.integrations.conftest import add_connection
+from tests.unit.sandbox_proxy.conftest import StubResolver, make_flow
 
 TENANT = POSTGRES_DEFAULT_SCHEMA
 
@@ -155,8 +157,12 @@ def _sandbox(user: User) -> ResolvedSandbox:
     )
 
 
-def _evaluate(request: http.Request, user: User) -> Any:
-    return IntegrationRequestEvaluator().evaluate(request, TENANT, user.id)
+def _evaluate(
+    request: http.Request, user: User, scheduled_task_id: UUID | None = None
+) -> Any:
+    return IntegrationRequestEvaluator().evaluate(
+        request, TENANT, user.id, scheduled_task_id
+    )
 
 
 def _headers(request: http.Request, user: User, matched: Any) -> dict[str, str]:
@@ -548,3 +554,46 @@ def test_the_craft_mcp_config_lists_only_connected_integrations_of_enabled_plugi
     assert {open_mcp.id, connected.id} <= listed
     assert unconnected.id not in listed
     assert turned_off.id not in listed
+
+
+def test_a_scheduled_run_matches_a_task_plugin_that_the_owner_turned_off(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    host = _host()
+    mcp = _mcp(db_session, created, f"https://{host}/mcp")
+    plugin = _run(db_session, [mcp])
+    db_session.add(
+        UserPluginPreference(user_id=user.id, plugin_id=plugin.id, enabled=False)
+    )
+    db_session.commit()
+    ctx = _session_ctx(db_session, user)
+    task = _task_run(
+        db_session,
+        user,
+        ctx.session_id,
+        {plugin.id: {"actions": {"update": "allow"}}},
+    )
+    request = _request(f"https://{host}/mcp", _tool_call("update"))
+
+    assert _evaluate(request, user) is None
+    matched = _evaluate(request, user, task.id)
+    assert isinstance(matched, AllMatchedActions)
+    assert matched.target.integration_id == mcp.id
+    _, resolved = _addon()._resolve_request_policies(ctx, matched)
+    assert resolved.governing_action.policy is ActionPolicy.ALWAYS
+
+    # The gate finds the task from the session tag of the run.
+    gate = GateAddon(
+        destination_policy=parse_destination_policy(""),
+        identity=StubResolver(session_by_id=ctx.session_id),
+        request_evaluator=IntegrationRequestEvaluator(),
+        cache_factory=lambda tenant: get_cache_backend(tenant_id=tenant),
+        proxy_instance_id="proxy-test",
+        credential_dispatcher=CredentialInjectionDispatcher([]),
+    )
+    request.headers[MCP_SESSION_TAG_HEADER] = str(ctx.session_id)
+    flow = make_flow(host=host)
+    flow.request = request
+    run_matched = gate._evaluate(flow, ctx.without_session())
+    assert isinstance(run_matched, AllMatchedActions)
+    assert run_matched.target.integration_id == mcp.id

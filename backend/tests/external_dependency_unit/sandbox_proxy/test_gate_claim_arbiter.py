@@ -131,7 +131,13 @@ class _UnusedResolver(SandboxIdentityResolver):
 
 
 class _UnusedMatcher(RequestEvaluator):
-    def evaluate(self, request: Any, tenant_id: str, user_id: UUID) -> Any:  # noqa: ARG002
+    def evaluate(
+        self,
+        request: Any,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        scheduled_task_id: UUID | None,  # noqa: ARG002
+    ) -> Any:
         raise AssertionError("request_evaluator.evaluate unexpectedly used")
 
 

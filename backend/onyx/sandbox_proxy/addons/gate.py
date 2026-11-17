@@ -25,7 +25,10 @@ from onyx.db.enums import (
 )
 from onyx.db.integration import get_integration_by_id
 from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import get_active_scheduled_task_context
+from onyx.db.scheduled_task import (
+    get_active_scheduled_task_context,
+    user_has_running_scheduled_run,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
@@ -526,7 +529,10 @@ class GateAddon:
     ) -> AllMatchedActions | None:
         """Recheck the original execution and persisted decision before forwarding."""
         recognized = self._request_evaluator.evaluate(
-            flow.request, ctx.tenant_id, ctx.user_id
+            flow.request,
+            ctx.tenant_id,
+            ctx.user_id,
+            ctx.scheduled_context[1] if ctx.scheduled_context else None,
         )
         if (
             not isinstance(recognized, AllMatchedActions)
@@ -590,12 +596,7 @@ class GateAddon:
             return None
 
         try:
-            matched_actions = await asyncio.to_thread(
-                self._request_evaluator.evaluate,
-                flow.request,
-                sandbox.tenant_id,
-                sandbox.user_id,
-            )
+            matched_actions = await asyncio.to_thread(self._evaluate, flow, sandbox)
         except Exception:
             logger.exception("request_recognition_failed tenant=%s", sandbox.tenant_id)
             flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
@@ -722,6 +723,47 @@ class GateAddon:
             matched_actions.governing_action.action_type,
         )
         return ctx, matched_actions
+
+    def _evaluate(
+        self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
+    ) -> AllMatchedActions | McpProtocolRequest | None:
+        return self._request_evaluator.evaluate(
+            flow.request,
+            sandbox.tenant_id,
+            sandbox.user_id,
+            self._running_task_id(flow, sandbox),
+        )
+
+    def _running_task_id(
+        self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
+    ) -> UUID | None:
+        """The task of the running scheduled run of the tagged session, so the
+        run also matches the integrations of its task plugins. The session tag
+        is read only while the owner has a running run, so other traffic pays
+        one query. Any doubt gives None: the interactive set, never more."""
+        try:
+            with get_session_with_tenant(tenant_id=sandbox.tenant_id) as db:
+                if not user_has_running_scheduled_run(db, sandbox.user_id):
+                    return None
+            tag = self._extract_session_tag(flow)
+            if tag is None:
+                return None
+            session_id = self._identity.resolve_session_by_id(
+                UUID(tag), sandbox.user_id, sandbox.tenant_id
+            )
+            if session_id is None:
+                return None
+            with get_session_with_tenant(tenant_id=sandbox.tenant_id) as db:
+                scheduled_context = get_active_scheduled_task_context(db, session_id)
+        except Exception:
+            logger.warning(
+                "scheduled_run_lookup_failed tenant=%s host=%s",
+                sandbox.tenant_id,
+                flow.request.host,
+                exc_info=True,
+            )
+            return None
+        return scheduled_context[1] if scheduled_context else None
 
     def _task_can_use_app(self, ctx: SessionContext, target: GatedTarget) -> bool:
         """A scheduled run uses only the integrations of its task plugins."""

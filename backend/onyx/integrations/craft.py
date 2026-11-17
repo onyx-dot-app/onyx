@@ -39,19 +39,58 @@ from onyx.integrations.policy import (
 from onyx.tools.models import PluginLinkConfiguration
 
 
-def list_runnable_integrations(db_session: Session, user_id: UUID) -> list[Integration]:
-    """The enabled integrations of the plugins that the user can see and has
-    turned on, in integration order."""
-    plugin_ids = [
-        state.plugin_id
-        for state in load_user_plugin_states([user_id], db_session)
-        if state.enabled
-    ]
+def _enabled_integrations(
+    db_session: Session, plugin_ids: Collection[UUID]
+) -> list[Integration]:
     integrations: dict[int, Integration] = {}
     for _, integration in list_plugin_integrations(db_session, plugin_ids):
         if integration.enabled:
             integrations[integration.id] = integration
     return list(integrations.values())
+
+
+def list_runnable_integrations(db_session: Session, user_id: UUID) -> list[Integration]:
+    """The enabled integrations of the plugins that the user can see and has
+    turned on, in integration order."""
+    return _enabled_integrations(
+        db_session,
+        [
+            state.plugin_id
+            for state in load_user_plugin_states([user_id], db_session)
+            if state.enabled
+        ],
+    )
+
+
+def _visible_task_plugin_ids(
+    db_session: Session, task_id: UUID, user_id: UUID
+) -> set[UUID]:
+    """The plugins of the task that the owner can still see. The task attached
+    them on purpose, so the owner's on/off choice does not apply."""
+    links = list_task_plugin_links(db_session, task_id)
+    return {
+        state.plugin_id
+        for state in load_user_plugin_states(
+            [user_id], db_session, [link.plugin_id for link in links]
+        )
+    }
+
+
+def list_scheduled_run_integrations(
+    db_session: Session, task_id: UUID, user_id: UUID
+) -> list[Integration]:
+    """The integrations a scheduled run can match: those the owner runs (the
+    gate blocks each one that no task plugin holds) and those of the task
+    plugins the owner can see."""
+    integrations = {
+        integration.id: integration
+        for integration in list_runnable_integrations(db_session, user_id)
+    }
+    for integration in _enabled_integrations(
+        db_session, _visible_task_plugin_ids(db_session, task_id, user_id)
+    ):
+        integrations.setdefault(integration.id, integration)
+    return sorted(integrations.values(), key=lambda integration: integration.id)
 
 
 def list_connectable_apps(db_session: Session, user: User) -> list[ExternalApp]:
@@ -77,12 +116,7 @@ def task_link_settings(
     """The settings of each plugin of the task that holds the integration and
     that the task owner can still see."""
     links = list_task_plugin_links(db_session, task_id)
-    visible = {
-        state.plugin_id
-        for state in load_user_plugin_states(
-            [user_id], db_session, [link.plugin_id for link in links]
-        )
-    }
+    visible = _visible_task_plugin_ids(db_session, task_id, user_id)
     holders = {
         plugin_id
         for plugin_id, integration in list_plugin_integrations(db_session, visible)

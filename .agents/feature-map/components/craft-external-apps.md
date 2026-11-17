@@ -107,7 +107,10 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
 **Recognition.** `sandbox_proxy/request_evaluator.py:IntegrationRequestEvaluator`
 loads the integrations the sandbox owner can use
 (`integrations/craft.py:list_runnable_integrations`: each enabled integration
-of a plugin that the user can see and has turned on) and calls
+of a plugin that the user can see and has turned on; in a scheduled run also
+`list_scheduled_run_integrations`, the integrations of the task plugins that
+the owner can see, on or off. The gate finds the task from the session tag
+only while the owner has a running run, `GateAddon._running_task_id`) and calls
 `match_request` of each kind (`integrations/kinds/`). An API integration wins
 over an MCP server on a shared host, and the lowest id wins between API
 integrations. For an external app, `external_apps/matching/engine.py:resolve_app_for_url`
