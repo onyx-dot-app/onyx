@@ -1,6 +1,6 @@
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
+from typing import NoReturn, Tuple
 from uuid import UUID
 
 from pydantic import TypeAdapter
@@ -1050,6 +1050,13 @@ def resolve_tool_options(
     return legacy.to_tool_options(built_in_tool_ids)
 
 
+def _raise_tool_options_too_large() -> NoReturn:
+    raise OnyxError(
+        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+        "The tool options are too large to save",
+    )
+
+
 def set_chat_session_tool_options__no_commit(
     db_session: Session,
     chat_session_id: UUID,
@@ -1079,14 +1086,8 @@ def set_chat_session_tool_options__no_commit(
         filters.document_set if filters else None,
         filters.tags if filters else None,
     ]
-    if (
-        any(len(items) > MAX_TOOL_OPTIONS_ITEMS for items in item_lists if items)
-        or len(tool_options.model_dump_json().encode()) > MAX_TOOL_OPTIONS_BYTES
-    ):
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
-            "The tool options are too large to save",
-        )
+    if any(len(items) > MAX_TOOL_OPTIONS_ITEMS for items in item_lists if items):
+        _raise_tool_options_too_large()
     require_document_set_access(
         db_session, filters.document_set if filters else None, user
     )
@@ -1105,9 +1106,10 @@ def set_chat_session_tool_options__no_commit(
         )
         or ToolOptions()
     )
-    chat_session.tool_options = ToolOptions.model_validate(
-        current.model_dump() | changes
-    )
+    merged = ToolOptions.model_validate(current.model_dump() | changes)
+    if len(merged.model_dump_json().encode()) > MAX_TOOL_OPTIONS_BYTES:
+        _raise_tool_options_too_large()
+    chat_session.tool_options = merged
     return chat_session.tool_options
 
 
