@@ -36,6 +36,15 @@ export function toPluginInput(draft: AgentPluginDraft): AgentPluginInput {
   };
 }
 
+/** The action's own setting in the draft, if any. An action key can name an
+ * Object member, such as `constructor`. */
+export function ownSetting(
+  draft: AgentPluginDraft,
+  key: string
+): LinkValue | undefined {
+  return Object.hasOwn(draft.actions, key) ? draft.actions[key] : undefined;
+}
+
 type LockReason = "adminBlocked" | "alwaysAsks" | "adminFinal";
 
 /** Why the agent cannot set Allow on the action, or null when it can. */
@@ -69,7 +78,7 @@ export function effectiveSetting(
   action: IntegrationAction,
   draft: AgentPluginDraft
 ): EffectiveSetting {
-  const own = draft.actions[action.key];
+  const own = ownSetting(draft, action.key);
   const link = own ?? draft.default;
   const source: SettingSource = own ? "agent" : "agentDefault";
   const admin = action.effective_admin_policy;
