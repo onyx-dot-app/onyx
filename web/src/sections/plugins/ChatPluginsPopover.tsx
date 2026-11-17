@@ -120,19 +120,29 @@ export default function ChatPluginsPopover({
         rounding={2}
         presentational
         rightChildren={
-          action ? (
-            <Button
-              size="sm"
-              prominence="secondary"
-              disabled={disabled}
-              onClick={() => {
-                setOpen(false);
-                onConnect(plugin);
-              }}
-            >
-              {connectionCopy(`${action}.label`)}
-            </Button>
-          ) : (
+          <Section
+            flexDirection="row"
+            gap={0.5}
+            width="auto"
+            height="auto"
+            alignItems="center"
+          >
+            {action && (
+              <Button
+                size="sm"
+                prominence="secondary"
+                disabled={disabled}
+                onClick={() => {
+                  setOpen(false);
+                  // Connect shows that the member wants to use the plugin.
+                  if (!enabled && toolConfiguration.ready)
+                    toolConfiguration.setPluginEnabled([plugin.pluginId], true);
+                  onConnect(plugin);
+                }}
+              >
+                {connectionCopy(`${action}.label`)}
+              </Button>
+            )}
             <InputSwitch
               checked={enabled}
               disabled={disabled || !toolConfiguration.ready}
@@ -141,7 +151,7 @@ export default function ChatPluginsPopover({
                 toolConfiguration.setPluginEnabled([plugin.pluginId], checked)
               }
             />
-          )
+          </Section>
         }
       />
     );

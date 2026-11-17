@@ -109,6 +109,35 @@ test("switches the agent's plugins and offers Connect for one that needs sign-in
   expect(onConnect).toHaveBeenCalledWith(catalog.plugins[1]);
 });
 
+test("a plugin that needs sign-in keeps its switch, and Connect turns it on", async () => {
+  const configuration = handle([REPORTS_PLUGIN_ID]);
+  const onConnect = jest.fn();
+  const u = user();
+  render(
+    <ChatPluginsPopover
+      agentId={8}
+      toolConfiguration={configuration}
+      catalog={catalog}
+      onConnect={onConnect}
+      onBrowse={jest.fn()}
+    />
+  );
+  await u.click(screen.getByRole("button", { name: copy.trigger.label }));
+  expect(
+    await screen.findByRole("switch", { name: "Use Reports with this agent" })
+  ).not.toBeChecked();
+  await u.click(
+    screen.getByRole("button", {
+      name: messages.plugins.member.connection.connect.label,
+    })
+  );
+  expect(configuration.setPluginEnabled).toHaveBeenCalledWith(
+    [REPORTS_PLUGIN_ID],
+    true
+  );
+  expect(onConnect).toHaveBeenCalledWith(catalog.plugins[1]);
+});
+
 test("says when the agent has no plugins with integrations", async () => {
   const u = user();
   render(
