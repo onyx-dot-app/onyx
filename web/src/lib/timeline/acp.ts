@@ -7,10 +7,25 @@
  * sending them; do not rename fields.
  */
 
+/** One web search result, as Onyx's web search returns it. */
+export interface OnyxSearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+/** A web search's queries and results (Craft's `web_search` tool). */
+export interface OnyxSearch {
+  queries: string[];
+  results: OnyxSearchResult[];
+}
+
 /** Onyx data that ACP has no field for. Carried in `_meta.onyx`. */
 export interface OnyxMeta {
   /** The Onyx wire version the producer used. Missing means version 1. */
   version?: number;
+  /** A web search's structured queries and results. */
+  search?: OnyxSearch;
   /**
    * The tool call was stopped before it finished. ACP's tool status has no
    * cancelled state, so this is kept apart from `failed`.

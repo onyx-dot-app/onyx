@@ -20,6 +20,8 @@ import type {
   AcpToolCallStatus,
   AcpToolKind,
   OnyxMeta,
+  OnyxSearch,
+  OnyxSearchResult,
 } from "@/lib/timeline/acp";
 import type { TimelineEvent } from "@/lib/timeline/events";
 
@@ -71,6 +73,28 @@ function oneOf<T extends string>(
   return allowed.find((option) => option === value);
 }
 
+/** A web search's queries and results; anything malformed is dropped. */
+function decodeSearch(raw: unknown): OnyxSearch | undefined {
+  if (!isRecord(raw)) return undefined;
+  const queries = Array.isArray(raw.queries)
+    ? raw.queries.filter((query): query is string => typeof query === "string")
+    : [];
+  const results: OnyxSearchResult[] = [];
+  if (Array.isArray(raw.results)) {
+    for (const item of raw.results) {
+      if (!isRecord(item)) continue;
+      const url = asString(item.url);
+      if (!url) continue;
+      results.push({
+        url,
+        title: asString(item.title) || url,
+        snippet: asString(item.snippet) ?? "",
+      });
+    }
+  }
+  return { queries, results };
+}
+
 /**
  * Copies `_meta`, keeps the `_meta.onyx` the backend sends (version,
  * cancelled), and moves Craft's flat text-part fields into it, where the
@@ -83,6 +107,8 @@ function decodeMeta(raw: unknown): AcpMeta | undefined {
   if (isRecord(sent)) {
     if (typeof sent.version === "number") onyx.version = sent.version;
     if (sent.cancelled === true) onyx.cancelled = true;
+    const search = decodeSearch(sent.search);
+    if (search) onyx.search = search;
   }
   const part = asString(partId);
   const snapshot = asString(snapshotText);
