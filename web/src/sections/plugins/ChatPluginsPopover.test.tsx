@@ -35,6 +35,7 @@ function handle(disabled: string[] = []): ToolConfigurationHandle {
     setPluginEnabled: jest.fn(),
     allowed: null,
     ready: true,
+    optionsLoaded: true,
     filters: {
       selectedSources: null,
       documentSets: [],
