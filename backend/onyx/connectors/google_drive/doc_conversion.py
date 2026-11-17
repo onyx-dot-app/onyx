@@ -282,6 +282,10 @@ MAX_RETRIEVER_EMAILS = 20
 # Above this many advanced sections, skip align_basic_advanced (its heading
 # matching is ~O(headings x doc length)) and index the unaligned sections.
 ADVANCED_PARSE_MAX_SECTIONS = 2000
+# A Google Doc whose Docs API text is above 1/this of the size threshold is
+# also exported, so the export decides the size skip as before. The export
+# can hold some text the Docs API sections leave out, such as list bullets.
+_DOC_EXPORT_SIZE_MARGIN = 2
 
 # Mapping of Google Drive mime types to export formats
 GOOGLE_MIME_TYPES_TO_EXPORT = {
@@ -828,16 +832,16 @@ def drive_file_size(file: GoogleDriveFileType) -> int | None:
         return None
 
 
-def _with_advanced_doc_sections(
+def _advanced_doc_sections(
     ops: GoogleDriveSourceOperations,
     retriever_email: str,
     file: GoogleDriveFileType,
-    basic_sections: list[TextSection | ImageSection | TabularSection],
-) -> list[TextSection | ImageSection | TabularSection]:
-    """Heading-aware sections of a Google Doc. The basic export is within the
-    size cap, so this parse is bounded. Falls back to the basic sections on
-    any failure."""
-    sections = basic_sections
+) -> list[TextSection] | None:
+    """Heading-aware sections of a Google Doc from the Docs API. None when
+    the read fails, passes GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES or gives no
+    section: the caller then uses the Drive export. A rate limit that outlasts
+    the retries raises, so the document fails and the next run reads it
+    again."""
     try:
         logger.debug("starting advanced parsing for %s", file.get("name"))
         google_doc = ops.fetch_google_doc(
@@ -845,40 +849,76 @@ def _with_advanced_doc_sections(
             doc_id=file.get("id", ""),
             max_response_bytes=GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
         )
-        doc_sections = (
-            None
-            if google_doc is None
-            else get_document_sections(google_doc, file.get("id", ""))
-        )
-        if doc_sections is None:
-            logger.info(
-                "Advanced parse of %s exceeds %s bytes; keeping basic text.",
-                file.get("name"),
-                GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
-            )
-        elif doc_sections:
-            has_smart_chips = any(
-                SMART_CHIP_CHAR in section.text for section in doc_sections
-            )
-            if has_smart_chips and len(doc_sections) <= ADVANCED_PARSE_MAX_SECTIONS:
-                logger.debug(
-                    "found smart chips in %s, aligning with basic sections",
-                    file.get("name"),
-                )
-                sections = align_basic_advanced(basic_sections, doc_sections)
-            else:
-                sections = cast(
-                    list[TextSection | ImageSection | TabularSection],
-                    doc_sections,
-                )
     except Exception as e:
-        # A rate limit that outlasted the retries fails the document, so the
-        # next run fetches it again. Basic text would stay indexed until the
-        # file changes.
         if is_transient_google_error(e):
             raise
         logger.warning("Error in advanced parsing: %s. Using basic extraction.", e)
-    return sections
+        return None
+    if google_doc is None:
+        logger.info(
+            "Advanced parse of %s exceeds %s bytes; keeping basic text.",
+            file.get("name"),
+            GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
+        )
+        return None
+    try:
+        return get_document_sections(google_doc, file.get("id", "")) or None
+    except Exception as e:
+        logger.warning("Error in advanced parsing: %s. Using basic extraction.", e)
+        return None
+
+
+def _needs_doc_export(doc_sections: list[TextSection], size_threshold: int) -> bool:
+    """Whether a Google Doc's Drive export is still needed after its Docs API
+    read. The export has the text of smart chips, which the Docs API gives
+    only as SMART_CHIP_CHAR. The export also decides the size skip, so a doc
+    whose text is near the size threshold is exported too."""
+    if len(doc_sections) > ADVANCED_PARSE_MAX_SECTIONS:
+        # Too many sections to align: the Docs API sections are used alone.
+        return False
+    if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
+        return True
+    text_bytes = sum(len(section.text.encode("utf-8")) for section in doc_sections)
+    return text_bytes * _DOC_EXPORT_SIZE_MARGIN > size_threshold
+
+
+def _read_google_doc(
+    file: GoogleDriveFileType,
+    ops: GoogleDriveSourceOperations,
+    retriever_email: str,
+    allow_images: bool,
+    size_threshold: int,
+    raw_file_callback: RawFileCallback | None,
+) -> FileExtractionResult:
+    """A Google Doc: the Docs API sections first, and the Drive export only
+    when they cannot stand alone. For a doc with no smart chips, the export
+    would be read and then dropped for the Docs API sections: one Drive
+    request for nothing."""
+    doc_sections = _advanced_doc_sections(ops, retriever_email, file)
+    if doc_sections is not None and not _needs_doc_export(doc_sections, size_threshold):
+        return FileExtractionResult(
+            sections=cast(
+                list[TextSection | ImageSection | TabularSection], doc_sections
+            )
+        )
+    basic = _download_and_extract_sections_basic(
+        file, ops, retriever_email, allow_images, size_threshold, raw_file_callback
+    )
+    if basic.skip_reason is not None or doc_sections is None:
+        return basic
+    if (
+        any(SMART_CHIP_CHAR in section.text for section in doc_sections)
+        and len(doc_sections) <= ADVANCED_PARSE_MAX_SECTIONS
+    ):
+        logger.debug(
+            "found smart chips in %s, aligning with basic sections", file.get("name")
+        )
+        basic.sections = align_basic_advanced(basic.sections, doc_sections)
+    else:
+        basic.sections = cast(
+            list[TextSection | ImageSection | TabularSection], doc_sections
+        )
+    return basic
 
 
 def _post_download_skip_reason(
@@ -928,7 +968,12 @@ def _convert_drive_item_to_document(
             logger.info("Skipping %s: %s", file.get("name"), skip_reason)
             return None
 
-        extraction = _download_and_extract_sections_basic(
+        # A Google Doc gets heading-aware sections from the Docs API.
+        extraction = (
+            _read_google_doc
+            if file.get("mimeType") == GDriveMimeType.DOC.value
+            else _download_and_extract_sections_basic
+        )(
             file,
             ops,
             retriever_email,
@@ -937,14 +982,6 @@ def _convert_drive_item_to_document(
             raw_file_callback,
         )
         sections = extraction.sections
-        # A Google Doc within the size cap also gets heading-aware sections.
-        if (
-            file.get("mimeType") == GDriveMimeType.DOC.value
-            and extraction.skip_reason is None
-        ):
-            extraction.sections = _with_advanced_doc_sections(
-                ops, retriever_email, file, extraction.sections
-            )
 
         skip_reason = _post_download_skip_reason(file, extraction)
         if skip_reason is not None:
