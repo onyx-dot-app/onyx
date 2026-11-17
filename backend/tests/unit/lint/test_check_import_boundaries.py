@@ -235,6 +235,22 @@ def test_only_a_relative_import_may_stay_inside_a_standalone_package(
     assert modules == ["onyx.connectors.jira.utils.x"]
 
 
+def test_relative_import_stays_in_the_shipped_package(tmp_path: Path) -> None:
+    """The image also holds files that do not ship, so the root is the package."""
+    config = _FORBIDDEN_CONTRACT.replace(
+        'source = ["onyx/"]', 'source = ["onyx/image/"]'
+    ).replace(
+        'forbidden = ["ee"]\nallowed = ["ee.onyx.allowed"]',
+        'forbidden = ["onyx", "ee"]\nstandalone = true',
+    )
+    (tmp_path / "onyx/image/sandbox_daemon").mkdir(parents=True)
+    (tmp_path / "onyx/image/sandbox_daemon/worker.py").touch()
+    path = "onyx/image/sandbox_daemon/worker.py"
+    assert _flagged(tmp_path, config, path, "from .helper import Helper") == ([], [])
+    modules, _ = _flagged(tmp_path, config, path, "from .. import helper")
+    assert modules == ["onyx.image.helper"]
+
+
 def test_exception_needs_a_reason(tmp_path: Path) -> None:
     config = _FORBIDDEN_CONTRACT + _EXCEPTION.replace(
         'reason = "Guarded by the edition check."', ""

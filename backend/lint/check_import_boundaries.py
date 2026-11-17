@@ -23,10 +23,14 @@ Standard library only: the hook runs without the backend virtualenv.
 
 import ast
 import sys
-import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 and older
+    sys.exit("check_import_boundaries.py needs Python 3.11 or later.")
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 CONFIG_PATH = Path(__file__).resolve().parent / "import_boundaries.toml"
@@ -316,14 +320,32 @@ def _breaks(
         return (backend_dir / contract.container / other).is_dir()
     if any(_matches_module(module, prefix) for prefix in contract.allowed):
         return False
-    if (contract.standalone and found.relative) and any(
-        prefix.endswith("/")
-        and _matches_path(path, prefix)
-        and _matches_path(module.replace(".", "/") + "/", prefix)
-        for prefix in contract.source
-    ):
-        return False
+    if contract.standalone and found.relative:
+        if _stays_in_package(contract, path, module, backend_dir):
+            return False
     return any(_matches_module(module, prefix) for prefix in contract.forbidden)
+
+
+def _stays_in_package(
+    contract: Contract, path: str, module: str, backend_dir: Path
+) -> bool:
+    """True when a relative import resolves inside the importer's shipped package.
+
+    The package is the directory under the source prefix that holds the file.
+    A file that sits directly in the prefix is its own package.
+    """
+    target = module.replace(".", "/") + "/"
+    for prefix in contract.source:
+        if not prefix.endswith("/") or not _matches_path(path, prefix):
+            continue
+        rest = path.removeprefix(prefix)
+        root = prefix
+        first = rest.split("/")[0]
+        if "/" in rest and (backend_dir / prefix / first).is_dir():
+            root = f"{prefix}{first}/"
+        if target.startswith(root):
+            return True
+    return False
 
 
 def check_file(
