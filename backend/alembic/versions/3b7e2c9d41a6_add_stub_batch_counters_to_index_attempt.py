@@ -4,7 +4,7 @@ Counters for the conversion stage: stub batches stored by the lister, sent
 to conversion, and converted into document batches.
 
 Revision ID: 3b7e2c9d41a6
-Revises: 414dfccc5e24
+Revises: ff11c4042c42
 Create Date: 2026-11-10 16:00:00.000000
 
 """
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "3b7e2c9d41a6"
-down_revision = "414dfccc5e24"
+down_revision = "ff11c4042c42"
 branch_labels = None
 depends_on = None
 
