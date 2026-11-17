@@ -13,6 +13,7 @@ from onyx.background.celery.tasks.docprocessing.tasks import (
 )
 from onyx.background.indexing.run_targeted_reindex import CCPairReindexResult
 from onyx.db.enums import IndexingStatus
+from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt, TargetedReindexJob, TargetedReindexJobTarget
 from onyx.db.targeted_reindex import TargetSpec, create_targeted_reindex_job
 from onyx.server.documents.targeted_reindex import (
@@ -24,6 +25,7 @@ from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
+    make_index_attempt,
 )
 
 
@@ -133,6 +135,29 @@ def test_reaped_job_stops_and_keeps_failed_state(db_session: Session) -> None:
         _delete_job(db_session, job_id)
         for pair in pairs:
             cleanup_cc_pair(db_session, pair)
+
+
+def test_startup_orphan_check_skips_synthetic_attempts(
+    db_session: Session, job: TargetedReindexJob
+) -> None:
+    # A queued task also reads PENDING, so the startup check must not cancel it.
+    synthetic_ids = {attempt.id for attempt in job.index_attempts}
+    assert synthetic_ids
+    pair = job.index_attempts[0].connector_credential_pair
+    normal = make_index_attempt(
+        db_session, pair, IndexingStatus.NOT_STARTED, datetime.now(timezone.utc), None
+    )
+    normal.celery_task_id = "normal-task"
+    db_session.commit()
+    try:
+        orphan_ids = set(
+            IndexingCoordination.get_orphaned_index_attempt_ids(db_session)
+        )
+        assert normal.id in orphan_ids
+        assert not synthetic_ids & orphan_ids
+    finally:
+        db_session.delete(normal)
+        db_session.commit()
 
 
 def test_submit_and_start_mark_tenant_active(

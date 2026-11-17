@@ -271,6 +271,8 @@ class IndexingCoordination:
                         [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
                     ),
                     IndexAttempt.celery_task_id.isnot(None),
+                    # The targeted reindex stale-job sweep owns synthetic attempts.
+                    IndexAttempt.targeted_reindex_job_id.is_(None),
                 )
             )
             .scalars()
