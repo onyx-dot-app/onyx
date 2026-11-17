@@ -10,7 +10,6 @@ from uuid import UUID
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session, load_only, selectinload
 
-from onyx.db.approval_request import get_legacy_gated_app_id
 from onyx.db.enums import (
     POLICY_SEVERITY,
     ActionPolicy,
@@ -57,11 +56,6 @@ def insert_action_approval(
         app_name=app_name,
         payload=payload,
         integration_id=integration_id,
-        gated_app_id=(
-            get_legacy_gated_app_id(db_session, integration_id)
-            if integration_id is not None
-            else None
-        ),
         decision=decision,
         decided_at=datetime.now(timezone.utc) if decision is not None else None,
         decided_via=decided_via,
