@@ -21,6 +21,7 @@ import {
 
 const copy = messages.plugins.chat.connectPrompt;
 let mockPlugins: ChatPluginEntry[] = [];
+const mockRefresh = jest.fn(() => Promise.resolve());
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
@@ -39,7 +40,7 @@ jest.mock("@/lib/plugins/hooks", () => ({
     plugins: mockPlugins,
     isLoading: false,
     error: undefined,
-    refresh: jest.fn(),
+    refresh: mockRefresh,
   }),
 }));
 
@@ -72,7 +73,10 @@ beforeEach(() => {
     { pluginId: REPORTS_PLUGIN_ID, name: "Reports", integrations: [reports] },
   ];
 });
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  mockRefresh.mockClear();
+});
 
 test("lists the integrations of plugins that are on and need sign-in", async () => {
   render(
@@ -161,4 +165,24 @@ test("Connect starts the sign-in with the chat as the return path", async () => 
       requestBody(fetchMock, "POST", "/api/integrations/1/oauth/start")
     ).toEqual({ organization: false, return_path: "/app?chatId=chat-1" })
   );
+});
+
+test("reads the statuses again when the user opens it, not on each render", async () => {
+  const { rerender } = render(
+    <IntegrationConnectPrompt
+      agentId={8}
+      toolConfiguration={{ ready: true, isPluginEnabled: () => true }}
+    />
+  );
+  rerender(
+    <IntegrationConnectPrompt
+      agentId={8}
+      toolConfiguration={{ ready: true, isPluginEnabled: () => true }}
+    />
+  );
+  expect(mockRefresh).not.toHaveBeenCalled();
+  await user().click(
+    screen.getByRole("button", { name: "2 integrations need sign-in" })
+  );
+  expect(mockRefresh).toHaveBeenCalledTimes(1);
 });
