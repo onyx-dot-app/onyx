@@ -16,10 +16,18 @@ from onyx.db.enums import (
     IntegrationKind,
     IntegrationOAuthProviderMode,
 )
-from onyx.db.integration_connection import get_connection, get_oauth_client
+from onyx.db.integration_connection import (
+    get_connection,
+    get_oauth_client,
+    set_oauth_client_credentials__no_commit,
+)
+from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import (
     SIGN_IN_REJECTED_REASON,
     read_connection_secret,
+)
+from onyx.server.features.mcp.credentials import (
+    mcp_oauth_client_information_fingerprint,
 )
 from onyx.server.features.mcp.oauth import (
     TOKEN_EXPIRY_BUFFER_SECONDS,
@@ -152,3 +160,67 @@ def test_storage_loads_the_expiry_with_the_refresh_buffer(
     assert context.token_expiry_time == (
         connection.expires_at.timestamp() - TOKEN_EXPIRY_BUFFER_SECONDS
     )
+
+
+def test_grant_for_an_entered_client_that_changed_is_refused(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = make_integration(
+        kind=IntegrationKind.MCP,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        provider_mode=IntegrationOAuthProviderMode.MANUAL,
+        client_id="client-a",
+        client_secret="secret-a",
+    )
+    user = make_test_user("mcp_entered_client_changed")
+    started_with = asyncio.run(
+        IntegrationTokenStorage(integration.id, user.id).get_client_info()
+    )
+    assert started_with is not None
+    storage = IntegrationTokenStorage(
+        integration.id,
+        user.id,
+        load_stored_tokens=False,
+        expected_client_information_fingerprint=(
+            mcp_oauth_client_information_fingerprint(started_with)
+        ),
+    )
+    oauth_client = get_oauth_client(db_session, integration.id)
+    assert oauth_client is not None
+    set_oauth_client_credentials__no_commit(
+        db_session,
+        oauth_client,
+        client_id="client-b",
+        client_secret="secret-b",
+        registration={},
+    )
+    db_session.commit()
+
+    with pytest.raises(OnyxError):
+        asyncio.run(
+            storage.set_authorization_result(
+                OAuthToken(access_token="grant-of-a"), started_with
+            )
+        )
+    assert get_connection(db_session, integration.id, user.id) is None
+
+    # An unchanged entered client still saves the grant.
+    current = asyncio.run(storage.get_client_info())
+    assert current is not None
+    unchanged = IntegrationTokenStorage(
+        integration.id,
+        user.id,
+        load_stored_tokens=False,
+        expected_client_information_fingerprint=(
+            mcp_oauth_client_information_fingerprint(current)
+        ),
+    )
+    asyncio.run(
+        unchanged.set_authorization_result(
+            OAuthToken(access_token="grant-of-b"), current
+        )
+    )
+    assert get_connection(db_session, integration.id, user.id) is not None
