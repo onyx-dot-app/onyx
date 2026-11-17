@@ -84,12 +84,35 @@ def _literal_length(template: str) -> int:
     return len(_PATH_PARAMETER.sub("", template.rstrip("/")))
 
 
+def _segment_matches(template: str, segment: str) -> bool:
+    """Each parameter takes one or more characters. Each literal goes at its
+    first place after the previous one, so the time is linear, with no
+    backtracking."""
+    literals = _PATH_PARAMETER.split(template)
+    if len(literals) == 1:
+        return template == segment
+    first, *middle, last = literals
+    if not segment.startswith(first) or not segment.endswith(last):
+        return False
+    position = len(first)
+    end = len(segment) - len(last)
+    for literal in middle:
+        found = segment.find(literal, position + 1, end - 1)
+        if found < 0:
+            return False
+        position = found + len(literal)
+    return end - position >= 1
+
+
 def _openapi_path_matches(template: str, path: str) -> bool:
     """A parameter fills all or part of one segment, as in ``/files/{id}.json``.
     A trailing slash on either side is ignored."""
-    literals = _PATH_PARAMETER.split(template.rstrip("/"))
-    pattern = "[^/]+".join(re.escape(literal) for literal in literals)
-    return re.fullmatch(pattern + "/?", path) is not None
+    template_segments = template.rstrip("/").split("/")
+    path_segments = path.removesuffix("/").split("/")
+    return len(template_segments) == len(path_segments) and all(
+        _segment_matches(t, p)
+        for t, p in zip(template_segments, path_segments, strict=True)
+    )
 
 
 def _whole_domain_action(
@@ -226,16 +249,7 @@ class ApiKindHandler(IntegrationKindHandler):
             user_oauth_token=ctx.user_oauth_token,
             approval_for=ctx.approval_for,
         )
-        # The schema placeholders can change an operationId, so match the tools
-        # to the action keys of the stored schema by position.
-        action_keys = [
-            spec.raw_name for spec in openapi_to_method_specs(config.openapi_spec)
-        ]
-        return [
-            tool
-            for tool, action_key in zip(tools, action_keys, strict=True)
-            if action_key in keys
-        ]
+        return [tool for tool in tools if tool.action_key in keys]
 
     def match_request(
         self,
@@ -290,18 +304,25 @@ class ApiKindHandler(IntegrationKindHandler):
         path = normalized_request_path(proxied.path or "")
         relative_path = path[len(target.path_prefix) :] or "/"
         method = method.upper()
-        candidates = [
+        path_matches = [
             (action, action.path_template)
             for action in list_integration_actions(integration_id, db_session)
-            if action.http_method == method
-            and action.path_template is not None
+            if action.path_template is not None
             and _openapi_path_matches(action.path_template, relative_path)
         ]
-        if not candidates:
+        # As in OpenAPI, the path decides first, then the method. A concrete
+        # path wins over a templated one: the template with the most literal
+        # text wins.
+        longest = max(
+            (_literal_length(template) for _, template in path_matches), default=0
+        )
+        winners = [
+            action
+            for action, template in path_matches
+            if _literal_length(template) == longest and action.http_method == method
+        ]
+        if not winners:
             return [_whole_domain_action(integration_id, f"{method} {path}")]
-        # As in OpenAPI, a concrete path wins over a templated one: the
-        # template with the most literal text wins.
-        longest = max(_literal_length(template) for _, template in candidates)
         return [
             MatchedIntegrationAction(
                 integration_id=integration_id,
@@ -311,6 +332,5 @@ class ApiKindHandler(IntegrationKindHandler):
                 default_policy=action.default_policy
                 or IntegrationActionPolicyValue.ASK,
             )
-            for action, template in candidates
-            if _literal_length(template) == longest
+            for action in winners
         ]

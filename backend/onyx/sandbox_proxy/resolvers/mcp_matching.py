@@ -64,7 +64,10 @@ def parse_target(server_id: int, server_url: str) -> CraftMCPTarget | None:
         scheme=scheme,
         host=parsed.hostname.lower(),
         port=port,
-        path_prefix=parsed.path.rstrip("/"),
+        # Normalized as the request path is, so an encoded prefix still matches.
+        path_prefix=(
+            normalized_request_path(parsed.path).rstrip("/") if parsed.path else ""
+        ),
     )
 
 
