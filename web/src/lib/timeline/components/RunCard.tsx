@@ -192,11 +192,17 @@ export function RunCard<S extends RunCardStep>({
             </Section>
           }
         >
-          {/* Working, finished and stopped titles swap through one
-              animation instead of flashing. A new activity in the working
-              title keeps its key, so it only resizes. */}
+          {/* Every title change swaps through one animation instead of
+              flashing: each new activity while working ("Thinking..." to
+              "Searching..."), and the finished or stopped title after. */}
           <Presence.Swap
-            swapKey={isRunning ? "working" : stopped ? "stopped" : "done"}
+            swapKey={
+              isRunning
+                ? `working:${workingText}`
+                : stopped
+                  ? "stopped"
+                  : "done"
+            }
           >
             {isRunning ? (
               <StreamingHeader headerText={workingText} />
