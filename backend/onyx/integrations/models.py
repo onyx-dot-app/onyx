@@ -109,14 +109,6 @@ class EffectivePolicy(str, Enum):
     BLOCKED = "blocked"
 
 
-# Stricter results rank higher.
-POLICY_STRICTNESS: dict[EffectivePolicy, int] = {
-    EffectivePolicy.ALLOW: 0,
-    EffectivePolicy.ASK: 1,
-    EffectivePolicy.BLOCKED: 2,
-}
-
-
 class ApprovalMode(str, Enum):
     """Who can answer an Ask in a run."""
 

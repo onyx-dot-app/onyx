@@ -37,8 +37,8 @@
   A down MCP server gives "Tool execution failed" with the reason. An OpenAPI
   tool says that it could not reach its server. Only that call fails; the turn
   continues.
-- **A user in the web chat approves an MCP or OpenAPI call.** Since U4a, chat
-  reads the integration tables. Each action of an integration has a policy:
+- **A user in the web chat approves an MCP or OpenAPI call.** Chat reads the
+  integration tables. Each action of an integration has a policy:
   Allow, Ask or Blocked, from `integrations/policy.py:resolve_action_policies`
   (see "Policy order" under Chat approvals). When no row sets it, a read-only
   MCP tool and an OpenAPI GET are Allow, and each other action is Ask. A
@@ -226,7 +226,7 @@ OAuth config and external app routes read and write the old tables
 (`mcp_connection_config`, `oauth_user_token`, `external_app_user_credential`)
 with the old refresh functions.
 
-**Chat on integrations (U4a).** `db/tools.py:capture_persona_tool_configuration`
+**Chat on integrations.** `db/tools.py:capture_persona_tool_configuration`
 copies the agent's built-in tools and its `persona__plugin` links (plugin id
 and `action_settings`). `integrations/chat_tools.py:build_integration_chat_tools`
 then picks the integrations:
@@ -238,25 +238,20 @@ then picks the integrations:
 - An anonymous user (a Slack channel): only Organization library plugins, and
   only integrations with no sign-in or shared sign-in.
 - Only integrations with `enabled = true`. When several links hold one
-  integration, the strictest result of each action wins.
+  integration, the strictest link setting of each action wins.
 
 For each integration, `integrations/call_credentials.py:resolve_call_credentials`
 calls `resolve_connection` and renders the `header_template` (an OAuth2 or Onyx
 login token with no template goes in `Authorization: Bearer`). A problem means
 no action of the integration is offered. `MCPTool._run` calls the same check
-again through `resolve_call_credentials_by_id`, and for OAuth2 on a
-non-SSE transport passes `make_integration_oauth_provider` with
-`IntegrationTokenStorage`. A 401 on an API key connection sets it to Needs
-reconnect (`mark_api_key_rejected`). Request MCP headers no longer stand in for
-a missing connection. The kind handler (`build_chat_tools`) builds the tools:
+again through `resolve_mcp_call_auth`, and for OAuth2 on a non-SSE transport
+passes `make_integration_oauth_provider` with `IntegrationTokenStorage`. A 401
+on an API key connection sets it to Needs reconnect (`mark_api_key_rejected`).
+Request MCP headers do not stand in for a missing connection. The kind handler (`build_chat_tools`) builds the tools:
 `MCPTool` for an MCP server, one `CustomTool` per operation for an OpenAPI spec,
 and none for a preset or custom app. Tool names use the integration id
 (`mcp__<id>__<name>__<tool>`, `custom__<id>__<operationId>`), and each tool has
-`id = None`. Chat no longer reads `persona__tool` MCP or OpenAPI rows,
-`ToolUserPreference`, `MCPServerUserPreference`, `user_can_access_mcp_server`,
-`resolve_mcp_credentials`, `OAuthTokenManager`, `tool.custom_headers`,
-`passthrough_auth` or `oauth_config_id`
-(`tests/unit/onyx/integrations/test_chat_reads_no_old_sign_in.py`).
+`id = None`.
 
 **Outbound safety.** `server/features/mcp/ssrf.py:mcp_ssrf_httpx_client_factory`
 checks every request the MCP SDK makes, redirects included, at the admin SSRF
@@ -366,9 +361,9 @@ the card shows them, so a live card and a replayed card are the same. Craft's pr
 general, so future sandbox-proxy network approvals can reuse them. An
 "approve_session" decision is a session grant: it also approves the action's
 other pending rows of that integration and action in the chat session, and
-`has_session_grant` lets later calls run with no row unless the policy is now
-Blocked. A new row also writes `gated_app_id`: the `gated_app` row that the U1
-migration kept with the same id, or NULL for an integration made after the
+`chat/tool_approvals.py:open_tool_approval` lets later calls run with no row
+unless the policy is now Blocked. A new row also writes `gated_app_id`: the
+`gated_app` row that the upgrade kept with the same id, or NULL for an integration made after the
 upgrade (`db/approval_request.py:get_legacy_gated_app_id`). Deleting an
 integration sets `integration_id` to NULL; an approval of that row saves a
 rejection by the policy.
@@ -393,8 +388,8 @@ the chat's agent links and no chat grant.
 1. `credential-resolution-single-point` **`resolve_connection` is the only
    place that picks a credential.** Chat construction and MCP execution reach
    it through `integrations/call_credentials.py:resolve_call_credentials`; the
-   sandbox proxy still uses `server/features/mcp/credentials.py:resolve_mcp_credentials`
-   until U4c. A mode never falls back to the other one.
+   sandbox proxy uses `server/features/mcp/credentials.py:resolve_mcp_credentials`.
+   A mode never falls back to the other one.
 2. `oauth-always-per-user` **OAuth is always per user.**
    `server/features/mcp/models.py:MCPToolCreateRequest.validate_auth_configuration`
    rejects OAuth with any performer other than `PER_USER`. The OAuth client
@@ -470,15 +465,11 @@ the chat's agent links and no chat grant.
     object in `tool_result`. Other `CustomTool` exceptions reach `Tool.run`,
     which gives the model "Tool failed with error: <exception text>" and the
     user no error detail ([[tools-framework#run-errors-become-results]]).
-12. `reauth-mark-if-current` **A rejected credential is marked only if it is
-    still current.**
-    `MCPTool._run` marks it only for a 401 on a connection config whose headers
-    the user manages
-    (`server/features/mcp/credentials.py:uses_user_managed_headers`).
-    `backend/onyx/db/mcp.py:mark_connection_config_reauth_required` compares
-    the stored data with the data the call used, so a call with old values
-    cannot mark a newer credential. The mark makes `connection_status` report
-    `reauth_required`.
+12. `reauth-mark-if-current` **Only a rejected API key is marked.**
+    For a 401, `MCPTool._run` calls
+    `integrations/call_credentials.py:mark_api_key_rejected`, which sets the
+    API key connection that the call used to Needs reconnect. An OAuth2
+    connection is left to the refresh.
 13. `craft-sessions-bake-mcp-config` **Craft sessions bake MCP config.** A change
     to a server's URL, access or `available_in_craft` must call
     `server/features/mcp/api.py:_hot_reload_craft_sessions`. Take
@@ -773,10 +764,10 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 - The Slack and Discord bots have no approval buttons, so they get no Ask
   action. An admin sets an action to Allow, or the agent sets it to Allow, to
   let a bot run it.
-- Until U4b, `allowed_tool_ids` narrows only built-in tools, and a preferred
-  tool id cannot name an integration action: integration actions have no tool
-  id. Until U6, an MCP server or OpenAPI tool made through the old routes has
-  no integration, so chat offers none of its actions.
+- `allowed_tool_ids` narrows only built-in tools, and a preferred tool id
+  cannot name an integration action: integration actions have no tool id. An
+  MCP server or OpenAPI tool made through the admin MCP or tool routes has no
+  integration, so chat offers none of its actions.
 
 - Schema placeholders are a plain string replace.
   `build_custom_tools_from_openapi_schema_and_headers` replaces
@@ -845,7 +836,7 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   fields, `oauth_cimd_enabled` included, for every type that is not `OAUTH`.
   Handle the type in `server/features/mcp/credentials.py`
   (`resolve_mcp_credentials`, `ResolvedMCPCredentials`,
-  `user_connection_status`, `uses_user_managed_headers`), and in
+  `user_connection_status`), and in
   `_mcp_setup_headers` and the fingerprint in `server/features/mcp/api.py`.
   Add a test that a user without a credential gets the auth error, not a
   shared credential.
@@ -870,7 +861,7 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   `localhost`: `localhost` is in `utils/url.py:BLOCKED_HOSTNAMES` and fails at
   every level.
 - `investigate-missing-mcp-tools` **Investigate "my MCP tools are missing in chat".** In order: the server
-  must have an integration (`mcp_server.integration_id`) with `enabled` true;
+  must have an integration (`integration.mcp_server_id`) with `enabled` true;
   a plugin that holds it must be linked to the agent (`persona__plugin`), or on
   the default assistant be visible and turned on for the user ([[plugins]]);
   `integration_status` must be connected for the user (a debug log "Skipping

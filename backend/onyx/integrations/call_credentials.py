@@ -1,9 +1,4 @@
-"""The one credential check for a chat call of an integration action.
-
-Chat tool construction and MCP tool execution both call
-``resolve_call_credentials``, so an action is offered only when its call can
-authenticate, and a call checks the same rule again when it runs (#17536).
-"""
+"""The one credential check for a chat call of an integration action."""
 
 from uuid import UUID
 
@@ -94,11 +89,11 @@ def resolve_call_credentials(
     )
 
 
-def resolve_call_credentials_by_id(
-    integration_id: int, acting_user_id: UUID | None
-) -> CallCredentials | ConnectionProblem:
-    """``resolve_call_credentials`` in a session of its own, for a call that
-    runs after construction."""
+def resolve_mcp_call_auth(
+    integration_id: int, acting_user_id: UUID | None, transport: MCPTransport | None
+) -> tuple[CallCredentials, OAuthClientProvider | None] | ConnectionProblem:
+    """``resolve_call_credentials`` and ``mcp_oauth_provider`` in a session of
+    their own, for an MCP call that runs after construction."""
     with get_session_with_current_tenant() as db_session:
         integration = get_integration_by_id(integration_id, db_session)
         if integration is None or not integration.enabled:
@@ -109,11 +104,19 @@ def resolve_call_credentials_by_id(
         acting_user = (
             db_session.get(User, acting_user_id) if acting_user_id is not None else None
         )
-        return resolve_call_credentials(integration, acting_user, db_session)
+        credentials = resolve_call_credentials(integration, acting_user, db_session)
+        if isinstance(credentials, ConnectionProblem):
+            return credentials
+        return credentials, mcp_oauth_provider(
+            integration, credentials, transport, db_session
+        )
 
 
 def mcp_oauth_provider(
-    credentials: CallCredentials, transport: MCPTransport | None
+    integration: Integration,
+    credentials: CallCredentials,
+    transport: MCPTransport | None,
+    db_session: Session,
 ) -> OAuthClientProvider | None:
     """The MCP SDK provider that refreshes an OAuth2 token during a call.
     None for other methods and for SSE, where the refresh before the call
@@ -123,20 +126,13 @@ def mcp_oauth_provider(
         or transport is MCPTransport.SSE
     ):
         return None
-    with get_session_with_current_tenant() as db_session:
-        integration = get_integration_by_id(credentials.integration_id, db_session)
-        server = get_mcp_server_for_integration(credentials.integration_id, db_session)
-        oauth_client = get_oauth_client(db_session, credentials.integration_id)
-        if integration is None or server is None or oauth_client is None:
-            return None
-        connection = integration_mcp_server_connection(
-            server, integration, oauth_client
-        )
+    server = get_mcp_server_for_integration(integration.id, db_session)
+    oauth_client = get_oauth_client(db_session, integration.id)
+    if server is None or oauth_client is None:
+        return None
     return make_integration_oauth_provider(
-        connection,
-        IntegrationTokenStorage(
-            credentials.integration_id, credentials.connection_user_id
-        ),
+        integration_mcp_server_connection(server, integration, oauth_client),
+        IntegrationTokenStorage(integration.id, credentials.connection_user_id),
     )
 
 

@@ -18,7 +18,6 @@ from onyx.db.enums import (
     ApprovalDecision,
     IntegrationActionPolicyValue,
     IntegrationActionSource,
-    IntegrationKind,
 )
 from onyx.db.models import (
     ApprovalRequest,
@@ -37,12 +36,11 @@ from onyx.integrations.models import (
 from onyx.integrations.policy import (
     parse_action_settings,
     resolve_action_policies,
-    strictest_policies,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    make_integration,
+    make_mcp_integration,
     set_policy,
 )
 
@@ -229,9 +227,11 @@ def integrations(db_session: Session) -> Generator[list[int], None, None]:
 def _integration(
     db_session: Session, created: list[int], case: Case, world: PolicyWorld
 ) -> Integration:
-    integration = make_integration(
+    integration, _ = make_mcp_integration(
         db_session,
-        kind=IntegrationKind.MCP,
+        server_url="https://mcp.example.test/mcp",
+        name=f"policy-{uuid4().hex[:8]}",
+        tools=(),
         users_can_save_always_allow=case.users_can_save,
     )
     created.append(integration.id)
@@ -298,7 +298,7 @@ def test_each_step_of_the_policy_order(
         integration=integration,
         action_keys=[ACTION],
         user_id=world.user.id,
-        link_settings=settings,
+        link_settings=[settings],
         approval_mode=case.mode,
         chat_session_id=world.chat_session_id,
     )
@@ -319,7 +319,7 @@ def test_a_caller_with_no_user_gets_no_user_grant_and_no_link_inherits(
             integration=integration,
             action_keys=[ACTION],
             user_id=user_id,
-            link_settings=None,
+            link_settings=[],
             approval_mode=ApprovalMode.INTERACTIVE,
             chat_session_id=None,
         ) == {ACTION: expected}
@@ -339,7 +339,7 @@ def test_a_chat_grant_applies_only_to_its_chat_and_integration(
             integration=integration,
             action_keys=[ACTION],
             user_id=world.user.id,
-            link_settings=None,
+            link_settings=[],
             approval_mode=ApprovalMode.INTERACTIVE,
             chat_session_id=chat_session_id,
         )[ACTION].value
@@ -360,7 +360,7 @@ def test_an_unknown_action_key_asks(
         integration=integration,
         action_keys=["not_synced"],
         user_id=None,
-        link_settings=None,
+        link_settings=[],
         approval_mode=ApprovalMode.INTERACTIVE,
         chat_session_id=None,
     ) == {"not_synced": E_ASK}
@@ -377,12 +377,3 @@ def test_stored_settings_parse_and_a_bad_row_blocks() -> None:
     assert parse_action_settings({"default": "sometimes"}) == ActionSettings(
         default=LinkValue.BLOCKED
     )
-
-
-def test_several_links_keep_the_strictest_result() -> None:
-    assert strictest_policies(
-        [
-            {"a": E_ALLOW, "b": E_ASK, "c": E_ALLOW},
-            {"a": E_ASK, "b": E_BLOCKED, "c": E_ALLOW},
-        ]
-    ) == {"a": E_ASK, "b": E_BLOCKED, "c": E_ALLOW}

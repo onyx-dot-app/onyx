@@ -17,7 +17,6 @@ class ChatToolContext(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    # The acting user; None for a caller with no user.
     user_id: UUID | None = None
     user_email: str | None = None
     chat_session_id: UUID | None = None

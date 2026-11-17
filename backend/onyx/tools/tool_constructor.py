@@ -184,8 +184,7 @@ def _construct_tools_impl(
     selection_llm_factory: Callable[[], LLM] | None = None,
     approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
 ) -> list[Tool]:
-    """Construct available tools, resolving each integration once per model response."""
-    tool_dict: dict[int, list[Tool]] = {}
+    tools: list[Tool] = []
 
     persona_tool_names = [t.name for t in configuration.tools]
     logger.debug(
@@ -254,9 +253,7 @@ def _construct_tools_impl(
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 
-                tool_dict[db_tool_model.id] = [
-                    _build_search_tool(db_tool_model.id, search_tool_config)
-                ]
+                tools.append(_build_search_tool(db_tool_model.id, search_tool_config))
 
             # Handle Image Generation Tool
             elif tool_cls.__name__ == ImageGenerationTool.__name__:
@@ -264,7 +261,7 @@ def _construct_tools_impl(
                     llm, db_session
                 )
 
-                tool_dict[db_tool_model.id] = [
+                tools.append(
                     ImageGenerationTool(
                         image_generation_credentials=ImageGenerationProviderCredentials(
                             api_key=cast(str, img_generation_llm_config.api_key),
@@ -283,14 +280,12 @@ def _construct_tools_impl(
                             custom_tool_config, ImageGenerationTool.__name__
                         ),
                     )
-                ]
+                )
 
             # Handle Web Search Tool
             elif tool_cls.__name__ == WebSearchTool.__name__:
                 try:
-                    tool_dict[db_tool_model.id] = [
-                        WebSearchTool(tool_id=db_tool_model.id)
-                    ]
+                    tools.append(WebSearchTool(tool_id=db_tool_model.id))
                 except ValueError as e:
                     logger.error("Failed to initialize Internet Search Tool: %s", e)
                     raise ValueError(
@@ -308,14 +303,14 @@ def _construct_tools_impl(
                     )
                     continue
                 try:
-                    tool_dict[db_tool_model.id] = [
+                    tools.append(
                         OpenURLTool(
                             tool_id=db_tool_model.id,
                             document_index=document_index,
                             user=user,
                             web_fetch_disabled=open_url_web_fetch_disabled,
                         )
-                    ]
+                    )
                 except RuntimeError as e:
                     logger.error("Failed to initialize Open URL Tool: %s", e)
                     raise ValueError(
@@ -324,34 +319,34 @@ def _construct_tools_impl(
 
             # Handle Python/Code Interpreter Tool
             elif tool_cls.__name__ == PythonTool.__name__:
-                tool_dict[db_tool_model.id] = [
+                tools.append(
                     PythonTool(
                         tool_id=db_tool_model.id,
                         chat_session_id=_require_chat_session_id(
                             custom_tool_config, PythonTool.__name__
                         ),
                     )
-                ]
+                )
 
             # Handle Coding Agent Tool
             elif tool_cls.__name__ == CodingAgentTool.__name__:
-                tool_dict[db_tool_model.id] = [
+                tools.append(
                     CodingAgentTool(
                         tool_id=db_tool_model.id,
                         llm=llm,
                     )
-                ]
+                )
 
             # Handle File Reader Tool
             elif tool_cls.__name__ == FileReaderTool.__name__:
                 cfg = file_reader_tool_config or FileReaderToolConfig()
-                tool_dict[db_tool_model.id] = [
+                tools.append(
                     FileReaderTool(
                         tool_id=db_tool_model.id,
                         user_file_ids=cfg.user_file_ids,
                         chat_file_ids=cfg.chat_file_ids,
                     )
-                ]
+                )
 
     if (
         not added_search_tool
@@ -364,9 +359,7 @@ def _construct_tools_impl(
         if not search_tool_config:
             search_tool_config = SearchToolConfig()
 
-        tool_dict[search_tool_db_model.id] = [
-            _build_search_tool(search_tool_db_model.id, search_tool_config)
-        ]
+        tools.append(_build_search_tool(search_tool_db_model.id, search_tool_config))
 
     # Always inject MemoryTool when the user has the memory tool enabled,
     # bypassing persona tool associations and allowed_tool_ids filtering
@@ -377,7 +370,7 @@ def _construct_tools_impl(
                 tool_id=memory_tool_db_model.id,
                 llm=llm,
             )
-            tool_dict[memory_tool_db_model.id] = [memory_tool]
+            tools.append(memory_tool)
         except RuntimeError:
             logger.warning(
                 "MemoryTool not found in the database. Run the latest alembic migration to seed it."
@@ -397,6 +390,4 @@ def _construct_tools_impl(
             mcp_headers=custom_tool_config.mcp_headers,
         ),
     )
-    return [
-        tool for tool_list in tool_dict.values() for tool in tool_list
-    ] + integration_tools
+    return tools + integration_tools

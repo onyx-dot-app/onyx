@@ -4,16 +4,15 @@ from collections.abc import Collection
 from uuid import UUID
 
 from pydantic import JsonValue
-from sqlalchemy import and_, exists, func, insert, or_, select, union_all, update
+from sqlalchemy import and_, func, insert, or_, select, union_all, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import (
     ApprovalRequest,
     ChatSession,
-    ExternalApp,
     GatedApp,
-    MCPServer,
+    Integration,
     QuestionRequest,
 )
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
@@ -64,35 +63,17 @@ def create_approval_request__no_commit(
 
 def get_legacy_gated_app_id(db_session: Session, integration_id: int) -> int | None:
     """The ``gated_app`` row that the upgrade kept for the integration: same
-    id, and its MCP server or external app points at the integration. None
-    for an integration made after the upgrade and for an OpenAPI tool."""
+    id, and the same MCP server or external app. None for an integration made
+    after the upgrade and for an OpenAPI tool."""
     return db_session.scalar(
         select(GatedApp.id)
-        .outerjoin(MCPServer, MCPServer.id == GatedApp.mcp_server_id)
-        .outerjoin(ExternalApp, ExternalApp.id == GatedApp.external_app_id)
+        .join(Integration, Integration.id == GatedApp.id)
         .where(
             GatedApp.id == integration_id,
             or_(
-                MCPServer.integration_id == integration_id,
-                ExternalApp.integration_id == integration_id,
+                Integration.mcp_server_id == GatedApp.mcp_server_id,
+                Integration.external_app_id == GatedApp.external_app_id,
             ),
-        )
-    )
-
-
-def has_session_grant(
-    db_session: Session, chat_session_id: UUID, integration_id: int, action_id: str
-) -> bool:
-    return bool(
-        db_session.scalar(
-            select(
-                exists().where(
-                    ApprovalRequest.chat_session_id == chat_session_id,
-                    ApprovalRequest.integration_id == integration_id,
-                    ApprovalRequest.action_id == action_id,
-                    ApprovalRequest.decided_via == ApprovalDecidedVia.SESSION_GRANT,
-                )
-            )
         )
     )
 
