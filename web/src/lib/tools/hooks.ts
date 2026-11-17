@@ -810,10 +810,13 @@ export function useToolConfiguration(
   // The plugins the user turned off for this agent. A chat that does not
   // exist yet starts with them; a switch in any chat saves them.
   const preferences = useAgentPluginPreferences(signedIn);
+  // The agent whose plugins this composer reads and saves: the agent viewer
+  // names its own.
+  const configAgentId = newChatWithAgentId ?? activeAgent?.id;
   const preferredOff =
-    activeAgent === undefined
+    configAgentId === undefined
       ? null
-      : preferences.disabledPluginIds(activeAgent.id);
+      : preferences.disabledPluginIds(configAgentId);
   const preferredOffKey = preferredOff === null ? null : preferredOff.join(",");
   const preferredPlugins = useMemo((): PluginConfiguration | null => {
     if (preferredOffKey === null) return null;
@@ -842,7 +845,7 @@ export function useToolConfiguration(
   const agentTools = activeAgent?.tools;
   // Every plugin of the agent, null until it loads. Saved options name
   // plugins in an allow-list, so a plugin unknown here would be left out.
-  const agentPluginIds = useAgentChatPlugins(activeAgent?.id).pluginIds;
+  const agentPluginIds = useAgentChatPlugins(configAgentId).pluginIds;
   const pluginIdsKey =
     agentPluginIds === null ? null : agentPluginIds.join(",");
   const pluginIds = useMemo(
@@ -1004,9 +1007,9 @@ export function useToolConfiguration(
   const { setPluginsDisabled } = preferences;
   const setPluginEnabled = useCallback(
     (ids: readonly string[], enabled: boolean) => {
-      if (key === null || activeAgent === undefined) return;
+      if (key === null || configAgentId === undefined) return;
       if (signedIn)
-        setPluginsDisabled(activeAgent.id, ids, !enabled).catch(() =>
+        setPluginsDisabled(configAgentId, ids, !enabled).catch(() =>
           toast.error(t("toolsPopover.selectionSaveFailed"))
         );
       const change = (current: PluginConfiguration): PluginConfiguration => {
@@ -1041,7 +1044,16 @@ export function useToolConfiguration(
         return { key, configuration: { ...current, plugins } };
       });
     },
-    [key, editChat, activeAgent, pluginIds, signedIn, setPluginsDisabled, t]
+    [
+      key,
+      editChat,
+      activeAgent,
+      configAgentId,
+      pluginIds,
+      signedIn,
+      setPluginsDisabled,
+      t,
+    ]
   );
 
   const setFilters = useCallback(

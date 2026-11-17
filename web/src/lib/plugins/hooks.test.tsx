@@ -125,3 +125,82 @@ test("turning a plugin off saves disabled_plugin_ids and keeps the built-in tool
     LINEAR_PLUGIN_ID,
   ]);
 });
+
+test("a failed agent read leaves the plugin list unknown and retries the agent", async () => {
+  let agentReads = 0;
+  mockFetch({
+    "/api/integrations": [linear, reports],
+    "/api/persona/8": () => {
+      agentReads += 1;
+      return agentReads === 1
+        ? new Response(JSON.stringify({ detail: "down" }), { status: 500 })
+        : {
+            id: 8,
+            plugins: [
+              {
+                plugin_id: LINEAR_PLUGIN_ID,
+                plugin_name: "Linear",
+                action_settings: { default: "inherit", actions: {} },
+              },
+            ],
+          };
+    },
+  });
+  const { result } = renderHook(() => useAgentChatPlugins(8), { wrapper });
+  await waitFor(() => expect(result.current.error).toBeDefined());
+  expect(result.current.pluginIds).toBeNull();
+
+  await act(() => result.current.refresh());
+  await waitFor(() =>
+    expect(result.current.pluginIds).toEqual([LINEAR_PLUGIN_ID])
+  );
+});
+
+test("a failed integrations read leaves the default agent's plugins unknown", async () => {
+  mockFetch({
+    "/api/integrations": new Response(JSON.stringify({ detail: "down" }), {
+      status: 500,
+    }),
+  });
+  const { result } = renderHook(() => useAgentChatPlugins(0), { wrapper });
+  await waitFor(() => expect(result.current.error).toBeDefined());
+  expect(result.current.pluginIds).toBeNull();
+});
+
+test("the API decides which plugins the user can see", async () => {
+  const [ref] = reports.plugins;
+  if (!ref) throw new Error("Missing fixture plugin");
+  mockFetch({
+    "/api/integrations": [
+      {
+        ...reports,
+        plugins: [{ ...ref, installation_policy: "NOT_AVAILABLE" }],
+      },
+    ],
+  });
+  const { result } = renderHook(() => useAgentChatPlugins(0), { wrapper });
+  await waitFor(() =>
+    expect(result.current.pluginIds).toEqual([REPORTS_PLUGIN_ID])
+  );
+});
+
+test("a failed preferences read is not loaded and a switch fails", async () => {
+  const fetchMock = mockFetch({
+    "/api/user/assistant/preferences": new Response(
+      JSON.stringify({ detail: "down" }),
+      { status: 500 }
+    ),
+  });
+  const { result } = renderHook(() => useAgentPluginPreferences(true), {
+    wrapper,
+  });
+  await waitFor(() => expect(result.current.error).toBeDefined());
+  expect(result.current.loaded).toBe(false);
+  expect(result.current.disabledPluginIds(8)).toBeNull();
+  await expect(
+    result.current.setPluginsDisabled(8, [LINEAR_PLUGIN_ID], true)
+  ).rejects.toThrow();
+  expect(
+    fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")
+  ).toBe(false);
+});

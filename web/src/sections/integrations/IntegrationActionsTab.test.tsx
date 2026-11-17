@@ -240,6 +240,9 @@ test("tells the admin to connect an own account for an individual MCP server", a
   expect(
     screen.queryByRole("button", { name: copy.connectFirst.open })
   ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: copy.connectFirst.openPlugins })
+  ).toBeInTheDocument();
 });
 
 test("locks Allow for an action that Craft always asks for, with the reason", async () => {

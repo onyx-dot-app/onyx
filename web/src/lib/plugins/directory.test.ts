@@ -92,3 +92,36 @@ test("only the owner of a private integration plugin shares it", () => {
     false
   );
 });
+
+test("a plugin the API returns stays in the list whatever its install setting", () => {
+  const [ref] = linear.plugins;
+  if (!ref) throw new Error("Missing fixture plugin");
+  const entries = memberPluginEntries(
+    [],
+    [
+      {
+        ...linear,
+        plugins: [{ ...ref, installation_policy: "NOT_AVAILABLE" }],
+      },
+    ],
+    "me@example.com",
+    "en"
+  );
+  expect(entries.map((entry) => entry.id)).toEqual([LINEAR_PLUGIN_ID]);
+  const [entry] = entries;
+  if (!entry) throw new Error("Missing entry");
+  expect(pluginSwitch(entry).blocked).toBe("notAvailable");
+});
+
+test("a plugin a group makes Required has a locked switch", () => {
+  const [ref] = linear.plugins;
+  if (!ref) throw new Error("Missing fixture plugin");
+  const [entry] = memberPluginEntries(
+    [],
+    [{ ...linear, plugins: [{ ...ref, installation_policy: "REQUIRED" }] }],
+    "me@example.com",
+    "en"
+  );
+  if (!entry) throw new Error("Missing entry");
+  expect(pluginSwitch(entry).blocked).toBe("required");
+});
