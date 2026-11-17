@@ -12,6 +12,7 @@ from onyx.db.llm import (
     can_user_access_llm_provider,
     fetch_default_model,
     fetch_existing_llm_provider,
+    fetch_first_llm_provider,
     fetch_model_configuration_by_id,
     fetch_user_group_ids,
 )
@@ -25,6 +26,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.decisions.client import DEFAULT_DECISION_TIMEOUT_S, DecisionClient
 from onyx.llm.decisions.factory import build_decision_client
+from onyx.llm.decisions.models import DecisionProvider
 from onyx.llm.interfaces import LLM, LlmRequestPolicy
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.multi_llm import LitellmLLM
@@ -472,6 +474,35 @@ def get_default_utility_llm(
     )
 
 
+def _decision_client_for_provider(
+    db_session: Session,
+    provider: LLMProviderModel,
+    model_name: str,
+    model_configuration_id: int | None,
+    additional_headers: dict[str, str] | None,
+    timeout: float,
+) -> DecisionClient:
+    api_key = provider.api_key.get_value(apply_mask=False) if provider.api_key else ""
+    check_llm_cost_limit_for_provider(
+        db_session=db_session,
+        tenant_id=get_current_tenant_id(),
+        llm_provider_api_key=api_key,
+    )
+    return build_decision_client(
+        provider=provider.provider,
+        model=model_name,
+        api_key=api_key,
+        api_base=provider.api_base,
+        zoom_voice_provider_id=provider.zoom_voice_provider_id,
+        extra_headers={
+            **build_llm_extra_headers(additional_headers),
+            **_build_provider_extra_headers(provider.provider, provider.custom_config),
+        },
+        model_configuration_id=model_configuration_id,
+        timeout=timeout,
+    )
+
+
 def get_decision_client(
     additional_headers: dict[str, str] | None = None,
     timeout: float = DEFAULT_DECISION_TIMEOUT_S,
@@ -480,29 +511,29 @@ def get_decision_client(
         model = fetch_default_model(db_session, LLMModelFlowType.DECISION)
         if model is None:
             return None
-        provider = model.llm_provider
-        api_key = (
-            provider.api_key.get_value(apply_mask=False) if provider.api_key else ""
+        return _decision_client_for_provider(
+            db_session,
+            model.llm_provider,
+            model.name,
+            model.id,
+            additional_headers,
+            timeout,
         )
-        check_llm_cost_limit_for_provider(
-            db_session=db_session,
-            tenant_id=get_current_tenant_id(),
-            llm_provider_api_key=api_key,
-        )
-        return build_decision_client(
-            provider=provider.provider,
-            model=model.name,
-            api_key=api_key,
-            api_base=provider.api_base,
-            zoom_voice_provider_id=provider.zoom_voice_provider_id,
-            extra_headers={
-                **build_llm_extra_headers(additional_headers),
-                **_build_provider_extra_headers(
-                    provider.provider, provider.custom_config
-                ),
-            },
-            model_configuration_id=model.id,
-            timeout=timeout,
+
+
+def get_decision_client_for_provider(
+    provider: DecisionProvider,
+    model_name: str,
+    timeout: float = DEFAULT_DECISION_TIMEOUT_S,
+) -> DecisionClient | None:
+    """A decision client on the tenant's setup of this provider, with a model
+    the caller fixes in code instead of the admin's decision model."""
+    with get_session_with_current_tenant() as db_session:
+        llm_provider = fetch_first_llm_provider(db_session, provider)
+        if llm_provider is None:
+            return None
+        return _decision_client_for_provider(
+            db_session, llm_provider, model_name, None, None, timeout
         )
 
 

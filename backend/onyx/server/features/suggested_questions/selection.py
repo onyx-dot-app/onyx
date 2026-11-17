@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, defaultdict
 
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.server.features.suggested_questions.config import (
     SQ_CHUNKS_PER_DOC,
     SQ_FETCH_CHUNKS_PER_DOC,
+    SQ_FEW_DOCUMENTS,
     SQ_MAX_LINE_REPEATS,
     SQ_MAX_LINK_RATIO,
     SQ_MAX_WORD_OVERLAP,
@@ -27,7 +28,11 @@ from onyx.server.features.suggested_questions.config import (
 from onyx.server.features.suggested_questions.models import (
     CandidateDocument,
     QuestionKind,
+    TriagedChunk,
 )
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def choose_documents(
@@ -87,6 +92,13 @@ def choose_documents(
         if candidate.document_id not in seen:
             seen.add(candidate.document_id)
             candidates.append(candidate)
+    logger.info(
+        "Suggested questions: chose %d documents (%d shared, %d private) for %d people",
+        len(candidates),
+        len(shared),
+        len(private),
+        len(people),
+    )
     return candidates
 
 
@@ -110,7 +122,14 @@ def fetch_chunks(
         ),
         max_chunk_index=SQ_FETCH_CHUNKS_PER_DOC - 1,
     )
-    return keep_useful_chunks(chunks)
+    kept = keep_useful_chunks(chunks)
+    logger.info(
+        "Suggested questions: read %d chunks of %d documents, kept %d after the junk rules",
+        len(chunks),
+        len(candidates),
+        len(kept),
+    )
+    return kept
 
 
 def keep_useful_chunks(chunks: list[InferenceChunk]) -> list[InferenceChunk]:
@@ -152,3 +171,22 @@ def looks_useful(content: str) -> bool:
         return False
     line_counts = Counter(line.strip() for line in text.splitlines() if line.strip())
     return max(line_counts.values(), default=0) <= SQ_MAX_LINE_REPEATS
+
+
+def best_chunks_per_document(triaged: list[TriagedChunk]) -> list[TriagedChunk]:
+    """The best chunks of each document after triage: one per document, or two
+    when fewer than SQ_FEW_DOCUMENTS documents are left, so a small company
+    still gets enough passages. Usable score first, a concrete fact breaks
+    ties."""
+    by_document: dict[str, list[TriagedChunk]] = defaultdict(list)
+    for item in triaged:
+        by_document[item.chunk.document_id].append(item)
+    per_document = 2 if len(by_document) < SQ_FEW_DOCUMENTS else 1
+    return [
+        best
+        for items in by_document.values()
+        # Rounded, so close usable scores tie and a concrete fact decides.
+        for best in sorted(
+            items, key=lambda item: (round(item.usable), item.has_fact), reverse=True
+        )[:per_document]
+    ]
