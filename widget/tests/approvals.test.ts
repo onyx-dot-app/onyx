@@ -157,7 +157,7 @@ describe("approval status", () => {
     expect(findPendingApproval(messages, local)?.request.approval_id).toBe("b");
   });
 
-  it.each(["awaiting_approval", null, "user_cancelled", "finished"])(
+  it.each(["awaiting_user", null, "user_cancelled", "finished"])(
     "keeps a request pending after a %s stop until the server resolves it",
     (stop_reason) => {
       const waiting = streamingMessage([entry("a")]);
@@ -772,7 +772,7 @@ describe("widget while a request waits", () => {
               outcome: "rejected",
             },
           },
-          { obj: { type: "stop", stop_reason: "awaiting_approval" } },
+          { obj: { type: "stop", stop_reason: "awaiting_user" } },
         ],
       ],
     }));
@@ -802,7 +802,7 @@ describe("widget while a request waits", () => {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
       yield { obj: request("a") };
       await beforeStop();
-      yield { obj: { type: "stop", stop_reason: "awaiting_approval" } };
+      yield { obj: { type: "stop", stop_reason: "awaiting_user" } };
     });
     return { widget, api };
   }
@@ -1020,7 +1020,7 @@ describe("widget while a request waits", () => {
         [
           { obj: request("a") },
           { obj: request("b") },
-          { obj: { type: "stop", stop_reason: "awaiting_approval" } },
+          { obj: { type: "stop", stop_reason: "awaiting_user" } },
         ],
       ],
     }));
@@ -1751,7 +1751,7 @@ describe("widget while a request waits", () => {
         [
           { obj: { type: "user_message", id: "sdk-1", message: "Email Bo" } },
           { obj: request("a") },
-          { obj: { type: "stop", stop_reason: "awaiting_approval" } },
+          { obj: { type: "stop", stop_reason: "awaiting_user" } },
         ],
       ],
     }));

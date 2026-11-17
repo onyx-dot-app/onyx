@@ -334,7 +334,7 @@ onyx-cli ask --json "List all active API integrations"
 | Event Type | Description |
 |------------|-------------|
 | `message_delta` | Content token — concatenate all `content` fields for the full answer |
-| `stop` | Stream complete. With `stop_reason` `awaiting_approval`, the response waits for approval answers, and its later events follow after them |
+| `stop` | Stream complete. With `stop_reason` `awaiting_user`, the response waits for the user, and its later events follow after them |
 | `error` | Error with `error` message field |
 | `search_tool_start` | Onyx started searching documents |
 | `citation_info` | Source citation with `citation_number` and `document_id` |

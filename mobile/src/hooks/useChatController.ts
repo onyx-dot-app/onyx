@@ -236,7 +236,7 @@ async function runChatStream(
         }
         if (event.obj.type === PacketType.STOP) {
           sawStop = true;
-          paused = event.obj.stop_reason === StopReason.AWAITING_APPROVAL;
+          paused = event.obj.stop_reason === StopReason.AWAITING_USER;
         }
         pending.push(event);
         scheduleFlush();

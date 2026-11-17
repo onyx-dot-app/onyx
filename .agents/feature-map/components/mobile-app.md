@@ -175,7 +175,7 @@ session's recovery, including one a send started, so reopening attaches a new
 one.
 
 **Approval waits.** A response that waits for tool approvals ends its stream
-with `stop` and reason `awaiting_approval`. The session goes to `input`. The
+with `stop` and reason `awaiting_user`. The session goes to `input`. The
 app does not check for waiting cards before a send. The server refuses the
 send with 409 `APPROVAL_PENDING`; the app then keeps the draft, scrolls to the
 card (`useToolApprovalUi.nudge`, without animation when the OS reduces
@@ -195,7 +195,7 @@ the continuation, or a status read when there is none, on the session
 (`queueFollow`). The reader takes it (`takeQueuedFollow`) before it releases
 the chat: recovery after its settle load, and a send after its idle poll. Both
 hand it to a new recovery. A reader whose
-stream stops with `awaiting_approval` reads status while the server
+stream stops with `awaiting_user` reads status while the server
 processes, such as for a sibling response, and follows the next new
 `current_stream` from cursor 0. It never reads the paused stream again. The
 recovery reader drops a continuation's `replay_end` packet. A repeated

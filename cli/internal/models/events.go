@@ -49,9 +49,10 @@ type MessageIDEvent struct {
 
 func (e MessageIDEvent) EventType() string { return EventMessageIDInfo }
 
-// StopReasonAwaitingApproval ends the stream of a response that waits for
-// tool approval decisions. The response continues on a new stream after them.
-const StopReasonAwaitingApproval = "awaiting_approval"
+// StopReasonAwaitingUser ends the stream of a response that waits for the
+// user: tool approval decisions, or answers to the agent's questions. The
+// response continues on a new stream after them.
+const StopReasonAwaitingUser = "awaiting_user"
 
 // StopEvent signals the end of a stream.
 type StopEvent struct {
@@ -61,10 +62,10 @@ type StopEvent struct {
 
 func (e StopEvent) EventType() string { return EventStop }
 
-// AwaitingApproval reports a stream that stopped while its response waits for
-// approval decisions.
-func (e StopEvent) AwaitingApproval() bool {
-	return e.StopReason != nil && *e.StopReason == StopReasonAwaitingApproval
+// AwaitingUser reports a stream that stopped while its response waits for the
+// user.
+func (e StopEvent) AwaitingUser() bool {
+	return e.StopReason != nil && *e.StopReason == StopReasonAwaitingUser
 }
 
 // ErrorEvent signals an error.

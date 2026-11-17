@@ -708,7 +708,7 @@ describe("with stubbed server checks", () => {
     const asked = approvalRequest("approval");
     const waited: Packet = {
       placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_USER },
     };
     const finalText: Packet = {
       placement: { turn_index: 2, tab_index: 0 },
@@ -775,7 +775,7 @@ describe("with stubbed server checks", () => {
     const asked = approvalRequest("approval");
     const waited: Packet = {
       placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_USER },
     };
     const finalText: Packet = {
       placement: { turn_index: 2, tab_index: 0 },
@@ -846,7 +846,7 @@ describe("with stubbed server checks", () => {
     const asked = approvalRequest("approval");
     const waited: Packet = {
       placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_USER },
     };
     const finalText: Packet = {
       placement: { turn_index: 2, tab_index: 0 },
@@ -1505,7 +1505,7 @@ describe("with a scripted fetch", () => {
   describe("a continuation the server names", () => {
     const awaitingStop: Packet = {
       placement: { turn_index: 0 },
-      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_USER },
     };
     const resolved: Packet = {
       placement: { turn_index: 1, tab_index: 0 },
@@ -1661,7 +1661,7 @@ describe("with a scripted fetch", () => {
     });
     const awaitingStop: Packet = {
       placement: { turn_index: 0 },
-      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_USER },
     };
     const resolved: Packet = {
       placement: { turn_index: 1, tab_index: 0 },

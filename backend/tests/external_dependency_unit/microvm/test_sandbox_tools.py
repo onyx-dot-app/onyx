@@ -568,7 +568,7 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     parts = chat.send(llm)
 
     ref = chat.ref(db_session)
-    assert _stops(parts) == [packets.AWAITING_APPROVAL]
+    assert _stops(parts) == [packets.AWAITING_USER]
     assert ended == [ref]
 
     # The approval resumes the root from its saved state with new agent and

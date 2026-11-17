@@ -430,6 +430,42 @@ def test_cold_question_resume_uses_answer_without_repeating_tool() -> None:
         assert resumed.wait_for_idle(3)
 
 
+def test_stopped_run_keeps_a_supplied_result_as_the_calls_result() -> None:
+    """A Stop that supplies a waiting call's result before it cancels leaves
+    the call with that result, so later runs see it."""
+    agent = Agent(
+        _model([ToolCall(id="question", name="question", arguments={})]),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id="question-agent",
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="question", description="", parameters={}
+                ),
+                execute=lambda _invocation: PendingToolInput(
+                    request_id="question", prompt="Which?", mode=InputMode.RESULT
+                ),
+            )
+        ],
+    )
+    run = agent.start(max_steps=2)
+    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+    with run.execution_lock:
+        run.submit(
+            HumanToolAnswer(
+                request_id="question",
+                decision=InputDecision.RESULT,
+                result=ToolResult(content="stopped before answering"),
+            )
+        )
+        run.cancel("user")
+    assert run.wait_for_idle(3)
+    snapshot = run.snapshot()
+    assert snapshot.status == RunStatus.CANCELLED
+    result = snapshot.steps[0].tools["question"].result
+    assert result is not None and result.text == "stopped before answering"
+
+
 def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> None:
     effects: list[str] = []
 

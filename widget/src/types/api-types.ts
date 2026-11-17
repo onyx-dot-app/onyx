@@ -202,8 +202,8 @@ export interface ApprovalDecisionResponse {
 /** The stream's last packet. */
 export interface Stop {
   type: "stop";
-  // "awaiting_approval": the response waits for decisions and continues on a
-  // new stream after them
+  // "awaiting_user": the response waits for the user's decisions or answers
+  // and continues on a new stream after them
   stop_reason?: string | null;
 }
 

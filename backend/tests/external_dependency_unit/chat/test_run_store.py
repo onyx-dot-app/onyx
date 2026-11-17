@@ -104,6 +104,7 @@ from onyx.db.models import (
     ChatSession,
     User,
 )
+from onyx.db.question_request import create_question_request__no_commit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import ExtractedContextFiles
@@ -141,6 +142,26 @@ from tests.unit.onyx.agents.fakes import (
     FakeModelClient,
     FakeRunStore,
 )
+
+# The ID of the request of the `ask` tool's calls. In chat only the question
+# tool requests a result, so its waiting row keeps a resumed call waiting.
+ANSWER_ID = "6d0c9c8e-3b0a-4d6e-9a43-5a1f0f6b2a11"
+
+
+def open_question(chat_session_id: UUID, response_id: int) -> None:
+    """Save the waiting question of the `ask` call of `response_id`."""
+    with get_session_with_tenant(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    ) as session:
+        create_question_request__no_commit(
+            session,
+            question_request_id=UUID(ANSWER_ID),
+            chat_session_id=chat_session_id,
+            chat_message_id=response_id,
+            tool_call_id="question",
+            questions=[],
+        )
+        session.commit()
 
 
 @pytest.fixture
@@ -272,7 +293,7 @@ def ask_tool(prompt: str = "Which file?") -> AgentTool:
     return agent_tool(
         "ask",
         lambda _: PendingToolInput(
-            request_id="answer", prompt=prompt, mode=InputMode.RESULT
+            request_id=ANSWER_ID, prompt=prompt, mode=InputMode.RESULT
         ),
     )
 
@@ -522,6 +543,9 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         ).save_response(project_response(snapshot, tool_ids={}))
 
     owner = store(branch)
+    # The test hands the waiting run off itself, so the owner's polls do not
+    # park it.
+    monkeypatch.setattr(owner, "may_park", lambda _run: False)
     remote = store(
         branch,
         root_response=FakeRunStore(save=lambda run: save_root(run.snapshot()))
@@ -559,7 +583,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         executed.append(invocation.call_id)
         if invocation.call_id == "question":
             return PendingToolInput(
-                request_id="answer", prompt="Which file?", mode=InputMode.RESULT
+                request_id=ANSWER_ID, prompt="Which file?", mode=InputMode.RESULT
             )
         return ToolResult(
             content="recorded search result",
@@ -633,6 +657,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
     try:
         assert run.wait_until_settled(timeout=10).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(timeout=10)
+        open_question(branch[0], branch[1])
         if scenario == "release":
             with patch.object(
                 owner.cache, "delete", side_effect=RuntimeError("cache unavailable")
@@ -735,7 +760,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             assert resumed.snapshot().input_messages == input_messages
             resumed.submit(
                 HumanToolAnswer(
-                    request_id="answer",
+                    request_id=ANSWER_ID,
                     decision=InputDecision.RESULT,
                     result=ToolResult(content="report.txt"),
                 )
@@ -789,15 +814,17 @@ def _resume_response_in_process(session_id: str, message_id: str, run_id: str) -
 
     controller = start_thread_future(poll, name="test-chat-control")
     try:
-        resumed = remote.resume(run_id, context=AgentState())
-        assert resumed is not None
-        resumed.submit(
-            HumanToolAnswer(
-                request_id="answer",
-                decision=InputDecision.RESULT,
-                result=ToolResult(content="report.txt"),
+        # The polls must not park the resumed run before the answer arrives.
+        with patch.object(remote, "may_park", return_value=False):
+            resumed = remote.resume(run_id, context=AgentState())
+            assert resumed is not None
+            resumed.submit(
+                HumanToolAnswer(
+                    request_id=ANSWER_ID,
+                    decision=InputDecision.RESULT,
+                    result=ToolResult(content="report.txt"),
+                )
             )
-        )
         assert resumed.result(timeout=10).output.text == "done"
         progress = resumed.snapshot().progress
         assert progress is not None
@@ -1348,11 +1375,12 @@ def test_resumed_child_keeps_its_original_response_tree(
         sibling_store = store((branch[0], sibling.id))
         with pytest.raises(ValueError, match="unavailable on this branch"):
             sibling_store.read_run(child_ids[0], str(branch[0]))
+        open_question(branch[0], int(child_ids[0]))
         resumed = remote.resume(child_ids[0], context=AgentState())
         assert resumed is not None
         resumed.submit(
             HumanToolAnswer(
-                request_id="answer",
+                request_id=ANSWER_ID,
                 decision=InputDecision.RESULT,
                 result=ToolResult(content="approved"),
             )

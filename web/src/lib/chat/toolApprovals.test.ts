@@ -131,7 +131,7 @@ describe("toolApprovalStatus", () => {
   it.each([
     ["a server stop for another reason", StopReason.FINISHED, null],
     ["a server stop for another reason", StopReason.FINISHED, "Researcher"],
-    ["the approval wait's stop", StopReason.AWAITING_APPROVAL, null],
+    ["the approval wait's stop", StopReason.AWAITING_USER, null],
     ["a stop this client added", undefined, null],
   ])(
     "keeps a request pending after %s (agent %s) until its outcome arrives",

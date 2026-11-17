@@ -691,7 +691,7 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 	case models.StopEvent:
 		// Delivery completion does not confirm the save. Drain the stream.
 		m.stopReceived = true
-		m.awaitingApproval = e.AwaitingApproval()
+		m.awaitingApproval = e.AwaitingUser()
 		m.renderApprovals()
 
 	case models.StreamUnavailableEvent:

@@ -124,7 +124,7 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 		for _, request := range requests {
 			fmt.Fprintln(w, streamLine("tool_approval_request", request))
 		}
-		fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_approval"}))
+		fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_user"}))
 	})
 	mux.HandleFunc("POST /api/chat/approvals/{id}/decision", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -226,7 +226,7 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 		if opts.asksAgain {
 			fmt.Fprintln(w, streamLine("message_delta", map[string]any{"content": "Done"}))
 			fmt.Fprintln(w, streamLine("tool_approval_request", requestEvent("a9")))
-			fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_approval"}))
+			fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_user"}))
 			fmt.Fprintf(w, "{\"stream_id\":3,\"next_cursor\":%d,\"replay_complete\":true}\n", 9+2*len(all)+len(requests))
 			continuing = false
 			return
@@ -714,7 +714,7 @@ func newSavedParkServer(t *testing.T) chan string {
 		fmt.Fprintln(w, `{"user_message_id":1,"reserved_assistant_message_id":2}`)
 		fmt.Fprintln(w, streamLine("message_delta", map[string]any{"content": "Filing. "}))
 		fmt.Fprintln(w, streamLine("tool_approval_request", requestEvent("a1")))
-		fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_approval"}))
+		fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_user"}))
 	})
 	mux.HandleFunc("POST /api/chat/approvals/{id}/decision", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -744,7 +744,7 @@ func newSavedParkServer(t *testing.T) chan string {
 			packets = append(packets, resolved("a2"), streamLine("message_delta", map[string]any{"content": "done"}), streamLine("stop", map[string]any{"stop_reason": "finished"}))
 			text += "done"
 		} else {
-			packets = append(packets, streamLine("stop", map[string]any{"stop_reason": "awaiting_approval"}))
+			packets = append(packets, streamLine("stop", map[string]any{"stop_reason": "awaiting_user"}))
 		}
 		message, _ := json.Marshal(text)
 		fmt.Fprintf(w, `{"chat_session_id":%q,"messages":[{"message_id":1,"message":"file a ticket","message_type":"user"},{"message_id":2,"message":%s,"message_type":"assistant"}],"packets":[[%s]]}`,
@@ -1052,7 +1052,7 @@ func TestAsk_DecisionFailureStopsTheResponseBeforeExit(t *testing.T) {
 					fmt.Fprintln(w, `{"user_message_id":1,"reserved_assistant_message_id":2}`)
 					fmt.Fprintln(w, streamLine("tool_approval_request", requestEvent("a1")))
 					if waiting {
-						fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_approval"}))
+						fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_user"}))
 						return
 					}
 					w.(http.Flusher).Flush()

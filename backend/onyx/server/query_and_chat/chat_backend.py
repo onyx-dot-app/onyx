@@ -48,8 +48,10 @@ from onyx.chat.models import (
     ChatResponseOutcome,
     CreateChatSessionID,
     PendingChatMessage,
+    SavedToolQuestion,
 )
 from onyx.chat.process_message import (
+    USER_INPUT_PENDING,
     dispatch_pending_chat_messages,
     handle_multi_model_stream,
     handle_stream_message_objects,
@@ -64,6 +66,7 @@ from onyx.chat.run_store import (
 )
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import StreamChunkRead, read_stream_chunks
+from onyx.chat.tool_questions import card_answers
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import (
     CHAT_HEARTBEAT_INTERVAL_S,
@@ -104,9 +107,10 @@ from onyx.db.chat import (
     translate_db_message_to_chat_message_detail,
     update_chat_session,
 )
-from onyx.db.chat_checkpoint import parked_response_ids
+from onyx.db.chat_checkpoint import parked_response_ids, parked_tree_approval_ids
 from onyx.db.chat_inputs import (
     active_agent_response_ids,
+    chat_message_content,
     drop_agent_work__no_commit,
     get_human_input_session,
     interrupt_human_message__no_commit,
@@ -126,6 +130,8 @@ from onyx.db.enums import (
     ApprovalDecision,
     LLMModelFlowType,
     Permission,
+    QuestionAnsweredVia,
+    QuestionOutcome,
     record_mode_persists_content,
 )
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
@@ -140,6 +146,11 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.persona import get_persona_by_id
+from onyx.db.question_request import (
+    get_question_request_for_user,
+    get_response_question_requests,
+    resolve_question_requests__no_commit,
+)
 from onyx.db.usage import UsageType, increment_usage
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -183,6 +194,7 @@ from onyx.server.query_and_chat.models import (
     ChatApprovalDecisionRequest,
     ChatFeedbackRequest,
     ChatMessageIdentifier,
+    ChatQuestionAnswersRequest,
     ChatRenameRequest,
     ChatSearchResponse,
     ChatSessionCreationRequest,
@@ -196,6 +208,7 @@ from onyx.server.query_and_chat.models import (
     CurrentStreamInfo,
     MessageOrigin,
     PendingChatMessageRequest,
+    QuestionAnswersResponse,
     RenameChatSessionResponse,
     SendMessageRequest,
     SetPreferredResponseRequest,
@@ -229,6 +242,7 @@ from onyx.tools.models import ChatToolSelection
 from onyx.tracing.framework.create import ChatTraceMetadata, ensure_trace
 from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_string
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -961,16 +975,15 @@ def end_incognito_session(
             logger.exception("Incognito teardown could not %s for %s", what, session_id)
 
 
-def _reject_while_approval_waits(db_session: Session, chat_session_id: UUID) -> None:
+def _reject_while_user_input_waits(db_session: Session, chat_session_id: UUID) -> None:
     """The user may draft but not send while the selected response is parked:
-    its waits, its own requests or a foreground subtree's, are on the user. A
-    background agent waits independently and does not block."""
+    its waits, its own requests and questions or a foreground subtree's
+    requests, are on the user. A background agent waits independently and
+    does not block. A typed answer to the response's questions goes through
+    the question answers route."""
     selected, _ = get_selected_branch(db_session, chat_session_id)
     if selected is not None and selected.response_status == RunStatus.SUSPENDED:
-        raise OnyxError(
-            OnyxErrorCode.APPROVAL_PENDING,
-            "Approve or reject the pending requests before you send a message",
-        )
+        raise OnyxError(OnyxErrorCode.APPROVAL_PENDING, USER_INPUT_PENDING)
 
 
 # NOTE: This endpoint is extremely central to the application, any changes to it should be reviewed and approved by an experienced
@@ -984,9 +997,10 @@ def _reject_while_approval_waits(db_session: Session, chat_session_id: UUID) -> 
             "description": (
                 "If `stream=true`, returns `text/event-stream`.\n"
                 "If `stream=false`, returns `application/json` (ChatFullResponse). "
-                "When tool calls wait for the user's approval, the response "
-                "stops and lists them in `pending_tool_approvals`; after the "
-                "decisions it continues in the chat session."
+                "When tool calls wait for the user, the response stops and "
+                "lists them: approval requests in `pending_tool_approvals`, "
+                "and questions in `pending_tool_questions`. After the "
+                "decisions and answers it continues in the chat session."
             ),
             "content": {
                 "text/event-stream": {
@@ -1018,8 +1032,8 @@ def handle_send_chat_message(
         chat_message_req (SendMessageRequest): Details about the new chat message.
             - When stream=True (default): Returns StreamingResponse with SSE
             - When stream=False: Returns ChatFullResponse with complete data, or
-              with `pending_tool_approvals` when the response stops because tool
-              calls wait for the user's approval
+              with `pending_tool_approvals` and `pending_tool_questions` when
+              the response stops because tool calls wait for the user
         request (Request): The current HTTP request context.
         user (User): The current user, obtained via dependency injection.
         _ (None): Rate limit check is run if user/group/global rate limits are enabled.
@@ -1048,7 +1062,7 @@ def handle_send_chat_message(
             except ValueError:
                 pass
             else:
-                _reject_while_approval_waits(
+                _reject_while_user_input_waits(
                     db_session, chat_message_req.chat_session_id
                 )
 
@@ -1731,7 +1745,7 @@ def submit_pending_chat_message(
 ) -> PendingChatMessage:
     """Submit text for the next step, normal completion, or interruption."""
     chat_session = get_human_input_session(db_session, session_id, user)
-    _reject_while_approval_waits(db_session, session_id)
+    _reject_while_user_input_waits(db_session, session_id)
     cache = get_cache_backend()
     pending = submit_human_message__no_commit(
         db_session,
@@ -1803,7 +1817,7 @@ def interrupt_with_pending_chat_message(
 ) -> PendingChatMessage:
     """Stop current work; the message starts the next turn."""
     get_human_input_session(db_session, session_id, user)
-    _reject_while_approval_waits(db_session, session_id)
+    _reject_while_user_input_waits(db_session, session_id)
     pending = interrupt_human_message__no_commit(db_session, session_id, message_id)
     cache = get_cache_backend()
     # The interrupt stops the turn running at commit, never the turn it starts.
@@ -1946,30 +1960,180 @@ def decide_approval(
             OnyxErrorCode.CONFLICT,
             "This request was already decided or is no longer waiting",
         )
-    response_id = approval.chat_message_id
-    chat_session_id = approval.chat_session_id
+    return ApprovalDecisionResponse(
+        approval_id=approval_id,
+        decision=decision,
+        decided_via=decided_via,
+        continuation=_continue_response(
+            db_session,
+            request,
+            user,
+            approval.chat_session_id,
+            approval.chat_message_id,
+            body.mcp_headers,
+        ),
+    )
+
+
+def _continue_response(
+    db_session: Session,
+    request: Request,
+    user: User,
+    chat_session_id: UUID,
+    response_id: int,
+    mcp_headers: dict[str, str] | None,
+) -> CurrentStreamInfo | None:
+    """Commit the user's input to a waiting response and dispatch, so the
+    response continues once nothing of it waits. Returns the stream that
+    continues it, when this dispatch started it or found it running."""
     db_session.commit()
     dispatch_pending_chat_messages(
         chat_session_id,
         user.id,
         get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
         get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
-        mcp_headers=body.mcp_headers,
+        mcp_headers=mcp_headers,
         decided_response_id=response_id,
     )
     stream = get_processing_stream(
         chat_session_id,
         get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S),
     )
-    return ApprovalDecisionResponse(
-        approval_id=approval_id,
-        decision=decision,
-        decided_via=decided_via,
-        continuation=CurrentStreamInfo(
-            stream_id=stream.stream_id, response_ids=stream.response_ids
-        )
+    return (
+        CurrentStreamInfo(stream_id=stream.stream_id, response_ids=stream.response_ids)
         if stream is not None and stream.resumed and response_id in stream.response_ids
-        else None,
+        else None
+    )
+
+
+@router.post("/question-requests/{question_request_id}/answers", tags=PUBLIC_API_TAGS)
+def answer_questions(
+    question_request_id: UUID,
+    body: ChatQuestionAnswersRequest,
+    request: Request,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> QuestionAnswersResponse:
+    """Answer the questions that a chat response's agent asked the user.
+
+    `answers` answer this request's questions from its card: each question
+    once, with one of its option labels, a note, or both. A `message` is text
+    that the user typed in the chat instead: it answers every question of the
+    response that waits, and the agent reads it as the user typed it. A
+    message is a conflict (APPROVAL_PENDING) while an approval request of the
+    response, or of a foreground run that it waits for, waits.
+
+    The answer is saved. Once nothing of its response waits, the response
+    continues under a new stream ID; `continuation` names that stream when
+    this answer started it or found it running. Only the answer's
+    `mcp_headers` reach the MCP servers of a continuation that this route
+    starts; they are not saved. Repeating a saved answer returns it, also
+    after the response ends; a different one, or a question that no longer
+    waits, is a conflict.
+    """
+    question = get_question_request_for_user(db_session, question_request_id, user.id)
+    if question is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Question request not found")
+    chat_session = get_chat_session_by_id(
+        chat_session_id=question.chat_session_id,
+        user_id=user.id,
+        db_session=db_session,
+    )
+    saved = SavedToolQuestion.model_validate(question)
+    response_id = question.chat_message_id
+    if body.message is not None:
+        # The admin's query hook sees typed text, as it sees a chat message.
+        message = chat_message_content(
+            process_chat_query(
+                sanitize_string(body.message), chat_session, user, db_session
+            )
+        )
+
+        asked_at = question.created_at
+
+        def answered_by_message() -> bool:
+            # Only a message saved after this question was asked can be a
+            # repeat; the same text for a later question answers it.
+            return any(
+                row.answered_via == QuestionAnsweredVia.MESSAGE
+                and row.message == message
+                and row.resolved_at is not None
+                and row.resolved_at >= asked_at
+                for row in get_response_question_requests(db_session, [response_id])
+            )
+
+        # A message answers every question of the response that waits; a
+        # retry of it answers none asked since.
+        answered = (
+            []
+            if answered_by_message()
+            else resolve_question_requests__no_commit(
+                db_session,
+                QuestionOutcome.ANSWERED,
+                chat_message_ids=[response_id],
+                answered_via=QuestionAnsweredVia.MESSAGE,
+                message=message,
+            )
+        )
+        # The request's session rolls back the answers.
+        if answered and parked_tree_approval_ids(db_session, [response_id]):
+            raise OnyxError(
+                OnyxErrorCode.APPROVAL_PENDING,
+                "Approve or reject the pending requests before you answer "
+                "with a message",
+            )
+        # A repeat, also of a message that a concurrent request saved,
+        # returns it.
+        conflict = not answered and not answered_by_message()
+    else:
+        answers = [
+            answer.model_copy(
+                update={
+                    "user_note": chat_message_content(
+                        process_chat_query(
+                            sanitize_string(answer.user_note),
+                            chat_session,
+                            user,
+                            db_session,
+                        )
+                    )
+                    if answer.user_note
+                    else answer.user_note
+                }
+            )
+            for answer in card_answers(saved.questions, body.answers or [])
+        ]
+        answered = resolve_question_requests__no_commit(
+            db_session,
+            QuestionOutcome.ANSWERED,
+            question_request_ids=[question_request_id],
+            answered_via=QuestionAnsweredVia.CARD,
+            answers=[answer.model_dump(mode="json") for answer in answers],
+        )
+        if not answered:
+            # A repeat, also of answers that a concurrent request saved,
+            # returns them.
+            db_session.refresh(question)
+            saved = SavedToolQuestion.model_validate(question)
+        conflict = not answered and (saved.answered_via, saved.answers) != (
+            QuestionAnsweredVia.CARD,
+            answers,
+        )
+    if conflict:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "This question was already answered or is no longer waiting",
+        )
+    return QuestionAnswersResponse(
+        question_request_id=question_request_id,
+        continuation=_continue_response(
+            db_session,
+            request,
+            user,
+            question.chat_session_id,
+            response_id,
+            body.mcp_headers,
+        ),
     )
 
 

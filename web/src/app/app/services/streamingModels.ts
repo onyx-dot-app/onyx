@@ -138,9 +138,10 @@ export enum StopReason {
   USER_CANCELLED = "user_cancelled",
   /** The turn reached its execution deadline. */
   TIMED_OUT = "timed_out",
-  /** The stream ended while tool calls wait for the user's approval. The
-   * response continues in a new stream after the decisions. */
-  AWAITING_APPROVAL = "awaiting_approval",
+  /** The stream ended while tool calls wait for the user: approval decisions
+   * or answers to questions. The response continues in a new stream after
+   * them. */
+  AWAITING_USER = "awaiting_user",
 }
 
 export interface Stop extends BaseObj {

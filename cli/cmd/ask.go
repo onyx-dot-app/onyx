@@ -273,7 +273,7 @@ func (r *askRun) handle(event models.StreamEvent) error {
 	if r.approvalErr != nil || r.undecided {
 		// Drain so the stream owner can stop the turn before exit.
 		if stop, ok := event.(models.StopEvent); ok {
-			r.awaiting = stop.AwaitingApproval()
+			r.awaiting = stop.AwaitingUser()
 		}
 		return nil
 	}
@@ -317,7 +317,7 @@ func (r *askRun) handle(event models.StreamEvent) error {
 		// Keep draining: the server saves the turn after it sends stop, and
 		// the rename after the run reads the saved history.
 		r.gotStop = true
-		r.awaiting = e.AwaitingApproval()
+		r.awaiting = e.AwaitingUser()
 	case models.ToolApprovalRequestEvent:
 		if _, seen := r.asked[e.ApprovalID]; seen {
 			return nil

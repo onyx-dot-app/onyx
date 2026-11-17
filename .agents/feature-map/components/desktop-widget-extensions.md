@@ -115,7 +115,7 @@ restore / sent stream / decision / 409 → resumeStream    widget.ts
   ├─ GET /chat/chat-session/{id}/resume-stream (no stream_id: the current
   │    stream; cursor lines track stream_id and next_cursor; only a 404 stops
   │    requests for that stream)
-  ├─ stop with "awaiting_approval" → a continuation a decision named during
+  ├─ stop with "awaiting_user" → a continuation a decision named during
   │    the stream, else one status read: a new stream whose response_ids
   │    include the response → follow from 0; else stop following
   ├─ a replayed user_message whose question the transcript lacks inserts it

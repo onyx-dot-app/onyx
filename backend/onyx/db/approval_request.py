@@ -4,11 +4,11 @@ from collections.abc import Collection
 from uuid import UUID
 
 from pydantic import JsonValue
-from sqlalchemy import and_, exists, func, insert, or_, select, update
+from sqlalchemy import and_, exists, func, insert, or_, select, union_all, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
-from onyx.db.models import ApprovalRequest, ChatSession
+from onyx.db.models import ApprovalRequest, ChatSession, QuestionRequest
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
 
@@ -183,16 +183,25 @@ def get_response_approval_requests(
 
 
 def approvals_version(db_session: Session, chat_session_id: UUID) -> str:
-    """A marker that changes when a request of the chat opens, is decided or is
-    deleted, for clients that show the requests of a saved chat. It is empty
-    while the chat has no request, so a client that loaded nothing takes the
-    empty marker as its baseline."""
+    """A marker that changes when an approval request or a question of the
+    chat opens, ends or is deleted, for clients that show the requests of a
+    saved chat. It is empty while the chat has neither, so a client that
+    loaded nothing takes the empty marker as its baseline."""
+    requests = union_all(
+        select(
+            ApprovalRequest.created_at.label("created_at"),
+            ApprovalRequest.decided_at.label("ended_at"),
+        ).where(ApprovalRequest.chat_session_id == chat_session_id),
+        select(QuestionRequest.created_at, QuestionRequest.resolved_at).where(
+            QuestionRequest.chat_session_id == chat_session_id
+        ),
+    ).subquery()
     marker = db_session.execute(
         select(
             func.count(),
-            func.count(ApprovalRequest.decision),
-            func.max(ApprovalRequest.created_at),
-            func.max(ApprovalRequest.decided_at),
-        ).where(ApprovalRequest.chat_session_id == chat_session_id)
+            func.count(requests.c.ended_at),
+            func.max(requests.c.created_at),
+            func.max(requests.c.ended_at),
+        )
     ).one()
     return "/".join(str(value) for value in marker) if marker[0] else ""
