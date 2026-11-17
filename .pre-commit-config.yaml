@@ -353,8 +353,9 @@ repos:
         language: system
         entry: python3 backend/lint/check_celery_task_allowlist.py
         pass_filenames: false
+        # Deleted task files must also trigger the check.
+        always_run: true
         stages: [pre-commit]
-        files: ^backend/((onyx|ee)/.*\.py|lint/celery_task_allowlist\.txt)$
       # Runs on every commit so a rename or deletion of a file the map cites
       # fails in the same PR.
       - id: feature-map-integrity
