@@ -28,22 +28,24 @@ from onyx.integrations.connections import (
     sign_in_settings_for,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import make_app_integration
 from tests.external_dependency_unit.integrations.conftest import (
-    MakeIntegration,
     add_connection,
+    new_oauth_client,
 )
 
 
 def test_status_four_states(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    individual = make_integration(
+    individual, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
     )
-    shared = make_integration(
+    shared, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.SHARED,
         auth_method=IntegrationAuthMethod.API_KEY,
     )
@@ -72,7 +74,9 @@ def test_status_four_states(
     assert status.state is ConnectionState.NEEDS_RECONNECT
     assert status.reason == "Key expired"
 
-    none_mode = make_integration(auth_mode=IntegrationAuthMode.NONE, auth_method=None)
+    none_mode, _ = make_app_integration(
+        db_session, auth_mode=IntegrationAuthMode.NONE, auth_method=None
+    )
     assert (
         integration_status(none_mode, None, db_session).state
         is ConnectionState.CONNECTED
@@ -81,23 +85,24 @@ def test_status_four_states(
 
 def test_oauth_without_client_id_is_not_set_up(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
     user = make_test_user("no_client")
-    manual = make_integration(
+    manual, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
+        oauth_client=new_oauth_client(IntegrationOAuthProviderMode.MANUAL),
     )
     assert integration_status(manual, user, db_session).state is (
         ConnectionState.NOT_SET_UP
     )
     # Discovery registers a client at the first sign-in.
-    discovery = make_integration(
+    discovery, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
+        oauth_client=new_oauth_client(IntegrationOAuthProviderMode.DISCOVERY),
     )
     assert integration_status(discovery, user, db_session).state is (
         ConnectionState.NOT_CONNECTED
@@ -106,15 +111,17 @@ def test_oauth_without_client_id_is_not_set_up(
 
 def test_client_id_change_resets_connections_but_secret_change_does_not(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="client-1",
-        client_secret="secret-1",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL,
+            client_id="client-1",
+            client_secret="secret-1",
+        ),
     )
     for prefix in ("settings_a", "settings_b"):
         user = make_test_user(prefix)
@@ -156,10 +163,10 @@ def test_client_id_change_resets_connections_but_secret_change_does_not(
 
 def test_disconnect_deletes_only_the_user_row(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
     )
@@ -180,10 +187,10 @@ def test_disconnect_deletes_only_the_user_row(
 
 def test_deactivation_deletes_connections(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
     )

@@ -19,7 +19,6 @@ from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
     IntegrationConnectionStatus,
-    IntegrationKind,
     IntegrationLegacyFormat,
     IntegrationOAuthProviderMode,
 )
@@ -57,12 +56,16 @@ from onyx.server.features.mcp.oauth import (
     make_integration_oauth_provider,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import (
+    make_app_integration,
+    make_mcp_integration,
+)
 from tests.external_dependency_unit.integrations.conftest import (
     TOKEN_URL,
     FakeTokenEndpoint,
-    MakeIntegration,
     expect_problem,
     expect_resolved,
+    new_oauth_client,
 )
 
 _MCP_TOKEN_URL = "https://mcp-auth.example.test/oauth/token"
@@ -106,10 +109,10 @@ def _unix(delta: timedelta) -> float:
 
 
 def test_mcp_config_shared_api_key(
-    db_session: Session, make_integration: MakeIntegration
+    db_session: Session,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.SHARED,
         auth_method=IntegrationAuthMethod.API_KEY,
     )
@@ -135,11 +138,10 @@ def test_mcp_config_shared_api_key(
 
 def test_mcp_config_individual_api_key_and_reauth(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
     )
@@ -202,26 +204,28 @@ def test_mcp_config_individual_api_key_and_reauth(
 
 
 def _mcp_oauth_integration(
-    db_session: Session, make_integration: MakeIntegration
+    db_session: Session,
 ) -> Integration:
-    integration = make_integration(
-        kind=IntegrationKind.MCP,
+    integration, _ = make_mcp_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
-        registration={
-            "headers": {},
-            "client_info": {
-                "client_id": "dcr-client",
-                "redirect_uris": ["https://onyx.example.test/mcp/oauth/callback"],
-                "token_endpoint_auth_method": "none",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.DISCOVERY,
+            registration={
+                "headers": {},
+                "client_info": {
+                    "client_id": "dcr-client",
+                    "redirect_uris": ["https://onyx.example.test/mcp/oauth/callback"],
+                    "token_endpoint_auth_method": "none",
+                },
+                "metadata": {
+                    "issuer": "https://mcp-auth.example.test",
+                    "authorization_endpoint": "https://mcp-auth.example.test/authorize",
+                    "token_endpoint": _MCP_TOKEN_URL,
+                },
             },
-            "metadata": {
-                "issuer": "https://mcp-auth.example.test",
-                "authorization_endpoint": "https://mcp-auth.example.test/authorize",
-                "token_endpoint": _MCP_TOKEN_URL,
-            },
-        },
+        ),
     )
     _tag_oauth_client(db_session, integration, IntegrationLegacyFormat.MCP_CONFIG)
     return integration
@@ -243,10 +247,9 @@ def _mcp_oauth_user_secret(expires_at: float) -> dict[str, Any]:
 
 def test_mcp_config_token_storage_loads_and_saves_new_format(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = _mcp_oauth_integration(db_session, make_integration)
+    integration = _mcp_oauth_integration(db_session)
     user = make_test_user("legacy_mcp_storage")
     _seed(
         db_session,
@@ -285,11 +288,10 @@ def test_mcp_config_token_storage_loads_and_saves_new_format(
 
 def test_mcp_config_refresh_writes_new_format(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = _mcp_oauth_integration(db_session, make_integration)
+    integration = _mcp_oauth_integration(db_session)
     user = make_test_user("legacy_mcp_refresh")
     connection = _seed(
         db_session,
@@ -320,10 +322,9 @@ def test_mcp_config_refresh_writes_new_format(
 
 def test_mcp_config_registration_saves_new_format(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = _mcp_oauth_integration(db_session, make_integration)
+    integration = _mcp_oauth_integration(db_session)
     user = make_test_user("legacy_mcp_registration")
     storage = IntegrationTokenStorage(integration.id, user.id)
     server = get_mcp_server_for_integration(integration.id, db_session)
@@ -351,17 +352,19 @@ def test_mcp_config_registration_saves_new_format(
 
 def test_oauth_user_token_refresh_writes_new_format(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
         header_template={"Authorization": "Bearer {access_token}"},
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="client",
-        client_secret="secret",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL,
+            client_id="client",
+            client_secret="secret",
+        ),
     )
     user = make_test_user("legacy_oauth_token")
     connection = _seed(
@@ -395,15 +398,16 @@ def test_oauth_user_token_refresh_writes_new_format(
 
 def test_oauth_user_token_expired_without_refresh_needs_reconnect(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
     token_endpoint: FakeTokenEndpoint,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
-        provider_mode=IntegrationOAuthProviderMode.MANUAL,
-        client_id="client",
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.MANUAL, client_id="client"
+        ),
     )
     user = make_test_user("legacy_oauth_dead")
     _seed(
@@ -424,20 +428,22 @@ def test_oauth_user_token_expired_without_refresh_needs_reconnect(
 
 def test_preset_registration_and_user_token(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.OAUTH2,
         header_template={"Authorization": "Bearer {access_token}"},
-        provider_mode=IntegrationOAuthProviderMode.PRESET,
-        registration={
-            "client_id": "zd-client",
-            "client_secret": "zd-secret",
-            "subdomain": "acme",
-        },
         app_type=ExternalAppType.ZENDESK,
+        oauth_client=new_oauth_client(
+            IntegrationOAuthProviderMode.PRESET,
+            registration={
+                "client_id": "zd-client",
+                "client_secret": "zd-secret",
+                "subdomain": "acme",
+            },
+        ),
     )
     _tag_oauth_client(db_session, integration, IntegrationLegacyFormat.EXTERNAL_APP_ORG)
     user = make_test_user("legacy_preset")
@@ -477,10 +483,10 @@ def test_preset_registration_and_user_token(
 
 def test_individual_custom_app_merges_organization_fields(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
         header_template={"X-Key": "{api_key}", "X-Region": "{region}"},
@@ -519,10 +525,10 @@ def test_individual_custom_app_merges_organization_fields(
 
 def test_custom_app_user_fields_named_like_token_fields_are_kept(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
         header_template={"X-Scope": "{scope}", "X-Until": "{expires_at}"},
@@ -544,9 +550,10 @@ def test_custom_app_user_fields_named_like_token_fields_are_kept(
 
 
 def test_tool_headers_plain_json(
-    db_session: Session, make_integration: MakeIntegration
+    db_session: Session,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.SHARED,
         auth_method=IntegrationAuthMethod.API_KEY,
     )
@@ -581,11 +588,10 @@ def test_tool_headers_plain_json(
 
 def test_mcp_config_no_sign_in_keeps_admin_template(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP, auth_mode=IntegrationAuthMode.NONE, auth_method=None
+    integration, _ = make_mcp_integration(
+        db_session, auth_mode=IntegrationAuthMode.NONE, auth_method=None
     )
     _seed(
         db_session,
@@ -614,11 +620,10 @@ def test_mcp_config_no_sign_in_keeps_admin_template(
 
 def test_mcp_config_no_sign_in_with_rejected_user_values_needs_reconnect(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP, auth_mode=IntegrationAuthMode.NONE, auth_method=None
+    integration, _ = make_mcp_integration(
+        db_session, auth_mode=IntegrationAuthMode.NONE, auth_method=None
     )
     _seed(
         db_session,
@@ -659,10 +664,10 @@ def test_mcp_config_no_sign_in_with_rejected_user_values_needs_reconnect(
 
 def test_individual_custom_app_user_without_row_uses_full_organization_values(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
+    integration, _ = make_app_integration(
+        db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
         header_template={"X-Key": "{api_key}", "X-Region": "{region}"},
@@ -692,11 +697,10 @@ def test_individual_custom_app_user_without_row_uses_full_organization_values(
 
 def test_mcp_config_no_sign_in_without_user_values_is_not_connected(
     db_session: Session,
-    make_integration: MakeIntegration,
     make_test_user: MakeTestUser,
 ) -> None:
-    integration = make_integration(
-        kind=IntegrationKind.MCP, auth_mode=IntegrationAuthMode.NONE, auth_method=None
+    integration, _ = make_mcp_integration(
+        db_session, auth_mode=IntegrationAuthMode.NONE, auth_method=None
     )
     _seed(
         db_session,

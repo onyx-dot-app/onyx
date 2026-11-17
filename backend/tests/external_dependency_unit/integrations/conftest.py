@@ -2,37 +2,29 @@ import threading
 import time
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
-from typing import Any, Protocol
+from typing import Any
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlencode
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import httpx
 import pytest
 import requests
-from sqlalchemy import delete
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
-    ExternalAppType,
-    IntegrationAuthMethod,
-    IntegrationAuthMode,
-    IntegrationKind,
     IntegrationOAuthProviderMode,
-    MCPAuthenticationPerformer,
-    MCPAuthenticationType,
-    MCPTransport,
 )
 from onyx.db.integration_connection import upsert_connection__no_commit
 from onyx.db.models import (
-    ExternalApp,
     Integration,
     IntegrationConnection,
     IntegrationOAuthClient,
-    MCPServer,
 )
 from onyx.integrations.connection_models import ConnectionSecret
 from onyx.integrations.connections import ConnectionProblem, ResolvedConnection
+from tests.external_dependency_unit.integration_helpers import delete_integrations
 
 TOKEN_URL = "https://auth.example.test/token"
 AUTHORIZE_URL = "https://auth.example.test/authorize"
@@ -43,113 +35,45 @@ def _tenant(tenant_context: None) -> None:  # noqa: ARG001
     return None
 
 
-class MakeIntegration(Protocol):
-    def __call__(
-        self,
-        *,
-        auth_mode: IntegrationAuthMode,
-        auth_method: IntegrationAuthMethod | None,
-        kind: IntegrationKind = IntegrationKind.API,
-        app_type: ExternalAppType = ExternalAppType.CUSTOM,
-        header_template: dict[str, str] | None = None,
-        provider_mode: IntegrationOAuthProviderMode | None = None,
-        client_id: str | None = None,
-        client_secret: str | None = None,
-        pkce: bool | None = None,
-        registration: dict[str, Any] | None = None,
-        scopes: list[str] | None = None,
-    ) -> Integration: ...
+@pytest.fixture(autouse=True)
+def _delete_new_integrations(db_session: Session) -> Generator[None, None, None]:
+    """Deletes the integrations that the test saves through ``db_session``."""
+    integration_ids: list[int] = []
 
+    def collect(_session: Session, instance: object) -> None:
+        if isinstance(instance, Integration):
+            integration_ids.append(instance.id)
 
-@pytest.fixture
-def make_integration(db_session: Session) -> Generator[MakeIntegration, None, None]:
-    """An MCP integration gets an MCP server; an API integration gets an
-    external app of ``app_type``."""
-    server_ids: list[int] = []
-    app_ids: list[int] = []
-
-    def make(
-        *,
-        auth_mode: IntegrationAuthMode,
-        auth_method: IntegrationAuthMethod | None,
-        kind: IntegrationKind = IntegrationKind.API,
-        app_type: ExternalAppType = ExternalAppType.CUSTOM,
-        header_template: dict[str, str] | None = None,
-        provider_mode: IntegrationOAuthProviderMode | None = None,
-        client_id: str | None = None,
-        client_secret: str | None = None,
-        pkce: bool | None = None,
-        registration: dict[str, Any] | None = None,
-        scopes: list[str] | None = None,
-    ) -> Integration:
-        name = f"Test integration {uuid4().hex[:8]}"
-        integration = Integration(
-            kind=kind,
-            name=name,
-            auth_mode=auth_mode,
-            auth_method=auth_method,
-            header_template=header_template,
-        )
-        if kind is IntegrationKind.MCP:
-            server = MCPServer(
-                owner="integration-test@example.com",
-                name=name,
-                server_url="https://mcp.example.test/mcp",
-                transport=MCPTransport.STREAMABLE_HTTP,
-                auth_type=MCPAuthenticationType.OAUTH,
-                auth_performer=MCPAuthenticationPerformer.PER_USER,
-            )
-            db_session.add(server)
-            db_session.flush()
-            server_ids.append(server.id)
-            integration.mcp_server_id = server.id
-        else:
-            app = ExternalApp(
-                name=name,
-                app_type=app_type,
-                upstream_url_patterns=[],
-                auth_template={"Authorization": "Bearer {access_token}"},
-                organization_credentials={},
-            )
-            db_session.add(app)
-            db_session.flush()
-            app_ids.append(app.id)
-            integration.external_app_id = app.id
-        db_session.add(integration)
-        db_session.flush()
-        if provider_mode is not None:
-            db_session.add(
-                IntegrationOAuthClient(
-                    integration_id=integration.id,
-                    provider_mode=provider_mode,
-                    authorization_url=(
-                        AUTHORIZE_URL
-                        if provider_mode is IntegrationOAuthProviderMode.MANUAL
-                        else None
-                    ),
-                    token_url=(
-                        TOKEN_URL
-                        if provider_mode is IntegrationOAuthProviderMode.MANUAL
-                        else None
-                    ),
-                    client_id=client_id,
-                    client_secret=client_secret,
-                    pkce=pkce,
-                    registration=registration,
-                    scopes=scopes,
-                )
-            )
-        db_session.commit()
-        return integration
-
+    event.listen(db_session, "pending_to_persistent", collect)
     try:
-        yield make
+        yield
     finally:
-        db_session.rollback()
-        # The integration and its rows go by cascade.
-        db_session.execute(delete(MCPServer).where(MCPServer.id.in_(server_ids)))
-        db_session.execute(delete(ExternalApp).where(ExternalApp.id.in_(app_ids)))
-        db_session.commit()
+        event.remove(db_session, "pending_to_persistent", collect)
+        delete_integrations(db_session, integration_ids)
+
+
+def new_oauth_client(
+    provider_mode: IntegrationOAuthProviderMode,
+    *,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+    pkce: bool | None = None,
+    registration: dict[str, Any] | None = None,
+    scopes: list[str] | None = None,
+) -> IntegrationOAuthClient:
+    """An unsaved OAuth client for the ``oauth_client`` argument of the
+    integration factories. A manual client gets test endpoints."""
+    manual = provider_mode is IntegrationOAuthProviderMode.MANUAL
+    return IntegrationOAuthClient(
+        provider_mode=provider_mode,
+        authorization_url=AUTHORIZE_URL if manual else None,
+        token_url=TOKEN_URL if manual else None,
+        client_id=client_id,
+        client_secret=client_secret,
+        pkce=pkce,
+        registration=registration,
+        scopes=scopes,
+    )
 
 
 def add_connection(
