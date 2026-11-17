@@ -487,3 +487,21 @@ def test_many_failed_batches_fail_the_conversion(run: _Run) -> None:
         run.convert(batch_num)
     with pytest.raises(RuntimeError, match="failed for 4 of 4 stub batches"):
         run.convert(3)
+
+
+def test_batches_whose_documents_fail_fail_the_conversion(run: _Run) -> None:
+    """The source reports a failure for each document and raises nothing.
+    A batch with more than a tenth of its documents failed counts as a
+    failed batch, so the threshold still ends the attempt."""
+    run.store_stub_batch(0, ["failure"] + ["document"] * 10)
+    for batch_num in range(1, 5):
+        run.store_stub_batch(batch_num, ["failure"] * 4)
+    run.dispatch()
+
+    # One failure in eleven documents is under the share.
+    run.convert(0)
+    assert run.attempt().total_failures_batch_level == 0
+    for batch_num in range(1, 4):
+        run.convert(batch_num)
+    with pytest.raises(RuntimeError, match="failed for 4 of 5 stub batches"):
+        run.convert(4)
