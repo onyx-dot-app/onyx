@@ -20,6 +20,7 @@ from tests.unit.sandbox_proxy.conftest import (
     StubResolver,
     make_flow,
     make_resolved_sandbox,
+    mcp_targets,
     unused_cache,
     usable_ids,
 )
@@ -66,13 +67,13 @@ async def test_private_mcp_origin(
             ),
         )
     )
-    load_targets = MagicMock(return_value=targets)
+    load_targets = MagicMock(return_value=mcp_targets(*targets))
     load_access = MagicMock(
         return_value=usable_ids() if case == "inaccessible" else usable_ids(1)
     )
     if case == "db_error":
         load_access.side_effect = RuntimeError("database unavailable")
-    monkeypatch.setattr(resolver, "_load_targets", load_targets)
+    monkeypatch.setattr(resolver._usable, "_load_targets", load_targets)
     monkeypatch.setattr(resolver._usable, "_load", load_access)
     pin = MagicMock()
     monkeypatch.setattr("onyx.sandbox_proxy.addons.gate.pin_destination", pin)
@@ -201,9 +202,9 @@ def test_mcp_rechecks_tenant_ssrf_settings(
     sandbox = make_resolved_sandbox(tenant_id="tenant-mcp")
     resolver = IntegrationResolver()
     monkeypatch.setattr(
-        resolver,
+        resolver._usable,
         "_load_targets",
-        lambda _tenant: (
+        lambda _tenant: mcp_targets(
             CraftMCPTarget(
                 server_id=1,
                 scheme="https",
@@ -278,7 +279,7 @@ def test_private_mcp_denies_real_settings_read_failure(
     sandbox = make_resolved_sandbox(tenant_id="tenant-strict")
     resolver = IntegrationResolver()
     targets = MagicMock(
-        return_value=(
+        return_value=mcp_targets(
             CraftMCPTarget(
                 server_id=1,
                 scheme="https",
@@ -289,7 +290,7 @@ def test_private_mcp_denies_real_settings_read_failure(
         )
     )
     access = MagicMock(return_value=usable_ids(1))
-    monkeypatch.setattr(resolver, "_load_targets", targets)
+    monkeypatch.setattr(resolver._usable, "_load_targets", targets)
     monkeypatch.setattr(resolver._usable, "_load", access)
     monkeypatch.setattr(store, "_CACHE", TTLCache(maxsize=100, ttl=10))
     monkeypatch.setattr(store, "MULTI_TENANT", False)

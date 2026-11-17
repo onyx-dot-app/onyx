@@ -6,7 +6,8 @@ from __future__ import annotations
 from mitmproxy import http
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.integration import get_integration_by_id, list_enabled_mcp_server_urls
+from onyx.db.enums import IntegrationKind
+from onyx.db.integration import get_integration_by_id
 from onyx.db.users import fetch_user_by_id
 from onyx.external_apps.matching.engine import GatedTarget
 from onyx.integrations.call_credentials import resolve_call_credentials
@@ -22,14 +23,9 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     CraftMCPTarget,
     host_targets,
     normalized_request_path,
-    parse_target,
 )
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
-from onyx.sandbox_proxy.usable_integrations import (
-    CACHE_TTL_S,
-    TTLMemo,
-    UsableIntegrations,
-)
+from onyx.sandbox_proxy.usable_integrations import UsableIntegrations
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -40,9 +36,6 @@ logger = setup_logger()
 class IntegrationResolver(CredentialResolver):
     def __init__(self, usable: UsableIntegrations | None = None) -> None:
         self._usable = usable or UsableIntegrations()
-        # MCP host ownership (claims): user-agnostic, so a claimed host never
-        # forwards bare for a user who cannot use the server.
-        self._targets: TTLMemo[str, tuple[CraftMCPTarget, ...]] = TTLMemo(CACHE_TTL_S)
 
     def allows_destination(
         self, sandbox: ResolvedSandbox, scheme: str, host: str, port: int
@@ -153,12 +146,10 @@ class IntegrationResolver(CredentialResolver):
             return credentials.headers
 
     def _tenant_targets(self, tenant_id: str) -> tuple[CraftMCPTarget, ...]:
-        return self._targets.get(tenant_id, lambda: self._load_targets(tenant_id))
-
-    def _load_targets(self, tenant_id: str) -> tuple[CraftMCPTarget, ...]:
-        with get_session_with_tenant(tenant_id=tenant_id) as db:
-            parsed = [
-                parse_target(integration_id, server_url)
-                for integration_id, server_url in list_enabled_mcp_server_urls(db)
-            ]
-        return tuple(target for target in parsed if target is not None)
+        """MCP hosts only: user-agnostic, so a claimed host never forwards
+        bare for a user who cannot use the server."""
+        return tuple(
+            target.endpoint
+            for target in self._usable.targets(tenant_id)
+            if target.kind is IntegrationKind.MCP and target.endpoint is not None
+        )

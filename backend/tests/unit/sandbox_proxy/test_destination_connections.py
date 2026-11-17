@@ -34,6 +34,7 @@ from tests.unit.sandbox_proxy.conftest import (
     StubResolver,
     make_resolved_sandbox,
     make_tls_context,
+    mcp_targets,
     unused_cache,
     usable_ids,
     wait_for_proxy_listener,
@@ -323,9 +324,9 @@ def test_private_http_mcp_uses_pinned_addresses(
         async with _upstream(address) as (port, requests):
             resolver = IntegrationResolver()
             monkeypatch.setattr(
-                resolver,
+                resolver._usable,
                 "_load_targets",
-                lambda _tenant: (
+                lambda _tenant: mcp_targets(
                     CraftMCPTarget(
                         server_id=1,
                         scheme="http",
@@ -372,9 +373,9 @@ def test_private_connect_never_forwards_raw_tcp(
         ):
             resolver = IntegrationResolver()
             monkeypatch.setattr(
-                resolver,
+                resolver._usable,
                 "_load_targets",
-                lambda _tenant: (
+                lambda _tenant: mcp_targets(
                     CraftMCPTarget(
                         server_id=1,
                         scheme="https",
@@ -433,7 +434,7 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
     from unittest.mock import MagicMock
 
     from onyx.db.enums import ActionPolicy, IntegrationKind
-    from onyx.db.models import Integration, MCPServer, User
+    from onyx.db.models import Integration, User
     from onyx.integrations.call_credentials import CallCredentials
     from onyx.integrations.kinds import mcp_server as mcp_kind
     from onyx.sandbox_proxy import request_evaluator
@@ -443,7 +444,6 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
     async def exercise() -> None:
         async with _upstream(address) as (port, requests):
             server_url = f"http://{_HOST}:{port}/mcp"
-            stored = MCPServer(id=1, name="Private MCP", server_url=server_url)
             integration = Integration(
                 id=1, kind=IntegrationKind.MCP, name="Private MCP", enabled=True
             )
@@ -458,15 +458,12 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
                 "list_enabled_integrations_by_id",
                 lambda *_args: [integration],
             )
-            monkeypatch.setattr(
-                mcp_kind, "get_mcp_server_for_integration", lambda *_args: stored
-            )
             monkeypatch.setattr(mcp_kind, "list_integration_actions", lambda *_: [])
             monkeypatch.setattr(
-                integration_resolver,
-                "list_enabled_mcp_server_urls",
-                lambda *_args: [(1, server_url)],
+                usable, "list_enabled_mcp_server_urls", lambda *_: [(1, server_url)]
             )
+            monkeypatch.setattr(usable, "list_enabled_openapi_schemas", lambda *_: [])
+            monkeypatch.setattr(usable, "list_enabled_external_apps", lambda *_: [])
             monkeypatch.setattr(
                 integration_resolver, "get_integration_by_id", lambda *_: integration
             )
@@ -478,6 +475,7 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
             monkeypatch.setattr(
                 gate, "get_active_scheduled_task_context", lambda *_args: None
             )
+            monkeypatch.setattr(gate, "get_running_task_id", lambda *_args: None)
             monkeypatch.setattr(
                 gate,
                 "resolve_gate_policies",
@@ -594,9 +592,9 @@ def test_private_mcp_keepalive_rechecks_actual_peer(
         port = upstream.sockets[0].getsockname()[1]
         resolver = IntegrationResolver()
         monkeypatch.setattr(
-            resolver,
+            resolver._usable,
             "_load_targets",
-            lambda _tenant: (
+            lambda _tenant: mcp_targets(
                 CraftMCPTarget(
                     server_id=1,
                     scheme=scheme,

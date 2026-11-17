@@ -23,6 +23,11 @@ from onyx.integrations.kinds import api as api_kind
 from onyx.integrations.kinds.api import ApiKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import ApiShape
+from onyx.sandbox_proxy.resolvers.mcp_matching import IntegrationMatchTarget
+from onyx.sandbox_proxy.usable_integrations import (
+    app_match_target,
+    openapi_match_target,
+)
 from onyx.tools.models import PluginAction, ToolApprovalScope
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
@@ -86,7 +91,7 @@ def _integration(tool_id: int | None, external_app_id: int | None) -> Integratio
 
 def _use_openapi_tool(
     monkeypatch: pytest.MonkeyPatch, spec: dict[str, Any] = OPENAPI_SPEC
-) -> Integration:
+) -> tuple[Integration, IntegrationMatchTarget]:
     """Patch the tool getter and the stored actions that the sync writes."""
     tool = Tool(id=5, name="orders", openapi_schema=spec)
     rows = [
@@ -98,12 +103,14 @@ def _use_openapi_tool(
     ]
     monkeypatch.setattr(api_kind, "get_openapi_tool_for_integration", lambda *_: tool)
     monkeypatch.setattr(api_kind, "list_integration_actions", lambda *_: rows)
-    return _integration(tool_id=tool.id, external_app_id=None)
+    target = openapi_match_target(21, spec)
+    assert target is not None
+    return _integration(tool_id=tool.id, external_app_id=None), target
 
 
 def _use_external_app(
     monkeypatch: pytest.MonkeyPatch, app_type: ExternalAppType, patterns: list[str]
-) -> Integration:
+) -> tuple[Integration, IntegrationMatchTarget]:
     app = ExternalApp(
         id=9,
         name="old-name",
@@ -112,7 +119,7 @@ def _use_external_app(
         auth_template={},
     )
     monkeypatch.setattr(api_kind, "get_external_app_for_integration", lambda *_: app)
-    return _integration(tool_id=None, external_app_id=app.id)
+    return _integration(tool_id=None, external_app_id=app.id), app_match_target(21, app)
 
 
 def _request(method: str, url: str, body: Any = None) -> ProxiedRequest:
@@ -129,7 +136,7 @@ def _request(method: str, url: str, body: Any = None) -> ProxiedRequest:
 
 
 def test_openapi_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    integration = _use_openapi_tool(monkeypatch)
+    integration, target = _use_openapi_tool(monkeypatch)
     config = HANDLER.load_config(integration, DB)
     assert config.shape is ApiShape.OPENAPI
     assert config.tool_id == 5
@@ -167,9 +174,9 @@ def test_openapi_action_display_name_is_the_summary_else_the_operation_id() -> N
 def test_openapi_match_method_and_path_template(
     monkeypatch: pytest.MonkeyPatch, method: str, url: str, expected: list[str]
 ) -> None:
-    integration = _use_openapi_tool(monkeypatch)
+    integration, target = _use_openapi_tool(monkeypatch)
 
-    matched = HANDLER.match_request(integration, _request(method, url), DB)
+    matched = HANDLER.match_request(integration, target, _request(method, url), DB)
 
     assert matched is not None
     assert [m.action_key for m in matched.actions] == expected
@@ -180,14 +187,16 @@ def test_openapi_match_method_and_path_template(
 def test_openapi_match_policy_follows_the_method(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    integration = _use_openapi_tool(monkeypatch)
+    integration, target = _use_openapi_tool(monkeypatch)
     get = HANDLER.match_request(
         integration,
+        target,
         _request("GET", "https://api.orders.example.com/v1/orders/1"),
         DB,
     )
     delete = HANDLER.match_request(
         integration,
+        target,
         _request("DELETE", "https://api.orders.example.com/v1/orders/1"),
         DB,
     )
@@ -241,10 +250,13 @@ FILES_SPEC: dict[str, Any] = {
 def test_openapi_match_parameters_inside_a_segment_and_concrete_paths_first(
     monkeypatch: pytest.MonkeyPatch, path: str, expected: list[str]
 ) -> None:
-    integration = _use_openapi_tool(monkeypatch, FILES_SPEC)
+    integration, target = _use_openapi_tool(monkeypatch, FILES_SPEC)
 
     matched = HANDLER.match_request(
-        integration, _request("GET", f"https://api.files.example.com/v1{path}"), DB
+        integration,
+        target,
+        _request("GET", f"https://api.files.example.com/v1{path}"),
+        DB,
     )
 
     assert matched is not None
@@ -274,10 +286,11 @@ METHODS_SPEC: dict[str, Any] = {
 def test_openapi_match_picks_the_path_before_the_method_under_an_encoded_server_path(
     monkeypatch: pytest.MonkeyPatch, method: str, path: str, expected: list[str]
 ) -> None:
-    integration = _use_openapi_tool(monkeypatch, METHODS_SPEC)
+    integration, target = _use_openapi_tool(monkeypatch, METHODS_SPEC)
 
     matched = HANDLER.match_request(
         integration,
+        target,
         _request(method, f"https://api.files.example.com/team%20one{path}"),
         DB,
     )
@@ -327,14 +340,14 @@ def test_openapi_path_match_takes_linear_time_on_a_long_segment() -> None:
 def test_openapi_match_outside_the_server_url_is_none(
     monkeypatch: pytest.MonkeyPatch, url: str
 ) -> None:
-    integration = _use_openapi_tool(monkeypatch)
-    assert HANDLER.match_request(integration, _request("GET", url), DB) is None
+    integration, target = _use_openapi_tool(monkeypatch)
+    assert HANDLER.match_request(integration, target, _request("GET", url), DB) is None
 
 
 def test_openapi_build_chat_tools_keeps_names_placeholders_and_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    integration = _use_openapi_tool(monkeypatch)
+    integration, target = _use_openapi_tool(monkeypatch)
     scope = ToolApprovalScope(integration_id=21, action_id="getOrder")
     actions = [
         IntegrationAction(key="getOrder"),
@@ -402,7 +415,7 @@ def test_openapi_build_chat_tools_keys_actions_by_the_unsubstituted_operation_id
 def test_openapi_build_chat_tools_with_no_actions_is_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    integration = _use_openapi_tool(monkeypatch)
+    integration, target = _use_openapi_tool(monkeypatch)
     assert (
         HANDLER.build_chat_tools(
             integration, [], ChatToolContext(credentials=_credentials({})), DB
@@ -425,12 +438,13 @@ def _credentials(headers: dict[str, str]) -> CallCredentials:
 
 
 def test_preset_match_graphql(monkeypatch: pytest.MonkeyPatch) -> None:
-    integration = _use_external_app(
+    integration, target = _use_external_app(
         monkeypatch, ExternalAppType.LINEAR, [r"https://api\.linear\.app/.*"]
     )
 
     matched = HANDLER.match_request(
         integration,
+        target,
         _request(
             "POST",
             "https://api.linear.app/graphql",
@@ -448,12 +462,13 @@ def test_preset_match_graphql(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_preset_match_rest(monkeypatch: pytest.MonkeyPatch) -> None:
-    integration = _use_external_app(
+    integration, target = _use_external_app(
         monkeypatch, ExternalAppType.GITHUB, [r"https://api\.github\.com/.*"]
     )
 
     matched = HANDLER.match_request(
         integration,
+        target,
         _request("GET", "https://api.github.com/repos/onyx/app/issues/3?page=2"),
         DB,
     )
@@ -465,19 +480,19 @@ def test_preset_match_rest(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_preset_match_on_another_host_is_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    integration = _use_external_app(
+    integration, target = _use_external_app(
         monkeypatch, ExternalAppType.GITHUB, [r"https://api\.github\.com/.*"]
     )
     assert (
         HANDLER.match_request(
-            integration, _request("GET", "https://api.gitlab.com/user"), DB
+            integration, target, _request("GET", "https://api.gitlab.com/user"), DB
         )
         is None
     )
 
 
 def test_preset_build_chat_tools_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
-    integration = _use_external_app(
+    integration, target = _use_external_app(
         monkeypatch, ExternalAppType.GITHUB, [r"https://api\.github\.com/.*"]
     )
     actions = [IntegrationAction(key="github.user.read")]
@@ -493,15 +508,15 @@ def test_preset_build_chat_tools_is_empty(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_custom_match_whole_domain(monkeypatch: pytest.MonkeyPatch) -> None:
-    integration = _use_external_app(
+    integration, target = _use_external_app(
         monkeypatch, ExternalAppType.CUSTOM, ["https://internal.example.com/**"]
     )
 
     matched = HANDLER.match_request(
-        integration, _request("DELETE", "https://internal.example.com/a/b"), DB
+        integration, target, _request("DELETE", "https://internal.example.com/a/b"), DB
     )
     other = HANDLER.match_request(
-        integration, _request("GET", "https://elsewhere.example.com/a"), DB
+        integration, target, _request("GET", "https://elsewhere.example.com/a"), DB
     )
 
     assert matched is not None
@@ -513,8 +528,8 @@ def test_custom_match_whole_domain(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_match_request_without_url_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    integration = _use_external_app(
+    integration, target = _use_external_app(
         monkeypatch, ExternalAppType.CUSTOM, ["https://internal.example.com/**"]
     )
     request = ProxiedRequest(method="GET", path="/a")
-    assert HANDLER.match_request(integration, request, DB) is None
+    assert HANDLER.match_request(integration, target, request, DB) is None

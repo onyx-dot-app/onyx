@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import time
 from collections.abc import Generator
 from typing import Any
 from uuid import UUID, uuid4
@@ -61,6 +62,7 @@ from onyx.sandbox_proxy.request_evaluator import IntegrationRequestEvaluator
 from onyx.sandbox_proxy.resolvers.integration import IntegrationResolver
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.sandbox_identity.resolution import SandboxIdentityResolver
+from onyx.sandbox_proxy.usable_integrations import UsableIntegrations
 from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.util.mcp_config import (
     resolve_craft_mcp_servers,
@@ -72,6 +74,7 @@ from tests.external_dependency_unit.integration_helpers import (
     hold_in_plugin,
     make_app_integration,
     make_mcp_integration,
+    make_openapi_integration,
 )
 from tests.external_dependency_unit.integrations.conftest import add_connection
 from tests.unit.sandbox_proxy.conftest import StubResolver, make_flow
@@ -338,6 +341,65 @@ def test_an_external_app_wins_over_an_mcp_server_on_a_shared_host(
     matched = _evaluate(_request(f"https://{host}/mcp", _tool_call("search")), user)
     assert isinstance(matched, AllMatchedActions)
     assert matched.target.integration_id == app.id
+
+
+def test_an_openapi_integration_matches_under_its_server_url(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    host = _host()
+    integration, _ = make_openapi_integration(
+        db_session,
+        openapi_schema={
+            "openapi": "3.0.0",
+            "info": {"title": "Orders", "description": "Orders", "version": "1"},
+            "servers": [{"url": f"https://{host}/v1"}],
+            "paths": {
+                "/orders": {
+                    "get": {"operationId": "listOrders", "summary": "List orders"}
+                }
+            },
+        },
+    )
+    created.append(integration.id)
+    _run(db_session, [integration])
+
+    matched = _evaluate(_request(f"https://{host}/v1/orders", method="GET"), user)
+    assert isinstance(matched, AllMatchedActions)
+    assert matched.target.integration_id == integration.id
+    assert [action.action_type for action in matched.actions] == ["listOrders"]
+    assert _evaluate(_request(f"https://{host}/v2/orders", method="GET"), user) is None
+
+
+def test_the_match_targets_reload_after_the_cache_time(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    """The targets are cached for each tenant. A new integration matches
+    after the cache time; a disabled one stops at once, because the
+    evaluator reads the enabled integrations for each request."""
+    usable = UsableIntegrations(ttl_s=0.5)
+    evaluator = IntegrationRequestEvaluator(usable)
+    resolver = IntegrationResolver(usable)
+    host = _host()
+    request = _request(f"https://{host}/mcp", _tool_call("search"))
+    ctx = InjectionContext(
+        sandbox=_sandbox(user), matched_actions=None, protocol_target=None
+    )
+    assert evaluator.evaluate(request, TENANT, user.id, None) is None
+
+    mcp = _mcp(db_session, created, f"https://{host}/mcp")
+    _run(db_session, [mcp])
+    assert evaluator.evaluate(request, TENANT, user.id, None) is None
+    assert not resolver.claims(request, ctx)
+
+    time.sleep(0.6)
+    matched = evaluator.evaluate(request, TENANT, user.id, None)
+    assert isinstance(matched, AllMatchedActions)
+    assert matched.target.integration_id == mcp.id
+    assert resolver.claims(request, ctx)
+
+    mcp.enabled = False
+    db_session.commit()
+    assert evaluator.evaluate(request, TENANT, user.id, None) is None
 
 
 def test_an_integration_the_user_does_not_run_is_not_matched(

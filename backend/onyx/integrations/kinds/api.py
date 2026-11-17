@@ -21,7 +21,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
     WHOLE_DOMAIN_ACTION_TYPE,
     recognize_actions,
-    resolve_app_for_url,
+    url_matches_patterns,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.providers.registry import get_endpoint_catalog
@@ -35,9 +35,10 @@ from onyx.integrations.models import (
     RequestMatch,
 )
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
+    CraftMCPTarget,
+    IntegrationMatchTarget,
     match_request,
     normalized_request_path,
-    parse_target,
 )
 from onyx.server.features.mcp.models import merge_mcp_headers
 from onyx.tools.interface import Tool
@@ -263,22 +264,23 @@ class ApiKindHandler(IntegrationKindHandler):
     def match_request(
         self,
         integration: Integration,
+        target: IntegrationMatchTarget,
         request: ProxiedRequest,
         db_session: Session,
     ) -> RequestMatch | None:
         if request.url is None:
             return None
-        config = self._openapi_config(integration, db_session)
-        if config is not None:
+        if target.endpoint is not None:
             return self._match_openapi(
-                integration.id, config.base_url, request.method, request.url, db_session
+                integration.id, target.endpoint, request.method, request.url, db_session
             )
-
-        app = self._external_app(integration, db_session)
-        if resolve_app_for_url(request.url, [app]) is None:
+        if target.app_type is None or not url_matches_patterns(
+            request.url, target.url_regexes
+        ):
             return None
         matched = recognize_actions(
-            app, request.model_copy(update={"path": request.path.split("?", 1)[0]})
+            target.app_type,
+            request.model_copy(update={"path": request.path.split("?", 1)[0]}),
         )
         return RequestMatch(
             actions=[
@@ -296,18 +298,13 @@ class ApiKindHandler(IntegrationKindHandler):
     def _match_openapi(
         self,
         integration_id: int,
-        base_url: str | None,
+        target: CraftMCPTarget,
         method: str,
         url: str,
         db_session: Session,
     ) -> RequestMatch | None:
         """The request must be under the server URL of the spec. Then its method
         and the rest of its path pick the stored actions."""
-        if base_url is None:
-            return None
-        target = parse_target(integration_id, base_url)
-        if target is None:
-            return None
         proxied = http.Request.make(method, url)
         if match_request((target,), proxied) is None:
             return None

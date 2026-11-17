@@ -74,7 +74,7 @@ def test_recognition_is_independent_of_stored_override(
     _set_policy(db_session, app, "slack.messages.write", ActionPolicy.ALWAYS)
 
     request = ProxiedRequest(method="POST", path="/api/chat.postMessage")
-    assert recognize_actions(app, request) == (
+    assert recognize_actions(app.app_type, request) == (
         MatchedAction(
             action_type="slack.messages.write",
             display_name="Post a message",
@@ -91,7 +91,7 @@ def test_unset_read_action_uses_catalog_default_always(
     # Slack is all-POST, so the catalog default (not HTTP method) classifies reads.
     app = _connect_app(db_session, ExternalAppType.SLACK)
     request = ProxiedRequest(method="POST", path="/api/conversations.list")
-    matched_actions = recognize_actions(app, request)
+    matched_actions = recognize_actions(app.app_type, request)
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions] == ["slack.channels.read"]
     assert matched_actions[0].policy == ActionPolicy.ALWAYS
@@ -103,7 +103,7 @@ def test_unset_write_action_uses_catalog_default_ask(
 ) -> None:
     app = _connect_app(db_session, ExternalAppType.SLACK)
     request = ProxiedRequest(method="POST", path="/api/chat.postMessage")
-    matched_actions = recognize_actions(app, request)
+    matched_actions = recognize_actions(app.app_type, request)
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions] == ["slack.messages.write"]
     assert matched_actions[0].policy == ActionPolicy.ASK
@@ -118,14 +118,14 @@ def test_match_google_calendar_method_distinguishes_actions(
     item_path = "/calendar/v3/calendars/primary/events/evt123"
 
     delete_req = ProxiedRequest(method="DELETE", path=item_path)
-    matched_actions = recognize_actions(app, delete_req)
+    matched_actions = recognize_actions(app.app_type, delete_req)
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions] == ["gcal.events.delete"]
     assert matched_actions[0].policy == ActionPolicy.ASK
 
     # Same path, GET → the read action; no stored row → catalog default ALWAYS.
     read_req = ProxiedRequest(method="GET", path=item_path)
-    read_matched_actions = recognize_actions(app, read_req)
+    read_matched_actions = recognize_actions(app.app_type, read_req)
     assert read_matched_actions is not None
     assert [a.action_type for a in read_matched_actions] == ["gcal.events.read"]
     assert read_matched_actions[0].policy == ActionPolicy.ALWAYS
@@ -142,7 +142,7 @@ def test_match_linear_graphql_body(
         {"query": "mutation { issueCreate(input: $i) { issue { id } } }"}
     ).encode()
     matched_actions = recognize_actions(
-        app, ProxiedRequest(method="POST", path="/graphql", body=body)
+        app.app_type, ProxiedRequest(method="POST", path="/graphql", body=body)
     )
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions] == ["linear.issues.create"]
@@ -167,7 +167,7 @@ def test_graphql_batched_sorts_strictest_first(
         ]
     ).encode()
     matched_actions = recognize_actions(
-        app, ProxiedRequest(method="POST", path="/graphql", body=body)
+        app.app_type, ProxiedRequest(method="POST", path="/graphql", body=body)
     )
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions] == [
@@ -187,7 +187,10 @@ def test_match_action_off_catalog_requires_approval(
     # Unknown managed actions still require approval.
     app = _connect_app(db_session, ExternalAppType.SLACK)
     request = ProxiedRequest(method="POST", path="/api/some.unknownMethod")
-    assert recognize_actions(app, request)[0].action_type == WHOLE_DOMAIN_ACTION_TYPE
+    assert (
+        recognize_actions(app.app_type, request)[0].action_type
+        == WHOLE_DOMAIN_ACTION_TYPE
+    )
 
 
 # ── app_is_available: the credential predicate ─────────────────────

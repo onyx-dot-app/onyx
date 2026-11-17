@@ -28,6 +28,7 @@ from tests.unit.sandbox_proxy.conftest import (
     StubResolver,
     make_resolved_sandbox,
     make_tls_context,
+    mcp_targets,
     unused_cache,
     usable_ids,
     wait_for_proxy_listener,
@@ -205,9 +206,9 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
         )
         mcp_resolver = IntegrationResolver()
         monkeypatch.setattr(
-            mcp_resolver,
+            mcp_resolver._usable,
             "_load_targets",
-            lambda _tenant: (
+            lambda _tenant: mcp_targets(
                 CraftMCPTarget(
                     server_id=1,
                     scheme="https",

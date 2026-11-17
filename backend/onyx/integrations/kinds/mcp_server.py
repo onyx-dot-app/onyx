@@ -26,7 +26,10 @@ from onyx.sandbox_proxy.mcp_jsonrpc import (
     classify_mcp_request,
 )
 from onyx.sandbox_proxy.models import McpRpcKind
-from onyx.sandbox_proxy.resolvers.mcp_matching import match_request, parse_target
+from onyx.sandbox_proxy.resolvers.mcp_matching import (
+    IntegrationMatchTarget,
+    match_request,
+)
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.utils.logger import setup_logger
@@ -119,17 +122,14 @@ class McpServerKindHandler(IntegrationKindHandler):
     def match_request(
         self,
         integration: Integration,
+        target: IntegrationMatchTarget,
         request: ProxiedRequest,
         db_session: Session,
     ) -> RequestMatch | None:
         """The host and the path prefix of the server URL attribute the
         request, and the JSON-RPC body gives the tools. The caller picks the
         longest prefix when servers share a host."""
-        if request.url is None:
-            return None
-        server = self._server(integration, db_session)
-        target = parse_target(server.id, server.server_url)
-        if target is None:
+        if request.url is None or target.endpoint is None:
             return None
         proxied = http.Request.make(
             request.method,
@@ -140,9 +140,9 @@ class McpServerKindHandler(IntegrationKindHandler):
                 for name, value in request.headers.items()
             ],
         )
-        if match_request((target,), proxied) is None:
+        if match_request((target.endpoint,), proxied) is None:
             return None
-        prefix_length = len(target.path_prefix)
+        prefix_length = len(target.endpoint.path_prefix)
 
         try:
             classification = classify_mcp_request(proxied)

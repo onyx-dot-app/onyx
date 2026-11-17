@@ -21,11 +21,20 @@ from onyx.integrations.kinds import mcp_server as mcp_kind
 from onyx.integrations.kinds.mcp_server import McpServerKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
 from onyx.sandbox_proxy.mcp_jsonrpc import MCP_UNCLASSIFIABLE_ACTION_TYPE
+from onyx.sandbox_proxy.resolvers.mcp_matching import (
+    IntegrationMatchTarget,
+    parse_target,
+)
 from onyx.tools.models import ToolApprovalScope
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 
 DB = MagicMock(spec=Session)
 SERVER_URL = "https://mcp.example.com/linear/mcp"
+TARGET = IntegrationMatchTarget(
+    integration_id=7,
+    kind=IntegrationKind.MCP,
+    endpoint=parse_target(7, SERVER_URL),
+)
 
 
 @pytest.fixture
@@ -125,7 +134,9 @@ def test_match_tools_call_uses_action_defaults(
         ]
     ).encode()
 
-    matched = McpServerKindHandler().match_request(integration, _request(body), DB)
+    matched = McpServerKindHandler().match_request(
+        integration, TARGET, _request(body), DB
+    )
 
     assert matched is not None
     assert {(m.action_key, m.default_policy) for m in matched.actions} == {
@@ -155,7 +166,7 @@ def test_match_protocol_message_is_empty_not_none(
     method: str,
 ) -> None:
     matched = McpServerKindHandler().match_request(
-        integration, _request(body, method=method), DB
+        integration, TARGET, _request(body, method=method), DB
     )
     assert matched is not None
     assert matched.actions == []
@@ -170,7 +181,9 @@ def test_match_unparsable_body_is_blocked(
     integration: Integration,
     body: bytes,
 ) -> None:
-    matched = McpServerKindHandler().match_request(integration, _request(body), DB)
+    matched = McpServerKindHandler().match_request(
+        integration, TARGET, _request(body), DB
+    )
     assert matched is not None
     assert [(m.action_key, m.default_policy) for m in matched.actions] == [
         (MCP_UNCLASSIFIABLE_ACTION_TYPE, IntegrationActionPolicyValue.BLOCKED)
@@ -183,7 +196,7 @@ def test_match_upgrade_request_is_blocked(
     request = _request(None, method="GET").model_copy(
         update={"headers": {"Upgrade": "websocket", "Connection": "Upgrade"}}
     )
-    matched = McpServerKindHandler().match_request(integration, request, DB)
+    matched = McpServerKindHandler().match_request(integration, TARGET, request, DB)
     assert matched is not None
     assert matched.actions[0].action_key == MCP_UNCLASSIFIABLE_ACTION_TYPE
 
@@ -204,7 +217,7 @@ def test_match_request_for_another_target_is_none(
     url: str,
 ) -> None:
     matched = McpServerKindHandler().match_request(
-        integration, _request(_rpc("tools/call", name="search"), url=url), DB
+        integration, TARGET, _request(_rpc("tools/call", name="search"), url=url), DB
     )
     assert matched is None
 
@@ -213,7 +226,9 @@ def test_match_request_without_url_is_none(
     integration: Integration,
 ) -> None:
     request = ProxiedRequest(method="POST", path="/linear/mcp", body=_rpc("ping"))
-    assert McpServerKindHandler().match_request(integration, request, DB) is None
+    assert (
+        McpServerKindHandler().match_request(integration, TARGET, request, DB) is None
+    )
 
 
 def test_build_chat_tools_sets_approval_and_schemas(

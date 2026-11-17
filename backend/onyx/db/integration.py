@@ -1,4 +1,5 @@
 from collections.abc import Collection, Sequence
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -106,6 +107,34 @@ def list_enabled_mcp_server_urls(db_session: Session) -> list[tuple[int, str]]:
         db_session.execute(
             select(Integration.id, MCPServer.server_url)
             .join(MCPServer, MCPServer.id == Integration.mcp_server_id)
+            .where(Integration.enabled.is_(True))
+            .order_by(Integration.id)
+        ).tuples()
+    )
+
+
+def list_enabled_openapi_schemas(
+    db_session: Session,
+) -> list[tuple[int, dict[str, Any] | None]]:
+    """``(integration_id, openapi_schema)`` of each enabled OpenAPI integration."""
+    return list(
+        db_session.execute(
+            select(Integration.id, Tool.openapi_schema)
+            .join(Tool, Tool.id == Integration.tool_id)
+            .where(Integration.enabled.is_(True))
+            .order_by(Integration.id)
+        ).tuples()
+    )
+
+
+def list_enabled_external_apps(
+    db_session: Session,
+) -> list[tuple[int, ExternalApp]]:
+    """``(integration_id, external_app)`` of each enabled preset or custom app."""
+    return list(
+        db_session.execute(
+            select(Integration.id, ExternalApp)
+            .join(ExternalApp, ExternalApp.id == Integration.external_app_id)
             .where(Integration.enabled.is_(True))
             .order_by(Integration.id)
         ).tuples()
