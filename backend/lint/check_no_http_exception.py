@@ -33,6 +33,9 @@ BASELINE_PATH = Path(__file__).resolve().with_name("no_http_exception_baseline.t
 # Apps with no OnyxError handler are out of scope: model_server, and the sandbox
 # daemon, which runs in the sandbox image without the onyx package.
 SCAN_ROOTS = ("backend/onyx", "backend/ee")
+# The FOSS mirror removes the enterprise code, so its baseline rows do not apply there.
+ENTERPRISE_ROOT = "backend/ee/"
+ENTERPRISE_PACKAGE = "backend/ee/onyx"
 SKIP_PREFIXES = ("backend/onyx/server/features/build/sandbox/image/sandbox_daemon/",)
 # A deliberate exception goes on or directly above the violation and must give a reason.
 ALLOW_MARKER = "http-exception: allow"
@@ -81,7 +84,7 @@ def _import_aliases(tree: ast.AST) -> dict[str, str]:
     aliases: dict[str, str] = {}
 
     def bind(local: str, qualified: str) -> None:
-        if not aliases.get(local, "").startswith(_BANNED_MODULES):
+        if aliases.get(local, "").split(".")[0] not in _BANNED_MODULES:
             aliases[local] = qualified
 
     for node in ast.walk(tree):
@@ -289,7 +292,14 @@ def main(argv: list[str] | None = None, repo_root: Path = REPO_ROOT) -> int:
         print(f"Wrote {total} violations in {len(violations)} files to {args.baseline}")
         return 0
 
-    failures = check(violations, read_baseline(args.baseline))
+    baseline = read_baseline(args.baseline)
+    if not (repo_root / ENTERPRISE_PACKAGE).is_dir():
+        baseline = {
+            relative: count
+            for relative, count in baseline.items()
+            if not relative.startswith(ENTERPRISE_ROOT)
+        }
+    failures = check(violations, baseline)
     if not failures:
         return 0
     print("HTTPException and fastapi/starlette status constants are not allowed.")

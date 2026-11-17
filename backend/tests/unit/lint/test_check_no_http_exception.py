@@ -98,6 +98,15 @@ def test_marker_without_reason_or_out_of_place_does_not_allow(source: str) -> No
     assert len(check_no_http_exception.find_violations(imports + source)) == 1
 
 
+def test_import_from_a_package_with_a_similar_name_does_not_hide_a_violation() -> None:
+    source = (
+        "from fastapi_users import exceptions\n"
+        "from fastapi import exceptions\n"
+        "raise exceptions.HTTPException(400)\n"
+    )
+    assert check_no_http_exception.find_violations(source) == [3]
+
+
 def test_nested_import_does_not_hide_a_violation() -> None:
     source = (
         "from fastapi import HTTPException\n"
@@ -161,6 +170,17 @@ def test_removed_violation_asks_for_a_lower_baseline(
 
 def test_deleted_baselined_file_fails(tmp_path: Path) -> None:
     baseline_path = _repo(tmp_path, {_CLEAN: "x = 1\n"}, f"{_LEGACY} 1\n")
+    assert _run(tmp_path, baseline_path) == 1
+
+
+def test_enterprise_rows_are_ignored_when_the_enterprise_code_is_absent(
+    tmp_path: Path,
+) -> None:
+    enterprise = "backend/ee/onyx/server/legacy.py"
+    files = {_LEGACY: _ONE_RAISE, "backend/ee/__init__.py": ""}
+    baseline_path = _repo(tmp_path, files, f"{enterprise} 3\n{_LEGACY} 1\n")
+    assert _run(tmp_path, baseline_path) == 0
+    (tmp_path / "backend/ee/onyx").mkdir()
     assert _run(tmp_path, baseline_path) == 1
 
 
