@@ -17,7 +17,9 @@ import {
 } from "@tests/e2e/mcp/mcpToolInvocation";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
-const DEFAULT_PORT = Number(process.env.MCP_API_KEY_TEST_PORT || "8005");
+const PORT = process.env.MCP_API_KEY_TEST_PORT
+  ? Number(process.env.MCP_API_KEY_TEST_PORT)
+  : undefined;
 const MCP_API_KEY_TEST_URL = process.env.MCP_API_KEY_TEST_URL;
 const MCP_ASSERTED_TOOL_NAME = "tool_0";
 
@@ -45,7 +47,7 @@ test.describe("Default Agent MCP Integration", () => {
       serverUrl = MCP_API_KEY_TEST_URL;
     } else {
       serverProcess = await startMcpApiKeyServer({
-        port: DEFAULT_PORT,
+        port: PORT,
         apiKey: API_KEY,
       });
       serverUrl = `http://${serverProcess.address.host}:${serverProcess.address.port}/mcp`;

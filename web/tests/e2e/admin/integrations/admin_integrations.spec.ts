@@ -9,7 +9,9 @@ import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
 import { AdminIntegrationDetailPage } from "@tests/e2e/pages/AdminIntegrationDetailPage";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
-const PORT = Number(process.env.MCP_INTEGRATIONS_TEST_PORT || "8015");
+const PORT = process.env.MCP_INTEGRATIONS_TEST_PORT
+  ? Number(process.env.MCP_INTEGRATIONS_TEST_PORT)
+  : undefined;
 const MCP_API_KEY_TEST_URL = process.env.MCP_API_KEY_TEST_URL;
 const MCP_TOOL = "tool_0";
 
