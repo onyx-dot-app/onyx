@@ -46,7 +46,7 @@ def _blocked_actions(
         integration=integration,
         action_keys=keys,
         user_id=user.id,
-        link_settings=None,
+        link_settings=[],
         approval_mode=ApprovalMode.INTERACTIVE,
         chat_session_id=None,
     )
