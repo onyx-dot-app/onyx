@@ -46,6 +46,9 @@ export default function AdminPluginsPage() {
   const policyCopy = useInstallationPolicyCopy();
   const policyOptions = usePolicyOptions();
   const [query, setQuery] = useState("");
+  const [savingPluginIds, setSavingPluginIds] = useState<ReadonlySet<string>>(
+    new Set()
+  );
   const search = query.trim().toLocaleLowerCase();
   const entries = pluginsFromIntegrations(data ?? [], locale).filter((entry) =>
     [entry.plugin.plugin_name, ...entry.integrations.map((i) => i.name)]
@@ -58,6 +61,8 @@ export default function AdminPluginsPage() {
     row: AdminPluginEntry,
     policy: InstallationPolicy
   ) {
+    const pluginId = row.plugin.plugin_id;
+    setSavingPluginIds((ids) => new Set(ids).add(pluginId));
     try {
       await setPluginInstallationPolicy(row.plugin.plugin_id, policy);
       toast.success(
@@ -73,7 +78,15 @@ export default function AdminPluginsPage() {
           : t("installationSaveFailed")
       );
     }
-    await mutate();
+    try {
+      await mutate();
+    } finally {
+      setSavingPluginIds((ids) => {
+        const next = new Set(ids);
+        next.delete(pluginId);
+        return next;
+      });
+    }
   }
 
   const columns: TableColumn<AdminPluginEntry>[] = [
@@ -121,7 +134,9 @@ export default function AdminPluginsPage() {
               name: row.plugin.plugin_name,
             })}
             value={policy}
-            disabled={!isGlobalHolder}
+            disabled={
+              !isGlobalHolder || savingPluginIds.has(row.plugin.plugin_id)
+            }
             options={policyOptions}
             onValueChange={(value) => {
               const next = INSTALLATION_POLICIES.find(
