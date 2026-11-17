@@ -51,7 +51,7 @@ export default function SharePluginModal({
   onSaved,
 }: SharePluginModalProps) {
   const t = useTranslations("plugins.member.share");
-  const { data, error } = useSWR<PluginAccessView, Error>(
+  const { data, error, mutate } = useSWR<PluginAccessView, Error>(
     SWR_KEYS.pluginAccess(pluginId),
     errorHandlingFetcher
   );
@@ -88,7 +88,7 @@ export default function SharePluginModal({
       nextGroups.set(group.id, stagedPermission);
     setBusy(true);
     try {
-      await updatePluginAccess(pluginId, {
+      const saved = await updatePluginAccess(pluginId, {
         user_shares: [...nextUsers].map(([user_id, permission]) => ({
           user_id,
           permission,
@@ -98,6 +98,8 @@ export default function SharePluginModal({
           permission,
         })),
       });
+      // A reopened dialog starts from the cache, so it must hold the saved list.
+      await mutate(saved, { revalidate: false });
       toast.success(t("saved", { name: pluginName }));
       onSaved();
     } catch (saveError) {
