@@ -114,3 +114,79 @@ def test_request_stops_after_three_lost_attempts(
     assert pair.prune_requested_at is None
     assert not tasks._is_pruning_due(pair)
     assert celery_app.send_task.call_count == 3
+
+
+def test_dispatch_transaction_before_request_counts_as_an_attempt(
+    db_session: Session, pair: ConnectorCredentialPair
+) -> None:
+    from sqlalchemy import func, select
+
+    from onyx.db.connector_edit_requests import request_prune__no_commit
+    from onyx.db.engine.sql_engine import get_session_with_current_tenant
+
+    pair_id = pair.id
+    db_session.rollback()
+    with get_session_with_current_tenant() as dispatch_session:
+        dispatch_session.execute(select(func.now()))
+        request_prune__no_commit(db_session, pair_id)
+        db_session.commit()
+        dispatch_pair = dispatch_session.scalar(
+            select(ConnectorCredentialPair).where(ConnectorCredentialPair.id == pair_id)
+        )
+        assert dispatch_pair is not None
+        celery_app = MagicMock()
+        celery_app.send_task.return_value.id = "lost-generator"
+        assert tasks.try_creating_prune_generator_task(
+            celery_app,
+            dispatch_pair,
+            dispatch_session,
+            get_redis_client(),
+            get_current_tenant_id(),
+        )
+    db_session.refresh(pair)
+    record = (
+        db_session.query(SyncRecord)
+        .filter_by(entity_id=pair_id, sync_type=SyncType.PRUNING)
+        .one()
+    )
+    assert pair.prune_requested_at is not None
+    assert record.sync_start_time >= pair.prune_requested_at
+
+
+def test_file_removal_keeps_prune_due_when_dispatch_is_deferred(
+    db_session: Session, pair: ConnectorCredentialPair
+) -> None:
+    from onyx.configs.constants import DocumentSource
+    from onyx.server.documents.connector import update_connector_files
+
+    pair.connector.source = DocumentSource.FILE
+    pair.connector.connector_specific_config = {
+        "file_locations": ["gone", "keep"],
+        "file_names": ["gone.txt", "keep.txt"],
+    }
+    db_session.commit()
+    with (
+        patch(
+            "onyx.server.documents.connector._fetch_and_check_file_connector_cc_pair_permissions",
+            return_value=pair,
+        ),
+        patch(
+            "onyx.server.documents.connector.get_default_file_store",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "onyx.server.documents.connector.try_creating_prune_generator_task",
+            return_value=None,
+        ),
+    ):
+        response = update_connector_files(
+            pair.connector_id,
+            files=None,
+            file_ids_to_remove='["gone"]',
+            user=MagicMock(),
+            db_session=db_session,
+        )
+    assert response.file_paths == ["keep"]
+    db_session.refresh(pair)
+    assert pair.prune_requested_at is not None
+    assert tasks._is_pruning_due(pair)

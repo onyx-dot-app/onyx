@@ -126,7 +126,9 @@ The beat retries the request after a lost task or failure, even without
 `prune_freq`. The dispatcher counts durable prune records since the request
 under the pair lock. After three attempts it clears the request and keeps
 the failed records in the run history. A new request starts a new budget.
-Connector edits use the same request field and limit. Scheduled pruning
+Connector edits and file removals use the same request field and limit.
+Request and dispatch timestamps use database wall-clock time, because an open
+beat transaction can predate a new request. Scheduled pruning
 without a request keeps its existing retry behavior.
 
 **Pruning without a slim listing.** A connector with no slim listing is

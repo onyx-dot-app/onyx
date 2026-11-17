@@ -454,7 +454,7 @@ def request_prune__no_commit(db_session: Session, cc_pair_id: int) -> None:
     The request waits while the pair is not ACTIVE or a prune runs, and is
     cleared when a prune dispatched after it succeeds or three attempts end."""
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
-    cc_pair.prune_requested_at = func.now()
+    cc_pair.prune_requested_at = func.clock_timestamp()
 
 
 def request_prune_after_reindex__no_commit(
@@ -479,7 +479,7 @@ def promote_prune_after_reindex_request__no_commit(
     db_session.execute(
         update(ConnectorCredentialPair)
         .where(ConnectorCredentialPair.id == cc_pair_id)
-        .values(prune_requested_at=func.now())
+        .values(prune_requested_at=func.clock_timestamp())
     )
     db_session.execute(
         update(ConnectorCredentialPair)

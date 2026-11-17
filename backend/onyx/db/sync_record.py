@@ -68,7 +68,8 @@ def _create_sync_record(
         sync_type=sync_type,
         sync_status=SyncStatus.IN_PROGRESS,
         num_docs_synced=0,
-        sync_start_time=func.now(),
+        # A dispatch can serve a request newer than this transaction.
+        sync_start_time=func.clock_timestamp(),
     )
     db_session.add(sync_record)
     db_session.commit()

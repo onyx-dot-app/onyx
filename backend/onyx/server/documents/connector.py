@@ -106,6 +106,7 @@ from onyx.db.connector_credential_pair import (
     verify_user_can_edit_connector,
     verify_user_can_manage_all_cc_pairs,
 )
+from onyx.db.connector_edit_requests import request_prune__no_commit
 from onyx.db.connector_event_inbox import get_active_event_cc_pairs
 from onyx.db.credentials import (
     create_credential,
@@ -914,6 +915,7 @@ def update_connector_files(
             # Send task to check for indexing immediately
             client_app.send_task(
                 OnyxCeleryTask.CHECK_FOR_INDEXING,
+                expires=BEAT_EXPIRES_DEFAULT,
                 kwargs={"tenant_id": tenant_id},
                 priority=OnyxCeleryPriority.HIGH,
                 expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
@@ -926,6 +928,8 @@ def update_connector_files(
 
         # If files were removed, trigger pruning immediately
         if file_ids_list:
+            request_prune__no_commit(db_session, cc_pair.id)
+            db_session.commit()
             # no-direct-redis: allow client for a Celery task helper
             r = get_redis_client()
             payload_id = try_creating_prune_generator_task(
