@@ -32,6 +32,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PermissionAuthority, PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.integration_policy import (
+    list_persona_mcp_tools,
     list_persona_openapi_tools,
     list_persona_plugin_snapshots,
 )
@@ -89,6 +90,7 @@ from onyx.server.features.persona.models import (
     PersonaUpsertRequest,
 )
 from onyx.server.features.tool.api import openapi_tool_snapshot
+from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_persona
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.models import DisplayPriorityRequest
@@ -762,18 +764,25 @@ def get_persona(
 
     snapshot = FullPersonaSnapshot.from_model(persona)
     snapshot.plugins = list_persona_plugin_snapshots(persona.id, db_session)
-    # A custom tool is the plugin of its integration, so its old tool id comes
-    # from the plugin links.
+    # Old custom and MCP tool ids come from the plugin links, so they
+    # round-trip through tool_ids.
     custom_tools = {
         tool.id: (tool, integration)
         for _, tool, integration in list_persona_openapi_tools(persona.id, db_session)
     }
-    snapshot.tools = [
-        tool for tool in snapshot.tools if tool.in_code_tool_id is not None
-    ] + [
-        openapi_tool_snapshot(tool, integration, db_session)
-        for tool, integration in custom_tools.values()
-    ]
+    mcp_tools = {
+        tool.id: ToolSnapshot.from_model(tool, plugin_ids=[plugin_id])
+        for plugin_id, tool, selected in list_persona_mcp_tools(persona.id, db_session)
+        if selected
+    }
+    snapshot.tools = (
+        [tool for tool in snapshot.tools if tool.in_code_tool_id is not None]
+        + [
+            openapi_tool_snapshot(tool, integration, db_session)
+            for tool, integration in custom_tools.values()
+        ]
+        + list(mcp_tools.values())
+    )
     # Hide a pinned model this viewer cannot use. The check is viewer-relative, so
     # it changes only the response, never the stored agent.
     if persona.default_model_configuration_id:

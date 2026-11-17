@@ -25,6 +25,7 @@ from onyx.db.enums import (
 from onyx.db.hierarchy import filter_accessible_hierarchy_node_ids
 from onyx.db.integration_policy import (
     legacy_tool_plugin_links,
+    list_persona_mcp_tools,
     list_persona_openapi_tools,
     list_persona_plugin_links,
     list_persona_plugin_snapshots,
@@ -60,7 +61,7 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
-from onyx.integrations.models import ActionSettings, PersonaPluginLink
+from onyx.integrations.models import ActionSettings, LinkValue, PersonaPluginLink
 from onyx.server.features.persona.models import (
     FullPersonaSnapshot,
     MinimalPersonaSnapshot,
@@ -1885,17 +1886,41 @@ def _write_persona_plugins(
 ) -> None:
     """Write the plugin links of an agent. A plugin that is new on the
     agent must be one the user can see. With no ``plugin_links``, the old
-    tool ids replace the links of the plugins that hold a custom tool."""
+    tool ids replace the links of the plugins that hold a custom tool or an
+    old MCP tool. A link whose MCP tool selection did not change keeps its
+    settings."""
     rows = list_persona_plugin_links(db_session, persona_id)
     existing = {row.plugin_id for row in rows}
     if plugin_links is not None:
         links = list(plugin_links)
     else:
         legacy_ids = {link.plugin_id for link in legacy_links}
-        dropped = {
+        mcp_tools = list_persona_mcp_tools(persona_id, db_session)
+        selected: dict[UUID, set[str]] = {}
+        for plugin_id, tool, is_selected in mcp_tools:
+            names = selected.setdefault(plugin_id, set())
+            if is_selected:
+                names.add(tool.name)
+        requested = {
+            link.plugin_id: {
+                key
+                for key, value in link.action_settings.actions.items()
+                if value is not LinkValue.BLOCKED
+            }
+            for link in legacy_links
+        }
+        openapi_plugins = {
             plugin_id
             for plugin_id, _, _ in list_persona_openapi_tools(persona_id, db_session)
-        } - legacy_ids
+        }
+        changed_mcp = {
+            plugin_id
+            for plugin_id, names in selected.items()
+            if plugin_id in requested
+            and plugin_id not in openapi_plugins
+            and requested[plugin_id] != names
+        }
+        dropped = (openapi_plugins | selected.keys()) - legacy_ids
         links = [
             PersonaPluginLink(
                 plugin_id=row.plugin_id,
@@ -1904,7 +1929,7 @@ def _write_persona_plugins(
                 ),
             )
             for row in rows
-            if row.plugin_id not in dropped
+            if row.plugin_id not in dropped | changed_mcp
         ]
     linked = {link.plugin_id for link in links}
     links += [link for link in legacy_links if link.plugin_id not in linked]
