@@ -221,6 +221,8 @@ def test_onyx_login_uses_and_refreshes_login_token(
         # Near expiry: refreshed with no web request.
         account.expires_at = now + 10
         db_session.commit()
+        name = integration.name
+        integration.name = f"{name} renamed"
         new_expiry = now + int(timedelta(hours=1).total_seconds())
         with (
             patch(
@@ -244,6 +246,9 @@ def test_onyx_login_uses_and_refreshes_login_token(
         assert refresh_call.await_count == 1
         assert resolved.secret is not None
         assert resolved.secret.access_token == "refreshed-login"
+        # The refresh does not commit the work of the caller.
+        db_session.rollback()
+        assert integration.name == name
         db_session.refresh(account)
         assert account.access_token == "refreshed-login"
         assert account.expires_at == new_expiry

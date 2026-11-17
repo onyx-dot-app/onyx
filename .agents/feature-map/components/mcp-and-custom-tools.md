@@ -174,7 +174,9 @@ OpenAPI tool, external app). Queries are in `db/integration_connection.py`.
   connection (`integrations/connection_models.py:connection_refresh_lock_name`), which the
   MCP SDK storage also uses. `invalid_grant`, or a 400 or 401 without an OAuth
   error, sets `needs_reconnect` with a reason and keeps the row. Other errors,
-  including `invalid_client`, keep the token.
+  including `invalid_client`, keep the token. The refresh writes in a session
+  that it opens and then re-reads the row of the caller, so it never commits or
+  rolls back the session of the caller. The `onyx_login` refresh does the same.
 - `integration_status` gives Connected, Not connected, Needs reconnect or Not set
   up. It maps `resolve_connection(..., refresh=False)`, so it never calls the
   service.
