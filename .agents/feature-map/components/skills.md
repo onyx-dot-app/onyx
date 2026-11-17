@@ -482,11 +482,9 @@ the app from the same rule
     who gets it, never toggled), `db/skill.py:fetch_skill` (VIEW), the Skills
     list (`skills_list_response_for_user` drops a built-in that is not on) and
     the preview read it. Do not add a second check, and do not
-    check the app connection. Nothing links a skill to an app: no code reads
-    or writes `external_app__skill` or `ExternalApp.associated_skills`, which
-    stay only for rollback.
-    `backend/tests/unit/onyx/db/test_no_external_app_skill_link.py` fails on
-    a new use. A custom skill written for an app is an ordinary plugin: it
+    check the app connection. Nothing links a skill to an app: the
+    `external_app__skill` table has no model and stays only for rollback.
+    A custom skill written for an app is an ordinary plugin: it
     keeps its owner and shares, loads, counts for the limits and reaches chat.
     `db/external_app.py:associate_built_in_skill__no_commit` makes or reuses
     the built-in `Skill` row and refuses a second app of one built-in type.

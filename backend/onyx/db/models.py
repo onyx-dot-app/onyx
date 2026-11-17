@@ -8981,30 +8981,6 @@ class HookExecutionLog(Base):
     hook: Mapped["Hook"] = relationship("Hook", back_populates="execution_logs")
 
 
-class ExternalApp__Skill(Base):
-    """Non-owning association between an app and its dependent skills.
-
-    One app may support many skills. The unique skill constraint keeps the
-    initial dependency model to at most one external app per skill.
-    """
-
-    __tablename__ = "external_app__skill"
-    __table_args__ = (
-        UniqueConstraint("skill_id", name="uq_external_app__skill_skill_id"),
-    )
-
-    external_app_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("external_app.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    skill_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("skill.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-
-
 class ExternalApp(Base):
     __tablename__ = "external_app"
 
@@ -9063,10 +9039,6 @@ class ExternalApp(Base):
         nullable=False,
     )
 
-    associated_skills: Mapped[list["Skill"]] = relationship(
-        "Skill",
-        secondary=ExternalApp__Skill.__table__,
-    )
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
         "ExternalAppUserCredential",
         back_populates="external_app",
