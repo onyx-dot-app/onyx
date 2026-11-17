@@ -46,7 +46,7 @@ from onyx.db.scheduled_task import get_scheduled_task_id_for_session
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.integrations.connection_models import ConnectionSecret
 from onyx.integrations.craft import list_task_plugin_views
-from onyx.integrations.models import LinkValue
+from onyx.integrations.models import EffectivePolicy, LinkValue
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import (
     CredentialInjectionDispatcher,
@@ -662,6 +662,30 @@ def test_the_task_catalog_locks_a_task_allow_that_the_policy_ignores(
     }
     assert locked[(open_mcp.id, "update")] is False
     assert locked[(no_always_allow.id, "update")] is True
+
+
+def test_the_task_catalog_ignores_the_owners_always_allow(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
+    _run(db_session, [mcp])
+    db_session.add(
+        IntegrationActionPolicy(
+            integration_id=mcp.id,
+            action="update",
+            user_id=user.id,
+            policy=IntegrationActionPolicyValue.ALLOW,
+        )
+    )
+    db_session.commit()
+
+    policies = {
+        (integration.id, action.key): action.integration_policy
+        for view in list_task_plugin_views(db_session, user, None)
+        for integration in view.integrations
+        for action in integration.actions
+    }
+    assert policies[(mcp.id, "update")] is EffectivePolicy.ASK
 
 
 def test_a_scheduled_session_config_lists_the_task_plugins_the_owner_turned_off(

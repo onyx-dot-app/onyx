@@ -181,8 +181,9 @@ def _integration_view(
     db_session: Session, integration: Integration, user: User
 ) -> TaskIntegrationView:
     actions = list_integration_actions(integration.id, db_session)
+    # A scheduled run ignores the owner's Always allow choices.
     inherited = _interactive_policies(
-        db_session, integration, [action.key for action in actions], user.id, []
+        db_session, integration, [action.key for action in actions], None, []
     )
     app = (
         get_external_app_for_integration(integration.id, db_session)
