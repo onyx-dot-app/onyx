@@ -4,6 +4,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import InferenceChunk
 
 
 class QuestionKind(StrEnum):
@@ -26,6 +27,20 @@ class CandidateDocument(BaseModel):
 
     document_id: str
     kind: QuestionKind
+
+
+class TriagedChunk(BaseModel):
+    """A chunk with the decision model's answers about it."""
+
+    chunk: InferenceChunk
+    # Expected usable score, 0 (useless) to 3 (excellent).
+    usable: float
+    # Probability that it reveals private information.
+    sensitive: float
+    # None when the model refused or the rules-only fallback scored it.
+    topic: UseCase | None
+    # Probability that it states a number, date, name or short list.
+    has_fact: float
 
 
 class PoolQuestion(BaseModel):
