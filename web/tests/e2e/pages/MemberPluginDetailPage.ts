@@ -77,6 +77,11 @@ export class MemberPluginDetailPage {
     });
   }
 
+  /** Clicks Connect on the row of an integration. */
+  async startConnect(integration: string): Promise<void> {
+    await this.connectButton(integration).click();
+  }
+
   /** Waits for the status text of an integration row. */
   async expectStatus(status: IntegrationStatusLabel | string): Promise<void> {
     await expect(this.page.getByText(status, { exact: true })).toBeVisible();
@@ -87,7 +92,7 @@ export class MemberPluginDetailPage {
     integration: string,
     fields: Record<string, string>
   ): Promise<void> {
-    await this.connectButton(integration).click();
+    await this.startConnect(integration);
     await expect(this.credentialsDialog).toBeVisible();
     for (const [label, value] of Object.entries(fields))
       await this.credentialsDialog

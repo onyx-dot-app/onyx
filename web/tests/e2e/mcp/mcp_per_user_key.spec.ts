@@ -147,7 +147,7 @@ test.describe("MCP per-user API key auth (two credential fields)", () => {
     const prompt = new IntegrationConnectPrompt(page);
     await prompt.expectCount(1);
     await prompt.open();
-    await prompt.dialog.connectButton(serverName).click();
+    await prompt.dialog.startConnect(serverName);
     await prompt.dialog.submitCredentials(FIELDS);
     await prompt.dialog.expectConnected(serverName);
     await prompt.dialog.close();
