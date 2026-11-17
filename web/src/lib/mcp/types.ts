@@ -1,75 +1,9 @@
-import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
-import type { PermissionsOf } from "@/lib/permissions/resource-actions";
-
 export enum MCPServerStatus {
   CREATED = "CREATED",
   AWAITING_AUTH = "AWAITING_AUTH",
   FETCHING_TOOLS = "FETCHING_TOOLS",
   CONNECTED = "CONNECTED",
   DISCONNECTED = "DISCONNECTED",
-}
-
-export interface MCPServer {
-  id: number;
-  name: string;
-  description?: string;
-  server_url: string;
-  owner: string;
-  transport?: MCPTransportType;
-  auth_type?: MCPAuthenticationType;
-  auth_performer?: MCPAuthenticationPerformer;
-  oauth_provider_mode?: MCPOAuthProviderMode;
-  oauth_setup_mode?: "automatic" | "own_client" | null;
-  oauth_cimd_enabled?: boolean;
-  oauth_authorization_endpoint?: string;
-  oauth_token_endpoint?: string;
-  oauth_scopes_override?: string[];
-  oauth_additional_auth_params?: Record<string, string>;
-  // Whether Craft can produce auth headers for the user's sandbox sessions.
-  // Only the Craft listing computes it.
-  craft_connected?: boolean;
-  auth_template?: MCPAuthTemplate | null;
-  admin_credentials?: Record<string, string>;
-  user_credentials?: Record<string, string>;
-  status: MCPServerStatus;
-  is_public: boolean;
-  groups: number[];
-  users: string[];
-  available_in_craft?: boolean;
-  // Sparse per-tool approval overrides for chat and Craft; unlisted tools use their default.
-  // Present on owner/admin views only.
-  action_policies?: Record<string, ActionPolicy> | null;
-  last_refreshed_at?: string;
-  tool_count: number;
-  // Server-stamped affordance map; fail-closed (absent = denied).
-  permissions?: PermissionsOf<"MCPServer">;
-}
-
-export interface MCPAuthTemplate {
-  headers: Record<string, string>;
-  required_fields: string[];
-}
-
-export interface MCPServersResponse {
-  assistant_id?: string | null;
-  mcp_servers: MCPServer[];
-}
-
-export enum MCPAuthenticationType {
-  NONE = "NONE",
-  API_TOKEN = "API_TOKEN",
-  OAUTH = "OAUTH",
-  PT_OAUTH = "PT_OAUTH", // Pass-Through OAuth
-}
-
-export enum MCPAuthenticationPerformer {
-  ADMIN = "ADMIN",
-  PER_USER = "PER_USER",
-}
-
-export enum MCPOAuthProviderMode {
-  AUTO_DISCOVERY = "AUTO_DISCOVERY",
-  KNOWN_PROVIDER = "KNOWN_PROVIDER",
 }
 
 export enum MCPTransportType {
