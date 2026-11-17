@@ -11150,7 +11150,14 @@
           },
           "deleted": "Deleted {name}.",
           "deleteFailed": "Could not delete the integration.",
-          "saveFailed": "Could not save the change."
+          "saveFailed": "Could not save the change.",
+          "details": {
+            "name": "Name",
+            "nameRequired": "Give the integration a name.",
+            "description": "Description",
+            "save": "Save",
+            "saved": "Saved the name and description."
+          }
         },
         "configuration": {
           "readOnly": "You can see this integration. You cannot change it.",
@@ -11185,6 +11192,11 @@
             "connected": "Connected the organization account.",
             "disconnected": "Disconnected the organization account.",
             "failed": "Could not change the organization connection."
+          },
+          "preset": {
+            "title": "Account settings",
+            "description": "Enter new values to replace the saved account settings and OAuth client. Leave the fields empty to keep them.",
+            "credentialRequired": "Fill in each field to replace the account settings."
           }
         },
         "actions": {
@@ -11213,7 +11225,8 @@
           "connectFirst": {
             "title": "Connect the server first",
             "description": "Onyx loads the actions of an MCP server after the server is connected.",
-            "open": "Open Configuration"
+            "open": "Open Configuration",
+            "individualDescription": "Each user signs in to this server. Connect your own account on the Plugins page, then click Refresh."
           }
         }
       }

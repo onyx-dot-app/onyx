@@ -11150,7 +11150,14 @@
           },
           "deleted": "{name}을(를) 삭제했습니다.",
           "deleteFailed": "연동을 삭제할 수 없습니다.",
-          "saveFailed": "변경 사항을 저장할 수 없습니다."
+          "saveFailed": "변경 사항을 저장할 수 없습니다.",
+          "details": {
+            "name": "이름",
+            "nameRequired": "통합의 이름을 입력하세요.",
+            "description": "설명",
+            "save": "저장",
+            "saved": "이름과 설명을 저장했습니다."
+          }
         },
         "configuration": {
           "readOnly": "이 연동을 볼 수는 있지만 변경할 수는 없습니다.",
@@ -11185,6 +11192,11 @@
             "connected": "조직 계정을 연결했습니다.",
             "disconnected": "조직 계정의 연결을 해제했습니다.",
             "failed": "조직 연결을 변경할 수 없습니다."
+          },
+          "preset": {
+            "title": "계정 설정",
+            "description": "저장된 계정 설정과 OAuth 클라이언트를 바꾸려면 새 값을 입력하세요. 유지하려면 필드를 비워 두세요.",
+            "credentialRequired": "계정 설정을 바꾸려면 모든 필드를 입력하세요."
           }
         },
         "actions": {
@@ -11213,7 +11225,8 @@
           "connectFirst": {
             "title": "먼저 서버를 연결하세요",
             "description": "Onyx는 MCP 서버가 연결된 후 해당 서버의 액션을 불러옵니다.",
-            "open": "구성 열기"
+            "open": "구성 열기",
+            "individualDescription": "각 사용자가 이 서버에 로그인합니다. 플러그인 페이지에서 본인 계정을 연결한 다음 새로 고침을 클릭하세요."
           }
         }
       }

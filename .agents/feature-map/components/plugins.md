@@ -25,9 +25,13 @@ Group or user restriction needs EE.
   (`sections/integrations/AdminPluginsPage.tsx`). Each Organization library
   plugin has an install setting select, which a global action manager changes
   through `PUT /admin/plugins/{id}/installation-policy`. The detail page
-  `/admin/integrations/[id]` has Overview, Configuration (sign-in settings and
-  the organization connection) and Actions ("Default for new actions", then
-  Read-only and Write actions, each Allow, Ask or Blocked).
+  `/admin/integrations/[id]` has Overview (name, description, switch),
+  Configuration (sign-in settings, the preset account settings and the
+  organization connection) and Actions ("Default for new actions", then
+  Read-only and Write actions, each Allow, Ask or Blocked). The tabs stay
+  mounted, so a tab switch keeps a draft. The Configuration Save sends the
+  sign-in fields only when they changed, because the backend replaces each
+  one it gets.
 - **A full admin turns a plugin on for Default Chat.** Default Chat is the chat
   with no custom agent. The switch on the plugin and the tool list in Admin >
   Chat Preferences change the same selection, so a change in one shows in the

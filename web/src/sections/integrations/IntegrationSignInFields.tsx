@@ -10,9 +10,13 @@ import { InputVertical, Section } from "@opal/layouts";
 import type {
   AuthMethod,
   AuthMode,
-  OAuthProviderMode,
+  IntegrationShape,
 } from "@/lib/integrations/types";
-import { signInErrors, type SignInDraft } from "@/sections/integrations/signIn";
+import {
+  PROVIDER_MODES,
+  signInErrors,
+  type SignInDraft,
+} from "@/sections/integrations/signIn";
 
 const AUTH_MODES: readonly AuthMode[] = ["none", "shared", "individual"];
 
@@ -20,7 +24,7 @@ interface IntegrationSignInFieldsProps {
   draft: SignInDraft;
   onChange: (draft: SignInDraft) => void;
   methods: readonly AuthMethod[];
-  preset: boolean;
+  shape: IntegrationShape;
   showErrors: boolean;
   disabled: boolean;
 }
@@ -29,13 +33,11 @@ export default function IntegrationSignInFields({
   draft,
   onChange,
   methods,
-  preset,
+  shape,
   showErrors,
   disabled,
 }: IntegrationSignInFieldsProps) {
-  const providerModes: readonly OAuthProviderMode[] = preset
-    ? ["preset", "manual"]
-    : ["manual", "discovery"];
+  const providerModes = PROVIDER_MODES[shape];
   const t = useTranslations("admin.integrations.signIn");
   const errors = showErrors ? signInErrors(draft) : [];
   const variant = disabled ? "disabled" : "primary";

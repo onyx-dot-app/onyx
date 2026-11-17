@@ -2,11 +2,19 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Card, InputSwitch, Text } from "@opal/components";
+import {
+  Button,
+  Card,
+  InputSwitch,
+  InputTextArea,
+  InputTypeIn,
+  Text,
+} from "@opal/components";
 import {
   ConfirmationModalLayout,
   Content,
   InputHorizontal,
+  InputVertical,
   Section,
   toast,
 } from "@opal/layouts";
@@ -18,6 +26,8 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { deleteIntegration, updateIntegration } from "@/lib/integrations/svc";
 import type { AdminIntegrationDetail } from "@/lib/integrations/types";
 import { useIntegrationLabels } from "@/sections/integrations/integrationLabels";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
+import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 
 interface IntegrationOverviewTabProps {
   integration: AdminIntegrationDetail;
@@ -35,7 +45,33 @@ export default function IntegrationOverviewTab({
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [name, setName] = useState(integration.name);
+  const [description, setDescription] = useState(integration.description ?? "");
   const readOnly = !integration.can_manage;
+  const detailsDirty =
+    name !== integration.name ||
+    description !== (integration.description ?? "");
+  const unsavedChanges = useUnsavedChangesGuard({ isDirty: detailsDirty });
+
+  async function saveDetails() {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      const updated = await updateIntegration(integration.id, {
+        name: name.trim(),
+        description: description.trim() || null,
+      });
+      setName(updated.name);
+      setDescription(updated.description ?? "");
+      await mutate(SWR_KEYS.adminIntegrations);
+      onChanged();
+      toast.success(t("details.saved"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("saveFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function setEnabled(enabled: boolean) {
     setBusy(true);
@@ -72,10 +108,43 @@ export default function IntegrationOverviewTab({
       )}
       <Card padding={4}>
         <Section gap={4} alignItems="stretch" height="auto">
-          <Content
-            title={integration.name}
-            description={integration.description ?? t("noDescription")}
-          />
+          {readOnly ? (
+            <Content
+              title={integration.name}
+              description={integration.description ?? t("noDescription")}
+            />
+          ) : (
+            <>
+              <InputVertical
+                title={t("details.name")}
+                error={name.trim() ? undefined : t("details.nameRequired")}
+              >
+                <InputTypeIn
+                  aria-label={t("details.name")}
+                  value={name}
+                  variant={busy ? "disabled" : "primary"}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </InputVertical>
+              <InputVertical title={t("details.description")}>
+                <InputTextArea
+                  aria-label={t("details.description")}
+                  value={description}
+                  rows={3}
+                  variant={busy ? "disabled" : "primary"}
+                  onChange={(event) => setDescription(event.target.value)}
+                />
+              </InputVertical>
+              <Section flexDirection="row" justifyContent="end" height="auto">
+                <Button
+                  disabled={busy || !detailsDirty || !name.trim()}
+                  onClick={() => void saveDetails()}
+                >
+                  {t("details.save")}
+                </Button>
+              </Section>
+            </>
+          )}
           <Content
             font="secondary-body"
             title={t("type")}
@@ -196,6 +265,11 @@ export default function IntegrationOverviewTab({
           }
         />
       )}
+      <UnsavedChangesModal
+        open={unsavedChanges.confirmationOpen}
+        onCancel={unsavedChanges.cancelLeave}
+        onDiscard={unsavedChanges.discardAndLeave}
+      />
     </Section>
   );
 }

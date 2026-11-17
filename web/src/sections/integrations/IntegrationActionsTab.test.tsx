@@ -225,3 +225,19 @@ test("has no Refresh button for an app and no edits without manage access", asyn
     })
   ).toHaveAttribute("aria-pressed", "true");
 });
+
+test("tells the admin to connect an own account for an individual MCP server", async () => {
+  mockFetch({ [URL_ACTIONS]: { default_policy: null, actions: [] } });
+  render(
+    <IntegrationActionsTab
+      integration={makeDetail({ auth_mode: "individual" })}
+      onOpenConfiguration={jest.fn()}
+    />
+  );
+  expect(
+    await screen.findByText(copy.connectFirst.individualDescription)
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: copy.connectFirst.open })
+  ).not.toBeInTheDocument();
+});
