@@ -34,11 +34,13 @@ MARKERS = (
     "celery-expires: allow",
     "db-ops-outside-db: allow",
     "http-exception: allow",
-    "migration-determinism: allow",
     "no-response-model: allow",
 )
-NOQA = re.compile(r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\b", re.IGNORECASE)
-REDIS_MARKER = "no-direct-redis: allow"
+NOQA = re.compile(
+    r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\b(?:\s*:\s*([A-Z]+\d+(?:[ ,]+[A-Z]+\d+)*))?",
+    re.IGNORECASE,
+)
+RAW_MARKERS = ("no-direct-redis: allow", "migration-determinism: allow")
 
 
 def rows(source: str) -> list[str]:
@@ -64,11 +66,12 @@ def counts(source: str, count_first: bool) -> dict[str, int]:
 
 
 def ruff_additions(before: str, after: str) -> bool:
-    old = tomllib.loads(before).get("tool", {}).get("ruff", {})
-    new = tomllib.loads(after).get("tool", {}).get("ruff", {})
-    for section in (old, new, old.get("lint", {}), new.get("lint", {})):
-        for key in ("per-file-ignores", "extend-per-file-ignores"):
-            section.setdefault(key, {})
+    old = tomllib.loads(before).get("tool", {}).get("ruff")
+    new = tomllib.loads(after).get("tool", {}).get("ruff")
+    if old is None and new is not None:
+        return True
+    old = old or {}
+    new = new or {}
     for left, right in ((old, new), (old.get("lint", {}), new.get("lint", {}))):
         for key in ("per-file-ignores", "extend-per-file-ignores"):
             previous = left.pop(key, {})
@@ -81,17 +84,53 @@ def ruff_additions(before: str, after: str) -> bool:
     return old != new
 
 
-def suppression_lines(source: str) -> set[int]:
-    lines = {
-        index for index, line in enumerate(source.splitlines()) if REDIS_MARKER in line
+def suppression_data(source: str) -> tuple[list[str], dict[int, set[str]]]:
+    lines = source.splitlines()
+    suppressions: dict[int, set[str]] = {
+        index: {"marker"}
+        for index, line in enumerate(lines)
+        if any(marker in line for marker in RAW_MARKERS)
     }
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
-        if token.type == tokenize.COMMENT and (
-            NOQA.search(token.string)
-            or any(marker in token.string for marker in MARKERS)
-        ):
-            lines.add(token.start[0] - 1)
-    return lines
+        if token.type != tokenize.COMMENT:
+            continue
+        index = token.start[0] - 1
+        if any(marker in token.string for marker in MARKERS):
+            suppressions.setdefault(index, set()).add("marker")
+        if match := NOQA.search(token.string):
+            rules = set(re.findall(r"[A-Z]+[0-9]+", (match[1] or "").upper()))
+            suppressions.setdefault(index, set()).update(rules or {"all"})
+            if "marker" not in suppressions[index]:
+                # Align a selector edit with the original directive on the same code.
+                start = token.start[1] + match.start()
+                stop = token.start[1] + match.end()
+                directive = match[0].split(match[1], 1)[0] if match[1] else match[0]
+                lines[index] = (
+                    lines[index][:start] + directive.rstrip(": ") + lines[index][stop:]
+                )
+    return lines, suppressions
+
+
+def adds_suppression(before: str, after: str) -> bool:
+    if not any(
+        marker in after for marker in (*MARKERS, *RAW_MARKERS)
+    ) and not NOQA.search(after):
+        return False
+    old_lines, old = suppression_data(before)
+    new_lines, new = suppression_data(after)
+    diff = difflib.SequenceMatcher(None, old_lines, new_lines, autojunk=False)
+    for tag, old_start, _, start, stop in diff.get_opcodes():
+        for index in range(start, stop):
+            rules = new.get(index, set())
+            if not rules:
+                continue
+            previous = (
+                old.get(old_start + index - start, set()) if tag == "equal" else set()
+            )
+            added = rules - previous
+            if added and ("all" not in previous or "marker" in added):
+                return True
+    return False
 
 
 def check_change(path: str, before: str, after: str) -> str | None:
@@ -114,16 +153,8 @@ def check_change(path: str, before: str, after: str) -> str | None:
     elif (name := Path(path).name) in {".ruff.toml", "ruff.toml", "pyproject.toml"}:
         if name != "pyproject.toml" or ruff_additions(before, after):
             return "Ruff configuration changed"
-    elif path.endswith((".py", ".pyi", ".pyw")):
-        if not any(
-            marker in after for marker in (*MARKERS, REDIS_MARKER)
-        ) and not NOQA.search(after):
-            return None
-        suppressions = suppression_lines(after)
-        diff = difflib.SequenceMatcher(None, before.splitlines(), after.splitlines())
-        for tag, _, _, start, stop in diff.get_opcodes():
-            if tag != "equal" and not suppressions.isdisjoint(range(start, stop)):
-                return "suppression added or edited"
+    elif path.endswith((".py", ".pyi", ".pyw")) and adds_suppression(before, after):
+        return "suppression added or edited"
     return None
 
 

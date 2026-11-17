@@ -35,6 +35,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GATE_TEAM_TOKEN: ${{ secrets.GATE_TEAM_TOKEN }}
         run: |
-          git fetch --no-tags origin "refs/pull/${PR_NUMBER}/head"
+          git -c credential.helper= -c "credential.helper=!gh auth git-credential" fetch --no-tags origin "refs/pull/${PR_NUMBER}/head"
           test "$(git rev-parse FETCH_HEAD)" = "$HEAD_SHA"
           python3 -I backend/lint/check_gate_changes.py "$BASE_SHA" "$HEAD_SHA" --pr "$PR_NUMBER"

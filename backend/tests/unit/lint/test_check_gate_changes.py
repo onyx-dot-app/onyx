@@ -124,3 +124,34 @@ def test_git_diff_reads_committed_baselines(
         (str(path), "baseline entry added or increased")
     ]
     assert violations(base, lowered) == []
+
+
+@pytest.mark.parametrize("prefix", ["run()  # noqa", "# ruff: noqa", "# flake8: noqa"])
+def test_reduce_noqa_selectors(prefix: str) -> None:
+    path = "example.py"
+    broad = f"{prefix}: S101, C901"
+    narrow = f"{prefix}: C901"
+    assert check_change(path, broad, narrow) is None
+    assert check_change(path, narrow, broad)
+    assert check_change(path, narrow, prefix)
+    assert check_change(path, prefix, narrow) is None
+
+
+def test_unchanged_line_becomes_active() -> None:
+    assert check_change(
+        "example.py",
+        'text = """\n# ruff: noqa: S101\n"""\n',
+        'text = ""\n# ruff: noqa: S101\nassert False\n',
+    )
+
+
+def test_migration_marker_in_sql_string() -> None:
+    assert check_change(
+        "backend/alembic/versions/example.py",
+        'op.execute("INSERT INTO example VALUES (now())")',
+        'op.execute("INSERT INTO example VALUES (now()) -- migration-determinism: allow")',
+    )
+
+
+def test_empty_nested_ruff_config_requires_approval() -> None:
+    assert check_change("backend/onyx/pyproject.toml", "", "[tool.ruff]")
