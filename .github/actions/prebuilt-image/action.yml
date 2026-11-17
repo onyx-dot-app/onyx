@@ -67,7 +67,7 @@ runs:
             for source in "${sources[@]}"; do
               path=$(realpath -m --relative-to=. "$CONTEXT/$source")
               if [ -z "$(git ls-files -- "$path")" ]; then
-                echo "::notice::$path is not tracked by git, so the $NAME image always builds."
+                echo "::notice::git does not track $path, so the $NAME image always builds."
                 exit 0
               fi
               paths+=("$path")
@@ -83,9 +83,9 @@ runs:
         echo "prefix=${prefix}" >> "$GITHUB_OUTPUT"
         echo "save-key=${prefix}${RUN_SUFFIX}" >> "$GITHUB_OUTPUT"
 
-    # Only GitHub's cache, not RunsOn's S3 cache or the ECR cache: fork pull
-    # requests can write those, but cannot write a main branch cache entry.
-    # Push runs on main always build, so the newest main entry stays fresh.
+    # Fork pull requests can write RunsOn's S3 cache and the ECR cache. They
+    # cannot write a main branch entry in GitHub's cache, so the digests live
+    # there. Push runs on main always build, so the newest main entry stays fresh.
     - name: Restore the digest of an earlier build
       if: github.event_name == 'pull_request' && steps.key.outputs.prefix != ''
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
