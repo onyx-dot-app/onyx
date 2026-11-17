@@ -65,6 +65,10 @@ Key facts:
 
 - Always use `@shared_task` rather than `@celery_app`
 - Put tasks under `background/celery/tasks/` or `ee/background/celery/tasks`
+- Add a task only for work that runs again: a periodic check, a step of a pipeline, or a
+  user-started job that is heavy, long, or must survive an API restart. A run-once backfill or
+  migration is not a task. `lint/check_celery_task_allowlist.py` fails a task or beat entry that
+  is not in `lint/celery_task_allowlist.txt`, where each line gives a one-line reason.
 - Never enqueue a task without an expiration. Always supply `expires=` when
   sending tasks, either from the beat schedule or directly from another task. It
   should never be acceptable to submit code which enqueues tasks without an

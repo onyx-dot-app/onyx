@@ -347,6 +347,14 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
         files: ^backend/(onyx|ee|scripts)/.*\.py$
+      - id: celery-task-allowlist
+        name: celery tasks and beat entries are on the approved list
+        description: "Fail a Celery task or beat entry that is not on backend/lint/celery_task_allowlist.txt"
+        language: system
+        entry: python3 backend/lint/check_celery_task_allowlist.py
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^backend/((onyx|ee)/.*\.py|lint/celery_task_allowlist\.txt)$
       # Runs on every commit so a rename or deletion of a file the map cites
       # fails in the same PR.
       - id: feature-map-integrity
