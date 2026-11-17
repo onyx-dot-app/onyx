@@ -21,7 +21,7 @@ interface MemoryTagWithTooltipProps {
   memoryIndex: number | null;
 }
 
-function MemoryTagWithTooltip({
+export function MemoryTagWithTooltip({
   memoryText,
   memoryOperation,
   memoryId,
@@ -149,24 +149,17 @@ export function CompletedHeader({
       : null;
 
   const shownText = isExpanded ? durationText : (imageText ?? durationText);
-  const showMemoryTag = !!memoryOperation && !isExpanded;
 
-  // The summary swaps through Presence.Swap whenever what it shows changes
-  // (opening the card shows the duration in place of the image count).
+  // The summary swaps through Presence.Swap whenever its text changes
+  // (opening the card shows the duration in place of the image count). A
+  // saved memory's tag sits on the card's right side (see RunCard), so it
+  // never swaps the summary.
   return (
-    <Presence.Swap swapKey={`${shownText}|${showMemoryTag}`}>
-      <div className="flex flex-1 min-w-0 items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+    <Presence.Swap swapKey={shownText}>
+      <div className="flex flex-1 min-w-0 items-center px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
         <Text as="p" font="main-ui-action" color="text-03">
           {shownText}
         </Text>
-        {showMemoryTag && (
-          <MemoryTagWithTooltip
-            memoryText={memoryText}
-            memoryOperation={memoryOperation}
-            memoryId={memoryId}
-            memoryIndex={memoryIndex}
-          />
-        )}
       </div>
     </Presence.Swap>
   );

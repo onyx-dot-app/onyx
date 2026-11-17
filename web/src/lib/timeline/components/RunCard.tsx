@@ -10,6 +10,7 @@ import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot"
 import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
 import {
   CompletedHeader,
+  MemoryTagWithTooltip,
   type CompletedHeaderProps,
 } from "@/lib/timeline/components/headers/CompletedHeader";
 import { StoppedHeader } from "@/lib/timeline/components/headers/StoppedHeader";
@@ -152,6 +153,22 @@ export function RunCard<S extends RunCardStep>({
           rightChildren={
             foldable && (
               <>
+                {/* A saved memory's tag, on the right so it never swaps the
+                    summary. Shown on a finished card while it is folded. */}
+                {summary?.memoryOperation && !summary.isMemoryOnly && (
+                  <Presence
+                    show={!isRunning && !stopped && !isOpen}
+                    from="end"
+                    width="fit"
+                  >
+                    <MemoryTagWithTooltip
+                      memoryText={summary.memoryText ?? null}
+                      memoryOperation={summary.memoryOperation}
+                      memoryId={summary.memoryId ?? null}
+                      memoryIndex={summary.memoryIndex ?? null}
+                    />
+                  </Presence>
+                )}
                 {/* The timer is plain text beside the button: a button label
                     animates its changes, so each tick would flash. */}
                 <Presence
