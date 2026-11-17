@@ -126,13 +126,14 @@ test("shows a cursor after refresh with only completed tools until the turn sett
   expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
 });
 
-test("uses the text cursor without adding a second progress cursor", () => {
+test("uses the text cursor without adding a second progress cursor", async () => {
   renderList({
     isStreaming: true,
     timelineEvents: [text("Writing")],
   });
   // The text cursor is the inline `[*]()` marker in the (mocked) markdown.
-  expect(screen.getByText(/Writing \[\*\]\(\)/)).toBeInTheDocument();
+  // Live text types out.
+  expect(await screen.findByText(/Writing \[\*\]\(\)/)).toBeInTheDocument();
   expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
 });
 
@@ -271,7 +272,8 @@ describe("BuildMessageList thinking visibility", () => {
   it("shows restored thought packets as collapsed thinking rows", () => {
     renderList({ messages: [savedAssistantMessage] });
 
-    fireEvent.click(screen.getByRole("button", { name: /Thinking/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand timeline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Thinking" }));
 
     expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(screen.getByText("Checking the app structure.")).toBeInTheDocument();
@@ -281,6 +283,8 @@ describe("BuildMessageList thinking visibility", () => {
   it("does not open restored thought packets by default", () => {
     renderList({ messages: [savedAssistantMessage] });
 
+    // The saved run is folded; opening it shows the thought step closed.
+    fireEvent.click(screen.getByRole("button", { name: "Expand timeline" }));
     expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
@@ -297,12 +301,17 @@ describe("BuildMessageList thinking visibility", () => {
       ],
     });
 
+    // Live text types out with its cursor, and the run folds once text
+    // follows it.
+    expect(await screen.findByText(/^Final answer/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Expand timeline" })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Expand timeline" }));
     expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();
-    // Live text types out.
-    expect(await screen.findByText("Final answer")).toBeInTheDocument();
   });
 
   it("shows live thought packets as collapsed progress by default", () => {
