@@ -215,6 +215,8 @@ async def _get_tenant_id_from_request(
         # so we maintain consistency by returning it here when no valid tenant is found.
         return POSTGRES_DEFAULT_SCHEMA
 
+    except OnyxError:
+        raise
     except Exception as e:
         logger.error("Unexpected error in _get_tenant_id_from_request: %s", str(e))
         raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Internal server error")

@@ -60,6 +60,19 @@ async def test_bearer_redis_error_propagates_not_default(
 
 
 @pytest.mark.asyncio
+@patch(f"{MODULE}.retrieve_auth_token_data_from_redis")
+async def test_invalid_tenant_id_in_session_is_a_bad_request(
+    mock_cookie: AsyncMock,
+) -> None:
+    """The catch-all must not turn the 400 into a 500."""
+    mock_cookie.return_value = {"tenant_id": "not a schema; drop"}
+
+    with pytest.raises(OnyxError) as exc:
+        await tenant_tracking._get_tenant_id_from_request(_request(), MagicMock())
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
 @patch(f"{MODULE}.retrieve_auth_token_data_from_bearer")
 @patch(f"{MODULE}.retrieve_auth_token_data_from_redis")
 async def test_cookie_redis_error_propagates_not_default(
