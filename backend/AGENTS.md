@@ -26,7 +26,8 @@ tests. Additive to the root `AGENTS.md`.
   `lint/check_db_ops_outside_db.py` enforces this on commit. It fails when a file outside
   those directories gains a query, a statement or a session write. The existing ones are frozen
   in `lint/db_ops_outside_db_baseline.txt`, and a count there can only go down. A deliberate
-  exception needs `# db-ops-outside-db: allow <reason>` on its line.
+  exception needs `# db-ops-outside-db: allow <reason>` on its line, or on a comment line above
+  the statement.
 - When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
   function. `lint/check_no_response_model.py` enforces this on commit. `response_model=None`
   is allowed. `# no-response-model: allow <reason>` on the decorator marks a deliberate exception.

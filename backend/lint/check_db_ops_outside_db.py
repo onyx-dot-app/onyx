@@ -29,7 +29,8 @@ import re
 from collections.abc import Iterable
 from pathlib import Path
 
-# A deliberate exception opts out on its own line, and must give a reason.
+# A deliberate exception opts out with a comment that gives a reason: on the
+# line of the call, or on its own line above the statement.
 ALLOW_MARKER = "db-ops-outside-db: allow"
 _ALLOW_WITH_REASON = re.compile(re.escape(ALLOW_MARKER) + r"[\s:(-]*\w")
 
@@ -218,6 +219,22 @@ def _session_names(tree: ast.AST, imports: _Imports) -> set[str]:
     return names
 
 
+def _calls_with_statement(tree: ast.AST) -> list[tuple[ast.Call, ast.stmt]]:
+    """Every call with the innermost statement that holds it."""
+    found: list[tuple[ast.Call, ast.stmt]] = []
+
+    def walk(node: ast.AST, statement: ast.stmt | None) -> None:
+        if isinstance(node, ast.stmt):
+            statement = node
+        if isinstance(node, ast.Call) and statement is not None:
+            found.append((node, statement))
+        for child in ast.iter_child_nodes(node):
+            walk(child, statement)
+
+    walk(tree, None)
+    return found
+
+
 def find_db_operations(source: str) -> tuple[list[int], list[int]]:
     """One-based lines of database operations, and of allow markers with no reason."""
     tree = ast.parse(source)
@@ -226,9 +243,7 @@ def find_db_operations(source: str) -> tuple[list[int], list[int]]:
     sessions = _session_names(tree, imports)
     found: set[int] = set()
     no_reason: set[int] = set()
-    for call in ast.walk(tree):
-        if not isinstance(call, ast.Call):
-            continue
+    for call, statement in _calls_with_statement(tree):
         func = call.func
         is_operation = imports.is_builder(func) or (
             isinstance(func, ast.Attribute)
@@ -237,13 +252,18 @@ def find_db_operations(source: str) -> tuple[list[int], list[int]]:
         )
         if not is_operation:
             continue
-        # The marker exempts the call whose name is on its line, so a marker
-        # on a nested call does not exempt the call around it.
-        line = func.end_lineno or call.lineno
-        if ALLOW_MARKER in lines[line - 1]:
-            if _ALLOW_WITH_REASON.search(lines[line - 1]):
-                continue
-            no_reason.add(line)
+        # A trailing marker exempts the call whose name is on its line, so a
+        # marker on a nested call does not exempt the call around it. A marker
+        # on a comment line above a statement exempts the whole statement; the
+        # formatter does not move that one.
+        marker_lines = [func.end_lineno or call.lineno]
+        above = statement.lineno - 1
+        if above >= 1 and lines[above - 1].lstrip().startswith("#"):
+            marker_lines.append(above)
+        marked = [line for line in marker_lines if ALLOW_MARKER in lines[line - 1]]
+        if any(_ALLOW_WITH_REASON.search(lines[line - 1]) for line in marked):
+            continue
+        no_reason.update(marked)
         found.add(call.lineno)
     return sorted(found), sorted(no_reason)
 
@@ -391,7 +411,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         print("\n".join(f"  {entry}" for entry in risen))
         print(
-            f"A deliberate exception may carry `# {ALLOW_MARKER} <reason>` on its line."
+            f"A deliberate exception may carry `# {ALLOW_MARKER} <reason>` on its "
+            "line, or on a comment line above the statement."
         )
     if no_reason:
         print(f"`# {ALLOW_MARKER}` needs a reason after it:")

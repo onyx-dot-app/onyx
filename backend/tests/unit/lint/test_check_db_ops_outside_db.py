@@ -157,6 +157,27 @@ def test_builder_names_from_other_modules_are_clean() -> None:
     assert check_db_ops_outside_db.find_db_operations(source) == ([], [])
 
 
+def test_allow_marker_above_a_statement_exempts_the_whole_statement() -> None:
+    body = (
+        "# db-ops-outside-db: allow advisory lock, not a table query\n"
+        "acquired = db_session.execute(\n"
+        "    text('SELECT pg_try_advisory_xact_lock(:id)'),\n"
+        "    {'id': lock_id},\n"
+        ").scalar()\n"
+        "db_session.execute(stmt)"
+    )
+    lines, no_reason = check_db_ops_outside_db.find_db_operations(_source(body))
+    assert lines == [_FIRST_BODY_LINE + 5]
+    assert no_reason == []
+
+
+def test_allow_marker_above_a_statement_needs_a_reason() -> None:
+    body = "# db-ops-outside-db: allow\ndb_session.execute(stmt)"
+    lines, no_reason = check_db_ops_outside_db.find_db_operations(_source(body))
+    assert lines == [_FIRST_BODY_LINE + 1]
+    assert no_reason == [_FIRST_BODY_LINE]
+
+
 @pytest.mark.parametrize(
     "body",
     [
