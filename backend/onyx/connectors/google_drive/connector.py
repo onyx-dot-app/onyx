@@ -2905,10 +2905,14 @@ class GoogleDriveConnector(
         state = checkpoint.listing
         if state is None:
             return None
+        # A shared drive that was listed only in part, or a requested drive
+        # or folder that no user could reach, leaves files out of the count.
         return ListingCounts(
             docs_by_type=state.docs_by_type,
             bytes_by_type=state.bytes_by_type,
-            partial=bool(checkpoint.incomplete_drive_ids),
+            partial=bool(
+                checkpoint.incomplete_drive_ids or checkpoint.unreachable_target_ids
+            ),
         )
 
     @override
