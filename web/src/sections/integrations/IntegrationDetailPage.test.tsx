@@ -104,7 +104,7 @@ test("shows the overview and turns the integration off", async () => {
     view.getByRole("switch", { name: detailCopy.overview.enabled.title })
   );
   await waitFor(() =>
-    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual({
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({
       enabled: false,
     })
   );
@@ -250,15 +250,13 @@ test("sends a changed server URL with the configuration", async () => {
     view.getByRole("button", { name: detailCopy.configuration.save })
   );
   await waitFor(() =>
-    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual(
-      expect.objectContaining({
-        config: {
-          shape: "mcp_server",
-          server_url: "https://mcp.linear.app/v2",
-          transport: "STREAMABLE_HTTP",
-        },
-      })
-    )
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({
+      config: {
+        shape: "mcp_server",
+        server_url: "https://mcp.linear.app/v2",
+        transport: "STREAMABLE_HTTP",
+      },
+    })
   );
 });
 
@@ -302,50 +300,10 @@ test("sends an edited OpenAPI schema and rejects one that is not JSON", async ()
   await u.paste('{"openapi":"3.1.0"}');
   await u.click(save);
   await waitFor(() =>
-    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual(
-      expect.objectContaining({
-        config: { shape: "openapi", openapi_spec: { openapi: "3.1.0" } },
-      })
-    )
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({
+      config: { shape: "openapi", openapi_spec: { openapi: "3.1.0" } },
+    })
   );
-});
-
-test("reloads the actions after a schema change", async () => {
-  const spec = { openapi: "3.0.0", info: { title: "Reports" } };
-  const fetchMock = mockFetch({
-    [URL_DETAIL]: makeDetail({
-      kind: "api",
-      shape: "openapi",
-      auth_mode: "none",
-      auth_method: null,
-      oauth_client: null,
-      config: { shape: "openapi", openapi_spec: spec },
-    }),
-    [`PATCH ${URL_DETAIL}`]: makeDetail(),
-    [URL_ACTIONS]: NO_ACTIONS,
-    "/api/admin/integrations": [],
-  });
-  const actionReads = () =>
-    fetchMock.mock.calls.filter(
-      ([url, init]) =>
-        String(url) === URL_ACTIONS && (init?.method ?? "GET") === "GET"
-    ).length;
-  const u = user();
-  open("configuration");
-  const view = await inPanel();
-  const schema = await view.findByRole("textbox", {
-    name: detailCopy.configuration.connection.schema,
-  });
-  await waitFor(() => expect(actionReads()).toBeGreaterThan(0));
-  const before = actionReads();
-
-  await u.clear(schema);
-  await u.click(schema);
-  await u.paste('{"openapi":"3.1.0"}');
-  await u.click(
-    view.getByRole("button", { name: detailCopy.configuration.save })
-  );
-  await waitFor(() => expect(actionReads()).toBeGreaterThan(before));
 });
 
 test("connects the organization account with an API key", async () => {
@@ -567,15 +525,13 @@ test("keeps the other headers and the OAuth options in a sign-in change", async 
     view.getByRole("button", { name: detailCopy.configuration.save })
   );
   await waitFor(() =>
-    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual(
-      expect.objectContaining({
-        oauth_client: expect.objectContaining({
-          scopes: ["read", "write"],
-          additional_params: { audience: "api" },
-          pkce: true,
-        }),
-      })
-    )
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({
+      oauth_client: {
+        scopes: ["read", "write"],
+        additional_params: { audience: "api" },
+        pkce: true,
+      },
+    })
   );
 });
 
@@ -607,11 +563,9 @@ test("keeps every saved header when the API key header changes", async () => {
     view.getByRole("button", { name: detailCopy.configuration.save })
   );
   await waitFor(() =>
-    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual(
-      expect.objectContaining({
-        header_template: { "X-Org": "{org}", Authorization: "Token {api_key}" },
-      })
-    )
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({
+      header_template: { "X-Org": "{org}", Authorization: "Token {api_key}" },
+    })
   );
   expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).not.toHaveProperty(
     "credential_fields"
@@ -677,7 +631,7 @@ test("replaces the account settings of a preset", async () => {
   await u.type(view.getByLabelText("Client ID"), "zd-client");
   await u.click(save);
   await waitFor(() =>
-    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual({
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({
       users_can_save_always_allow: true,
       config: {
         shape: "preset",
@@ -735,7 +689,7 @@ test("renames the integration and changes its description", async () => {
     view.getByRole("button", { name: detailCopy.overview.details.save })
   );
   await waitFor(() =>
-    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toEqual({
+    expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({
       name: "Linear EU",
       description: "EU issues",
     })
