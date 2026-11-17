@@ -100,7 +100,7 @@ packages:
   src/lib/spendingLimits: 100
   src/lib/sso: 99.2
   src/lib/tiers: 100
-  src/lib/tools: 99.4
+  src/lib/tools: 99.6
   src/lib/tracing: 96.9
   src/lib/usage: 97.9
   src/lib/users: 99.1
@@ -120,7 +120,7 @@ packages:
   src/refresh-components/texts: 98.9
   src/refresh-components/tiles: 100
   src/sections: 100
-  src/sections/actions: 98.8
+  src/sections/actions: 98.6
   src/sections/admin: 100
   src/sections/agents: 99.8
   src/sections/approvals: 99.1
@@ -135,7 +135,7 @@ packages:
   src/sections/model-selector: 99.9
   src/sections/oauth: 100
   src/sections/oauth-provider: 100
-  src/sections/plugins: 99.8
+  src/sections/plugins: 99.9
   src/sections/settings: 100
   src/sections/sidebar: 99.1
   src/sections/skills: 99.9

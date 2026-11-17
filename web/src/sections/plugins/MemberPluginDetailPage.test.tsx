@@ -151,13 +151,11 @@ test("shows each of the four statuses with its action", async () => {
       status: status("needs_reconnect", "The organization account expired"),
     }),
   ]);
-  expect(
-    await screen.findByText(copy.connection.status.connected)
-  ).toBeVisible();
+  expect(await screen.findByText("Connected")).toBeVisible();
   expect(
     screen.getByRole("button", { name: "Disconnect Connected app" })
   ).toBeVisible();
-  expect(screen.getByText(copy.connection.status.notConnected)).toBeVisible();
+  expect(screen.getByText("Not connected")).toBeVisible();
   expect(screen.getByRole("button", { name: "Connect New app" })).toBeVisible();
   expect(
     screen.getByText("Your admin changed the sign-in settings")
