@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User, UserSkillPreference
+from onyx.db.skill import set_skill_enabled_for_user
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.api import import_github_skills
 from onyx.server.features.skill.models import GitHubSkillsImportRequest
@@ -59,12 +60,8 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
         name=conflict_name,
         author_user_id=test_user.id,
     )
-    db_session.add(
-        UserSkillPreference(
-            user_id=test_user.id,
-            skill_id=existing.id,
-            name=existing.name,
-        )
+    set_skill_enabled_for_user(
+        skill_id=existing.id, enabled=True, user=test_user, db_session=db_session
     )
     db_session.commit()
     discovered = [
@@ -105,7 +102,7 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
     )
     pushed_user_ids: list[set[UUID]] = []
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users",
+        "onyx.skills.push.push_skills_for_users",
         lambda user_ids, _db: pushed_user_ids.append(user_ids),
     )
 
@@ -191,7 +188,7 @@ def test_import_enables_only_first_new_skill_with_each_name(
         lambda *_args: None,
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users",
+        "onyx.skills.push.push_skills_for_users",
         lambda *_args: None,
     )
 
@@ -248,9 +245,7 @@ def test_import_applies_shared_access_before_publication(
         skill = session.scalar(select(Skill).where(Skill.name == name))
         published.append(skill.public_permission if skill else None)
 
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users", record_publication
-    )
+    monkeypatch.setattr("onyx.skills.push.push_skills_for_users", record_publication)
     result = import_github_skills(
         GitHubSkillsImportRequest(
             repository="owner/repository",
@@ -297,9 +292,7 @@ def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
         "onyx.server.features.skill.api._github_authorization_header",
         lambda *_args: None,
     )
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users", lambda *_args: None
-    )
+    monkeypatch.setattr("onyx.skills.push.push_skills_for_users", lambda *_args: None)
     monkeypatch.setattr(
         "onyx.db.plugin.has_global_permission",
         lambda *_args, **_kwargs: True,

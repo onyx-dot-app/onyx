@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 func TestMaxVMsCountsEveryFirecrackerProcess(t *testing.T) {
 	f := newFixture(t, 10)
 	f.m.cfg.MaxVMs = 2
+	var admits atomic.Int32
+	f.m.OnAdmit(func() { admits.Add(1) })
 	ctx := context.Background()
 
 	f.l.gate = make(chan struct{})
@@ -42,8 +45,15 @@ func TestMaxVMsCountsEveryFirecrackerProcess(t *testing.T) {
 	}
 	_, _, err = f.m.BuildSlot("tpl-def", 1024)
 	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
-	if info, err := f.m.NodeInfo(); err != nil || info.VMCount != 1 || info.VMSlotsUsed != 2 {
+	if info, err := f.m.NodeInfo(); err != nil || info.VMCount != 1 || info.VMSlotsUsed != 2 || f.m.ScaleDownHolds() != 2 {
 		t.Fatalf("NodeInfo with a build %+v %v", info, err)
+	}
+	// Create runs the callback after it releases the lock.
+	for admits.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if n := admits.Load(); n != 2 {
+		t.Fatalf("%d admits for a Create and a build", n)
 	}
 
 	close(f.l.gate)
@@ -62,6 +72,10 @@ func TestMaxVMsCountsEveryFirecrackerProcess(t *testing.T) {
 	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
 	if info, err := f.m.NodeInfo(); err != nil || info.MaxVMs != 2 || info.VMCount != 2 || info.VMSlotsUsed != 2 {
 		t.Fatalf("NodeInfo %+v %v", info, err)
+	}
+	// Refusals and the repeat Create admit nothing.
+	if n := admits.Load(); n != 3 {
+		t.Fatalf("%d admits", n)
 	}
 
 	if _, err := f.m.Stop(ctx, sb2, 1, vm2.Generation); err != nil {
@@ -108,6 +122,66 @@ func TestMaxVMsRescansDoubtsAtTheCap(t *testing.T) {
 	if _, _, err := f.m.Create(ctx, req(sb1, 1)); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Processes in doubt and a scan that never worked hold scale-down until a
+// scan shows them gone.
+func TestScaleDownHoldsRescansDoubts(t *testing.T) {
+	f := newFixture(t, 10)
+	if n := f.m.ScaleDownHolds(); n != 0 {
+		t.Fatalf("idle node holds %d", n)
+	}
+	table := &fakeTable{cands: []Candidate{{ID: "kept", PID: 700, UID: 1000005}}}
+	f.m.mu.Lock()
+	f.m.adopter = table
+	f.m.doubt["kept"] = &doubt{reason: "test"}
+	f.m.needScan = true
+	f.m.mu.Unlock()
+	table.set(nil, errors.New("read /proc: permission denied"))
+	if n := f.m.ScaleDownHolds(); n != 2 {
+		t.Fatalf("failed scan: %d holds, want the doubt and the unknown processes", n)
+	}
+	table.set([]Candidate{{ID: "kept", PID: 700, UID: 1000005}}, nil)
+	if n := f.m.ScaleDownHolds(); n != 1 {
+		t.Fatalf("live doubt: %d holds", n)
+	}
+	table.set(nil, nil)
+	if n := f.m.ScaleDownHolds(); n != 0 {
+		t.Fatalf("process gone: %d holds", n)
+	}
+
+	// A scan that hangs adds a hold and does not block the guard.
+	defer func(d time.Duration) { scaleDownScanWait = d }(scaleDownScanWait)
+	scaleDownScanWait = 10 * time.Millisecond
+	release := make(chan struct{})
+	f.m.mu.Lock()
+	f.m.adopter = blockingTable{fakeTable: table, release: release}
+	f.m.doubt["kept"] = &doubt{reason: "test"}
+	f.m.mu.Unlock()
+	for range 2 { // the second call finds the first scan still running
+		if n := f.m.ScaleDownHolds(); n != 2 {
+			t.Fatalf("hung scan: %d holds", n)
+		}
+	}
+	close(release)
+	deadline := time.Now().Add(5 * time.Second)
+	for f.m.ScaleDownHolds() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("holds stay after the scan ends")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// blockingTable is a fakeTable whose Scan waits for release.
+type blockingTable struct {
+	*fakeTable
+	release chan struct{}
+}
+
+func (b blockingTable) Scan() ([]Candidate, error) {
+	<-b.release
+	return b.fakeTable.Scan()
 }
 
 // The scan at the cap finds a process of the requested sandbox: Create

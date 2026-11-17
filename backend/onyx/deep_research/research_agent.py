@@ -248,7 +248,9 @@ class ResearchAgent(Agent, RestorableFeature):
                 available_tools=generate_tools_description(self.application_tools),
                 current_datetime=get_current_llm_day_time(full_sentence=False),
                 current_cycle_count=step.index,
-                optional_internal_search_tool_description=INTERNAL_SEARCH_GUIDANCE
+                optional_internal_search_tool_description=INTERNAL_SEARCH_GUIDANCE.format(
+                    name=SearchTool.NAME
+                )
                 if SearchTool.NAME in tool_names
                 else "",
                 optional_web_search_tool_description=WEB_SEARCH_TOOL_DESCRIPTION

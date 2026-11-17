@@ -1,7 +1,9 @@
 import type { useTranslations } from "next-intl";
 import type { IconFunctionComponent } from "@opal/types";
 import {
+  ApplyPatchStart,
   CustomToolStart,
+  FileToolName,
   Packet,
   PacketType,
   SearchToolPacket,
@@ -23,6 +25,7 @@ import {
   SvgXCircle,
   SvgCode,
   SvgWrench,
+  SvgEdit,
 } from "@opal/icons";
 
 /**
@@ -76,6 +79,12 @@ export type TimelineTranslate = ReturnType<
   typeof useTranslations<"chat.messages.timeline">
 >;
 
+const FILE_TOOL_TITLES = {
+  apply_patch: "toolNames.applyPatch",
+  edit: "toolNames.editFile",
+  write: "toolNames.writeFile",
+} as const satisfies Record<FileToolName, string>;
+
 export function getToolName(packets: Packet[], t: TimelineTranslate): string {
   const firstPacket = firstActivityPacket(packets);
   if (!firstPacket) return t("toolNames.tool");
@@ -91,6 +100,13 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
     }
     case PacketType.PYTHON_TOOL_START:
       return t("toolNames.codeInterpreter");
+    case PacketType.EXEC_COMMAND_START:
+    case PacketType.WRITE_STDIN_START:
+      return t("toolNames.terminal");
+    case PacketType.APPLY_PATCH_START:
+      return t(
+        FILE_TOOL_TITLES[(firstPacket.obj as ApplyPatchStart).tool_name]
+      );
     case PacketType.FETCH_TOOL_START:
       return t("toolNames.openUrls");
     case PacketType.CUSTOM_TOOL_START: {
@@ -129,7 +145,11 @@ export function getToolIcon(packets: Packet[]): IconFunctionComponent {
       return searchState.isInternetSearch ? SvgGlobe : SvgSearchMenu;
     }
     case PacketType.PYTHON_TOOL_START:
+    case PacketType.EXEC_COMMAND_START:
+    case PacketType.WRITE_STDIN_START:
       return SvgTerminal;
+    case PacketType.APPLY_PATCH_START:
+      return SvgEdit;
     case PacketType.FETCH_TOOL_START:
       return SvgLink;
     case PacketType.CUSTOM_TOOL_START:

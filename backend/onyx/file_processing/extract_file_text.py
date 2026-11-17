@@ -15,7 +15,6 @@ from zipfile import BadZipFile
 
 import chardet
 import openpyxl
-import psutil
 from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 
 from onyx.configs.app_configs import (
@@ -35,6 +34,10 @@ from onyx.file_processing.file_types import (
 )
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.pdf_image_utils import iter_pdf_extracted_images
+from onyx.file_processing.pdfium_text import (
+    TEXT_SECTION_SEPARATOR,
+    extract_pdf_text_pdfium,
+)
 from onyx.file_processing.unstructured import (
     get_unstructured_api_key,
     unstructured_to_text,
@@ -51,12 +54,6 @@ if TYPE_CHECKING:
     from markitdown import MarkItDown
 logger = setup_logger()
 
-TEXT_SECTION_SEPARATOR = "\n\n"
-
-# PDFium holds every page's fonts until the document closes, so a scan with a
-# distinct non-embedded font per page grows tens of MiB a page. Past this
-# budget the document is reopened before each page.
-PDFIUM_REOPEN_RSS_GROWTH_BYTES = 256 * 1024 * 1024
 
 # A full collection costs about 0.1 s in a loaded worker. One follows every
 # spreadsheet (openpyxl leaves cycles) and otherwise at most one per interval,
@@ -240,41 +237,6 @@ def pdf_to_text(
     return text
 
 
-def _extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
-    """Extract all text from a PDF via pypdfium2 (PDFium/C).
-
-    PDFium releases the GIL while parsing, so a large or complex PDF can't pin
-    a worker thread or stall the indexing heartbeat during text extraction.
-    """
-    import pypdfium2 as pdfium
-
-    process = psutil.Process()
-    pdf = pdfium.PdfDocument(file_bytes, password=password)
-    rss_at_open = process.memory_info().rss
-    try:
-        page_texts: list[str] = []
-        for index in range(len(pdf)):
-            # RSS does not drop after a close, so a reset baseline lets the process
-            # keep climbing. Kept fixed, every page past the budget reopens.
-            if process.memory_info().rss - rss_at_open > PDFIUM_REOPEN_RSS_GROWTH_BYTES:
-                pdf.close()
-                pdf = pdfium.PdfDocument(file_bytes, password=password)
-            page = pdf[index]
-            # Per-page try/finally so a get_textpage() failure still closes the
-            # native page handle instead of leaking it until GC.
-            try:
-                textpage = page.get_textpage()
-                try:
-                    page_texts.append(textpage.get_text_range())
-                finally:
-                    textpage.close()
-            finally:
-                page.close()
-        return TEXT_SECTION_SEPARATOR.join(page_texts)
-    finally:
-        pdf.close()
-
-
 def read_pdf_file(
     file: IO[Any],
     pdf_pass: str | None = None,
@@ -339,13 +301,13 @@ def read_pdf_file(
         try:
             if isolate_pdfium:
                 text = run_in_isolated_process(
-                    _extract_pdf_text_pdfium,
+                    extract_pdf_text_pdfium,
                     file_bytes,
                     decrypt_password,
                     timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
                 )
             else:
-                text = _extract_pdf_text_pdfium(file_bytes, decrypt_password)
+                text = extract_pdf_text_pdfium(file_bytes, decrypt_password)
         except (PdfiumError, IsolatedProcessError) as pdfium_err:
             logger.warning(
                 "PDFium text extraction failed (%s); falling back to pypdf",

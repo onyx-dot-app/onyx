@@ -368,7 +368,7 @@ def _setup(
     refresh = MagicMock()
     monkeypatch.setattr(tr, "upsert_external_app_user_credential", upsert)
     monkeypatch.setattr(tr, "disconnect_external_app_for_user", disconnect)
-    monkeypatch.setattr(tr, "push_skills_for_users", push)
+    monkeypatch.setattr(tr, "push_skills_and_commit", push)
     monkeypatch.setattr(provider, "refresh_credentials", refresh)
     return {
         "upsert": upsert,

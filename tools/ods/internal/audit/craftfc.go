@@ -32,8 +32,8 @@ const (
 	// DefaultFirecrackerAdvisoriesURL lists the published Firecracker advisories.
 	DefaultFirecrackerAdvisoriesURL = "https://api.github.com/repos/firecracker-microvm/firecracker/security-advisories?per_page=100"
 	// DefaultALASFeedURL is the Amazon Linux 2023 advisory feed. The guest
-	// kernel is an Amazon Linux microvm-kernel tag, which shares its version
-	// with the AL2023 kernel package of the same series.
+	// kernel is an amazonlinux/linux tag (kernel6.18-... or microvm-kernel-...),
+	// which shares its version with the AL2023 kernel package of the series.
 	DefaultALASFeedURL = "https://alas.aws.amazon.com/AL2023/alas.rss"
 )
 
@@ -55,15 +55,16 @@ type CraftFCOptions struct {
 type CraftFCPins struct {
 	// KernelPackage is the AL2023 package of the kernel series, e.g. kernel6.18.
 	KernelPackage string
-	// KernelVersion is the microvm-kernel tag without its prefix, e.g.
-	// 6.18.25-57.115.amzn2023.
+	// KernelVersion is the kernel tag without its prefix, e.g.
+	// 6.18.62-127.179.amzn2023.
 	KernelVersion string
 	// FirecrackerVersion has no "v" prefix, e.g. 1.17.0.
 	FirecrackerVersion string
 }
 
 var (
-	kernelTagRe   = regexp.MustCompile(`^microvm-kernel-((\d+)\.(\d+)\.\d+-[0-9.]+\.amzn2023)$`)
+	// kernel6.18-<v>, microvm-kernel6.18-<v> or microvm-kernel-<v>.
+	kernelTagRe   = regexp.MustCompile(`^(microvm-kernel|kernel)(\d+\.\d+)?-((\d+)\.(\d+)\.\d+-[0-9.]+\.amzn2023)$`)
 	fcVersionRe   = regexp.MustCompile(`^v?(\d+\.\d+\.\d+)$`)
 	alasTitleRe   = regexp.MustCompile(`^(ALAS2023-\d+-\d+) \(([a-z]+)\): (.+)$`)
 	cveRe         = regexp.MustCompile(`CVE-\d{4}-\d+`)
@@ -89,16 +90,17 @@ func ReadCraftFCPins(path string) (CraftFCPins, error) {
 		}
 	}
 	m := kernelTagRe.FindStringSubmatch(args["KERNEL_TAG"])
-	if m == nil {
-		return CraftFCPins{}, fmt.Errorf("%s: KERNEL_TAG %q is not a microvm-kernel-<version>.amzn2023 tag", path, args["KERNEL_TAG"])
+	// The package tag always names its series; only microvm-kernel may omit it.
+	if m == nil || (m[2] == "" && m[1] == "kernel") || (m[2] != "" && m[2] != m[4]+"."+m[5]) {
+		return CraftFCPins{}, fmt.Errorf("%s: KERNEL_TAG %q is not a kernel<series>-<version>.amzn2023 or microvm-kernel-<version>.amzn2023 tag", path, args["KERNEL_TAG"])
 	}
 	fc := fcVersionRe.FindStringSubmatch(args["FC_VERSION"])
 	if fc == nil {
 		return CraftFCPins{}, fmt.Errorf("%s: FC_VERSION %q is not vX.Y.Z", path, args["FC_VERSION"])
 	}
 	return CraftFCPins{
-		KernelPackage:      "kernel" + m[2] + "." + m[3],
-		KernelVersion:      m[1],
+		KernelPackage:      "kernel" + m[4] + "." + m[5],
+		KernelVersion:      m[3],
 		FirecrackerVersion: fc[1],
 	}, nil
 }

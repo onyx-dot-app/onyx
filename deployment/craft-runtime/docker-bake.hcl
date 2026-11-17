@@ -3,7 +3,7 @@ variable "BASE_IMAGE_REGISTRY" {
 }
 
 variable "NODE_IMAGE" {
-  default = "library/node:24-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d"
+  default = "library/node:24-trixie-slim@sha256:af02d57b57719b9657a45199a79264a9437940cd55b3c7b3fc99615654f124a0"
 }
 
 variable "PYTHON_IMAGE" {
@@ -11,7 +11,7 @@ variable "PYTHON_IMAGE" {
 }
 
 variable "UV_IMAGE" {
-  default = "ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9"
+  default = "ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85"
 }
 
 variable "NPM_VERSION" {
@@ -27,7 +27,7 @@ variable "PPTXGENJS_VERSION" {
 }
 
 variable "SHARP_VERSION" {
-  default = "0.35.3"
+  default = "0.35.5"
 }
 
 variable "LUCIDE_VERSION" {
@@ -39,7 +39,7 @@ variable "TABLER_VERSION" {
 }
 
 variable "GH_CLI_VERSION" {
-  default = "2.94.0"
+  default = "2.102.0"
 }
 
 variable "IMAGE_VERSION" {

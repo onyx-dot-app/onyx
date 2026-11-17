@@ -1047,6 +1047,12 @@ ods audit --format=sarif,text > audit.sarif
 ods audit --all-lockfiles --web --python
 ```
 
+#### Rust-built PyPI tools in images
+
+The image scanner records the `uv` binary as the crates.io crate `uv`, but uv advisories are
+filed on PyPI. `ods audit image` also matches each such crate as the PyPI package of the same
+version. Add other tools of this kind to `pypiToolsFromCrates` in `internal/audit/image.go`.
+
 #### Audit software installed outside package managers
 
 Use `ods audit image IMAGE --sbom /path/in/image.cdx.json` for a required CycloneDX inventory.
@@ -1075,8 +1081,9 @@ A scanner cannot read a bare `vmlinux` or the Firecracker binaries.
 `ods audit craft-fc` reads the `KERNEL_TAG` and `FC_VERSION` pins in
 `deployment/craft-fc/Dockerfile.artifacts` and matches them against advisory feeds:
 
-- The guest kernel is an Amazon Linux `microvm-kernel` tag. Each Amazon Linux 2023
-  advisory (ALAS) for the same kernel series, fixed in a newer package than the pin, is a finding.
+- The guest kernel is an `amazonlinux/linux` tag: the AL2023 kernel package source
+  (`kernel6.18-<version>`) or a `microvm-kernel` tag. Each Amazon Linux 2023 advisory (ALAS)
+  for the same kernel series, fixed in a newer package than the pin, is a finding.
 - Firecracker is matched against the GitHub security advisories of `firecracker-microvm/firecracker`.
 
 The allowlist, report formats and `--fail-on` work as for `ods audit image`.

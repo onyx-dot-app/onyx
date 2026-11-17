@@ -1,67 +1,42 @@
 """Single share and bulk share apply one access change to the plugin of each
 skill, with one set of rules.
 
-The API refuses group install settings until group settings ship, so these
-tests write such rows directly and read the plugin rows from the database."""
+Some tests write group install settings directly and read the plugin rows
+from the database."""
 
-from collections.abc import Generator
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
-import httpx
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import PluginInstallationPolicy, SkillSharePermission
 from onyx.db.models import (
     Plugin,
     Plugin__User,
     Plugin__UserGroup,
     Skill,
-    User__UserGroup,
 )
-from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.server.features.skill.models import SkillBulkResponse
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
+from tests.integration.tests.skills.conftest import (
+    promote_to_manager,
+    share_skill,
+    unique_name,
+)
 from tests.utils.plugin_access import plugin_access_mismatches
-
-
-@pytest.fixture(autouse=True)
-def _db_access() -> Generator[None, None, None]:
-    SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
-
-def _name(prefix: str) -> str:
-    return f"{prefix}-{uuid4().hex[:8]}"
 
 
 def _group(admin: DATestUser, user_ids: list[str] | None = None) -> DATestUserGroup:
     return UserGroupManager.create(
-        admin, name=_name("access-group"), user_ids=user_ids or []
-    )
-
-
-def _share(
-    user: DATestUser, skill_id: UUID | str, body: dict[str, Any]
-) -> httpx.Response:
-    return client.patch(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}/share",
-        json=body,
-        headers=user.headers,
+        admin, name=unique_name("access-group"), user_ids=user_ids or []
     )
 
 
@@ -143,27 +118,11 @@ def _assert_rows_match(*skill_ids: UUID) -> None:
         assert plugin_access_mismatches(db_session, skill_ids) == []
 
 
-def _promote_to_manager(user_id: str, group_id: int) -> None:
-    with get_session_with_current_tenant() as db_session:
-        promoted = db_session.scalars(
-            update(User__UserGroup)
-            .where(
-                User__UserGroup.user_id == UUID(user_id),
-                User__UserGroup.user_group_id == group_id,
-            )
-            .values(is_manager=True)
-            .returning(User__UserGroup.user_id)
-        ).all()
-        assert len(promoted) == 1
-        recompute_user_permissions__no_commit(UUID(user_id), db_session)
-        db_session.commit()
-
-
 # --- Group install settings ------------------------------------------------
 
 
 def test_bulk_share_keeps_group_install_setting(admin_user: DATestUser) -> None:
-    skill = SkillManager.create_custom(admin_user, name=_name("keep-setting"))
+    skill = SkillManager.create_custom(admin_user, name=unique_name("keep-setting"))
     setting_group = _group(admin_user)
     share_group = _group(admin_user)
     # A row that holds only a group install setting.
@@ -188,9 +147,9 @@ def test_bulk_share_keeps_group_install_setting(admin_user: DATestUser) -> None:
 def test_share_keeps_group_install_setting_of_removed_share(
     admin_user: DATestUser,
 ) -> None:
-    skill = SkillManager.create_custom(admin_user, name=_name("keep-removed"))
+    skill = SkillManager.create_custom(admin_user, name=unique_name("keep-removed"))
     group = _group(admin_user)
-    _share(
+    share_skill(
         admin_user,
         skill.id,
         {"group_shares": [{"group_id": group.id, "permission": "EDITOR"}]},
@@ -199,24 +158,22 @@ def test_share_keeps_group_install_setting_of_removed_share(
         skill.id,
         group.id,
         SkillSharePermission.EDITOR,
-        PluginInstallationPolicy.NOT_AVAILABLE,
+        PluginInstallationPolicy.DEFAULT,
     )
 
     # A level change keeps the setting.
-    _share(
+    share_skill(
         admin_user,
         skill.id,
         {"group_shares": [{"group_id": group.id, "permission": "VIEWER"}]},
     ).raise_for_status()
     assert _group_rows(skill.id) == {
-        group.id: (SkillSharePermission.VIEWER, PluginInstallationPolicy.NOT_AVAILABLE)
+        group.id: (SkillSharePermission.VIEWER, PluginInstallationPolicy.DEFAULT)
     }
 
     # Removing the share keeps the setting, with no access.
-    _share(admin_user, skill.id, {"group_shares": []}).raise_for_status()
-    assert _group_rows(skill.id) == {
-        group.id: (None, PluginInstallationPolicy.NOT_AVAILABLE)
-    }
+    share_skill(admin_user, skill.id, {"group_shares": []}).raise_for_status()
+    assert _group_rows(skill.id) == {group.id: (None, PluginInstallationPolicy.DEFAULT)}
     _assert_rows_match(skill.id)
 
 
@@ -227,10 +184,10 @@ def test_share_keeps_group_install_setting_of_removed_share(
 def manager_env(
     admin_user: DATestUser,
 ) -> tuple[DATestUser, DATestUserGroup, DATestUserGroup]:
-    manager = UserManager.create(name=_name("skill_manager"))
+    manager = UserManager.create(name=unique_name("skill_manager"))
     managed = _group(admin_user, [manager.id])
     other = _group(admin_user)
-    _promote_to_manager(manager.id, managed.id)
+    promote_to_manager(manager.id, managed.id)
     return manager, managed, other
 
 
@@ -240,13 +197,13 @@ def test_group_manager_is_refused_outside_their_groups(
     manager, managed, other = manager_env
     skills = [
         SkillManager.create_custom(
-            manager, name=_name("scoped"), group_ids=[managed.id]
+            manager, name=unique_name("scoped"), group_ids=[managed.id]
         )
         for _ in range(2)
     ]
     outside = {"group_shares": [{"group_id": other.id, "permission": "VIEWER"}]}
 
-    single = _share(manager, skills[0].id, outside)
+    single = share_skill(manager, skills[0].id, outside)
     assert single.status_code == 403
 
     result = _bulk_share(manager, [skill.id for skill in skills], outside)
@@ -259,22 +216,42 @@ def test_group_manager_is_refused_outside_their_groups(
 
     # Inside their groups, the change goes through.
     inside = {"group_shares": [{"group_id": managed.id, "permission": "EDITOR"}]}
-    _share(manager, skills[0].id, inside).raise_for_status()
+    share_skill(manager, skills[0].id, inside).raise_for_status()
     assert _group_rows(skills[0].id) == {
         managed.id: (SkillSharePermission.EDITOR, None)
     }
 
 
-def test_group_manager_is_refused_a_company_install_setting(
+def test_group_manager_is_refused_install_settings(
     manager_env: tuple[DATestUser, DATestUserGroup, DATestUserGroup],
 ) -> None:
+    """A group manager shares within their groups, but only an
+    organization-wide skill manager sets a company or group install setting."""
     manager, managed, _other = manager_env
     skill = SkillManager.create_custom(
-        manager, name=_name("scoped-policy"), group_ids=[managed.id]
+        manager, name=unique_name("scoped-policy"), group_ids=[managed.id]
     )
 
-    single = _share(manager, skill.id, {"installation_policy": "DEFAULT"})
+    single = share_skill(manager, skill.id, {"installation_policy": "DEFAULT"})
     assert single.status_code == 403
+    group_setting = share_skill(
+        manager,
+        skill.id,
+        {
+            "group_settings": [
+                {"group_id": managed.id, "installation_policy": "REQUIRED"}
+            ]
+        },
+    )
+    assert group_setting.status_code == 403
+    assert _group_rows(skill.id) == {managed.id: (SkillSharePermission.VIEWER, None)}
+
+    # A private skill the manager cannot see does not show that it exists.
+    hidden = SkillManager.create_custom(UserManager.create(name=unique_name("hidden")))
+    hidden_setting = {
+        "group_settings": [{"group_id": managed.id, "installation_policy": "DEFAULT"}]
+    }
+    assert share_skill(manager, hidden.id, hidden_setting).status_code == 404
 
     result = _bulk_share(manager, [skill.id], {"installation_policy": "REQUIRED"})
     assert [failure.skill_id for failure in result.failed] == [skill.id]
@@ -287,10 +264,10 @@ def test_group_manager_is_refused_a_company_install_setting(
 def test_share_on_a_skill_writes_the_grant_on_its_plugin(
     admin_user: DATestUser, basic_user: DATestUser
 ) -> None:
-    skill = SkillManager.create_custom(admin_user, name=_name("grant"))
+    skill = SkillManager.create_custom(admin_user, name=unique_name("grant"))
     group = _group(admin_user)
 
-    _share(
+    share_skill(
         admin_user,
         skill.id,
         {
@@ -315,11 +292,11 @@ def test_share_on_a_skill_writes_the_grant_on_its_plugin(
 
 
 def test_admin_changes_the_company_install_setting(admin_user: DATestUser) -> None:
-    single = SkillManager.create_custom(admin_user, name=_name("company"))
-    bulk = SkillManager.create_custom(admin_user, name=_name("company-bulk"))
+    single = SkillManager.create_custom(admin_user, name=unique_name("company"))
+    bulk = SkillManager.create_custom(admin_user, name=unique_name("company-bulk"))
 
     # A value sets it.
-    _share(
+    share_skill(
         admin_user, single.id, {"installation_policy": "REQUIRED"}
     ).raise_for_status()
     result = _bulk_share(admin_user, [bulk.id], {"installation_policy": "DEFAULT"})
@@ -328,14 +305,14 @@ def test_admin_changes_the_company_install_setting(admin_user: DATestUser) -> No
     assert _company_settings(bulk.id) == ("DEFAULT", "DEFAULT")
 
     # A missing setting changes nothing.
-    _share(admin_user, single.id, {"user_shares": []}).raise_for_status()
+    share_skill(admin_user, single.id, {"user_shares": []}).raise_for_status()
     result = _bulk_share(admin_user, [bulk.id], {"user_shares": []})
     assert result.failed == []
     assert _company_settings(single.id) == ("REQUIRED", "REQUIRED")
     assert _company_settings(bulk.id) == ("DEFAULT", "DEFAULT")
 
     # An explicit null takes the marketplace default.
-    _share(admin_user, single.id, {"installation_policy": None}).raise_for_status()
+    share_skill(admin_user, single.id, {"installation_policy": None}).raise_for_status()
     result = _bulk_share(admin_user, [bulk.id], {"installation_policy": None})
     assert result.failed == []
     assert _company_settings(single.id) == (None, "AVAILABLE")

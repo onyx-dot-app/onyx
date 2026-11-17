@@ -65,7 +65,7 @@ from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool, until
 
 __all__ = ["chat", "owned_runs"]
 
-PROGRAM = f"r = await mcp__1__acme__{ACTION}(value='team')\nprint('sent', r)"
+PROGRAM = f"r = await tools.mcp__1__acme__{ACTION}(value='team')\nprint('sent', r)"
 
 
 def _reply(request: GenerationRequest, _signal: CancellationSignal) -> AssistantMessage:

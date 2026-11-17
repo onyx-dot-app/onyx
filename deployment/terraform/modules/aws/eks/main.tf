@@ -14,6 +14,36 @@ moved {
 }
 
 locals {
+  # Pin to the cluster's running CNI so adoption only flips enableNetworkPolicy.
+  # PRESERVE keeps out-of-band aws-node settings; OVERWRITE on create is
+  # required to adopt the previously-unmanaged addon (PRESERVE isn't valid there).
+  vpc_cni_addon = {
+    addon_version               = var.vpc_cni_addon_version
+    most_recent                 = false
+    resolve_conflicts_on_create = "OVERWRITE"
+    resolve_conflicts_on_update = "PRESERVE"
+    configuration_values = jsonencode({
+      enableNetworkPolicy = "true"
+    })
+  }
+
+  # Upstream v21 creates a cluster without the default vpc-cni, kube-proxy and
+  # CoreDNS. manage_core_addons (new clusters) installs them as EKS addons, the
+  # CNI before the node groups and with NetworkPolicy enforcement on.
+  # enable_network_policy (existing clusters) adopts only the CNI, after the
+  # node groups. Upstream keeps the two CNI placements in different resources,
+  # so the flags are exclusive: switching would replace the running CNI.
+  cluster_addons = merge(
+    var.enable_network_policy ? {
+      vpc-cni = local.vpc_cni_addon
+    } : {},
+    var.manage_core_addons ? {
+      vpc-cni    = merge(local.vpc_cni_addon, { before_compute = true })
+      kube-proxy = { resolve_conflicts_on_create = "OVERWRITE" }
+      coredns    = { resolve_conflicts_on_create = "OVERWRITE" }
+    } : {},
+  )
+
   # Upstream v21 changed these node group defaults. Pin the v20 values so the
   # upgrade does not roll nodes, change AMIs or resize groups. A node group can
   # still override any of them.
@@ -309,23 +339,7 @@ module "eks" {
   enabled_log_types                      = var.cluster_enabled_log_types
   cloudwatch_log_group_retention_in_days = var.cloudwatch_log_group_retention_in_days
 
-  # Opt-in per cluster: adopts the VPC CNI addon and turns on NetworkPolicy
-  # enforcement. Off by default so existing clusters' NetworkPolicies stay
-  # inert (the cloud cluster has legacy policies of unknown effect).
-  addons = var.enable_network_policy ? {
-    vpc-cni = {
-      # Pin to the cluster's running CNI so adoption only flips enableNetworkPolicy.
-      addon_version = var.vpc_cni_addon_version
-      most_recent   = false
-      # PRESERVE keeps out-of-band aws-node settings; OVERWRITE on create is
-      # required to adopt the previously-unmanaged addon (PRESERVE isn't valid there).
-      resolve_conflicts_on_create = "OVERWRITE"
-      resolve_conflicts_on_update = "PRESERVE"
-      configuration_values = jsonencode({
-        enableNetworkPolicy = "true"
-      })
-    }
-  } : {}
+  addons = local.cluster_addons
 
   eks_managed_node_groups = {
     for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups, local.craft_pod_sandbox_node_groups) : k => merge(local.node_group_defaults, v,

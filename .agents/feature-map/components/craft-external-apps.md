@@ -85,7 +85,8 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
  2 destinations     resolve_destination: public, or the exact ONYX_SERVER_URL
                     host:port, or a Craft MCP origin the user can reach with
                     tenant SSRF settings that allow it; server_connect pins
-                    the validated IPs (no second DNS lookup)
+                    the validated IPs (no second DNS lookup); a
+                    /microvm/ path on the API host -> 403 (host-agent routes)
  3 identity         signed `Proxy-Authorization: Bearer` on the connection's
                     first request -> SignedIdentityVerifier, bound to the
                     client connection; else IdentityResolver.resolve_sandbox
@@ -218,7 +219,10 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    The proxy holds node public keys only and checks the cache placement record
    (`microvm/registry.py`; no schema change).
    A bad token is a 403, never an IP fallback; a signed plain-HTTP connection
-   allows one request.
+   allows one request. The relays reach the proxy over mTLS on a separate port
+   (`sandbox_proxy/relay_tls.py`, Helm `craft.hostAgent.relayTls`); it pipes
+   to the plain listener on loopback, so relay flows log a loopback source IP
+   and the token check stays the identity check.
    `sandbox_proxy/sandbox_identity/resolution.py:IdentityResolver.resolve_session_by_id` accepts a tag
    only for a session of the IP-resolved user. A forged tag can only move an
    approval to another session of the same user. The comment in

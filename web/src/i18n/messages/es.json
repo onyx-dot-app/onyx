@@ -5201,10 +5201,20 @@
           "description": "Solo los administradores publican habilidades en la organización."
         },
         "saveSuccess": {
-          "message": "Se guardó la configuración de publicación."
+          "message": "Configuración guardada."
         },
         "saveError": {
-          "message": "No se pudo guardar la configuración de publicación."
+          "message": "No se pudo guardar la configuración."
+        },
+        "defaultAccess": {
+          "title": "Acceso predeterminado",
+          "description": "Se aplica a cada skill publicado que no tiene su propia configuración, incluidos los que se publiquen después.",
+          "loadFailed": "No se pudo cargar el acceso predeterminado.",
+          "retry": "Reintentar"
+        },
+        "sharing": {
+          "title": "Compartir",
+          "description": "Los miembros pueden compartir skills con personas y grupos. Los administradores de skills siempre pueden compartir."
         }
       }
     },
@@ -10153,6 +10163,8 @@
         },
         "title": "Eliminar al usuario",
         "toasts": {
+          "blockedBySkills": "No se puede eliminar este usuario",
+          "openSkills": "Abrir habilidades para transferirlas",
           "success": "Usuario eliminado"
         }
       },
@@ -11790,9 +11802,17 @@
         "loginBadCredentials": "Esta cuenta no puede iniciar sesión. Puede estar desactivada. Contacta al administrador de tu espacio de trabajo.",
         "loginRequired": "Primero debes iniciar sesión con tu proveedor de identidad.",
         "oauthUserAlreadyExists": "Ya existe una cuenta con este correo con otro método de inicio de sesión. Inicia sesión como lo hiciste la primera vez, o pide a tu administrador que vincule este proveedor.",
+        "playgroundActiveTenant": "Un equipo de tu empresa ya está probando Onyx. ¿Unirte a tu equipo o crear un equipo nuevo?",
+        "playgroundAskAdmin": "Pide a tu administrador que te invite.",
+        "playgroundCheckFailed": "No pudimos comprobar tu registro. Inténtalo de nuevo más tarde.",
+        "playgroundEmailUsed": "Ya has usado tu acceso al playground.",
+        "playgroundLimitReached": "Tu empresa ya ha usado su acceso al playground.",
         "serverError": "Tu proveedor de identidad encontró un error. Inténtalo de nuevo.",
         "staleSignIn": "Este enlace de inicio de sesión caducó o ya no es válido. Vuelve a iniciar sesión.",
         "temporarilyUnavailable": "Tu proveedor de identidad no está disponible temporalmente. Inténtalo de nuevo más tarde."
+      },
+      "contactSalesButton": {
+        "label": "Contactar con ventas"
       },
       "credentialsIssue": {
         "description": "Credenciales de acceso incorrectas o caducadas"
@@ -11800,6 +11820,12 @@
       "heading": {
         "description": "Hubo un problema con tu intento de inicio de sesión.",
         "title": "Error de autenticación"
+      },
+      "joinTeamButton": {
+        "label": "Unirme a mi equipo"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "Posibles causas:"
@@ -11809,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "Si el problema continúa, contacta al administrador del sistema para obtener ayuda."
+      },
+      "startNewTeamButton": {
+        "label": "Crear un equipo nuevo"
       },
       "systemDisruptionIssue": {
         "description": "Interrupción temporal del sistema de autenticación"
@@ -12905,6 +12934,11 @@
           "text": "Se detuvo la generación de imágenes"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Copiar tabla"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Pregunta"
@@ -13102,6 +13136,12 @@
           },
           "waitingForApproval": {
             "label": "Esperando tu aprobación"
+          },
+          "runningCommand": {
+            "label": "Ejecutando comando"
+          },
+          "editingFiles": {
+            "label": "Editando archivos"
           }
         },
         "internalSearch": {
@@ -13231,11 +13271,56 @@
           "researchAgent": "Agente de investigación",
           "thinking": "Pensando",
           "tool": "Herramienta",
-          "webSearch": "Búsqueda web"
+          "webSearch": "Búsqueda web",
+          "terminal": "Terminal",
+          "applyPatch": "Aplicar parche",
+          "editFile": "Editar archivo",
+          "writeFile": "Escribir archivo"
         },
         "webSearch": {
           "searching": {
             "status": "Buscando en la web"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {Ejecutando comando} started {Comando iniciado} failed {El comando falló} canceled {Cancelado} done {Comando ejecutado} other {Comando ejecutado}}",
+            "workdir": {
+              "label": "En {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {Enviando entrada a la sesión {sessionId}} failed {No se pudo enviar la entrada a la sesión {sessionId}} canceled {Cancelado} done {Entrada enviada a la sesión {sessionId}} other {Entrada enviada a la sesión {sessionId}}}} check {{phase, select, running {Revisando la sesión {sessionId}} failed {No se pudo revisar la sesión {sessionId}} canceled {Cancelado} done {Sesión {sessionId} revisada} other {Sesión {sessionId} revisada}}} other {Sesión {sessionId}}}"
+          },
+          "output": {
+            "title": "Salida"
+          },
+          "exitCode": {
+            "label": "Código de salida {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {Detenido por una señal} canceled {Cancelado} deadline_exceeded {Detenido al alcanzar su límite de tiempo} other {Finalizado}}"
+          },
+          "stillRunning": {
+            "label": "Sigue en ejecución (sesión {sessionId})"
+          },
+          "truncated": {
+            "label": "Salida truncada"
+          },
+          "noOutput": {
+            "text": "Sin salida"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {# archivo editado} other {# archivos editados}}"
+            },
+            "failed": {
+              "status": "La edición falló"
+            },
+            "title": "Parche"
+          },
+          "stopped": {
+            "status": "Detenido"
           }
         }
       },
@@ -15892,6 +15977,12 @@
       "resetDefaults": "Restablecer todos los valores predeterminados",
       "resetAll": "Restablecer todo a los valores del espacio de trabajo",
       "workspaceDisabledTooltip": "Un administrador desactivó esta acción para el espacio de trabajo."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, one {# skill no se cargó} other {# skills no se cargaron}}",
+      "description": "Esta sesión no puede usar {names}. Tus skills deben caber en {maxSize} y {maxFiles, number} archivos. Desactiva los skills que no necesites para liberar espacio.",
+      "manage": "Gestionar skills",
+      "dismiss": "Descartar"
     }
   },
   "knowledge": {
@@ -17455,12 +17546,6 @@
         },
         "installation": {
           "title": "Instalación",
-          "available": "Disponible para instalar",
-          "default": "Instalado de forma predeterminada",
-          "required": "Obligatorio",
-          "availableDescription": "Los usuarios pueden instalar o desinstalar en cualquier momento.",
-          "defaultDescription": "Se instala automáticamente. Los usuarios pueden desactivar o desinstalar en cualquier momento.",
-          "requiredDescription": "Se instala automáticamente. Los usuarios no pueden desactivar ni desinstalar.",
           "description": "Elige cómo se instala esta habilidad para quienes tienen acceso."
         },
         "description": "Elige quién puede usar esta habilidad y cómo se instala.",
@@ -17484,6 +17569,19 @@
         "publishOff": {
           "title": "La publicación está desactivada",
           "description": "Un administrador desactivó la publicación en la organización. Pide a un administrador que publique esta habilidad."
+        },
+        "sharingOff": {
+          "title": "El uso compartido está desactivado",
+          "description": "Un administrador desactivó el uso compartido con personas y grupos. Pide a un administrador de skills que comparta este skill."
+        },
+        "groupAccess": {
+          "title": "Acceso de grupos",
+          "description": "De forma predeterminada, cada grupo usa la configuración de la organización. Una configuración de grupo la reemplaza para los miembros del grupo, también cuando es más estricta.",
+          "add": "Agregar un grupo",
+          "select": "Configuración para {name}",
+          "remove": "Quitar {name}",
+          "shared": "Compartido con este grupo",
+          "settingOnly": "Solo configuración del grupo"
         }
       },
       "placeholders": {
@@ -17568,7 +17666,8 @@
       "empty": {
         "noMatches": {
           "description": "Prueba con otra búsqueda.",
-          "title": "No hay habilidades coincidentes"
+          "title": "No hay habilidades coincidentes",
+          "groupDescription": "Ningún skill de este grupo coincide. Prueba otro grupo u otra búsqueda."
         },
         "noSkills": {
           "title": "Aún no hay habilidades personalizadas",
@@ -17725,6 +17824,46 @@
       "version": {
         "firstPublish": "v{number} · Primera publicación",
         "update": "v{number} · Actualización de v{published}"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Obligatorio",
+        "description": "Instalado y siempre activo. Los miembros no pueden desactivarlo."
+      },
+      "DEFAULT": {
+        "label": "Instalado de forma predeterminada",
+        "description": "Instalado para cada miembro. Los miembros pueden desactivarlo."
+      },
+      "AVAILABLE": {
+        "label": "Disponible para instalar",
+        "description": "Los miembros lo encuentran y lo activan si lo quieren."
+      },
+      "NOT_AVAILABLE": {
+        "label": "No disponible",
+        "description": "Oculto. Los miembros no pueden encontrarlo ni activarlo."
+      },
+      "inherit": {
+        "label": "{scope, select, group {Configuración de la organización} other {Acceso predeterminado}}",
+        "labelWithPolicy": "{scope, select, group {Configuración de la organización ({policy})} other {Acceso predeterminado ({policy})}}",
+        "description": "{scope, select, group {Sin configuración de grupo. El grupo usa la configuración de la organización.} other {Sin configuración propia. El skill usa el acceso predeterminado, también después de que un administrador lo cambie.}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Filtrar por grupo",
+        "all": "Todos los grupos"
+      },
+      "card": "Grupos: {groups}",
+      "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "refused": "Este cambio te lleva por encima del límite de skills de {maxSize} o {maxFiles, number} archivos. Desactiva los skills que no uses y vuelve a intentarlo.",
+      "banner": {
+        "title": "{count, plural, one {# usuario supera el límite de skills} other {# usuarios superan el límite de skills}}",
+        "description": "La configuración de grupos y los elementos compartidos pueden llevar a un usuario por encima de {maxSize} o {maxFiles, number} archivos de habilidades. Es posible que algunas de sus habilidades no se carguen. Cambie la configuración de los grupos o pida a los usuarios que desactiven habilidades.",
+        "user": "{email}: {size}, {files, plural, one {# archivo} other {# archivos}}, {notLoaded, plural, one {# skill no se cargó} other {# skills no se cargaron}}",
+        "more": "Y {count, number} más."
       }
     }
   },

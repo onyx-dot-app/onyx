@@ -1747,7 +1747,8 @@ auth:
       private_key: ""
   # Shared credential that Craft Firecracker host agents send to register
   # their node signing key (craft.sandboxRuntime=firecracker). The api_server
-  # rejects every registration while it is unset.
+  # rejects every registration while it is unset. An inline value must be at
+  # least 32 characters (the chart fails otherwise).
   sandboxNodeRegistration:
     enabled: false
     allPods: false  # Restricted: only the API server checks it (plus the other restricted pods)
@@ -2010,7 +2011,9 @@ craft:
   # the kube-dns podSelector in the sandbox-egress NetworkPolicy can't match it; without an allow
   # here its DNS query hits the default-deny and bricks sandbox init. Set this to the actual
   # listener IP(s), e.g. ["169.254.20.10/32"]. Empty (default) = standard CoreDNS, resolved via
-  # the podSelector alone (no NodeLocal DNS).
+  # the podSelector alone (no NodeLocal DNS). GKE Dataplane V2 with kube-dns runs node-local-dns
+  # as pods, which the podSelector matches, so leave this empty there. With Cloud DNS, GKE's
+  # NodeLocal DNSCache listens on the host network (169.254.20.10), so set it.
   dnsExtraCIDRs: []
   # CIDR(s) of the egress proxy when it is NOT a chart-labeled pod. The sandbox-egress NetworkPolicy
   # selects the proxy by pod label (app.kubernetes.io/component: sandbox-proxy), but
@@ -2096,6 +2099,11 @@ craft:
     # Most open egress relay connections per VM; the agent closes new ones
     # over the cap.
     relayMaxConns: 256
+    # Most open egress relay connections of all VMs on the node together.
+    # Each one uses up to about 100 KiB of agent memory, so keep
+    # resources.limits.memory above 256Mi + relayMaxConnsNode x 100 KiB
+    # (2048: about 456Mi).
+    relayMaxConnsNode: 2048
     # Most open Dial streams per VM; more fail with DIAL_LIMIT.
     dialMaxStreams: 64
     # Most VMs per node, template build VMs included (--max-vms). Over it,
@@ -2104,8 +2112,17 @@ craft:
     # 2 vCPU make random running VMs fail, so the default is 60. On bare
     # metal, raise it or set 0 (no cap).
     maxVms: 60
+    # memory.max of the host slice of all VMs (fcvms.slice), in percent of
+    # the node's memory; the agent sets it at start (--slice-memory-percent).
+    # Idle guests give memory back, so the agent can start more VMs than the
+    # node holds. When they use it again, the kernel then kills a VM inside
+    # the slice, not kubelet or containerd. Keep the rest for kubelet,
+    # containerd, the host agent and the system. 0: no limit (the agent
+    # removes a limit of an earlier start).
+    sliceMemoryPercent: 85
     # Comma-separated DNS or URI SANs; the client certificate must have one.
-    # Empty = any certificate that the client CA (tls ca.crt) signed.
+    # Empty = the client certificate name with chart-made certificates, or
+    # any certificate that the client CA (tls ca.crt) signed with existingSecret.
     clientAllowedSans: ""
     # host:port the agent clients dial, sent with the node key registration.
     # Empty = the pod IP and listenPort.
@@ -2136,6 +2153,39 @@ craft:
       # (<release>-craft-fc-host-agent.<namespace>.svc); a value here is added
       # to the chart-made certificate.
       tlsServerName: ""
+    # mTLS between the agent egress relays and sandbox-proxy. The relays
+    # dial the proxy relay port (relayTls.port), check the proxy certificate,
+    # and show a client certificate; a failed handshake fails the connection
+    # (no plain TCP fallback). The proxy accepts only that client certificate
+    # and still checks the signed token. Only the agent namespace reaches the
+    # relay port; pod sandboxes keep the plain proxy port (which stays open to
+    # the agents for rolling upgrades). With both
+    # existingSecret values empty, the chart makes a relay CA, the proxy and
+    # relay certificates (10 years), keeps them on upgrade with Helm lookup,
+    # and renews them like the agent set above. A new set restarts
+    # sandbox-proxy; the agents and the proxy also load changed files at
+    # their next connection.
+    # Set both existingSecret values, or neither.
+    relayTls:
+      # false: the relays send their tokens to the plain proxy port. Also set
+      # false if craft.hostAgent.image.tag pins an agent without the
+      # --egress-proxy-tls-* flags (before this chart): it does not start.
+      enabled: true
+      port: 8443
+      # A Secret in the agent namespace with tls.crt and tls.key (the relay
+      # client certificate) and ca.crt (the CA of the proxy certificate).
+      existingSecret: ""
+      # A Secret in the release namespace with tls.crt and tls.key (the proxy
+      # certificate) and ca.crt (the CA of the relay client certificates).
+      proxyExistingSecret: ""
+      # Name the relays verify in the proxy certificate. Empty = the
+      # sandbox-proxy host (configMap.SANDBOX_PROXY_HOST, else the Service
+      # FQDN); a value here is added to the chart-made certificate.
+      serverName: ""
+      # Comma-separated DNS or URI SANs; the relay certificate must have one.
+      # Empty = the relay certificate name with chart-made certificates, or
+      # any certificate that the relay CA (proxyExistingSecret ca.crt) signed.
+      clientAllowedSans: ""
     # Secret in the agent namespace with the registration key: the key name
     # in auth.sandboxNodeRegistration.secretKeys.SANDBOX_NODE_REGISTRATION_SECRET
     # (default sandbox_node_registration_secret). Empty = the chart copies
@@ -2153,14 +2203,29 @@ craft:
     terminationGracePeriodSeconds: 30
     # Drain: the agent reads its own Node and refuses new VMs while the Node
     # has one of these taint keys (kubectl cordon and kubectl drain set
-    # node.kubernetes.io/unschedulable). The api_server then saves and
-    # stops the VMs on the node. The chart gives the agent a ServiceAccount
-    # with "get" on nodes. false: no RBAC; only the manual drain (SetDrain).
+    # node.kubernetes.io/unschedulable; the cluster autoscaler sets
+    # ToBeDeletedByClusterAutoscaler and does not cordon). The api_server
+    # then saves and stops the VMs on the node. The chart gives the agent a
+    # ServiceAccount with "get" on nodes. false: no RBAC; only the manual
+    # drain (SetDrain).
     drainWatch:
       enabled: true
       # Comma-separated taint keys.
-      taints: "node.kubernetes.io/unschedulable"
+      taints: "node.kubernetes.io/unschedulable,ToBeDeletedByClusterAutoscaler"
       pollInterval: 10s
+    # Scale-down guard: VMs are not pods, so the cluster autoscaler (GKE,
+    # AKS, EKS cluster-autoscaler) sees a node with VMs as empty. While the
+    # node runs VMs, the agent sets the Node annotation
+    # cluster-autoscaler.kubernetes.io/scale-down-disabled=true. It removes
+    # the annotation when the node has had no VMs for grace. The agent never
+    # removes a value that it did not set. The chart gives the agent "get"
+    # and "patch" on nodes, and a ValidatingAdmissionPolicy (when the cluster
+    # serves admissionregistration.k8s.io/v1) limits the patch to these
+    # annotations. false: no patch RBAC; remove an annotation that is left on
+    # a node by hand (microvm/RUNBOOKS.md).
+    scaleDownGuard:
+      enabled: true
+      grace: 10m
     # Root drive of the VMs. An init container copies the drive into
     # <dataDir>/rootfs and the agent builds its node template from it at
     # start (--rootfs-dir).
@@ -2219,6 +2284,11 @@ craft:
       runbookUrl: https://docs.onyx.app/deployment/kubernetes/craft-firecracker-operations
       # Labels added to every rule (for example team or routing labels).
       extraLabels: {}
+      # Seconds since the api_server last accepted a node state report. The
+      # api_server stops placing VMs on a node that reported before after
+      # SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS (default 180). Needs the
+      # agent's state reports on (--state-report-interval > 0, the default).
+      nodeReportStaleSeconds: 300
       # Failed Creates (start failed after admission) / admitted Creates, 15 m.
       createFailureRatio: 0.2
       # Capacity refusals per node and reason in 15 m.

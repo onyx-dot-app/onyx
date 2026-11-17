@@ -59,6 +59,25 @@ spec:
             description: {{ `{{ $value }} host agent pods are available, fewer than the DaemonSet wants, for 15m. Sandbox nodes without a Ready agent take no VMs.` | quote }}
             runbook_url: {{ printf "%s#craftfchostagentpodsmissing" $runbook }}
 
+        - alert: CraftFcNodeReportsStale
+          # The agent answers scrapes but the api_server accepts no state
+          # report (for example a lost node key, or 1 h after a wrong
+          # registration secret). 0 = none yet; max keeps the old pod's
+          # value while a new pod starts.
+          expr: |
+            time() - max by (namespace, node) (craft_fc_host_agent_node_report_last_success_timestamp_seconds{ {{- $sel -}} })
+              > {{ dig "nodeReportStaleSeconds" 300 $alerts }}
+          for: 5m
+          labels:
+            severity: critical
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `The api_server accepts no node reports from {{ $labels.node }}` | quote }}
+            description: {{ `The api_server last accepted a state report from the host agent on node {{ $labels.node }} {{ $value | humanizeDuration }} ago (about 56 years: none since the agent started). After SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS (default 180 s) without a report it places no new VMs on a node that reported before. CraftFcHostAgentDown stays clear.` | quote }}
+            runbook_url: {{ printf "%s#craftfcnodereportsstale" $runbook }}
+
         - alert: CraftFcCreateFailures
           # "failed" = the start failed after admission (VMM, journal, guest
           # key). Refusals before admission are in CraftFcAdmissionRefusals.

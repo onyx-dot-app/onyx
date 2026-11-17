@@ -191,7 +191,8 @@ class VmRequest(BaseModel):
 
     tenant_id: str
     sandbox_id: UUID
-    # The sandbox's provisioning attempt number (the existing attempt fence).
+    # The lowest attempt that may serve the request: a running VM of an older
+    # attempt is a conflict, and a new VM starts at this attempt or later.
     attempt: int
     # Template version; vcpus and mem_mib come from the node's template.
     template: str
@@ -443,6 +444,42 @@ class FileType(str, Enum):
     SYMLINK = "SYMLINK"
     # A device, FIFO or socket.
     OTHER = "OTHER"
+
+
+class StatError(str, Enum):
+    """Why a path's target has no facts."""
+
+    # The path or a link on it leads to nothing.
+    MISSING = "MISSING"
+    # A link on the path leads out of the session directory.
+    ESCAPES = "ESCAPES"
+    # The links on the path loop (os.Root follows at most 8).
+    LOOP = "LOOP"
+    # Another error, such as a file used as a directory.
+    OTHER = "OTHER"
+
+
+class PathStat(BaseModel):
+    """StatFiles' facts of one session path: its own entry, and its target
+    through the links inside the session directory."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    # The entry itself exists, a broken link included.
+    exists: bool
+    # The entry's own type and mode & 0o777.
+    type: FileType
+    mode: int
+    # SYMLINK only: the stored target (invalid UTF-8 as U+FFFD).
+    link_target: str
+    # None when the target facts are set.
+    target_error: StatError | None
+    target_type: FileType
+    target_mode: int
+    # The target's identity: equal for two paths that name one file.
+    device: int
+    inode: int
 
 
 class FileEntry(BaseModel):

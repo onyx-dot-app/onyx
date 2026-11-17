@@ -213,6 +213,18 @@ func TestCoreKVM(t *testing.T) {
 	}
 	t.Logf("cgroup/UID: %d VMs, %d unique UIDs", len(vms), len(seenUID))
 
+	// 4b. Each Firecracker has its own empty network namespace (loopback only).
+	ownNS, _ := netnsOf(t, os.Getpid())
+	seenNS := map[string]bool{}
+	for i, vm := range vms {
+		ns, ifs := netnsOf(t, int(vm.GetPid()))
+		if ns == ownNS || seenNS[ns] || len(ifs) != 1 || ifs[0] != "lo" {
+			t.Errorf("vm %d: netns %s interfaces %v, want a new namespace with lo only (agent %s)", i, ns, ifs, ownNS)
+		}
+		seenNS[ns] = true
+	}
+	t.Logf("netns: %d VMs, %d namespaces, none is the agent's", len(vms), len(seenNS))
+
 	// 5. ping and run in every VM.
 	okPing, okRun := 0, 0
 	for i, id := range ids {
@@ -234,13 +246,27 @@ func TestCoreKVM(t *testing.T) {
 	}
 	t.Logf("ping %d/%d, run %d/%d", okPing, e.VMs, okRun, e.VMs)
 
+	// 5b. Without the egress relay the VM has no host vsock listener, so every
+	// guest connect to the host is refused.
+	vctx, vcancel := context.WithTimeout(ctx, 2*time.Minute)
+	v0probe := lay.HostPath(ids[0], template.VsockUDS)
+	accepted, out, err := vsockProbe(vctx, v0probe, vsockProbePorts)
+	vcancel()
+	if err != nil || len(accepted) != 0 {
+		t.Errorf("vsock deny-list without a relay: accepted %v, err %v\n%s", accepted, err, out)
+	}
+	if l := hostVsockListeners(t, v0probe); len(l) != 0 {
+		t.Errorf("host vsock listeners without a relay: %v", l)
+	}
+	t.Logf("vsock: %d guest → host ports refused, 0 host listeners", len(vsockProbePorts))
+
 	// 6. Scratch cap on VM 0: the guest sees the grown disk, grows ext4, then
 	// a write past the cap fails.
 	v0 := lay.HostPath(ids[0], template.VsockUDS)
 	sctx, scancel := context.WithTimeout(ctx, 3*time.Minute)
 	// The daemon will do this in Init. EXT4_IOC_RESIZE_FS is the
 	// online grow that resize2fs uses; it needs no e2fsprogs in the image.
-	out, err := guestRun(sctx, v0, "root", `echo dev_bytes=$(( $(cat /sys/block/vdb/size) * 512 ));
+	out, err = guestRun(sctx, v0, "root", `echo dev_bytes=$(( $(cat /sys/block/vdb/size) * 512 ));
 python3 - <<'EOF'
 import fcntl, os, struct
 dev = int(open("/sys/block/vdb/size").read()) * 512

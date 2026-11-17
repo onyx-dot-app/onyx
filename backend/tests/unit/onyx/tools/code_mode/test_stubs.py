@@ -95,15 +95,12 @@ def test_a_program_type_checks_against_only_the_functions_it_names() -> None:
         ("3d_render", "tool_3d_render"),
         ("print", "print_tool"),
         ("class", "class_tool"),
-        ("json", "json_tool"),
-        ("typing", "typing_tool"),
-        ("os", "os_tool"),
-        ("store", "store_tool"),
-        ("load", "load_tool"),
+        # Methods of `class tools` can take the names of the program's globals.
+        ("json", "json"),
+        ("store", "store"),
+        ("tool_search", "tool_search"),
+        ("tools", "tools"),
         ("TypedDict", "TypedDict_tool"),
-        ("tool_search", "tool_search_tool"),
-        ("functions", "functions_tool"),
-        ("yield_control", "yield_control_tool"),
         ("SearchResults", "SearchResults"),
     ],
 )
@@ -161,8 +158,9 @@ class _BatchedSearchTool(FakeWebSearchTool):
 
 def test_usage_note_reaches_the_docstring() -> None:
     stubs = build_tool_stubs([_BatchedSearchTool(_unused)])
-    assert "snippets.\n\n    Pass all queries in one call.\n\n    Args:" in _full_text(
-        stubs
+    assert (
+        "snippets.\n\n        Pass all queries in one call.\n\n        Args:"
+        in _full_text(stubs)
     )
 
 
@@ -346,7 +344,7 @@ def test_argument_names_are_python_identifiers_in_normal_form() -> None:
         [FakeTool("fetch", _unused, parameters=parameters)]
     ).functions["fetch"]
     assert function.argument_names == {"file": "ﬁle", "version2": "version²"}
-    ast.parse(function.stub)
+    ast.parse(f"class tools:\n{function.stub}")
 
 
 def test_required_entries_that_are_not_names_are_ignored() -> None:
@@ -462,16 +460,21 @@ def test_control_characters_in_a_tool_name_keep_the_stubs_valid(
 
     module = ast.parse(_full_text(stubs))
 
+    [tools_class] = [
+        node
+        for node in module.body
+        if isinstance(node, ast.ClassDef) and node.name == "tools"
+    ]
     docstrings = [
         ast.get_docstring(node, clean=False)
-        for node in module.body
+        for node in tools_class.body
         if isinstance(node, ast.AsyncFunctionDef)
     ]
     assert any(f"Tool name: {name}\n" in (text or "") for text in docstrings)
 
     # The sandbox's type checker reads the same stubs: a wrong argument to the
     # ordinary tool is its only diagnostic.
-    code = "await plain(value=1)\n"
+    code = "await tools.plain(value=1)\n"
     with (
         type_checker.checkout(
             type_check=True,
@@ -482,9 +485,26 @@ def test_control_characters_in_a_tool_name_keep_the_stubs_valid(
     ):
         session.feed_run(code)
     assert str(error.value).strip().splitlines() == [
-        "main.py:1:13: error[invalid-argument-type] Argument to function `plain` "
-        "is incorrect: Expected `str`, found `Literal[1]`"
+        "main.py:1:19: error[invalid-argument-type] Argument to function "
+        "`tools.plain` is incorrect: Expected `str`, found `Literal[1]`"
     ]
+
+
+def test_a_function_named_like_a_global_keeps_the_global(
+    type_checker: Monty,
+) -> None:
+    stubs = build_tool_stubs([FakeTool("json", _unused), FakeTool("store", _unused)])
+    code = (
+        "await tools.json(value='a')\nawait tools.store(value='b')\n"
+        "store('k', json.dumps(1))\n"
+    )
+    with type_checker.checkout(
+        type_check=True,
+        type_check_stubs=stubs.program_text(code),
+        type_check_format="concise",
+    ) as session:
+        snapshot = session.feed_start(code)
+    assert snapshot is not None
 
 
 @pytest.mark.parametrize("description", ["\x00", "a\rb", "\ud800"])
@@ -724,3 +744,33 @@ def test_soft_keywords_keep_their_names_as_arguments_and_fields() -> None:
         in (function.declarations[0])
     )
     assert function.argument_names == {"type": "type"}
+
+
+class _Status(BaseModel):
+    state: str = Field(alias="status")
+    exit_code: int | None = None
+
+
+class _LiveStatus(_Status):
+    stream: str
+
+
+class _StatusTool(FakeTool):
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(kind=CodeModeResultKind.DETAILS, model=_Status)
+
+
+def test_details_results_give_the_program_the_declared_details() -> None:
+    """The program gets the details as the declared model has them, also from
+    a subclass with an aliased field; the model reads the content."""
+    function = build_tool_stubs([_StatusTool("status", _unused)]).functions["status"]
+    assert ") -> _Status:" in function.stub
+
+    details = _LiveStatus(status="ok", exit_code=0, stream="out")
+    result = ToolResult(content="Process exited with code 0", details=details)
+    assert program_value(function, result) == {"state": "ok", "exit_code": 0}
+    with pytest.raises(RuntimeError, match="no details"):
+        program_value(function, ToolResult(content=""))
+    with pytest.raises(ValueError, match="needs the model"):
+        CodeModeResultSpec(kind=CodeModeResultKind.DETAILS)

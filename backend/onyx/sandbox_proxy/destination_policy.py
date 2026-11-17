@@ -77,6 +77,28 @@ def is_internal(config: DestinationPolicyConfig, address: IPAddress) -> bool:
     )
 
 
+_NODE_ONLY_PATH_SEGMENT = "microvm"
+
+
+def is_node_only_api_path(
+    config: DestinationPolicyConfig,
+    host: str,
+    port: int,
+    path_components: Iterable[str],
+) -> bool:
+    """True for a request to the api host's host-agent routes (`/microvm/...`).
+
+    Only host agents call these routes; sandboxes never need them.
+    """
+    if config.api_host is None or host.lower() != config.api_host:
+        return False
+    if port != config.api_port:
+        return False
+    # Components are percent-decoded, so an encoded "/" can hide a segment.
+    segments = "/".join(path_components).split("/")
+    return any(segment.lower() == _NODE_ONLY_PATH_SEGMENT for segment in segments)
+
+
 def resolve_destination(
     config: DestinationPolicyConfig,
     host: str,

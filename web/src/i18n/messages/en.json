@@ -5201,10 +5201,20 @@
           "description": "Only admins publish skills to the organization."
         },
         "saveSuccess": {
-          "message": "Publishing setting saved."
+          "message": "Setting saved."
         },
         "saveError": {
-          "message": "Couldn't save the Publishing setting."
+          "message": "Couldn't save the setting."
+        },
+        "defaultAccess": {
+          "title": "Default Access",
+          "description": "Applies to every published skill that doesn't have its own setting, including skills published later.",
+          "loadFailed": "Could not load Default Access.",
+          "retry": "Try again"
+        },
+        "sharing": {
+          "title": "Sharing",
+          "description": "Members can share skills with people and groups. Skill managers can always share."
         }
       }
     },
@@ -10153,6 +10163,8 @@
         },
         "title": "Delete User",
         "toasts": {
+          "blockedBySkills": "Can't delete this user",
+          "openSkills": "Open skills to transfer them",
           "success": "User deleted"
         }
       },
@@ -11790,9 +11802,17 @@
         "loginBadCredentials": "This account can't sign in. It may be deactivated. Contact your workspace admin.",
         "loginRequired": "You need to log in with your identity provider first.",
         "oauthUserAlreadyExists": "An account with this email already exists under a different sign-in method. Sign in the way you first did, or ask your admin to link this provider.",
+        "playgroundActiveTenant": "A team from your company is already trying Onyx. Join your team, or start a new team?",
+        "playgroundAskAdmin": "Ask your admin to invite you.",
+        "playgroundCheckFailed": "We could not check your sign-up. Try again later.",
+        "playgroundEmailUsed": "You have used your playground access.",
+        "playgroundLimitReached": "Your company has used its playground access.",
         "serverError": "Your identity provider encountered an error. Please try again.",
         "staleSignIn": "This sign-in link has expired or is no longer valid. Please sign in again.",
         "temporarilyUnavailable": "Your identity provider is temporarily unavailable. Please try again later."
+      },
+      "contactSalesButton": {
+        "label": "Contact sales"
       },
       "credentialsIssue": {
         "description": "Incorrect or expired login credentials"
@@ -11800,6 +11820,12 @@
       "heading": {
         "description": "There was a problem with your login attempt.",
         "title": "Authentication Error"
+      },
+      "joinTeamButton": {
+        "label": "Join your team"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "Possible Issues:"
@@ -11809,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "If you continue to experience problems, please reach out to your system administrator for assistance."
+      },
+      "startNewTeamButton": {
+        "label": "Start a new team"
       },
       "systemDisruptionIssue": {
         "description": "Temporary authentication system disruption"
@@ -12905,6 +12934,11 @@
           "text": "Image generation stopped"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Copy table"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Question"
@@ -13102,6 +13136,12 @@
           },
           "waitingForApproval": {
             "label": "Waiting for your approval"
+          },
+          "runningCommand": {
+            "label": "Running command"
+          },
+          "editingFiles": {
+            "label": "Editing files"
           }
         },
         "internalSearch": {
@@ -13231,11 +13271,56 @@
           "researchAgent": "Research agent",
           "thinking": "Thinking",
           "tool": "Tool",
-          "webSearch": "Web Search"
+          "webSearch": "Web Search",
+          "terminal": "Terminal",
+          "applyPatch": "Apply Patch",
+          "editFile": "Edit File",
+          "writeFile": "Write File"
         },
         "webSearch": {
           "searching": {
             "status": "Searching the web"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {Running command} started {Started command} failed {Command failed} canceled {Canceled} done {Ran command} other {Ran command}}",
+            "workdir": {
+              "label": "In {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {Sending input to session {sessionId}} failed {Could not send input to session {sessionId}} canceled {Canceled} done {Sent input to session {sessionId}} other {Sent input to session {sessionId}}}} check {{phase, select, running {Checking session {sessionId}} failed {Could not check session {sessionId}} canceled {Canceled} done {Checked session {sessionId}} other {Checked session {sessionId}}}} other {Session {sessionId}}}"
+          },
+          "output": {
+            "title": "Output"
+          },
+          "exitCode": {
+            "label": "Exit code {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {Stopped by a signal} canceled {Canceled} deadline_exceeded {Stopped at its time limit} other {Ended}}"
+          },
+          "stillRunning": {
+            "label": "Still running (session {sessionId})"
+          },
+          "truncated": {
+            "label": "Output truncated"
+          },
+          "noOutput": {
+            "text": "No output"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {Edited # file} other {Edited # files}}"
+            },
+            "failed": {
+              "status": "Edit failed"
+            },
+            "title": "Patch"
+          },
+          "stopped": {
+            "status": "Stopped"
           }
         }
       },
@@ -15892,6 +15977,12 @@
       "resetDefaults": "Reset all to defaults",
       "resetAll": "Reset all to workspace defaults",
       "workspaceDisabledTooltip": "An admin disabled this action for the workspace."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, one {# skill did not load} other {# skills did not load}}",
+      "description": "This session cannot use {names}. Your skills must fit in {maxSize} and {maxFiles, number} files. Turn off skills you do not need to make room.",
+      "manage": "Manage skills",
+      "dismiss": "Dismiss"
     }
   },
   "knowledge": {
@@ -17455,12 +17546,6 @@
         },
         "installation": {
           "title": "Installation",
-          "available": "Available to install",
-          "default": "Installed by default",
-          "required": "Required",
-          "availableDescription": "Users can install or uninstall anytime.",
-          "defaultDescription": "Installed automatically. Users can disable or uninstall anytime.",
-          "requiredDescription": "Installed automatically. Users cannot disable or uninstall.",
           "description": "Choose how this skill is installed for everyone with access."
         },
         "description": "Choose who can use this skill and how it is installed.",
@@ -17484,6 +17569,19 @@
         "publishOff": {
           "title": "Publishing is turned off",
           "description": "An admin turned off publishing to the organization. Ask an admin to publish this skill."
+        },
+        "sharingOff": {
+          "title": "Sharing is turned off",
+          "description": "An admin turned off sharing with people and groups. Ask a skill manager to share this skill."
+        },
+        "groupAccess": {
+          "title": "Group Access",
+          "description": "By default, every group uses the organization setting. A group setting replaces it for the group's members, also when it is stricter.",
+          "add": "Add a group",
+          "select": "Setting for {name}",
+          "remove": "Remove {name}",
+          "shared": "Shared with this group",
+          "settingOnly": "Group setting only"
         }
       },
       "placeholders": {
@@ -17568,7 +17666,8 @@
       "empty": {
         "noMatches": {
           "description": "Try a different search.",
-          "title": "No matching skills"
+          "title": "No matching skills",
+          "groupDescription": "No skills in this group match. Try a different group or search."
         },
         "noSkills": {
           "title": "No custom skills yet",
@@ -17725,6 +17824,46 @@
       "version": {
         "firstPublish": "v{number} · First publish",
         "update": "v{number} · Update from v{published}"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Required",
+        "description": "Installed and always on. Members can't turn it off."
+      },
+      "DEFAULT": {
+        "label": "Installed by default",
+        "description": "Installed for every member. Members can turn it off."
+      },
+      "AVAILABLE": {
+        "label": "Available to install",
+        "description": "Members find it and turn it on if they want it."
+      },
+      "NOT_AVAILABLE": {
+        "label": "Not available",
+        "description": "Hidden. Members can't find or turn it on."
+      },
+      "inherit": {
+        "label": "{scope, select, group {Organization setting} other {Default access}}",
+        "labelWithPolicy": "{scope, select, group {Organization setting ({policy})} other {Default access ({policy})}}",
+        "description": "{scope, select, group {No group setting. The group uses the organization setting.} other {No own setting. The skill uses Default access, also after an admin changes it.}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Filter by group",
+        "all": "All groups"
+      },
+      "card": "Groups: {groups}",
+      "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "refused": "This change puts you past the skill limit of {maxSize} or {maxFiles, number} files. Turn off skills you do not use, then try again.",
+      "banner": {
+        "title": "{count, plural, one {# user is past the skill limit} other {# users are past the skill limit}}",
+        "description": "Group settings and shares can put a user past {maxSize} or {maxFiles, number} files of skills. Some of their skills may then not load. Change group settings, or ask users to turn off skills.",
+        "user": "{email}: {size}, {files, plural, one {# file} other {# files}}, {notLoaded, plural, one {# skill did not load} other {# skills did not load}}",
+        "more": "And {count, number} more."
       }
     }
   },

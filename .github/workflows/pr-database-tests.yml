@@ -36,7 +36,6 @@ jobs:
           filters: |
             db:
               - 'backend/**'
-              - 'tools/ods/**'
               - 'pyproject.toml'
               - 'deployment/docker_compose/docker-compose.yml'
               - 'deployment/docker_compose/docker-compose.dev.yml'
