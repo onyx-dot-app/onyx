@@ -202,7 +202,7 @@ _REASONING_KWARG_KEYS = frozenset(
     {"thinking", "output_config", "reasoning", "reasoning_effort"}
 )
 _BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset(
-    {"temperature", "prompt_cache_options"}
+    {"temperature", "prompt_cache_options", "include"}
 )
 
 # Substrings provider 400s use to name each strippable kwarg (errors may
@@ -212,6 +212,7 @@ _KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
     "output_config": ("output_config", "effort"),
     "reasoning": ("reasoning", "effort"),
     "reasoning_effort": ("reasoning_effort", "effort"),
+    "include": ("include",),
     "temperature": ("temperature",),
     "prompt_cache_options": ("prompt_cache_options", "prompt_cache_breakpoint"),
 }
@@ -515,14 +516,20 @@ _THINKING_BLOCK_PROVIDERS = {
     LlmProviderNames.VERTEX_AI,
 }
 
+# Substrings of the OpenAI-family 400s for a replayed reasoning item the
+# provider cannot use: encrypted content from another key, org, deployment or
+# model, or an item whose following item is missing.
+_REASONING_ITEM_REJECTIONS = (
+    "encrypted_content",
+    "encrypted content",
+    "of type 'reasoning'",
+    "reasoning item",
+)
 
-def _strip_thinking_blocks_from_messages(
-    messages: list[dict[str, JsonValue]],
-) -> list[dict[str, JsonValue]]:
-    return [
-        {key: value for key, value in msg.items() if key != "thinking_blocks"}
-        for msg in messages
-    ]
+
+def _rejection_names_reasoning_items(error: Exception) -> bool:
+    message = str(error).lower()
+    return any(token in message for token in _REASONING_ITEM_REJECTIONS)
 
 
 def _strip_tool_content_from_messages(
@@ -1164,6 +1171,13 @@ class LitellmLLM(LLM):
         litellm_bridges_tool_turn = bool(
             tools
         ) and _litellm_bridges_tool_turn_to_responses(model, self._custom_llm_provider)
+        # Every route LiteLLM sends to the Responses API, which returns and
+        # replays reasoning items.
+        uses_responses_api = (
+            is_openai_model
+            or self._api_surface is LlmApiSurface.OPENAI_RESPONSES
+            or litellm_bridges_tool_turn
+        )
 
         # Tool turns over chat completions for GPT-5.4+ trade reasoning for a
         # working call. Responses routes, registry bridge included, are exempt.
@@ -1255,6 +1269,10 @@ class LitellmLLM(LLM):
                     )
                 if send_reasoning:
                     optional_kwargs["reasoning"] = openai_style_reasoning
+                    if uses_responses_api and not sends_explicit_reasoning_none:
+                        # Replaying a reasoning item by id alone needs server
+                        # storage; the encrypted content replays anywhere.
+                        optional_kwargs["include"] = ["reasoning.encrypted_content"]
                     if (
                         sends_explicit_reasoning_none
                         and self.config.model_provider == LlmProviderNames.OPENAI
@@ -1431,6 +1449,9 @@ class LitellmLLM(LLM):
 
             messages = _prompt_to_dicts(prompt)
 
+            # Replayable reasoning state is kept only on the route that can read
+            # it; other routes forward the unknown key verbatim.
+            unreplayable: set[str] = set()
             if not (
                 is_claude
                 and (
@@ -1438,7 +1459,13 @@ class LitellmLLM(LLM):
                     or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
                 )
             ):
-                messages = _strip_thinking_blocks_from_messages(messages)
+                unreplayable.add("thinking_blocks")
+            if not uses_responses_api:
+                unreplayable.add("reasoning_items")
+            messages = [
+                {key: value for key, value in msg.items() if key not in unreplayable}
+                for msg in messages
+            ]
 
             # Bedrock's Converse API requires toolConfig when messages
             # contain toolUse/toolResult content blocks. When no tools are
@@ -1665,18 +1692,39 @@ class LitellmLLM(LLM):
                         _log_chat_completions_tools_disable_reasoning(
                             model, self._api_base
                         )
-                    elif (
-                        "prompt_cache_options" in opts
-                        and _rejection_names_strippable_kwargs(
-                            e, {"prompt_cache_options"}
-                        )
+                    elif _rejection_names_reasoning_items(e) and any(
+                        "reasoning_items" in msg for msg in messages
                     ):
-                        # A cache rejection must preserve the user's reasoning choice.
-                        without_cache = {
-                            k: v for k, v in opts.items() if k != "prompt_cache_options"
+                        # Only the provider that issued a reasoning item can read
+                        # it. After a key, deployment or model change the old
+                        # items stay in history, so the turn proceeds without them.
+                        messages, cache_messages = (
+                            [
+                                {k: v for k, v in msg.items() if k != "reasoning_items"}
+                                for msg in variant
+                            ]
+                            for variant in (messages, cache_messages)
+                        )
+                        attempts.insert(i + 1, dict(opts))
+                        logger.warning(
+                            "Provider rejected replayed reasoning for model %s; "
+                            "retrying without it: %s",
+                            model,
+                            e,
+                        )
+                        continue
+                    elif rejected_tuning := {
+                        key
+                        for key in ("prompt_cache_options", "include")
+                        if key in opts and _rejection_names_strippable_kwargs(e, {key})
+                    }:
+                        # A cache or include rejection must preserve the user's
+                        # reasoning choice.
+                        without_tuning = {
+                            k: v for k, v in opts.items() if k not in rejected_tuning
                         }
                         attempts[i + 1 :] = _retry_attempts(
-                            without_cache, required_kwarg_keys
+                            without_tuning, required_kwarg_keys
                         )
                     elif i == len(attempts) - 1:
                         raise

@@ -5,6 +5,8 @@ from collections import Counter
 from onyx.llm.models import (
     AssistantMessage,
     Message,
+    ReasoningItemBlock,
+    TextContent,
     ThinkingBlock,
     ThinkingContent,
     ToolCall,
@@ -84,6 +86,21 @@ def messages_for_model(
                             }
                         )
                 content.append(part)
+            if not any(isinstance(part, (TextContent, ToolCall)) for part in content):
+                # OpenAI rejects a reasoning item without the text or tool call
+                # that followed it, so it goes with the tool call it lost.
+                content = [
+                    part
+                    for part in content
+                    if not (
+                        isinstance(part, ThinkingContent)
+                        and part.blocks
+                        and all(
+                            isinstance(block, ReasoningItemBlock)
+                            for block in part.blocks
+                        )
+                    )
+                ]
             copy.content = content
             if copy.content:
                 result.append(copy)

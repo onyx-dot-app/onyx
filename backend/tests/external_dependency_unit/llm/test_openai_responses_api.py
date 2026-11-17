@@ -19,15 +19,22 @@ behavior of that bridge that cannot be reached with mocks:
 
 import json
 import warnings
+from typing import Any
+from unittest.mock import patch
 
+import httpx
 import pytest
 from pydantic import JsonValue
 
+from onyx.agents.execution_records import messages_for_model
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.litellm_singleton import litellm
 from onyx.llm.model_request import ChatCompletionMessage, UserMessage
+from onyx.llm.models import GenerationOptions, GenerationRequest, ReasoningItemBlock
+from onyx.llm.models import UserMessage as AppUserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from tests.common.models import CI_OPENAI_MODEL
+from tests.unit.onyx.agents.fakes import collect_generation
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
@@ -301,3 +308,58 @@ def test_streaming_emits_no_pydantic_serializer_warnings(
         "monkey patches for usage format / assembled streaming response are "
         f"not silencing them: {[str(w.message) for w in serializer_warnings]!r}"
     )
+
+
+@pytest.mark.secrets(TestSecret.OPENAI_API_KEY)
+def test_reasoning_item_from_one_turn_is_accepted_on_the_next(
+    test_secrets: dict[TestSecret, str],
+) -> None:
+    """A streamed turn keeps the reasoning item OpenAI returned, and the next
+    turn replays it with its encrypted content in a request OpenAI accepts."""
+    llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
+    question = AppUserMessage(
+        content=(
+            "Plan a 3-day trip to Tokyo for someone with a peanut allergy on a "
+            "$2000 budget. Keep the answer under 120 words."
+        )
+    )
+    first = collect_generation(
+        list(
+            llm.stream(
+                GenerationRequest(
+                    messages=[question], options=GenerationOptions(max_tokens=4000)
+                )
+            )
+        )
+    )
+    items = [
+        block
+        for block in first.thinking_blocks or []
+        if isinstance(block, ReasoningItemBlock)
+    ]
+    assert items, f"Expected a reasoning item in {first.content!r}"
+    assert items[0].encrypted_content
+
+    bodies: list[dict[str, Any]] = []
+    original_send = httpx.Client.send
+
+    def send(
+        client: httpx.Client, request: httpx.Request, **kwargs: Any
+    ) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return original_send(client, request, **kwargs)
+
+    history = messages_for_model(
+        [question, first, AppUserMessage(content="Which city was that? One word.")]
+    )
+    with patch.object(httpx.Client, "send", send):
+        second = llm.invoke(
+            GenerationRequest(
+                messages=history, options=GenerationOptions(max_tokens=400)
+            )
+        )
+
+    assert "tokyo" in second.text.lower()
+    replayed = [item for item in bodies[-1]["input"] if item["type"] == "reasoning"]
+    assert replayed[0]["id"] == items[0].id
+    assert replayed[0]["encrypted_content"] == items[0].encrypted_content
