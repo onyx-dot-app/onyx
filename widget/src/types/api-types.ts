@@ -39,6 +39,8 @@ export type PacketType =
   | IntermediateReportStart
   | ToolApprovalRequest
   | ToolApprovalResolved
+  | ToolQuestionRequest
+  | ToolQuestionResolved
   | Stop
   | OverallStop
   | ErrorPacket;
@@ -184,6 +186,49 @@ export interface ToolApprovalResolved {
   outcome: string;
 }
 
+export interface ToolQuestionOption {
+  label: string;
+  // What the choice means or changes
+  description: string;
+}
+
+export interface ToolQuestion {
+  id: string;
+  // A short label, at most 12 characters
+  header: string;
+  question: string;
+  options: ToolQuestionOption[];
+}
+
+/** The user's answer to one question: one of its options, a note, or both. */
+export interface ToolQuestionAnswer {
+  question_id: string;
+  option_label?: string | null;
+  user_note?: string | null;
+}
+
+/** A question call of the root agent waits for the user's answers. */
+export interface ToolQuestionRequest {
+  type: "tool_question_request";
+  question_request_id: string;
+  tool_call_id: string;
+  questions: ToolQuestion[];
+}
+
+/**
+ * How a question call ended: answered on its card (`answers`), by a message
+ * that the user typed in the chat (`message`), or cancelled.
+ */
+export interface ToolQuestionResolved {
+  type: "tool_question_resolved";
+  question_request_id: string;
+  // answered | cancelled; anything else is ignored
+  outcome: string;
+  answered_via?: "card" | "message" | null;
+  answers?: ToolQuestionAnswer[] | null;
+  message?: string | null;
+}
+
 /** A running stream and the responses it writes. */
 export interface ChatStream {
   stream_id: number;
@@ -196,6 +241,17 @@ export interface ApprovalDecisionResponse {
   decided_via: string;
   // The stream that continues the response; null while other requests still
   // wait, or for a background agent's request, which continues without one
+  continuation: ChatStream | null;
+}
+
+/** The body of a question request's answers: card answers or a typed message. */
+export type QuestionAnswersRequest =
+  | { answers: ToolQuestionAnswer[] }
+  | { message: string };
+
+export interface QuestionAnswersResponse {
+  // The stream that continues the response; null while other requests or
+  // questions of the response still wait
   continuation: ChatStream | null;
 }
 

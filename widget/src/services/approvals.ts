@@ -6,7 +6,6 @@ import type {
   ApprovalDecisionResponse,
   ToolApprovalRequest,
 } from "@/types/api-types";
-import type { ChatMessage } from "@/types/widget-types";
 
 /** `error_code` of the 409 a send gets while the chat waits for a decision. */
 export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
@@ -99,23 +98,18 @@ export function decidedStatus(
 }
 
 /**
- * The first root agent request that still waits for this user. Subagent
- * requests never hold the chat.
+ * A root agent request that still waits for this user. Subagent requests
+ * never hold the chat.
  */
-export function findPendingApproval(
-  messages: ChatMessage[],
+export function holdsChat(
+  entry: ApprovalEntry,
   localApprovals: ReadonlyMap<string, LocalApproval>
-): ApprovalEntry | null {
-  for (const message of messages) {
-    const pending = message.approvals?.find(
-      (entry) =>
-        !entry.request.agent_name &&
-        approvalStatus(entry, localApprovals.get(entry.request.approval_id)) ===
-          "pending"
-    );
-    if (pending) return pending;
-  }
-  return null;
+): boolean {
+  return (
+    !entry.request.agent_name &&
+    approvalStatus(entry, localApprovals.get(entry.request.approval_id)) ===
+      "pending"
+  );
 }
 
 /** The one-line record of a decided request, or null while it waits. */
