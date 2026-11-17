@@ -1276,7 +1276,12 @@ export class OnyxApiClient {
   }
 
   async listOpenApiTools(): Promise<
-    Array<{ id: number; name: string; description: string }>
+    Array<{
+      id: number;
+      name: string;
+      description: string;
+      permissions: Record<string, boolean>;
+    }>
   > {
     const response = await this.get("/tool/openapi");
     return await this.handleResponse(response, "Failed to list OpenAPI tools");
