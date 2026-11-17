@@ -1,7 +1,6 @@
 from collections.abc import Collection
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -14,16 +13,7 @@ from onyx.db.models import (
     Persona__Plugin,
     Plugin__Integration,
 )
-
-
-class PolicyRows(BaseModel):
-    """The stored policy rows of one integration, by action key. The empty
-    key is the default row."""
-
-    model_config = ConfigDict(frozen=True)
-
-    admin: dict[str, IntegrationActionPolicyValue]
-    user: dict[str, IntegrationActionPolicyValue]
+from onyx.integrations.models import PolicyRows
 
 
 def get_policy_rows(
@@ -98,24 +88,3 @@ def get_chat_session_persona_id(
     return db_session.scalar(
         select(ChatSession.persona_id).where(ChatSession.id == chat_session_id)
     )
-
-
-def list_persona_link_settings_for_integration(
-    db_session: Session, persona_id: int, integration_id: int
-) -> list[dict[str, object]]:
-    """The raw ``action_settings`` of each link of the agent whose plugin
-    holds the integration."""
-    return [
-        dict(settings)
-        for settings in db_session.scalars(
-            select(Persona__Plugin.action_settings)
-            .join(
-                Plugin__Integration,
-                Plugin__Integration.plugin_id == Persona__Plugin.plugin_id,
-            )
-            .where(
-                Persona__Plugin.persona_id == persona_id,
-                Plugin__Integration.integration_id == integration_id,
-            )
-        ).all()
-    ]

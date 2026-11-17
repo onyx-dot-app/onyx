@@ -205,7 +205,10 @@ class MCPTool(Tool):
                     denylisted,
                 )
             resolved = resolve_mcp_call_auth(
-                self._integration_id, self._acting_user_id, self._transport
+                self._integration_id,
+                self._acting_user_id,
+                self._transport,
+                self._server_url,
             )
             if isinstance(resolved, ConnectionProblem):
                 logger.warning(

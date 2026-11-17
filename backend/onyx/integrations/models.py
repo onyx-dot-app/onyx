@@ -133,6 +133,16 @@ class ActionSettings(BaseModel):
         return self.actions.get(action_key, self.default)
 
 
+class PolicyRows(BaseModel):
+    """The stored policy rows of one integration, by action key. The empty
+    key is the default row."""
+
+    model_config = ConfigDict(frozen=True)
+
+    admin: dict[str, IntegrationActionPolicyValue]
+    user: dict[str, IntegrationActionPolicyValue]
+
+
 class CallCredentials(BaseModel):
     """What one call of an integration action sends."""
 
@@ -147,3 +157,6 @@ class CallCredentials(BaseModel):
     connection_user_id: UUID | None
     # The rendered header template, with the bearer token of a token method.
     headers: dict[str, str]
+    # The fingerprint of the stored secret of that connection, so a late
+    # rejection does not mark a key that replaced it.
+    secret_fingerprint: str | None = None

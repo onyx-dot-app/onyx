@@ -230,6 +230,54 @@ def test_an_agent_default_of_blocked_offers_only_listed_actions(
     assert set(tools) == {f"mcp__{mcp.id}__crm__update"}
 
 
+def test_a_migrated_openapi_integration_with_no_actions_offers_its_operations(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    api = _openapi(db_session, integration_ids, sync_actions=False)
+    plugin = _plugin(db_session, [api])
+
+    tools = _build(db_session, user, _configuration({plugin.id: {}}))
+
+    assert {f"custom__{api.id}__listOrders", f"custom__{api.id}__createOrder"} <= set(
+        tools
+    )
+
+
+def test_the_user_token_wins_over_a_literal_authorization_header(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    """A migrated OpenAPI tool keeps its static headers as literal template
+    values. The user's token replaced a static Authorization header before."""
+    literal = _openapi(
+        db_session,
+        integration_ids,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        header_template={"Authorization": "Bearer static", "X-Team": "blue"},
+    )
+    templated = _openapi(
+        db_session,
+        integration_ids,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        header_template={"Authorization": "token {access_token}"},
+    )
+    for integration in (literal, templated):
+        add_connection(
+            db_session, integration, user.id, ConnectionSecret(access_token="mine")
+        )
+    plugin = _plugin(db_session, [literal, templated])
+
+    tools = _build(db_session, user, _configuration({plugin.id: {}}))
+
+    literal_tool = tools[f"custom__{literal.id}__listOrders"]
+    templated_tool = tools[f"custom__{templated.id}__listOrders"]
+    assert isinstance(literal_tool, CustomTool)
+    assert isinstance(templated_tool, CustomTool)
+    assert literal_tool.headers == {"Authorization": "Bearer mine", "X-Team": "blue"}
+    assert templated_tool.headers == {"Authorization": "token mine"}
+
+
 def test_an_integration_with_no_usable_credential_offers_nothing(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:

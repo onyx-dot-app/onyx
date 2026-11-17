@@ -21,15 +21,18 @@ from uuid import UUID
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.enums import IntegrationActionPolicyValue
 from onyx.db.integration import list_integration_actions
 from onyx.db.integration_policy import (
     get_chat_session_persona_id,
     get_policy_rows,
     get_session_granted_actions,
-    list_persona_link_settings_for_integration,
+    list_persona_plugin_links,
+    list_plugin_integrations,
 )
 from onyx.db.models import Integration, IntegrationAction
+from onyx.db.plugin_access import load_user_plugin_states
 from onyx.integrations.models import (
     ActionSettings,
     ApprovalMode,
@@ -155,6 +158,35 @@ def resolve_action_policies(
     return policies
 
 
+def agent_plugin_settings(
+    db_session: Session,
+    user_id: UUID,
+    persona_id: int,
+    links: Mapping[UUID, ActionSettings],
+    *,
+    published_only: bool = False,
+) -> dict[UUID, ActionSettings | None]:
+    """The plugins whose integrations a chat of the agent uses, with the
+    settings of the agent for each. The default agent uses each plugin the
+    user runs; another agent uses each linked plugin the user can see.
+    ``published_only`` keeps only the Organization library."""
+    states = load_user_plugin_states([user_id], db_session)
+    if published_only:
+        states = [state for state in states if state.published]
+    if persona_id == DEFAULT_PERSONA_ID:
+        return {
+            state.plugin_id: links.get(state.plugin_id)
+            for state in states
+            if state.enabled
+        }
+    visible = {state.plugin_id for state in states}
+    return {
+        plugin_id: settings
+        for plugin_id, settings in links.items()
+        if plugin_id in visible
+    }
+
+
 def resolve_chat_action_policy(
     db_session: Session,
     *,
@@ -165,21 +197,33 @@ def resolve_chat_action_policy(
 ) -> EffectivePolicy:
     """The current policy of one action for the agent of a chat, before the
     chat grants. The approval check uses it to see that an action is not
-    Blocked now."""
+    Blocked now. It reads the plugins that chat tool construction reads, so
+    a plugin the user cannot use does not change the result."""
     persona_id = get_chat_session_persona_id(db_session, chat_session_id)
-    raw_links = (
-        list_persona_link_settings_for_integration(
-            db_session, persona_id, integration.id
+    link_settings: list[ActionSettings | None] = []
+    if persona_id is not None:
+        settings_by_plugin = agent_plugin_settings(
+            db_session,
+            user_id,
+            persona_id,
+            {
+                link.plugin_id: parse_action_settings(link.action_settings)
+                for link in list_persona_plugin_links(db_session, persona_id)
+            },
         )
-        if persona_id is not None
-        else []
-    )
+        link_settings = [
+            settings_by_plugin[plugin_id]
+            for plugin_id, held in list_plugin_integrations(
+                db_session, list(settings_by_plugin)
+            )
+            if held.id == integration.id
+        ]
     return resolve_action_policies(
         db_session,
         integration=integration,
         action_keys=[action_key],
         user_id=user_id,
-        link_settings=[parse_action_settings(raw) for raw in raw_links],
+        link_settings=link_settings,
         approval_mode=ApprovalMode.INTERACTIVE,
         chat_session_id=None,
     )[action_key]

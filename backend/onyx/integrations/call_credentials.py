@@ -1,5 +1,6 @@
 """The one credential check for a chat call of an integration action."""
 
+from collections.abc import Mapping
 from uuid import UUID
 
 from mcp.client.auth import OAuthClientProvider
@@ -18,13 +19,16 @@ from onyx.db.integration_connection import (
     mark_connection_needs_reconnect__no_commit,
 )
 from onyx.db.models import Integration, User
+from onyx.db.users import fetch_user_by_id
 from onyx.integrations.connection_models import (
     SIGN_IN_REJECTED_REASON,
     ConnectionState,
+    connection_secret_fingerprint,
 )
 from onyx.integrations.connections import (
     ConnectionProblem,
     MissingHeaderValueError,
+    has_placeholder,
     render_headers,
     resolve_connection,
 )
@@ -40,6 +44,15 @@ from onyx.server.features.mcp.oauth import (
 _TOKEN_METHODS = frozenset(
     {IntegrationAuthMethod.OAUTH2, IntegrationAuthMethod.ONYX_LOGIN}
 )
+
+
+def _fills_authorization(header_template: Mapping[str, str] | None) -> bool:
+    """Whether the template fills Authorization from a placeholder, such as
+    ``token {access_token}``."""
+    return any(
+        name.lower() == "authorization" and has_placeholder(value)
+        for name, value in (header_template or {}).items()
+    )
 
 
 def resolve_call_credentials(
@@ -69,12 +82,18 @@ def resolve_call_credentials(
         integration.auth_method in _TOKEN_METHODS
         and secret is not None
         and secret.access_token
-        and not any(name.lower() == "authorization" for name in headers)
+        and not _fills_authorization(integration.header_template)
     ):
-        # An integration with no template still sends its token.
+        # The user's token wins over a literal Authorization header, as it
+        # did for the old OpenAPI tools.
         headers = merge_mcp_headers(
             headers, {"Authorization": f"Bearer {secret.access_token}"}
         )
+    connection = (
+        get_connection_by_id(db_session, resolved.connection_id)
+        if resolved.connection_id is not None
+        else None
+    )
     return CallCredentials(
         integration_id=integration.id,
         auth_method=integration.auth_method,
@@ -86,23 +105,45 @@ def resolve_call_credentials(
             else None
         ),
         headers=headers,
+        secret_fingerprint=(
+            connection_secret_fingerprint(connection)
+            if connection is not None
+            else None
+        ),
     )
 
 
 def resolve_mcp_call_auth(
-    integration_id: int, acting_user_id: UUID | None, transport: MCPTransport | None
+    integration_id: int,
+    acting_user_id: UUID | None,
+    transport: MCPTransport | None,
+    server_url: str,
 ) -> tuple[CallCredentials, OAuthClientProvider | None] | ConnectionProblem:
     """``resolve_call_credentials`` and ``mcp_oauth_provider`` in a session of
-    their own, for an MCP call that runs after construction."""
+    their own, for an MCP call that runs after construction. ``server_url`` is
+    the URL the call goes to; when the server moved since construction, the
+    credential is not sent."""
     with get_session_with_current_tenant() as db_session:
         integration = get_integration_by_id(integration_id, db_session)
-        if integration is None or not integration.enabled:
+        server = (
+            get_mcp_server_for_integration(integration_id, db_session)
+            if integration is not None
+            else None
+        )
+        if (
+            integration is None
+            or not integration.enabled
+            or server is None
+            or server.server_url != server_url
+        ):
             return ConnectionProblem(
                 code=ConnectionState.NOT_SET_UP,
                 reason="The integration is no longer available.",
             )
         acting_user = (
-            db_session.get(User, acting_user_id) if acting_user_id is not None else None
+            fetch_user_by_id(db_session, acting_user_id)
+            if acting_user_id is not None
+            else None
         )
         credentials = resolve_call_credentials(integration, acting_user, db_session)
         if isinstance(credentials, ConnectionProblem):
@@ -138,15 +179,22 @@ def mcp_oauth_provider(
 
 def mark_api_key_rejected(credentials: CallCredentials) -> None:
     """Set Needs reconnect on an API key connection that the service
-    rejected. OAuth2 connections are left to the refresh."""
+    rejected, when the row still holds the key the call sent. OAuth2
+    connections are left to the refresh."""
     if (
         credentials.auth_method is not IntegrationAuthMethod.API_KEY
         or credentials.connection_id is None
     ):
         return
     with get_session_with_current_tenant() as db_session:
-        connection = get_connection_by_id(db_session, credentials.connection_id)
-        if connection is None:
+        connection = get_connection_by_id(
+            db_session, credentials.connection_id, for_update=True
+        )
+        if (
+            connection is None
+            or connection_secret_fingerprint(connection)
+            != credentials.secret_fingerprint
+        ):
             return
         mark_connection_needs_reconnect__no_commit(
             db_session, connection, SIGN_IN_REJECTED_REASON
