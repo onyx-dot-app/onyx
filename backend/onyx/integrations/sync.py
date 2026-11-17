@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.integration import (
     list_integration_actions,
+    lock_integration__no_commit,
     replace_integration_actions__no_commit,
 )
 from onyx.db.models import Integration
@@ -11,7 +12,10 @@ from onyx.integrations.registry import get_kind_handler
 def sync_integration_actions__no_commit(
     integration: Integration, db_session: Session
 ) -> None:
-    """A stored source that the kind no longer finds loses its rows."""
+    """A stored source that the kind no longer finds loses its rows. The kind
+    settings are read under the integration lock, so a sync that started
+    earlier cannot write an older action list over a newer one."""
+    lock_integration__no_commit(integration.id, db_session)
     handler = get_kind_handler(integration.kind)
     specs = handler.discover_actions(integration, db_session)
     stored_sources = {

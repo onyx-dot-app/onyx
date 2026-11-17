@@ -16,6 +16,7 @@ from mcp.types import ToolAnnotations
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     ActionPolicy,
     ExternalAppType,
@@ -365,6 +366,32 @@ def test_openapi_sync_writes_updates_and_deletes(
     assert after["listOrders"][0] == first["listOrders"][0]
     assert after["listOrders"][2] == "List all orders"
     assert after["createOrder"] == first["createOrder"]
+
+
+def test_openapi_sync_reads_the_settings_committed_before_its_lock(
+    db_session: Session, created: Created
+) -> None:
+    integration, tool = _openapi_tool(db_session, created)
+    _sync(db_session, integration)
+    # This session holds the old schema in memory.
+    assert tool.openapi_schema is not None
+    assert "/orders/{order_id}" in tool.openapi_schema["paths"]
+
+    with get_session_with_current_tenant() as other_session:
+        other_tool = other_session.get(Tool, tool.id)
+        other_integration = other_session.get(Integration, integration.id)
+        if other_tool is None or other_integration is None:
+            raise AssertionError("rows are gone")
+        schema = deepcopy(other_tool.openapi_schema)
+        if schema is None:
+            raise AssertionError("tool has no schema")
+        del schema["paths"]["/orders/{order_id}"]
+        other_tool.openapi_schema = schema
+        _sync(other_session, other_integration)
+
+    _sync(db_session, integration)
+
+    assert set(_snapshot(db_session, integration.id)) == {"listOrders", "createOrder"}
 
 
 # External apps

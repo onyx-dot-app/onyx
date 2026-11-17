@@ -81,6 +81,16 @@ def _apply_spec(action: IntegrationAction, spec: IntegrationActionSpec) -> None:
     action.path_template = spec.path_template
 
 
+def lock_integration__no_commit(integration_id: int, db_session: Session) -> None:
+    """Locks the integration row, then expires the session, so the reads that
+    follow see what other transactions committed before the lock."""
+    db_session.flush()
+    db_session.execute(
+        select(Integration.id).where(Integration.id == integration_id).with_for_update()
+    )
+    db_session.expire_all()
+
+
 def replace_integration_actions__no_commit(
     integration_id: int,
     source: IntegrationActionSource,
