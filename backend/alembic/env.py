@@ -538,8 +538,10 @@ def run_migrations_online() -> None:
             context.configure(
                 connection=connection,
                 target_metadata=target_metadata,
-                version_table_schema=schema_name,
-                include_schemas=True,
+                version_table_schema=(
+                    None if schema_name == POSTGRES_DEFAULT_SCHEMA else schema_name
+                ),
+                include_schemas=schema_name != POSTGRES_DEFAULT_SCHEMA,
                 compare_type=True,
                 compare_server_default=True,
                 script_location=config.get_main_option("script_location"),

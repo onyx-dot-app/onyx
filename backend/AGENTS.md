@@ -149,6 +149,9 @@ to ask the user to restart the celery worker. There is no auto-restart on code-c
 
 Run all `alembic` commands from `backend/` (where `alembic.ini` lives) through `uv run`.
 
+CI runs the pytest-alembic built-ins for both migration chains against fresh Postgres databases.
+To run them locally from `backend/`, use `uv run pytest -m alembic tests/integration/tests/migrations/`.
+
 ### Running Migrations
 
 ```bash
