@@ -176,12 +176,12 @@ test("the API key form saves the credential fields", async () => {
   );
   const dialog = await screen.findByRole("dialog");
   await u.click(
-    within(dialog).getByRole("button", { name: copy.credentials.submit })
+    within(dialog).getByRole("button", { name: copy.credentials.submit.label })
   );
   expect(within(dialog).getByText(copy.credentials.required)).toBeVisible();
   await u.type(within(dialog).getByLabelText("API Token"), "secret-1");
   await u.click(
-    within(dialog).getByRole("button", { name: copy.credentials.submit })
+    within(dialog).getByRole("button", { name: copy.credentials.submit.label })
   );
   await waitFor(() =>
     expect(

@@ -129,7 +129,9 @@ test("filters by skills and integrations and searches", async () => {
   render(<MemberPluginsPage />);
   await screen.findByRole("button", { name: "Open Linear" });
 
-  await user.click(screen.getByRole("button", { name: copy.filters.skills }));
+  await user.click(
+    screen.getByRole("button", { name: copy.filters.skills.label })
+  );
   expect(
     screen.getByRole("button", { name: "Open report-writer" })
   ).toBeInTheDocument();
@@ -138,15 +140,17 @@ test("filters by skills and integrations and searches", async () => {
   ).not.toBeInTheDocument();
 
   await user.click(
-    screen.getByRole("button", { name: copy.filters.integrations })
+    screen.getByRole("button", { name: copy.filters.integrations.label })
   );
   expect(
     screen.queryByRole("button", { name: "Open report-writer" })
   ).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Open Linear" })).toBeVisible();
 
-  await user.click(screen.getByRole("button", { name: copy.filters.all }));
-  await user.type(screen.getByLabelText(copy.search), "weekly");
+  await user.click(
+    screen.getByRole("button", { name: copy.filters.all.label })
+  );
+  await user.type(screen.getByLabelText(copy.search.placeholder), "weekly");
   expect(screen.getByRole("button", { name: "Open Reports" })).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Open Linear" })
@@ -170,7 +174,7 @@ test("a member with manage:actions adds a personal integration", async () => {
   const user = setupUser();
   render(<MemberPluginsPage />);
   await user.click(
-    await screen.findByRole("button", { name: copy.addIntegration })
+    await screen.findByRole("button", { name: copy.addIntegration.label })
   );
   expect(mockModalProps).toHaveBeenCalledWith(
     expect.objectContaining({ canChooseOrganization: false })
@@ -185,6 +189,6 @@ test("a member without manage:actions cannot add an integration", async () => {
   render(<MemberPluginsPage />);
   await screen.findByRole("button", { name: "Open Linear" });
   expect(
-    screen.queryByRole("button", { name: copy.addIntegration })
+    screen.queryByRole("button", { name: copy.addIntegration.label })
   ).not.toBeInTheDocument();
 });

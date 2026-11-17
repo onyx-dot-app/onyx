@@ -23,6 +23,7 @@ import {
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { refreshSkillLists } from "@/lib/skills/cache";
+import { locationKey } from "@/app/app/services/submitLocation";
 
 interface SetupCardProps {
   // Correlation id for the parked `connect_app` request (from the packet).
@@ -36,11 +37,10 @@ interface SetupCardProps {
 }
 
 /**
- * Connect-app card rendered from a `connect_app_request` packet. "Connect" runs
- * the integration OAuth sign-in in a new tab (or the credential form for token
- * apps); finishing posts a
- * "connected" decision (→ the parked agent tool resumes with access), "Not now"
- * posts "declined" (→ the agent gets a rejection and picks an alternative).
+ * Connect-app card rendered from a `connect_app_request` packet. Finishing
+ * "Connect" posts a "connected" decision (the parked agent tool resumes with
+ * access). "Not now" posts "declined" (the agent gets a rejection and picks an
+ * alternative).
  */
 export default function SetupCard({
   requestId,
@@ -129,11 +129,10 @@ export default function SetupCard({
     }
 
     setBusy(true);
-    const query = searchParams.toString();
     try {
       const result = await connectWithOAuth(
         userApp.integration_id,
-        query ? `${pathname}?${query}` : pathname
+        locationKey(pathname, searchParams.toString())
       );
       if (!mountedRef.current) return;
       setBusy(false);

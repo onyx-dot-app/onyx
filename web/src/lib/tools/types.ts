@@ -53,8 +53,6 @@ export interface ToolSnapshot {
   chat_selectable: boolean;
   agent_creation_selectable: boolean;
   default_enabled: boolean;
-  default_chat_enabled?: boolean | null;
-  user_enabled_in_chat?: boolean;
   default_action_policy?: ActionPolicy | null;
 
   // Server-stamped affordance map; fail-closed (absent = denied).

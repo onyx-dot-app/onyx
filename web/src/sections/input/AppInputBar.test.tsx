@@ -20,10 +20,7 @@ import { useToolConfiguration } from "@/lib/tools/hooks";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
 import { Button } from "@opal/components";
-import {
-  memberTool,
-  storedMcpTool,
-} from "@/sections/plugins/__tests__/memberPluginFixtures";
+import type { ToolSnapshot } from "@/lib/tools/types";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { ChatState } from "@/app/app/types";
 import type { PickerSections } from "@/lib/skills/picker";
@@ -35,6 +32,34 @@ import {
   MAX_MENTIONS_PER_MESSAGE,
   type ComposedMessage,
 } from "@/lib/chat/types";
+
+function memberTool(overrides: Partial<ToolSnapshot> = {}): ToolSnapshot {
+  return {
+    id: 7,
+    name: "Reports API",
+    display_name: "Reports API",
+    description: "Read weekly reports and project summaries.",
+    definition: {},
+    custom_headers: [],
+    in_code_tool_id: null,
+    passthrough_auth: false,
+    enabled: true,
+    chat_selectable: true,
+    agent_creation_selectable: true,
+    default_enabled: false,
+    permissions: {},
+    ...overrides,
+  };
+}
+
+const storedMcpTool = memberTool({
+  id: 71,
+  name: "search_issues",
+  display_name: "Search issues",
+  description: "Find issues in the projects you can access.",
+  definition: null,
+  mcp_server_id: 7,
+});
 
 jest.mock("@/lib/hooks", () => ({
   useLlmManager: () => ({ isLoadingProviders: true }),

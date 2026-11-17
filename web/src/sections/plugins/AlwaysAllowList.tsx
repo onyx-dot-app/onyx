@@ -36,7 +36,7 @@ export default function AlwaysAllowList({
       <Section alignItems="start" gap={2} height="auto">
         <MessageCard variant="error" title={t("loadFailed")} />
         <Button prominence="secondary" onClick={() => void mutate()}>
-          {t("retry")}
+          {t("retry.label")}
         </Button>
       </Section>
     );
@@ -80,7 +80,7 @@ export default function AlwaysAllowList({
             rightChildren={
               asks ? (
                 <InputSwitch
-                  aria-label={t("label", { name: action.display_name })}
+                  aria-label={t("switch.label", { name: action.display_name })}
                   checked={action.user_policy === "allow"}
                   disabled={savingKey !== null}
                   onCheckedChange={(checked) => void change(action, checked)}

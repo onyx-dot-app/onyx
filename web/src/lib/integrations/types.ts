@@ -35,7 +35,6 @@ export interface IntegrationPluginRef {
   installation_policy: InstallationPolicy | null;
 }
 
-/** A plugin ref on the member routes, with the user's on/off of the plugin. */
 export interface MemberPluginRef extends IntegrationPluginRef {
   enabled: boolean;
 }

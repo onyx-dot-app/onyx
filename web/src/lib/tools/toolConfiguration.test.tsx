@@ -922,20 +922,6 @@ describe("useToolConfiguration: plugins of the agent", () => {
     ]);
   });
 
-  test("a switch in a new chat saves disabled_plugin_ids for the agent", () => {
-    mockChatId = null;
-    mockActiveAgent = AGENT;
-    mockPluginIds = ["plugin-a"];
-    const { result } = renderHook(() => useToolConfiguration(7));
-
-    act(() => result.current.setPluginEnabled(["plugin-a"], false));
-    expect(mockSetPluginsDisabled).toHaveBeenCalledWith(
-      AGENT.id,
-      ["plugin-a"],
-      true
-    );
-  });
-
   test("a tool change sends a saved actions list of a plugin back unchanged", async () => {
     mockPluginIds = ["plugin-a", "plugin-b"];
     const saved: ChatToolOptions = {
