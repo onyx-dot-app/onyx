@@ -1696,6 +1696,7 @@ pytest==9.0.3 \
     #   pytest-mock
     #   pytest-playwright
     #   pytest-repeat
+    #   pytest-split
     #   pytest-xdist
 pytest-alembic==0.12.1 \
     --hash=sha256:4e2b477d93464d0cfe80487fdf63922bfd22f29153ca980c1bccf1dbf833cf12 \
@@ -1719,6 +1720,9 @@ pytest-playwright==0.7.2 \
 pytest-repeat==0.9.4 \
     --hash=sha256:c1738b4e412a6f3b3b9e0b8b29fcd7a423e50f87381ad9307ef6f5a8601139f3 \
     --hash=sha256:d92ac14dfaa6ffcfe6917e5d16f0c9bc82380c135b03c2a5f412d2637f224485
+pytest-split==0.11.0 \
+    --hash=sha256:899d7c0f5730da91e2daf283860eb73b503259cb416851a65599368849c7f382 \
+    --hash=sha256:8ebdb29cc72cc962e8eb1ec07db1eeb98ab25e215ed8e3216f6b9fc7ce0ec2b5
 pytest-xdist==3.8.0 \
     --hash=sha256:202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88 \
     --hash=sha256:7e578125ec9bc6050861aa93f2d59f1d8d085595d6551c2c90b6f4fad8d3a9f1
