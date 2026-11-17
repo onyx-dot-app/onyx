@@ -16,7 +16,7 @@ from ee.onyx.db.usage_export import (
 from ee.onyx.server.reporting.usage_export_models import USAGE_REPORT_MEDIA_TYPE
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.constants import CELERY_USER_REQUESTED_TASK_EXPIRES, OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -55,7 +55,7 @@ def generate_report(
         )
 
     tenant_id = get_current_tenant_id()
-    client_app.send_task(
+    client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
         OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
         kwargs={
             "tenant_id": tenant_id,
@@ -64,7 +64,6 @@ def generate_report(
             "period_to": params.period_to,
             "report_id": str(params.report_id) if params.report_id else None,
         },
-        expires=CELERY_USER_REQUESTED_TASK_EXPIRES,
     )
 
     return None

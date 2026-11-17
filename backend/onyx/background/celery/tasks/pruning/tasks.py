@@ -27,7 +27,6 @@ from onyx.background.celery.tasks.docprocessing.utils import IndexingCallbackBas
 from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING, JOB_TIMEOUT
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
-    CELERY_PRUNING_GENERATOR_TASK_EXPIRES,
     CELERY_PRUNING_LOCK_TIMEOUT,
     CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
     DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
@@ -533,7 +532,7 @@ def try_creating_prune_generator_task(
         )
         redis_connector.prune.set_fence(payload)
 
-        result = celery_app.send_task(
+        result = celery_app.send_task(  # celery-expires: allow (existing send, expiry pending)
             OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
             kwargs={
                 "cc_pair_id": cc_pair.id,
@@ -544,7 +543,6 @@ def try_creating_prune_generator_task(
             queue=OnyxCeleryQueues.CONNECTOR_PRUNING,
             task_id=custom_task_id,
             priority=OnyxCeleryPriority.LOW,
-            expires=CELERY_PRUNING_GENERATOR_TASK_EXPIRES,
             headers={"enqueued_at": time.time()},
         )
 
