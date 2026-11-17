@@ -7,6 +7,8 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.decisions.models import (
     ChoiceAnswer,
     DecisionAnswer,
@@ -196,3 +198,30 @@ def test_build_triage_clients_tries_openai_then_zoom(
         (DecisionProvider.ZOOM_AI, "zoom-decisions-pro"),
     ]
     assert len(clients) == 1
+
+
+def test_a_full_refusal_keeps_nothing_even_when_rules_would() -> None:
+    refusing = _client()
+    refusing.decide.side_effect = _refuses_everything
+    # The rules alone would keep this chunk: early, with a number.
+    chunk = _chunk("address", 0, "Alice's home address is 25 Oak Street.")
+
+    assert triage.triage_chunks([chunk], [refusing]) == []
+
+
+@pytest.mark.parametrize(
+    "error",
+    [OnyxError(OnyxErrorCode.RATE_LIMITED, "over the cost limit"), ValueError("bad")],
+    ids=["cost_limit", "set_up_wrong"],
+)
+def test_build_triage_clients_skips_a_provider_it_cannot_use(
+    monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    def get_client(provider: DecisionProvider, model: str) -> MagicMock:  # noqa: ARG001
+        if provider == DecisionProvider.OPENAI:
+            raise error
+        return MagicMock()
+
+    monkeypatch.setattr(triage, "get_decision_client_for_provider", get_client)
+
+    assert len(triage.build_triage_clients()) == 1
