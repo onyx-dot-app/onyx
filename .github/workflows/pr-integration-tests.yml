@@ -283,7 +283,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
     outputs:
-      digest: ${{ steps.build.outputs.digest }}
+      digest: ${{ steps.prebuilt.outputs.digest || steps.build.outputs.digest }}
     runs-on:
       [
         runs-on,
@@ -307,8 +307,19 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
+      - name: Find a prebuilt Devcontainer image
+        id: prebuilt
+        uses: ./.github/actions/prebuilt-image
+        with:
+          name: devcontainer
+          context: .devcontainer
+          dockerfile: .devcontainer/Dockerfile
+          build-config: BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          image-repo: ${{ env.RUNS_ON_ECR_CACHE }}
+
       - name: Build and push Devcontainer Docker image
         id: build
+        if: steps.prebuilt.outputs.digest == ''
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: .devcontainer
@@ -334,6 +345,14 @@ jobs:
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ runner.arch }},mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+      - name: Save the Devcontainer image digest
+        if: steps.build.outcome == 'success'
+        uses: ./.github/actions/prebuilt-image
+        with:
+          name: devcontainer
+          save-key: ${{ steps.prebuilt.outputs.save-key }}
+          save-digest: ${{ steps.build.outputs.digest }}
 
   integration-tests:
     needs:
