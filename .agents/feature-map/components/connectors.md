@@ -181,6 +181,10 @@ encryption. This component only consumes the pairing at run time (§4).
 - **`HierarchyNode`**: a folder/space/page structural node (`raw_node_id`,
   `raw_parent_id`, `display_name`, `node_type`, `external_access`), distinct
   from the SQLAlchemy `HierarchyNode` row it becomes during docprocessing.
+  A run that does not read permissions gives `external_access=None`, never an
+  invented public or empty access. `onyx/db/hierarchy.py:upsert_hierarchy_node`
+  then keeps the stored node access. A new node is private, or public on a
+  PUBLIC pair.
 - **`ConnectorCheckpoint`**: base class is just `{has_more: bool}`. Real
   connectors subclass it with whatever cursor state they need; see the case
   studies in §4. Checkpoints must round-trip through
