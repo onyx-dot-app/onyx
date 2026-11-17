@@ -128,7 +128,8 @@ def _create_mcp_client_function_runner(
             if len(client_tuple) == 3:
                 read, write, _ = client_tuple
             elif len(client_tuple) == 2:
-                assert isinstance(client_tuple, tuple)  # for type-checking
+                if not isinstance(client_tuple, tuple):
+                    raise TypeError("MCP client did not return a tuple.")
                 read, write = client_tuple
             else:
                 raise ValueError(

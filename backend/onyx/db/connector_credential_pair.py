@@ -485,8 +485,8 @@ def get_connector_credential_pairs_for_user(
             to avoid fetching large JSONB blobs when they aren't needed.
         eager_load_creator: If True, loads each pair's creator in one query.
     """
-    if eager_load_user:
-        assert eager_load_credential, (
+    if eager_load_user and not eager_load_credential:
+        raise ValueError(
             "eager_load_credential must be True if eager_load_user is True"
         )
     stmt = select(ConnectorCredentialPair).distinct()

@@ -130,7 +130,8 @@ async def get_license_payload(
     """
     license_data = _extract_license_from_header(authorization, required=True)
     # license_data is guaranteed non-None when required=True
-    assert license_data is not None
+    if license_data is None:
+        raise RuntimeError("License data is missing after a required header check.")
     return verify_license_auth(license_data, allow_expired=False)
 
 
@@ -143,7 +144,8 @@ async def get_license_payload_allow_expired(
     """
     license_data = _extract_license_from_header(authorization, required=True)
     # license_data is guaranteed non-None when required=True
-    assert license_data is not None
+    if license_data is None:
+        raise RuntimeError("License data is missing after a required header check.")
     return verify_license_auth(license_data, allow_expired=True)
 
 

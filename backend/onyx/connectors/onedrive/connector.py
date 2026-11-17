@@ -551,6 +551,8 @@ class OneDriveConnector(
     def _discover_delta_page(
         self,
         checkpoint: OneDriveCheckpoint,
+        user: OneDriveUser,
+        drive: OneDriveDrive,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         *,
@@ -559,9 +561,6 @@ class OneDriveConnector(
     ) -> Generator[
         OneDriveDiscoveredFile | HierarchyNode | ConnectorFailure, None, None
     ]:
-        user = checkpoint.current_user
-        drive = checkpoint.current_drive
-        assert user is not None and drive is not None
         start_at = datetime.fromtimestamp(start, tz=timezone.utc) if start else None
         end_at = datetime.fromtimestamp(end, tz=timezone.utc) if end else None
         page_url = checkpoint.delta_cursor or build_delta_start_url(
@@ -694,10 +693,16 @@ class OneDriveConnector(
                 yield from self._select_explicit_user(checkpoint)
             if checkpoint.current_user is not None and checkpoint.current_drive is None:
                 yield from self._open_current_drive(checkpoint)
-        if checkpoint.current_drive is None:
+        drive = checkpoint.current_drive
+        if drive is None:
             return checkpoint
+        user = checkpoint.current_user
+        if user is None:
+            raise RuntimeError("OneDrive checkpoint has a current drive but no user.")
         yield from self._discover_delta_page(
             checkpoint,
+            user,
+            drive,
             start,
             end,
             include_permissions=include_permissions,

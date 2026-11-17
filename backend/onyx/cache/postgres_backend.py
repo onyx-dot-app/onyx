@@ -149,7 +149,8 @@ class PostgresCacheLock(CacheLock):
                 self._session = None
 
     def _try_lock(self) -> bool:
-        assert self._session is not None
+        if self._session is None:
+            raise RuntimeError("Advisory lock has no open session.")
         result = self._session.execute(
             select(func.pg_try_advisory_lock(self._lock_id))
         ).scalar()

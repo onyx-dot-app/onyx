@@ -16,9 +16,8 @@ tests. Additive to the root `AGENTS.md`.
     (see "Error Handling"). Use `ValueError` for configuration and
     `ConnectorMissingCredentialError` for missing connector credentials.
 
-  A deliberate exception goes on the line as `# noqa: S101 - <reason>`. Files that had asserts
-  when the check was added are listed in `[tool.ruff.lint.per-file-ignores]` in `pyproject.toml`.
-  Do not add files to that list. Remove a file when you convert its asserts.
+  A deliberate exception goes on the line as `# noqa: S101 - <reason>`. Do not add a file to
+  `[tool.ruff.lint.per-file-ignores]` in `pyproject.toml` for `S101`.
 - Declare owned protocol implementations through explicit inheritance.
 
 - Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run

@@ -1245,7 +1245,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                                 user, existing_oauth_account, oauth_account_dict
                             )
 
-            assert user is not None
+            if user is None:
+                raise RuntimeError("OAuth callback has no user after account lookup.")
 
             if override is not None:
                 # A pinned login skipped the provisioning that records
@@ -1324,7 +1325,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 # the upgraded fields.
                 self.user_db.session.expire(user)
                 user = await self.user_db.get(refreshed_user_id)
-                assert user is not None
+                if user is None:
+                    raise RuntimeError("OAuth callback could not reload the user.")
 
             # this is needed if an organization toggles track_external_idp_expiry from
             # true to false; otherwise the oidc expiry will always be old and the user

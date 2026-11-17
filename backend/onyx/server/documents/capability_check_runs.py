@@ -191,7 +191,8 @@ def start_capability_check_run(
     if row is None:
         return None
     run_id = row.run_id
-    assert run_id is not None, "The RUNNING mark always stamps a run_id."
+    if run_id is None:
+        raise RuntimeError("The RUNNING mark did not stamp a run_id.")
     db_session.commit()
     try:
         send_capability_check_run_task(
