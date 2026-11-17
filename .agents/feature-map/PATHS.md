@@ -400,7 +400,7 @@ the admin routes and check that each has a row above, run
 | `web/.oxlintrc.json` | Lint config for `web/`, with the design-system, layout and navigation baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
 | `web/AGENTS.md` | Frontend standards for every agent. Read it before you work in `web/`. |
 | `backend/AGENTS.md` | Backend standards for every agent: workers, migrations, tests, errors and tracing. Read it before you work in `backend/`. |
-| `pyproject.toml` | Python dependencies and tool config for the repo: uv, ruff and ty. The ruff per-file ignores hold the C901 ratchet list, which only shrinks. |
+| `pyproject.toml`, `uv.lock` | Python dependencies and tool config for the repo: uv, ruff and ty. `uv.lock` pins the resolved versions. The ruff per-file ignores hold the C901 ratchet list, which only shrinks. |
 | `backend/.gitignore` | Git ignore rules for local backend files. No product surface reads it. |
 | `web/bun.lock` | The `web/` dependency lockfile. `bun install` writes it; do not edit it by hand. |
 | `web/.type-coverage-baseline.yaml` | Type-coverage floor of each `web/` directory. The `typescript-check` pre-commit hook fails when a directory falls below its floor (`web/AGENTS.md`, Tests). |
