@@ -18,7 +18,6 @@ from onyx.db.engine.sql_engine import get_session, get_session_with_current_tena
 from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
-    IntegrationKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPTransport,
@@ -42,13 +41,11 @@ from onyx.db.plugin import (
 from onyx.db.plugin_access import load_plugin_access
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.connection_models import ConnectionState, read_connection_secret
+from onyx.integrations.connection_models import read_connection_secret
 from onyx.integrations.connections import (
     connect_with_fields__no_commit,
     header_field_keys,
-    integration_status,
 )
-from onyx.integrations.craft import list_runnable_integrations
 from onyx.integrations.plugin_settings import (
     publish_plugin_for_user__no_commit,
     share_plugin__no_commit,
@@ -76,15 +73,12 @@ from onyx.server.features.mcp.client_metadata import (
 )
 from onyx.server.features.mcp.models import (
     MCPAuthTemplate,
-    MCPConnectionStatus,
     MCPOAuthDiscoveryRequest,
     MCPOAuthDiscoveryResponse,
-    MCPServer,
     MCPServerAdminView,
     MCPServerCreateResponse,
     MCPServerDeleteResponse,
     MCPServerSimpleUpdateRequest,
-    MCPServersResponse,
     MCPSetupProbeRequest,
     MCPToolCreateRequest,
 )
@@ -141,52 +135,6 @@ def _get_authorized_discovery_url(server_id: int, user: User) -> str:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
         get_manageable_integration(user, integration.id, db_session)
         return server.server_url
-
-
-_CONNECTION_STATUS: dict[ConnectionState, MCPConnectionStatus] = {
-    ConnectionState.CONNECTED: MCPConnectionStatus.CONNECTED,
-    ConnectionState.NOT_CONNECTED: MCPConnectionStatus.NOT_CONNECTED,
-    ConnectionState.NOT_SET_UP: MCPConnectionStatus.NOT_CONNECTED,
-    ConnectionState.NEEDS_RECONNECT: MCPConnectionStatus.REAUTH_REQUIRED,
-}
-
-
-@router.get("/servers/craft")
-def get_craft_mcp_servers_for_user(
-    db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-) -> MCPServersResponse:
-    """The MCP servers of the integrations of the plugins the user runs, with
-    the user's connection state."""
-    pairs = [
-        (integration, server)
-        for integration in list_runnable_integrations(db_session, user.id)
-        if integration.kind is IntegrationKind.MCP
-        and (server := get_mcp_server_for_integration(integration.id, db_session))
-        is not None
-    ]
-    plugin_rows = list_integration_plugin_rows(
-        [integration.id for integration, _ in pairs], db_session
-    )
-    servers: list[MCPServer] = []
-    for integration, server in pairs:
-        state = integration_status(integration, user, db_session).state
-        servers.append(
-            MCPServer(
-                id=server.id,
-                name=integration.name,
-                description=integration.description,
-                server_url=server.server_url,
-                owner=server.owner,
-                transport=server.transport,
-                connection_status=_CONNECTION_STATUS[state],
-                status=server.status,
-                available_in_craft=True,
-                plugin_ids=[row.plugin_id for row in plugin_rows[integration.id]],
-                craft_connected=state is ConnectionState.CONNECTED,
-            )
-        )
-    return MCPServersResponse(mcp_servers=servers)
 
 
 _SHARED_TOKEN_TEMPLATE = {"Authorization": "Bearer {api_key}"}

@@ -13,17 +13,20 @@ import { SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
 
 // Mirrors `onyx.db.enums.ExternalAppType` on the backend.
-export type ExternalAppType =
-  | "SLACK"
-  | "GOOGLE_CALENDAR"
-  | "GOOGLE_DRIVE"
-  | "GMAIL"
-  | "LINEAR"
-  | "GITHUB"
-  | "HUBSPOT"
-  | "NOTION"
-  | "ZENDESK"
-  | "CUSTOM";
+export const EXTERNAL_APP_TYPES = [
+  "SLACK",
+  "GOOGLE_CALENDAR",
+  "GOOGLE_DRIVE",
+  "GMAIL",
+  "LINEAR",
+  "GITHUB",
+  "HUBSPOT",
+  "NOTION",
+  "ZENDESK",
+  "CUSTOM",
+] as const;
+
+export type ExternalAppType = (typeof EXTERNAL_APP_TYPES)[number];
 
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
   {
@@ -52,17 +55,3 @@ export function getAppTypeLogo(
 
 // Mirrors `onyx.db.enums.ActionPolicy` on the backend.
 export type ActionPolicy = "ALWAYS" | "ASK" | "DENY";
-
-export interface ExternalAppUserResponse {
-  id: number;
-  // The member sign-in routes under /integrations take this id.
-  integration_id: number;
-  name: string;
-  app_type: ExternalAppType;
-  service_urls?: string[];
-  credential_keys: string[];
-  credential_values: Record<string, string>;
-  authenticated: boolean;
-  // OAuth apps connect in a new tab; others via the credential form.
-  supports_oauth: boolean;
-}

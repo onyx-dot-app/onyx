@@ -186,8 +186,9 @@ permission on the sandbox: allow for connected, reject for declined.
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
 disabled tool. A session of a scheduled run gets only the task plugins,
-also one that the owner turned off ([[craft-scheduled-tasks]]). `GET /mcp/servers/craft`
-lists the same servers, and
+also one that the owner turned off ([[craft-scheduled-tasks]]). The web reads
+the Craft apps and MCP servers from the member list (`GET /integrations`,
+`web/src/lib/integrations/craft.ts`), and
 `integrations/craft.py:list_connectable_apps` lists the external apps the user
 can still connect. No code reads `mcp_server.available_in_craft`. An
 integration change reloads running Craft sessions through
@@ -399,10 +400,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   rows ([[#url-patterns-on-app-row]]). Update the app's built-in skill files
   in `backend/onyx/skills/builtin/`; the agent learns the host and helpers
   only from them, and [[skills]] owns how they reach running sandboxes. Escape
-  every dot in the host: an unescaped dot matches any character, and the member
-  app view
-  (`backend/onyx/server/features/build/external_apps/api.py:_to_user_response`)
-  leaves that pattern out of the app's service URLs, with no error.
+  every dot in the host: an unescaped dot matches any character, and
+  `backend/onyx/integrations/craft.py:craft_service_urls` leaves that pattern
+  out of the app's service URLs, with no error.
 - `credential-resolver` **A credential resolver.** Copy `OnyxPatResolver`; list the resolvers with
   `git ls-files backend/onyx/sandbox_proxy/resolvers/`. Register it in
   `build_resolvers`. Claim requests by a disjoint host set. Raise

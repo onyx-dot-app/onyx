@@ -245,8 +245,6 @@ describe("ImportSkillsFromGitHubModal", () => {
           integration_id: 7,
           name: "GitHub",
           app_type: "GITHUB",
-          credential_keys: ["access_token"],
-          credential_values: {},
           authenticated: false,
           supports_oauth: true,
         },

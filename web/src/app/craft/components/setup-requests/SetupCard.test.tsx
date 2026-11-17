@@ -7,7 +7,7 @@ import {
 } from "@tests/setup/test-utils";
 import { StrictMode } from "react";
 import SetupCard from "@/app/craft/components/setup-requests/SetupCard";
-import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import type { CraftApp } from "@/lib/integrations/craft";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 const mockMutate = jest.fn();
@@ -47,13 +47,11 @@ jest.mock("@/sections/plugins/IntegrationCredentialsModal", () => ({
   ),
 }));
 
-const userApp: ExternalAppUserResponse = {
+const userApp: CraftApp = {
   id: 42,
   integration_id: 7,
   name: "Acme CRM",
   app_type: "CUSTOM",
-  credential_keys: ["token"],
-  credential_values: {},
   authenticated: false,
   supports_oauth: false,
 };
@@ -195,7 +193,7 @@ describe("SetupCard", () => {
         "connected"
       )
     );
-    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.buildExternalApps);
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.integrations);
     expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.userSkills);
     expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
