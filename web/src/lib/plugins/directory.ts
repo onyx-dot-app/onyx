@@ -19,7 +19,7 @@ export interface MemberPluginEntry {
   integrations: MemberIntegration[];
 }
 
-export function isCustomSkill(skill: Skill): skill is CustomSkill {
+function isCustomSkill(skill: Skill): skill is CustomSkill {
   return skill.source === "custom";
 }
 

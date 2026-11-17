@@ -38,7 +38,6 @@ export function useAgentChatPlugins(
   const isDefault = agentId === DEFAULT_AGENT_ID;
   const agent = useAgent(agentId === undefined || isDefault ? null : agentId);
   const data = integrations.data;
-  const links = agent.agent?.plugins;
 
   const { pluginIds, plugins } = useMemo(() => {
     const byPlugin = new Map<string, ChatPluginEntry>();
@@ -57,18 +56,16 @@ export function useAgentChatPlugins(
           });
       }
     }
-    const ids =
-      agentId === undefined
-        ? null
-        : isDefault
-          ? data === undefined && !integrations.error
-            ? null
-            : [...byPlugin.keys()]
-          : agent.agent === null
-            ? agent.error
-              ? []
-              : null
-            : (links ?? []).map((link) => link.plugin_id);
+    function agentPluginIds(): string[] | null {
+      if (agentId === undefined) return null;
+      if (isDefault)
+        return data === undefined && !integrations.error
+          ? null
+          : [...byPlugin.keys()];
+      if (agent.agent === null) return agent.error ? [] : null;
+      return (agent.agent.plugins ?? []).map((link) => link.plugin_id);
+    }
+    const ids = agentPluginIds();
     const entries = (ids ?? []).flatMap((id) => {
       const entry = byPlugin.get(id);
       return entry ? [entry] : [];
@@ -77,15 +74,7 @@ export function useAgentChatPlugins(
       pluginIds: ids === null ? null : [...new Set(ids)].sort(),
       plugins: entries.sort((a, b) => a.name.localeCompare(b.name)),
     };
-  }, [
-    agentId,
-    isDefault,
-    data,
-    integrations.error,
-    agent.agent,
-    agent.error,
-    links,
-  ]);
+  }, [agentId, isDefault, data, integrations.error, agent.agent, agent.error]);
 
   return {
     pluginIds,

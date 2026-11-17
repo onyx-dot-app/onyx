@@ -16,7 +16,6 @@ interface IntegrationConnectModalProps {
   onCloseAutoFocus?: ComponentProps<typeof Modal.Content>["onCloseAutoFocus"];
 }
 
-/** The integrations a chat needs, each with Connect or Reconnect. */
 export default function IntegrationConnectModal({
   integrations,
   returnPath,
@@ -54,7 +53,7 @@ export default function IntegrationConnectModal({
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={onClose}>
-            {t("done")}
+            {t("done.label")}
           </Button>
         </Modal.Footer>
       </Modal.Content>

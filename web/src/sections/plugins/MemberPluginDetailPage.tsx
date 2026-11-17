@@ -23,11 +23,11 @@ import AlwaysAllowList from "@/sections/plugins/AlwaysAllowList";
 import IntegrationConnectionRow from "@/sections/plugins/IntegrationConnectionRow";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
 
-interface OverviewTabProps {
+interface PluginTabProps {
   entry: MemberPluginEntry;
 }
 
-function OverviewTab({ entry }: OverviewTabProps) {
+function OverviewTab({ entry }: PluginTabProps) {
   const t = useTranslations("plugins.member.detail.overview");
   const sections = useTranslations("plugins.member.sections");
   return (
@@ -70,7 +70,7 @@ function OverviewTab({ entry }: OverviewTabProps) {
   );
 }
 
-function SkillsTab({ entry }: OverviewTabProps) {
+function SkillsTab({ entry }: PluginTabProps) {
   const t = useTranslations("plugins.member.detail.skills");
   return (
     <Section gap={2} alignItems="stretch" height="auto">
@@ -93,11 +93,7 @@ function SkillsTab({ entry }: OverviewTabProps) {
   );
 }
 
-interface IntegrationsTabProps {
-  entry: MemberPluginEntry;
-}
-
-function IntegrationsTab({ entry }: IntegrationsTabProps) {
+function IntegrationsTab({ entry }: PluginTabProps) {
   const returnPath = memberPluginHref(entry.id, "integrations");
   return (
     <Section gap={2} alignItems="stretch" height="auto">
@@ -125,12 +121,12 @@ interface MemberPluginDetailPageProps {
   pluginId: string;
 }
 
-/** One plugin of the member Plugins page: Overview, Skills, Integrations and
- * Versions. Tabs with nothing to show are hidden. */
+/** Tabs with nothing to show are hidden. */
 export default function MemberPluginDetailPage({
   pluginId,
 }: MemberPluginDetailPageProps) {
   const t = useTranslations("plugins.member.detail");
+  const promptCopy = useTranslations("plugins.chat.connectPrompt");
   const locale = useLocale();
   const navigation = useNavigation();
   const searchParams = useSearchParams();
@@ -185,7 +181,7 @@ export default function MemberPluginDetailPage({
             icon={SvgArrowLeft}
             {...navigation.linkTo("/app/plugins")}
           >
-            {t("back")}
+            {t("back.label")}
           </Button>,
           ...(pending > 0
             ? [
@@ -193,7 +189,7 @@ export default function MemberPluginDetailPage({
                   key="pending"
                   size={6}
                   color="warning"
-                  title={t("pending", { count: pending })}
+                  title={promptCopy("trigger.label", { count: pending })}
                 />,
               ]
             : []),

@@ -18,18 +18,13 @@ interface IntegrationConnectionRowProps {
   integration: MemberIntegration;
   /** Where the OAuth callback returns when no waiting tab closes it. */
   returnPath: string;
-  /** Shows Disconnect on a connection of the user's own. */
   allowDisconnect?: boolean;
-  onConnected?: () => void;
 }
 
-/** One integration with its status: Connected, Not connected, Needs
- * reconnect or Not set up, and the action that fixes it. */
 export default function IntegrationConnectionRow({
   integration,
   returnPath,
   allowDisconnect = false,
-  onConnected,
 }: IntegrationConnectionRowProps) {
   const t = useTranslations("plugins.member.connection");
   const { mutate } = useSWRConfig();
@@ -46,7 +41,6 @@ export default function IntegrationConnectionRow({
   async function connected() {
     toast.success(t("connected", { name }));
     await refresh();
-    onConnected?.();
   }
 
   async function connect() {
@@ -111,10 +105,10 @@ export default function IntegrationConnectionRow({
               size="md"
               icon={busy ? IconLoader : SvgKey}
               disabled={busy}
-              aria-label={t(`${action}Label`, { name })}
+              aria-label={t(`${action}.ariaLabel`, { name })}
               onClick={() => void connect()}
             >
-              {t(action)}
+              {t(`${action}.label`)}
             </Button>
           ) : state === "not_set_up" ? (
             <Text font="secondary-body" color="text-03">
@@ -127,10 +121,10 @@ export default function IntegrationConnectionRow({
               size="md"
               prominence="secondary"
               disabled={busy}
-              aria-label={t("disconnectLabel", { name })}
+              aria-label={t("disconnect.ariaLabel", { name })}
               onClick={() => void disconnect()}
             >
-              {t("disconnect")}
+              {t("disconnect.label")}
             </Button>
           ) : undefined
         }

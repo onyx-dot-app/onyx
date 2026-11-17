@@ -91,9 +91,9 @@ test("switches the agent's plugins and offers Connect for one that needs sign-in
       onBrowse={jest.fn()}
     />
   );
-  await u.click(screen.getByRole("button", { name: copy.trigger }));
+  await u.click(screen.getByRole("button", { name: copy.trigger.label }));
   const toggle = await screen.findByRole("switch", {
-    name: "Use Linear in this chat",
+    name: "Use Linear with this agent",
   });
   expect(toggle).not.toBeChecked();
   await u.click(toggle);
@@ -102,7 +102,11 @@ test("switches the agent's plugins and offers Connect for one that needs sign-in
     true
   );
 
-  await u.click(screen.getByRole("button", { name: copy.connect }));
+  await u.click(
+    screen.getByRole("button", {
+      name: messages.plugins.member.connection.connect.label,
+    })
+  );
   expect(onConnect).toHaveBeenCalledWith(catalog.plugins[1]);
 });
 
@@ -117,6 +121,6 @@ test("says when the agent has no plugins with integrations", async () => {
       onBrowse={jest.fn()}
     />
   );
-  await u.click(screen.getByRole("button", { name: copy.trigger }));
+  await u.click(screen.getByRole("button", { name: copy.trigger.label }));
   expect(await screen.findByText(copy.empty)).toBeVisible();
 });

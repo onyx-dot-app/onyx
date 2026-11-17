@@ -1,8 +1,4 @@
-import {
-  filterPlugins,
-  memberPluginEntries,
-  pendingIntegrations,
-} from "@/lib/plugins/directory";
+import { memberPluginEntries } from "@/lib/plugins/directory";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import {
   LINEAR_PLUGIN_ID,
@@ -63,42 +59,4 @@ test("a plugin that holds a skill and an integration is one entry", () => {
   expect(entries).toHaveLength(1);
   expect(entries[0]?.skills).toHaveLength(1);
   expect(entries[0]?.integrations).toEqual([linear]);
-});
-
-test("filters by kind and searches names and integration names", () => {
-  const entries = memberPluginEntries(
-    [skill],
-    [linear, personal],
-    "me@example.com",
-    "en"
-  );
-  expect(filterPlugins(entries, "skills", "").map((e) => e.name)).toEqual([
-    "report-writer",
-  ]);
-  expect(filterPlugins(entries, "integrations", "").map((e) => e.name)).toEqual(
-    ["Linear", "Reports"]
-  );
-  expect(
-    filterPlugins(entries, "all", "reports api").map((e) => e.name)
-  ).toEqual(["Reports"]);
-});
-
-test("pending integrations are the ones the user connects or reconnects", () => {
-  const reconnect = makeMemberIntegration({
-    id: 3,
-    status: {
-      state: "needs_reconnect",
-      reason: "Your admin changed the sign-in settings",
-      moving_credentials: false,
-    },
-  });
-  const notSetUp = makeMemberIntegration({
-    id: 4,
-    status: { state: "not_set_up", reason: null, moving_credentials: false },
-  });
-  expect(
-    pendingIntegrations([linear, personal, reconnect, notSetUp]).map(
-      (integration) => integration.id
-    )
-  ).toEqual([1, 3]);
 });

@@ -27,8 +27,6 @@ export interface MCPServer {
   oauth_token_endpoint?: string;
   oauth_scopes_override?: string[];
   oauth_additional_auth_params?: Record<string, string>;
-  // Null when there is no user context.
-  connection_status: MCPConnectionStatus | null;
   // Whether Craft can produce auth headers for the user's sandbox sessions.
   // Only the Craft listing computes it.
   craft_connected?: boolean;
@@ -40,15 +38,9 @@ export interface MCPServer {
   groups: number[];
   users: string[];
   available_in_craft?: boolean;
-  // The plugins that hold the server's integration; chat tool options name them.
-  plugin_ids?: string[];
-  default_chat_enabled?: boolean | null;
-  user_enabled_in_chat?: boolean;
-  user_enabled_in_craft?: boolean;
   // Sparse per-tool approval overrides for chat and Craft; unlisted tools use their default.
   // Present on owner/admin views only.
   action_policies?: Record<string, ActionPolicy> | null;
-  users_can_manage_policies?: boolean;
   last_refreshed_at?: string;
   tool_count: number;
   // Server-stamped affordance map; fail-closed (absent = denied).

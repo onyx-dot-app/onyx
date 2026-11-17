@@ -36,7 +36,6 @@ export function useAdminIntegrationActions(id: number) {
   );
 }
 
-/** The integrations the user can use through a visible plugin, with status. */
 export function useMemberIntegrations() {
   return useSWR<MemberIntegration[], Error>(
     SWR_KEYS.integrations,

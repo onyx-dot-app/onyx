@@ -20,7 +20,6 @@ interface IntegrationCredentialsModalProps {
   onConnected: () => void;
 }
 
-/** The API key form of one integration, made from its credential fields. */
 export default function IntegrationCredentialsModal({
   integration,
   onClose,
@@ -100,12 +99,12 @@ export default function IntegrationCredentialsModal({
           <BasicModalFooter
             cancel={
               <Button prominence="secondary" disabled={busy} onClick={onClose}>
-                {t("cancel")}
+                {t("cancel.label")}
               </Button>
             }
             submit={
               <Button disabled={busy} onClick={() => void submit()}>
-                {busy ? t("connecting") : t("submit")}
+                {busy ? t("submit.pendingLabel") : t("submit.label")}
               </Button>
             }
           />

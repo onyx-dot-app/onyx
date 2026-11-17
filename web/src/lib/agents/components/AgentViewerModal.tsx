@@ -33,7 +33,6 @@ import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { Interactive } from "@opal/core";
 import { useSettings } from "@/lib/settings/hooks";
 
-/** Read-only card for one plugin of the agent. */
 function ViewerPluginCard({ name }: { name: string }) {
   return (
     <Card border="solid" rounding={4} padding={4}>

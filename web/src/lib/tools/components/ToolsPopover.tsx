@@ -22,8 +22,9 @@ import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import ChatPluginsPopover from "@/sections/plugins/ChatPluginsPopover";
 import IntegrationConnectModal from "@/sections/plugins/IntegrationConnectModal";
-import { useAgentChatPlugins, type ChatPluginEntry } from "@/lib/plugins/hooks";
+import { useAgentChatPlugins } from "@/lib/plugins/hooks";
 import { usePathname, useSearchParams } from "@opal/navigation";
+import { locationKey } from "@/app/app/services/submitLocation";
 
 export interface ToolsPopoverProps {
   agent: MinimalAgent;
@@ -42,10 +43,9 @@ export default function ToolsPopover({
   const [showSources, setShowSources] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const catalog = useAgentChatPlugins(agent.id);
-  const [connection, setConnection] = useState<{
-    agentId: number;
-    pluginId: string;
-  } | null>(null);
+  const [connectingPluginId, setConnectingPluginId] = useState<string | null>(
+    null
+  );
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
@@ -61,15 +61,12 @@ export default function ToolsPopover({
     setOpen(false);
     setShowSources(false);
     setSearchTerm("");
-    setConnection(null);
+    setConnectingPluginId(null);
   }, [agent.id]);
 
-  const connectedPlugin =
-    connection && connection.agentId === agent.id
-      ? catalog.plugins.find(
-          (plugin) => plugin.pluginId === connection.pluginId
-        )
-      : undefined;
+  const connectingPlugin = catalog.plugins.find(
+    (plugin) => plugin.pluginId === connectingPluginId
+  );
 
   const displayTools = agent.tools.filter((tool) => {
     if (!tool.in_code_tool_id || tool.mcp_server_id) return false;
@@ -164,11 +161,8 @@ export default function ToolsPopover({
                     toolConfiguration={toolConfiguration}
                     catalog={catalog}
                     disabled={disabled}
-                    onConnect={(plugin: ChatPluginEntry) => {
-                      setConnection({
-                        agentId: agent.id,
-                        pluginId: plugin.pluginId,
-                      });
+                    onConnect={(plugin) => {
+                      setConnectingPluginId(plugin.pluginId);
                       close();
                     }}
                     onBrowse={close}
@@ -179,15 +173,11 @@ export default function ToolsPopover({
           </div>
         </Popover.Content>
       </Popover>
-      {connectedPlugin && (
+      {connectingPlugin && (
         <IntegrationConnectModal
-          integrations={connectedPlugin.integrations}
-          returnPath={
-            searchParams.toString()
-              ? `${pathname}?${searchParams.toString()}`
-              : pathname
-          }
-          onClose={() => setConnection(null)}
+          integrations={connectingPlugin.integrations}
+          returnPath={locationKey(pathname, searchParams.toString())}
+          onClose={() => setConnectingPluginId(null)}
         />
       )}
     </ToolsPopoverProvider>
