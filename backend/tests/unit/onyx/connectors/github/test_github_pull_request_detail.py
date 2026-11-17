@@ -8,16 +8,7 @@ from onyx.connectors.github.connector import GithubConnector
 from onyx.connectors.github.connector import _convert_pr_to_document
 from onyx.connectors.github.models import GitHubPullRequest
 from onyx.connectors.github.source_operations import GitHubApiError
-
-
-def _api_error(status: int, message: str) -> GitHubApiError:
-    return GitHubApiError(
-        f"{status} {message}",
-        status_code=status,
-        github_message=message,
-        method="GET",
-        url="/repos/test-org/test-repo/pulls/1",
-    )
+from tests.unit.onyx.connectors.github.github_check_helpers import api_error
 
 
 def test_too_many_files_changed_keeps_the_listing_pull_request(
@@ -29,7 +20,7 @@ def test_too_many_files_changed_keeps_the_listing_pull_request(
     # One such pull request must not fail the whole run.
     connector = build_github_connector()
     listed = create_pr(number=1)
-    mock_source_operations.get_pull_request.side_effect = _api_error(
+    mock_source_operations.get_pull_request.side_effect = api_error(
         422, "The request could not be processed because too many files changed"
     )
 
@@ -45,7 +36,7 @@ def test_an_undetailable_pull_request_is_requested_only_once(
     # second failing request is wasted, and a rate limit on it would drop the PR.
     connector = build_github_connector()
     listed = create_pr(number=1)
-    mock_source_operations.get_pull_request.side_effect = _api_error(
+    mock_source_operations.get_pull_request.side_effect = api_error(
         422, "The request could not be processed because too many files changed"
     )
 
@@ -83,7 +74,7 @@ def test_other_errors_still_raise(
     message: str,
 ) -> None:
     connector = build_github_connector()
-    mock_source_operations.get_pull_request.side_effect = _api_error(status, message)
+    mock_source_operations.get_pull_request.side_effect = api_error(status, message)
 
     with pytest.raises(GitHubApiError):
         connector._detailed_pull_request(create_pr(number=1))
