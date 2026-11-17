@@ -10791,16 +10791,37 @@
           "label": "Speichern"
         }
       },
-      "mcp": {
-        "noAccess": {
-          "tooltip": "Sie haben keinen Zugriff mehr auf diesen MCP-Server. Seine vorhandenen Tools bleiben erhalten."
-        },
-        "searchTools": {
-          "placeholder": "Tools suchen..."
-        }
-      },
       "page": {
         "ariaLabel": "Agenten-Editor-Seite"
+      },
+      "plugins": {
+        "actionSetting": "Einstellung für {action}",
+        "add": "Plugin hinzufügen",
+        "askHint": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben, oder jeder Benutzer wählt Immer erlauben.",
+        "askHintAdminOnly": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben.",
+        "choice": {
+          "inherit": "Integrationseinstellung verwenden"
+        },
+        "default": {
+          "description": "Gilt für jede Aktion ohne eigene Einstellung, auch für Aktionen, die die Integration später hinzufügt.",
+          "title": "Standard für andere Aktionen"
+        },
+        "defaultSetting": "Standardeinstellung für {plugin}",
+        "description": "Geben Sie dem Agenten Plugins. Jede Aktion verwendet die Integrationseinstellung, sofern Sie keine andere wählen.",
+        "effective": "{policy, select, allow {Erlaubt} ask {Fragt} other {Blockiert}} ({source, select, integration {Integrationseinstellung} agentDefault {Agentenstandard} other {Agenteneinstellung}})",
+        "empty": "Für Sie sind keine Plugins mit Integrationen verfügbar.",
+        "loadFailed": "Die Plugins konnten nicht geladen werden.",
+        "lock": {
+          "adminBlocked": "Erlauben ist nicht verfügbar: Ein Administrator hat diese Aktion blockiert.",
+          "adminFinal": "Erlauben ist nicht verfügbar: Die Administratoreinstellung dieser Integration ist endgültig.",
+          "defaultFinal": "Erlauben ist nicht verfügbar: Die Administratoreinstellungen dieser Integrationen sind endgültig."
+        },
+        "noActions": "Diese Integration hat noch keine Aktionen.",
+        "notVisible": "Sie können die Aktionen dieses Plugins nicht sehen. Seine Einstellungen bleiben unverändert.",
+        "openIntegration": "Aktionen von {integration} öffnen",
+        "remove": "{plugin} entfernen",
+        "retry": "Erneut versuchen",
+        "title": "Plugins"
       },
       "prompts": {
         "instructions": {
@@ -11057,14 +11078,6 @@
         "knowledgeCutoff": {
           "description": "Dokumente, deren letzte Aktualisierung vor diesem Datum liegt, werden ignoriert.",
           "title": "Stichtag für Wissen"
-        },
-        "mcpCard": {
-          "expand": {
-            "label": "Ausklappen"
-          },
-          "fold": {
-            "label": "Einklappen"
-          }
         },
         "moreInfo": {
           "title": "Weitere Informationen"

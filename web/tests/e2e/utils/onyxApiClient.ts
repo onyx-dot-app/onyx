@@ -1218,6 +1218,33 @@ export class OnyxApiClient {
     return success;
   }
 
+  /** An organization OpenAPI integration with no sign-in, and its plugin. */
+  async createOpenApiIntegration(
+    name: string,
+    openapiSpec: Record<string, unknown>
+  ): Promise<{
+    id: number;
+    plugins: Array<{ plugin_id: string; plugin_name: string }>;
+  }> {
+    const response = await this.post("/admin/integrations", {
+      for_organization: true,
+      name,
+      description: null,
+      auth_mode: "none",
+      auth_method: null,
+      credential_fields: null,
+      header_template: null,
+      oauth_client: null,
+      config: { shape: "openapi", openapi_spec: openapiSpec },
+    });
+    const data = await this.handleResponse<{
+      id: number;
+      plugins: Array<{ plugin_id: string; plugin_name: string }>;
+    }>(response, `Failed to create integration ${name}`);
+    this.log(`Created integration: ${name} (ID: ${data.id})`);
+    return data;
+  }
+
   async deleteIntegration(integrationId: number): Promise<boolean> {
     const response = await this.request.delete(
       `${this.baseUrl}/admin/integrations/${integrationId}`
@@ -1374,6 +1401,14 @@ export class OnyxApiClient {
       id: number;
       in_code_tool_id?: string | null;
       mcp_server_id?: number | null;
+    }>;
+    plugins: Array<{
+      plugin_id: string;
+      plugin_name: string;
+      action_settings: {
+        default?: string;
+        actions?: Record<string, string>;
+      };
     }>;
   }> {
     const response = await this.get(`/persona/${agentId}`);

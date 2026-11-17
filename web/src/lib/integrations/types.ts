@@ -81,6 +81,24 @@ export interface IntegrationAction {
   always_asks: boolean;
 }
 
+/** One integration of a plugin in `GET /integrations/agent-catalog`. */
+export interface AgentCatalogIntegration {
+  id: number;
+  name: string;
+  kind: IntegrationKind;
+  shape: IntegrationShape;
+  users_can_save_always_allow: boolean;
+  actions: IntegrationAction[];
+}
+
+/** A plugin that holds integrations, as the agent editor offers it. */
+export interface AgentPluginOption {
+  plugin_id: string;
+  plugin_name: string;
+  description: string | null;
+  integrations: AgentCatalogIntegration[];
+}
+
 export interface AdminIntegration {
   id: number;
   kind: IntegrationKind;
