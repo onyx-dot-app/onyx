@@ -41,6 +41,7 @@ from onyx.db.integration import (
     list_integrations_by_ids,
     lock_integration,
     lock_integration__no_commit,
+    rename_kind_row__no_commit,
     replace_integration_actions__no_commit,
     set_policy_rows__no_commit,
     upsert_oauth_client__no_commit,
@@ -819,6 +820,7 @@ def update_integration__no_commit(
         if not name:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Give the integration a name.")
         integration.name = name
+        rename_kind_row__no_commit(integration, name, db_session)
     if "description" in fields:
         integration.description = request.description
     if "enabled" in fields and request.enabled is not None:

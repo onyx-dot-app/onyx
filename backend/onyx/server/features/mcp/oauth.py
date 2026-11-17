@@ -975,7 +975,6 @@ def integration_mcp_server_connection(
         id=mcp_server.id,
         name=integration.name,
         server_url=mcp_server.server_url,
-        auth_type=mcp_server.auth_type,
         transport=mcp_server.transport,
         oauth_provider_mode=(
             MCPOAuthProviderMode.AUTO_DISCOVERY

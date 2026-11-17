@@ -25,6 +25,7 @@ from onyx.db.integration_policy import list_persona_plugin_links
 from onyx.db.models import (
     Integration,
     Marketplace,
+    MCPServer,
     Plugin,
     Plugin__Integration,
     Tool,
@@ -207,6 +208,10 @@ def test_create_get_update_and_delete_keep_the_old_shapes(
     )
     assert server.is_public is False
     assert server.available_in_craft is True
+    server_row = db_session.get(MCPServer, response.server_id)
+    assert server_row is not None
+    db_session.refresh(server_row)
+    assert server_row.name == "renamed"
     assert _marketplace_kind(db_session, integration.id) is (
         MarketplaceKind.USER_UPLOADS
     )

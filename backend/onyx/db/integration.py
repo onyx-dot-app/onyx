@@ -2,7 +2,7 @@ from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, and_, delete, func, select
+from sqlalchemy import ColumnElement, Select, and_, delete, func, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 from sqlalchemy.sql.elements import KeyedColumnElement
 
@@ -409,6 +409,30 @@ def insert_integration__no_commit(
     db_session.add(integration)
     db_session.flush()
     return integration
+
+
+def rename_kind_row__no_commit(
+    integration: Integration, name: str, db_session: Session
+) -> None:
+    """The kind rows keep a copy of the name, which the Craft prompt shows."""
+    if integration.mcp_server_id is not None:
+        db_session.execute(
+            update(MCPServer)
+            .where(MCPServer.id == integration.mcp_server_id)
+            .values(name=name)
+        )
+    if integration.tool_id is not None:
+        db_session.execute(
+            update(Tool)
+            .where(Tool.id == integration.tool_id)
+            .values(name=name, display_name=name)
+        )
+    if integration.external_app_id is not None:
+        db_session.execute(
+            update(ExternalApp)
+            .where(ExternalApp.id == integration.external_app_id)
+            .values(name=name)
+        )
 
 
 def create_mcp_server_row__no_commit(
