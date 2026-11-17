@@ -38,11 +38,13 @@ jest.mock("@/lib/agents/hooks", () => ({
   useActiveAgent: () => ({ id: 5, tools: mockAgentTools }),
 }));
 let mockCatalog: MemberPlugin[] = [];
+let mockCatalogErrors: { servers?: Error; tools?: Error } = {};
 jest.mock("@/lib/plugins/member", () => ({
   ...jest.requireActual("@/lib/plugins/member"),
   useMemberPlugins: () => ({
     plugins: mockCatalog,
     loading: { apps: false, servers: false, tools: false, oauth: false },
+    errors: mockCatalogErrors,
   }),
 }));
 jest.mock("@/providers/UserProvider", () => ({
@@ -270,6 +272,7 @@ beforeEach(() => {
   mockProjectId = null;
   mockAgentTools = tools;
   mockCatalog = plugins;
+  mockCatalogErrors = {};
   // Existing chats whose details carry no saved selection yet.
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
   for (const chatSessionId of ["chat-a", "chat-b"]) {
@@ -408,6 +411,68 @@ test("a plugin toggle saves plugin entries for each other plugin", async () => {
     ],
     preferred: null,
   });
+});
+
+test("saved action limits survive a send and an unrelated tool change", async () => {
+  useChatSessionStore.getState().updateSessionData("chat-a", {
+    toolOptions: {
+      allowed: [
+        { type: "capability", tool_id: 1 },
+        { type: "capability", tool_id: 2 },
+        { type: "plugin", plugin_id: "plugin-mcp" },
+        { type: "plugin", plugin_id: "plugin-api", actions: ["listOrders"] },
+        { type: "plugin", plugin_id: "plugin-other" },
+      ],
+      preferred: null,
+      internal_search_filters: null,
+    },
+  });
+  const { result } = renderHook(() => useToolConfiguration());
+  const apiEntry = {
+    type: "plugin",
+    plugin_id: "plugin-api",
+    actions: ["listOrders"],
+  };
+  expect(result.current.allowed).toContainEqual(apiEntry);
+
+  act(() => result.current.setToolState(2, () => "disabled"));
+
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("chat-a")?.toolOptions
+        ?.allowed
+    ).not.toContainEqual({ type: "capability", tool_id: 2 })
+  );
+  expect(
+    useChatSessionStore.getState().sessions.get("chat-a")?.toolOptions?.allowed
+  ).toContainEqual(apiEntry);
+});
+
+test("a failed plugin catalog leaves the saved plugins of a chat alone", async () => {
+  const saved = {
+    allowed: [
+      { type: "capability" as const, tool_id: 1 },
+      { type: "capability" as const, tool_id: 2 },
+      { type: "plugin" as const, plugin_id: "plugin-mcp" },
+    ],
+    preferred: null,
+    internal_search_filters: null,
+  };
+  useChatSessionStore
+    .getState()
+    .updateSessionData("chat-a", { toolOptions: saved });
+  mockCatalog = [];
+  mockCatalogErrors = { servers: new Error("503") };
+  const { result } = renderHook(() => useToolConfiguration());
+
+  act(() => result.current.setToolState(2, () => "disabled"));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(
+    useChatSessionStore.getState().sessions.get("chat-a")?.toolOptions
+  ).toEqual(saved);
 });
 
 test("chat plugin choices survive a reload and stay separate between chats", async () => {

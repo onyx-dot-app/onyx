@@ -31,8 +31,10 @@ from onyx.llm.interfaces import LLM
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     PersonaToolConfiguration,
+    PluginEntry,
     PluginLinkConfiguration,
     ToolApprovalScope,
+    ToolOptions,
 )
 from onyx.tools.tool_constructor import CustomToolConfig, construct_tools
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
@@ -152,6 +154,7 @@ def _build(
     configuration: PersonaToolConfiguration,
     mode: ApprovalMode = ApprovalMode.INTERACTIVE,
     chat_session_id: UUID | None = None,
+    tool_options: ToolOptions | None = None,
 ) -> dict[str, Tool]:
     tools = construct_tools(
         configuration=configuration,
@@ -160,6 +163,7 @@ def _build(
         db_session=db_session,
         custom_tool_config=CustomToolConfig(chat_session_id=chat_session_id),
         approval_mode=mode,
+        tool_options=tool_options,
     )
     return {tool.name: tool for tool in tools}
 
@@ -462,6 +466,29 @@ def test_two_plugins_of_one_integration_keep_the_strictest_setting(
                 strict.id: {"actions": {"update": "blocked"}},
             }
         ),
+    )
+
+    assert set(tools) == {f"mcp__{mcp.id}__crm__search"}
+
+
+def test_tool_options_cannot_drop_a_blocked_agent_link(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    mcp = _mcp(db_session, integration_ids)
+    loose = _plugin(db_session, [mcp])
+    strict = _plugin(db_session, [mcp])
+    configuration = _configuration(
+        {
+            loose.id: {"actions": {"update": "allow"}},
+            strict.id: {"actions": {"update": "blocked"}},
+        }
+    )
+
+    tools = _build(
+        db_session,
+        user,
+        configuration,
+        tool_options=ToolOptions(allowed=[PluginEntry(plugin_id=loose.id)]),
     )
 
     assert set(tools) == {f"mcp__{mcp.id}__crm__search"}

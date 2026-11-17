@@ -77,11 +77,18 @@ export function useAvailableTools() {
 type ToolConfiguration = Readonly<Record<number, ToolState>>;
 /** The plugins switched off, by plugin id. A plugin not listed is on. */
 type PluginConfiguration = Readonly<Record<string, "disabled">>;
+/**
+ * The action keys that saved options keep for a plugin, by plugin id. A
+ * plugin not listed keeps each action. No control edits them; they come from
+ * options another client saved and go back unchanged.
+ */
+type PluginActions = Readonly<Record<string, readonly string[]>>;
 
 /** Everything a chat's next message is configured with. */
 interface ChatConfiguration {
   tools: ToolConfiguration;
   plugins: PluginConfiguration;
+  pluginActions: PluginActions;
   filters: ChatSearchFilters;
 }
 
@@ -95,6 +102,7 @@ const NEUTRAL_FILTERS: ChatSearchFilters = {
 const NEUTRAL: ChatConfiguration = {
   tools: {},
   plugins: {},
+  pluginActions: {},
   filters: NEUTRAL_FILTERS,
 };
 
@@ -111,6 +119,7 @@ function isNeutralConfiguration(configuration: ChatConfiguration): boolean {
   return (
     Object.keys(configuration.tools).length === 0 &&
     Object.keys(configuration.plugins).length === 0 &&
+    Object.keys(configuration.pluginActions).length === 0 &&
     isNeutralFilters(configuration.filters)
   );
 }
@@ -288,6 +297,7 @@ function parseConfiguration(raw: string): ChatConfiguration {
     return {
       tools: parseTools(value.tools),
       plugins: isRecord(value.plugins) ? parsePlugins(value.plugins) : {},
+      pluginActions: {},
       filters: isRecord(value.filters)
         ? parseFilters(value.filters)
         : NEUTRAL_FILTERS,
@@ -296,6 +306,7 @@ function parseConfiguration(raw: string): ChatConfiguration {
   return {
     tools: parseTools(value),
     plugins: {},
+    pluginActions: {},
     filters: NEUTRAL_FILTERS,
   };
 }
@@ -369,8 +380,17 @@ function configurationFrom(
 ): ChatConfiguration {
   const tools: Record<number, ToolState> = {};
   const plugins: Record<string, "disabled"> = {};
+  const pluginActions: Record<string, string[] | null> = {};
   const allowed = options.allowed;
   if (allowed !== null) {
+    for (const entry of allowed) {
+      if (entry.type !== "plugin") continue;
+      const kept = pluginActions[entry.plugin_id];
+      pluginActions[entry.plugin_id] =
+        entry.actions == null || kept === null
+          ? null
+          : [...new Set([...(kept ?? []), ...entry.actions])];
+    }
     for (const tool of agentTools) {
       if (
         tool.in_code_tool_id &&
@@ -396,9 +416,14 @@ function configurationFrom(
   }
   const filters = options.internal_search_filters;
   const rangeStart = filters?.updated_at_range?.start ?? null;
+  const limited: Record<string, readonly string[]> = {};
+  for (const [pluginId, actions] of Object.entries(pluginActions)) {
+    if (actions !== null) limited[pluginId] = actions;
+  }
   return {
     tools,
     plugins,
+    pluginActions: limited,
     filters: {
       selectedSources: filters?.source_type ?? null,
       documentSets: filters?.document_set ?? [],
@@ -419,12 +444,14 @@ function configurationFrom(
 function allowedEntries(
   tools: ToolConfiguration,
   plugins: PluginConfiguration,
+  pluginActions: PluginActions,
   agent: MinimalAgent,
   pluginIds: readonly string[]
 ): ToolOptionsEntry[] | null {
   if (
     !Object.values(tools).includes("disabled") &&
-    Object.keys(plugins).length === 0
+    Object.keys(plugins).length === 0 &&
+    Object.keys(pluginActions).length === 0
   ) {
     return null;
   }
@@ -439,12 +466,12 @@ function allowedEntries(
       ),
     ...pluginIds
       .filter((pluginId) => plugins[pluginId] !== "disabled")
-      .map(
-        (pluginId): ToolOptionsEntry => ({
-          type: "plugin",
-          plugin_id: pluginId,
-        })
-      ),
+      .map((pluginId): ToolOptionsEntry => {
+        const actions = pluginActions[pluginId];
+        return actions === undefined
+          ? { type: "plugin", plugin_id: pluginId }
+          : { type: "plugin", plugin_id: pluginId, actions: [...actions] };
+      }),
   ];
 }
 
@@ -454,16 +481,16 @@ function allowedEntries(
  * starts drops it too.
  */
 function toolFields(
-  configuration: Pick<ChatConfiguration, "tools" | "plugins">,
+  configuration: Pick<ChatConfiguration, "tools" | "plugins" | "pluginActions">,
   agent: MinimalAgent,
   pluginIds: readonly string[]
 ): Pick<ChatToolOptions, "allowed" | "preferred"> {
-  const { tools, plugins } = configuration;
+  const { tools, plugins, pluginActions } = configuration;
   const preferred = Object.keys(tools)
     .map(Number)
     .find((id) => tools[id] === "preferred");
   return {
-    allowed: allowedEntries(tools, plugins, agent, pluginIds),
+    allowed: allowedEntries(tools, plugins, pluginActions, agent, pluginIds),
     preferred:
       preferred === undefined
         ? null
@@ -746,11 +773,16 @@ export function useToolConfiguration(
     surface: "chat",
     agentId: activeAgent?.id,
   });
-  const catalogLoading =
+  // A catalog request that failed leaves its plugins out, so the ids stay
+  // unknown and no edit rewrites the allow-list from them.
+  const catalogIncomplete =
     catalog.loading.servers ||
     catalog.loading.tools ||
-    agentCatalog.loading.servers;
-  const pluginIdsKey = catalogLoading
+    agentCatalog.loading.servers ||
+    catalog.errors.servers !== undefined ||
+    catalog.errors.tools !== undefined ||
+    agentCatalog.errors.servers !== undefined;
+  const pluginIdsKey = catalogIncomplete
     ? null
     : chatPluginIds([...catalog.plugins, ...agentCatalog.plugins]).join(",");
   const pluginIds = useMemo(
@@ -995,6 +1027,7 @@ export function useToolConfiguration(
           : allowedEntries(
               configuration.tools,
               configuration.plugins,
+              configuration.pluginActions,
               activeAgent,
               pluginIds ?? []
             ),

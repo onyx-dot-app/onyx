@@ -57,6 +57,7 @@ jest.mock("@/lib/plugins/member", () => ({
   useMemberPlugins: () => ({
     plugins: [],
     loading: { apps: false, servers: false, tools: false, oauth: false },
+    errors: {},
   }),
 }));
 jest.mock("@/providers/UserProvider", () => ({

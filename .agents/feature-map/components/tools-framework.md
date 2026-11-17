@@ -100,8 +100,13 @@ order and applies these gates:
    choice that the client sends or the chat saved. A capability entry keeps a
    built-in tool by its id. A plugin entry keeps the plugin, and its optional
    `actions` keep only those action keys
-   (`integrations/chat_tools.py:IntegrationChatRequest.allowed_plugins`).
-   NULL keeps every tool and plugin of the agent.
+   (`tools/models.py:IntegrationChatRequest.allowed_plugins`). The options
+   only pick integrations and actions: the settings of every agent link that
+   holds an integration still apply, so a request cannot drop a Blocked link.
+   NULL keeps every tool and plugin of the agent. The web composer
+   (`web/src/lib/tools/hooks.ts`) sends a saved `actions` list back unchanged,
+   and it does not rewrite the allow-list while a plugin catalog request has
+   failed.
 3. `is_available(db_session)`. An exception counts as "not available" and is
    logged.
 4. A class-specific branch builds the instance, and some branches skip the
