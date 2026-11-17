@@ -62,8 +62,17 @@ export class IntegrationConnectDialog {
     await expect(this.credentialsDialog).toBeHidden();
   }
 
+  /** The row of one integration (an Opal ContentAction). */
+  row(name: string): Locator {
+    return this.dialog.locator(".opal-content-action").filter({
+      has: this.page.getByText(name, { exact: true }),
+    });
+  }
+
   async expectConnected(name: string): Promise<void> {
-    await expect(this.dialog.getByText(name, { exact: true })).toBeVisible();
+    await expect(
+      this.row(name).getByText("Connected", { exact: true })
+    ).toBeVisible();
     await expect(this.connectButton(name)).toBeHidden();
     await expect(this.reconnectButton(name)).toBeHidden();
   }
