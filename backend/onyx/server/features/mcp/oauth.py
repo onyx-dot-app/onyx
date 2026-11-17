@@ -1348,27 +1348,28 @@ class IntegrationTokenStorage(PersistentTokenStorage):
     async def set_authorization_result(
         self, tokens: OAuthToken, client_information: OAuthClientInformationFull
     ) -> None:
-        with get_session_with_current_tenant() as db_session:
-            stored_raw = self._credentials(db_session).registration.get(
-                OAUTH_CLIENT_INFO_KEY
-            )
         expected = (
             self.expected_client_information_fingerprint
             or mcp_oauth_client_information_fingerprint(client_information)
         )
-        if mcp_oauth_client_information_fingerprint(client_information) != expected or (
-            stored_raw is not None
-            and mcp_oauth_client_information_fingerprint(
-                OAuthClientInformationFull.model_validate(stored_raw)
-            )
-            != expected
-        ):
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "MCP OAuth client registration changed while authorization "
-                "was pending.",
-            )
-        await self._persist_tokens(tokens, keep_refresh=False)
+        with get_session_with_current_tenant() as db_session:
+            # The lock keeps the client from changing between the check and
+            # the write of the grant.
+            get_oauth_client(db_session, self.integration_id, for_update=True)
+            # An entered client has no registration document, so compare the
+            # client that the storage gives to the SDK.
+            stored = self._client_information(db_session)
+            if (
+                mcp_oauth_client_information_fingerprint(client_information) != expected
+                or stored is None
+                or mcp_oauth_client_information_fingerprint(stored) != expected
+            ):
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "MCP OAuth client registration changed while authorization "
+                    "was pending.",
+                )
+            self._write_tokens(db_session, tokens, keep_refresh=False)
 
     async def _persist_tokens(
         self,
@@ -1378,41 +1379,54 @@ class IntegrationTokenStorage(PersistentTokenStorage):
         expected_refresh_token: str | None = None,
     ) -> bool:
         with get_session_with_current_tenant() as db_session:
-            existing = get_connection(
-                db_session, self.integration_id, self.user_id, for_update=True
-            )
-            record = read_connection(existing) if existing is not None else None
-            previous = record.secret if record is not None else None
-            if expected_refresh_token is not None and (
-                previous is None or previous.refresh_token != expected_refresh_token
-            ):
-                return False
-            secret = _secret_from_oauth_token(
-                tokens, previous, keep_refresh=keep_refresh
-            )
-            upsert_connection__no_commit(
+            return self._write_tokens(
                 db_session,
-                integration_id=self.integration_id,
-                user_id=self.user_id,
-                secret=secret.model_dump(mode="json"),
-                expires_at=expiry_from_expires_in(
-                    tokens.expires_in, datetime.now(timezone.utc)
-                ),
-                granted_scopes=(
-                    tokens.scope.split()
-                    if tokens.scope
-                    else (record.granted_scopes if record is not None else None)
-                ),
+                tokens,
+                keep_refresh=keep_refresh,
+                expected_refresh_token=expected_refresh_token,
             )
-            if (
-                self._oauth_context is not None
-                and self._oauth_context.oauth_metadata is not None
-            ):
-                self._save_oauth_metadata(
-                    db_session,
-                    self._oauth_context.oauth_metadata.model_dump(mode="json"),
-                )
-            db_session.commit()
+
+    def _write_tokens(
+        self,
+        db_session: Session,
+        tokens: OAuthToken,
+        *,
+        keep_refresh: bool,
+        expected_refresh_token: str | None = None,
+    ) -> bool:
+        existing = get_connection(
+            db_session, self.integration_id, self.user_id, for_update=True
+        )
+        record = read_connection(existing) if existing is not None else None
+        previous = record.secret if record is not None else None
+        if expected_refresh_token is not None and (
+            previous is None or previous.refresh_token != expected_refresh_token
+        ):
+            return False
+        secret = _secret_from_oauth_token(tokens, previous, keep_refresh=keep_refresh)
+        upsert_connection__no_commit(
+            db_session,
+            integration_id=self.integration_id,
+            user_id=self.user_id,
+            secret=secret.model_dump(mode="json"),
+            expires_at=expiry_from_expires_in(
+                tokens.expires_in, datetime.now(timezone.utc)
+            ),
+            granted_scopes=(
+                tokens.scope.split()
+                if tokens.scope
+                else (record.granted_scopes if record is not None else None)
+            ),
+        )
+        if (
+            self._oauth_context is not None
+            and self._oauth_context.oauth_metadata is not None
+        ):
+            self._save_oauth_metadata(
+                db_session,
+                self._oauth_context.oauth_metadata.model_dump(mode="json"),
+            )
+        db_session.commit()
         return True
 
     def _save_oauth_metadata(
