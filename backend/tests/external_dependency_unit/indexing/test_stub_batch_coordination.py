@@ -8,10 +8,16 @@ from collections.abc import Generator
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.orm import Session
+from sqlalchemy.schema import CreateSchema, DropSchema
 
 from onyx.connectors.models import ListingPayload, SlimDocumentStub
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_tenant,
+    get_sqlalchemy_engine,
+)
 from onyx.db.enums import IndexingStatus
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt
@@ -101,6 +107,50 @@ def test_claim_stops_at_stored_and_window(db_session: Session, attempt_id: int) 
         4,
         5,
     ]
+
+
+# No attempt in the public schema has this id.
+_TENANT_ATTEMPT_ID = 2_000_000_001
+
+
+@pytest.fixture
+def tenant_schema() -> Generator[str, None, None]:
+    """A tenant schema with its own index_attempt table and one attempt
+    row."""
+    tenant = f"claim_tenant_{uuid4().hex[:12]}"
+    engine = get_sqlalchemy_engine()
+    with engine.begin() as conn:
+        conn.execute(CreateSchema(tenant))
+        conn.execute(
+            text(
+                f'CREATE TABLE "{tenant}".index_attempt '
+                "(LIKE public.index_attempt INCLUDING DEFAULTS)"
+            )
+        )
+        conn.execute(
+            text(
+                f'INSERT INTO "{tenant}".index_attempt '
+                "(id, connector_credential_pair_id, search_settings_id, "
+                "from_beginning, status, stub_batches_stored) "
+                "VALUES (:id, 1, 1, false, 'IN_PROGRESS', 3)"
+            ),
+            {"id": _TENANT_ATTEMPT_ID},
+        )
+    try:
+        yield tenant
+    finally:
+        with engine.begin() as conn:
+            conn.execute(DropSchema(tenant, cascade=True, if_exists=True))
+
+
+def test_claim_uses_the_tenant_schema(tenant_schema: str) -> None:
+    with get_session_with_tenant(tenant_id=tenant_schema) as session:
+        assert IndexingCoordination.claim_stub_batches(
+            session, _TENANT_ATTEMPT_ID, 2
+        ) == [0, 1]
+        attempt = session.get(IndexAttempt, _TENANT_ATTEMPT_ID)
+        assert attempt is not None
+        assert attempt.stub_batches_sent == 2
 
 
 def test_out_of_order_store_is_refused(db_session: Session, attempt_id: int) -> None:
