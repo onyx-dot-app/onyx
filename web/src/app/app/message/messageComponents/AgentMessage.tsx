@@ -772,6 +772,9 @@ function packetTurn(group: TurnGroup): number {
   return step ? parseToolKey(step.groupKey).turn_index : group.turnIndex;
 }
 
+/** The key of a section's first run, and of its waiting card before that. */
+const LIVE_RUN_KEY = "live";
+
 /**
  * Lays out one response section the way Craft lays out a turn: steps, text,
  * and approval and question cards in arrival (turn) order. Consecutive steps
@@ -835,7 +838,11 @@ function buildSectionSegments(
       else
         segments.push({
           kind: "run",
-          key: item.group.steps[0]?.key ?? String(item.turn),
+          // The first run keeps the waiting card's key, so "Thinking..."
+          // becomes that run's card instead of being replaced by a new one.
+          key: segments.some((s) => s.kind === "run")
+            ? (item.group.steps[0]?.key ?? String(item.turn))
+            : LIVE_RUN_KEY,
           turnGroups: [item.group],
         });
     }
@@ -852,7 +859,7 @@ function buildSectionSegments(
     });
   }
   if (!segments.some((s) => s.kind === "run")) {
-    segments.push({ kind: "run", key: "live", turnGroups: [] });
+    segments.push({ kind: "run", key: LIVE_RUN_KEY, turnGroups: [] });
   }
   if (section.publishedFiles.length > 0) {
     segments.push({ kind: "files" });
