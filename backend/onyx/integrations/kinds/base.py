@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import Integration, IntegrationAction
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.kinds.models import ChatToolContext
-from onyx.integrations.models import IntegrationConfig, MatchedIntegrationAction
+from onyx.integrations.models import IntegrationConfig, RequestMatch
 from onyx.tools.interface import Tool
 
 
@@ -37,8 +37,8 @@ class IntegrationKindHandler(ABC):
         integration: Integration,
         request: ProxiedRequest,
         db_session: Session,
-    ) -> list[MatchedIntegrationAction] | None:
+    ) -> RequestMatch | None:
         """The actions that a sandbox request calls. None: the request is not
-        for this integration. An empty list: a protocol request that calls no
+        for this integration. No actions: a protocol request that calls no
         action."""
         raise NotImplementedError

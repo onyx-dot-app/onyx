@@ -8583,9 +8583,8 @@ class ActionApproval(Base):
         Enum(ApprovalDecidedVia, native_enum=False, name="approvaldecidedvia"),
         nullable=True,
     )
-    # The gated target (external app or MCP server) this request hit, via the
-    # polymorphic ``gated_app`` identity row. Goes NULL when that target is
-    # deleted (SET NULL) — the decided row stays as an audit record.
+    # The old identity row of the target, kept for rollback: written only when
+    # a gated_app row with the integration id exists.
     gated_app_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("gated_app.id", ondelete="SET NULL"),
@@ -8600,7 +8599,7 @@ class ActionApproval(Base):
         ),
         nullable=True,
     )
-    gated_app: Mapped["GatedApp | None"] = relationship("GatedApp")
+    integration: Mapped["Integration | None"] = relationship("Integration")
 
 
 class ScheduledTask(Base):

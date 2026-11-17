@@ -21,6 +21,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
     WHOLE_DOMAIN_ACTION_TYPE,
     recognize_actions,
+    resolve_app_for_url,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.providers.registry import get_endpoint_catalog
@@ -31,8 +32,8 @@ from onyx.integrations.models import (
     ApiShape,
     IntegrationActionSpec,
     MatchedIntegrationAction,
+    RequestMatch,
 )
-from onyx.sandbox_proxy.request_evaluator import resolve_app_for_url
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
     match_request,
     normalized_request_path,
@@ -264,7 +265,7 @@ class ApiKindHandler(IntegrationKindHandler):
         integration: Integration,
         request: ProxiedRequest,
         db_session: Session,
-    ) -> list[MatchedIntegrationAction] | None:
+    ) -> RequestMatch | None:
         if request.url is None:
             return None
         config = self._openapi_config(integration, db_session)
@@ -279,16 +280,18 @@ class ApiKindHandler(IntegrationKindHandler):
         matched = recognize_actions(
             app, request.model_copy(update={"path": request.path.split("?", 1)[0]})
         )
-        return [
-            MatchedIntegrationAction(
-                integration_id=integration.id,
-                action_key=action.action_type,
-                display_name=action.display_name,
-                description=action.description,
-                default_policy=CATALOG_POLICY_VALUES[action.policy],
-            )
-            for action in matched.actions
-        ]
+        return RequestMatch(
+            actions=[
+                MatchedIntegrationAction(
+                    integration_id=integration.id,
+                    action_key=action.action_type,
+                    display_name=action.display_name,
+                    description=action.description,
+                    default_policy=CATALOG_POLICY_VALUES[action.policy],
+                )
+                for action in matched
+            ]
+        )
 
     def _match_openapi(
         self,
@@ -297,7 +300,7 @@ class ApiKindHandler(IntegrationKindHandler):
         method: str,
         url: str,
         db_session: Session,
-    ) -> list[MatchedIntegrationAction] | None:
+    ) -> RequestMatch | None:
         """The request must be under the server URL of the spec. Then its method
         and the rest of its path pick the stored actions."""
         if base_url is None:
@@ -329,9 +332,7 @@ class ApiKindHandler(IntegrationKindHandler):
             for action, template in path_matches
             if _literal_length(template) == longest and action.http_method == method
         ]
-        if not winners:
-            return [_whole_domain_action(integration_id, f"{method} {path}")]
-        return [
+        matched = [
             MatchedIntegrationAction(
                 integration_id=integration_id,
                 action_key=action.key,
@@ -342,3 +343,8 @@ class ApiKindHandler(IntegrationKindHandler):
             )
             for action in winners
         ]
+        return RequestMatch(
+            actions=matched
+            or [_whole_domain_action(integration_id, f"{method} {path}")],
+            path_prefix_length=len(target.path_prefix),
+        )

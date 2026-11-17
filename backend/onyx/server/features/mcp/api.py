@@ -38,6 +38,7 @@ from onyx.db.action_policy import (
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
     GatedAppKind,
+    IntegrationKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -46,7 +47,10 @@ from onyx.db.enums import (
     Permission,
     PermissionAuthority,
 )
-from onyx.db.integration import get_mcp_server_plugin_ids
+from onyx.db.integration import (
+    get_mcp_server_for_integration,
+    get_mcp_server_plugin_ids,
+)
 from onyx.db.mcp import (
     affected_user_ids_for_mcp_server,
     clear_mcp_admin_connection_config__no_commit,
@@ -59,14 +63,12 @@ from onyx.db.mcp import (
     fetch_mcp_tools,
     get_all_mcp_servers,
     get_connection_config_by_id,
-    get_craft_enabled_mcp_servers,
     get_default_chat_mcp_server_ids,
     get_mcp_server_by_id,
     get_mcp_server_user_preferences,
     get_mcp_servers_accessible_to_user,
     get_mcp_servers_for_persona,
     get_user_connection_config,
-    get_user_connection_configs,
     lock_mcp_server_row,
     update_connection_config,
     update_connection_config__no_commit,
@@ -94,6 +96,9 @@ from onyx.db.tools import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.connection_models import ConnectionState
+from onyx.integrations.connections import integration_status
+from onyx.integrations.craft import list_runnable_integrations
 from onyx.oauth.authorization_attempt import canonical_json_fingerprint
 from onyx.server.features.mcp.client import (
     discover_mcp_tools,
@@ -1413,7 +1418,6 @@ def _db_mcp_server_to_api_mcp_server(
         is_public=db_server.is_public,
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
-        available_in_craft=db_server.available_in_craft,
         users_can_manage_policies=users_can_manage_policies(
             db, GatedAppKind.MCP_SERVER, db_server.id
         ),
@@ -1458,7 +1462,7 @@ def update_mcp_user_preferences(
     if not user_can_access_mcp_server(user, server_id, db):
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "MCP server is not accessible")
     try:
-        server = get_mcp_server_by_id(server_id, db)
+        get_mcp_server_by_id(server_id, db)
     except ValueError as error:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found") from error
     if (
@@ -1468,10 +1472,7 @@ def update_mcp_user_preferences(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, "MCP server is not available in default Chat"
         )
-    if request.enabled_in_craft is True and not server.available_in_craft:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT, "MCP server is not available in Craft"
-        )
+
     preference = upsert_mcp_server_user_preferences__no_commit(
         server_id,
         user.id,
@@ -1561,36 +1562,39 @@ def get_craft_mcp_servers_for_user(
     db: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPServersResponse:
-    """List MCP servers an admin has made available to the Craft agent, with
-    the current user's connection/auth state. Craft reads the same credential
-    rows as chat, so a server connected in either surface shows as
-    authenticated here.
-
-    Personal preferences remain visible so users can enable a server again.
-    `craft_connected` reports credentials independently of personal availability.
-    """
-    db_mcp_servers = get_craft_enabled_mcp_servers(
-        db, user, include_personal_disabled=True
-    )
+    """The MCP servers of the integrations of the plugins the user runs, with
+    the user's connection state from the integration tables."""
+    pairs = [
+        (integration, server)
+        for integration in list_runnable_integrations(db, user.id)
+        if integration.kind is IntegrationKind.MCP
+        and (server := get_mcp_server_for_integration(integration.id, db)) is not None
+    ]
     default_chat_server_ids = get_default_chat_mcp_server_ids(
-        [server.id for server in db_mcp_servers], db
-    )
-    user_configs = get_user_connection_configs(
-        [s.id for s in db_mcp_servers], user.email, db
+        [server.id for _, server in pairs], db
     )
     mcp_servers = []
-    for db_server in db_mcp_servers:
+    for integration, db_server in pairs:
         server = _db_mcp_server_to_api_mcp_server(
-            db_server, db, request_user=user, user_configs=user_configs
+            db_server, db, request_user=user, user_configs={}
         )
+        state = integration_status(integration, user, db).state
+        server.connection_status = _CONNECTION_STATUS[state]
         server.default_chat_enabled = server.id in default_chat_server_ids
-        server.craft_connected = (
-            server.connection_status == MCPConnectionStatus.CONNECTED
-        )
+        server.available_in_craft = True
+        server.craft_connected = state is ConnectionState.CONNECTED
         mcp_servers.append(server)
     _stamp_plugin_ids(mcp_servers, db)
     _stamp_user_preferences(mcp_servers, user, db)
     return MCPServersResponse(mcp_servers=mcp_servers)
+
+
+_CONNECTION_STATUS: dict[ConnectionState, MCPConnectionStatus] = {
+    ConnectionState.CONNECTED: MCPConnectionStatus.CONNECTED,
+    ConnectionState.NOT_CONNECTED: MCPConnectionStatus.NOT_CONNECTED,
+    ConnectionState.NOT_SET_UP: MCPConnectionStatus.NOT_CONNECTED,
+    ConnectionState.NEEDS_RECONNECT: MCPConnectionStatus.REAUTH_REQUIRED,
+}
 
 
 @admin_router.get("/server/{server_id}/tools")
@@ -2803,7 +2807,6 @@ def _mcp_setup_configuration_fingerprint(
             "is_public": server.is_public,
             "groups": sorted(group.id for group in server.user_groups),
             "users": sorted(str(member.id) for member in server.users),
-            "available_in_craft": server.available_in_craft,
             "default_chat_tool_ids": sorted(
                 tool.id
                 for tool in default_assistant.tools
@@ -3431,7 +3434,6 @@ def create_mcp_server_simple(
         is_public=mcp_server.is_public,
         groups=[group.id for group in mcp_server.user_groups],
         users=[user.id for user in mcp_server.users],
-        available_in_craft=mcp_server.available_in_craft,
         tool_count=0,  # New server, no tools yet
         auth_template=None,
         user_credentials=None,

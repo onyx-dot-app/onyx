@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import Select, and_, delete, select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session, aliased, selectinload
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.auth.permissions import has_global_permission
@@ -136,41 +136,6 @@ def get_mcp_servers_by_owner(owner_email: str, db_session: Session) -> list[MCPS
             select(MCPServer).where(MCPServer.owner == owner_email)
         ).all()
     )
-
-
-def get_craft_enabled_mcp_servers(
-    db_session: Session,
-    user: User | None,
-    *,
-    include_personal_disabled: bool = False,
-    server_ids: set[int] | None = None,
-) -> list[MCPServer]:
-    """MCP servers an admin has made available to the Craft agent, filtered to
-    those ``user`` may use (public / shared / owned). ``None`` skips the access
-    filter — only for host matching before a user is known (proxy claim path).
-
-    Eager-loads ``admin_connection_config`` so credential resolution across the
-    returned set doesn't lazy-load one row per admin-managed server."""
-    stmt = (
-        select(MCPServer)
-        .where(MCPServer.available_in_craft.is_(True))
-        .options(selectinload(MCPServer.admin_connection_config))
-    )
-    if user is not None:
-        stmt = _add_mcp_server_access_filter(stmt, user)
-        if not include_personal_disabled:
-            stmt = stmt.where(
-                ~select(MCPServerUserPreference.mcp_server_id)
-                .where(
-                    MCPServerUserPreference.user_id == user.id,
-                    MCPServerUserPreference.mcp_server_id == MCPServer.id,
-                    MCPServerUserPreference.enabled_in_craft.is_(False),
-                )
-                .exists()
-            )
-    if server_ids is not None:
-        stmt = stmt.where(MCPServer.id.in_(server_ids))
-    return list(db_session.scalars(stmt).all())
 
 
 def get_mcp_servers_for_persona(

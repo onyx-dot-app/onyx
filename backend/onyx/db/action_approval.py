@@ -10,13 +10,12 @@ from uuid import UUID
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session, load_only, selectinload
 
-from onyx.db.action_policy import get_or_create_gated_app_id
+from onyx.db.approval_request import get_legacy_gated_app_id
 from onyx.db.enums import (
     POLICY_SEVERITY,
     ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    GatedAppKind,
 )
 from onyx.db.models import ActionApproval, BuildSession
 from onyx.utils.logger import setup_logger
@@ -31,16 +30,15 @@ def insert_action_approval(
     actions: list[dict[str, Any]],
     app_name: str,
     payload: dict[str, Any],
-    target: tuple[GatedAppKind, int] | None = None,
+    integration_id: int | None = None,
     decision: ApprovalDecision | None = None,
     decided_via: ApprovalDecidedVia | None = None,
 ) -> ActionApproval:
     """Commit an approval row. ``actions`` is the JSONB list of
     ``MatchedAction``-shaped dicts; must be non-empty. Re-sorted
     strictest-policy-first so every reader can rely on ``actions[0]``.
-    ``target`` attributes the row to a gated ``(kind, target_id)`` via its
-    ``gated_app`` identity row; a target-less row (e.g. a bash gate) leaves
-    ``gated_app_id`` NULL.
+    ``integration_id`` attributes the row to an integration; a row with no
+    integration (e.g. a bash gate) leaves it NULL.
 
     Defaults to a pending row (``decision IS NULL``). Passing ``decision``
     inserts it pre-decided — safe to bypass ``try_record_decision``'s
@@ -53,15 +51,17 @@ def insert_action_approval(
         key=lambda a: POLICY_SEVERITY[ActionPolicy(a["policy"])],
         reverse=True,
     )
-    gated_app_id = (
-        get_or_create_gated_app_id(db_session, *target) if target is not None else None
-    )
     row = ActionApproval(
         session_id=session_id,
         actions=sorted_actions,
         app_name=app_name,
         payload=payload,
-        gated_app_id=gated_app_id,
+        integration_id=integration_id,
+        gated_app_id=(
+            get_legacy_gated_app_id(db_session, integration_id)
+            if integration_id is not None
+            else None
+        ),
         decision=decision,
         decided_at=datetime.now(timezone.utc) if decision is not None else None,
         decided_via=decided_via,
@@ -164,7 +164,7 @@ def list_session_action_approvals(
                     raiseload=True,
                 )
                 if status_only
-                else selectinload(ActionApproval.gated_app)
+                else selectinload(ActionApproval.integration)
             )
             .order_by(
                 ActionApproval.created_at.desc(), ActionApproval.approval_id.desc()
@@ -185,7 +185,7 @@ def list_session_pending_action_approvals(
     `created_after` excludes rows older than the proxy's wait window
     (likely orphaned by a crashed proxy that couldn't write EXPIRED).
 
-    `load_target` eager-loads each row's ``gated_app`` in one batched SELECT —
+    `load_target` eager-loads each row's ``integration`` in one batched SELECT —
     set it when the caller inspects the target per row (else it stays lazy and a
     caller that never touches it pays nothing).
     """
@@ -195,7 +195,7 @@ def list_session_pending_action_approvals(
         .where(ActionApproval.decision.is_(None))
     )
     if load_target:
-        stmt = stmt.options(selectinload(ActionApproval.gated_app))
+        stmt = stmt.options(selectinload(ActionApproval.integration))
     if created_after is not None:
         stmt = stmt.where(ActionApproval.created_at >= created_after)
     stmt = stmt.order_by(ActionApproval.created_at.desc())
@@ -206,16 +206,16 @@ def list_session_grant_action_approvals(
     db_session: Session,
     session_id: UUID,
     *,
-    gated_app_id: int | None,
+    integration_id: int | None,
 ) -> list[ActionApproval]:
-    """Approved rows covered by a durable session-scope grant for one gated app.
-    ``None`` means the target was never gated — no identity row, so no grants."""
-    if gated_app_id is None:
+    """Approved rows covered by a durable session-scope grant for one
+    integration. ``None`` (an integration that was deleted) has no grants."""
+    if integration_id is None:
         return []
     stmt = (
         select(ActionApproval)
         .where(ActionApproval.session_id == session_id)
-        .where(ActionApproval.gated_app_id == gated_app_id)
+        .where(ActionApproval.integration_id == integration_id)
         .where(ActionApproval.decision == ApprovalDecision.APPROVED)
         .where(ActionApproval.decided_via == ApprovalDecidedVia.SESSION_GRANT)
         .order_by(ActionApproval.decided_at.desc())

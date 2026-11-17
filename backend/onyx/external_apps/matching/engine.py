@@ -1,18 +1,19 @@
 """Recognize app actions independently of saved permission settings."""
 
+import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from onyx.db.enums import POLICY_SEVERITY, ActionPolicy, ExternalAppType, GatedAppKind
+from onyx.db.enums import POLICY_SEVERITY, ActionPolicy, IntegrationKind
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
-from onyx.external_apps.providers.registry import (
-    get_endpoint_catalog,
-    get_provider_for_app,
-)
+from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # action_type for a domain-matched request that hit no catalog action.
 WHOLE_DOMAIN_ACTION_TYPE = "unspecified"
@@ -31,25 +32,14 @@ class MatchedAction(BaseModel):
 
 
 class GatedTarget(BaseModel):
-    """The connected app/server a gated request is attributed to.
-
-    ``id`` indexes the table named by ``kind`` — ``external_app`` or
-    ``mcp_server``. Lookups key off ``(kind, id)``, never ``app_name``: the
-    latter isn't unique across instances (self-hosted GitLab/Jira share an
-    app_type, and two MCP servers can share a display name).
-    """
+    """The integration a gated request is attributed to. Lookups key off
+    ``integration_id``, never ``app_name``, which is not unique."""
 
     model_config = ConfigDict(frozen=True)
 
-    kind: GatedAppKind
-    id: int
+    integration_id: int
+    kind: IntegrationKind
     app_name: str
-
-    @property
-    def key(self) -> tuple[GatedAppKind, int]:
-        """The ``(kind, id)`` pair — same shape as ``GatedApp.target_key``, so
-        live matches compare directly against persisted grants."""
-        return self.kind, self.id
 
 
 class AllMatchedActions(BaseModel):
@@ -121,21 +111,32 @@ def actions_requiring_approval(actions: Iterable[ActionLike]) -> list[str]:
     return sorted(action_types)
 
 
-def _app_name(app: ExternalApp) -> str:
-    provider = get_provider_for_app(app)
-    if provider is not None:
-        return provider.spec.app_name
-    # CUSTOM apps have no provider; use their independently editable display name.
-    if app.app_type == ExternalAppType.CUSTOM:
-        return app.name
-    return app.app_type.value
+def resolve_app_for_url(
+    url: str,
+    apps: Iterable[ExternalApp],
+) -> ExternalApp | None:
+    """The first app with an ``upstream_url_patterns`` entry that matches
+    ``url``. A malformed built-in regex is skipped."""
+    for app in apps:
+        for regex in app.upstream_url_regexes:
+            try:
+                if re.fullmatch(regex, url):
+                    return app
+            except re.error:
+                logger.warning(
+                    "skipping malformed upstream_url_pattern app_id=%s pattern=%r",
+                    app.id,
+                    regex,
+                )
+    return None
 
 
 def recognize_actions(
     app: ExternalApp,
     request: ProxiedRequest,
-) -> AllMatchedActions:
-    """Identify actions with catalog defaults; the proxy resolves saved policies."""
+) -> tuple[MatchedAction, ...]:
+    """Identify actions with catalog defaults, strictest first. The proxy
+    resolves saved policies."""
     context = MatchContext(request)
     catalog = get_endpoint_catalog(app.app_type)
     matched = [
@@ -157,9 +158,4 @@ def recognize_actions(
                 policy=ActionPolicy.ASK,
             )
         ]
-    return AllMatchedActions(
-        actions=tuple(matched),
-        target=GatedTarget(
-            kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
-        ),
-    )
+    return tuple(sorted(matched, key=lambda a: POLICY_SEVERITY[a.policy], reverse=True))
