@@ -61,6 +61,15 @@ def list_runnable_integrations(db_session: Session, user_id: UUID) -> list[Integ
     )
 
 
+def list_visible_integrations(db_session: Session, user_id: UUID) -> list[Integration]:
+    """The enabled integrations of the plugins that the user can see, on or
+    off."""
+    return _enabled_integrations(
+        db_session,
+        [state.plugin_id for state in load_user_plugin_states([user_id], db_session)],
+    )
+
+
 def _visible_task_plugin_ids(
     db_session: Session, task_id: UUID, user_id: UUID
 ) -> set[UUID]:

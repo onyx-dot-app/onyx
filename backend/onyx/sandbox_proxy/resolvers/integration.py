@@ -24,7 +24,7 @@ from onyx.db.users import fetch_user_by_id
 from onyx.external_apps.matching.engine import GatedTarget
 from onyx.integrations.call_credentials import resolve_call_credentials
 from onyx.integrations.connections import ConnectionProblem
-from onyx.integrations.craft import list_runnable_integrations
+from onyx.integrations.craft import list_visible_integrations
 from onyx.sandbox_proxy.credential_injection import (
     CredentialResolver,
     CredentialUnavailableError,
@@ -57,7 +57,7 @@ class IntegrationResolver(CredentialResolver):
         self._targets_by_tenant: TTLCache[str, tuple[CraftMCPTarget, ...]] = TTLCache(
             maxsize=10_000, ttl=cache_ttl_s
         )
-        # The integrations each user runs, for internal destinations.
+        # The integrations of the plugins each user can see.
         self._accessible_ids_by_user: TTLCache[tuple[str, UUID], frozenset[int]] = (
             TTLCache(maxsize=10_000, ttl=cache_ttl_s)
         )
@@ -65,7 +65,9 @@ class IntegrationResolver(CredentialResolver):
     def allows_destination(
         self, sandbox: ResolvedSandbox, scheme: str, host: str, port: int
     ) -> bool:
-        """Allow an internal origin only for an MCP integration the user runs."""
+        """Allow an internal origin only for an MCP integration of a plugin
+        that the user can see. A scheduled run can use a task plugin that the
+        user turned off; the gate matches each request."""
         if scheme not in {"http", "https"}:
             return False
         runnable = self._accessible_ids(sandbox.tenant_id, sandbox.user_id)
@@ -132,17 +134,6 @@ class IntegrationResolver(CredentialResolver):
                     f"integration {target.integration_id} is no longer available",
                     sandbox_detail=f'"{target.app_name}" is no longer available.',
                 )
-            if integration.id not in {
-                runnable.id
-                for runnable in list_runnable_integrations(db, sandbox.user_id)
-            }:
-                raise CredentialUnavailableError(
-                    f"user {short_log_id(sandbox.user_id)} cannot use integration "
-                    f"{integration.id}",
-                    sandbox_detail=(
-                        f'Turn on a plugin that holds "{integration.name}" to use it.'
-                    ),
-                )
             user = fetch_user_by_id(db, sandbox.user_id)
             if user is None:
                 raise CredentialUnavailableError(
@@ -202,6 +193,5 @@ class IntegrationResolver(CredentialResolver):
     def _load_accessible_ids(self, tenant_id: str, user_id: UUID) -> frozenset[int]:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             return frozenset(
-                integration.id
-                for integration in list_runnable_integrations(db, user_id)
+                integration.id for integration in list_visible_integrations(db, user_id)
             )

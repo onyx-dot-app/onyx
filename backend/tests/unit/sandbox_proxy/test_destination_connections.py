@@ -446,11 +446,12 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
                 id=1, kind=IntegrationKind.MCP, name="Private MCP", enabled=True
             )
             user = User(id=make_resolved_sandbox().user_id)
-            for module in (request_evaluator, integration_resolver):
+            for module, loader in (
+                (request_evaluator, "list_runnable_integrations"),
+                (integration_resolver, "list_visible_integrations"),
+            ):
                 monkeypatch.setattr(module, "get_session_with_tenant", MagicMock())
-                monkeypatch.setattr(
-                    module, "list_runnable_integrations", lambda *_args: [integration]
-                )
+                monkeypatch.setattr(module, loader, lambda *_args: [integration])
             monkeypatch.setattr(
                 mcp_kind, "get_mcp_server_for_integration", lambda *_args: stored
             )
