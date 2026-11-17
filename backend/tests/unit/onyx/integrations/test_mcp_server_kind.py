@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
     IntegrationActionPolicyValue,
+    IntegrationActionSource,
     IntegrationAuthMode,
     IntegrationKind,
     MCPAuthenticationType,
