@@ -104,10 +104,13 @@ export default function AddIntegrationModal({
     if (!busy) onClose();
   }
 
-  // The sign-in methods and client modes differ by kind.
+  // The sign-in methods and client modes differ by kind, and the sign-in of
+  // a preset comes from the preset, so the admin picks the preset again.
   function pickShape(option: IntegrationShape) {
     setSignIn(DEFAULT_SIGN_IN);
     setSignInTouched(false);
+    setPresetId("");
+    setOrgCredentials({});
     setStep(
       option === "openapi"
         ? { kind: "openapiSchema" }
