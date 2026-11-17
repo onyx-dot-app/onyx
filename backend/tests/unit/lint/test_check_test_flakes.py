@@ -16,6 +16,8 @@ def test_reason(): pass
 p.skip(reason=" ")
 p.skip("Service unavailable")
 p.mark.skip(reason="test-flakes: allow")
+p.skip(f"{env_name} is not set.")
+p.skip(f"{dynamic_reason}")
 """
     assert sorted(python_findings(source)) == [
         (4, "sleep", False),
@@ -25,6 +27,8 @@ p.mark.skip(reason="test-flakes: allow")
         (10, "skip", False),
         (11, "skip", True),
         (12, "skip", True),
+        (13, "skip", True),
+        (14, "skip", False),
     ]
 
 
@@ -38,6 +42,8 @@ test.skip(!enabled, "Feature is disabled");
 test.skip("The title", async () => {});
 test.describe.fixme("Group title", () => {});
 test.fixme(); // test-flakes: allow tracked in issue #1234
+test.skip(!enabled, `${feature} is disabled`);
+test.skip(!enabled, `${dynamicReason}`);
 """
     assert list(playwright_findings(source)) == [
         (4, "sleep", True),
@@ -46,6 +52,8 @@ test.fixme(); // test-flakes: allow tracked in issue #1234
         (7, "skip", False),
         (8, "skip", False),
         (9, "skip", True),
+        (10, "skip", True),
+        (11, "skip", False),
     ]
 
 

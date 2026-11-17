@@ -40,6 +40,16 @@ def _python_name(node: ast.expr) -> str:
     return ""
 
 
+def _python_has_reason(value: ast.expr) -> bool:
+    parts = value.values if isinstance(value, ast.JoinedStr) else [value]
+    return any(
+        isinstance(part, ast.Constant)
+        and isinstance(part.value, str)
+        and bool(part.value.strip())
+        for part in parts
+    )
+
+
 def python_findings(source: str) -> Iterator[Finding]:
     tree = ast.parse(source)
     nodes = list(ast.walk(tree))
@@ -81,12 +91,7 @@ def python_findings(source: str) -> Iterator[Finding]:
                 values = [kw.value for kw in node.keywords if kw.arg == "reason"]
                 if name == "pytest.skip":
                     values.extend(node.args[:1])
-                reason = any(
-                    isinstance(value, ast.Constant)
-                    and isinstance(value.value, str)
-                    and bool(value.value.strip())
-                    for value in values
-                )
+                reason = any(_python_has_reason(value) for value in values)
             yield node.lineno, "skip", reason or node.lineno in marked
 
 
@@ -137,7 +142,10 @@ def playwright_findings(source: str, *, tsx: bool = False) -> Iterator[Finding]:
                 len(values) == 2
                 and values[0].type not in {"string", "template_string"}
                 and values[1].type in {"string", "template_string"}
-                and bool(_ts_text(values[1])[1:-1].strip())
+                and any(
+                    part.type == "string_fragment" and _ts_text(part).strip()
+                    for part in values[1].named_children
+                )
             )
             yield line, "skip", reason or line in marked
 

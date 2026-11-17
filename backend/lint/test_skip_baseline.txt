@@ -7,18 +7,13 @@
 #
 # One `<count> <path>` per line, sorted by path.
 1 backend/tests/daily/connectors/onedrive/test_onedrive_fixed_tenant_daily.py
-2 backend/tests/evals/connector_filter_eval/conftest.py
 1 backend/tests/external_dependency_unit/craft_helm/rendering.py
 1 backend/tests/external_dependency_unit/craft_helm/test_sandbox_image_prepuller.py
-2 backend/tests/external_dependency_unit/llm/test_prompt_caching.py
+1 backend/tests/external_dependency_unit/llm/test_prompt_caching.py
 1 backend/tests/external_dependency_unit/oauth_provider/test_native_clients.py
-1 backend/tests/external_dependency_unit/sandbox_proxy/test_identity_docker_lookup.py
-1 backend/tests/integration/common_utils/managers/mock_llm.py
 1 backend/tests/integration/connector_job_tests/onedrive/test_onedrive_full_acl_integration.py
 1 backend/tests/integration/tests/gateway_clients/conftest.py
 1 backend/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py
-1 backend/tests/manual/embedding_models/provider_env.py
-1 backend/tests/unit/onyx/tools/tool_implementations/open_url/test_snippet_matcher.py
 1 web/tests/e2e/admin/web-search/web_search_providers.spec.ts
 2 web/tests/e2e/auth/password_managements.spec.ts
 1 web/tests/e2e/chat/current_agent.spec.ts
