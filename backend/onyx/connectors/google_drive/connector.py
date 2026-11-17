@@ -1882,6 +1882,9 @@ class GoogleDriveConnector(
             # version removed. Its claims and progress do not apply, so the
             # attempt lists again from its window start.
             _drop_listing_state(checkpoint)
+            # The serial listing could send a folder with no parent, and it
+            # kept no record to repair that. Send each folder node again.
+            checkpoint.seen_hierarchy_node_raw_ids = ThreadSafeSet()
         t0, t1 = window_ms(start or 0, time.time() if end is None else end)
         if state is not None and state.window_t0 != t0:
             logger.warning(

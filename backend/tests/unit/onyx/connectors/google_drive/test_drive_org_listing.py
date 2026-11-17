@@ -350,6 +350,33 @@ def test_a_checkpoint_from_main_parses_and_lists_again(
         assert key not in dumped
 
 
+def test_a_checkpoint_from_main_sends_its_folder_nodes_again() -> None:
+    """main's serial listing could send a folder with no parent, and its
+    checkpoint has no record to repair it. The restart forgets the nodes it
+    sent, so the new listing sends each folder node again, with its parent.
+    A restart for a new window start keeps the nodes sent."""
+    tenant = _org_tenant()
+    connector = _full_org_connector()
+    old = connector.validate_checkpoint_json(
+        json.dumps(
+            {
+                **_MAIN_STAGE_CHECKPOINT,
+                "seen_hierarchy_node_raw_ids": ["sent_without_parent"],
+            }
+        )
+    )
+
+    with tenant.patch(connector):
+        connector._plan_listing(old, 0, 1_000)
+    assert "sent_without_parent" not in old.seen_hierarchy_node_raw_ids
+
+    old.seen_hierarchy_node_raw_ids.add("sent_in_this_attempt")
+    with tenant.patch(connector):
+        connector._plan_listing(old, 500, 1_000)
+    assert old.listing is not None and old.listing.window_t0 == 500_000
+    assert "sent_in_this_attempt" in old.seen_hierarchy_node_raw_ids
+
+
 # --- requested folders -------------------------------------------------------
 
 
