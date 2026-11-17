@@ -104,6 +104,17 @@ export default function AddIntegrationModal({
     if (!busy) onClose();
   }
 
+  // The sign-in methods and client modes differ by kind.
+  function pickShape(option: IntegrationShape) {
+    setSignIn(DEFAULT_SIGN_IN);
+    setSignInTouched(false);
+    setStep(
+      option === "openapi"
+        ? { kind: "openapiSchema" }
+        : { kind: "form", shape: option }
+    );
+  }
+
   function changeSignIn(next: SignInDraft) {
     setSignInTouched(true);
     setSignIn(next);
@@ -247,13 +258,7 @@ export default function AddIntegrationModal({
                   role="button"
                   tabIndex={0}
                   aria-label={kindCopy(option)}
-                  onClick={() =>
-                    setStep(
-                      option === "openapi"
-                        ? { kind: "openapiSchema" }
-                        : { kind: "form", shape: option }
-                    )
-                  }
+                  onClick={() => pickShape(option)}
                 >
                   <Content
                     icon={SHAPE_ICONS[option]}

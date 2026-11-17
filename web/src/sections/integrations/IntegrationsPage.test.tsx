@@ -290,6 +290,43 @@ test("adds an MCP server for the organization with the probed sign-in", async ()
   );
 });
 
+test("does not carry the sign-in of one kind to another kind", async () => {
+  mockProbe.mockResolvedValue({
+    kind: "oauth",
+    transport: "STREAMABLE_HTTP",
+    discovery: {
+      status: "metadata_found",
+      supports_automatic_registration: true,
+      supports_client_metadata: null,
+      authorization_endpoint: "https://mcp.example.com/authorize",
+      token_endpoint: "https://mcp.example.com/token",
+    },
+  });
+  const fetchMock = mockList({
+    "POST /api/admin/integrations": makeDetail({ id: 12 }),
+  });
+  const user = await openAdd("mcp_server");
+  await user.type(
+    screen.getByRole("textbox", { name: copy.add.mcp.url.title }),
+    "https://mcp.example.com/mcp"
+  );
+  await screen.findByText(copy.add.mcp.probe.oauth, {}, { timeout: 3000 });
+  await user.click(screen.getByRole("button", { name: copy.add.back }));
+  await user.click(screen.getByRole("button", { name: copy.shape.openapi }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await user.click(screen.getByRole("button", { name: copy.add.submit }));
+
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "POST", "/api/admin/integrations")).toEqual(
+      expect.objectContaining({
+        auth_mode: "none",
+        auth_method: null,
+        oauth_client: null,
+      })
+    )
+  );
+});
+
 test("hides the organization choice without global manage:actions", async () => {
   mockGlobalHolder = false;
   mockScopedManager = true;
