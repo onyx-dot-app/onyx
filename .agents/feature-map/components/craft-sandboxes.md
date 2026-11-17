@@ -181,6 +181,20 @@ then replaces `outputs/` and `attachments/`
 in place with `tar`. Managed-content pushes, not snapshots, use
 `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/extract.py:safe_extract_then_atomic_swap`.
 
+**Push transport.** A push carries at most 900 MiB of files:
+`MAX_BUNDLE_BYTES` in
+`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/extract.py`.
+The sender (`_build_targz`) and the run-time skill limit
+(`backend/onyx/skills/limits.py:SKILL_RUNTIME_MAX_BYTES`) import it, so the
+caps cannot drift. The sender spools the archive to disk and streams it with a
+`Content-Length`
+(`backend/onyx/server/features/build/sandbox/kubernetes/sidecar_client.py:SidecarClient.push_archive`).
+The sidecar refuses a `Content-Length` past `MAX_ARCHIVE_BYTES` (the bundle
+cap plus tar and gzip overhead) with a 413 before it reads the body, spools
+the rest to disk and cuts a longer stream at that cap.
+A failure keeps the live tree. Each mount holds at most two trees: a push
+removes that mount's versions other than the live one before it extracts.
+
 **Sweep.** Two tasks on the `sandbox` Celery queue share one per-tenant sweep
 (`backend/onyx/background/celery/tasks/build/tasks.py:_sweep_tenant_sandboxes`). The sweep fails stale
 `PROVISIONING` attempts
@@ -211,8 +225,9 @@ library payload with the same code
 must close before the push. `push_managed_content` runs before the sandbox is
 reported `RUNNING`, because opencode scans the skills directory once per
 instance: a turn that starts during the push misses managed skills for good. It
-logs a failure and never raises. `skills_hash` is written
-only after a successful push, so the next session create or reload retries.
+logs a failure and never raises. `skills_hash` and `skill_omissions` (the
+plugins the run-time skill limit left out, [[skills]]) are written only after a
+successful push, so the next session create or reload retries.
 User library blobs use `FileOrigin.USER_FILE` but have no `UserFile` rows, so
 the chat user-file lifecycle does not apply to them.
 
@@ -293,10 +308,38 @@ Harness sandboxes (the agent harness runs outside the sandbox):
 - `backend/onyx/server/features/build/sandbox/harness_base.py:HarnessSandbox`
   is the narrow interface the new harness calls: `ensure_running`, the Codex
   `exec_command` / `write_stdin` contract (yield time, head and tail output
-  caps, "\x03" sends SIGINT), `read_file` / `write_file` (exact bytes for
-  view_image and apply_patch), `publish_artifact`, and busy signals (turn
-  and parked-approval marks). Each chat session works in
-  `SESSION_WORKSPACE_ROOT/<session_id>` (`/home/onyx/workspaces`).
+  caps, "\x03" sends SIGINT; the exec limits live in
+  `.../sandbox/exec_output.py`, whose `ExecOutputBuffer` keeps one call's
+  output: live deltas stop at what the result can show, `max_output_tokens`
+  x 4 bytes). A cancel of the current signal ends the wait and
+  kills the command however the wait ends (also when the consumer drops the
+  stream); a call cancelled before its command starts or its input is
+  written does neither. `read_file` / `write_file` (exact bytes, a mode),
+  `stat_files` (the guest daemon's typed `StatFiles` RPC over `os.Root`:
+  each path's own entry and link target, and its target through the links
+  inside the session with a device and inode identity, or why there is none:
+  missing, escapes, loop; at most 8 links per path; up to 1,000 paths and
+  1 MiB of path bytes per call; an older root drive fails with a message
+  that it updates after a restart) and `delete_file` for apply_patch,
+  `publish_artifact`, and busy signals (turn and parked-approval marks).
+  Each chat session works in `SESSION_WORKSPACE_ROOT/<session_id>`
+  (`/home/onyx/workspaces`); file calls take paths by
+  `session_relative_path`. For a missing file, `read_file` raises
+  `SandboxFileNotFoundError`, `stat_files` reports it and `delete_file`
+  returns False. A yield window counts from the
+  Start or the write, so a slow wake does not use it up; `wall_time_seconds`
+  covers the whole call.
+- The chat sandbox tools ([[code-execution]],
+  `backend/onyx/tools/tool_implementations/sandbox/sandbox_tools.py`) call it with the
+  user's `Sandbox` row and the chat session ID. The first call of a
+  response's sandbox tools gets or creates the row
+  (`backend/onyx/server/features/build/db/sandbox.py:get_or_create_sandbox`,
+  safe against a race on the unique `user_id`; a new row is `TERMINATED`,
+  with no pod runtime). Chat and the new Craft harness share one VM per
+  user, in separate session directories. The row's
+  `provisioning_attempt_number` counts Craft's pods; harness calls do not
+  read it: the harness's own attempt record (`harness_state.last_attempt`)
+  fences VMs.
 - `.../sandbox/firecracker/harness_sandbox.py:FirecrackerHarnessSandbox`
   implements it on the microvm code: wake on the first call (capacity
   retry for 10 s), Init only when `Health.initialized` is false or the
@@ -311,7 +354,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   Each command has a client label; when Start gets no answer, the harness
   finds the command by that label and adopts it.
 - `.../sandbox/harness_factory.py:get_harness_sandbox` returns it with
-  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`, the source image
+  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`
+  (`backend/onyx/microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the source image
   tag of the root drive. Each node names its templates
   `<tag>-<key hash[:12]>` and the hash differs per node, so
   `backend/onyx/microvm/models.py:NodeInfo.template` takes an exact version or that node's newest
@@ -346,12 +390,25 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   commit): a Craft session delete
   (`backend/onyx/server/features/build/session/api.py:delete_session`)
   deletes that session's save, its directory on the running VM and its
-  exec records; its artifacts stay. A user delete (`delete_user_from_db`
+  exec records; its artifacts stay. A user's chat delete, hard or soft
+  (`backend/onyx/server/query_and_chat/chat_backend.py:delete_chat_session_by_id`;
+  `delete_all_chat_sessions` purges in a background thread) does the same for
+  the chat session: no one can restore a soft-deleted chat. The API routes
+  purge, not `db/chat.py`: a VM purge needs the host agent client
+  certificates, which the light worker that runs chat retention lacks. A
+  session the harness has no record of (save, instance mark or exec record)
+  costs only cache reads. A user delete (`delete_user_from_db`
   in a background thread, `UserManager.delete`) and the last-admin tenant
   delete stop the VM and delete every save, artifact and record of the
-  sandbox. A purge mark makes a save in progress drop its
-  archive instead of committing. Saves and artifacts are indexed per
-  sandbox in the tenant cache.
+  sandbox. At the end of each chat retention chain
+  (`backend/ee/onyx/background/celery/tasks/ttl_management/tasks.py`),
+  `purge_expired_harness_sessions_task` runs on the `sandbox` queue (the
+  heavy worker has the host agent client certificates). It purges up to
+  100 saved sessions whose chat session is gone or whose build session had
+  no activity in the window.
+  A purge mark makes a save in progress drop its archive instead of
+  committing. Saves and artifacts are indexed per sandbox in the tenant
+  cache.
 
 ---
 

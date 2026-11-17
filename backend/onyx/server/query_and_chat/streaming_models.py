@@ -6,9 +6,14 @@ from pydantic import BaseModel, Field, JsonValue
 
 from onyx.chat.mention_models import RecordedMention
 from onyx.context.search.models import SearchDoc
+from onyx.server.features.build.sandbox.models import ExecCompletionName
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
 from onyx.tools.tool_implementations.code_mode.models import CodeModeStatus
+from onyx.tools.tool_implementations.sandbox.models import (
+    ApplyPatchFileChange,
+    FileToolName,
+)
 
 
 class StreamingError(BaseModel):
@@ -87,6 +92,13 @@ class StreamingType(Enum):
 
     CODE_MODE_START = "code_mode_start"
     CODE_MODE_DELTA = "code_mode_delta"
+
+    EXEC_COMMAND_START = "exec_command_start"
+    WRITE_STDIN_START = "write_stdin_start"
+    EXEC_OUTPUT_DELTA = "exec_output_delta"
+    EXEC_END = "exec_end"
+    APPLY_PATCH_START = "apply_patch_start"
+    APPLY_PATCH_END = "apply_patch_end"
 
 
 class BaseObj(BaseModel):
@@ -491,6 +503,59 @@ class CodeModeDelta(BaseObj):
     response_ended: bool = False
 
 
+################################################
+# Sandbox Tool Packets
+################################################
+class ExecCommandStart(BaseObj):
+    type: Literal["exec_command_start"] = StreamingType.EXEC_COMMAND_START.value
+    cmd: str
+    workdir: str | None = None
+
+
+class WriteStdinStart(BaseObj):
+    type: Literal["write_stdin_start"] = StreamingType.WRITE_STDIN_START.value
+    session_id: str
+    chars: str
+
+
+# Live output of exec_command and write_stdin (stdout and stderr in arrival
+# order): a preview that exec_end's output replaces.
+class ExecOutputDelta(BaseObj):
+    type: Literal["exec_output_delta"] = StreamingType.EXEC_OUTPUT_DELTA.value
+    text: str
+
+
+class ExecEnd(BaseObj):
+    type: Literal["exec_end"] = StreamingType.EXEC_END.value
+    # The output that the model got (cut to its token budget, head and tail).
+    # None only with an error.
+    output: str | None = None
+    exit_code: int | None = None
+    # None while the command runs, or when it ended in a way the sandbox
+    # did not report.
+    completion: ExecCompletionName | None = None
+    # Set while the command still runs.
+    session_id: str | None = None
+    wall_time_seconds: float | None = None
+    truncated: bool = False
+    # Set when the call failed: there is no process result.
+    error: str | None = None
+
+
+class ApplyPatchStart(BaseObj):
+    type: Literal["apply_patch_start"] = StreamingType.APPLY_PATCH_START.value
+    patch: str
+    # The file tool that made the change; it names the card.
+    tool_name: FileToolName
+
+
+class ApplyPatchEnd(BaseObj):
+    type: Literal["apply_patch_end"] = StreamingType.APPLY_PATCH_END.value
+    files: list[ApplyPatchFileChange] = []
+    # Set when the patch failed; no file changed then, unless a write failed.
+    error: str | None = None
+
+
 # A tool call waits for the user's decision; placed with the call's tool packets.
 class ToolApprovalRequest(BaseObj):
     type: Literal["tool_approval_request"] = StreamingType.TOOL_APPROVAL_REQUEST.value
@@ -586,6 +651,13 @@ PacketObj = Union[
     # Code Mode Packets
     CodeModeStart,
     CodeModeDelta,
+    # Sandbox Tool Packets
+    ExecCommandStart,
+    WriteStdinStart,
+    ExecOutputDelta,
+    ExecEnd,
+    ApplyPatchStart,
+    ApplyPatchEnd,
 ]
 
 

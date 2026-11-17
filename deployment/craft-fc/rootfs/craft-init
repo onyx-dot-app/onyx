@@ -75,6 +75,13 @@ mkdir -p "${STATE}/log" /run/lock
 mkfifo -m 0600 "${STATE}/halt.fifo" 2>/dev/null
 log "boot $(cut -d' ' -f1 /proc/uptime)s"
 
+# Kernel hardening. The guest image loads no modules (it has no
+# /lib/modules) and uses no io_uring (libuv falls back to threads).
+# modules_disabled and kexec_load_disabled cannot be set back before reboot.
+for setting in io_uring_disabled=2 kptr_restrict=2 dmesg_restrict=1 sysrq=0 kexec_load_disabled=1 modules_disabled=1; do
+  echo "${setting#*=}" >"/proc/sys/kernel/${setting%%=*}" 2>/dev/null || log "sysctl kernel.${setting} failed"
+done
+
 # Refuse to read or run anything from a writable /craft-fc. The probe write
 # fails with EROFS on the read-only root.
 if (: >"${CRAFT}/.rw-probe") 2>/dev/null; then

@@ -1,11 +1,21 @@
 from typing import Any, TypeVar
 
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 T = TypeVar("T")
+
+
+def _is_none(value: object) -> bool:
+    return value is None
+
+
+# Annotate a field with it (`Annotated[str | None, OMITTED_WHEN_NONE]`) to
+# leave its key out of the JSON when it has no value. Code mode stubs read
+# such a field as NotRequired.
+OMITTED_WHEN_NONE = Field(exclude_if=_is_none)
 
 
 def shallow_model_dump(model_instance: BaseModel) -> dict[str, Any]:
@@ -20,11 +30,12 @@ def shallow_model_dump(model_instance: BaseModel) -> dict[str, Any]:
 
 def as_base[B: BaseModel](model: B, base: type[B]) -> B:
     """`model` as an instance of `base`, one of its classes; subclass fields are
-    dropped. Returns `model` when it already is exactly a `base`."""
+    dropped. Returns `model` when it already is exactly a `base`. The values
+    are not validated again: `model` validated them, by name or alias."""
     if type(model) is base:
         return model
     fields = shallow_model_dump(model)
-    return base(**{name: fields[name] for name in base.model_fields})
+    return base.model_construct(**{name: fields[name] for name in base.model_fields})
 
 
 def parse_json_form_field(raw: str, adapter: TypeAdapter[T], field_name: str) -> T:

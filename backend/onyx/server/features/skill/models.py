@@ -1,6 +1,7 @@
 """Pydantic request and response models for the skills API."""
 
 import datetime
+from dataclasses import replace
 from typing import Any, Literal
 from uuid import UUID
 
@@ -10,7 +11,6 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import (
     PluginInstallationPolicy,
     SkillAccessLevel,
-    SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.models import Skill
@@ -19,7 +19,11 @@ from onyx.db.skill import SkillSharingChange
 from onyx.db.utils import UNSET
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
+from onyx.skills.models import (
+    GITHUB_SKILL_MAX_COUNT,
+    SkillBundleFile,
+    UserPastWriteLimit,
+)
 from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
 
@@ -32,6 +36,17 @@ class SkillGroupShare(BaseModel):
     group_id: int
     group_name: str
     permission: SkillSharePermission
+
+
+class SkillGroupSummary(BaseModel):
+    """One group row of a skill: a share, a group install setting, or both."""
+
+    group_id: int
+    group_name: str
+    # None for a row that holds only a setting.
+    permission: SkillSharePermission | None
+    # None: the group uses the company setting.
+    installation_policy: PluginInstallationPolicy | None
 
 
 class SkillExternalAppDependencyResponse(BaseModel):
@@ -53,7 +68,17 @@ class SkillResponse(BaseModel):
 
     enabled: bool
     can_toggle: bool
-    installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
+    # The skill's own company setting. None: it follows the default of its
+    # marketplace. Built-ins report AVAILABLE.
+    installation_policy: PluginInstallationPolicy | None = None
+    # The default of the skill's marketplace. None for built-ins.
+    default_installation_policy: PluginInstallationPolicy | None = None
+    # The caller can delete the skill (``may_delete_skill``, and they can
+    # edit it).
+    can_delete: bool = False
+    # The setting for the current user is REQUIRED, from the company setting
+    # or one of their groups.
+    required_for_user: bool = False
     author_user_id: UUID | None = None
     author_email: str | None = None
     owner: MinimalUserSnapshot | None = None
@@ -62,6 +87,8 @@ class SkillResponse(BaseModel):
     updated_at: datetime.datetime | None = None
     user_shares: list[SkillUserShare] = Field(default_factory=list)
     group_shares: list[SkillGroupShare] = Field(default_factory=list)
+    # Every group row the caller may see, with its setting.
+    group_summaries: list[SkillGroupSummary] = Field(default_factory=list)
     public_permission: SkillSharePermission | None = None
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
@@ -94,6 +121,7 @@ class SkillResponse(BaseModel):
             unavailable_reason=definition.unavailable_reason,
             enabled=enabled,
             can_toggle=can_toggle,
+            installation_policy=PluginInstallationPolicy.AVAILABLE,
             user_permission=SkillAccessLevel.VIEWER,
             external_app=external_app,
         )
@@ -106,8 +134,11 @@ class SkillResponse(BaseModel):
         *,
         enabled: bool,
         can_toggle: bool = True,
+        required_for_user: bool = False,
         user_permission: SkillAccessLevel | None = None,
+        can_delete: bool = False,
         include_share_details: bool = False,
+        group_summaries: list[SkillGroupSummary] | None = None,
         external_app: SkillExternalAppDependencyResponse | None = None,
         current_version_id: UUID | None = None,
     ) -> "SkillResponse":
@@ -139,16 +170,14 @@ class SkillResponse(BaseModel):
                 access.description if access is not None else skill.description
             ),
             is_valid=access.is_valid if access is not None else None,
-            # The plugin's own company setting. No setting maps to AVAILABLE,
-            # as it did before plugins. The skills API cannot show
-            # NOT_AVAILABLE until group install settings ship.
             installation_policy=(
-                SkillInstallationPolicy(access.installation_policy.value)
-                if access is not None
-                and access.installation_policy
-                in (PluginInstallationPolicy.DEFAULT, PluginInstallationPolicy.REQUIRED)
-                else SkillInstallationPolicy.AVAILABLE
+                access.installation_policy if access is not None else None
             ),
+            default_installation_policy=(
+                access.marketplace_default_policy if access is not None else None
+            ),
+            can_delete=can_delete,
+            required_for_user=required_for_user,
             enabled=enabled,
             can_toggle=can_toggle,
             author_user_id=author_user_id,
@@ -165,6 +194,7 @@ class SkillResponse(BaseModel):
             updated_at=skill.updated_at,
             user_shares=user_shares if include_share_details else [],
             group_shares=group_shares if include_share_details else [],
+            group_summaries=group_summaries or [],
             public_permission=SkillSharePermission.VIEWER if published else None,
             is_personal=not published and not user_shares and not group_shares,
             user_permission=user_permission,
@@ -331,6 +361,20 @@ class GitHubSkillsImportResponse(BaseModel):
     not_imported: list[GitHubSkillNotImported]
 
 
+class OrganizationLibraryDefaultAccess(BaseModel):
+    """The install setting of every published skill with no own setting."""
+
+    installation_policy: PluginInstallationPolicy
+
+
+class SkillLimitUsersResponse(BaseModel):
+    """Active users past the write limit (``max_bytes`` or ``max_files``)."""
+
+    max_bytes: int
+    max_files: int
+    users: list[UserPastWriteLimit]
+
+
 class SkillEnableRequest(BaseModel):
     enabled: bool
     replace_conflict: bool = False
@@ -403,16 +447,26 @@ class SkillUserShareRequest(BaseModel):
     permission: SkillSharePermission
 
 
+class SkillGroupSettingRequest(BaseModel):
+    group_id: int
+    # Null: the group follows the company setting.
+    installation_policy: PluginInstallationPolicy | None
+
+
 class SkillGroupShareRequest(BaseModel):
     group_id: int
     permission: SkillSharePermission
 
 
-class SkillShareRequest(BaseModel):
+class SkillBulkSharing(BaseModel):
+    """An access change for many skills. Group install settings are set one
+    skill at a time (``SkillShareRequest``)."""
+
     model_config = ConfigDict(extra="forbid")
 
-    # Missing: unchanged. Null: the marketplace default.
-    installation_policy: SkillInstallationPolicy | None = None
+    # Missing: unchanged. Null: no own setting, so the marketplace default
+    # applies. A value, AVAILABLE too, is the skill's own setting.
+    installation_policy: PluginInstallationPolicy | None = None
 
     user_shares: list[SkillUserShareRequest] | None = None
     group_shares: list[SkillGroupShareRequest] | None = None
@@ -440,6 +494,23 @@ class SkillShareRequest(BaseModel):
         )
 
 
+class SkillShareRequest(SkillBulkSharing):
+    # Group install settings with no change to the group's share. A group with
+    # no row gets a row that holds only the setting.
+    group_settings: list[SkillGroupSettingRequest] | None = None
+
+    def to_change(self) -> SkillSharingChange:
+        if self.group_settings is None:
+            return super().to_change()
+        return replace(
+            super().to_change(),
+            group_settings={
+                setting.group_id: setting.installation_policy
+                for setting in self.group_settings
+            },
+        )
+
+
 class TransferSkillOwnershipRequest(BaseModel):
     new_owner_user_id: UUID
 
@@ -449,7 +520,7 @@ class SkillBulkShareRequest(BaseModel):
 
     skill_ids: list[UUID] = Field(min_length=1, max_length=GITHUB_SKILL_MAX_COUNT)
     action: Literal["share"]
-    sharing: SkillShareRequest
+    sharing: SkillBulkSharing
 
 
 class SkillBulkActionRequest(BaseModel):

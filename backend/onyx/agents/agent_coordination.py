@@ -543,22 +543,29 @@ class AgentCoordinator:
         run.add_done_callback(lambda: run.add_idle_callback(start))
         return completion
 
-    def track_child_work(self, parent: Run, run_ids: Sequence[str]) -> None:
-        """Retain local child workers and cleanup without reading remote state."""
-        executions: list[Run] = []
-        cleanup: list[Future[None]] = []
+    def _local_child_work(self, run_ids: Sequence[str]) -> list[Future[None]]:
+        """The workers and cleanup of these child runs on this process;
+        remote children have none here."""
+        work: list[Future[None]] = []
         with self._state.lock:
             for run_id in run_ids:
                 tracked = self._state.tracked_runs.get(run_id)
                 if tracked is None:
                     continue
                 if tracked.execution is not None:
-                    executions.append(tracked.execution)
-                cleanup.extend(tracked.cleanup)
-        for execution in executions:
-            parent.track_child_work(execution)
-        for completion in cleanup:
-            parent.work.track_operation(completion)
+                    work.append(tracked.execution.idle)
+                work.extend(tracked.cleanup)
+        return work
+
+    def track_child_work(self, parent: Run, run_ids: Sequence[str]) -> None:
+        """Retain local child workers and cleanup without reading remote state."""
+        for work in self._local_child_work(run_ids):
+            parent.work.track_operation(work)
+
+    def children_idle(self, run_ids: Sequence[str]) -> bool:
+        """Whether the local workers and cleanup of these child runs have
+        drained. Reads only."""
+        return all(work.done() for work in self._local_child_work(run_ids))
 
     def complete(self, run: Run) -> None:
         """Save terminal output before resolving child completion."""

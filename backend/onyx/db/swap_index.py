@@ -10,7 +10,7 @@ from onyx.configs.app_configs import (
     PORT_SWAP_VERIFY_DOCS_PER_UNIT,
     PORT_SWAP_VERIFY_RETRY_DELAY_S,
 )
-from onyx.configs.constants import KV_REINDEX_KEY
+from onyx.configs.constants import KV_REINDEX_KEY, DocumentSource
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
     get_connector_credential_pairs,
@@ -514,13 +514,20 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
     if DISABLE_VECTOR_DB:
         return None
 
-    # Default CC-pair created for Ingestion API unused here
-    all_cc_pairs = get_connector_credential_pairs(db_session)
-    cc_pair_count = max(len(all_cc_pairs) - 1, 0)
     new_search_settings = get_secondary_search_settings(db_session)
 
     if not new_search_settings:
         return None
+
+    all_cc_pairs = get_connector_credential_pairs(db_session, eager_load_connector=True)
+    # User Library pairs are never indexed, so they never count as complete.
+    swap_counted_cc_pairs = [
+        cc_pair
+        for cc_pair in all_cc_pairs
+        if cc_pair.connector.source != DocumentSource.CRAFT_FILE
+    ]
+    # Default CC-pair created for Ingestion API unused here
+    cc_pair_count = max(len(swap_counted_cc_pairs) - 1, 0)
 
     # Handle switchover based on switchover_type
     switchover_type = new_search_settings.switchover_type
@@ -591,7 +598,7 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
         # Count non-paused cc_pairs (excluding the default Ingestion API cc_pair)
         active_cc_pairs = [
             cc_pair
-            for cc_pair in all_cc_pairs
+            for cc_pair in swap_counted_cc_pairs
             if cc_pair.status != ConnectorCredentialPairStatus.PAUSED
         ]
         active_cc_pair_count = max(len(active_cc_pairs) - 1, 0)

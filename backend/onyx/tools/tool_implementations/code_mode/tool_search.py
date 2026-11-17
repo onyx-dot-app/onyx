@@ -7,6 +7,7 @@ from collections import Counter
 from collections.abc import Sequence
 
 from onyx.tools.tool_implementations.code_mode.models import SearchableFunction
+from onyx.tools.tool_implementations.code_mode.sandbox import TOOLS_NAMESPACE
 
 TOOL_SEARCH_FUNCTION = "tool_search"
 TOOL_MATCH_TYPE = "ToolMatch"
@@ -22,10 +23,11 @@ TOOL_SEARCH_STUBS = f'''class {TOOL_MATCH_TYPE}(TypedDict):
 
 
 async def {TOOL_SEARCH_FUNCTION}(query: str, limit: int = {DEFAULT_TOOL_SEARCH_LIMIT}) -> list[{TOOL_MATCH_TYPE}]:
-    """Find functions that this description does not list, best match first.
+    """Find tool functions that this description does not list, best match first.
 
     Each match has the function name, its description, and its full stub with
-    the argument and result types. At most `limit` matches, up to {MAX_TOOL_SEARCH_LIMIT}.
+    the argument and result types. Call a match as `await {TOOLS_NAMESPACE}.<name>(...)`.
+    At most `limit` matches, up to {MAX_TOOL_SEARCH_LIMIT}.
     """
     ...'''
 

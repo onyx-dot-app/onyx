@@ -28,10 +28,17 @@ Agent flags and node requirements: microvm/README.md.
   copy in its own namespace.
 - Only the agent clients (api_server, heavy and scheduled-tasks workers) reach
   the agent listener (NetworkPolicy below). Agent
-  pods may reach the sandbox-proxy port (sandbox-proxy/networkpolicy.yaml).
+  pods may reach the sandbox-proxy relay mTLS port (craft.hostAgent.relayTls,
+  craft-fc-relay-tls.yaml), or the plain port with relayTls off
+  (sandbox-proxy/networkpolicy.yaml).
 - Drain (craft.hostAgent.drainWatch): the agent reads its own Node with a
-  ServiceAccount that may only "get" nodes, and refuses new VMs while the
+  ServiceAccount that may "get" nodes, and refuses new VMs while the
   Node has a drain taint. Off: no ServiceAccount token in the pod.
+- Scale-down guard (craft.hostAgent.scaleDownGuard): while the node runs
+  VMs, the agent sets cluster-autoscaler.kubernetes.io/scale-down-disabled
+  on its own Node ("patch" on nodes), so the cluster autoscaler does not
+  remove the node. A ValidatingAdmissionPolicy limits the patch to the guard
+  annotations (rendered when the cluster serves the API).
 - Root drive (craft.hostAgent.rootfs): an init container copies the drive
   of onyxdotapp/craft-fc-artifacts:rootfs-<version> into <dataDir>/rootfs
   (skipped when it is current), and the agent builds its template from it
@@ -68,6 +75,7 @@ Agent flags and node requirements: microvm/README.md.
 {{- $imageTag = include "onyx.craftFcPinnedTag" (list (include "onyx.craftFcReleaseTag" .) "host agent image" "craft.hostAgent.image.tag") }}
 {{- end }}
 {{- $tls := $agent.tls | default dict }}
+{{- $relayTls := include "onyx.craftFcRelayTls.enabled" . }}
 {{- $clientSecret := include "onyx.craftFcAgentClient.secretName" . }}
 {{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict }}
 {{- if ne (toString $reg.enabled) "true" }}
@@ -79,6 +87,13 @@ Agent flags and node requirements: microvm/README.md.
 {{- $regValue := dig "values" $regKey "" $reg }}
 {{- if and (not $regSecret) (or $reg.existingSecret (not $regValue)) }}
 {{- fail "craft.hostAgent.registrationExistingSecret is required when auth.sandboxNodeRegistration uses existingSecret or has no value" }}
+{{- end }}
+{{- if and (not $reg.existingSecret) $regValue (lt (len (toString $regValue)) 32) }}
+{{- fail (printf "auth.sandboxNodeRegistration.values.%s must be at least 32 characters (for example: openssl rand -hex 32)" $regKey) }}
+{{- end }}
+{{- $slicePercent := toString (hasKey $agent "sliceMemoryPercent" | ternary $agent.sliceMemoryPercent 85) }}
+{{- if or (not (regexMatch "^(0|[1-9][0-9]*)$" $slicePercent)) (and (ne $slicePercent "0") (or (lt (atoi $slicePercent) 10) (gt (atoi $slicePercent) 100))) }}
+{{- fail (printf "craft.hostAgent.sliceMemoryPercent must be 0 or a whole number from 10 to 100, not %q" $slicePercent) }}
 {{- end }}
 {{- $loopStoreGiB := toString (($agent.loopStore | default dict).sizeGiB | default "") }}
 {{- if and $loopStoreGiB (not (regexMatch "^[0-9]+$" $loopStoreGiB)) }}
@@ -97,6 +112,8 @@ cluster, and configmap.yaml then forces S3_ENDPOINT_URL to it. */}}
 {{- end }}
 {{- $drain := $agent.drainWatch | default dict }}
 {{- $watchDrain := ne (toString $drain.enabled) "false" }}
+{{- $guard := $agent.scaleDownGuard | default dict }}
+{{- $guardScale := ne (toString $guard.enabled) "false" }}
 {{- $rootfs := $agent.rootfs | default dict }}
 {{- $rootfsImage := $rootfs.image | default dict }}
 {{- $rootfsTag := $rootfsImage.tag }}
@@ -112,7 +129,7 @@ cluster, and configmap.yaml then forces S3_ENDPOINT_URL to it. */}}
 {{- $caNs := $egressCA.namespace | default $sandboxNs }}
 {{- $caConfigMap := $egressCA.configMapName | default (.Values.configMap.SANDBOX_PROXY_CA_CONFIGMAP | default "sandbox-proxy-ca-bundle") }}
 {{- $caKey := $egressCA.key | default "ca.crt" }}
-{{- $serviceAccount := or $watchDrain $readCA }}
+{{- $serviceAccount := or $watchDrain $readCA $guardScale }}
 {{- $tolerations := include "onyx.craftKvmNodeTolerations" (dict "ctx" . "tolerations" $agent.tolerations) | fromYamlArray }}
 {{- $metrics := $agent.metrics | default dict }}
 {{- $metricsPort := $metrics.port | default 9464 }}
@@ -125,6 +142,14 @@ cluster, and configmap.yaml then forces S3_ENDPOINT_URL to it. */}}
 {{- fail "craft.hostAgent.metrics.authExistingSecret is required when auth.metricsAuth uses existingSecret or has no value" }}
 {{- end }}
 {{- $tlsSecret := $tls.existingSecret | default (printf "%s-tls" $name) }}
+{{- $clientName := printf "%s.%s.svc" (include "onyx.resourceName" (list . "craft-fc-client")) .Release.Namespace }}
+{{- /* One CA signs the agent and client certificates, and both have the
+client usage, so pin the agents to the client name: an agent certificate must
+not open the other agents. */}}
+{{- $allowedSans := $agent.clientAllowedSans }}
+{{- if and (not $allowedSans) (not $tls.existingSecret) }}
+{{- $allowedSans = $clientName }}
+{{- end }}
 {{- if not $tls.existingSecret }}
 {{- /* One CA signs both sides (onyx.craftFcAgentCerts.stored). A new set
 is valid 10 years and renews on the first upgrade in its last 30 days. */}}
@@ -145,7 +170,6 @@ is valid 10 years and renews on the first upgrade in its last 30 days. */}}
 {{- $dns = append $dns . }}
 {{- end }}
 {{- end }}
-{{- $clientName := printf "%s.%s.svc" (include "onyx.resourceName" (list . "craft-fc-client")) .Release.Namespace }}
 {{- $ca := genCA (printf "%s-craft-fc-ca" (include "onyx.fullname" .)) 3650 }}
 {{- $server := genSignedCert (first $sans) $ips $dns 3650 $ca }}
 {{- $client := genSignedCert $clientName nil (list $clientName) 3650 $ca }}
@@ -260,7 +284,7 @@ subjects:
     namespace: {{ $ns }}
 ---
 {{- end }}
-{{- if $watchDrain }}
+{{- if or $watchDrain $guardScale }}
 {{- /* Cluster-scoped: RBAC cannot limit "get" to the pod's own Node. Node objects hold no secrets. */}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -290,6 +314,97 @@ subjects:
     name: {{ $name }}
     namespace: {{ $ns }}
 ---
+{{- end }}
+{{- if $guardScale }}
+{{- /* Cluster-scoped like node-read: RBAC cannot limit "patch" to the pod's
+own Node. The agent patches only its own Node (NODE_NAME), and only its
+scale-down annotations. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-annotate
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-annotate
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $ns }}-{{ $name }}-node-annotate
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $ns }}
+---
+{{- if .Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy" }}
+{{- /* RBAC cannot limit "patch" to fields. This policy lets the agent
+change only the scale-down annotations, and (when the token names its
+node) only on its own Node. */}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-annotate
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["*"]
+        operations: ["UPDATE"]
+        resources: ["nodes"]
+  matchConditions:
+    - name: host-agent
+      expression: {{ printf "request.userInfo.username == 'system:serviceaccount:%s:%s'" $ns $name | quote }}
+  variables:
+    # nodewatch.ScaleDownDisabledKey and nodewatch.GuardOwnerKey (microvm/).
+    - name: allowed
+      expression: "['cluster-autoscaler.kubernetes.io/scale-down-disabled', 'onyx.app/craft-fc-scale-down-guard']"
+    - name: oldAnn
+      expression: "oldObject.metadata.?annotations.orValue({})"
+    - name: newAnn
+      expression: "object.metadata.?annotations.orValue({})"
+    - name: nodeName
+      expression: "request.userInfo.?extra[?'authentication.kubernetes.io/node-name'].orValue([])"
+  validations:
+    - expression: "variables.nodeName.size() == 0 || variables.nodeName[0] == object.metadata.name"
+      message: "the host agent may change only its own Node"
+    - expression: >-
+        object.spec == oldObject.spec &&
+        object.metadata.?labels.orValue({}) == oldObject.metadata.?labels.orValue({}) &&
+        object.metadata.?finalizers.orValue([]) == oldObject.metadata.?finalizers.orValue([]) &&
+        object.metadata.?ownerReferences.orValue([]) == oldObject.metadata.?ownerReferences.orValue([])
+      message: "the host agent may change only the scale-down annotations of a Node"
+    - expression: >-
+        variables.newAnn.all(k, k in variables.allowed || (k in variables.oldAnn && variables.oldAnn[k] == variables.newAnn[k])) &&
+        variables.oldAnn.all(k, k in variables.allowed || k in variables.newAnn)
+      message: "the host agent may change only the scale-down annotations of a Node"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-annotate
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+spec:
+  policyName: {{ $ns }}-{{ $name }}-node-annotate
+  validationActions: [Deny]
+---
+{{- end }}
 {{- end }}
 {{- if and $metricsToken (not $metrics.authExistingSecret) }}
 apiVersion: v1
@@ -344,7 +459,8 @@ spec:
       hostPID: true
       {{- if $serviceAccount }}
       serviceAccountName: {{ $name }}
-      # The agent reads its own Node (drain taints) and the egress CA ConfigMap.
+      # The agent reads its own Node (drain taints), annotates it (scale-down
+      # guard) and reads the egress CA ConfigMap.
       automountServiceAccountToken: true
       {{- else }}
       automountServiceAccountToken: false
@@ -392,21 +508,35 @@ spec:
             - --client-ca=/etc/craft-fc/tls/ca.crt
             - --dial-ports={{ $agent.dialPorts | default "3010" }}
             - --relay-max-conns={{ $agent.relayMaxConns | default 256 | int64 }}
+            - --relay-max-conns-node={{ $agent.relayMaxConnsNode | default 2048 | int64 }}
             - --dial-max-streams={{ $agent.dialMaxStreams | default 64 | int64 }}
             - --max-vms={{ (hasKey $agent "maxVms" | ternary $agent.maxVms 60) | int64 }}
-            {{- with $agent.clientAllowedSans }}
+            - --slice-memory-percent={{ $slicePercent }}
+            {{- with $allowedSans }}
             - --client-allowed-sans={{ . }}
             {{- end }}
             {{- /* Unset: the agent joins $POD_IP and the --listen port (brackets IPv6). */}}
             {{- with $agent.advertiseAddress }}
             - {{ printf "--advertise-address=%s" . | quote }}
             {{- end }}
+            {{- if $relayTls }}
+            - --egress-proxy={{ include "onyx.sandboxProxyHost" . }}:{{ include "onyx.craftFcRelayTls.port" . }}
+            - --egress-proxy-tls-ca=/etc/craft-fc/relay-tls/ca.crt
+            - --egress-proxy-tls-cert=/etc/craft-fc/relay-tls/tls.crt
+            - --egress-proxy-tls-key=/etc/craft-fc/relay-tls/tls.key
+            - --egress-proxy-tls-server-name={{ include "onyx.craftFcRelayTls.serverName" . }}
+            {{- else }}
             - --egress-proxy={{ include "onyx.sandboxProxyHost" . }}:{{ include "onyx.sandboxProxyPort" . }}
+            {{- end }}
             - --api-server-url={{ $agent.apiServerUrl | default (include "onyx.sandboxApiUrl" .) }}
             {{- if $watchDrain }}
             - --watch-node-drain
-            - --drain-taints={{ $drain.taints | default "node.kubernetes.io/unschedulable" }}
+            - --drain-taints={{ $drain.taints | default "node.kubernetes.io/unschedulable,ToBeDeletedByClusterAutoscaler" }}
             - --drain-poll-interval={{ $drain.pollInterval | default "10s" }}
+            {{- end }}
+            {{- if $guardScale }}
+            - --scale-down-guard
+            - --scale-down-guard-grace={{ $guard.grace | default "10m" }}
             {{- end }}
             - --rootfs-dir={{ $rootfsDir }}
             {{- if $bundledStore }}
@@ -475,6 +605,12 @@ spec:
             - name: tls
               mountPath: /etc/craft-fc/tls
               readOnly: true
+            {{- if $relayTls }}
+            {{- /* No subPath: the kubelet updates the files, and the relay reloads them. */}}
+            - name: relay-tls
+              mountPath: /etc/craft-fc/relay-tls
+              readOnly: true
+            {{- end }}
             {{- if $metricsToken }}
             {{- /* No subPath: the kubelet updates the file when the Secret changes. */}}
             - name: metrics-auth
@@ -494,6 +630,12 @@ spec:
           secret:
             secretName: {{ $tlsSecret }}
             defaultMode: 0400
+        {{- if $relayTls }}
+        - name: relay-tls
+          secret:
+            secretName: {{ include "onyx.craftFcRelayTls.relaySecretName" . }}
+            defaultMode: 0400
+        {{- end }}
         {{- if $metricsToken }}
         - name: metrics-auth
           secret:

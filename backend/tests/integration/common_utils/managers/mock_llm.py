@@ -45,8 +45,9 @@ def tool_call_reply(
 ) -> Reply:
     """A reply that calls tools the way the server offers them: native tool
     calls, or with code mode on, one `execute_code` program that awaits each
-    call in order. A program names a tool with its other characters as `_`; it
-    can call a deferred (MCP or custom) function without `tool_search`. The
+    call in order. A program calls a tool as `tools.<name>`, with the other
+    characters of its name as `_`; it can call a deferred (MCP or custom)
+    function without `tool_search`. The
     program call takes the first call's id, so a later reply can wait for
     `has_results_for=[calls[0].id]` in both modes."""
     if not CODE_MODE_ENABLED:
@@ -58,7 +59,7 @@ def tool_call_reply(
             required=required,
         )
     program = "\n".join(
-        f"await {re.sub(r'[^0-9A-Za-z_]', '_', call.name)}("
+        f"await tools.{re.sub(r'[^0-9A-Za-z_]', '_', call.name)}("
         + ", ".join(f"{name}={value!r}" for name, value in call.arguments.items())
         + ")"
         for call in calls

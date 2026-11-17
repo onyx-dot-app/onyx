@@ -21,6 +21,7 @@ from collections.abc import Callable, Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from pathlib import PurePosixPath
+from typing import Final
 from uuid import UUID
 
 from onyx.server.features.build.configs import TURN_BUDGET_FILE_NAME
@@ -61,6 +62,9 @@ from onyx.skills.built_in import BUILTIN_SKILLS_PATH
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Sandboxes ``push_to_sandboxes`` pushes at the same time.
+PUSH_PARALLELISM: Final[int] = 10
 
 
 # Internal sandbox-event protocol — the type contract between the agent
@@ -891,7 +895,9 @@ class SandboxManager(_ServeMixin, ABC):
                 timeout_s=timeout_s,
             )
 
-        with ThreadPoolExecutor(max_workers=min(len(sandbox_files), 10)) as pool:
+        with ThreadPoolExecutor(
+            max_workers=min(len(sandbox_files), PUSH_PARALLELISM)
+        ) as pool:
             for result in pool.map(_push_one, sandbox_files):
                 pushed += result.succeeded
                 all_failures.extend(result.failures)

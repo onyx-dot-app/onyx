@@ -151,6 +151,9 @@ receives); see [[code-execution]]. A tool that must not run twice sets
 that a lost execution owner left running (`agents/tools.py:AgentTool`).
 `inner_tools` lists the tools that run inside a tool's calls, such as the
 functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
+`inner_call_hint` answers a call of such a tool as a tool of its own: the
+result says how to call it through the offered tool
+(`agents/tool_execution.py`).
 
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error
@@ -174,6 +177,17 @@ both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
 tool catalog rows, are `DIRECT` in code mode, and render as generic tool cards with
 a short JSON summary, not the SKILL.md text.
+
+**Chat sandbox tools.** `chat/execution.py:create_chat_agent` also adds
+`exec_command`, `write_stdin` and the file tools (`apply_patch`, or `edit` and
+`write` when the turn's model is Claude) ([[code-execution]]) when
+`ChatTurnSetup.sandbox_tools` is set. `chat/process_message.py:prepare_chat_turn`
+sets it in one expression: harness sandboxes run
+(`microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the user is not anonymous, the
+chat is not incognito, the turn has one response, and no Slack or Discord bot
+sent it (`SendMessageRequest.origin`). The agent's tools and
+`allowed_tool_ids` do not remove them. They have no tool catalog rows, so no
+admin switch, picker entry or forced-tool request reaches them.
 
 **Argument models.** A tool declares its arguments as one Pydantic
 `*Arguments` model. `parse_tool_arguments` validates calls with it, and
@@ -361,7 +375,8 @@ Their control functions, such as `think_tool`, `generate_report` and
    `finish_tool`, the saved result is the raw result and no `ToolEndEvent` is
    sent. A tool whose calls must not overlap
    returns `ToolExecutionMode.SEQUENTIAL` from `execution_mode`, as
-   `MemoryTool` does. This orders only calls with the same name: each starts
+   `MemoryTool` does. This orders only calls with the same name, or with the
+   same `sequence_group` (the sandbox file tools share one): each starts
    after the previous one is finalized, and a call that waits for a child run
    or input blocks the calls after it.
 10. `tool-name-is-lookup-key` **`Tool.name` is a lookup key and must be a valid

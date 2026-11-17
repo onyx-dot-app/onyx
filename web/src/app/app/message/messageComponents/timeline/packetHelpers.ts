@@ -19,6 +19,9 @@ export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
   PacketType.CODING_AGENT_START,
   PacketType.REASONING_START,
   PacketType.DEEP_RESEARCH_PLAN_START,
+  PacketType.EXEC_COMMAND_START,
+  PacketType.WRITE_STDIN_START,
+  PacketType.APPLY_PATCH_START,
 ]);
 
 // A packet from a tool call nested under a parent tool (code mode, research
@@ -190,6 +193,15 @@ export const stepHasCollapsedStreamingContent = (
         p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
         isCodeInterpreterToolType((p.obj as ToolCallArgumentDelta).tool_type)
     )
+  ) {
+    return true;
+  }
+
+  // Sandbox tools show the command or patch from the start packet onward
+  if (
+    packetTypes.has(PacketType.EXEC_COMMAND_START) ||
+    packetTypes.has(PacketType.WRITE_STDIN_START) ||
+    packetTypes.has(PacketType.APPLY_PATCH_START)
   ) {
     return true;
   }

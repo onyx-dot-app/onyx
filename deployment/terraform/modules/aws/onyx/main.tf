@@ -313,6 +313,7 @@ module "eks" {
 
   # NetworkPolicy enforcement (opt-in per cluster; default off)
   enable_network_policy = var.enable_network_policy
+  manage_core_addons    = var.manage_core_addons
   vpc_cni_addon_version = var.vpc_cni_addon_version
 }
 

@@ -3,17 +3,13 @@ bundle.
 
 The file records and deleted rows are read from the database."""
 
-from collections.abc import Generator
 from uuid import UUID, uuid4
 
-import pytest
 from sqlalchemy import func, select
 
-from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import FileRecord, Plugin, PluginSkill, PluginVersion, Skill
 from onyx.server.features.skill.models import SkillBulkResponse, SkillResponse
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import (
@@ -21,16 +17,6 @@ from tests.integration.common_utils.managers.skill import (
     build_minimal_bundle,
 )
 from tests.integration.common_utils.test_models import DATestUser
-
-
-@pytest.fixture(autouse=True)
-def _db_access() -> Generator[None, None, None]:
-    SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def _skill_with_versions(user: DATestUser, count: int) -> SkillResponse:

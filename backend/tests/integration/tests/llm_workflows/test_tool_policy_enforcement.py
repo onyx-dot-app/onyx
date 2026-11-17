@@ -3,6 +3,7 @@ import json
 import pytest
 
 from onyx.configs import app_configs
+from onyx.configs.chat_configs import CODE_MODE_ENABLED
 from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -295,9 +296,9 @@ def test_preference_is_optional_and_does_not_leak_into_followup(
     assert first.used_tools == second.used_tools == []
     first_request, second_request = mock_llm.requests_in("chat")
     # Code mode names the search as a function of execute_code programs.
-    assert (
-        "The user selected these operations for this request: internal_search"
-        in str(first_request.body["messages"])
+    operation = "tools.internal_search" if CODE_MODE_ENABLED else "internal_search"
+    assert f"The user selected these operations for this request: {operation}" in str(
+        first_request.body["messages"]
     )
     assert "The user selected these operations" not in str(
         second_request.body["messages"]

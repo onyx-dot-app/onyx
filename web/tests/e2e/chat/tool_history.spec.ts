@@ -8,7 +8,8 @@ import {
 } from "@tests/e2e/utils/mockLlm";
 
 // Code mode runs behind the scenes; none of it is user-facing copy.
-const CODE_MODE_TEXT = /await \w+\(|\bcell\b|Ran code|execute_code|wait_code/i;
+const CODE_MODE_TEXT =
+  /await [\w.]+\(|\bcell\b|Ran code|execute_code|wait_code/i;
 
 test("custom tool output and answer survive a history reload @code-mode", async ({
   browser,

@@ -146,8 +146,9 @@ def _fetch_form(chunks: list[bytes], max_response_bytes: int) -> dict[str, Any] 
     )
     with (
         patch.object(GoogleDriveSourceOperations, "_creds", return_value=MagicMock()),
-        patch(
-            "onyx.connectors.google_drive.source_operations.get_google_authorized_session",
+        patch.object(
+            GoogleDriveSourceOperations,
+            "_docs_session",
             return_value=_session(chunks),
         ),
     ):

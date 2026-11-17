@@ -3,17 +3,27 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.db.enums import Permission, SkillAccessLevel, SkillSharePermission
+from onyx.db.enums import (
+    Permission,
+    PluginInstallationPolicy,
+    SkillAccessLevel,
+    SkillSharePermission,
+)
 from onyx.db.models import Skill, User
-from onyx.db.plugin_access import PluginAccess, PluginGroupShare, PluginUserShare
+from onyx.db.plugin_access import (
+    PluginAccess,
+    PluginGroupRowAccess,
+    PluginGroupShare,
+    PluginUserShare,
+)
 from onyx.db.skill import ensure_can_edit_org_visibility
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.response_helpers import user_permission_for_skill
 
 
 def _user(*, is_admin: bool = False) -> User:
-    """Scoped-manager reach is passed per call via `managed_user_group_ids`,
-    never carried on the user."""
+    """Scoped-manager reach is passed per call via `in_managed_scope`, never
+    carried on the user."""
     granted = [Permission.BASIC_ACCESS.value]
     if is_admin:
         granted.append(Permission.FULL_ADMIN_PANEL_ACCESS.value)
@@ -41,6 +51,8 @@ class _Case:
             author_is_active=True,
             published=self.published,
             installation_policy=None,
+            marketplace_default_policy=PluginInstallationPolicy.AVAILABLE,
+            required_for_anyone=False,
             current_version_id=self.skill.id,
             current_version_number=1,
             published_version_number=1 if self.published else None,
@@ -50,7 +62,15 @@ class _Case:
             description=self.skill.description,
             is_valid=True,
             user_shares=tuple(self.user_shares),
-            group_shares=tuple(self.group_shares),
+            group_rows=tuple(
+                PluginGroupRowAccess(
+                    group_id=share.group_id,
+                    group_name=share.group_name,
+                    permission=share.permission,
+                    installation_policy=None,
+                )
+                for share in self.group_shares
+            ),
         )
 
 
@@ -101,10 +121,10 @@ def _permission(
     case: _Case,
     user: User,
     user_group_ids: set[int],
-    managed_user_group_ids: set[int] | None = None,
+    in_managed_scope: bool = False,
 ) -> SkillAccessLevel | None:
     return user_permission_for_skill(
-        case.skill, case.access(), user, user_group_ids, managed_user_group_ids
+        case.skill, case.access(), user, user_group_ids, in_managed_scope
     )
 
 
@@ -248,7 +268,6 @@ def test_curator_viewer_access_does_not_grant_editor() -> None:
             public_skill,
             curator,
             user_group_ids=set(),
-            managed_user_group_ids=set(),
         )
         == SkillAccessLevel.VIEWER
     )
@@ -260,44 +279,24 @@ def test_curator_viewer_access_does_not_grant_editor() -> None:
             direct_shared,
             curator,
             user_group_ids=set(),
-            managed_user_group_ids=set(),
         )
         == SkillAccessLevel.VIEWER
     )
 
 
-def test_curator_can_edit_skill_shared_with_curated_groups() -> None:
+def test_curator_edits_a_skill_in_their_managed_scope() -> None:
+    """``plugin_in_managed_scope`` (SQL) decides the scope; a skill in it is
+    editable."""
     author = _user()
     curator = _user()
     skill = _skill(author)
     _share_with_groups(skill, [1])
 
     assert (
-        _permission(
-            skill,
-            curator,
-            user_group_ids={1},
-            managed_user_group_ids={1},
-        )
+        _permission(skill, curator, user_group_ids={1}, in_managed_scope=True)
         == SkillAccessLevel.EDITOR
     )
-
-
-def test_curator_cannot_edit_skill_shared_outside_curated_groups() -> None:
-    author = _user()
-    curator = _user()
-    skill = _skill(author)
-    _share_with_groups(skill, [1, 2])
-
-    assert (
-        _permission(
-            skill,
-            curator,
-            user_group_ids={1},
-            managed_user_group_ids={1},
-        )
-        == SkillAccessLevel.VIEWER
-    )
+    assert _permission(skill, curator, user_group_ids={1}) == SkillAccessLevel.VIEWER
 
 
 def test_group_membership_alone_does_not_grant_editor() -> None:

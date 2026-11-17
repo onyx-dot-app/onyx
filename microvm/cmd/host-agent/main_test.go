@@ -6,6 +6,8 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"github.com/onyx-dot-app/onyx/microvm/internal/testcerts"
 )
 
 func TestCheckRanges(t *testing.T) {
@@ -37,6 +39,8 @@ func TestCheckRanges(t *testing.T) {
 		"managed builds 0":    func(f *flags) { f.managedBuilds = 0 },
 		"managed swap time 0": func(f *flags) { f.swapTimeout = 0 },
 		"vm overhead 0":       func(f *flags) { f.memOverhead = 0 },
+		"slice percent low":   func(f *flags) { f.slicePercent = 5 },
+		"slice percent high":  func(f *flags) { f.slicePercent = 101 },
 		"vm overhead huge":    func(f *flags) { f.memOverhead = 1 << 20 },
 		"transfer parallel 0": func(f *flags) { f.transferPar = 0 },
 		"image gc negative":   func(f *flags) { f.imageGCEvery = -time.Minute },
@@ -45,6 +49,7 @@ func TestCheckRanges(t *testing.T) {
 		"transfer parallel":   func(f *flags) { f.transferPar = 65 },
 		"transfer part small": func(f *flags) { f.transferPart = 1024 },
 		"transfer part huge":  func(f *flags) { f.transferPart = 512 << 20 },
+		"guard grace":         func(f *flags) { f.guardGrace = -time.Second },
 	} {
 		f := ok
 		edit(&f)
@@ -66,6 +71,21 @@ func TestStartDrainWatchChecks(t *testing.T) {
 	} {
 		t.Setenv("KUBERNETES_SERVICE_HOST", "")
 		if _, err := startDrainWatch(context.Background(), f, nil, nil); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+func TestNewScaleDownGuardChecks(t *testing.T) {
+	if g, err := newScaleDownGuard(flags{}, nil, nil); err != nil || g != nil {
+		t.Fatalf("off: %v %v", g, err)
+	}
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	for name, f := range map[string]flags{
+		"no node name": {guardScale: true},
+		"not in a pod": {guardScale: true, nodeID: "n"},
+	} {
+		if _, err := newScaleDownGuard(f, nil, nil); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
@@ -187,5 +207,37 @@ func TestLoopStoreEnv(t *testing.T) {
 	fs, _, _ = newFS()
 	if err := loopStoreEnv(fs, env(map[string]string{"CRAFT_FC_LOOP_STORE_GIB": "lots"})); err == nil {
 		t.Error("a bad $CRAFT_FC_LOOP_STORE_GIB was accepted")
+	}
+}
+
+func TestEgressTLS(t *testing.T) {
+	certs, err := testcerts.Write(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := flags{egressProxy: "onyx-sandbox-proxy.onyx.svc:8443", egressTLSCA: certs.ServerCA,
+		egressTLSCert: certs.GoodCert, egressTLSKey: certs.GoodKey}
+	if u, err := egressTLS(flags{egressProxy: "p:8080"}); u != nil || err != nil {
+		t.Fatalf("no TLS flags: %v %v", u, err)
+	}
+	u, err := egressTLS(full)
+	if err != nil || u.ServerName != "onyx-sandbox-proxy.onyx.svc" {
+		t.Fatalf("full: %+v %v", u, err)
+	}
+	named := full
+	named.egressTLSName = "proxy.example.internal"
+	if u, err := egressTLS(named); err != nil || u.ServerName != "proxy.example.internal" {
+		t.Fatalf("server name: %+v %v", u, err)
+	}
+	noKey := full
+	noKey.egressTLSKey = ""
+	noProxy := full
+	noProxy.egressProxy = ""
+	badCert := full
+	badCert.egressTLSCert = certs.ServerCA
+	for name, f := range map[string]flags{"no key": noKey, "no --egress-proxy": noProxy, "unloadable cert": badCert} {
+		if _, err := egressTLS(f); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
 }

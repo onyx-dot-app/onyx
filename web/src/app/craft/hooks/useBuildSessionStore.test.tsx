@@ -1271,6 +1271,7 @@ describe("Session loading and restoration", () => {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_omissions: null,
       nextjs_port: null,
       session_loaded_in_sandbox: false,
       sandbox: {
@@ -3540,6 +3541,7 @@ describe("session history races and discarded queued starts", () => {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_omissions: null,
       session_loaded_in_sandbox: true,
     });
   });
@@ -4074,6 +4076,7 @@ describe("Session naming", () => {
     agent_provider: null,
     agent_model: null,
     skills_stale: false,
+    skill_omissions: null,
   };
   beforeEach(() => {
     useBuildSessionStore.setState({

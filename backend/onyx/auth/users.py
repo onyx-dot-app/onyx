@@ -1069,6 +1069,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         allowed_email_domains_override: Sequence[str] | None = None,
         enforce_verified_domain: bool = False,
         sso_provider_id: int | None = None,
+        start_new_team: bool = False,
     ) -> User:
         referral_source = (
             getattr(request.state, "referral_source", None)  # ods: ignore[getattr]
@@ -1090,6 +1091,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             request=request,
             oauth_name=oauth_name,
             account_id=account_id,
+            start_new_team=start_new_team,
         )
 
         if not tenant_id:
@@ -3029,6 +3031,8 @@ async def complete_login_flow(
             allowed_email_domains_override=allowed_email_domains_override,  # ty: ignore[unknown-argument]
             enforce_verified_domain=enforce_verified_domain,  # ty: ignore[unknown-argument]
             sso_provider_id=sso_provider_id,  # ty: ignore[unknown-argument]
+            # Playground: the sign-up page put the choice into the signed state.
+            start_new_team=state_data.get("start_new_team") == "true",  # ty: ignore[unknown-argument]
         )
     except UserAlreadyExists:
         raise OnyxError(
@@ -3173,6 +3177,9 @@ def get_oauth_router(
             "referral_source": referral_source or "default_referral",
             CSRF_TOKEN_KEY: csrf_token,
         }
+        # Playground: "start a new team" rides the signed state through the IdP.
+        if request.query_params.get("start_new_team") == "true":
+            state_data["start_new_team"] = "true"
         # No-op for web; for mobile, marks the signed state for complete_mobile_sso.
         apply_mobile_state(
             state_data, mobile_redirect_uri, app_state, app_code_challenge

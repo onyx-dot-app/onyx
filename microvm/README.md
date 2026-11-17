@@ -141,7 +141,10 @@ a URL (`internal/server/saves.go`, `internal/transfer`).
   extracts into a staging directory and replaces the session's capture roots only after the size and
   SHA-256 match. A mismatch is `ARCHIVE_MISMATCH` (agent) or `ARCHIVE_INVALID` (daemon); the session
   does not change.
-- URLs and redirect targets must be `https`, unless `--transfer-allow-http` (a test object store).
+- URLs and redirect targets must be `https`, unless `--transfer-allow-http`. The flag then allows
+  `http` to any host: the agent does not check the destination. Use it only for an object store
+  inside the cluster or a test store. The chart sets it only for the bundled in-cluster object
+  store (cluster-internal HTTP).
   `--transfer-timeout` (default 10 min) bounds one upload or one single-GET restore. A ranged restore
   uses one timeout for the whole download (all parts, queued parts included), so set it for the
   longest expected restore. Errors and logs show the URL without its query string.
@@ -170,7 +173,8 @@ process. VMs and their programs keep running; callers retry.
    Each VM gets its own cgroup (the scope) in the host slice, outside the agent's container cgroup, so it
    survives an agent restart. The scope has `memory.max` = guest memory + `--vm-mem-overhead-mib` and
    `cpu.max` = one CPU per vCPU (see Memory, admission and drain). The jailer gives it its own UID/GID (from `--uid-base`, `--uid-count`), a
-   chroot and a PID namespace.
+   chroot and a PID namespace. The agent starts the command in a new, empty network namespace (loopback
+   only), so Firecracker cannot reach the pod network. The VM has no NIC; vsock uses Unix sockets.
 4. The agent checks the PID (`comm` is `firecracker`, the cgroup is the VM scope), restores the snapshot
    and resumes the VM.
 
@@ -228,6 +232,13 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
 (`<chroot>/root/v.sock_3128`) → sandbox-proxy (`--egress-proxy`). Design: `plans/craft-fc-d1-egress-identity.md`
 (D1-A). The proxy side is PR #17174 (`backend/onyx/sandbox_proxy/sandbox_identity/signed.py`).
 
+- With `--egress-proxy-tls-ca`, `--egress-proxy-tls-cert` and `--egress-proxy-tls-key`, every proxy
+  connection uses mTLS (TLS 1.3): the relay checks the proxy certificate against the CA and
+  `--egress-proxy-tls-server-name` (default: the `--egress-proxy` host), and shows its client certificate.
+  A failed handshake gets a 502, and so does a proxy alert, close or reset before the proxy's first byte
+  (TLS 1.3 refuses a client certificate after the client handshake ends); the relay never falls back to plain TCP. A partial or unloadable setup
+  stops the agent at start. The relay reads the files again on the next connection after they change.
+  The Helm chart turns this on with Firecracker (`craft.hostAgent.relayTls`, proxy port 8443).
 - The relay reads one request head per connection, with strict parsing (no bare LF, no obs-fold, at most
   64 KiB). A bad head gets a 400 and never reaches the proxy.
 - It removes every `Proxy-Authorization` and `X-Onyx-Session-Hint` from the VM, then adds
@@ -239,7 +250,10 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   (Firecracker vsock does not carry a half-close). The idle timeout is `--relay-idle-timeout` (default
   15 min; a value under 180 s becomes 180 s). Every VM connection gets its own proxy connection.
 - One VM can have at most `--relay-max-conns` open relay connections (default 256). The relay closes a
-  new connection over the cap at once, so one VM cannot use up the agent's memory or file descriptors.
+  new connection over the cap at once, so one VM cannot use up the agent's file descriptors. All VMs
+  together can have at most `--relay-max-conns-node` (default 2048), the same way. One connection uses up
+  to about 100 KiB of agent memory (the 64 KiB head buffer, or two 16 KiB copy buffers plus TLS buffers),
+  so the node cap bounds relay memory.
   An accept error (for example `EMFILE`) does not stop the relay: it waits (5 ms, doubling up to 1 s)
   and accepts again.
 - The token is an EdDSA JWT: header `{"alg":"EdDSA","typ":"JWT","kid"}`, claims `sub`
@@ -591,6 +605,12 @@ guest OOM killer acts. Keep the default overhead unless a test of the VM shape s
 safe. A Firecracker that grows past the limit is OOM-killed; the kernel kills that VM only, and the agent
 shows it as `EXITED` and cleans it up. `io.max` is not set.
 
+At start the agent sets `MemoryMax` of the slice (`systemctl set-property --runtime <slice>`) to
+`--slice-memory-percent` of `MemTotal` (default 85; 0 sets `MemoryMax=infinity` and only logs a failure). Admission counts what
+running guests use, and idle guests give memory back, so the VMs can together ask for more memory than the
+node has. With the cap the kernel OOM killer acts inside the slice and kills a VM, not kubelet or
+containerd. kubelet does not see VM memory, so it cannot evict anything for it.
+
 **Admission.** Create needs `MemAvailable` (measured, `/proc/meminfo`) >= guest memory of the VMs that are
 starting + `mem_mib` + `--min-free-mem-mib` (default 2048). Starting VMs count at their full size because
 their memory is not in use yet; running VMs count at what they use, because the balloon returns what the
@@ -609,7 +629,8 @@ returns `max_vms` and `vm_slots_used` (what the cap counts), and placement skips
 
 **Drain.** The node drains while the manual flag is set (`SetDrain`, kept in `<data-dir>/drain.json`
 across restarts) or while its Node has a taint from `--drain-taints` (default
-`node.kubernetes.io/unschedulable`, which `kubectl cordon` and `kubectl drain` set). With
+`node.kubernetes.io/unschedulable`, which `kubectl cordon` and `kubectl drain` set, and
+`ToBeDeletedByClusterAutoscaler`). With
 `--watch-node-drain`, the agent reads its own Node (`--node-id`, from `$NODE_NAME`) every
 `--drain-poll-interval` (default 10 s) with the pod's ServiceAccount (RBAC: `get` on nodes). The first read
 runs before the API serves. If a read fails, the agent keeps the last taints and shows the error in
@@ -628,6 +649,23 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
   `DRAINED` when none of these is left), `manual`, `taints`, `since`, `watch_error`. While draining,
   `NodeInfo` scans the processes again, so a doubt whose process exited clears. Clearing the manual flag does not end a drain that a
   taint causes.
+
+**Cluster autoscaler.** VMs are not pods, so the cluster autoscaler (GKE, AKS, the EKS
+cluster-autoscaler) sees a KVM node with VMs as empty and can remove it. With `--scale-down-guard`,
+the agent sets the Node annotation `cluster-autoscaler.kubernetes.io/scale-down-disabled=true` while
+the node runs VMs (starting, running, template builds and processes in doubt) and while no process
+scan has worked since the agent started; with processes in doubt, each check scans the processes
+again, so a doubt whose process exited stops holding the node. It checks when a Create
+or a template build takes a slot, and every 10 s from the first check after recovery; while VMs run,
+each check reads the Node and sets the annotation again if someone removed it. It removes the
+annotation when the node has had no VMs for `--scale-down-guard-grace` (default 10 m; after an agent
+restart the grace starts again). It patches only its own Node (RBAC: `get` and `patch` on nodes) and
+marks its value with `onyx.app/craft-fc-scale-down-guard=true`. It leaves a `true` value without this
+mark, and never removes it; it replaces any other value without the mark while VMs run. A failed
+patch is logged once per failure streak and tried again; it never blocks VM work. The default
+`--drain-taints` also has `ToBeDeletedByClusterAutoscaler`, the taint the autoscaler sets (without a
+cordon) before it removes a node. This is a second guard only: the autoscaler removes a node with only
+DaemonSet pods seconds after the taint. Karpenter does not read this annotation.
 
 ### Managed drive
 
@@ -748,8 +786,8 @@ go mod tidy
 
 - Unit tests: `go test -race ./...`. They use a fake VMM and run in CI.
 - KVM tests: build tag `kvm`, on a KVM host. The older tests use the kit rootfs (`onyxdotapp/sandbox`
-  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and guest
-  kernel 6.18.25. The egress and pass-through tests use the proxy harness in
+  + `internal/kvmtest/testdata/kit`: `fc-init` and the prototype guest agent `fc-agent.py`) and the
+  pinned guest kernel. The egress and pass-through tests use the proxy harness in
   `internal/kvmtest/testdata/harness`.
 - `check-kvm.sh smoke|full ARTIFACTS_DIR SOURCE_IMAGE` (as root) prepares a host and runs them: the data
   dir, the root drives, the agent image, then one test at a time. CI

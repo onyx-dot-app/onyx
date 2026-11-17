@@ -16,4 +16,10 @@ spec:
       port: {{ include "onyx.sandboxProxyPort" . }}
       targetPort: proxy
       protocol: TCP
+    {{- if include "onyx.craftFcRelayTls.enabled" . }}
+    - name: relay-tls
+      port: {{ include "onyx.craftFcRelayTls.port" . }}
+      targetPort: relay-tls
+      protocol: TCP
+    {{- end }}
 {{- end }}

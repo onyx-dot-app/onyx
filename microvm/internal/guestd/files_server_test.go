@@ -281,3 +281,45 @@ func TestListFilesSkipsInvalidUTF8(t *testing.T) {
 		t.Fatalf("names = %v", names)
 	}
 }
+
+func TestStatFilesGRPC(t *testing.T) {
+	c, sessions := fileHarness(t)
+	ctx := keyed(context.Background())
+	base := filepath.Join(sessions, fileSession)
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "a.txt"), []byte("a"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	for name, target := range map[string]string{"l": "a.txt", "loop": "loop", "out": "/etc/hostname"} {
+		if err := os.Symlink(target, filepath.Join(base, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := c.StatFiles(ctx, &pb.StatFilesRequest{SessionId: fileSession, Paths: []string{"a.txt", "l", "loop", "out", "missing"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, l, loop, out, missing := res.GetStats()[0], res.GetStats()[1], res.GetStats()[2], res.GetStats()[3], res.GetStats()[4]
+	if l.GetType() != pb.FileType_FILE_TYPE_SYMLINK || l.GetLinkTarget() != "a.txt" ||
+		l.GetTargetType() != pb.FileType_FILE_TYPE_REGULAR || l.GetTargetMode() != 0o640 ||
+		l.GetInode() == 0 || l.GetInode() != a.GetInode() || l.GetDevice() != a.GetDevice() {
+		t.Fatalf("link = %v, file = %v", l, a)
+	}
+	if loop.GetTargetError() != pb.StatError_STAT_ERROR_LOOP {
+		t.Fatalf("loop = %v", loop)
+	}
+	if out.GetTargetError() != pb.StatError_STAT_ERROR_ESCAPES || out.GetLinkTarget() != "/etc/hostname" {
+		t.Fatalf("outside = %v", out)
+	}
+	if missing.GetExists() || missing.GetTargetError() != pb.StatError_STAT_ERROR_MISSING {
+		t.Fatalf("missing = %v", missing)
+	}
+	if _, err := c.StatFiles(ctx, &pb.StatFilesRequest{Paths: []string{"a.txt"}}); reason(err) != "INVALID_ARGUMENT" {
+		t.Fatalf("no session: %v", err)
+	}
+	if _, err := c.StatFiles(ctx, &pb.StatFilesRequest{SessionId: fileSession, Paths: make([]string, 1001)}); reason(err) != "LIMIT_EXCEEDED" {
+		t.Fatalf("too many: %v", err)
+	}
+}

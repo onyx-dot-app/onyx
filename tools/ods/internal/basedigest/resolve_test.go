@@ -200,10 +200,11 @@ func gitRepo(t *testing.T, files ...string) string {
 	return root
 }
 
-func TestTrackedFiles_keepsDockerfilesAndCIYAML(t *testing.T) {
+func TestTrackedFiles_keepsDockerfilesBakeFilesAndCIYAML(t *testing.T) {
 	root := gitRepo(t,
 		"backend/Dockerfile",
 		"web/Dockerfile.dev",
+		"deployment/craft-runtime/docker-bake.hcl",
 		".github/workflows/build.yml",
 		".github/actions/dhi-base-images/action.yaml",
 		".github/workflows/README.md",
@@ -224,6 +225,7 @@ func TestTrackedFiles_keepsDockerfilesAndCIYAML(t *testing.T) {
 		".github/actions/dhi-base-images/action.yaml",
 		".github/workflows/build.yml",
 		"backend/Dockerfile",
+		"deployment/craft-runtime/docker-bake.hcl",
 		"web/Dockerfile.dev",
 	}
 	if !slices.Equal(got, want) {

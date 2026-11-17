@@ -82,11 +82,15 @@ def model_requires_auto_tool_choice(model_names: Sequence[str]) -> bool:
     )
 
 
+def is_claude_model(model_names: Sequence[str]) -> bool:
+    """True when any name of the model (model_identity_names) names Claude,
+    whatever the provider or gateway (Bedrock, Vertex, a custom alias)."""
+    return any("claude" in name.lower() for name in model_names)
+
+
 def model_prefers_auto_tool_choice(model_names: Sequence[str]) -> bool:
     """Keep reasoning enabled on Claude and avoid unsupported forced choices."""
-    return model_requires_auto_tool_choice(model_names) or any(
-        "claude" in name.lower() for name in model_names
-    )
+    return model_requires_auto_tool_choice(model_names) or is_claude_model(model_names)
 
 
 def _strip_extra_provider_from_model_name(model_name: str) -> str:
@@ -787,7 +791,7 @@ def resolve_reasoning_param_style(
     model.
     """
     openai_compatible_surface = api_surface in OPENAI_COMPATIBLE_SURFACES
-    is_claude_model = any("claude" in name.lower() for name in model_names)
+    is_claude = is_claude_model(model_names)
 
     # An OpenAI model reached over OpenAI's own API, and one reached through a
     # gateway that speaks OpenAI, take the same parameters. So does Claude
@@ -797,12 +801,11 @@ def resolve_reasoning_param_style(
     if any(is_true_openai_model(model_provider, name) for name in model_names):
         return ReasoningParamStyle.OPENAI
     if openai_compatible_surface and (
-        is_claude_model
-        or any(is_openai_registry_model_name(name) for name in model_names)
+        is_claude or any(is_openai_registry_model_name(name) for name in model_names)
     ):
         return ReasoningParamStyle.OPENAI
 
-    if is_claude_model:
+    if is_claude:
         if any(anthropic_uses_adaptive_thinking(name) for name in model_names):
             return ReasoningParamStyle.ANTHROPIC_ADAPTIVE
         return ReasoningParamStyle.ANTHROPIC_BUDGET

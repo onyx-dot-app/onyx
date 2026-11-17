@@ -41,7 +41,7 @@ describe("SkillFileTree", () => {
 
     await user.click(scripts);
     expect(screen.getAllByText("run.py")).not.toHaveLength(0);
-    expect(screen.getByText("20 Bytes")).toBeInTheDocument();
+    expect(screen.getByText("20 byte")).toBeInTheDocument();
     expect(screen.queryByText("util.py")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /lib/i }));

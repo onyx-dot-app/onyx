@@ -9,10 +9,18 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
 from onyx.db.enums import BuildSessionStatus, PatType, Permission, SandboxStatus
-from onyx.db.models import BuildSession, PersonalAccessToken, Sandbox, Snapshot, User
+from onyx.db.models import (
+    BuildSession,
+    ChatSession,
+    PersonalAccessToken,
+    Sandbox,
+    Snapshot,
+    User,
+)
 from onyx.db.pat import create_pat, revoke_pat
 from onyx.server.features.build.sandbox.models import SandboxCleanupCheckpoint
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
+from onyx.skills.models import SandboxSkillsState
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -111,6 +119,32 @@ def get_sandbox_by_user_id(db_session: Session, user_id: UUID) -> Sandbox | None
     """Get sandbox by user ID (primary lookup method)."""
     stmt = select(Sandbox).where(Sandbox.user_id == user_id)
     return db_session.execute(stmt).scalar_one_or_none()
+
+
+def get_sandbox_id_by_user_id(db_session: Session, user_id: UUID) -> UUID | None:
+    return db_session.scalar(select(Sandbox.id).where(Sandbox.user_id == user_id))
+
+
+def get_or_create_sandbox(db_session: Session, user_id: UUID) -> Sandbox:
+    """The user's sandbox row, created when missing. A new row is TERMINATED,
+    with no runtime: a harness sandbox starts its VM on use, and Craft
+    provisions its own runtime when it needs one. Creation holds the user-row
+    lock that Craft's reservation holds, so the two never insert at once."""
+    sandbox = get_sandbox_by_user_id(db_session, user_id)
+    if sandbox is not None:
+        return sandbox
+    # The row lock of `fetch_user_by_id(for_update=True)`.
+    db_session.execute(
+        select(User.id)  # ty: ignore[no-matching-overload]
+        .where(User.id == user_id)
+        .with_for_update()
+    )
+    sandbox = get_sandbox_by_user_id(db_session, user_id)
+    if sandbox is None:
+        sandbox = Sandbox(user_id=user_id, status=SandboxStatus.TERMINATED)
+        db_session.add(sandbox)
+    db_session.commit()
+    return sandbox
 
 
 def begin_provisioning_attempt__no_commit(
@@ -247,18 +281,18 @@ def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def set_sandbox_skills_hashes__no_commit(
+def set_sandbox_skills_states__no_commit(
     db_session: Session,
-    skills_hashes: dict[UUID, str],
+    states: dict[UUID, SandboxSkillsState],
 ) -> None:
     """Record the skill runtime state successfully synchronized to each sandbox."""
-    if not skills_hashes:
+    if not states:
         return
-    sandboxes = db_session.scalars(
-        select(Sandbox).where(Sandbox.id.in_(skills_hashes))
-    ).all()
+    sandboxes = db_session.scalars(select(Sandbox).where(Sandbox.id.in_(states))).all()
     for sandbox in sandboxes:
-        sandbox.skills_hash = skills_hashes[sandbox.id]
+        state = states[sandbox.id]
+        sandbox.skills_hash = state.skills_hash
+        sandbox.skill_omissions = list(state.omissions)
     db_session.flush()
 
 
@@ -278,20 +312,25 @@ def set_sandbox_mcp_config_hashes__no_commit(
     db_session.flush()
 
 
-def lock_sandbox_skills_hashes(
+def lock_sandbox_skills_states(
     db_session: Session,
     sandbox_ids: set[UUID],
-) -> dict[UUID, str | None]:
-    """Lock sandboxes while their managed skill files and hashes are updated."""
+) -> dict[UUID, SandboxSkillsState]:
+    """Lock sandboxes while their managed skill files and states are updated."""
     if not sandbox_ids:
         return {}
     rows = db_session.execute(
-        select(Sandbox.id, Sandbox.skills_hash)
+        select(Sandbox.id, Sandbox.skills_hash, Sandbox.skill_omissions)
         .where(Sandbox.id.in_(sandbox_ids))
         .order_by(Sandbox.id)
         .with_for_update()
     )
-    return {sandbox_id: skills_hash for sandbox_id, skills_hash in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
+    return {
+        sandbox_id: SandboxSkillsState(
+            skills_hash=skills_hash, omissions=tuple(omissions)
+        )
+        for sandbox_id, skills_hash, omissions in rows
+    }
 
 
 def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
@@ -522,3 +561,27 @@ def get_sandbox_purge_targets(
         if session_id is not None:
             sessions.append(session_id)
     return targets
+
+
+def get_all_sandbox_ids(db_session: Session) -> list[UUID]:
+    return list(db_session.scalars(select(Sandbox.id)).all())
+
+
+def get_retained_session_ids(
+    db_session: Session, session_ids: list[UUID], cutoff: datetime.datetime
+) -> set[UUID]:
+    """The IDs in `session_ids` that chat retention keeps: an existing chat
+    session (the retention task deletes the expired ones), or a build
+    session with activity since `cutoff`."""
+    if not session_ids:
+        return set()
+    chats = db_session.scalars(
+        select(ChatSession.id).where(ChatSession.id.in_(session_ids))
+    ).all()
+    builds = db_session.scalars(
+        select(BuildSession.id).where(
+            BuildSession.id.in_(session_ids),
+            BuildSession.last_activity_at >= cutoff,
+        )
+    ).all()
+    return {*chats, *builds}

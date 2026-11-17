@@ -16,6 +16,7 @@ from ee.onyx.db.user_tenant_mapping import (
 )
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import (
+    SignUpDomainState,
     TenantByDomainResponse,
     TenantCreationPayload,
     TenantDeletionPayload,
@@ -59,6 +60,8 @@ from onyx.db.models import (
     UserTenantMapping,
 )
 from onyx.db.tenant_shard import clear_tenant_placement, record_tenant_placement
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import (
     ANTHROPIC_PROVIDER_NAME,
@@ -80,6 +83,7 @@ from onyx.server.manage.llm.models import (
 from onyx.setup import setup_onyx
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import (
+    IS_PLAYGROUND,
     MULTI_TENANT,
     POSTGRES_DEFAULT_SCHEMA,
     TENANT_ID_PREFIX,
@@ -99,6 +103,7 @@ async def get_or_provision_tenant(
     request: Request | None = None,
     oauth_name: str | None = None,
     account_id: str | None = None,
+    start_new_team: bool = False,
 ) -> str:
     """
     Get existing tenant ID for an email or create a new tenant if none exists.
@@ -107,6 +112,9 @@ async def get_or_provision_tenant(
 
     When the caller knows the IdP subject it is tried before the email, which is
     what stops a renamed user being treated as a brand new signup.
+
+    On the playground `start_new_team` says the person chose to start a new team
+    although a team from their domain has a running trial.
     """
     # Early return for non-multi-tenant mode
     if not MULTI_TENANT:
@@ -118,6 +126,10 @@ async def get_or_provision_tenant(
     tenant_id = resolve_tenant_id(email, oauth_name, account_id)
     if tenant_id:
         return tenant_id
+
+    # Before the try below: a refusal must reach the person, not become a 500.
+    if IS_PLAYGROUND:
+        await check_playground_sign_up(email, start_new_team)
 
     try:
         # Try to get a pre-provisioned tenant
@@ -170,6 +182,56 @@ async def get_or_provision_tenant(
             status_code=500,
             detail="Failed to provision tenant. Please try again later.",
         )
+
+
+# The web shows a page for each code: contact sales, or join-or-new.
+PLAYGROUND_REFUSAL_CODES = {
+    SignUpDomainState.EMAIL_USED: "PLAYGROUND_EMAIL_USED",
+    SignUpDomainState.LIMIT_REACHED: "PLAYGROUND_LIMIT_REACHED",
+    SignUpDomainState.ACTIVE_TENANT: "PLAYGROUND_ACTIVE_TENANT",
+}
+# The control plane did not answer, so the rules could not run.
+PLAYGROUND_CHECK_FAILED_CODE = "PLAYGROUND_CHECK_FAILED"
+
+
+async def fetch_sign_up_domain_state(email: str) -> SignUpDomainState:
+    """What the control plane says a playground sign-up from this address
+    runs into. Raises when the control plane is down or answers badly.
+    """
+    headers = {
+        "Authorization": f"Bearer {generate_data_plane_token()}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=_CONTROL_PLANE_TIMEOUT_S) as client:
+        response = await client.post(
+            f"{CONTROL_PLANE_API_BASE_URL}/sign-up-domain",
+            headers=headers,
+            json={"email": email},
+        )
+    response.raise_for_status()
+    return SignUpDomainState(response.json()["state"])
+
+
+async def check_playground_sign_up(email: str, start_new_team: bool) -> None:
+    """Refuses a playground sign-up the control plane rules out.
+
+    `active_tenant` passes when the person chose to start a new team. A
+    control plane that cannot answer refuses too: no tenant without the rules.
+    """
+    try:
+        state = await fetch_sign_up_domain_state(email)
+    except Exception:
+        logger.exception("Control plane sign-up check failed")
+        raise OnyxError(
+            OnyxErrorCode.REGISTRATION_DISABLED, PLAYGROUND_CHECK_FAILED_CODE
+        )
+    if state is SignUpDomainState.NEW:
+        return
+    if state is SignUpDomainState.ACTIVE_TENANT and start_new_team:
+        return
+    raise OnyxError(
+        OnyxErrorCode.REGISTRATION_DISABLED, PLAYGROUND_REFUSAL_CODES[state]
+    )
 
 
 async def create_tenant(

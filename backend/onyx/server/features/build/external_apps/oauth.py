@@ -38,7 +38,7 @@ from onyx.server.features.build.external_apps.models import (
     OAuthCallbackResponse,
     OAuthStartResponse,
 )
-from onyx.skills.push import push_skills_for_users
+from onyx.skills.push import push_skills_and_commit
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -305,8 +305,8 @@ def handle_external_app_oauth_callback(
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes so
     # the now-usable skill bundle lands
-    push_skills_for_users({user.id}, db_session)
     db_session.commit()
+    push_skills_and_commit({user.id}, db_session)
 
     return OAuthCallbackResponse(
         success=True, external_app_id=app.id, return_path=payload.return_path
