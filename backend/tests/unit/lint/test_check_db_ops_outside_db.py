@@ -147,6 +147,11 @@ def test_other_calls_are_clean(body: str) -> None:
     assert _found(body) == 0
 
 
+def test_dotted_import_binds_the_root_module() -> None:
+    source = "import sqlalchemy.sql\nstmt = sqlalchemy.select(1)\n"
+    assert check_db_ops_outside_db.find_db_operations(source) == ([2], [])
+
+
 def test_builder_names_from_other_modules_are_clean() -> None:
     source = (
         "from select import select\n"
@@ -301,6 +306,14 @@ def test_write_baseline_lowers_a_count_and_refuses_a_rise(
     (tmp_path / _CORE_FILE).write_text(_TWO_OPERATIONS)
     assert check_db_ops_outside_db.main(["--write-baseline"]) == 1
     assert check_db_ops_outside_db.read_baseline(baseline) == {_CORE_FILE: 1}
+
+    # An empty baseline is still a baseline: a rise from zero is refused.
+    (tmp_path / _CORE_FILE).write_text("x = 1\n")
+    assert check_db_ops_outside_db.main(["--write-baseline"]) == 0
+    assert check_db_ops_outside_db.read_baseline(baseline) == {}
+    (tmp_path / _CORE_FILE).write_text(_ONE_OPERATION)
+    assert check_db_ops_outside_db.main(["--write-baseline"]) == 1
+    assert check_db_ops_outside_db.read_baseline(baseline) == {}
 
 
 def test_a_deleted_file_fails_a_full_scan_only(

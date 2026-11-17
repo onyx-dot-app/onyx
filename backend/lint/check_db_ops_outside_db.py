@@ -107,10 +107,9 @@ class _Imports:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if _is_sqlalchemy(alias.name) and (
-                        alias.asname or "." not in alias.name
-                    ):
-                        self.modules.add(alias.asname or alias.name)
+                    if _is_sqlalchemy(alias.name):
+                        # `import sqlalchemy.sql` binds the name `sqlalchemy`.
+                        self.modules.add(alias.asname or alias.name.split(".")[0])
             elif isinstance(node, ast.ImportFrom):
                 for alias in node.names:
                     self._add(node.module, alias.name, alias.asname or alias.name)
@@ -378,7 +377,8 @@ def main(argv: list[str] | None = None) -> int:
         operations[path] = found
         no_reason.extend(f"{path}:{line}" for line in unexplained)
 
-    baseline = read_baseline(BASELINE_PATH) if BASELINE_PATH.is_file() else {}
+    has_baseline = BASELINE_PATH.is_file()
+    baseline = read_baseline(BASELINE_PATH) if has_baseline else {}
     # The FOSS mirror has no backend/ee. Its baseline entries stay as they are.
     not_checked_out = {
         path: count for path, count in baseline.items() if not _in_checkout(path)
@@ -393,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.write_baseline:
         # Regeneration lowers counts. A rise needs a marker or an edit by hand.
-        if risen and baseline:
+        if risen and has_baseline:
             print("The baseline can only go down. These files have new operations:")
             print("\n".join(f"  {entry}" for entry in risen))
             return 1
