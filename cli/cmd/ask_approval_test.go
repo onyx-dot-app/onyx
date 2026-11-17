@@ -815,13 +815,19 @@ func (b *syncBuffer) String() string {
 
 const askPrompt = "[y] approve once / [a] approve for session / [d] show all arguments / [N] reject"
 
-// waitForPrompts waits until stderr shows n prompts.
+// waitForPrompts waits until stderr shows n approval prompts.
 func waitForPrompts(t *testing.T, errOut *syncBuffer, n int) {
 	t.Helper()
+	waitForText(t, errOut, askPrompt, n)
+}
+
+// waitForText waits until stderr shows text n times.
+func waitForText(t *testing.T, errOut *syncBuffer, text string, n int) {
+	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for strings.Count(errOut.String(), askPrompt) < n {
+	for strings.Count(errOut.String(), text) < n {
 		if time.Now().After(deadline) {
-			t.Fatalf("stderr does not show %d prompts: %q", n, errOut.String())
+			t.Fatalf("stderr does not show %q %d times: %q", text, n, errOut.String())
 		}
 		time.Sleep(5 * time.Millisecond)
 	}

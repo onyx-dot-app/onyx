@@ -319,9 +319,9 @@ its background task end ([[#pure-asgi-middleware]]).
    404 as `StreamUnavailableEvent`; only that stops the CLI from requesting
    the response again, and a clean end before the first cursor is retried.
    After a `stop` with `stop_reason` `awaiting_user`, `cli/cmd/ask.go`
-   and `cli/internal/tui/app.go` keep the approval cards and stop reading.
-   They follow the stream that a decision response names in `continuation`
-   from cursor 0. When it is `null`, or after another client's decision, and
+   and `cli/internal/tui/app.go` keep the approval and question cards and
+   stop reading. They follow the stream that a decision or answers response
+   names in `continuation` from cursor 0. When it is `null`, or after another client's decision, and
    no stream that they read writes the response,
    `cli/internal/api/client.go:FollowResponse` reads the status while
    `is_processing` until a `current_stream` lists the response in

@@ -21,7 +21,7 @@ const (
 	entryInfo
 	entryError
 	entryCitation
-	entryApproval
+	entryCard
 )
 
 // chatEntry is a single rendered entry in the chat history.
@@ -29,7 +29,7 @@ type chatEntry struct {
 	kind       entryKind
 	content    string // raw content (for agent: the markdown source)
 	rendered   string // pre-rendered output
-	approvalID string // for entryApproval: the request the entry shows
+	cardID     string // for entryCard: the approval request or question request the entry shows
 	responseID int    // the agent message whose response the entry shows; 0 for none
 }
 
@@ -258,12 +258,13 @@ func (v *viewport) addError(msg string) {
 	})
 }
 
-// setApproval replaces the entry for an approval request, or appends one.
+// setCard replaces the entry for an approval request or a question request,
+// or appends one.
 // A new entry follows the text streamed before it. rendered must already be
 // sanitized.
-func (v *viewport) setApproval(approvalID, rendered string) {
+func (v *viewport) setCard(cardID, rendered string) {
 	for i := range v.entries {
-		if v.entries[i].kind == entryApproval && v.entries[i].approvalID == approvalID {
+		if v.entries[i].kind == entryCard && v.entries[i].cardID == cardID {
 			v.entries[i].rendered = rendered
 			return
 		}
@@ -272,7 +273,7 @@ func (v *viewport) setApproval(approvalID, rendered string) {
 		v.finishAgent()
 		v.streaming = true
 	}
-	v.entries = append(v.entries, chatEntry{kind: entryApproval, rendered: rendered, approvalID: approvalID})
+	v.entries = append(v.entries, chatEntry{kind: entryCard, rendered: rendered, cardID: cardID})
 }
 
 func (v *viewport) addCitations(citations map[int]string) {
