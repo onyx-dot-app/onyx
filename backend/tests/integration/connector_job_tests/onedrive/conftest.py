@@ -168,8 +168,6 @@ def _integration_environment(
                 "treat_organization_link_as_public": True,
             },
         )
-        _wait_for_initial_jobs(onedrive_cc_pair, admin_user, started_at)
-
         sharepoint_started_at = datetime.now(timezone.utc)
         sharepoint_cc_pair = _create_cc_pair(
             admin_user=admin_user,
@@ -183,6 +181,7 @@ def _integration_environment(
                 "treat_sharing_link_as_public": True,
             },
         )
+        _wait_for_initial_jobs(onedrive_cc_pair, admin_user, started_at)
         _wait_for_initial_jobs(sharepoint_cc_pair, admin_user, sharepoint_started_at)
 
         yield OneDriveIntegrationEnvironment(

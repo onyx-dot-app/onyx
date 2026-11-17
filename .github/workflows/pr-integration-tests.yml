@@ -221,7 +221,7 @@ jobs:
           # so pytest-split runs each one across this many jobs. It balances
           # the jobs with backend/tests/integration/.test_durations; refresh
           # that file with `pytest --store-durations` after a suite changes.
-          declare -A splits=([usergroup]=2 [connector]=2 [indexing]=2 [permissions_membership]=2)
+          declare -A splits=([usergroup]=2 [connector]=2 [indexing]=2 [permissions_membership]=2 [reindex_port]=3)
 
           # Create JSON array with directory info
           all_dirs=""
@@ -264,7 +264,7 @@ jobs:
     runs-on:
       [
         runs-on,
-        runner=1cpu-linux-arm64,
+        runner=8cpu-linux-arm64,
         "run-id=${{ github.run_id }}-build-model-server-image",
         "extras=ecr-cache",
       ]
@@ -300,7 +300,7 @@ jobs:
     runs-on:
       [
         runs-on,
-        runner=2cpu-linux-arm64,
+        runner=8cpu-linux-arm64,
         "run-id=${{ github.run_id }}-build-devcontainer-image",
         "extras=ecr-cache",
       ]
@@ -464,17 +464,14 @@ jobs:
       # same image with the same routes (INDEXING_ONLY only changes the log
       # request-id prefix), so the tests point both hosts at the one container
       # and skip a second load of the embedding model.
-      - name: Start Docker containers
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
-            --wait --wait-timeout 300 \
-            relational_db \
-            opensearch \
-            cache \
-            object-store \
-            inference_model_server
-        id: start_docker
+      - name: Install Python deps and start Docker services
+        uses: ./.github/actions/install-python-deps
+        env:
+          COMPOSE_FILE: docker-compose.yml:docker-compose.dev.yml
+        with:
+          compose-services: relational_db opensearch cache object-store inference_model_server
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
+          save-cache: ${{ strategy.job-index == 0 }}
 
       - name: Start Mock Services
         if: matrix.test-dir.path == 'tests/indexing'
@@ -495,12 +492,6 @@ jobs:
         run: |
           cd cli
           GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
-
-      - name: Install Python deps
-        uses: ./.github/actions/install-python-deps
-        with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
-          save-cache: ${{ strategy.job-index == 0 }}
 
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
@@ -661,17 +652,12 @@ jobs:
       # The api_server runs in-process inside pytest via FastAPI TestClient
       # (see tests/integration/conftest.py); only Postgres is needed from
       # compose for Onyx Lite.
-      - name: Start Docker containers (onyx-lite)
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d \
-            --wait --wait-timeout 300 \
-            relational_db
-        id: start_docker_onyx_lite
-
-      - name: Install Python deps
+      - name: Install Python deps and start Docker services
         uses: ./.github/actions/install-python-deps
+        env:
+          COMPOSE_FILE: docker-compose.yml:docker-compose.onyx-lite.yml:docker-compose.dev.yml
         with:
+          compose-services: relational_db
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Onyx Lite Integration Tests
@@ -766,21 +752,12 @@ jobs:
 
       # NOTE: `indexing_model_server` is intentionally not started. See the
       # integration-tests job above.
-      - name: Start Docker containers for multi-tenant tests
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
-            --wait --wait-timeout 300 \
-            relational_db \
-            opensearch \
-            cache \
-            object-store \
-            inference_model_server
-        id: start_docker_multi_tenant
-
-      - name: Install Python deps
+      - name: Install Python deps and start Docker services
         uses: ./.github/actions/install-python-deps
+        env:
+          COMPOSE_FILE: docker-compose.yml:docker-compose.dev.yml
         with:
+          compose-services: relational_db opensearch cache object-store inference_model_server
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Multi-Tenant Integration Tests
