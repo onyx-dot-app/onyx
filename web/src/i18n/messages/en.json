@@ -10797,6 +10797,8 @@
       "plugins": {
         "askHint": "To run this with no prompt, an admin sets it to Allow on the integration, or each user picks Always allow.",
         "askHintAdminOnly": "To run this with no prompt, an admin sets it to Allow on the integration.",
+        "askHintAgent": "To run this with no prompt, change the agent setting, or each user picks Always allow.",
+        "askHintAgentOnly": "To run this with no prompt, change the agent setting.",
         "choice": {
           "inherit": "Use the integration setting",
           "agentDefault": "Use the agent default"

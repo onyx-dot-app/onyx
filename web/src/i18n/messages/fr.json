@@ -10797,6 +10797,8 @@
       "plugins": {
         "askHint": "Pour l'exécuter sans demande, un administrateur la règle sur Autoriser dans l'intégration, ou chaque utilisateur choisit Toujours autoriser.",
         "askHintAdminOnly": "Pour l'exécuter sans demande, un administrateur la règle sur Autoriser dans l'intégration.",
+        "askHintAgent": "Pour exécuter ceci sans confirmation, modifiez le paramètre de l'agent, ou chaque utilisateur choisit Toujours autoriser.",
+        "askHintAgentOnly": "Pour exécuter ceci sans confirmation, modifiez le paramètre de l'agent.",
         "choice": {
           "inherit": "Utiliser le réglage de l'intégration",
           "agentDefault": "Utiliser la valeur par défaut de l'agent"

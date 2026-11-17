@@ -324,6 +324,27 @@ test("shows the setting that applies and the ask hint", async () => {
   ).not.toBeInTheDocument();
 });
 
+test("tells the owner to change an agent Ask that the integration allows", async () => {
+  mockManage = true;
+  setup([draft({ actions: { list_issues: "ask" } })]);
+  expect(await screen.findByText("Asks (agent setting)")).toBeInTheDocument();
+  expect(screen.getAllByText(copy.askHintAgent)).toHaveLength(1);
+  expect(screen.getAllByText(copy.askHint)).toHaveLength(1);
+  // Only the Ask of the integration links to its Actions tab.
+  expect(
+    screen.getAllByRole("link", { name: "Open Linear actions" })
+  ).toHaveLength(1);
+});
+
+test("leaves out Always allow from the agent hint when users cannot save it", async () => {
+  setup(
+    [draft({ actions: { list_issues: "ask" } })],
+    [plugin({ integrations: [linear({ users_can_save_always_allow: false })] })]
+  );
+  expect(await screen.findByText("Asks (agent setting)")).toBeInTheDocument();
+  expect(screen.getAllByText(copy.askHintAgentOnly)).toHaveLength(1);
+});
+
 test("links an admin to the Actions tab of the integration", async () => {
   mockManage = true;
   setup([draft()]);
