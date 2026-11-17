@@ -31,6 +31,7 @@ from onyx.connectors.github.config import GithubConnectorConfig
 from onyx.connectors.gitlab.config import GitlabConnectorConfig
 from onyx.connectors.gmail.config import GmailConnectorConfig
 from onyx.connectors.gong.config import GongConnectorConfig
+from onyx.connectors.google_chat.config import GoogleChatConnectorConfig
 from onyx.connectors.google_drive.config import GoogleDriveConnectorConfig
 from onyx.connectors.google_site.config import GoogleSitesConnectorConfig
 from onyx.connectors.guru.config import GuruConnectorConfig
@@ -95,6 +96,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.gmail.connector",
         class_name="GmailConnector",
         config_class=GmailConnectorConfig,
+    ),
+    DocumentSource.GOOGLE_CHAT: ConnectorMapping(
+        module_path="onyx.connectors.google_chat.connector",
+        class_name="GoogleChatConnector",
+        config_class=GoogleChatConnectorConfig,
     ),
     DocumentSource.GITLAB: ConnectorMapping(
         module_path="onyx.connectors.gitlab.connector",

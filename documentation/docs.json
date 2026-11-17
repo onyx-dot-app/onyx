@@ -266,6 +266,7 @@
                       "admins/connectors/official/gmail/service_account"
                     ]
                   },
+                  "admins/connectors/official/google_chat",
                   {
                     "group": "Google Drive",
                     "pages": [
