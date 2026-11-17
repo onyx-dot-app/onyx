@@ -34,14 +34,9 @@ function normalizeThinking(text: string): string {
 interface CraftTimelineStepProps {
   entry: CraftTimelineEntry;
   position: TimelineStepPosition;
-  defaultExpanded: boolean;
 }
 
-function CraftTimelineStep({
-  entry,
-  position,
-  defaultExpanded,
-}: CraftTimelineStepProps) {
+function CraftTimelineStep({ entry, position }: CraftTimelineStepProps) {
   const t = useTranslations("chat.messages.timeline");
   const { payload } = entry;
 
@@ -99,7 +94,6 @@ function CraftTimelineStep({
           <SkillBadge name={toolCall.skillName} />
         ) : undefined
       }
-      defaultExpanded={defaultExpanded}
       body={hasToolCallBody(toolCall) ? renderToolCallBody(toolCall) : null}
     />
   );
@@ -128,11 +122,9 @@ export default function CraftTimeline({
       autoCollapse={autoCollapse}
       isActive={isActive || entries.some((e) => e.status === "streaming")}
       renderStep={(entry, position) => (
-        <CraftTimelineStep
-          entry={entry}
-          position={position}
-          defaultExpanded={entries.length === 1 && entry.status === "error"}
-        />
+        // Every step starts closed. The card drops its steps when it
+        // closes, so reopening it closes them all again.
+        <CraftTimelineStep entry={entry} position={position} />
       )}
     />
   );
