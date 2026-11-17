@@ -36,6 +36,7 @@ from onyx.db.chat import (
     delete_messages_and_files_from_chat_session,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import PluginInstallationPolicy
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
@@ -83,6 +84,7 @@ from tests.external_dependency_unit.chat.test_wait_agents import (
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
+    hold_in_plugin,
     make_mcp_integration,
 )
 from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool
@@ -226,6 +228,9 @@ def turns(
         server_url="https://example.com/mcp",
         name=f"continuations_{uuid4().hex[:8]}",
         tools=[ACTION],
+    )
+    hold_in_plugin(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
     )
     chat = ChatSession(
         id=uuid4(),
