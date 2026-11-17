@@ -339,6 +339,13 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
         files: ^backend/alembic/versions/.*\.py$
+      - id: migration-design
+        name: new migrations follow safe DDL patterns
+        language: system
+        entry: python3 backend/lint/check_migration_design.py
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^backend/alembic(_tenants)?/versions/.*\.py$
       - id: celery-task-expires
         name: celery tasks are enqueued with an expiration
         description: "Fail a task send or beat schedule entry that has no expires"
