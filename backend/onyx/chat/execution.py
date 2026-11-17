@@ -66,6 +66,7 @@ from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_token_counter, get_search_selection_llm
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_capabilities import model_identity_names
 from onyx.server.query_and_chat.models import (
     ModelResponseSlot,
     response_id_info,
@@ -88,6 +89,10 @@ from onyx.tools.tool_constructor import (
     SearchToolConfig,
     construct_tools,
 )
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    sandbox_tools_for_model,
+)
+from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
     SkillsReadTool,
@@ -608,6 +613,7 @@ class ChatTurnExecution:
                     follow_up_steps=chat_agent.max_steps,
                     root_response=persistence,
                     on_child_released=self._dispatch_after_release,
+                    on_root_drained=chat_agent.on_drained,
                     on_root_parked=partial(self._root_parked, persistence),
                 )
                 with self._lock:
@@ -793,9 +799,11 @@ def bind_run_store(
     follow_up_steps: int,
     root_response: RunStore | None,
     on_child_released: Callable[[], None] | None,
+    on_root_drained: Callable[[], None] | None,
     on_root_parked: Callable[[Run], None] | None = None,
 ) -> tuple[ChatRunStore, AgentCoordinator]:
-    """Bind the run store of a response's branch and register the visible agents."""
+    """Bind the run store of a response's branch and register the visible
+    agents. A restored root gets `on_root_drained` as its on_drained hook."""
     branch = load_chat_branch(response_id)
     if branch.chat_session_id != setup.chat_session_id:
         raise ValueError("Response belongs to another chat session")
@@ -835,6 +843,7 @@ def bind_run_store(
             llm=llm,
             tools=tools,
             user_identity=setup.user_identity,
+            on_root_drained=on_root_drained,
             subagent_factory=lambda depth: chat_subagent_factory(
                 setup=setup,
                 llm=llm,
@@ -892,6 +901,7 @@ def host_agent_work(
                 follow_up_steps=chat_agent.max_steps,
                 root_response=None,
                 on_child_released=dispatch_pending_messages,
+                on_root_drained=chat_agent.on_drained,
             )
             store.poll_control()
         except BaseException:
@@ -985,7 +995,6 @@ def create_chat_agent(
         # the other configured tools.
         if setup.has_chat_skills:
             tools += [SkillsListTool(user), SkillsReadTool(user)]
-
         preferred_tool_id = setup.preferred_tool_id
         if preferred_tool_id is not None and preferred_tool_id not in {
             tool.id for tool in tools
@@ -1029,6 +1038,26 @@ def create_chat_agent(
                 checkpoint=setup.checkpoint,
                 previous_run_id=setup.previous_run_id,
             )
+        # The chat agent and its subagents get the sandbox tools when the turn
+        # offers them. They share one sandbox turn, which the root's runs end.
+        turn = (
+            SandboxTurn(
+                tenant_id=get_current_tenant_id(),
+                user_id=user.id,
+                chat_session_id=setup.chat_session_id,
+            )
+            if setup.sandbox_tools
+            else None
+        )
+        if turn is not None:
+            tools += [
+                tool(turn)
+                for tool in sandbox_tools_for_model(
+                    model_identity_names(
+                        llm.config.model_name, llm.config.deployment_name
+                    )
+                )
+            ]
         return build_chat_agent(
             AgentState(messages=list(setup.messages), checkpoint=setup.checkpoint),
             agent_id,
@@ -1036,6 +1065,7 @@ def create_chat_agent(
             setup=setup,
             llm=llm,
             tools=tools,
+            on_drained=turn.end if turn is not None else None,
             inject_memories=user.use_memories,
             with_subagents=with_subagents,
             additional_context=setup.additional_context,

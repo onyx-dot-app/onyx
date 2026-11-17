@@ -5201,10 +5201,20 @@
           "description": "관리자만 스킬을 조직에 게시합니다."
         },
         "saveSuccess": {
-          "message": "게시 설정을 저장했습니다."
+          "message": "설정이 저장되었습니다."
         },
         "saveError": {
-          "message": "게시 설정을 저장할 수 없습니다."
+          "message": "설정을 저장하지 못했습니다."
+        },
+        "defaultAccess": {
+          "title": "기본 액세스",
+          "description": "자체 설정이 없는 모든 게시된 스킬에 적용됩니다. 나중에 게시되는 스킬도 포함됩니다.",
+          "loadFailed": "기본 액세스를 불러올 수 없습니다.",
+          "retry": "다시 시도"
+        },
+        "sharing": {
+          "title": "공유",
+          "description": "멤버는 스킬을 사람 및 그룹과 공유할 수 있습니다. 스킬 관리자는 항상 공유할 수 있습니다."
         }
       }
     },
@@ -10153,6 +10163,8 @@
         },
         "title": "사용자 삭제",
         "toasts": {
+          "blockedBySkills": "이 사용자를 삭제할 수 없습니다",
+          "openSkills": "스킬을 열어 이전하기",
           "success": "사용자를 삭제했습니다"
         }
       },
@@ -11790,9 +11802,17 @@
         "loginBadCredentials": "이 계정으로는 로그인할 수 없습니다. 비활성화되었을 수 있습니다. 워크스페이스 관리자에게 문의하세요.",
         "loginRequired": "먼저 ID 공급자로 로그인해야 합니다.",
         "oauthUserAlreadyExists": "이 이메일로 다른 로그인 방식의 계정이 이미 있습니다. 처음 사용한 방식으로 로그인하거나, 관리자에게 이 공급자의 연결을 요청하세요.",
+        "playgroundActiveTenant": "회사의 팀이 이미 Onyx를 사용해 보고 있습니다. 팀에 참여하시겠습니까, 새 팀을 시작하시겠습니까?",
+        "playgroundAskAdmin": "관리자에게 초대를 요청하세요.",
+        "playgroundCheckFailed": "가입을 확인할 수 없습니다. 나중에 다시 시도하세요.",
+        "playgroundEmailUsed": "플레이그라운드 액세스를 이미 사용했습니다.",
+        "playgroundLimitReached": "귀사는 플레이그라운드 액세스를 이미 사용했습니다.",
         "serverError": "ID 공급자에서 오류가 발생했습니다. 다시 시도하세요.",
         "staleSignIn": "이 로그인 링크가 만료되었거나 더 이상 유효하지 않습니다. 다시 로그인하세요.",
         "temporarilyUnavailable": "ID 공급자를 일시적으로 사용할 수 없습니다. 나중에 다시 시도하세요."
+      },
+      "contactSalesButton": {
+        "label": "영업팀에 문의"
       },
       "credentialsIssue": {
         "description": "잘못되었거나 만료된 로그인 자격 증명"
@@ -11800,6 +11820,12 @@
       "heading": {
         "description": "로그인 시도 중 문제가 발생했습니다.",
         "title": "인증 오류"
+      },
+      "joinTeamButton": {
+        "label": "팀에 참여"
+      },
+      "playgroundHeading": {
+        "title": "Onyx 플레이그라운드"
       },
       "possibleIssues": {
         "title": "가능한 원인:"
@@ -11809,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "문제가 계속되면 시스템 관리자에게 도움을 요청하세요."
+      },
+      "startNewTeamButton": {
+        "label": "새 팀 시작"
       },
       "systemDisruptionIssue": {
         "description": "일시적인 인증 시스템 장애"
@@ -12905,6 +12934,11 @@
           "text": "이미지 생성 중지됨"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "표 복사"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "질문"
@@ -13102,6 +13136,12 @@
           },
           "waitingForApproval": {
             "label": "승인을 기다리는 중"
+          },
+          "runningCommand": {
+            "label": "명령 실행 중"
+          },
+          "editingFiles": {
+            "label": "파일 편집 중"
           }
         },
         "internalSearch": {
@@ -13231,11 +13271,56 @@
           "researchAgent": "리서치 에이전트",
           "thinking": "생각 중",
           "tool": "도구",
-          "webSearch": "웹 검색"
+          "webSearch": "웹 검색",
+          "terminal": "터미널",
+          "applyPatch": "패치 적용",
+          "editFile": "파일 편집",
+          "writeFile": "파일 쓰기"
         },
         "webSearch": {
           "searching": {
             "status": "웹 검색 중"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {명령 실행 중} started {명령 시작됨} failed {명령 실패} canceled {취소됨} done {명령 실행됨} other {명령 실행됨}}",
+            "workdir": {
+              "label": "위치: {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {세션 {sessionId}에 입력을 보내는 중} failed {세션 {sessionId}에 입력을 보내지 못함} canceled {취소됨} done {세션 {sessionId}에 입력을 보냄} other {세션 {sessionId}에 입력을 보냄}}} check {{phase, select, running {세션 {sessionId} 확인 중} failed {세션 {sessionId}을(를) 확인하지 못함} canceled {취소됨} done {세션 {sessionId} 확인함} other {세션 {sessionId} 확인함}}} other {세션 {sessionId}}}"
+          },
+          "output": {
+            "title": "출력"
+          },
+          "exitCode": {
+            "label": "종료 코드 {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {신호로 중지됨} canceled {취소됨} deadline_exceeded {시간 제한으로 중지됨} other {종료됨}}"
+          },
+          "stillRunning": {
+            "label": "계속 실행 중 (세션 {sessionId})"
+          },
+          "truncated": {
+            "label": "출력이 잘림"
+          },
+          "noOutput": {
+            "text": "출력 없음"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {파일 #개 편집함} other {파일 #개 편집함}}"
+            },
+            "failed": {
+              "status": "편집 실패"
+            },
+            "title": "패치"
+          },
+          "stopped": {
+            "status": "중지됨"
           }
         }
       },
@@ -15892,6 +15977,12 @@
       "resetDefaults": "모두 기본값으로 재설정",
       "resetAll": "모두 워크스페이스 기본값으로 재설정",
       "workspaceDisabledTooltip": "관리자가 워크스페이스에서 이 작업을 비활성화했습니다."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, other {스킬 #개를 불러오지 못했습니다}}",
+      "description": "이 세션에서는 {names}을(를) 사용할 수 없습니다. 스킬은 {maxSize} 및 파일 {maxFiles, number}개 이내여야 합니다. 필요 없는 스킬을 끄고 공간을 확보하세요.",
+      "manage": "스킬 관리",
+      "dismiss": "닫기"
     }
   },
   "knowledge": {
@@ -17455,12 +17546,6 @@
         },
         "installation": {
           "title": "설치",
-          "available": "설치 가능",
-          "default": "기본 설치",
-          "required": "필수",
-          "availableDescription": "사용자는 언제든지 설치하거나 제거할 수 있습니다.",
-          "defaultDescription": "자동으로 설치됩니다. 사용자는 언제든지 비활성화하거나 제거할 수 있습니다.",
-          "requiredDescription": "자동으로 설치됩니다. 사용자는 비활성화하거나 제거할 수 없습니다.",
           "description": "액세스 권한이 있는 모든 사용자의 스킬 설치 방법을 선택하세요."
         },
         "description": "이 스킬을 사용할 수 있는 사용자와 설치 방법을 선택하세요.",
@@ -17484,6 +17569,19 @@
         "publishOff": {
           "title": "게시가 꺼져 있습니다",
           "description": "관리자가 조직 게시를 껐습니다. 관리자에게 이 스킬 게시를 요청하세요."
+        },
+        "sharingOff": {
+          "title": "공유가 꺼져 있습니다",
+          "description": "관리자가 사람 및 그룹과의 공유를 껐습니다. 스킬 관리자에게 이 스킬을 공유해 달라고 요청하세요."
+        },
+        "groupAccess": {
+          "title": "그룹 액세스",
+          "description": "기본적으로 모든 그룹은 조직 설정을 사용합니다. 그룹 설정은 더 엄격한 경우에도 그룹 구성원에 대해 조직 설정을 대체합니다.",
+          "add": "그룹 추가",
+          "select": "{name} 설정",
+          "remove": "{name} 제거",
+          "shared": "이 그룹과 공유됨",
+          "settingOnly": "그룹 설정만"
         }
       },
       "placeholders": {
@@ -17568,7 +17666,8 @@
       "empty": {
         "noMatches": {
           "description": "다른 검색어를 사용해 보세요.",
-          "title": "일치하는 스킬 없음"
+          "title": "일치하는 스킬 없음",
+          "groupDescription": "이 그룹에서 일치하는 스킬이 없습니다. 다른 그룹이나 검색어를 사용해 보세요."
         },
         "noSkills": {
           "title": "아직 사용자 지정 스킬이 없습니다",
@@ -17725,6 +17824,46 @@
       "version": {
         "firstPublish": "v{number} · 첫 게시",
         "update": "v{number} · v{published}에서 업데이트"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "필수",
+        "description": "설치되어 항상 켜져 있습니다. 구성원이 끌 수 없습니다."
+      },
+      "DEFAULT": {
+        "label": "기본 설치",
+        "description": "모든 구성원에게 설치됩니다. 구성원이 끌 수 있습니다."
+      },
+      "AVAILABLE": {
+        "label": "설치 가능",
+        "description": "구성원이 찾아서 원하면 켭니다."
+      },
+      "NOT_AVAILABLE": {
+        "label": "사용 불가",
+        "description": "숨겨집니다. 구성원이 찾거나 켤 수 없습니다."
+      },
+      "inherit": {
+        "label": "{scope, select, group {조직 설정} other {기본 액세스}}",
+        "labelWithPolicy": "{scope, select, group {조직 설정({policy})} other {기본 액세스({policy})}}",
+        "description": "{scope, select, group {그룹 설정이 없습니다. 그룹은 조직 설정을 사용합니다.} other {자체 설정이 없습니다. 관리자가 변경한 후에도 스킬은 기본 액세스를 사용합니다.}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "그룹으로 필터링",
+        "all": "모든 그룹"
+      },
+      "card": "그룹: {groups}",
+      "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "refused": "이 변경으로 {maxSize} 또는 파일 {maxFiles, number}개의 스킬 한도를 넘습니다. 사용하지 않는 스킬을 끈 다음 다시 시도하세요.",
+      "banner": {
+        "title": "{count, plural, other {사용자 #명이 스킬 한도를 넘었습니다}}",
+        "description": "그룹 설정과 공유로 인해 사용자의 스킬이 {maxSize} 또는 {maxFiles, number}개 파일을 넘을 수 있습니다. 이 경우 일부 스킬이 로드되지 않을 수 있습니다. 그룹 설정을 변경하거나 사용자에게 스킬을 끄도록 요청하세요.",
+        "user": "{email}: {size}, 파일 {files, plural, other {#개}}, 불러오지 못한 스킬 {notLoaded, plural, other {#개}}",
+        "more": "외 {count, number}명."
       }
     }
   },

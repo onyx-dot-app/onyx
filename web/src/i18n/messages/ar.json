@@ -5201,10 +5201,20 @@
           "description": "المسؤولون فقط ينشرون المهارات في المؤسسة."
         },
         "saveSuccess": {
-          "message": "تم حفظ إعداد النشر."
+          "message": "تم حفظ الإعداد."
         },
         "saveError": {
-          "message": "تعذّر حفظ إعداد النشر."
+          "message": "تعذر حفظ الإعداد."
+        },
+        "defaultAccess": {
+          "title": "الوصول الافتراضي",
+          "description": "ينطبق على كل مهارة منشورة ليس لها إعداد خاص، بما في ذلك المهارات المنشورة لاحقًا.",
+          "loadFailed": "تعذّر تحميل الوصول الافتراضي.",
+          "retry": "إعادة المحاولة"
+        },
+        "sharing": {
+          "title": "المشاركة",
+          "description": "يمكن للأعضاء مشاركة المهارات مع الأشخاص والمجموعات. يمكن لمديري المهارات المشاركة دائمًا."
         }
       }
     },
@@ -10153,6 +10163,8 @@
         },
         "title": "حذف المستخدم",
         "toasts": {
+          "blockedBySkills": "تعذر حذف هذا المستخدم",
+          "openSkills": "افتح المهارات لنقلها",
           "success": "تم حذف المستخدم"
         }
       },
@@ -11790,9 +11802,17 @@
         "loginBadCredentials": "لا يمكن لهذا الحساب تسجيل الدخول. قد يكون معطّلًا. تواصل مع مسؤول مساحة العمل.",
         "loginRequired": "يجب تسجيل الدخول عبر موفر الهوية أولًا.",
         "oauthUserAlreadyExists": "يوجد حساب بهذا البريد الإلكتروني بطريقة تسجيل دخول مختلفة. سجّل الدخول بالطريقة التي استخدمتها أول مرة، أو اطلب من المسؤول ربط هذا الموفر.",
+        "playgroundActiveTenant": "فريق من شركتك يجرّب Onyx بالفعل. هل تريد الانضمام إلى فريقك أم بدء فريق جديد؟",
+        "playgroundAskAdmin": "اطلب من مسؤولك دعوتك.",
+        "playgroundCheckFailed": "لم نتمكن من التحقق من تسجيلك. حاول مرة أخرى لاحقًا.",
+        "playgroundEmailUsed": "لقد استخدمت وصولك إلى الـ playground.",
+        "playgroundLimitReached": "لقد استخدمت شركتك وصولها إلى الـ playground.",
         "serverError": "واجه موفر الهوية خطأً. يرجى المحاولة مرة أخرى.",
         "staleSignIn": "انتهت صلاحية رابط تسجيل الدخول هذا أو لم يعد صالحًا. يرجى تسجيل الدخول مرة أخرى.",
         "temporarilyUnavailable": "موفر الهوية غير متاح مؤقتًا. يرجى المحاولة لاحقًا."
+      },
+      "contactSalesButton": {
+        "label": "تواصل مع المبيعات"
       },
       "credentialsIssue": {
         "description": "بيانات تسجيل دخول غير صحيحة أو منتهية الصلاحية"
@@ -11800,6 +11820,12 @@
       "heading": {
         "description": "حدثت مشكلة أثناء محاولة تسجيل الدخول.",
         "title": "خطأ في المصادقة"
+      },
+      "joinTeamButton": {
+        "label": "الانضمام إلى فريقي"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "المشكلات المحتملة:"
@@ -11809,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "إذا استمرت المشكلة، يرجى التواصل مع مسؤول النظام للمساعدة."
+      },
+      "startNewTeamButton": {
+        "label": "بدء فريق جديد"
       },
       "systemDisruptionIssue": {
         "description": "انقطاع مؤقت في نظام المصادقة"
@@ -12905,6 +12934,11 @@
           "text": "تم إيقاف توليد الصورة"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "نسخ الجدول"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "سؤال"
@@ -13102,6 +13136,12 @@
           },
           "waitingForApproval": {
             "label": "في انتظار موافقتك"
+          },
+          "runningCommand": {
+            "label": "جارٍ تشغيل الأمر"
+          },
+          "editingFiles": {
+            "label": "جارٍ تعديل الملفات"
           }
         },
         "internalSearch": {
@@ -13231,11 +13271,56 @@
           "researchAgent": "وكيل البحث",
           "thinking": "التفكير",
           "tool": "أداة",
-          "webSearch": "البحث في الويب"
+          "webSearch": "البحث في الويب",
+          "terminal": "الطرفية",
+          "applyPatch": "تطبيق التصحيح",
+          "editFile": "تعديل ملف",
+          "writeFile": "كتابة ملف"
         },
         "webSearch": {
           "searching": {
             "status": "جارٍ البحث في الويب"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {جارٍ تشغيل الأمر} started {تم بدء الأمر} failed {فشل الأمر} canceled {أُلغي} done {تم تشغيل الأمر} other {تم تشغيل الأمر}}",
+            "workdir": {
+              "label": "في {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة {sessionId}} failed {تعذر إرسال إدخال إلى الجلسة {sessionId}} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة {sessionId}} other {تم إرسال إدخال إلى الجلسة {sessionId}}}} check {{phase, select, running {جارٍ فحص الجلسة {sessionId}} failed {تعذر فحص الجلسة {sessionId}} canceled {أُلغي} done {تم فحص الجلسة {sessionId}} other {تم فحص الجلسة {sessionId}}}} other {الجلسة {sessionId}}}"
+          },
+          "output": {
+            "title": "المخرجات"
+          },
+          "exitCode": {
+            "label": "رمز الخروج {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {أُوقف بإشارة} canceled {أُلغي} deadline_exceeded {أُوقف عند حده الزمني} other {انتهى}}"
+          },
+          "stillRunning": {
+            "label": "لا يزال قيد التشغيل (الجلسة {sessionId})"
+          },
+          "truncated": {
+            "label": "تم اقتطاع المخرجات"
+          },
+          "noOutput": {
+            "text": "لا توجد مخرجات"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, zero {لم يتم تعديل أي ملف} one {تم تعديل ملف واحد} two {تم تعديل ملفين} few {تم تعديل # ملفات} many {تم تعديل # ملفًا} other {تم تعديل # ملف}}"
+            },
+            "failed": {
+              "status": "فشل التعديل"
+            },
+            "title": "التصحيح"
+          },
+          "stopped": {
+            "status": "تم الإيقاف"
           }
         }
       },
@@ -15892,6 +15977,12 @@
       "resetDefaults": "إعادة تعيين الكل إلى الإعدادات الافتراضية",
       "resetAll": "إعادة تعيين الكل إلى إعدادات مساحة العمل الافتراضية",
       "workspaceDisabledTooltip": "عطّل مسؤول هذا الإجراء لمساحة العمل."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, zero {لم يتم تحميل أي مهارة} one {لم يتم تحميل مهارة واحدة} two {لم يتم تحميل مهارتين} few {لم يتم تحميل # مهارات} many {لم يتم تحميل # مهارة} other {لم يتم تحميل # مهارة}}",
+      "description": "لا يمكن لهذه الجلسة استخدام {names}. يجب أن تتسع مهاراتك في {maxSize} و{maxFiles, number} ملف. أوقف تشغيل المهارات التي لا تحتاجها لإفساح المجال.",
+      "manage": "إدارة المهارات",
+      "dismiss": "تجاهل"
     }
   },
   "knowledge": {
@@ -17455,12 +17546,6 @@
         },
         "installation": {
           "title": "التثبيت",
-          "available": "متاح للتثبيت",
-          "default": "مثبت افتراضيًا",
-          "required": "إلزامي",
-          "availableDescription": "يمكن للمستخدمين التثبيت أو إلغاء التثبيت في أي وقت.",
-          "defaultDescription": "يتم التثبيت تلقائيًا. يمكن للمستخدمين التعطيل أو إلغاء التثبيت في أي وقت.",
-          "requiredDescription": "يتم التثبيت تلقائيًا. لا يمكن للمستخدمين التعطيل أو إلغاء التثبيت.",
           "description": "اختر كيفية تثبيت هذه المهارة لكل من لديه حق الوصول."
         },
         "description": "اختر من يمكنه استخدام هذه المهارة وكيفية تثبيتها.",
@@ -17484,6 +17569,19 @@
         "publishOff": {
           "title": "النشر متوقف",
           "description": "أوقف مسؤول النشر إلى المؤسسة. اطلب من مسؤول نشر هذه المهارة."
+        },
+        "sharingOff": {
+          "title": "المشاركة متوقفة",
+          "description": "أوقف أحد المسؤولين مشاركة المهارات مع الأشخاص والمجموعات. اطلب من مدير المهارات مشاركة هذه المهارة."
+        },
+        "groupAccess": {
+          "title": "وصول المجموعات",
+          "description": "بشكل افتراضي، تستخدم كل مجموعة إعداد المؤسسة. يحل إعداد المجموعة محله لأعضاء المجموعة، حتى عندما يكون أكثر صرامة.",
+          "add": "إضافة مجموعة",
+          "select": "إعداد {name}",
+          "remove": "إزالة {name}",
+          "shared": "تمت المشاركة مع هذه المجموعة",
+          "settingOnly": "إعداد المجموعة فقط"
         }
       },
       "placeholders": {
@@ -17568,7 +17666,8 @@
       "empty": {
         "noMatches": {
           "description": "جرّب بحثًا مختلفًا.",
-          "title": "لا توجد مهارات مطابقة"
+          "title": "لا توجد مهارات مطابقة",
+          "groupDescription": "لا توجد مهارات مطابقة في هذه المجموعة. جرّب مجموعة أو بحثًا مختلفًا."
         },
         "noSkills": {
           "title": "لا توجد مهارات مخصصة بعد",
@@ -17725,6 +17824,46 @@
       "version": {
         "firstPublish": "v{number} · أول نشر",
         "update": "v{number} · تحديث من v{published}"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "مطلوبة",
+        "description": "مثبتة ومفعلة دائمًا. لا يمكن للأعضاء إيقافها."
+      },
+      "DEFAULT": {
+        "label": "مثبتة افتراضيًا",
+        "description": "مثبتة لكل عضو. يمكن للأعضاء إيقافها."
+      },
+      "AVAILABLE": {
+        "label": "متاح للتثبيت",
+        "description": "يجدها الأعضاء ويفعّلونها إذا أرادوا."
+      },
+      "NOT_AVAILABLE": {
+        "label": "غير متاحة",
+        "description": "مخفية. لا يمكن للأعضاء العثور عليها أو تفعيلها."
+      },
+      "inherit": {
+        "label": "{scope, select, group {إعداد المؤسسة} other {الوصول الافتراضي}}",
+        "labelWithPolicy": "{scope, select, group {إعداد المؤسسة ({policy})} other {الوصول الافتراضي ({policy})}}",
+        "description": "{scope, select, group {لا يوجد إعداد للمجموعة. تستخدم المجموعة إعداد المؤسسة.} other {لا يوجد إعداد خاص. تستخدم المهارة الوصول الافتراضي، حتى بعد أن يغيره المسؤول.}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "التصفية حسب المجموعة",
+        "all": "كل المجموعات"
+      },
+      "card": "المجموعات: {groups}",
+      "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "refused": "هذا التغيير يتجاوز بك حد المهارات البالغ {maxSize} أو {maxFiles, number} ملف. أوقف تشغيل المهارات التي لا تستخدمها، ثم حاول مرة أخرى.",
+      "banner": {
+        "title": "{count, plural, zero {لا يوجد مستخدمون فوق حد المهارات} one {مستخدم واحد فوق حد المهارات} two {مستخدمان فوق حد المهارات} few {# مستخدمين فوق حد المهارات} many {# مستخدمًا فوق حد المهارات} other {# مستخدم فوق حد المهارات}}",
+        "description": "قد تجعل إعدادات المجموعات والمشاركات مهارات المستخدم تتجاوز {maxSize} أو {maxFiles, number} ملفًا. قد لا يتم تحميل بعض مهاراته عندئذٍ. غيّر إعدادات المجموعات، أو اطلب من المستخدمين إيقاف تشغيل بعض المهارات.",
+        "user": "{email}: {size}، {files, plural, zero {لا ملفات} one {ملف واحد} two {ملفان} few {# ملفات} many {# ملفًا} other {# ملف}}، {notLoaded, plural, zero {لا مهارات غير محمّلة} one {مهارة واحدة لم تُحمَّل} two {مهارتان لم تُحمَّلا} few {# مهارات لم تُحمَّل} many {# مهارة لم تُحمَّل} other {# مهارة لم تُحمَّل}}",
+        "more": "و{count, number} آخرون."
       }
     }
   },

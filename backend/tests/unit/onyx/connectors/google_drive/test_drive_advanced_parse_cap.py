@@ -11,7 +11,6 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
 
-_GATEWAY_MODULE = "onyx.connectors.google_drive.source_operations"
 _USER = "user@example.com"
 
 
@@ -36,8 +35,9 @@ def _fetch(chunks: list[bytes], max_response_bytes: int) -> dict[str, object] | 
     )
     with (
         patch.object(GoogleDriveSourceOperations, "_creds", return_value=MagicMock()),
-        patch(
-            f"{_GATEWAY_MODULE}.get_google_authorized_session",
+        patch.object(
+            GoogleDriveSourceOperations,
+            "_docs_session",
             return_value=_mock_session(chunks),
         ),
     ):

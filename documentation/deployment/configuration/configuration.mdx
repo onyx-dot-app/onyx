@@ -202,6 +202,11 @@ If using Docker,
 the `init-letsencrypt.sh` script in `onyx/deployment/docker_compose` will automatically generate a Let's Encrypt
 certificate and launch Onyx with SSL enabled.
 
+The production nginx configs redirect plain-HTTP requests to HTTPS.
+Nginx does not redirect a request that has the `X-Forwarded-Proto: https` header.
+Thus a load balancer that ends TLS in front of nginx keeps working.
+If your proxy sends plain HTTP to port 80 without that header, set `NGINX_HTTPS_REDIRECT_ENABLED=false` in `.env.nginx`.
+
 ### Web Search
 
 To enable the Web Search Tool, set the `EXA_API_KEY` environment variable.

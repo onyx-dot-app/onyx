@@ -115,6 +115,13 @@ class StreamingType(Enum):
 
     CODE_MODE_START = "code_mode_start"
     CODE_MODE_DELTA = "code_mode_delta"
+
+    EXEC_COMMAND_START = "exec_command_start"
+    WRITE_STDIN_START = "write_stdin_start"
+    EXEC_OUTPUT_DELTA = "exec_output_delta"
+    EXEC_END = "exec_end"
+    APPLY_PATCH_START = "apply_patch_start"
+    APPLY_PATCH_END = "apply_patch_end"
 ```
 
 ### Non-streaming Response

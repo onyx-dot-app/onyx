@@ -5,12 +5,14 @@ Firecracker sandbox nodes with the host access it needs, and its pods may reach
 sandbox-proxy. A wrong render here fails only at runtime on a KVM node."""
 
 import json
+import re
 from typing import Any
 
 import pytest
 import yaml
 
 from tests.external_dependency_unit.craft_helm.rendering import (
+    CHART_DIR,
     render_chart,
     skip_or_fail,
 )
@@ -36,6 +38,7 @@ _CLIENT_TEMPLATES = [
 ]
 _CLIENT_DIR = "/etc/onyx/craft-fc-agent-client"
 _AGENT_NS = "onyx-sandbox-runtime"
+_REG_VALUE = "reg-test-0123456789abcdef0123456789"
 _FIRECRACKER = [
     "--set",
     "craft.sandboxRuntime=firecracker",
@@ -50,7 +53,7 @@ _FIRECRACKER = [
     "--set",
     "auth.sandboxNodeRegistration.enabled=true",
     "--set-string",
-    "auth.sandboxNodeRegistration.values.sandbox_node_registration_secret=reg-test",
+    f"auth.sandboxNodeRegistration.values.sandbox_node_registration_secret={_REG_VALUE}",
 ]
 
 
@@ -159,42 +162,176 @@ def test_agent_pod_spec() -> None:
     assert "--uid-count=65536" in args
     assert "--dial-ports=3010" in args
     assert "--relay-max-conns=256" in args
+    assert "--relay-max-conns-node=2048" in args
     assert "--dial-max-streams=64" in args
     assert "--max-vms=60" in args
+    assert "--slice-memory-percent=85" in args
     assert not [a for a in args if a.startswith("--client-allowed-sans")]
     # The agent joins $POD_IP and the listen port itself (it brackets IPv6).
     assert not [a for a in args if a.startswith("--advertise-address")]
     assert env["POD_IP"]["valueFrom"]["fieldRef"]["fieldPath"] == "status.podIP"
-    assert "--egress-proxy=onyx-sandbox-proxy.onyx.svc.cluster.local:8080" in args
+    # The relays reach sandbox-proxy only on its mTLS relay port.
+    assert "--egress-proxy=onyx-sandbox-proxy.onyx.svc.cluster.local:8443" in args
+    assert "--egress-proxy-tls-ca=/etc/craft-fc/relay-tls/ca.crt" in args
+    assert (
+        "--egress-proxy-tls-server-name=onyx-sandbox-proxy.onyx.svc.cluster.local"
+        in args
+    )
     assert any(a.startswith("--api-server-url=http") for a in args)
     assert env["NODE_NAME"]["valueFrom"]["fieldRef"]["fieldPath"] == "spec.nodeName"
     assert "--watch-node-drain" in args
-    assert "--drain-taints=node.kubernetes.io/unschedulable" in args
+    # The cluster autoscaler taints a node it removes and does not cordon it.
+    assert (
+        "--drain-taints=node.kubernetes.io/unschedulable,ToBeDeletedByClusterAutoscaler"
+        in args
+    )
     assert "--drain-poll-interval=10s" in args
+    assert "--scale-down-guard" in args
+    assert "--scale-down-guard-grace=10m" in args
 
 
-def test_drain_watch_rbac_is_get_nodes_only() -> None:
-    docs = _render(_FIRECRACKER)
+def _cluster_rbac(docs: list[dict[str, Any]]) -> dict[str, list[Any]]:
+    """ClusterRole rules by name suffix, each checked against its binding."""
     account = _by_kind(docs, "ServiceAccount")
-    role = _by_kind(docs, "ClusterRole")
-    binding = _by_kind(docs, "ClusterRoleBinding")
+    bindings = {
+        d["roleRef"]["name"]: d for d in docs if d["kind"] == "ClusterRoleBinding"
+    }
+    out: dict[str, list[Any]] = {}
+    for role in (d for d in docs if d["kind"] == "ClusterRole"):
+        name = role["metadata"]["name"]
+        assert bindings.pop(name)["subjects"] == [
+            {
+                "kind": "ServiceAccount",
+                "name": account["metadata"]["name"],
+                "namespace": _AGENT_NS,
+            }
+        ]
+        out["node-" + name.rsplit("-node-", 1)[1]] = role["rules"]
+    assert not bindings
+    return out
 
-    assert account["metadata"]["namespace"] == _AGENT_NS
-    assert role["rules"] == [
-        {"apiGroups": [""], "resources": ["nodes"], "verbs": ["get"]}
+
+def test_node_rbac_is_get_and_patch_nodes_only() -> None:
+    docs = _render(_FIRECRACKER)
+
+    assert _by_kind(docs, "ServiceAccount")["metadata"]["namespace"] == _AGENT_NS
+    assert _cluster_rbac(docs) == {
+        "node-read": [{"apiGroups": [""], "resources": ["nodes"], "verbs": ["get"]}],
+        "node-annotate": [
+            {"apiGroups": [""], "resources": ["nodes"], "verbs": ["patch"]}
+        ],
+    }
+
+
+def test_scale_down_guard_grace_and_off() -> None:
+    docs = _render(
+        [*_FIRECRACKER, "--set-string", "craft.hostAgent.scaleDownGuard.grace=2m"]
+    )
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
     ]
-    assert binding["roleRef"]["name"] == role["metadata"]["name"]
-    assert binding["subjects"] == [
+    assert "--scale-down-guard-grace=2m" in args
+
+    docs = _render(
+        [*_FIRECRACKER, "--set", "craft.hostAgent.scaleDownGuard.enabled=false"]
+    )
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ]
+    assert _cluster_rbac(docs) == {
+        "node-read": [{"apiGroups": [""], "resources": ["nodes"], "verbs": ["get"]}]
+    }
+    assert not [a for a in args if "scale-down" in a]
+    assert "--watch-node-drain" in args
+
+
+_VAP_API = [
+    "--api-versions",
+    "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy",
+]
+
+
+def _guard_annotation_keys() -> set[str]:
+    guard = (CHART_DIR.parents[3] / "microvm/internal/nodewatch/guard.go").read_text()
+    keys = dict(
+        re.findall(r'(ScaleDownDisabledKey|GuardOwnerKey)\s*=\s*"([^"]+)"', guard)
+    )
+    assert len(keys) == 2
+    return set(keys.values())
+
+
+def test_node_patch_policy_allows_only_guard_annotations() -> None:
+    """RBAC grants cluster-wide "patch" on nodes; the admission policy limits
+    the agent to the annotations that nodewatch.ScaleDownGuard sets."""
+    docs = _render([*_FIRECRACKER, *_VAP_API])
+    policy = _by_kind(docs, "ValidatingAdmissionPolicy")
+    binding = _by_kind(docs, "ValidatingAdmissionPolicyBinding")
+    account = _by_kind(docs, "ServiceAccount")["metadata"]["name"]
+    spec = policy["spec"]
+    variables = {v["name"]: v["expression"] for v in spec["variables"]}
+    validations = " ".join(v["expression"] for v in spec["validations"])
+
+    assert binding["spec"] == {
+        "policyName": policy["metadata"]["name"],
+        "validationActions": ["Deny"],
+    }
+    assert spec["failurePolicy"] == "Fail"
+    assert spec["matchConstraints"]["resourceRules"] == [
         {
-            "kind": "ServiceAccount",
-            "name": account["metadata"]["name"],
-            "namespace": _AGENT_NS,
+            "apiGroups": [""],
+            "apiVersions": ["*"],
+            "operations": ["UPDATE"],
+            "resources": ["nodes"],
         }
     ]
+    assert spec["matchConditions"][0]["expression"] == (
+        f"request.userInfo.username == 'system:serviceaccount:{_AGENT_NS}:{account}'"
+    )
+    assert set(re.findall(r"'([^']+)'", variables["allowed"])) == (
+        _guard_annotation_keys()
+    )
+    for field in ("spec", "labels", "finalizers", "ownerReferences"):
+        assert field in validations
+    assert "authentication.kubernetes.io/node-name" in variables["nodeName"]
 
 
-def test_drain_watch_off_keeps_only_the_egress_ca_rbac() -> None:
+@pytest.mark.parametrize(
+    "extra_args",
+    [
+        [],
+        [*_VAP_API, "--set", "craft.hostAgent.scaleDownGuard.enabled=false"],
+    ],
+)
+def test_node_patch_policy_needs_api_and_guard(extra_args: list[str]) -> None:
+    kinds = {d["kind"] for d in _render([*_FIRECRACKER, *extra_args])}
+    assert not kinds & {
+        "ValidatingAdmissionPolicy",
+        "ValidatingAdmissionPolicyBinding",
+    }
+
+
+def test_scale_down_guard_without_drain_watch_can_read_nodes() -> None:
     docs = _render([*_FIRECRACKER, "--set", "craft.hostAgent.drainWatch.enabled=false"])
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ]
+
+    # The guard reads the Node before it patches it.
+    assert set(_cluster_rbac(docs)) == {"node-read", "node-annotate"}
+    assert "--scale-down-guard" in args
+    assert not [a for a in args if "drain" in a]
+
+
+def test_drain_watch_and_guard_off_keep_only_the_egress_ca_rbac() -> None:
+    docs = _render(
+        [
+            *_FIRECRACKER,
+            "--set",
+            "craft.hostAgent.drainWatch.enabled=false",
+            "--set",
+            "craft.hostAgent.scaleDownGuard.enabled=false",
+        ]
+    )
     kinds = {d["kind"] for d in docs}
     spec = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]
     args = spec["containers"][0]["args"]
@@ -202,15 +339,17 @@ def test_drain_watch_off_keeps_only_the_egress_ca_rbac() -> None:
     assert not kinds & {"ClusterRole", "ClusterRoleBinding"}
     assert {"ServiceAccount", "Role", "RoleBinding"} <= kinds
     assert spec["automountServiceAccountToken"] is True
-    assert not [a for a in args if "drain" in a]
+    assert not [a for a in args if "drain" in a or "scale-down" in a]
 
 
-def test_drain_watch_and_egress_ca_off_have_no_rbac() -> None:
+def test_drain_watch_guard_and_egress_ca_off_have_no_rbac() -> None:
     docs = _render(
         [
             *_FIRECRACKER,
             "--set",
             "craft.hostAgent.drainWatch.enabled=false",
+            "--set",
+            "craft.hostAgent.scaleDownGuard.enabled=false",
             "--set",
             "craft.hostAgent.egressCA.enabled=false",
         ]
@@ -361,7 +500,7 @@ def test_registration_secret_is_copied_into_agent_namespace() -> None:
     )
 
     assert secret["metadata"]["namespace"] == _AGENT_NS
-    assert secret["stringData"] == {"sandbox_node_registration_secret": "reg-test"}
+    assert secret["stringData"] == {"sandbox_node_registration_secret": _REG_VALUE}
     assert ref["valueFrom"]["secretKeyRef"] == {
         "name": secret["metadata"]["name"],
         "key": "sandbox_node_registration_secret",
@@ -420,14 +559,18 @@ def test_agent_overrides() -> None:
     assert "--advertise-address=agent.example:7443" in args
 
 
-@pytest.mark.parametrize("max_vms", ["0", "120"])
-def test_max_vms_override_keeps_zero(max_vms: str) -> None:
-    docs = _render([*_FIRECRACKER, "--set", f"craft.hostAgent.maxVms={max_vms}"])
+@pytest.mark.parametrize(
+    ("key", "flag"),
+    [("maxVms", "max-vms"), ("sliceMemoryPercent", "slice-memory-percent")],
+)
+@pytest.mark.parametrize("value", ["0", "90"])
+def test_override_keeps_zero(key: str, flag: str, value: str) -> None:
+    docs = _render([*_FIRECRACKER, "--set", f"craft.hostAgent.{key}={value}"])
     args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
         "args"
     ]
 
-    assert f"--max-vms={max_vms}" in args
+    assert f"--{flag}={value}" in args
 
 
 def test_headless_service_targets_agent_pods() -> None:
@@ -441,17 +584,41 @@ def test_headless_service_targets_agent_pods() -> None:
     assert service["spec"]["ports"][0]["port"] == 7443
 
 
-def test_agent_pods_reach_sandbox_proxy() -> None:
-    sources = _proxy_ingress_sources(_FIRECRACKER)
+def test_agent_pods_reach_the_proxy_relay_port() -> None:
+    policy = _render(_FIRECRACKER, _PROXY_POLICY_TEMPLATE)[0]
+    plain, relay = policy["spec"]["ingress"]
     pod_labels = _by_kind(_render(_FIRECRACKER), "DaemonSet")["spec"]["template"][
         "metadata"
     ]["labels"]
 
-    # Pod sandboxes keep their access; agent pods are added.
+    # Pod sandboxes keep the plain port. Agent pods get the mTLS port, and
+    # the plain port stays open to agents that have not rolled yet.
+    assert plain["from"][0] == {"namespaceSelector": _ns_selector("onyx-sandboxes")}
+    assert plain["from"][1]["namespaceSelector"] == _ns_selector(_AGENT_NS)
+    assert plain["ports"] == [{"protocol": "TCP", "port": 8080}]
+    (agent,) = relay["from"]
+    assert agent["namespaceSelector"] == _ns_selector(_AGENT_NS)
+    assert agent["podSelector"]["matchLabels"].items() <= pod_labels.items()
+    assert relay["ports"] == [{"protocol": "TCP", "port": 8443}]
+
+
+def test_relay_tls_off_keeps_the_plain_proxy_port() -> None:
+    args = [*_FIRECRACKER, "--set", "craft.hostAgent.relayTls.enabled=false"]
+    sources = _proxy_ingress_sources(args)
+    container = _by_kind(_render(args), "DaemonSet")["spec"]["template"]["spec"][
+        "containers"
+    ][0]
+
     assert sources[0] == {"namespaceSelector": _ns_selector("onyx-sandboxes")}
     assert sources[1]["namespaceSelector"] == _ns_selector(_AGENT_NS)
-    assert sources[1]["podSelector"]["matchLabels"].items() <= pod_labels.items()
     assert len(sources) == 2
+    assert len(_render(args, _PROXY_POLICY_TEMPLATE)[0]["spec"]["ingress"]) == 1
+    assert (
+        "--egress-proxy=onyx-sandbox-proxy.onyx.svc.cluster.local:8080"
+        in container["args"]
+    )
+    assert not [a for a in container["args"] if a.startswith("--egress-proxy-tls")]
+    assert "relay-tls" not in {m["name"] for m in container["volumeMounts"]}
 
 
 def test_only_agent_clients_reach_agent_listener() -> None:
@@ -491,6 +658,25 @@ def test_only_agent_clients_reach_agent_listener() -> None:
             ["--set-string", "auth.sandboxNodeRegistration.existingSecret=reg"],
             "craft.hostAgent.registrationExistingSecret",
         ),
+        (
+            [
+                "--set-string",
+                "auth.sandboxNodeRegistration.values.sandbox_node_registration_secret="
+                + "x" * 31,
+            ],
+            "must be at least 32 characters",
+        ),
+        (
+            ["--set-string", "craft.hostAgent.sliceMemoryPercent=85%"],
+            "sliceMemoryPercent",
+        ),
+        (["--set", "craft.hostAgent.sliceMemoryPercent=0.85"], "sliceMemoryPercent"),
+        (["--set", "craft.hostAgent.sliceMemoryPercent=5"], "sliceMemoryPercent"),
+        (["--set", "craft.hostAgent.sliceMemoryPercent=101"], "sliceMemoryPercent"),
+        (
+            ["--set-string", "craft.hostAgent.sliceMemoryPercent=0100"],
+            "sliceMemoryPercent",
+        ),
         (["--set-string", "configMap.ENABLE_CRAFT=false"], "ENABLE_CRAFT"),
         (
             ["--set-string", "craft.hostAgent.namespace=onyx"],
@@ -518,7 +704,7 @@ def test_registration_key_follows_secret_keys() -> None:
             "--set-string",
             "auth.sandboxNodeRegistration.secretKeys.SANDBOX_NODE_REGISTRATION_SECRET=custom_key",
             "--set-string",
-            "auth.sandboxNodeRegistration.values.custom_key=reg-custom",
+            f"auth.sandboxNodeRegistration.values.custom_key={_REG_VALUE}",
         ]
     )
     secret = _by_kind(docs, "Secret")
@@ -527,7 +713,7 @@ def test_registration_key_follows_secret_keys() -> None:
         e for e in container["env"] if e["name"] == "SANDBOX_NODE_REGISTRATION_SECRET"
     )
 
-    assert secret["stringData"] == {"custom_key": "reg-custom"}
+    assert secret["stringData"] == {"custom_key": _REG_VALUE}
     assert ref["valueFrom"]["secretKeyRef"]["key"] == "custom_key"
 
 

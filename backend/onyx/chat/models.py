@@ -888,6 +888,8 @@ class ChatTurnSetup(BaseModel):
     persona: PersonaPromptConfig
     base_system_prompt: str
     tool_configuration: PersonaToolConfiguration
+    # The turn offers the sandbox tools (sandbox_tools.py:sandbox_tools_for_model).
+    sandbox_tools: bool
     research_tool_id: int | None
     checkpoint: CompactionCheckpoint | None
     # Child-result delivery has no new user message.

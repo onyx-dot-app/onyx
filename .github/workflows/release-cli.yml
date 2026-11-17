@@ -31,7 +31,7 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: false
-          version: "0.11.25"
+          version: "0.13.8"
       # Build every platform wheel first, then publish once. Publishing per
       # platform would leave a partial release on PyPI if a later platform
       # failed; building all up front keeps the release atomic. Remove the

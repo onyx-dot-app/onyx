@@ -239,7 +239,8 @@ With `firecracker`, the chart:
   Security `privileged`;
 - adds a headless Service for the agent port (7443);
 - lets only the agent clients (api_server, heavy and scheduled-tasks workers)
-  reach the agent port, and lets the agent pods reach the sandbox-proxy port;
+  reach the agent port, and lets the agent pods reach the sandbox-proxy relay
+  mTLS port (see "Relay mTLS certificates");
 - gives the agent `POD_IP`, so the agent registers `<pod IP>:7443` with its
   node key (`craft.hostAgent.advertiseAddress` overrides it);
 - lets the agent move session saves over plain HTTP (`--transfer-allow-http`)
@@ -312,7 +313,10 @@ pods and sets `SANDBOX_FC_AGENT_CLIENT_CERT_PATH`,
 `SANDBOX_FC_AGENT_CLIENT_KEY_PATH` and `SANDBOX_FC_AGENT_CA_PATH`. The clients
 dial agent pod IPs. If your agent certificates do not carry the pod IPs, set
 `craft.hostAgent.client.tlsServerName` to a DNS name in the agent certificate.
-To accept only some client certificates, set `craft.hostAgent.clientAllowedSans`.
+With chart-made certificates, the agents accept only the chart's client
+certificate (one CA signs both sides). With your own PKI, set
+`craft.hostAgent.clientAllowedSans` to the SANs of your client certificates, so
+that an agent certificate from the same CA cannot call the other agents.
 
 ```yaml
 global:
@@ -326,6 +330,7 @@ auth:
       sandbox_node_registration_secret: "<random value>"
 ```
 
+The value must be at least 32 characters (for example `openssl rand -hex 32`).
 The chart copies `sandbox_node_registration_secret` into the agent namespace.
 If you change `auth.sandboxNodeRegistration.secretKeys`, the copy uses the same
 key. If `auth.sandboxNodeRegistration` uses `existingSecret`, create the same
@@ -383,6 +388,36 @@ to its `job` label. Each alert links to
 the Craft Firecracker operations page on docs.onyx.app (source:
 `microvm/RUNBOOKS.md`). Set `runbookUrl` to your own copy if your on-call
 team cannot reach docs.onyx.app.
+
+#### Relay mTLS certificates
+
+The agent egress relays reach sandbox-proxy over mutual TLS on a separate
+port (`craft.hostAgent.relayTls.port`, default 8443). The proxy hands each
+verified connection to its plain port and still checks the signed token. Pod
+sandboxes keep the plain port (8080), and only the agent pods may reach 8443
+(NetworkPolicy). 8080 stays open to the agent pods, so that agents that have
+not rolled keep egress during an upgrade. If the handshake fails, the relay closes the VM connection;
+it never falls back to plain TCP. By default the chart makes a second CA
+(apart from the agent set), a proxy certificate and a relay certificate:
+
+- `<release>-sandbox-proxy-relay-tls` in the release namespace: the proxy
+  certificate and the relay CA. Its DNS names are
+  `craft.hostAgent.relayTls.serverName` (default: the sandbox-proxy host),
+  `<release>-sandbox-proxy.<namespace>.svc` and `.svc.cluster.local`.
+- `<release>-craft-fc-host-agent-relay-tls` in the agent namespace: the relay
+  certificate (`<release>-craft-fc-relay.<agent namespace>.svc`) and the CA.
+
+The proxy accepts only that relay name
+(`craft.hostAgent.relayTls.clientAllowedSans` overrides it). Renewal and
+`lookup` work as for the agent set. A new set restarts sandbox-proxy (pod
+annotation `onyx.app/craft-fc-relay-cert-revision`). The agents and the proxy
+also reload the files on the next connection after they change, so rotated
+`existingSecret` files need no restart. With your own PKI, set both
+`craft.hostAgent.relayTls.existingSecret` (agent namespace: relay certificate,
+CA of the proxy certificate) and `craft.hostAgent.relayTls.proxyExistingSecret`
+(release namespace: proxy certificate, CA of the relay certificates).
+`craft.hostAgent.relayTls.enabled: false` sends the signed tokens to the
+plain port, as before.
 
 ## Using an external Redis
 

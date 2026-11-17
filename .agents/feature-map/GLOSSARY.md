@@ -106,6 +106,16 @@ usage events sent to the Onyx fleet service ([[fleet-telemetry]]).
   deadline; the response is saved while they wait. "Approve for this chat" is
   scoped to a chat session. See [[mcp-and-custom-tools#chat-approval-durable-wait]].
 
+**"Sandbox"** means four things.
+- Code mode's sandbox: Monty worker processes that run `execute_code`
+  programs, with no files or network. See [[code-execution]].
+- A Craft sandbox: the pod or Docker container of opencode sessions. See
+  [[craft-sandboxes]].
+- A harness sandbox: the user's Firecracker VM behind `HarnessSandbox`, which
+  the chat sandbox tools (`tools/tool_implementations/sandbox/sandbox_tools.py:sandbox_tools_for_model`) use. See [[craft-sandboxes]] and [[code-execution]].
+- The `sandbox` table: one row per user, which Craft and harness sandboxes
+  share.
+
 **MCP** goes both ways. Onyx is an MCP client of servers that an admin connects
 ([[mcp-and-custom-tools]]), and an MCP server for external clients
 ([[mcp-server]]). Check the direction before you change code named `mcp`.

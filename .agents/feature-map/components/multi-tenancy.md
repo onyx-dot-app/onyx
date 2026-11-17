@@ -109,7 +109,15 @@ task keeps the pool full
 stored SQL dump of the shard's template schema at the code's Alembic head
 (`ee/onyx/db/tenant_snapshot.py:apply_snapshot`). It runs the migration chain
 instead when no snapshot exists at that head, or when the schema already has
-tables from a failed build.
+tables from a failed build. On the playground (`IS_PLAYGROUND`),
+`ee/onyx/server/tenants/provisioning.py:check_playground_sign_up` first asks the control plane
+(`POST /sign-up-domain`) and refuses with a `PLAYGROUND_*` code when the address
+or its domain has used its access, or when a team from the domain has a running
+trial and the person did not choose "start a new team" (`start_new_team`, a
+value in the signed OAuth state; the playground has no password form). The web
+shows one page per code on `/auth/error`
+(`web/src/app/auth/error/AuthErrorContent.tsx`). A control plane that does not
+answer refuses too (`PLAYGROUND_CHECK_FAILED`): no tenant without the rules.
 
 **Two Alembic trees.** `backend/alembic/` migrates the tenant tables
 (`db/models.py:Base`) once per tenant schema. `backend/alembic_tenants/`
@@ -128,8 +136,9 @@ migrates only the catalog tables (`PublicBase`) in `public`.
    tables only.
 2. `tenant-from-auth-only` **The request's tenant comes from authenticated
    context, never from client input.** Some routes take a tenant id in the
-   body, such as the control-plane routes behind `control_plane_dep` and the
-   request to join a workspace (`ee/onyx/server/tenants/user_invitations_api.py`).
+   body, such as the control-plane routes behind `control_plane_dep`
+   (`ee/onyx/server/tenants/control_plane_api.py`) and the request to join a
+   workspace (`ee/onyx/server/tenants/user_invitations_api.py`).
    They name a target and never set the request's own tenant from it.
    `db/engine/sql_engine.py:is_valid_schema_name` and
    `db/engine/tenant_utils.py:TENANT_ID_PATTERN` check every tenant id before

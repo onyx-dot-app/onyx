@@ -6,7 +6,6 @@ The API has no plugin reads yet, so these tests read the plugin rows from the
 database after each request."""
 
 import datetime
-from collections.abc import Generator
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -14,7 +13,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import (
     Plugin,
@@ -28,8 +27,6 @@ from onyx.server.features.skill.models import (
     SkillResponse,
     SkillUserShareRequest,
 )
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import (
@@ -39,21 +36,12 @@ from tests.integration.common_utils.managers.skill import (
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.skills.conftest import share_skill, unique_name
 from tests.utils.plugin_access import (
     ORGANIZATION_LIBRARY_ID,
     plugin_access_mismatches,
     user_uploads_id,
 )
-
-
-@pytest.fixture(autouse=True)
-def _db_access() -> Generator[None, None, None]:
-    SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 @pytest.fixture
@@ -65,21 +53,7 @@ def _user(prefix: str) -> DATestUser:
     return UserManager.create(name=f"{prefix}_{uuid4().hex[:8]}")
 
 
-def _name(prefix: str) -> str:
-    return f"{prefix}-{uuid4().hex[:8]}"
-
-
 # --- Requests ----------------------------------------------------------------
-
-
-def _share(
-    user: DATestUser, skill_id: UUID | str, body: dict[str, Any]
-) -> httpx.Response:
-    return client.patch(
-        f"{API_SERVER_URL}/skills/custom/{skill_id}/share",
-        json=body,
-        headers=user.headers,
-    )
 
 
 def _patch(
@@ -195,8 +169,8 @@ def test_share_writes_plugin_shares(admin_user: DATestUser) -> None:
     owner = admin_user
     viewer = _user("share_viewer")
     editor = _user("share_editor")
-    group = UserGroupManager.create(admin_user, name=_name("share-group"))
-    skill = SkillManager.create_custom(owner, name=_name("share"))
+    group = UserGroupManager.create(admin_user, name=unique_name("share-group"))
+    skill = SkillManager.create_custom(owner, name=unique_name("share"))
 
     SkillManager.share(
         skill,
@@ -241,9 +215,9 @@ def test_bulk_share_writes_plugin_rows(admin_user: DATestUser) -> None:
     owner = admin_user
     other = _user("bulk_other")
     viewer = _user("bulk_viewer")
-    group = UserGroupManager.create(admin_user, name=_name("bulk-group"))
-    first = SkillManager.create_custom(owner, name=_name("bulk-a"))
-    second = SkillManager.create_custom(owner, name=_name("bulk-b"))
+    group = UserGroupManager.create(admin_user, name=unique_name("bulk-group"))
+    first = SkillManager.create_custom(owner, name=unique_name("bulk-a"))
+    second = SkillManager.create_custom(owner, name=unique_name("bulk-b"))
     SkillManager.share(
         first,
         owner,
@@ -280,7 +254,7 @@ def test_bulk_share_writes_plugin_rows(admin_user: DATestUser) -> None:
 
 
 def test_publish_moves_plugin_to_organization_library(owner: DATestUser) -> None:
-    skill = SkillManager.create_custom(owner, name=_name("publish"))
+    skill = SkillManager.create_custom(owner, name=unique_name("publish"))
     before = _plugin(skill.id)
     assert before.marketplace_id == user_uploads_id(owner.id)
     assert before.published_version_id is None
@@ -306,12 +280,12 @@ def test_publish_moves_plugin_to_organization_library(owner: DATestUser) -> None
 
 def test_publish_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
     other = _user("publish_other")
-    name = _name("same")
+    name = unique_name("same")
     first = SkillManager.create_custom(other, name=name, auto_enable=False)
     _publish(other, first)
     second = SkillManager.create_custom(owner, name=name, auto_enable=False)
 
-    response = _share(owner, second.id, {"public_permission": "VIEWER"})
+    response = share_skill(owner, second.id, {"public_permission": "VIEWER"})
     assert response.status_code == 409
     assert response.json()["error_code"] == "CONFLICT"
     assert name in response.json()["detail"]
@@ -322,7 +296,7 @@ def test_publish_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
 
 def test_create_public_with_a_used_name_takes_a_free_name(owner: DATestUser) -> None:
     other = _user("create_public_other")
-    name = _name("created-public")
+    name = unique_name("created-public")
     first = SkillManager.create_custom(other, name=name, auto_enable=False)
     _publish(other, first)
 
@@ -351,10 +325,10 @@ def test_create_public_with_a_used_name_takes_a_free_name(owner: DATestUser) -> 
 
 
 def test_published_skill_cannot_be_made_private(owner: DATestUser) -> None:
-    skill = SkillManager.create_custom(owner, name=_name("one-way"))
+    skill = SkillManager.create_custom(owner, name=unique_name("one-way"))
     _publish(owner, skill)
 
-    share = _share(owner, skill.id, {"public_permission": None})
+    share = share_skill(owner, skill.id, {"public_permission": None})
     assert share.status_code == 400
     assert "cannot be made private" in share.json()["detail"]
     patch = _patch(owner, skill.id, {"public_permission": None})
@@ -379,12 +353,12 @@ def test_published_skill_cannot_be_made_private(owner: DATestUser) -> None:
 
 
 def test_organization_editor_is_refused(owner: DATestUser) -> None:
-    private = SkillManager.create_custom(owner, name=_name("org-edit-a"))
-    published = SkillManager.create_custom(owner, name=_name("org-edit-b"))
+    private = SkillManager.create_custom(owner, name=unique_name("org-edit-a"))
+    published = SkillManager.create_custom(owner, name=unique_name("org-edit-b"))
     _publish(owner, published)
 
     for skill in (private, published):
-        response = _share(owner, skill.id, {"public_permission": "EDITOR"})
+        response = share_skill(owner, skill.id, {"public_permission": "EDITOR"})
         assert response.status_code == 400
         assert "edit access" in response.json()["detail"]
         assert _patch(owner, skill.id, {"public_permission": "EDITOR"}).status_code == (
@@ -415,20 +389,28 @@ def test_organization_editor_is_refused(owner: DATestUser) -> None:
 
 @pytest.mark.parametrize(
     ("policy", "plugin_policy"),
-    [("DEFAULT", "DEFAULT"), ("REQUIRED", "REQUIRED"), ("AVAILABLE", None)],
+    [
+        ("DEFAULT", "DEFAULT"),
+        ("REQUIRED", "REQUIRED"),
+        ("AVAILABLE", "AVAILABLE"),
+        (None, None),
+    ],
 )
 def test_install_setting_writes_plugin_policy(
-    admin_user: DATestUser, policy: str, plugin_policy: str | None
+    admin_user: DATestUser, policy: str | None, plugin_policy: str | None
 ) -> None:
-    single = SkillManager.create_custom(admin_user, name=_name("policy"))
-    bulk = SkillManager.create_custom(admin_user, name=_name("policy-bulk"))
-    if policy == "AVAILABLE":
+    """AVAILABLE is an own setting; null clears it."""
+    single = SkillManager.create_custom(admin_user, name=unique_name("policy"))
+    bulk = SkillManager.create_custom(admin_user, name=unique_name("policy-bulk"))
+    if policy is None:
         for skill in (single, bulk):
-            _share(
+            share_skill(
                 admin_user, skill.id, {"installation_policy": "DEFAULT"}
             ).raise_for_status()
 
-    _share(admin_user, single.id, {"installation_policy": policy}).raise_for_status()
+    share_skill(
+        admin_user, single.id, {"installation_policy": policy}
+    ).raise_for_status()
     result = _bulk(
         admin_user,
         {
@@ -449,7 +431,7 @@ def test_install_setting_writes_plugin_policy(
 
 
 def test_enable_and_disable_write_the_user_choice(owner: DATestUser) -> None:
-    skill = SkillManager.create_custom(owner, name=_name("choice"))
+    skill = SkillManager.create_custom(owner, name=unique_name("choice"))
     # The auto-enable on create writes the choice with enabled_at.
     created = _choice(skill.id, owner.id)
     assert created is not None and created[0] is True and created[1] is not None
@@ -480,7 +462,7 @@ def test_enable_and_disable_write_the_user_choice(owner: DATestUser) -> None:
 def test_replacing_a_same_named_skill_turns_the_other_plugin_off(
     owner: DATestUser,
 ) -> None:
-    name = _name("same-choice")
+    name = unique_name("same-choice")
     first = SkillManager.create_custom(owner, name=name)
     second = SkillManager.create_custom(owner, name=name, auto_enable=False)
 
@@ -497,7 +479,7 @@ def test_replacing_a_same_named_skill_turns_the_other_plugin_off(
 
 def test_transfer_moves_private_plugin_to_new_owner(owner: DATestUser) -> None:
     new_owner = _user("transfer_new")
-    skill = SkillManager.create_custom(owner, name=_name("transfer"))
+    skill = SkillManager.create_custom(owner, name=unique_name("transfer"))
     SkillManager.share(
         skill,
         owner,
@@ -521,7 +503,7 @@ def test_transfer_moves_private_plugin_to_new_owner(owner: DATestUser) -> None:
 
 def test_transfer_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
     new_owner = _user("transfer_clash")
-    name = _name("transfer-clash")
+    name = unique_name("transfer-clash")
     SkillManager.create_custom(new_owner, name=name)
     skill = SkillManager.create_custom(owner, name=name)
 
@@ -538,7 +520,7 @@ def test_transfer_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
 
 def test_transfer_keeps_a_published_plugin_published(owner: DATestUser) -> None:
     new_owner = _user("transfer_published")
-    skill = SkillManager.create_custom(owner, name=_name("transfer-pub"))
+    skill = SkillManager.create_custom(owner, name=unique_name("transfer-pub"))
     _publish(owner, skill)
 
     _transfer(owner, skill.id, new_owner.id).raise_for_status()
@@ -554,9 +536,9 @@ def test_transfer_keeps_a_published_plugin_published(owner: DATestUser) -> None:
 def test_only_a_manager_can_delete_a_published_skill(
     owner: DATestUser, admin_user: DATestUser
 ) -> None:
-    single = SkillManager.create_custom(owner, name=_name("delete-pub"))
-    bulk = SkillManager.create_custom(owner, name=_name("delete-pub-bulk"))
-    private = SkillManager.create_custom(owner, name=_name("delete-private"))
+    single = SkillManager.create_custom(owner, name=unique_name("delete-pub"))
+    bulk = SkillManager.create_custom(owner, name=unique_name("delete-pub-bulk"))
+    private = SkillManager.create_custom(owner, name=unique_name("delete-private"))
     _publish(owner, single)
     _publish(owner, bulk)
 
@@ -591,7 +573,7 @@ def test_access_write_on_skill_without_plugin_row_converges(
     hidden from everyone but an admin. The re-sync migration leaves none; an
     admin write on one still makes the plugin from the legacy rows first."""
     viewer = _user("converge_viewer")
-    skill = SkillManager.create_custom(owner, name=_name("converge"))
+    skill = SkillManager.create_custom(owner, name=unique_name("converge"))
     SkillManager.share(
         skill,
         owner,
@@ -608,11 +590,11 @@ def test_access_write_on_skill_without_plugin_row_converges(
     assert hidden.status_code == 404
 
     if change == "share":
-        response = _share(admin_user, skill.id, {"group_shares": []})
+        response = share_skill(admin_user, skill.id, {"group_shares": []})
     elif change == "publish":
-        response = _share(admin_user, skill.id, {"public_permission": "VIEWER"})
+        response = share_skill(admin_user, skill.id, {"public_permission": "VIEWER"})
     else:
-        response = _share(admin_user, skill.id, {"installation_policy": "DEFAULT"})
+        response = share_skill(admin_user, skill.id, {"installation_policy": "DEFAULT"})
     response.raise_for_status()
 
     # The plugin is made from the legacy rows, with the shares and choices

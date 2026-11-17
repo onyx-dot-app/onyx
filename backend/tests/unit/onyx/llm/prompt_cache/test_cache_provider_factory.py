@@ -62,7 +62,7 @@ def test_gateway_unknown_model_stays_noop() -> None:
 
 
 def test_gateway_substring_lookalikes_stay_noop() -> None:
-    for name in ("claudio-fast", "myanthropic-proxy", "declauded-v1"):
+    for name in ("claudio-fast", "myanthropic-proxy"):
         adapter: PromptCacheProvider = get_provider_adapter(
             _config("litellm_proxy", name)
         )

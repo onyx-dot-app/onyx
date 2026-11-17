@@ -183,6 +183,9 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.DEEP_RESEARCH_PLAN_START,
   PacketType.RESEARCH_AGENT_START,
   PacketType.CODING_AGENT_START,
+  PacketType.EXEC_COMMAND_START,
+  PacketType.WRITE_STDIN_START,
+  PacketType.APPLY_PATCH_START,
 ]);
 
 function hasContentPackets(packets: Packet[]): boolean {
@@ -342,16 +345,19 @@ function handleStopPacket(state: ProcessorState, packet: Packet): void {
   });
 
   // Nothing follows Stop, so each open nested call ends with the response.
-  state.nestedCallsMap.forEach((calls) =>
-    calls.forEach((call) => {
-      if (!call.some(isGroupEndPacket)) {
-        call.push({
-          placement: call[0]!.placement,
-          obj: { type: PacketType.SECTION_END },
-        });
-      }
-    })
-  );
+  state.nestedCallsMap.forEach(endOpenNestedCalls);
+}
+
+// A call that its parent ended gets no end packet of its own: it was stopped.
+function endOpenNestedCalls(calls: Map<number, Packet[]>): void {
+  calls.forEach((call) => {
+    if (!call.some(isGroupEndPacket)) {
+      call.push({
+        placement: call[0]!.placement,
+        obj: { type: PacketType.SECTION_END },
+      });
+    }
+  });
 }
 
 function handleToolAfterMessagePacket(
@@ -434,6 +440,14 @@ function processPacket(state: ProcessorState, packet: Packet): void {
       running: false,
     };
     state.codeModePrograms.set(groupKey, nextCodeModeProgram(program, packet));
+    // The cell's end (any final status but a yield) cuts off its open calls.
+    if (
+      packet.obj.type === PacketType.CODE_MODE_DELTA &&
+      packet.obj.status != null &&
+      packet.obj.status !== "running"
+    ) {
+      endOpenNestedCalls(state.nestedCallsMap.get(groupKey) ?? new Map());
+    }
   }
 
   // Debug and control packets can precede the first rendered packet.

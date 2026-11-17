@@ -33,7 +33,7 @@ _BASE = [
     "--set",
     "auth.sandboxNodeRegistration.enabled=true",
     "--set-string",
-    "auth.sandboxNodeRegistration.values.sandbox_node_registration_secret=reg-test",
+    "auth.sandboxNodeRegistration.values.sandbox_node_registration_secret=reg-test-0123456789abcdef0123456789",
 ]
 _RELEASE = [*_BASE, "--set-string", "global.version=v5.2.0"]
 _EXISTING = [
@@ -195,6 +195,37 @@ def test_chart_makes_the_mtls_certificates() -> None:
 
     tls_volume = next(v for v in _pod_spec(docs)["volumes"] if v["name"] == "tls")
     assert tls_volume["secret"]["secretName"] == _AGENT_SECRET
+
+
+def test_agents_accept_only_the_chart_made_client_certificate() -> None:
+    docs = _render(_RELEASE)
+    secrets = _tls_secrets(docs)
+    server_cert = _cert(secrets[_AGENT_SECRET], "tls.crt")
+    client_names = _dns_names(_cert(secrets[_CLIENT_SECRET], "tls.crt"))
+    args = _pod_spec(docs)["containers"][0]["args"]
+
+    # The agent certificate also has the client usage and the same CA, so
+    # without the pin one node's agent certificate opens every other agent.
+    assert (
+        ExtendedKeyUsageOID.CLIENT_AUTH
+        in server_cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+    )
+    assert client_names == ["onyx-craft-fc-client.onyx.svc"]
+    assert f"--client-allowed-sans={client_names[0]}" in args
+    assert not set(client_names) & set(_dns_names(server_cert))
+
+    override = _pod_spec(
+        _render(
+            [
+                *_RELEASE,
+                "--set-string",
+                "craft.hostAgent.clientAllowedSans=spiffe://onyx/api-server",
+            ]
+        )
+    )["containers"][0]["args"]
+    assert [a for a in override if a.startswith("--client-allowed-sans")] == [
+        "--client-allowed-sans=spiffe://onyx/api-server"
+    ]
 
 
 @pytest.mark.parametrize("template", _CLIENT_TEMPLATES)

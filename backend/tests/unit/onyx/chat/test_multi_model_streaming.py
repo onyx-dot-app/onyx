@@ -402,6 +402,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
             )
         )
     setup.incognito_record_mode = None
+    setup.sandbox_tools = False
     setup.mentions = []
     setup.has_chat_skills = False
     setup.resumed_response_id = None
@@ -3766,7 +3767,9 @@ def test_an_agent_host_runs_its_agents_inside_a_trace() -> None:
     with (
         patch(
             "onyx.chat.execution.create_chat_agent",
-            return_value=MagicMock(spec=ChatAgent, configured_tools=[], max_steps=3),
+            return_value=MagicMock(
+                spec=ChatAgent, configured_tools=[], max_steps=3, on_drained=None
+            ),
         ),
         patch("onyx.chat.execution.bind_run_store", return_value=(store, None)),
         patch("onyx.chat.execution.load_settings"),

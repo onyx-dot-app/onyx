@@ -72,6 +72,7 @@ import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { externalAppAdminUrl } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
+import { useSkillLimitCopy } from "@/lib/skills/hooks";
 
 interface SkillEditorPageProps {
   skillId?: string;
@@ -87,11 +88,12 @@ export default function SkillEditorPage({
   externalAppName,
 }: SkillEditorPageProps) {
   const t = useTranslations("skills");
+  const { describeError } = useSkillLimitCopy();
   const isCreating = skillId === undefined;
   const hasAppContext = externalAppId !== undefined;
   const isCreatingForApp = isCreating && hasAppContext;
   const navigation = useNavigation();
-  const { isAdmin, user } = useUser();
+  const { user } = useUser();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
   );
@@ -261,11 +263,7 @@ export default function SkillEditorPage({
             auto_enable: isCreatingForApp ? false : !createDisabled,
             external_app_id: externalAppId,
             sharing: creationSharing
-              ? serializeSkillSharing(
-                  creationSharing,
-                  isAdmin,
-                  canManageOrgSkills
-                )
+              ? serializeSkillSharing(creationSharing, canManageOrgSkills)
               : undefined,
           },
           pendingFilesUpload?.file
@@ -343,9 +341,7 @@ export default function SkillEditorPage({
         return;
       }
       console.error("Failed to save skill", err);
-      toast.error(
-        err instanceof Error ? err.message : t("editor.toasts.saveFailed")
-      );
+      toast.error(describeError(err, t("editor.toasts.saveFailed")));
     } finally {
       setIsSaving(false);
     }
@@ -843,35 +839,32 @@ export default function SkillEditorPage({
                 </Card>
               </Section>
 
-              {skill &&
-                canManageSkill &&
-                (skill.installation_policy !== "REQUIRED" || isAdmin) &&
-                (skill.public_permission === null || canManageOrgSkills) && (
-                  <>
-                    <Divider paddingParallel={0} paddingPerpendicular={0} />
+              {skill?.can_delete && (
+                <>
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-                    <Card border="solid" rounding={4}>
-                      <Section>
-                        <InputHorizontal
-                          title={t("editor.delete.title")}
-                          description={t("editor.delete.description")}
-                          center
+                  <Card border="solid" rounding={4}>
+                    <Section>
+                      <InputHorizontal
+                        title={t("editor.delete.title")}
+                        description={t("editor.delete.description")}
+                        center
+                      >
+                        <Button
+                          type="button"
+                          variant="danger"
+                          prominence="secondary"
+                          icon={SvgTrash}
+                          disabled={isDeleting}
+                          onClick={() => deleteModal.toggle(true)}
                         >
-                          <Button
-                            type="button"
-                            variant="danger"
-                            prominence="secondary"
-                            icon={SvgTrash}
-                            disabled={isDeleting}
-                            onClick={() => deleteModal.toggle(true)}
-                          >
-                            {t("editor.delete.button.label")}
-                          </Button>
-                        </InputHorizontal>
-                      </Section>
-                    </Card>
-                  </>
-                )}
+                          {t("editor.delete.button.label")}
+                        </Button>
+                      </InputHorizontal>
+                    </Section>
+                  </Card>
+                </>
+              )}
             </>
           )}
         </SettingsLayouts.Body>

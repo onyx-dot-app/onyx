@@ -62,8 +62,8 @@ jobs:
           dockerfile="${CRAFT_FC_DIR}/Dockerfile.artifacts"
           kernel_tag="$(sed -n 's/^ARG KERNEL_TAG=//p' "${dockerfile}")"
           fc_version="$(sed -n 's/^ARG FC_VERSION=//p' "${dockerfile}")"
-          # microvm-kernel-6.18.25-57.115.amzn2023 + v1.17.0 -> 6.18.25-57.115-fc1.17.0
-          kernel="${kernel_tag#microvm-kernel-}"
+          # kernel6.18-6.18.62-127.179.amzn2023 + v1.17.0 -> 6.18.62-127.179-fc1.17.0
+          kernel="$(sed -E 's/^(microvm-)?kernel[0-9.]*-//' <<<"${kernel_tag}")"
           kernel="${kernel%.amzn2023}"
           tag="${kernel}-fc${fc_version#v}"
           if [ -n "${REVISION}" ]; then

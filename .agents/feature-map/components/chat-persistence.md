@@ -380,7 +380,14 @@ pending set (`retry_incognito_teardowns`).
 **Deletion and retention.** Soft delete sets `deleted` and ends the chat's
 parked responses, which nothing can decide anymore
 (`server/query_and_chat/chat_backend.py:_end_parked_responses`): their
-requests, checkpoints and program dumps go. Hard delete
+requests, checkpoints and program dumps go. After the commit, both delete
+routes call `server/features/build/sandbox/firecracker/purge.py:purge_deleted_chat_sessions`:
+when the user has a sandbox row, it purges each chat's sandbox directory and
+saves. A single delete purges before it returns; delete-all purges in a
+background thread. The purge is best effort: a failure is logged and the
+delete stands. A chat deleted during its first sandbox call can leave its
+directory until the VM stops.
+Hard delete
 (`HARD_DELETE_CHATS` or the `hard_delete` parameter) runs
 `db/chat.py:delete_messages_and_files_from_chat_session` over the session and
 its child sessions: message files, checkpoint blobs, then messages (tool calls,
@@ -389,6 +396,9 @@ to. The EE task
 `ee/onyx/background/celery/tasks/ttl_management/tasks.py:perform_ttl_management_task`
 hard-deletes in batches the sessions whose last activity, child sessions
 included, is older than the window (`db/chat.py:get_chat_sessions_older_than`).
+It purges no sandbox files itself. When the chain ends, it queues the sweep
+that purges the Craft Firecracker session saves the window no longer keeps,
+deleted chats' saves included ([[craft-sandboxes]]).
 A change to `maximum_chat_retention_days` needs the Enterprise tier, and the
 Community downgrade clears it ([[billing]]).
 

@@ -30,7 +30,7 @@ from onyx.external_apps.providers.base import (
 from onyx.external_apps.providers.registry import get_provider_for_app
 from onyx.external_apps.token_utils import needs_refresh, stamp_expires_at
 from onyx.redis.lock_context import RedisSharedLockAcquisitionError, redis_shared_lock
-from onyx.skills.push import push_skills_for_users
+from onyx.skills.push import push_skills_and_commit
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -123,8 +123,8 @@ def _refresh_under_lock(
             disconnect_external_app_for_user(
                 db, external_app_id=external_app_id, user_id=user_id
             )
-            push_skills_for_users({user_id}, db)
             db.commit()
+            push_skills_and_commit({user_id}, db)
         logger.warning(
             "ea_token_refresh.terminal_cleared external_app_id=%s user_id=%s error=%s",
             external_app_id,

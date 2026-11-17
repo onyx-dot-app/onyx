@@ -94,7 +94,8 @@ prompt holds and the compaction prompt text.
 
 ```
 Agent (history, checkpoint, tools, prepare_step / after_step,
-       before_tool_call / after_tool_call / on_finish / on_suspend hooks)
+       before_tool_call / after_tool_call / on_finish / on_suspend /
+       on_drained hooks)
   start() -> Run (one request, step budget, own cancellation signal)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish
@@ -129,6 +130,19 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   results and the run still suspends. A suspend hook that stops for
   cancellation finishes the run as cancelled. Chat uses both hooks to close
   code mode cells ([[code-execution#code-mode-interrupted-run]]).
+  `Agent.on_drained` runs after each finish or suspension once the run's work
+  drains (`Run._work_drained`, from `_drain_workers` and `_suspend`): its tool
+  threads, work that a tool added through `ToolInvocation.run_work` (a code
+  mode cell's driver and its tool call threads), and its foreground
+  children's work (`Run.track_child_work`), not background children. A suspension calls it only when no foreground child
+  waits or works (`RunCoordination.pending_children`,
+  `AgentCoordinator.children_idle`, read only); otherwise the run's later end does.
+  A run that hands off in that state calls no hook; the restoring owner's
+  run end does. It cannot change results. Errors, `AgentCancelled`
+  included, are logged and the run still becomes idle and reusable. Only the
+  root `chat/agent.py:ChatAgent` installs it, to end per-run tool state
+  (`create_chat_agent` passes it to the root only), such as the sandbox turn
+  ([[code-execution]]); subagents share the root's tools and install none.
   `chat/presentation.py:ResponsePresenter` renders each amendment with
   `chat/renderer.py:ToolRenderer.amend`. A call without an ended card
   completes with the amended result. An ended card renders only what the
@@ -145,8 +159,8 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   provider context-limit error before any output streams compacts and retries
   once.
 - `backend/onyx/agents/tool_execution.py:ToolBatch` runs a step's calls in
-  parallel. `ToolExecutionMode.SEQUENTIAL` serializes calls to one tool name,
-  and `merge_arguments` merges compatible calls into one worker. It records
+  parallel. `ToolExecutionMode.SEQUENTIAL` serializes calls to one tool name, or
+  to the tools of one `sequence_group`, and `merge_arguments` merges compatible calls into one worker. It records
   results as they complete. Each pass of `ToolBatch.execute` then ends the
   completed calls in call order, and model history replays them in call order. A step with more than `MAX_TOOL_CALLS_PER_STEP` (64) calls or a
   repeated call ID fails the whole run.

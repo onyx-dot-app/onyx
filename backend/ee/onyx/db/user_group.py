@@ -347,6 +347,18 @@ def fetch_user_groups(
     return db_session.scalars(stmt).unique().all()
 
 
+def fetch_user_group_member_ids(db_session: Session, user_group_id: int) -> set[UUID]:
+    return {
+        user_id
+        for user_id in db_session.scalars(
+            select(User__UserGroup.user_id).where(
+                User__UserGroup.user_group_id == user_group_id
+            )
+        )
+        if user_id is not None
+    }
+
+
 def fetch_user_group_member_counts(
     db_session: Session, user_group_ids: Collection[int]
 ) -> dict[int, UserGroupMemberCounts]:

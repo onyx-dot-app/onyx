@@ -62,7 +62,7 @@ export function CreateSkillModalContent({
   const [inspecting, setInspecting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const busy = preparing || inspecting;
-  const { isAdmin, user } = useUser();
+  const { user } = useUser();
   const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
   );
@@ -104,7 +104,7 @@ export function CreateSkillModalContent({
         const imported = await uploadSkillBundles(
           batchFiles,
           sharing
-            ? serializeSkillSharing(sharing, isAdmin, isOrganizationManager)
+            ? serializeSkillSharing(sharing, isOrganizationManager)
             : undefined
         );
         setResult(imported);

@@ -22,6 +22,10 @@ from onyx.tools.models import (
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.sandbox.models import (
+    ApplyPatchResult,
+    SandboxExecResult,
+)
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 
 # Durable details of the tools that programs can call.
@@ -33,7 +37,9 @@ CodeModeCallDetails = Annotated[
     | LlmBashExecutionResult
     | LlmPythonExecutionResult
     | MemoryUpdated
-    | ToolExecutionError,
+    | ToolExecutionError
+    | SandboxExecResult
+    | ApplyPatchResult,
     Field(discriminator="type"),
 ]
 CODE_MODE_CALL_DETAIL_TYPES: tuple[type[BaseModel], ...] = get_args(

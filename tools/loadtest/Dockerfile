@@ -5,10 +5,25 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 # Keep the tag in sync with the locust pin in uv.lock.
 FROM ${BASE_IMAGE_REGISTRY}/locustio/locust:2.46.6
 
-# prometheus-client isn't in the base locust image. Pinned to match the
-# version the root lockfile resolves for the `loadtest` group — bump both
-# together when the lockfile updates.
-RUN pip install --no-cache-dir prometheus-client==0.23.1
+# The base image is built once per Locust release, so its OS packages trail
+# Debian security.
+USER root
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+USER locust
+
+# prometheus-client isn't in the base image. The rest ship in it at vulnerable
+# versions. Pins match the root lockfile's `loadtest` group, so bump them with it.
+# uv is mounted for this step only, so it never reaches the shipped image.
+RUN --mount=from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9,source=/uv,target=/bin/uv \
+    uv pip install --python /opt/venv/bin/python --no-cache-dir \
+    prometheus-client==0.23.1 \
+    brotli==1.2.1 \
+    certifi==2026.10.19 \
+    msgpack==1.2.4 \
+    werkzeug==3.1.9
 
 COPY locustfile.py /loadtest/locustfile.py
 COPY shapes.py /loadtest/shapes.py

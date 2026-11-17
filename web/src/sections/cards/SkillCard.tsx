@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, type MouseEvent } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
   Card,
@@ -20,9 +20,6 @@ import {
   SvgTrash,
   SvgUser,
 } from "@opal/icons";
-import { useUser } from "@/providers/UserProvider";
-import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { Permission } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import type {
   CustomSkill,
@@ -30,6 +27,7 @@ import type {
 } from "@/lib/skills/types";
 import { cn } from "@opal/utils";
 import { hasUnpublishedChanges } from "@/lib/skills/sharing";
+import { useInstallationPolicyCopy } from "@/lib/skills/hooks";
 
 export type SkillCardSource = "builtin" | "custom";
 
@@ -91,22 +89,34 @@ export default function SkillCard({
   const t = useTranslations("cards");
   const skillCopy = useTranslations("skills");
   const { appName } = useSettings();
+  const format = useFormatter();
+  const policyCopy = useInstallationPolicyCopy();
 
   const handleClick = useCallback(() => {
     onClick?.(item);
   }, [onClick, item]);
 
-  const { isAdmin } = useUser();
-  const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
-    Permission.MANAGE_PLUGINS
-  );
-  const isRequired =
-    item.source === "custom" && item.skill.installation_policy === "REQUIRED";
-  // Only an organization-wide skill manager can delete a published skill.
-  const canDelete =
-    item.source === "custom" &&
-    (!isRequired || isAdmin) &&
-    (item.skill.public_permission === null || canManageOrgSkills);
+  const isRequired = item.source === "custom" && item.skill.required_for_user;
+  const canDelete = item.source === "custom" && item.skill.can_delete;
+
+  // Only callers who may see share details get summaries.
+  const groupSummaries =
+    item.source === "custom" ? item.skill.group_summaries : [];
+  const groupsLine =
+    groupSummaries.length > 0
+      ? skillCopy("groups.card", {
+          groups: format.list(
+            groupSummaries.map((summary) =>
+              summary.installation_policy === null
+                ? summary.group_name
+                : skillCopy("groups.entry", {
+                    name: summary.group_name,
+                    policy: policyCopy.label(summary.installation_policy),
+                  })
+            )
+          ),
+        })
+      : null;
 
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
@@ -301,6 +311,18 @@ export default function SkillCard({
           </Section>
         </Section>
 
+        {groupsLine && (
+          <Section height="auto" alignItems="stretch" padding={2}>
+            <Text
+              font="secondary-body"
+              color="text-03"
+              maxLines={1}
+              overflowTooltip
+            >
+              {groupsLine}
+            </Text>
+          </Section>
+        )}
         <Section
           flexDirection="row"
           height="auto"
@@ -332,7 +354,7 @@ export default function SkillCard({
           >
             {isRequired && (
               <Badge
-                title={skillCopy("modals.share.installation.required")}
+                title={skillCopy("installationPolicy.REQUIRED.label")}
                 color="info"
                 tooltip={t("skill.tags.required.tooltip")}
               />

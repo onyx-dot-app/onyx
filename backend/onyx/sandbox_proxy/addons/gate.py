@@ -42,6 +42,7 @@ from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import (
     clear_destination,
+    is_node_only_api_path,
     pin_destination,
     resolve_destination,
 )
@@ -333,6 +334,20 @@ class GateAddon:
             task.add_done_callback(self._inflight_tasks.discard)
 
         if not await self._bind_signed_identity(flow):
+            return
+        if is_node_only_api_path(
+            self._destination_policy,
+            flow.request.host,
+            flow.request.port,
+            flow.request.path_components,
+        ):
+            logger.warning(
+                "egress_denied_node_route method=%s host=%s port=%s",
+                flow.request.method,
+                flow.request.host,
+                flow.request.port,
+            )
+            flow.response = http_403(SandboxProxyError.DESTINATION_BLOCKED)
             return
         upstream_addresses = tuple(
             address

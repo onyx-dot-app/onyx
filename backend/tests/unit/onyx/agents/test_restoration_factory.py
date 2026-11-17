@@ -322,7 +322,7 @@ def _suspended(agent: Agent, state: dict[str, JsonValue]) -> ExecutionCheckpoint
     )
 
 
-_CODE_MODE_ECHO = "echo (a function in `execute_code` programs)"
+_CODE_MODE_ECHO = "tools.echo (a function in `execute_code` programs)"
 
 
 @pytest.mark.parametrize(

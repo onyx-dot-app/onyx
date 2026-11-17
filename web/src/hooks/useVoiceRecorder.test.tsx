@@ -304,6 +304,67 @@ describe("useVoiceRecorder", () => {
     expect(audioContext.close).toHaveBeenCalled();
   });
 
+  describe("silence fallback without auto-send", () => {
+    async function startRecording() {
+      const mocks = installStartupMocks();
+      const hook = renderHook(() =>
+        useVoiceRecorder({ autoStopOnSilence: false })
+      );
+      let start: Promise<void> | undefined;
+      act(() => {
+        start = hook.result.current.startRecording();
+      });
+      await waitFor(() => expect(TestWebSocket.instances).toHaveLength(1));
+      const socket = TestWebSocket.instances[0]!;
+      act(() => socket.open());
+      await act(async () => await start);
+      expect(hook.result.current.isRecording).toBe(true);
+      jest.useFakeTimers();
+
+      function receive(text: string, isFinal: boolean): void {
+        act(() => {
+          socket.onmessage?.(
+            new MessageEvent("message", {
+              data: JSON.stringify({
+                type: "transcript",
+                text,
+                is_final: isFinal,
+              }),
+            })
+          );
+        });
+      }
+      return { ...mocks, hook, receive, socket };
+    }
+
+    test("new words after a phrase end restart the 10s fallback", async () => {
+      const { hook, receive, stopTrack } = await startRecording();
+
+      receive("first phrase", true);
+      act(() => jest.advanceTimersByTime(8000));
+      receive("first phrase and more", false);
+      act(() => jest.advanceTimersByTime(8000));
+      expect(stopTrack).not.toHaveBeenCalled();
+
+      act(() => jest.advanceTimersByTime(2000));
+      expect(stopTrack).toHaveBeenCalledTimes(1);
+
+      hook.unmount();
+    });
+
+    test("a repeated transcript does not restart the fallback", async () => {
+      const { hook, receive, stopTrack } = await startRecording();
+
+      receive("same words", true);
+      act(() => jest.advanceTimersByTime(8000));
+      receive("same words", false);
+      act(() => jest.advanceTimersByTime(2000));
+      expect(stopTrack).toHaveBeenCalledTimes(1);
+
+      hook.unmount();
+    });
+  });
+
   test("settles startup when unmounted during WebSocket connection", async () => {
     const { stopTrack } = installStartupMocks();
     const { result, unmount } = renderHook(() => useVoiceRecorder());

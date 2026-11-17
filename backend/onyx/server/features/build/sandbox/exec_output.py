@@ -1,14 +1,25 @@
-"""Output shaping for `HarnessSandbox` exec calls: a byte cap per call (head
-and tail) and a token cap for the model (head and tail)."""
+"""The limits of `HarnessSandbox` exec calls, and their output shaping: a
+byte cap per call (head and tail) and a token cap for the model (head and
+tail)."""
 
 import codecs
+import time
 from collections import deque
 
 from onyx.microvm.models import OutputStream
-from onyx.server.features.build.sandbox.harness_base import EXEC_CALL_OUTPUT_MAX_BYTES
 
 # Token estimate for the cap, as Codex does.
 BYTES_PER_TOKEN = 4
+DEFAULT_MAX_OUTPUT_TOKENS = 10_000
+EXEC_CALL_OUTPUT_MAX_BYTES = 1 << 20
+EXEC_DEFAULT_YIELD_MS = 10_000
+EXEC_MIN_YIELD_MS = 250
+EXEC_MAX_YIELD_MS = 30_000
+WRITE_STDIN_DEFAULT_YIELD_MS = 250
+WRITE_STDIN_MAX_YIELD_MS = 30_000
+# An empty write_stdin (a poll) waits at least this long for new output.
+POLL_MIN_YIELD_MS = 5_000
+POLL_MAX_YIELD_MS = 300_000
 
 
 def _omitted_marker(count: int, unit: str) -> str:
@@ -25,12 +36,25 @@ def _utf8_prefix(text: str, max_bytes: int) -> str:
 
 
 class ExecOutputBuffer:
-    """Collects one call's output. Each stream is decoded on its own (a
-    character never mixes bytes of stdout and stderr). Keeps the first and
-    last half of `max_bytes` (UTF-8); `add` returns the text to stream now
-    (the head only)."""
+    """One exec_command or write_stdin call: its output, and the session ID
+    of its command while the command's record stays.
 
-    def __init__(self, max_bytes: int = EXEC_CALL_OUTPUT_MAX_BYTES) -> None:
+    Each stream is decoded on its own (a character never mixes bytes of
+    stdout and stderr). Keeps the first and last half of `max_bytes` (UTF-8);
+    `add` returns the text to stream now: the head, up to what the result can
+    show (`max_output_tokens`). The result's output replaces that preview."""
+
+    def __init__(
+        self,
+        max_output_tokens: int | None = None,
+        max_bytes: int = EXEC_CALL_OUTPUT_MAX_BYTES,
+    ) -> None:
+        self.max_output_tokens = max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS
+        self.started_at = time.monotonic()
+        # Set while the command's record stays.
+        self.session_id: str | None = None
+        self._preview_budget = self.max_output_tokens * BYTES_PER_TOKEN
+        self._previewed = 0
         self._head_budget = max_bytes // 2
         self._tail_budget = max_bytes - self._head_budget
         self._head: list[str] = []
@@ -75,7 +99,12 @@ class ExecOutputBuffer:
             self._tail.append(rest)
             self._tail_bytes += _utf8_len(rest)
             self._trim_tail()
-        return head_part
+        preview = _utf8_prefix(head_part, self._preview_budget - self._previewed)
+        self._previewed += _utf8_len(preview)
+        if len(preview) < len(head_part):
+            # Closed: a later, smaller piece must not skip the cut text.
+            self._previewed = self._preview_budget
+        return preview
 
     def _trim_tail(self) -> None:
         while self._tail_bytes > self._tail_budget:
@@ -115,6 +144,13 @@ class ExecOutputBuffer:
         if self._dropped:
             return head + _omitted_marker(self._dropped, "bytes") + tail
         return head + tail
+
+    def cut(self) -> tuple[str, bool, int]:
+        """The output for the model (head and tail within its tokens),
+        whether a cap cut it, and the token count before the cut."""
+        full = self.text()
+        output, cut = cut_to_tokens(full, self.max_output_tokens)
+        return output, cut or self.truncated, estimate_tokens(full)
 
 
 def estimate_tokens(text: str) -> int:

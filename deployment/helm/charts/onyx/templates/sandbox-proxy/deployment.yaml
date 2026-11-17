@@ -1,6 +1,8 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
 {{- $proxyPort := include "onyx.sandboxProxyPort" . }}
 {{- $healthzPort := "8081" }}
+{{- $relayTls := include "onyx.craftFcRelayTls.enabled" . }}
+{{- $relayDir := "/etc/onyx/sandbox-proxy-relay-tls" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,6 +27,9 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/service-account: {{ toJson (.Values.sandboxProxy.serviceAccount | default dict) | sha256sum }}
+        {{- with include "onyx.craftFcRelayTls.podAnnotations" . }}
+        {{- . | nindent 8 }}
+        {{- end }}
         {{- with .Values.sandboxProxy.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -108,6 +113,11 @@ spec:
             - name: healthz
               containerPort: {{ $healthzPort }}
               protocol: TCP
+            {{- if $relayTls }}
+            - name: relay-tls
+              containerPort: {{ include "onyx.craftFcRelayTls.port" . }}
+              protocol: TCP
+            {{- end }}
           env:
             # Disable file logging for this pod: the root FS is read-only, so opening log
             # files under /var/log/onyx would crash startup. Logs go to stdout (collected by
@@ -132,6 +142,19 @@ spec:
               value: {{ $proxyPort | quote }}
             - name: SANDBOX_PROXY_HEALTHZ_PORT
               value: {{ $healthzPort | quote }}
+            {{- if $relayTls }}
+            # Host agent relays only (craft.hostAgent.relayTls).
+            - name: SANDBOX_PROXY_RELAY_TLS_PORT
+              value: {{ include "onyx.craftFcRelayTls.port" . | quote }}
+            - name: SANDBOX_PROXY_RELAY_TLS_CERT_PATH
+              value: {{ $relayDir }}/tls.crt
+            - name: SANDBOX_PROXY_RELAY_TLS_KEY_PATH
+              value: {{ $relayDir }}/tls.key
+            - name: SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH
+              value: {{ $relayDir }}/ca.crt
+            - name: SANDBOX_PROXY_RELAY_TLS_ALLOWED_SANS
+              value: {{ include "onyx.craftFcRelayTls.allowedSans" . | quote }}
+            {{- end }}
             {{- if include "onyx.customCACerts.enabled" . }}
             - name: SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA
               value: /var/run/sandbox-proxy/upstream-ca-bundle.crt
@@ -182,6 +205,11 @@ spec:
             # one writable mount on an otherwise read-only root.
             - name: confdir
               mountPath: /var/run/sandbox-proxy
+            {{- if $relayTls }}
+            - name: relay-tls
+              mountPath: {{ $relayDir }}
+              readOnly: true
+            {{- end }}
             {{- with include "onyx.postgresTls.volumeMount" . }}
             {{- . | nindent 12 }}
             {{- end }}
@@ -192,6 +220,12 @@ spec:
         - name: confdir
           emptyDir:
             sizeLimit: {{ .Values.sandboxProxy.confdirSizeLimit }}
+        {{- if $relayTls }}
+        - name: relay-tls
+          secret:
+            secretName: {{ include "onyx.craftFcRelayTls.proxySecretName" . }}
+            defaultMode: 0440
+        {{- end }}
         {{- with include "onyx.customCACerts.volume" . }}
         {{- . | nindent 8 }}
         {{- end }}
