@@ -3,10 +3,9 @@
 from collections.abc import Collection, Sequence
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ExternalAppType, IntegrationKind
+from onyx.db.enums import IntegrationKind
 from onyx.db.integration import (
     get_external_app_for_integration,
     list_integration_actions,
@@ -22,11 +21,21 @@ from onyx.db.plugin_access import load_user_plugin_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import ConnectionState
-from onyx.integrations.connections import IntegrationStatus, integration_status
-from onyx.integrations.models import ActionSettings, ApprovalMode, EffectivePolicy
+from onyx.integrations.connections import integration_status
+from onyx.integrations.models import (
+    ActionSettings,
+    ApprovalMode,
+    EffectivePolicy,
+    UsableIntegrationIds,
+)
 from onyx.integrations.policy import (
     parse_action_settings,
     resolve_action_policies,
+)
+from onyx.server.features.build.models import (
+    TaskActionView,
+    TaskIntegrationView,
+    TaskPluginView,
 )
 from onyx.tools.models import PluginLinkConfiguration
 
@@ -54,17 +63,21 @@ def list_runnable_integrations(db_session: Session, user_id: UUID) -> list[Integ
     )
 
 
-class UsableIntegrationIds(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    # Of the plugins that the user turned on.
-    turned_on: frozenset[int]
-    # Of each plugin that the user can see, on or off.
-    by_visible_plugin: dict[UUID, frozenset[int]]
-
-    @property
-    def visible(self) -> frozenset[int]:
-        return frozenset().union(*self.by_visible_plugin.values())
+def list_task_integrations(
+    db_session: Session, task_id: UUID, user_id: UUID
+) -> list[Integration]:
+    """The enabled integrations of each plugin of the task that the owner can
+    still see, also one the owner turned off."""
+    links = list_task_plugin_links(db_session, task_id)
+    return _enabled_integrations(
+        db_session,
+        [
+            state.plugin_id
+            for state in load_user_plugin_states(
+                [user_id], db_session, [link.plugin_id for link in links]
+            )
+        ],
+    )
 
 
 def load_usable_integration_ids(
@@ -165,35 +178,6 @@ def resolve_craft_action_policies(
     )
 
 
-class TaskActionView(BaseModel):
-    key: str
-    display_name: str
-    description: str | None
-    # What a run does with Inherit.
-    integration_policy: EffectivePolicy
-    # A task Allow keeps the integration policy.
-    locked: bool
-
-
-class TaskIntegrationView(BaseModel):
-    id: int
-    name: str
-    kind: IntegrationKind
-    app_type: ExternalAppType | None
-    status: IntegrationStatus
-    actions: list[TaskActionView]
-
-
-class TaskPluginView(BaseModel):
-    plugin_id: UUID
-    plugin_name: str
-    # The task uses the plugin.
-    enabled: bool
-    # The stored settings of the task for the plugin; None when not enabled.
-    action_settings: ActionSettings | None
-    integrations: list[TaskIntegrationView]
-
-
 def _integration_view(
     db_session: Session, integration: Integration, user: User
 ) -> TaskIntegrationView:
@@ -226,12 +210,25 @@ def _integration_view(
     )
 
 
+def _known_actions(settings: ActionSettings, keys: set[str]) -> ActionSettings:
+    return settings.model_copy(
+        update={
+            "actions": {
+                key: value for key, value in settings.actions.items() if key in keys
+            }
+        }
+    )
+
+
 def list_task_plugin_views(
     db_session: Session, user: User, task_id: UUID | None
 ) -> list[TaskPluginView]:
     """Each plugin that the user runs and that holds an enabled integration,
-    and each visible plugin of the task. ``task_id`` None gives the catalog
-    for a new task: no plugin is enabled and each action inherits."""
+    and each visible plugin of the task, also one with no enabled
+    integration, so that a save keeps its settings. ``task_id`` None gives
+    the catalog for a new task: no plugin is enabled and each action
+    inherits. The stored settings leave out action keys that no integration
+    of the plugin has any more, so a save does not send them back."""
     links = (
         {
             link.plugin_id: parse_action_settings(link.action_settings)
@@ -245,8 +242,16 @@ def list_task_plugin_views(
         for state in load_user_plugin_states([user.id], db_session)
         if state.enabled or state.plugin_id in links
     ]
-    integrations_by_plugin: dict[UUID, list[Integration]] = {}
+    integrations_by_plugin: dict[UUID, list[Integration]] = {
+        plugin_id: [] for plugin_id in plugin_ids if plugin_id in links
+    }
+    action_keys: dict[UUID, set[str]] = {}
     for plugin_id, integration in list_plugin_integrations(db_session, plugin_ids):
+        if plugin_id in links:
+            action_keys.setdefault(plugin_id, set()).update(
+                action.key
+                for action in list_integration_actions(integration.id, db_session)
+            )
         if integration.enabled:
             integrations_by_plugin.setdefault(plugin_id, []).append(integration)
     names = get_plugin_names(db_session, list(integrations_by_plugin))
@@ -255,7 +260,11 @@ def list_task_plugin_views(
             plugin_id=plugin_id,
             plugin_name=names.get(plugin_id, ""),
             enabled=plugin_id in links,
-            action_settings=links.get(plugin_id),
+            action_settings=(
+                _known_actions(links[plugin_id], action_keys.get(plugin_id, set()))
+                if plugin_id in links
+                else None
+            ),
             integrations=[
                 _integration_view(db_session, integration, user)
                 for integration in integrations

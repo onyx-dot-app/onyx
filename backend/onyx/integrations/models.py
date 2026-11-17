@@ -175,3 +175,16 @@ class CallCredentials(BaseModel):
     secret_fingerprint: str | None = None
     # When the bearer token of a token method expires; None when unknown.
     expires_at: datetime | None = None
+
+
+class UsableIntegrationIds(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # Of the plugins that the user turned on.
+    turned_on: frozenset[int]
+    # Of each plugin that the user can see, on or off.
+    by_visible_plugin: dict[UUID, frozenset[int]]
+
+    @property
+    def visible(self) -> frozenset[int]:
+        return frozenset().union(*self.by_visible_plugin.values())

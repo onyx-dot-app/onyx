@@ -15807,6 +15807,7 @@
       "needsSignIn": "يتطلب {name} تسجيل الدخول.",
       "taskPolicyCounts": "{allow} سماح · {ask} سؤال · {blocked} محظور",
       "actionSetting": "إعداد {action}",
+      "lockedAllow": "تنطبق إعدادات مساحة العمل على هذا الإجراء، لذا لا يكون للسماح أي تأثير.",
       "value": {
         "inherit": "استخدام إعداد التكامل ({policy})",
         "allow": "سماح",

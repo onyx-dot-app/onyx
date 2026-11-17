@@ -172,7 +172,9 @@ permission on the sandbox: allow for connected, reject for declined.
 `server/features/build/sandbox/util/mcp_config.py:resolve_craft_mcp_servers`
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
-disabled tool. `GET /mcp/servers/craft` lists the same servers, and
+disabled tool. A session of a scheduled run also gets the task plugins that
+the owner turned off ([[craft-scheduled-tasks]]). `GET /mcp/servers/craft`
+lists the same servers, and
 `integrations/craft.py:list_connectable_apps` lists the external apps the user
 can still connect. No code reads `mcp_server.available_in_craft`.
 
@@ -185,7 +187,9 @@ and injects the Craft PAT. `backend/onyx/sandbox_proxy/resolvers/integration.py:
 injects the credential of the matched integration through
 `integrations/call_credentials.py:resolve_call_credentials`: `resolve_connection`
 (which refreshes a token that expires soon) and `render_headers`; an OAuth
-integration sends its access token as a bearer token. It checks again that
+integration sends its access token as a bearer token. It sets
+`CURRENT_TENANT_ID_CONTEXTVAR` to the sandbox tenant around this, because a
+refresh reads the tenant from the context. It checks again that
 the integration is enabled, and refuses with `CredentialUnavailableError` and
 the reason of the connection problem. An internal MCP host is reachable only
 when the server belongs to a plugin that the user can see

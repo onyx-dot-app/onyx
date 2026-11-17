@@ -15807,6 +15807,7 @@
       "needsSignIn": "{name} 需要登录。",
       "taskPolicyCounts": "允许 {allow} · 询问 {ask} · 已阻止 {blocked}",
       "actionSetting": "{action} 的设置",
+      "lockedAllow": "此操作适用工作区设置，因此“允许”无效。",
       "value": {
         "inherit": "使用集成设置（{policy}）",
         "allow": "允许",

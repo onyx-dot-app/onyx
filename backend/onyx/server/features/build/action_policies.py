@@ -7,7 +7,8 @@ from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.integrations.craft import TaskPluginView, list_task_plugin_views
+from onyx.integrations.craft import list_task_plugin_views
+from onyx.server.features.build.models import TaskPluginView
 
 router = APIRouter(prefix="/action-policies")
 

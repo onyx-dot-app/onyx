@@ -110,6 +110,17 @@ def get_running_task_id(
     )
 
 
+def get_scheduled_task_id_for_session(
+    db_session: Session, session_id: UUID
+) -> UUID | None:
+    """The task of the run that made the session; None for another session."""
+    return db_session.scalar(
+        select(ScheduledTaskRun.task_id).where(
+            ScheduledTaskRun.session_id == session_id
+        )
+    )
+
+
 def get_active_scheduled_task_context(
     db_session: Session, session_id: UUID
 ) -> tuple[UUID, UUID] | None:

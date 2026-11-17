@@ -15807,6 +15807,7 @@
       "needsSignIn": "{name} nécessite une connexion.",
       "taskPolicyCounts": "{allow} autoriser · {ask} demander · {blocked} bloquées",
       "actionSetting": "Paramètre pour {action}",
+      "lockedAllow": "Les paramètres de l'espace de travail s'appliquent à cette action, donc Autoriser n'a aucun effet.",
       "value": {
         "inherit": "Utiliser le paramètre de l'intégration ({policy})",
         "allow": "Autoriser",

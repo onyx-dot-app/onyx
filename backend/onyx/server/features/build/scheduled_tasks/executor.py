@@ -351,6 +351,7 @@ def _drive_agent(
                 user_id=task_user_id,
                 origin=SessionOrigin.SCHEDULED,
                 name=f"Scheduled: {task_name}",
+                task_id=task_id,
             )
             session_id = build_session.id
 

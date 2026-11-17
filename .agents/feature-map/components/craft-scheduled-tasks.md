@@ -118,7 +118,17 @@ action value is Allow, Ask, Blocked or Inherit (the integration setting).
 `GET /scheduled-tasks/{id}/action-policies` and the new-task catalog
 `GET /build/action-policies` return `TaskPluginView` rows
 (`integrations/craft.py:list_task_plugin_views`). Each action has the policy
-that Inherit gives, and `locked` when a task Allow keeps that policy. Edits apply to the next request, including
+that Inherit gives, and `locked` when a task Allow keeps that policy; the
+editor does not offer Allow for a locked action. A task plugin whose
+integrations are all off still has a row with no integrations, and the stored
+settings leave out action keys that no integration has any more, so a save of
+an unrelated edit keeps the plugin and passes the action check. A session of a
+scheduled run gets the MCP servers of the task plugins in its opencode config,
+also those the owner turned off, with the task settings as disabled tools
+(`resolve_craft_mcp_servers(..., task_id)`). The executor passes the task to
+`SessionManager.create_session`, because the run row names the session only
+after creation; later rebuilds read it with
+`db/scheduled_task.py:get_scheduled_task_id_for_session`. Edits apply to the next request, including
 requests of a run in progress.
 
 ---
