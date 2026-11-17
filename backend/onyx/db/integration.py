@@ -1,4 +1,5 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
+from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -9,6 +10,8 @@ from onyx.db.models import (
     Integration,
     IntegrationAction,
     MCPServer,
+    Plugin,
+    Plugin__Integration,
     Tool,
 )
 from onyx.integrations.models import IntegrationActionSpec
@@ -22,6 +25,23 @@ def get_integration_by_id(
 
 def list_integrations(db_session: Session) -> list[Integration]:
     return list(db_session.scalars(select(Integration).order_by(Integration.id)).all())
+
+
+def get_integration_plugin_ids(
+    integration_ids: Collection[int], db_session: Session
+) -> dict[int, list[UUID]]:
+    """The plugins that hold each integration, oldest first."""
+    if not integration_ids:
+        return {}
+    plugin_ids: dict[int, list[UUID]] = {}
+    for integration_id, plugin_id in db_session.execute(
+        select(Plugin__Integration.integration_id, Plugin__Integration.plugin_id)
+        .join(Plugin, Plugin.id == Plugin__Integration.plugin_id)
+        .where(Plugin__Integration.integration_id.in_(integration_ids))
+        .order_by(Plugin.created_at, Plugin.id)
+    ).tuples():
+        plugin_ids.setdefault(integration_id, []).append(plugin_id)
+    return plugin_ids
 
 
 def get_mcp_server_for_integration(
