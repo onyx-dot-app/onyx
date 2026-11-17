@@ -104,7 +104,8 @@ Shared agent skills live in `.agents/skills/`. `.claude/skills`, `.cursor/skills
 ## Code Quality
 
 The hooks in `.pre-commit-config.yaml` run with [prek](https://github.com/j178/prek).
-`uv sync` installs the pinned version into `.venv`.
+`uv sync` installs the pinned version into `.venv`. If the git hooks came from `pre-commit`,
+run `prek install --force` once to replace them.
 
 ```bash
 # Install the git hooks and run every hook
