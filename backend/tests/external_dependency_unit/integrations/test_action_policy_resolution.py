@@ -270,7 +270,6 @@ def _integration(
             chat_session_id=world.chat_session_id,
             chat_message_id=world.response_id,
             integration_id=integration.id,
-            gated_app_id=None,
             action_id=ACTION,
             tool_call_id="call",
             tool_name=ACTION,

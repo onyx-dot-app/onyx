@@ -3672,8 +3672,7 @@ class ApprovalRequest(Base):
     chat_message_id: Mapped[int] = mapped_column(
         ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=False
     )
-    # The old key, for a rollback. NULL for an integration with no gated_app
-    # row, such as one made after the upgrade.
+    # The old key, for a rollback. New rows leave it NULL.
     gated_app_id: Mapped[int | None] = mapped_column(
         ForeignKey("gated_app.id", ondelete="CASCADE"), nullable=True
     )

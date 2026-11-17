@@ -11,8 +11,6 @@ from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import (
     ApprovalRequest,
     ChatSession,
-    GatedApp,
-    Integration,
     QuestionRequest,
 )
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
@@ -35,7 +33,6 @@ def create_approval_request__no_commit(
     chat_session_id: UUID,
     chat_message_id: int,
     integration_id: int,
-    gated_app_id: int | None,
     action_id: str,
     tool_call_id: str,
     tool_name: str,
@@ -48,7 +45,6 @@ def create_approval_request__no_commit(
             chat_session_id=chat_session_id,
             chat_message_id=chat_message_id,
             integration_id=integration_id,
-            gated_app_id=gated_app_id,
             action_id=action_id,
             tool_call_id=tool_call_id,
             tool_name=tool_name,
@@ -59,23 +55,6 @@ def create_approval_request__no_commit(
         )
         .returning(ApprovalRequest.id)
     ).scalar_one()
-
-
-def get_legacy_gated_app_id(db_session: Session, integration_id: int) -> int | None:
-    """The ``gated_app`` row that the upgrade kept for the integration: same
-    id, and the same MCP server or external app. None for an integration made
-    after the upgrade and for an OpenAPI tool."""
-    return db_session.scalar(
-        select(GatedApp.id)
-        .join(Integration, Integration.id == GatedApp.id)
-        .where(
-            GatedApp.id == integration_id,
-            or_(
-                Integration.mcp_server_id == GatedApp.mcp_server_id,
-                Integration.external_app_id == GatedApp.external_app_id,
-            ),
-        )
-    )
 
 
 def get_approval_request_for_user(

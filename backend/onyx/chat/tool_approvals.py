@@ -32,7 +32,6 @@ from onyx.agents.tools import (
 from onyx.chat.models import SavedToolApproval, ToolApprovalDenial
 from onyx.db.approval_request import (
     create_approval_request__no_commit,
-    get_legacy_gated_app_id,
     lock_session_grants__no_commit,
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -90,7 +89,6 @@ def open_tool_approval(
             chat_session_id=chat_session_id,
             chat_message_id=response_id,
             integration_id=scope.integration_id,
-            gated_app_id=get_legacy_gated_app_id(db_session, scope.integration_id),
             action_id=scope.action_id,
             tool_call_id=tool_call_id,
             tool_name=tool_name,
