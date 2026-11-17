@@ -36,6 +36,7 @@ from onyx.db.models import (
     Persona__User,
     Plugin,
     SamlAccount,
+    ScimUserMapping,
     User,
     User__ExternalUserGroupId,
     User__UserGroup,
@@ -1161,3 +1162,12 @@ def set_user_groups__no_commit(
         db_session.execute(insert_stmt)
 
     recompute_user_permissions__no_commit(user_id, db_session)
+
+
+def fetch_scim_synced_user_ids(db_session: Session, user_ids: list[UUID]) -> set[UUID]:
+    """The given users that have a SCIM mapping."""
+    return set(
+        db_session.scalars(
+            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
+        ).all()
+    )

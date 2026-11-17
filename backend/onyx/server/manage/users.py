@@ -9,7 +9,6 @@ from email_validator import EmailNotValidError, EmailUndeliverableError, validat
 from fastapi import APIRouter, Body, Depends, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.anonymous_user import fetch_anonymous_user_info
@@ -58,10 +57,11 @@ from onyx.configs.constants import (
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session, get_session_with_shared_schema
-from onyx.db.enums import AccountType, Permission, UserFileStatus
-from onyx.db.models import User, UserFile
+from onyx.db.enums import AccountType, Permission
+from onyx.db.models import User
 from onyx.db.pinned_personas import set_pinned_personas
 from onyx.db.tenant_invite_counter import release_trial_invites, reserve_trial_invites
+from onyx.db.user_file import fetch_recent_user_files
 from onyx.db.user_preferences import (
     activate_user,
     deactivate_user,
@@ -89,6 +89,7 @@ from onyx.db.users import (
     batch_get_last_active,
     batch_get_user_groups,
     delete_user_from_db,
+    fetch_scim_synced_user_ids,
     get_all_accepted_users,
     get_all_users,
     get_page_of_filtered_users,
@@ -321,12 +322,7 @@ def list_accepted_users(
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
     try:
-        from onyx.db.models import ScimUserMapping
-
-        scim_mappings = db_session.scalars(
-            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
-        ).all()
-        scim_synced_ids = set(scim_mappings)
+        scim_synced_ids = fetch_scim_synced_user_ids(db_session, user_ids)
     except Exception:
         logger.warning(
             "Failed to fetch SCIM mappings; marking all users as non-synced",
@@ -370,12 +366,7 @@ def list_all_accepted_users(
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
     try:
-        from onyx.db.models import ScimUserMapping
-
-        scim_mappings = db_session.scalars(
-            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
-        ).all()
-        scim_synced_ids = set(scim_mappings)
+        scim_synced_ids = fetch_scim_synced_user_ids(db_session, user_ids)
     except Exception:
         logger.warning(
             "Failed to fetch SCIM mappings; marking all users as non-synced",
@@ -1516,15 +1507,6 @@ def get_recent_files(
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     user_id = user.id
-    user_files = (
-        db_session.query(UserFile)
-        .filter(UserFile.user_id == user_id)
-        .filter(UserFile.status != UserFileStatus.FAILED)
-        .filter(UserFile.status != UserFileStatus.DELETING)
-        # Incognito uploads live only inside their session, never in recents.
-        .filter(UserFile.incognito.is_(False))
-        .order_by(UserFile.last_accessed_at.desc())
-        .all()
-    )
+    user_files = fetch_recent_user_files(db_session, user_id)
 
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]

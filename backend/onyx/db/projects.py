@@ -218,6 +218,21 @@ def get_user_files_from_project(
     )
 
 
+def get_project_user_files_by_file_ids(
+    project_id: int, file_ids: list[str], db_session: Session
+) -> list[UserFile]:
+    """The project's user files whose file_id is in file_ids."""
+    return (
+        db_session.query(UserFile)
+        .join(Project__UserFile)
+        .filter(
+            Project__UserFile.project_id == project_id,
+            UserFile.file_id.in_(file_ids),
+        )
+        .all()
+    )
+
+
 def get_project_instructions(db_session: Session, project_id: int | None) -> str | None:
     """Return the project's instruction text from the project, else None.
 

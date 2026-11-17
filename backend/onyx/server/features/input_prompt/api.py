@@ -5,6 +5,7 @@ from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.input_prompt import (
+    add_input_prompt_user__no_commit,
     disable_input_prompt_for_user,
     fetch_input_prompt_by_id,
     fetch_input_prompts_by_user,
@@ -13,7 +14,7 @@ from onyx.db.input_prompt import (
     remove_public_input_prompt,
     update_input_prompt,
 )
-from onyx.db.models import InputPrompt__User, User
+from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.input_prompt.models import (
@@ -72,10 +73,7 @@ def create_input_prompt(
         db_session=db_session,
     )
 
-    input_prompt_user = InputPrompt__User(
-        input_prompt_id=input_prompt.id, user_id=user.id
-    )
-    db_session.add(input_prompt_user)
+    add_input_prompt_user__no_commit(input_prompt.id, user.id, db_session)
     db_session.commit()
 
     return InputPromptSnapshot.from_model(input_prompt)

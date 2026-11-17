@@ -1744,3 +1744,31 @@ def cc_pair_has_successful_index_attempt(db_session: Session, cc_pair_id: int) -
             )
         )
     )
+
+
+def increment_heartbeat_counter__no_commit(
+    db_session: Session, index_attempt_id: int
+) -> None:
+    db_session.execute(
+        update(IndexAttempt)
+        .where(IndexAttempt.id == index_attempt_id)
+        .values(heartbeat_counter=IndexAttempt.heartbeat_counter + 1)
+    )
+
+
+def get_unfinished_index_attempts_for_cc_pair(
+    db_session: Session, cc_pair_id: int
+) -> Sequence[IndexAttempt]:
+    """The pair's attempts that are NOT_STARTED or IN_PROGRESS."""
+    return (
+        db_session.execute(
+            select(IndexAttempt).where(
+                IndexAttempt.connector_credential_pair_id == cc_pair_id,
+                IndexAttempt.status.in_(
+                    [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+                ),
+            )
+        )
+        .scalars()
+        .all()
+    )

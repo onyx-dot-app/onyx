@@ -113,3 +113,13 @@ def update_entity_types_and_related_connectors__commit(
     )
 
     db_session.commit()
+
+
+def get_entity_type_id_names(db_session: Session) -> set[str]:
+    return {et.id_name for et in db_session.query(KGEntityType).all()}
+
+
+def add_entity_type__no_commit(
+    db_session: Session, kg_entity_type: KGEntityType
+) -> None:
+    db_session.add(kg_entity_type)
