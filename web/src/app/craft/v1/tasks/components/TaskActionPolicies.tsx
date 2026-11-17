@@ -136,7 +136,9 @@ function PluginGroups({ plugins, value, onChange }: PluginGroupsProps) {
             key={editing.plugin_id}
             plugin={editing}
             settings={
-              linkFor(editing.plugin_id)?.action_settings ?? INHERIT_ALL
+              linkFor(editing.plugin_id)?.action_settings ??
+              turnedOff.current[editing.plugin_id] ??
+              INHERIT_ALL
             }
             onClose={() => actionsModal.toggle(false)}
             onSave={(settings) => {
