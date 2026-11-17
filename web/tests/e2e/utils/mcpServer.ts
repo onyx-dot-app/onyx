@@ -69,6 +69,34 @@ export class McpServerProcess {
   }
 }
 
+/**
+ * `port` after a check that no other process holds it, or a free port when
+ * `port` is undefined. A held port would make the ready check pass on the
+ * other process.
+ */
+function serverPort(host: string, port: number | undefined): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once("error", (error: NodeJS.ErrnoException) => {
+      reject(
+        error.code === "EADDRINUSE"
+          ? new Error(
+              `Port ${port} on ${host} is in use, so the MCP test server cannot start. Choose a free port.`
+            )
+          : error
+      );
+    });
+    probe.listen(port ?? 0, host, () => {
+      const address = probe.address();
+      probe.close(() => {
+        if (address === null || typeof address === "string")
+          reject(new Error(`Could not read the port of ${host}`));
+        else resolve(address.port);
+      });
+    });
+  });
+}
+
 function waitForPort(
   host: string,
   port: number,
@@ -121,7 +149,7 @@ export async function startMcpOauthServer(
 ): Promise<McpServerProcess> {
   const bindHost = options.bindHost || DEFAULT_BIND_HOST;
   const publicHost = options.publicHost || DEFAULT_PUBLIC_HOST;
-  const port = options.port ?? DEFAULT_PORT;
+  const port = await serverPort(bindHost, options.port ?? DEFAULT_PORT);
   const pythonBinary = options.pythonBinary || "python3";
   const readyTimeout = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
 
@@ -168,7 +196,7 @@ export async function startMcpApiKeyServer(
 ): Promise<McpServerProcess> {
   const bindHost = options.bindHost || DEFAULT_BIND_HOST;
   const publicHost = options.publicHost || DEFAULT_PUBLIC_HOST;
-  const port = options.port ?? DEFAULT_PORT;
+  const port = await serverPort(bindHost, options.port);
   const pythonBinary = options.pythonBinary || "python3";
   const readyTimeout = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
   const apiKey = options.apiKey || "test-api-key-12345";
@@ -228,7 +256,7 @@ export async function startMcpPerUserKeyServer(
 ): Promise<McpServerProcess> {
   const bindHost = options.bindHost || DEFAULT_BIND_HOST;
   const publicHost = options.publicHost || DEFAULT_PUBLIC_HOST;
-  const port = options.port ?? 8007; // avoid clashing with other MCP test servers
+  const port = await serverPort(bindHost, options.port);
   const pythonBinary = options.pythonBinary || "python3";
   const readyTimeout = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
   const requiredHeaders = options.requiredHeaders ?? [];
@@ -293,7 +321,7 @@ export async function startMcpGoogleOAuthServer(
 ): Promise<McpServerProcess> {
   const bindHost = options.bindHost || DEFAULT_BIND_HOST;
   const publicHost = options.publicHost || DEFAULT_PUBLIC_HOST;
-  const port = options.port ?? 8006; // Default to 8006 to not conflict with other MCP servers
+  const port = await serverPort(bindHost, options.port ?? 8006);
   const pythonBinary = options.pythonBinary || "python3";
   const readyTimeout = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
   const requiredScopes = options.requiredScopes || [];
