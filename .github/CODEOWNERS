@@ -7,3 +7,16 @@
 
 # Beta cherry-pick workflow owners
 /.github/workflows/post-merge-beta-cherry-pick.yml @justin-tahara
+
+# Lint gates and their CI
+/backend/lint/ @onyx-dot-app/onyx-core-team
+/backend/scripts/check_migration_determinism.py @onyx-dot-app/onyx-core-team
+/backend/scripts/env_inventory.py @onyx-dot-app/onyx-core-team
+/backend/scripts/env_inventory_baseline.txt @onyx-dot-app/onyx-core-team
+/.pre-commit-config.yaml @onyx-dot-app/onyx-core-team
+**/pyproject.toml @onyx-dot-app/onyx-core-team
+**/ruff.toml @onyx-dot-app/onyx-core-team
+**/.ruff.toml @onyx-dot-app/onyx-core-team
+/.github/workflows/pr-quality-checks.yml @onyx-dot-app/onyx-core-team
+/.github/workflows/pr-gate-changes.yml @onyx-dot-app/onyx-core-team
+/.github/CODEOWNERS @onyx-dot-app/onyx-core-team

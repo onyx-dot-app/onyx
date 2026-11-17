@@ -376,3 +376,16 @@ Rules:
 
 Pre-commit runs `check_import_boundaries.py` to restrict provider SDK imports to adapters and recorded exceptions.
 The check covers import statements. Review HTTP calls and calls through shared clients for flow tags.
+
+## Lint gate changes
+
+The Protect lint gates job reads its policy from the base branch. You can lower
+a baseline or remove a suppression. To add a suppression or change a gate
+definition, get approval on the current commit from an Onyx core-team member.
+Then rerun the failed job from the pull request's Checks tab.
+
+Repository administrators must require the Gate Changes workflow through an
+active organization branch ruleset for `main`. Use the workflow from protected
+`main`. Require code owner reviews and dismiss stale approvals on new commits.
+Set `GATE_TEAM_TOKEN` to a token with organization Members read access for
+`onyx-dot-app`. The job uses this token to check active team membership.
