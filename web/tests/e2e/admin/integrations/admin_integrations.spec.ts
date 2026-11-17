@@ -49,13 +49,19 @@ test.describe("Admin integrations", () => {
   });
 
   test.afterAll(async ({ browser }) => {
-    const context = await browser.newContext({
-      storageState: "admin_auth.json",
-    });
-    const client = new OnyxApiClient(context.request);
-    for (const id of createdIds) await client.deleteIntegration(id);
-    await context.close();
-    await server?.stop();
+    try {
+      const context = await browser.newContext({
+        storageState: "admin_auth.json",
+      });
+      try {
+        const client = new OnyxApiClient(context.request);
+        for (const id of createdIds) await client.deleteIntegration(id);
+      } finally {
+        await context.close();
+      }
+    } finally {
+      await server?.stop();
+    }
   });
 
   test("adds an MCP server and an OpenAPI app, sets an action to Ask, and lists both", async ({

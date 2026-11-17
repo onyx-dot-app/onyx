@@ -21,8 +21,14 @@ export class AdminPluginsPage {
     await expect(this.page.getByRole("table")).toBeVisible();
   }
 
+  /** Matches the plugin name cell only, as the row also names the
+   * integrations. */
   pluginRow(name: string | RegExp): Locator {
-    return this.page.getByRole("row").filter({ hasText: name });
+    return this.page.getByRole("row").filter({
+      has: this.page
+        .locator("td:first-child")
+        .getByText(name, { exact: typeof name === "string" }),
+    });
   }
 
   async expectPluginVisible(name: string): Promise<void> {
