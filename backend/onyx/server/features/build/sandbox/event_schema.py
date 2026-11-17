@@ -39,6 +39,19 @@ class TextPartMetadata(TypedDict):
 ONYX_WIRE_VERSION = 2
 
 
+class OnyxSearchResult(BaseModel):
+    title: str
+    url: str
+    snippet: str
+
+
+class OnyxSearchMeta(BaseModel):
+    """A web search's queries and results, from the ``web_search`` tool."""
+
+    queries: list[str]
+    results: list[OnyxSearchResult]
+
+
 class OnyxToolMeta(BaseModel):
     """Onyx data on a tool call that ACP has no field for, in ``_meta.onyx``.
 
@@ -51,6 +64,7 @@ class OnyxToolMeta(BaseModel):
     # ACP's status has no cancelled state: a cancelled call is ``failed`` with
     # this set, so a stopped call reads apart from one that errored.
     cancelled: bool | None = None
+    search: OnyxSearchMeta | None = None
 
     def to_meta(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True)
@@ -74,6 +88,8 @@ class ActivityTimeoutError(Error):
 __all__ = [
     "ActivityTimeoutError",
     "ONYX_WIRE_VERSION",
+    "OnyxSearchMeta",
+    "OnyxSearchResult",
     "OnyxToolMeta",
     "AgentMessageChunk",
     "AgentPlanUpdate",
