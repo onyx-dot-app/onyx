@@ -354,9 +354,8 @@ general, so future sandbox-proxy network approvals can reuse them. An
 "approve_session" decision is a session grant: it also approves the action's
 other pending rows of that integration and action in the chat session, and
 `chat/tool_approvals.py:open_tool_approval` lets later calls run with no row
-unless the policy is now Blocked. A new row also writes `gated_app_id`: the
-`gated_app` row that the upgrade kept with the same id, or NULL for an integration made after the
-upgrade (`db/approval_request.py:get_legacy_gated_app_id`). Deleting an
+unless the policy is now Blocked. A new row leaves the old `gated_app_id`
+column NULL. Deleting an
 integration sets `integration_id` to NULL; an approval of that row saves a
 rejection by the policy.
 

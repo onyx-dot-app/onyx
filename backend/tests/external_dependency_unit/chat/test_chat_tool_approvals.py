@@ -1133,7 +1133,6 @@ def test_a_saved_decision_repeated_after_the_tool_is_disabled_returns_it(
         chat_session_id=chat.chat_session_id,
         chat_message_id=chat.response_id,
         integration_id=chat.integration_id,
-        gated_app_id=None,
         action_id=ACTION,
         tool_call_id="send",
         tool_name=ACTION,
