@@ -104,15 +104,15 @@ pub fn close(app: &AppHandle, label: &str) {
 }
 
 /// Opens whichever window the current state needs: onboarding, login or the main window.
-/// The session is valid but Onyx could not open (for example the server's
-/// sign-in settings did not load): keep the session, explain, and let the
-/// user try again or sign in.
-fn open_failed(app: &AppHandle, error: &str) {
+/// Onyx could not open although the session may be valid (the server could
+/// not be reached, or its sign-in settings did not load): keep the session,
+/// explain, and let the user try again or sign in.
+fn open_failed(app: &AppHandle, title: &str, error: &str) {
     let handle = app.clone();
-    let error = error.to_string();
+    let (title, error) = (title.to_string(), error.to_string());
     let _ = app.run_on_main_thread(move || {
         let choice = rfd::MessageDialog::new()
-            .set_title("Could not open Onyx")
+            .set_title(&title)
             .set_description(&error)
             .set_buttons(rfd::MessageButtons::OkCancelCustom(
                 "Try Again".into(),
@@ -144,16 +144,18 @@ pub fn route(app: &AppHandle) {
             Ok(true) => {
                 if let Err(e) = main_window::open(&app, &server, &token, "/app").await {
                     log::warn!("could not open main window: {e}");
-                    open_failed(&app, &e);
+                    open_failed(&app, "Could not open Onyx", &e);
                 }
             }
             Ok(false) => {
                 let _ = state.clear_token(&server);
                 let _ = open_login(&app);
             }
+            // Unreachable is not signed out: the session is kept, and
+            // Sign in is only for a rejected session or the user's choice.
             Err(e) => {
                 log::warn!("server check failed: {e}");
-                let _ = open_login(&app);
+                open_failed(&app, "Could not reach the server", &e);
             }
         }
     });
