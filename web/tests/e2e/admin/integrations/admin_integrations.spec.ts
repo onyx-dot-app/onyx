@@ -12,6 +12,7 @@ import { AdminOpenApiPluginPage } from "@tests/e2e/pages/AdminOpenApiPluginPage"
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
 const PORT = Number(process.env.MCP_INTEGRATIONS_TEST_PORT || "8015");
+const MCP_API_KEY_TEST_URL = process.env.MCP_API_KEY_TEST_URL;
 const MCP_TOOL = "tool_0";
 
 function openApiSchema(title: string): string {
@@ -35,10 +36,16 @@ test.describe("Admin integrations", () => {
   test.describe.configure({ mode: "serial" });
 
   let server: McpServerProcess | null = null;
+  let serverUrl: string;
   const createdIds: number[] = [];
 
   test.beforeAll(async () => {
-    server = await startMcpApiKeyServer({ port: PORT, apiKey: API_KEY });
+    if (MCP_API_KEY_TEST_URL) {
+      serverUrl = MCP_API_KEY_TEST_URL;
+    } else {
+      server = await startMcpApiKeyServer({ port: PORT, apiKey: API_KEY });
+      serverUrl = `http://${server.address.host}:${server.address.port}/mcp`;
+    }
   });
 
   test.afterAll(async ({ browser }) => {
@@ -68,7 +75,7 @@ test.describe("Admin integrations", () => {
     await mcp.openAddServerModal();
     await integrations.fillMcpServer({
       name: mcpName,
-      url: `http://${server?.address.host}:${server?.address.port}/mcp`,
+      url: serverUrl,
     });
     await integrations.selectSignIn(
       "One account for the organization",
