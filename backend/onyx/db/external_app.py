@@ -1,7 +1,7 @@
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from onyx.db.external_app_readiness import is_user_authenticated_for_app
 from onyx.db.models import (
     ExternalApp,
     ExternalAppUserCredential,
+    Integration,
     Skill,
     User,
 )
@@ -302,6 +303,12 @@ def update_external_app(
 
     if is_set(enabled):
         app.enabled = enabled
+        # The runtime reads the switch from the integration of the app.
+        db_session.execute(
+            update(Integration)
+            .where(Integration.external_app_id == app.id)
+            .values(enabled=enabled)
+        )
     if is_set(name):
         app.name = name
 

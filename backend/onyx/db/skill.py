@@ -302,17 +302,16 @@ def _user_skill_selection(
 ) -> _UserSkillSelection:
     """``left_out``: plugins that cannot run, such as versions the push just
     found invalid."""
-    loaded = load_user_plugin_states([user.id], db_session)
-    app_skills = built_in_app_skills(loaded, db_session)
-    built_ins = _runtime_built_in_skills(user, app_skills, db_session)
     states = {
         state.plugin_id: (
             state.model_copy(update={"can_run": False})
             if state.plugin_id in left_out
             else state
         )
-        for state in loaded
+        for state in load_user_plugin_states([user.id], db_session)
     }
+    app_skills = built_in_app_skills(states.values(), db_session)
+    built_ins = _runtime_built_in_skills(user, app_skills, db_session)
     return _UserSkillSelection(
         states=states,
         hidden=order_skill_names(
