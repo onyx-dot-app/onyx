@@ -77,6 +77,11 @@ class MemberIntegration(BaseModel):
     status: IntegrationStatus
     plugins: list[MemberPluginRef]
     users_can_save_always_allow: bool
+    credential_values: dict[str, str]
+    external_app_id: int | None
+    service_urls: list[str]
+    mcp_server_id: int | None
+    server_url: str | None
 
 
 class MemberIntegrationDetail(MemberIntegration):
