@@ -16,7 +16,6 @@ import { SettingsLayouts, InputVertical, toast, Section } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
 import TaskActionPolicies from "@/app/craft/v1/tasks/components/TaskActionPolicies";
-import type { TaskAppActionPolicies } from "@/lib/plugins/types";
 import {
   compileLocalPayloadToUtcCron,
   localPayloadToUtcPayload,
@@ -41,6 +40,7 @@ import type {
   ScheduledTaskCreateBody,
   ScheduledTaskDetail,
   ScheduledTaskPatchBody,
+  TaskPluginLink,
 } from "@/app/craft/v1/tasks/types";
 import {
   createScheduledTask,
@@ -85,9 +85,7 @@ export default function ScheduleTaskForm({
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
-  const [actionPolicies, setActionPolicies] = useState<
-    TaskAppActionPolicies[] | null
-  >(null);
+  const [plugins, setPlugins] = useState<TaskPluginLink[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [promptTouched, setPromptTouched] = useState(false);
@@ -151,11 +149,7 @@ export default function ScheduleTaskForm({
   const shownPromptError = promptTouched ? promptError : null;
 
   const canSubmit =
-    !nameError &&
-    !promptError &&
-    !scheduleError &&
-    !saving &&
-    actionPolicies !== null;
+    !nameError && !promptError && !scheduleError && !saving && plugins !== null;
 
   // Reason a submit button is blocked, surfaced via the `Disabled` wrapper's
   // tooltip. A natively-disabled <button> is inert and never fires hover
@@ -165,11 +159,11 @@ export default function ScheduleTaskForm({
     : (nameError ??
       promptError ??
       scheduleError ??
-      (actionPolicies === null ? tActionPolicies("loading") : undefined));
+      (plugins === null ? tActionPolicies("loading") : undefined));
 
   const submit = useCallback(
     async (runImmediately: boolean) => {
-      if (!compiled.ok || actionPolicies === null) return; // validation should already block, but typescript needs this
+      if (!compiled.ok || plugins === null) return; // validation should already block, but typescript needs this
       setSaving(true);
       try {
         const storagePayload = localPayloadToUtcPayload(mode, payload);
@@ -179,7 +173,7 @@ export default function ScheduleTaskForm({
             prompt: trimmedPrompt,
             editor_mode: mode,
             editor_payload: storagePayload,
-            action_policies: actionPolicies,
+            plugins,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
@@ -199,7 +193,7 @@ export default function ScheduleTaskForm({
             editor_mode: mode,
             editor_payload: storagePayload,
             run_immediately: runImmediately,
-            action_policies: actionPolicies,
+            plugins,
           };
           await createScheduledTask(body);
           await mutate(SWR_KEYS.scheduledTasks);
@@ -223,7 +217,7 @@ export default function ScheduleTaskForm({
       mode,
       mutate,
       payload,
-      actionPolicies,
+      plugins,
       navigation,
       trimmedName,
       trimmedPrompt,
@@ -356,8 +350,8 @@ export default function ScheduleTaskForm({
         <Section alignItems="stretch">
           <TaskActionPolicies
             taskId={initial.taskId}
-            value={actionPolicies}
-            onChange={setActionPolicies}
+            value={plugins}
+            onChange={setPlugins}
           />
         </Section>
       </SettingsLayouts.Body>

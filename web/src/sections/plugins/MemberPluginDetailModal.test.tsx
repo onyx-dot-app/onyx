@@ -733,7 +733,6 @@ const approvalApp: AppActionPoliciesView = {
   kind: "mcp_server",
   target_id: 7,
   name: "Linear",
-  enabled: null,
   users_can_manage_policies: true,
   actions: [
     {
