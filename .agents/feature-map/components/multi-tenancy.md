@@ -109,8 +109,8 @@ task keeps the pool full
 stored SQL dump of the shard's template schema at the code's Alembic head
 (`ee/onyx/db/tenant_snapshot.py:apply_snapshot`). The dump carries the
 template's ciphertext, so key rotation re-stores it
-(`ee/onyx/db/tenant_snapshot.py:refresh_template_snapshot`) after it rewrites
-the template. It runs the migration chain
+(`ee/onyx/db/tenant_snapshot.py:refresh_template_snapshot`) after every clean
+execute pass over the template, whether or not a row changed. It runs the migration chain
 instead when no snapshot exists at that head, or when the schema already has
 tables from a failed build. On the playground (`IS_PLAYGROUND`),
 `ee/onyx/server/tenants/provisioning.py:check_playground_sign_up` first asks the control plane

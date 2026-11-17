@@ -170,7 +170,8 @@ walks every encrypted column of every physical schema on every shard, reads the
 stored bytes past the type decorator, and rewrites a stale value with a
 compare-and-swap on those bytes, so a credential saved during the run is never
 overwritten. It also rewrites the sandbox daemon keys in the tenant cache,
-re-dumps a shard's template snapshot after it changed, and in verify mode
+re-dumps a shard's template snapshot after every clean execute pass over
+the template, and in verify mode
 clones each shard's snapshot to read what a new tenant would get.
 `backend/scripts/reencrypt_secrets.py` is the operator entry point; its exit
 status is 1 until every value is readable (dry run) or current (verify).
