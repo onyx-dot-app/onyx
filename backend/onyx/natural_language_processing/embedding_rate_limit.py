@@ -14,10 +14,13 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 
+# no-direct-redis: allow window shared by Celery docprocessing workers
 from redis.exceptions import RedisError
 
 from onyx.configs.app_configs import EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS
 from onyx.connectors.models import ConnectorStopSignal
+
+# no-direct-redis: allow window shared by Celery docprocessing workers
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -133,6 +136,7 @@ class EmbeddingRateLimiter:
     ) -> None:
         self.max_requests = max_requests
         self.period_seconds = period_seconds
+        # no-direct-redis: allow window shared by Celery docprocessing workers
         self._redis = get_redis_client(tenant_id=tenant_id)
 
     def acquire(
@@ -176,6 +180,7 @@ class EmbeddingRateLimiter:
     def _try_acquire(self) -> float:
         """Takes a slot and returns 0, or returns the seconds until a slot frees."""
         try:
+            # no-direct-redis: allow window shared by Celery docprocessing workers
             wait_ms = self._redis.eval(
                 _ACQUIRE_SCRIPT,
                 keys=[_WINDOW_KEY],

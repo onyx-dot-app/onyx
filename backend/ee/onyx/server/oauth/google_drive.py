@@ -1,7 +1,7 @@
 import base64
 import json
 import uuid
-from typing import Any, cast
+from typing import Any
 
 import requests
 from fastapi import Depends
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.server.oauth.api_router import router
 from onyx.auth.permissions import require_permission
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     DEV_MODE,
     OAUTH_GOOGLE_DRIVE_CLIENT_ID,
@@ -34,7 +35,6 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -126,7 +126,7 @@ def handle_google_drive_oauth_callback(
             "Google Drive client ID or client secret is not configured.",
         )
 
-    r = get_redis_client(tenant_id=tenant_id)
+    cache = get_cache_backend(tenant_id=tenant_id)
 
     # recover the state
     padded_state = state + "=" * (
@@ -142,7 +142,7 @@ def handle_google_drive_oauth_callback(
 
     r_key = f"da_oauth:{oauth_uuid_str}"
 
-    session_json_bytes = cast(bytes, r.get(r_key))
+    session_json_bytes = cache.get(r_key)
     if not session_json_bytes:
         raise OnyxError(
             OnyxErrorCode.BAD_REQUEST,
@@ -224,7 +224,7 @@ def handle_google_drive_oauth_callback(
             },
         )
     finally:
-        r.delete(r_key)
+        cache.delete(r_key)
 
     # return the result
     return JSONResponse(

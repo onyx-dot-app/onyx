@@ -1,6 +1,5 @@
-"""Unit tests for the Redis-backed invite + remove-invited rate limits."""
+"""Unit tests for the invite + remove-invited rate limits."""
 
-from typing import cast
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -9,59 +8,40 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.server.manage import invite_rate_limit
 from onyx.server.manage.invite_rate_limit import (
     enforce_invite_rate_limit,
     enforce_remove_invited_rate_limit,
 )
+from tests.unit.fakes import FakeCache
 
 
-class _StubRedis:
-    """In-memory stand-in that mirrors the Lua script's semantics.
-
-    The production rate limiter drives all state via a single EVAL call.
-    The stub reimplements that logic in Python so unit tests can assert
-    behavior without a live Redis — matching semantics including the
-    NX-style TTL that leaves existing TTLs intact on re-increment.
-    """
+class _StubCache(FakeCache):
+    """FakeCache with real TTL bookkeeping and integer counters for assertions."""
 
     def __init__(self) -> None:
-        self.store: dict[str | bytes, int] = {}
-        self.ttls: dict[str | bytes, int] = {}
-        self.eval_fail: Exception | None = None
+        super().__init__()
+        self.fail: Exception | None = None
 
-    def eval(
-        self,
-        _script: str,
-        keys: list[str] | list[bytes],
-        args: list[str] | list[bytes] | list[int] | list[float] | None = None,
-    ) -> int:
-        if self.eval_fail is not None:
-            raise self.eval_fail
-        argv = list(args or [])
-        n = int(argv[0])
-        for i in range(n):
-            key = keys[i]
-            increment = int(argv[1 + i * 3])
-            limit = int(argv[2 + i * 3])
-            if limit > 0 and increment > 0:
-                current = self.store.get(key, 0)
-                if current + increment > limit:
-                    return i + 1
-        for i in range(n):
-            key = keys[i]
-            increment = int(argv[1 + i * 3])
-            limit = int(argv[2 + i * 3])
-            ttl = int(argv[3 + i * 3])
-            if limit > 0 and increment > 0:
-                self.store[key] = self.store.get(key, 0) + increment
-                if key not in self.ttls:
-                    self.ttls[key] = ttl
-        return 0
+    def get(self, key: str) -> bytes | None:
+        if self.fail is not None:
+            raise self.fail
+        return super().get(key)
+
+    def ttl(self, key: str) -> int:
+        return self.expiries.get(key, -2)
+
+    @property
+    def counts(self) -> dict[str, int]:
+        return {key: int(value) for key, value in self.store.items()}
+
+    @property
+    def ttls(self) -> dict[str, int]:
+        return self.expiries
 
 
-def _stub() -> TenantRedisClient:
-    return cast(TenantRedisClient, _StubRedis())
+def _stub() -> _StubCache:
+    return _StubCache()
 
 
 def test_invite_allows_under_all_tiers() -> None:
@@ -80,10 +60,10 @@ def test_invite_allows_under_all_tiers() -> None:
             redis_client, user_id, num_invites=10, tenant_id="tenant_a"
         )
 
-    stub = cast(_StubRedis, redis_client)
-    assert stub.store[f"ratelimit:invite_put:admin:{user_id}:day"] == 10
-    assert stub.store["ratelimit:invite_put:tenant:tenant_a:day"] == 10
-    assert stub.store[f"ratelimit:invite_put:admin:{user_id}:min"] == 1
+    stub = redis_client
+    assert stub.counts[f"ratelimit:invite_put:admin:{user_id}:day"] == 10
+    assert stub.counts["ratelimit:invite_put:tenant:tenant_a:day"] == 10
+    assert stub.counts[f"ratelimit:invite_put:admin:{user_id}:min"] == 1
 
 
 def test_invite_minute_bucket_blocks_request_flood() -> None:
@@ -129,8 +109,8 @@ def test_invite_bulk_call_does_not_trip_minute_bucket() -> None:
             redis_client, user_id, num_invites=20, tenant_id="tenant_a"
         )
 
-    stub = cast(_StubRedis, redis_client)
-    assert stub.store[f"ratelimit:invite_put:admin:{user_id}:min"] == 1
+    stub = redis_client
+    assert stub.counts[f"ratelimit:invite_put:admin:{user_id}:min"] == 1
 
 
 def test_invite_admin_daily_cap_enforced() -> None:
@@ -202,10 +182,10 @@ def test_invite_rejected_request_does_not_consume_budget() -> None:
                 redis_client, user_id, num_invites=5, tenant_id="tenant_a"
             )
 
-    stub = cast(_StubRedis, redis_client)
-    assert stub.store[f"ratelimit:invite_put:admin:{user_id}:day"] == 10
-    assert stub.store["ratelimit:invite_put:tenant:tenant_a:day"] == 10
-    assert stub.store[f"ratelimit:invite_put:admin:{user_id}:min"] == 1
+    stub = redis_client
+    assert stub.counts[f"ratelimit:invite_put:admin:{user_id}:day"] == 10
+    assert stub.counts["ratelimit:invite_put:tenant:tenant_a:day"] == 10
+    assert stub.counts[f"ratelimit:invite_put:admin:{user_id}:min"] == 1
 
 
 def test_invite_zero_new_invites_still_ticks_minute_bucket() -> None:
@@ -232,7 +212,7 @@ def test_invite_zero_new_invites_still_ticks_minute_bucket() -> None:
                 redis_client, user_id, num_invites=0, tenant_id="tenant_a"
             )
 
-    stub = cast(_StubRedis, redis_client)
+    stub = redis_client
     assert stub.store.get(f"ratelimit:invite_put:admin:{user_id}:day", 0) == 0
     assert stub.store.get("ratelimit:invite_put:tenant:tenant_a:day", 0) == 0
 
@@ -278,16 +258,15 @@ def test_invite_tenant_bucket_is_isolated_across_tenants() -> None:
             redis_client, uuid4(), num_invites=10, tenant_id="tenant_b"
         )
 
-    stub = cast(_StubRedis, redis_client)
-    assert stub.store["ratelimit:invite_put:tenant:tenant_a:day"] == 10
-    assert stub.store["ratelimit:invite_put:tenant:tenant_b:day"] == 10
+    stub = redis_client
+    assert stub.counts["ratelimit:invite_put:tenant:tenant_a:day"] == 10
+    assert stub.counts["ratelimit:invite_put:tenant:tenant_b:day"] == 10
 
 
 def test_invite_fails_open_when_redis_unavailable() -> None:
     """Onyx Lite deployments ship without Redis; invite flow must still work."""
-    stub = _StubRedis()
-    stub.eval_fail = RedisConnectionError("Redis not reachable")
-    redis_client = cast(TenantRedisClient, stub)
+    redis_client = _stub()
+    redis_client.fail = RedisConnectionError("Redis not reachable")
     user_id = uuid4()
 
     with (
@@ -358,7 +337,7 @@ def test_ttls_set_on_first_increment_and_not_reset() -> None:
             redis_client, user_id, num_invites=3, tenant_id="tenant_a"
         )
 
-    stub = cast(_StubRedis, redis_client)
+    stub = redis_client
     assert stub.ttls[f"ratelimit:invite_put:admin:{user_id}:day"] == 24 * 60 * 60
     assert stub.ttls["ratelimit:invite_put:tenant:tenant_a:day"] == 24 * 60 * 60
     assert stub.ttls[f"ratelimit:invite_put:admin:{user_id}:min"] == 60
@@ -377,3 +356,73 @@ def test_ttls_set_on_first_increment_and_not_reset() -> None:
         )
 
     assert stub.ttls[f"ratelimit:invite_put:admin:{user_id}:min"] == 999
+
+
+def test_fails_open_when_the_lock_is_busy() -> None:
+    """A stuck holder must not block invites: the request passes unrecorded."""
+    redis_client = _stub()
+    user_id = uuid4()
+    assert redis_client.lock(invite_rate_limit._LOCK_KEY).acquire()
+
+    with patch("onyx.server.manage.invite_rate_limit._REMOVE_ADMIN_PER_MIN", 1):
+        enforce_remove_invited_rate_limit(redis_client, user_id)
+        enforce_remove_invited_rate_limit(redis_client, user_id)
+
+    assert redis_client.counts == {}
+
+
+def test_lock_is_released_after_a_rejection() -> None:
+    redis_client = _stub()
+    user_id = uuid4()
+
+    with patch("onyx.server.manage.invite_rate_limit._REMOVE_ADMIN_PER_MIN", 1):
+        enforce_remove_invited_rate_limit(redis_client, user_id)
+        with pytest.raises(OnyxError):
+            enforce_remove_invited_rate_limit(redis_client, user_id)
+
+    assert not redis_client.lock(invite_rate_limit._LOCK_KEY).owned()
+
+
+@pytest.mark.parametrize(
+    ("ttl", "expected_count", "expected_ttl"),
+    [
+        (0, 3, 1),  # under a second left: keep the window, do not restart it
+        (-2, 1, 24 * 60 * 60),  # window ended after the read: restart the count
+        (-1, 3, 24 * 60 * 60),  # counter without a TTL gets one
+        (500, 3, 500),
+    ],
+)
+def test_window_is_kept_or_restarted_by_the_remaining_ttl(
+    ttl: int, expected_count: int, expected_ttl: int
+) -> None:
+    redis_client = _stub()
+    user_id = uuid4()
+    day_key = f"ratelimit:invite_remove:admin:{user_id}:day"
+    redis_client.set(day_key, 2)
+    redis_client.expiries[day_key] = ttl
+
+    with patch("onyx.server.manage.invite_rate_limit._REMOVE_ADMIN_PER_DAY", 100):
+        enforce_remove_invited_rate_limit(redis_client, user_id)
+
+    assert redis_client.counts[day_key] == expected_count
+    assert redis_client.ttls[day_key] == expected_ttl
+
+
+def test_no_write_after_the_lock_lease_ends() -> None:
+    """A request that outlives its lease must not write a stale count over
+    another request's increment. It passes unrecorded."""
+    redis_client = _stub()
+    user_id = uuid4()
+    lock = redis_client.lock(invite_rate_limit._LOCK_KEY)
+
+    def lose_lease(key: str) -> bytes | None:
+        lock.release()
+        return FakeCache.get(redis_client, key)
+
+    with (
+        patch.object(redis_client, "get", side_effect=lose_lease),
+        patch("onyx.server.manage.invite_rate_limit._REMOVE_ADMIN_PER_MIN", 1),
+    ):
+        enforce_remove_invited_rate_limit(redis_client, user_id)
+
+    assert redis_client.counts == {}

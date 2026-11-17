@@ -1,6 +1,6 @@
 """External-dependency-unit tests for the mobile SSO one-time code store.
 
-Runs against a real Redis. Pins the security contract that protects the
+Runs against the real cache backend. Pins the security contract that protects the
 custom-scheme deep link: single-use redemption, a short TTL, and PKCE (S256)
 binding so a hijacked code is useless without the matching verifier.
 """
@@ -13,8 +13,8 @@ import pytest
 from onyx.auth.mobile_sso.code_store import consume_sso_code, store_sso_code
 from onyx.auth.pkce import compute_s256_challenge
 from onyx.auth.users import generate_pkce_pair
+from onyx.cache.factory import get_shared_cache_backend
 from onyx.configs.app_configs import MOBILE_SSO_CODE_PREFIX, MOBILE_SSO_CODE_TTL_SECONDS
-from onyx.redis.redis_pool import get_async_redis_connection
 
 
 @pytest.mark.asyncio
@@ -59,8 +59,7 @@ async def test_store_sets_bounded_ttl() -> None:
     _, challenge = generate_pkce_pair()
     code = await store_sso_code("tok_ttl", challenge)
 
-    redis = await get_async_redis_connection()
-    ttl = await redis.ttl(f"{MOBILE_SSO_CODE_PREFIX}{code}")
+    ttl = get_shared_cache_backend().ttl(f"{MOBILE_SSO_CODE_PREFIX}{code}")
     # Positive TTL that never exceeds the configured ceiling -> the code self-
     # expires even if it is never redeemed.
     assert 0 < ttl <= MOBILE_SSO_CODE_TTL_SECONDS
@@ -109,8 +108,7 @@ async def test_malformed_record_fails_closed_as_generic_miss() -> None:
     # instead fail closed as the same generic miss (fail-closed contract).
     verifier, _ = generate_pkce_pair()
     code = "manually-planted-malformed-code"
-    redis = await get_async_redis_connection()
-    await redis.set(
+    get_shared_cache_backend().set(
         f"{MOBILE_SSO_CODE_PREFIX}{code}",
         json.dumps({"token": "tok", "code_challenge": 12345}),
         ex=MOBILE_SSO_CODE_TTL_SECONDS,

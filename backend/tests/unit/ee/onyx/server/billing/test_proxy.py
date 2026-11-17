@@ -281,7 +281,7 @@ class TestProxyLicenseFetchBustsBillingCache:
     endpoints that signal the subscription moved."""
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.get_redis_client")
+    @patch("ee.onyx.server.tenants.proxy.get_cache_backend")
     @patch("ee.onyx.server.tenants.proxy.forward_to_control_plane")
     async def test_reclaim_drops_the_cached_snapshot(
         self,
@@ -304,7 +304,7 @@ class TestProxyLicenseFetchBustsBillingCache:
         mock_redis.return_value.delete.assert_called_once_with(BILLING_INFO_CACHE_KEY)
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.get_redis_client")
+    @patch("ee.onyx.server.tenants.proxy.get_cache_backend")
     @patch("ee.onyx.server.tenants.proxy.forward_to_control_plane")
     async def test_an_incomplete_response_leaves_the_snapshot_alone(
         self,
@@ -327,7 +327,7 @@ class TestProxyLicenseFetchBustsBillingCache:
         mock_redis.return_value.delete.assert_not_called()
 
     @pytest.mark.asyncio
-    @patch("ee.onyx.server.tenants.proxy.get_redis_client")
+    @patch("ee.onyx.server.tenants.proxy.get_cache_backend")
     @patch("ee.onyx.server.tenants.proxy.forward_to_control_plane")
     async def test_a_redis_failure_still_returns_the_license(
         self,

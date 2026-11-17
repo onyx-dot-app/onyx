@@ -36,6 +36,7 @@ from onyx.auth.users import (
     optional_user,
     scope_exempt,
 )
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     AUTH_BACKEND,
     DEV_MODE,
@@ -101,7 +102,9 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.llm.models import ReasoningEffort, parse_user_selectable_reasoning_effort
-from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
+
+# no-direct-redis: allow session store for AUTH_BACKEND=redis
+from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.invite_rate_limit import (
@@ -649,7 +652,7 @@ def bulk_invite_users(
                 shared_session.commit()
                 trial_invite_reservation = num_new_invites
         enforce_invite_rate_limit(
-            redis_client=get_redis_client(tenant_id=tenant_id),
+            cache=get_cache_backend(tenant_id=tenant_id),
             admin_user_id=current_user.id,
             num_invites=len(emails_needing_seats),
             tenant_id=tenant_id,
@@ -775,7 +778,7 @@ def remove_invited_user(
     tenant_id = get_current_tenant_id()
     if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
         enforce_remove_invited_rate_limit(
-            redis_client=get_redis_client(tenant_id=tenant_id),
+            cache=get_cache_backend(tenant_id=tenant_id),
             admin_user_id=current_user.id,
         )
     if MULTI_TENANT:
@@ -991,6 +994,7 @@ def get_current_auth_token_expiry_redis(
             logger.debug("No auth token cookie found")
             return None
 
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = get_raw_redis_client()
         redis_key = REDIS_AUTH_KEY_PREFIX + token
         raw_value = redis.get(redis_key)

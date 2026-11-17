@@ -29,7 +29,6 @@ from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox, Snapsh
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.db.build_session import (
     get_user_build_sessions,
     reserve_nextjs_port__no_commit,
@@ -1376,10 +1375,9 @@ class TestConcurrentCreateLock:
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        redis_client = get_redis_client(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        held_lock = get_session_creation_lock(
+            POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, test_user.id
         )
-        held_lock = get_session_creation_lock(redis_client, test_user.id)
         assert held_lock.acquire(blocking=False)
 
         monkeypatch.setattr(

@@ -24,7 +24,6 @@ from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.serving import build_content_disposition
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.server.features.build.db.artifact import (
     get_output_card_rows,
@@ -130,7 +129,7 @@ def create_session(
     attempt leaves durable, repairable state (a later request converges on
     the same IDs) rather than rolling back to nothing.
 
-    The Redis lock only reduces duplicate provisioning work for concurrent
+    The cache lock only reduces duplicate provisioning work for concurrent
     requests; correctness comes from the committed reservation and the
     attempt-number condition on status writes.
     """
@@ -394,8 +393,7 @@ def restore_session(
     sandbox_manager = get_sandbox_manager()
     tenant_id = get_current_tenant_id()
 
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    lock = get_session_creation_lock(redis_client, user.id)
+    lock = get_session_creation_lock(tenant_id, user.id)
 
     # 409 instead of blocking — the frontend retries.
     acquired = lock.acquire(blocking=False)

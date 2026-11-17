@@ -271,12 +271,9 @@ def test_cloud_tier_miss_is_cached_until_expiry() -> None:
         patch("ee.onyx.utils.tier.get_cached_tier", return_value=None) as cache,
         patch("ee.onyx.utils.tier._lazy_refresh_from_cp", return_value=None) as refresh,
         patch(
-            "ee.onyx.server.tenants.tier_management.get_redis_client",
+            "ee.onyx.server.tenants.tier_management.get_cache_backend",
             return_value=redis,
         ) as primary,
-        patch(
-            "ee.onyx.server.tenants.tier_management.get_redis_replica_client",
-        ) as replica,
     ):
         redis.exists.return_value = False
         assert get_tier("tenant-a") == Tier.BUSINESS
@@ -289,7 +286,6 @@ def test_cloud_tier_miss_is_cached_until_expiry() -> None:
         )
         redis.exists.return_value = True
         assert get_tier("tenant-a") == Tier.BUSINESS
-        replica.assert_not_called()
         refresh.assert_called_once_with("tenant-a")
         cache.return_value = CachedTier(CustomerTier.ENTERPRISE, None)
         assert get_tier("tenant-a") == Tier.ENTERPRISE

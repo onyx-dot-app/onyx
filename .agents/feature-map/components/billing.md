@@ -177,7 +177,7 @@ deletes the custom analytics script and both logo files.
 
 1. `failure-directions-differ` **The failure directions differ on purpose.**
    `backend/ee/onyx/server/middleware/license_enforcement.py:license_enforcement_middleware`
-   fails open on a cache error, so a Redis outage does not lock out every user.
+   fails open on a cache error, so a cache outage does not lock out every user.
    `backend/ee/onyx/server/settings/api.py:apply_license_status_to_settings`
    fails closed, so the UI hides paid features.
    `backend/ee/onyx/utils/tier.py:get_tier` returns `COMMUNITY` on a self-hosted
@@ -259,7 +259,7 @@ deletes the custom analytics script and both logo files.
   groups or private connectors. Public access keeps every document reachable, and
   no user loses read access.
 - **The self-hosted circuit breaker.** A 502, 503 or 504 from the billing
-  information fetch opens a one-hour Redis flag (`billing_circuit_open`). An
+  information fetch opens a one-hour cache flag (`billing_circuit_open`). An
   instance that cannot reach Stripe does not wait on a timeout at each page load.
 
 ---

@@ -112,6 +112,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
+
+# no-direct-redis: allow client for a Celery task helper
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.cc_pair_runs_feed import (
@@ -1165,6 +1167,7 @@ def prune_cc_pair(
             "The connector is paused. Resume it to prune.",
         )
 
+    # no-direct-redis: allow client for a Celery task helper
     r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)

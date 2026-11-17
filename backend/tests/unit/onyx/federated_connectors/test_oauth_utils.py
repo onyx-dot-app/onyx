@@ -69,6 +69,11 @@ class _MemoryCacheBackend(CacheBackend):
     def delete_if_value(self, key: str, expected: bytes) -> bool:  # noqa: ARG002
         raise NotImplementedError
 
+    def incr(self, key: str, ex: int | None = None) -> int:  # noqa: ARG002
+        count = int(self._store.get(key, b"0")) + 1
+        self._store[key] = str(count).encode()
+        return count
+
     def delete(self, key: str) -> None:
         self._store.pop(key, None)
 
@@ -89,6 +94,16 @@ class _MemoryCacheBackend(CacheBackend):
     def set_remove(self, key: str, member: str | bytes) -> None:
         value = member if isinstance(member, bytes) else member.encode()
         self.sets.get(key, set()).discard(value)
+
+    def set_contains(self, key: str, member: str | bytes) -> bool:
+        value = member if isinstance(member, bytes) else member.encode()
+        return value in self.sets.get(key, set())
+
+    def set_replace(self, key: str, members: Collection[str | bytes]) -> None:
+        self.sets[key] = {
+            member if isinstance(member, bytes) else member.encode()
+            for member in members
+        }
 
     def set_members(self, key: str, *, limit: int) -> list[bytes]:
         if limit < 1:

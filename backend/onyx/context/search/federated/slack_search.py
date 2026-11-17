@@ -9,6 +9,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     ENABLE_CONTEXTUAL_RAG,
     MAX_SLACK_THREAD_CONTEXT_MESSAGES,
@@ -43,7 +44,6 @@ from onyx.indexing.models import DocAwareChunk
 from onyx.llm.factory import get_default_llm
 from onyx.llm.interfaces import LLM
 from onyx.onyxbot.slack.models import ChannelType, SlackContext
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.federated.models import FederatedConnectorDetail
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -72,13 +72,12 @@ def fetch_and_cache_channel_metadata(
     Note: We ALWAYS fetch all channel types (including private) and cache them together.
     This ensures a single cache entry per team, avoiding duplicate API calls.
     """
-    # Use tenant-specific Redis client
-    redis_client = get_redis_client()
-    # (tenant_id prefix is added automatically by TenantRedis)
+    # The cache backend adds the tenant prefix.
+    cache = get_cache_backend()
     cache_key = f"slack_federated_search:{team_id}:channels:metadata"
 
     try:
-        cached = redis_client.get(cache_key)
+        cached = cache.get(cache_key)
         if cached:
             logger.debug("Channel metadata cache HIT for team %s", team_id)
             cached_str: str = (
@@ -153,7 +152,7 @@ def fetch_and_cache_channel_metadata(
 
             # Cache the results
             try:
-                redis_client.set(
+                cache.set(
                     cache_key,
                     json.dumps(channel_metadata),
                     ex=CHANNEL_METADATA_CACHE_TTL,
@@ -263,12 +262,12 @@ def get_cached_user_profile(
     Uses Redis caching to avoid repeated API calls and rate limiting.
     Returns the user's real_name or email, or None if not found.
     """
-    redis_client = get_redis_client()
+    cache = get_cache_backend()
     cache_key = f"slack_federated_search:{team_id}:user:{user_id}"
 
     # Check cache first
     try:
-        cached = redis_client.get(cache_key)
+        cached = cache.get(cache_key)
         if cached is not None:
             cached_str = (
                 cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
@@ -288,7 +287,7 @@ def get_cached_user_profile(
 
         # Cache the result (empty string for not found)
         try:
-            redis_client.set(
+            cache.set(
                 cache_key,
                 name or "",
                 ex=USER_PROFILE_CACHE_TTL,
@@ -314,7 +313,7 @@ def get_cached_user_profile(
 
         # Cache negative result to avoid repeated lookups for missing users
         try:
-            redis_client.set(cache_key, "", ex=USER_PROFILE_CACHE_TTL)
+            cache.set(cache_key, "", ex=USER_PROFILE_CACHE_TTL)
         except Exception:
             pass
 

@@ -179,7 +179,7 @@ resolvers. `backend/onyx/sandbox_proxy/resolvers/onyx_pat.py:OnyxPatResolver` cl
 and injects the Craft PAT. `backend/onyx/sandbox_proxy/resolvers/mcp_server.py:MCPServerResolver`
 injects MCP credentials. `backend/onyx/sandbox_proxy/resolvers/external_app.py:ExternalAppResolver` first
 calls `ensure_fresh_credentials` (`external_apps/token_refresh.py`), which
-refreshes an expiring OAuth token under a fleet-wide Redis lock and clears the
+refreshes an expiring OAuth token under a fleet-wide cache lock and clears the
 credential when the grant is dead. It then renders the app's `auth_template`
 from organization and user credentials. It refuses with
 `CredentialUnavailableError` when the app is missing or disabled, or when the

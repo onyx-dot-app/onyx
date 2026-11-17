@@ -28,7 +28,6 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
 
-from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.interface import CacheLock
@@ -802,7 +801,7 @@ def list_snapshotable_session_workspaces(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
     sandbox: Sandbox,
-    session_creation_lock: RedisLock,
+    session_creation_lock: CacheLock,
 ) -> list[UUID]:
     """List snapshotable workspaces while session creation is excluded."""
     if not session_creation_lock.owned():
@@ -862,7 +861,7 @@ def _require_owned_storage_inventory(
 
 
 def _require_cleanup_ownership(
-    claim: CacheLock, session_creation_lock: RedisLock
+    claim: CacheLock, session_creation_lock: CacheLock
 ) -> None:
     if not claim.owned() or not session_creation_lock.owned():
         raise RuntimeError("Sandbox cleanup ownership lost")
@@ -908,7 +907,7 @@ def sleep_sandbox(
     sandbox_manager: SandboxManager,
     sandbox: Sandbox,
     tenant_id: str,
-    session_creation_lock: RedisLock,
+    session_creation_lock: CacheLock,
     check_cleanup_ownership: Callable[[], None] | None = None,
     cleanup_deadline: float | None = None,
 ) -> None:

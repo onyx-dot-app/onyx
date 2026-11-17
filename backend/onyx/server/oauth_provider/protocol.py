@@ -17,6 +17,8 @@ from mcp.server.auth.middleware.client_auth import ClientAuthenticator
 from mcp.server.auth.provider import RegistrationError, construct_redirect_uri
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata
 from pydantic import ValidationError
+
+# no-direct-redis: allow names the Redis error in the unavailable tuple
 from redis.exceptions import RedisError
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
