@@ -1,7 +1,7 @@
 name: Gate Changes
 
 on:
-  pull_request_target: # zizmor: ignore[dangerous-triggers] PR objects are read as data. Only the base is checked out.
+  pull_request:
   merge_group:
 
 permissions:
@@ -20,20 +20,19 @@ jobs:
         run: echo "The gate check runs on each PR before it enters the queue."
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Fetch PR objects and check changes
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
-          GATE_TEAM_TOKEN: ${{ secrets.GATE_TEAM_TOKEN }}
         run: |
           git fetch --no-tags origin "refs/pull/${PR_NUMBER}/head"
           test "$(git rev-parse FETCH_HEAD)" = "$HEAD_SHA"
