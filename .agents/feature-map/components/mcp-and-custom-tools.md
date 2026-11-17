@@ -259,6 +259,19 @@ OAuth start and callback stay in
 `is_craft_available_for_deployment` is false, create refuses those shapes and
 the presets list is empty. A user cannot save Always allow on an action whose
 admin value is not Ask.
+- A plugin that holds only integrations has no skill row, so the skill routes
+  do not reach it. `server/features/integrations/plugins_api.py` serves it
+  (logic in `integrations/plugin_settings.py`): `PUT /plugins/{id}/enabled` is
+  the user's on/off switch (Required cannot go off),
+  `PUT /admin/plugins/{id}/installation-policy` sets the install setting of an
+  Organization library plugin (organization-wide manage-actions),
+  `GET`/`PUT /plugins/{id}/access` reads and replaces the shares of a private
+  plugin (its owner or an organization-wide action manager), and
+  `POST /plugins/{id}/publish` moves a private plugin to the Organization
+  library (organization-wide manage-actions, no review). The writes go through
+  `db/plugin.py:apply_plugin_access_change__no_commit`,
+  `publish_or_request_review__no_commit` and
+  `set_plugin_preferences__no_commit`. A plugin that holds a skill gets 400.
 - Create (`create_integration__no_commit`) writes, in one transaction, the
   kind row (`mcp_server`, the OpenAPI `tool` row, or `external_app` with the
   preset or URL patterns), then the `integration` row with exactly one of

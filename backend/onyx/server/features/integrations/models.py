@@ -12,6 +12,7 @@ from onyx.db.enums import (
     IntegrationOAuthProviderMode,
     MCPTransport,
     PluginInstallationPolicy,
+    SkillSharePermission,
 )
 from onyx.integrations.connection_models import IntegrationStatus
 from onyx.integrations.models import EffectivePolicy
@@ -247,6 +248,53 @@ class AgentPluginOption(BaseModel):
     plugin_name: str
     description: str
     integrations: list[AgentIntegrationOption]
+
+
+class PluginEnableRequest(BaseModel):
+    enabled: bool
+
+
+class MemberPluginState(BaseModel):
+    plugin_id: UUID
+    enabled: bool
+    # The install setting for the user, with the group settings and the
+    # owner and share floor.
+    installation_policy: PluginInstallationPolicy
+
+
+class PluginInstallationPolicyUpdate(BaseModel):
+    installation_policy: PluginInstallationPolicy
+
+
+class PluginUserShare(BaseModel):
+    user_id: UUID
+    permission: SkillSharePermission
+
+
+class PluginGroupShare(BaseModel):
+    group_id: int
+    permission: SkillSharePermission
+
+
+class PluginAccessUpdate(BaseModel):
+    """The new set of shares. A share that is not in the lists is removed."""
+
+    user_shares: list[PluginUserShare]
+    group_shares: list[PluginGroupShare]
+
+
+class PluginUserShareView(PluginUserShare):
+    email: str
+
+
+class PluginGroupShareView(PluginGroupShare):
+    group_name: str
+
+
+class PluginAccessView(BaseModel):
+    plugin_id: UUID
+    user_shares: list[PluginUserShareView]
+    group_shares: list[PluginGroupShareView]
 
 
 class IntegrationOAuthStartRequest(BaseModel):
