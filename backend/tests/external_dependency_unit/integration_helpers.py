@@ -210,6 +210,41 @@ def make_openapi_integration(
     return integration, tool
 
 
+def make_app_integration(
+    db_session: Session,
+    *,
+    app_type: ExternalAppType,
+    upstream_url_patterns: list[str],
+    name: str | None = None,
+    auth_mode: IntegrationAuthMode = IntegrationAuthMode.NONE,
+    auth_method: IntegrationAuthMethod | None = None,
+    header_template: dict[str, str] | None = None,
+) -> tuple[Integration, ExternalApp]:
+    """An external app integration: a preset (``app_type``) or a CUSTOM app."""
+    name = name or f"integration-{uuid4().hex[:8]}"
+    app = ExternalApp(
+        name=name,
+        app_type=app_type,
+        enabled=True,
+        upstream_url_patterns=upstream_url_patterns,
+        auth_template={},
+        organization_credentials={},
+    )
+    db_session.add(app)
+    db_session.flush()
+    integration = _add_integration(
+        db_session,
+        name=name,
+        auth_mode=auth_mode,
+        auth_method=auth_method,
+        header_template=header_template,
+        external_app_id=app.id,
+    )
+    sync_integration_actions__no_commit(integration, db_session)
+    db_session.commit()
+    return integration, app
+
+
 def hold_in_plugin(
     db_session: Session,
     integrations: Sequence[Integration],

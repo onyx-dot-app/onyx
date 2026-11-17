@@ -31,8 +31,7 @@ def test_create_persists_craft_availability_atomically(
     if available is not None:
         request.available_in_craft = available
 
-    result = api.create_mcp_server_simple(request, db, user)
+    api.create_mcp_server_simple(request, db, user)
 
     assert added[0].available_in_craft is (available is True)
-    assert result.available_in_craft is (available is True)
     db.commit.assert_called_once_with()

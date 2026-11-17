@@ -20,7 +20,7 @@ from onyx.integrations.call_credentials import CallCredentials
 from onyx.integrations.kinds import mcp_server as mcp_kind
 from onyx.integrations.kinds.mcp_server import McpServerKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
-from onyx.sandbox_proxy.request_evaluator import MCP_UNCLASSIFIABLE_ACTION_TYPE
+from onyx.sandbox_proxy.mcp_jsonrpc import MCP_UNCLASSIFIABLE_ACTION_TYPE
 from onyx.tools.models import ToolApprovalScope
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 
@@ -128,13 +128,13 @@ def test_match_tools_call_uses_action_defaults(
     matched = McpServerKindHandler().match_request(integration, _request(body), DB)
 
     assert matched is not None
-    assert {(m.action_key, m.default_policy) for m in matched} == {
+    assert {(m.action_key, m.default_policy) for m in matched.actions} == {
         ("search", IntegrationActionPolicyValue.ALLOW),
         ("legacy_read", IntegrationActionPolicyValue.ALLOW),
         ("unknown", IntegrationActionPolicyValue.ASK),
     }
-    assert all(m.integration_id == integration.id for m in matched)
-    search = next(m for m in matched if m.action_key == "search")
+    assert all(m.integration_id == integration.id for m in matched.actions)
+    search = next(m for m in matched.actions if m.action_key == "search")
     assert "invokes it 2 times" in search.description
     # The integration name, not the old copy on the server row.
     assert "Linear" in search.description
@@ -157,7 +157,9 @@ def test_match_protocol_message_is_empty_not_none(
     matched = McpServerKindHandler().match_request(
         integration, _request(body, method=method), DB
     )
-    assert matched == []
+    assert matched is not None
+    assert matched.actions == []
+    assert matched.path_prefix_length > 0
 
 
 @pytest.mark.parametrize(
@@ -170,7 +172,7 @@ def test_match_unparsable_body_is_blocked(
 ) -> None:
     matched = McpServerKindHandler().match_request(integration, _request(body), DB)
     assert matched is not None
-    assert [(m.action_key, m.default_policy) for m in matched] == [
+    assert [(m.action_key, m.default_policy) for m in matched.actions] == [
         (MCP_UNCLASSIFIABLE_ACTION_TYPE, IntegrationActionPolicyValue.BLOCKED)
     ]
 
@@ -183,7 +185,7 @@ def test_match_upgrade_request_is_blocked(
     )
     matched = McpServerKindHandler().match_request(integration, request, DB)
     assert matched is not None
-    assert matched[0].action_key == MCP_UNCLASSIFIABLE_ACTION_TYPE
+    assert matched.actions[0].action_key == MCP_UNCLASSIFIABLE_ACTION_TYPE
 
 
 @pytest.mark.parametrize(

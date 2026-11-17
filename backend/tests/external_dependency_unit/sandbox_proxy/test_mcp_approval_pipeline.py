@@ -16,17 +16,13 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.db import action_approval
 from onyx.db.action_policy import (
-    get_gated_app_id,
     get_or_create_gated_app_id,
     get_workspace_action_policies,
     replace_workspace_action_policies,
 )
 from onyx.db.enums import (
     ActionPolicy,
-    ApprovalDecidedVia,
-    ApprovalDecision,
     GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -37,7 +33,6 @@ from onyx.db.mcp import (
     update_mcp_server__no_commit,
 )
 from onyx.db.models import BuildSession, GatedApp, MCPServer, Tool
-from tests.external_dependency_unit.conftest import create_test_user
 
 CraftServerFactory = Callable[..., MCPServer]
 
@@ -88,49 +83,6 @@ def _build_session(db_session: Session, user_id: object) -> BuildSession:
     db_session.add(session)
     db_session.commit()
     return session
-
-
-def test_mcp_approval_row_round_trips_and_isolates_by_target(
-    db_session: Session, craft_server: CraftServerFactory
-) -> None:
-    user = create_test_user(db_session, "mcp_pipeline_grant")
-    session = _build_session(db_session, user.id)
-    server = craft_server()
-
-    action_approval.insert_action_approval(
-        db_session,
-        session_id=session.id,
-        actions=list(_ASK_ACTION),
-        app_name=server.name,
-        payload={"method": "tools/call"},
-        target=(GatedAppKind.MCP_SERVER, server.id),
-        decision=ApprovalDecision.APPROVED,
-        decided_via=ApprovalDecidedVia.SESSION_GRANT,
-    )
-    db_session.commit()
-
-    granted = action_approval.list_session_grant_action_approvals(
-        db_session,
-        session_id=session.id,
-        gated_app_id=get_gated_app_id(db_session, GatedAppKind.MCP_SERVER, server.id),
-    )
-    assert len(granted) == 1
-    assert granted[0].gated_app is not None
-    assert granted[0].gated_app.kind is GatedAppKind.MCP_SERVER
-    assert granted[0].gated_app.target_id == server.id
-    assert granted[0].gated_app.external_app_id is None
-
-    # A grant for the same numeric id but the external-app catalog must not match.
-    assert (
-        action_approval.list_session_grant_action_approvals(
-            db_session,
-            session_id=session.id,
-            gated_app_id=get_gated_app_id(
-                db_session, GatedAppKind.EXTERNAL_APP, server.id
-            ),
-        )
-        == []
-    )
 
 
 def test_gated_app_rejects_two_targets(

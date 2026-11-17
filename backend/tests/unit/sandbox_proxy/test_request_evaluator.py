@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
-from onyx.sandbox_proxy.request_evaluator import resolve_app_for_url
+from onyx.external_apps.matching.engine import resolve_app_for_url
 
 
 def _app(

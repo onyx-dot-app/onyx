@@ -19,8 +19,8 @@ from onyx.sandbox_proxy.destination_policy import (
     UpstreamEventLoop,
     parse_destination_policy,
 )
+from onyx.sandbox_proxy.resolvers.integration import IntegrationResolver
 from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
-from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.server.features.build import configs
 from tests.unit.sandbox_proxy.conftest import (
     NoMatchedRequest,
@@ -202,7 +202,7 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
         credential: RecordingCredentialResolver = RecordingCredentialResolver(
             headers={"Authorization": "Bearer injected"}
         )
-        mcp_resolver = MCPServerResolver()
+        mcp_resolver = IntegrationResolver()
         monkeypatch.setattr(
             mcp_resolver,
             "_load_targets",
@@ -221,7 +221,7 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
         )
         master.addons.add(
             GateAddon(
-                mcp_resolver=mcp_resolver if mcp_destination else None,
+                integration_resolver=mcp_resolver if mcp_destination else None,
                 identity=StubResolver(sandbox=make_resolved_sandbox()),
                 request_evaluator=NoMatchedRequest(),
                 cache_factory=unused_cache,
