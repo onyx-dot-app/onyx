@@ -120,21 +120,85 @@ def _ts_text(node: Node) -> str:
     return (node.text or b"").decode()
 
 
-def _playwright_test_names(nodes: list[Node]) -> set[str]:
-    names = {"test"}
+def _playwright_imports(nodes: list[Node]) -> Iterator[tuple[str, str, str]]:
     for node in nodes:
         if node.type != "import_statement":
             continue
         source = node.child_by_field_name("source")
-        if source is None or _ts_text(source)[1:-1] != "@playwright/test":
+        if source is None:
             continue
         for entry in _descendants(node):
             if entry.type != "import_specifier":
                 continue
             name = entry.child_by_field_name("name")
-            alias = entry.child_by_field_name("alias")
-            if name is not None and _ts_text(name) == "test" and alias is not None:
-                names.add(_ts_text(alias))
+            if name is not None:
+                alias = entry.child_by_field_name("alias") or name
+                yield _ts_text(source)[1:-1], _ts_text(name), _ts_text(alias)
+
+
+def _playwright_extensions(nodes: list[Node]) -> Iterator[tuple[str, str]]:
+    for node in nodes:
+        if node.type != "variable_declarator":
+            continue
+        name = node.child_by_field_name("name")
+        value = node.child_by_field_name("value")
+        if name is None or name.type != "identifier" or value is None:
+            continue
+        if value.type != "call_expression":
+            continue
+        callee = value.child_by_field_name("function")
+        if callee is None:
+            continue
+        prop = callee.child_by_field_name("property")
+        receiver = callee.child_by_field_name("object")
+        if prop is not None and _ts_text(prop) == "extend" and receiver is not None:
+            if receiver.type == "identifier":
+                yield _ts_text(receiver), _ts_text(name)
+
+
+def _local_test_module(
+    path: Path, module: str, web_tests: Path, files: dict[Path, list[Node]]
+) -> Path | None:
+    if module.startswith("@tests/"):
+        candidate = web_tests / module.removeprefix("@tests/")
+    elif module.startswith(("./", "../")):
+        candidate = path.parent / module
+    else:
+        return None
+    candidate = candidate.resolve()
+    for resolved in (
+        candidate,
+        Path(f"{candidate}.ts"),
+        Path(f"{candidate}.tsx"),
+        candidate / "index.ts",
+        candidate / "index.tsx",
+    ):
+        if resolved in files:
+            return resolved
+    return None
+
+
+def _playwright_test_names(
+    files: dict[Path, list[Node]], web_tests: Path
+) -> dict[Path, set[str]]:
+    names: dict[Path, set[str]] = {path: set() for path in files}
+    dependents: dict[tuple[Path, str], list[tuple[Path, str]]] = {}
+    pending: list[tuple[Path, str]] = []
+    for path, nodes in files.items():
+        for source, imported, local in _playwright_imports(nodes):
+            if source == "@playwright/test" and imported == "test":
+                pending.append((path, local))
+            elif fixture := _local_test_module(path, source, web_tests, files):
+                dependents.setdefault((fixture, imported), []).append((path, local))
+        for receiver, extended in _playwright_extensions(nodes):
+            dependents.setdefault((path, receiver), []).append((path, extended))
+
+    while pending:
+        path, name = pending.pop()
+        if name in names[path]:
+            continue
+        names[path].add(name)
+        pending.extend(dependents.get((path, name), ()))
     return names
 
 
@@ -148,12 +212,21 @@ def _is_playwright_test(receiver: Node, test_names: set[str]) -> bool:
     return receiver.type == "identifier" and _ts_text(receiver) in test_names
 
 
-def playwright_findings(source: str, *, tsx: bool = False) -> Iterator[Finding]:
+def _parse_typescript(source: str, *, tsx: bool) -> list[Node]:
     grammar = language_tsx() if tsx else language_typescript()
-    nodes = list(
+    return list(
         _descendants(Parser(Language(grammar)).parse(source.encode()).root_node)
     )
-    test_names = _playwright_test_names(nodes)
+
+
+def playwright_findings(source: str, *, tsx: bool = False) -> Iterator[Finding]:
+    nodes = _parse_typescript(source, tsx=tsx)
+    path = Path("test.ts")
+    names = _playwright_test_names({path: nodes}, Path())
+    yield from _playwright_findings(nodes, names[path] | {"test"})
+
+
+def _playwright_findings(nodes: list[Node], test_names: set[str]) -> Iterator[Finding]:
     marked = {
         node.start_point.row + 1
         for node in nodes
@@ -198,13 +271,20 @@ def scan(root: Path) -> Iterator[tuple[str, Finding]]:
         if any(word in source for word in ("sleep", "skip", "mark")):
             for finding in python_findings(source):
                 yield path.relative_to(root).as_posix(), finding
-    for path in sorted((root / "web/tests").rglob("*.ts*")):
+    web_tests = (root / "web/tests").resolve()
+    files: dict[Path, list[Node]] = {}
+    candidates: list[Path] = []
+    for path in sorted(web_tests.rglob("*.ts*")):
         if path.suffix not in {".ts", ".tsx"}:
             continue
         source = path.read_text(encoding="utf-8")
+        files[path] = _parse_typescript(source, tsx=path.suffix == ".tsx")
         if any(word in source for word in ("waitForTimeout", "skip", "fixme")):
-            for finding in playwright_findings(source, tsx=path.suffix == ".tsx"):
-                yield path.relative_to(root).as_posix(), finding
+            candidates.append(path)
+    names = _playwright_test_names(files, web_tests)
+    for path in candidates:
+        for finding in _playwright_findings(files[path], names[path]):
+            yield path.relative_to(root.resolve()).as_posix(), finding
 
 
 def check(root: Path, baseline_dir: Path, *, write: bool = False) -> int:
