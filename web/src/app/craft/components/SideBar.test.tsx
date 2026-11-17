@@ -13,9 +13,10 @@ jest.mock("next/navigation", () => ({
   usePathname: () => "/craft/v1/plugins",
   useSearchParams: () => new URLSearchParams(),
 }));
+let mockLeftSidebarFolded = false;
 jest.mock("@/app/craft/contexts/BuildContext", () => ({
   useBuildContext: () => ({
-    leftSidebarFolded: false,
+    leftSidebarFolded: mockLeftSidebarFolded,
     setLeftSidebarFolded: jest.fn(),
   }),
 }));
@@ -74,4 +75,24 @@ test("Craft navigation opens Plugins at the unified route", async () => {
   expect(
     screen.queryByRole("button", { name: /^Apps$/ })
   ).not.toBeInTheDocument();
+});
+
+test("a fold change from the chat header reaches the sidebar", () => {
+  mockLeftSidebarFolded = true;
+  const messages = { ...memberPluginMessages };
+  const { container, rerender } = render(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <BuildSidebar />
+    </NextIntlClientProvider>
+  );
+  const root = () => container.querySelector("[data-folded]");
+  expect(root()?.getAttribute("data-folded")).toBe("true");
+  mockLeftSidebarFolded = false;
+  rerender(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <BuildSidebar />
+    </NextIntlClientProvider>
+  );
+  expect(root()?.getAttribute("data-folded")).toBe("false");
+  mockLeftSidebarFolded = false;
 });

@@ -444,6 +444,26 @@ MemoizedBuildSidebarInner.displayName = "BuildSidebarInner";
 // Build Sidebar (Main Export)
 // ============================================================================
 
+// the chat header's mobile "open sidebar" button only changes the build
+// context, while the provider reads `defaultFolded` once. Tapping it hid the
+// button and never opened the sidebar. Push later context changes into the
+// provider; the first value is skipped so the mobile overlay still starts
+// closed.
+function SyncFoldFromContext({
+  leftSidebarFolded,
+}: {
+  leftSidebarFolded: boolean;
+}) {
+  const { setFolded } = useSidebarState();
+  const previous = useRef(leftSidebarFolded);
+  useEffect(() => {
+    if (previous.current === leftSidebarFolded) return;
+    previous.current = leftSidebarFolded;
+    setFolded(leftSidebarFolded);
+  }, [leftSidebarFolded, setFolded]);
+  return null;
+}
+
 export default function BuildSidebar() {
   const { leftSidebarFolded, setLeftSidebarFolded } = useBuildContext();
 
@@ -452,6 +472,7 @@ export default function BuildSidebar() {
       defaultFolded={leftSidebarFolded}
       onFoldedChange={setLeftSidebarFolded}
     >
+      <SyncFoldFromContext leftSidebarFolded={leftSidebarFolded} />
       <MemoizedBuildSidebarInner />
     </SidebarStateProvider>
   );
