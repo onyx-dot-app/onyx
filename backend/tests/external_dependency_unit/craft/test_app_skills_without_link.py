@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.app_skill import built_in_app_skills
 from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import delete_external_app
+from onyx.db.external_app import delete_external_app__no_commit
 from onyx.db.models import (
     ExternalApp,
     Integration,
@@ -243,7 +243,7 @@ def test_app_delete_keeps_custom_skill_plugins(session: Session) -> None:
         skill_id=skill.id, enabled=True, user=user, db_session=session
     )
 
-    delete_external_app(session, app.id)
+    delete_external_app__no_commit(session, app.id)
 
     assert session.get(Plugin, skill.id) is not None
     assert session.get(Skill, skill.id) is not None
@@ -265,7 +265,7 @@ def test_app_delete_removes_the_built_in_row(session: Session) -> None:
     reset_built_in_skill_row(session, built_in_skill_id=built_in_skill_id)
     app = make_external_app(session, app_type=app_type, auth_template={})
 
-    delete_external_app(session, app.id)
+    delete_external_app__no_commit(session, app.id)
 
     assert (
         session.scalar(

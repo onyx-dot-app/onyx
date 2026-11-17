@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import PluginInstallationPolicy, SkillSharePermission
 from onyx.db.external_app import (
-    delete_external_app,
+    delete_external_app__no_commit,
 )
 from onyx.db.models import (
     Plugin,
@@ -353,7 +353,7 @@ def test_external_app_delete(
     set_plugin_preferences__no_commit(user.id, [skill.id], True, db_session)
     set_plugin_preferences__no_commit(other.id, [skill.id], False, db_session)
 
-    delete_external_app(db_session, app.id)
+    delete_external_app__no_commit(db_session, app.id)
     db_session.expire_all()
     plugin = db_session.get(Plugin, skill.id)
     assert (

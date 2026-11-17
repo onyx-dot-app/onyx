@@ -32,7 +32,6 @@ from onyx.db.integration import (
     lock_integration__no_commit,
 )
 from onyx.db.integration_connection import (
-    delete_connection__no_commit,
     get_connection_by_id,
     get_connection_with_organization,
     get_oauth_client,
@@ -950,12 +949,6 @@ def integration_status(
     if isinstance(result, ConnectionProblem):
         return IntegrationStatus(state=result.code, reason=result.reason)
     return IntegrationStatus(state=ConnectionState.CONNECTED, reason=None)
-
-
-def disconnect(integration: Integration, user: User, db_session: Session) -> bool:
-    deleted = delete_connection__no_commit(db_session, integration.id, user.id)
-    db_session.commit()
-    return deleted
 
 
 def credential_field_keys(integration: Integration) -> list[str]:

@@ -100,7 +100,7 @@ def associate_built_in_skill__no_commit(
     return skill
 
 
-def delete_external_app(
+def delete_external_app__no_commit(
     db_session: Session,
     external_app_id: int,
 ) -> None:
