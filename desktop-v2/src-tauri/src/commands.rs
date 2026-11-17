@@ -114,10 +114,35 @@ pub async fn change_server(app: AppHandle, state: State<'_, AppState>) -> Result
 }
 
 #[tauri::command]
-pub fn open_external(url: String, app: AppHandle) -> Result<(), String> {
-    let parsed = url::Url::parse(&url).map_err(|e| e.to_string())?;
+pub async fn open_external(
+    url: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // Relative links (search results, citations) belong to the server.
+    let server = state.server().ok();
+    let base = server.as_deref().and_then(|s| url::Url::parse(s).ok());
+    let parsed = match &base {
+        Some(base) => base.join(&url),
+        None => url::Url::parse(&url),
+    }
+    .map_err(|e| e.to_string())?;
     if !matches!(parsed.scheme(), "http" | "https") {
         return Err("Only web links can be opened.".into());
+    }
+    // A page on the signed-in server opens in the Onyx window, which has the
+    // session; the browser would show the web sign-in page instead.
+    if let (Some(base), Ok((server, token))) = (&base, state.session()) {
+        if parsed.origin() == base.origin() {
+            let mut path = parsed.path().to_string();
+            if let Some(query) = parsed.query() {
+                path = format!("{path}?{query}");
+            }
+            if let Some(fragment) = parsed.fragment() {
+                path = format!("{path}#{fragment}");
+            }
+            return main_window::open(&app, &server, &token, &path).await;
+        }
     }
     main_window::open_external(&app, parsed.as_str());
     Ok(())
