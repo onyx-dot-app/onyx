@@ -107,7 +107,10 @@ task keeps the pool full
 (`ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py:check_available_tenants`).
 `ee/onyx/server/tenants/schema_management.py:build_tenant_schema` clones a
 stored SQL dump of the shard's template schema at the code's Alembic head
-(`ee/onyx/db/tenant_snapshot.py:apply_snapshot`). It runs the migration chain
+(`ee/onyx/db/tenant_snapshot.py:apply_snapshot`). The dump carries the
+template's ciphertext, so key rotation re-stores it
+(`ee/onyx/db/tenant_snapshot.py:refresh_template_snapshot`) after it rewrites
+the template. It runs the migration chain
 instead when no snapshot exists at that head, or when the schema already has
 tables from a failed build. On the playground (`IS_PLAYGROUND`),
 `ee/onyx/server/tenants/provisioning.py:check_playground_sign_up` first asks the control plane

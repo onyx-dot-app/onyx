@@ -165,6 +165,16 @@ build the secret through
 `backend/onyx/server/documents/models.py:CredentialSnapshot.from_credential_db_model`,
 which masks when the caller passes `mask_credential_prefix`.
 
+**Key rotation.** `ee/onyx/db/rotate_encryption_key.py:rotate_encryption_key`
+walks every encrypted column of every physical schema on every shard, reads the
+stored bytes past the type decorator, and rewrites a stale value with a
+compare-and-swap on those bytes, so a credential saved during the run is never
+overwritten. It also rewrites the sandbox daemon keys in the tenant cache,
+re-dumps a shard's template snapshot after it changed, and in verify mode
+clones each shard's snapshot to read what a new tenant would get.
+`backend/scripts/reencrypt_secrets.py` is the operator entry point; its exit
+status is 1 until every value is readable (dry run) or current (verify).
+
 **Run feed.** `db/cc_pair_runs.py:get_cc_pair_run_page` unions index attempts,
 doc permission syncs, group syncs, prunes and check runs into one page, newest
 first. A queued run is in the `scheduled` group, apart from `running`. Both
@@ -253,7 +263,14 @@ status page reads the same builders across every pair the caller can read
     `utils/variable_functionality.py:set_is_ee_if_available`, to
     `utils/variable_functionality.py:is_ee_available`, or to the `ee` copy in `backend/Dockerfile` changes
     storage for every deployment.
-11. `credential-use-rule` **Every use of a credential goes through
+11. `encrypted-state-outside-tables-needs-rotation` **Ciphertext stored outside
+    an encrypted column is invisible to key rotation unless it is added to
+    `ee/onyx/db/rotate_encryption_key.py:rotate_schema`.** A new `EncryptedString`
+    or `EncryptedJson` column is discovered from the ORM registry. A value a
+    caller encrypts by hand and stores in the cache, the file store, or a text
+    column is not. Give it a TTL short enough to expire during a rotation, or
+    add a sweep next to `rotate_sandbox_daemon_keys`, and say which in the PR.
+12. `credential-use-rule` **Every use of a credential goes through
     `connectors/factory.py:assert_user_can_use_credential`.** A pairing, a swap,
     an edit and a check run all call it before anything builds a connector. The
     owner can use it. A global `MANAGE_CONNECTORS` holder can use one with no
@@ -261,7 +278,7 @@ status page reads the same builders across every pair the caller can read
     account-bound fields or no real secret, or the bound values match a pair
     that already uses it ([[connectors]] owns the bindings). The stored `source` of a credential may
     differ from the connector's source when the two share a credential family.
-12. `access-type-paths` **A change to an existing pair's access type must
+13. `access-type-paths` **A change to an existing pair's access type must
     re-gate and resync.** The connector edit flow
     (`db/connector_edit_requests.py:apply_access_change__no_commit`,
     [[connectors]]) and the Community downgrade
@@ -272,7 +289,7 @@ status page reads the same builders across every pair the caller can read
     for sync, or the index keeps the old chunk ACLs. A path that moves a pair out
     of `private` or `sync_restricted` deletes its data-access rows before the
     type changes: their `(cc_pair_id, access_type)` foreign key rejects it.
-13. `google-oauth-callback-by-route` **The Google OAuth callback picks Gmail or
+14. `google-oauth-callback-by-route` **The Google OAuth callback picks Gmail or
     Drive from its `[connector]` route parameter.**
     `web/src/app/admin/connectors/[connector]/auth/callback/route.ts` accepts
     only `gmail` and `google-drive` and forwards to that source's backend
@@ -364,6 +381,12 @@ on the admin routes.
   `update_cc_pair_property`: a connector-level value needs operate access on
   every pair of the connector ([[#connector-settings-are-shared]]). List the
   settings with `git grep -n "update_request.name ==" backend/onyx/server/documents/cc_pair.py`.
+- `rotate-encryption-key` **Rotate the encryption key.** Stage the new key in
+  `ENCRYPTION_KEYS` on every process, then set `ENCRYPTION_WRITE_KEY_ID`, then
+  run `backend/scripts/reencrypt_secrets.py` with `--dry-run`, without a flag,
+  and with `--verify`, from an API process. Retire `ENCRYPTION_KEY_SECRET` only
+  after verify exits 0 and every process restarted with the write key. The
+  customer steps are in `documentation/deployment/configuration/configuration.mdx`.
 - `credential-route` **Add a route that returns credential data.** Copy `get_cc_pair_full_info`:
   build the snapshot with `CredentialSnapshot.from_credential_db_model` and pass
   `credential_ids_to_mask` ([[#credential-reads-masked]]). List the current
