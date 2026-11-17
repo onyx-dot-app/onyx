@@ -203,7 +203,7 @@ def test_create_openapi_makes_integration_tool_plugin_and_actions(
     detail = admin_api.create_integration(_openapi_create(), admin, db_session)
     created.add(detail.id)
 
-    assert detail.kind.value == "api"
+    assert detail.kind is IntegrationKind.API
     assert detail.shape is IntegrationShape.OPENAPI
     assert detail.credential_fields[0].key == "api_key"
     assert detail.needs_setup is True
@@ -270,7 +270,7 @@ def test_create_mcp_discovers_tools_of_a_public_server(
         )
     created.add(detail.id)
     fetch.assert_called_once()
-    assert detail.kind.value == "mcp_server"
+    assert detail.kind is IntegrationKind.MCP
     server = get_mcp_server_for_integration(detail.id, db_session)
     assert server is not None and server.server_url == "https://mcp.example.com/mcp"
     assert [a.key for a in list_integration_actions(detail.id, db_session)] == [

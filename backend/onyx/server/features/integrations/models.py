@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
+    IntegrationKind,
     IntegrationOAuthProviderMode,
     MCPTransport,
     PluginInstallationPolicy,
@@ -18,11 +19,6 @@ from onyx.integrations.connection_models import IntegrationStatus
 from onyx.integrations.models import EffectivePolicy
 from onyx.oauth.models import SafeOAuthReturnPath
 from onyx.server.features.mcp.models import HeaderTemplate
-
-
-class IntegrationKindName(str, Enum):
-    MCP_SERVER = "mcp_server"
-    API = "api"
 
 
 class IntegrationShape(str, Enum):
@@ -70,7 +66,7 @@ class MemberAction(IntegrationActionView):
 
 class MemberIntegration(BaseModel):
     id: int
-    kind: IntegrationKindName
+    kind: IntegrationKind
     shape: IntegrationShape
     name: str
     description: str | None
@@ -151,7 +147,7 @@ IntegrationConfigView = Annotated[
 
 class AdminIntegration(BaseModel):
     id: int
-    kind: IntegrationKindName
+    kind: IntegrationKind
     shape: IntegrationShape
     name: str
     description: str | None
@@ -239,7 +235,7 @@ class ActionGrantsUpdate(BaseModel):
 class AgentIntegrationOption(BaseModel):
     id: int
     name: str
-    kind: IntegrationKindName
+    kind: IntegrationKind
     shape: IntegrationShape
     # False: the agent cannot set Allow over an Ask of the admin.
     users_can_save_always_allow: bool
