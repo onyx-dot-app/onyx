@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "Adicionar conectores"
       },
-      "authenticate": {
-        "label": "Autenticar"
-      },
       "codingAgentIncognito": {
         "tooltip": "O agente de código não está disponível no modo anônimo"
       },
@@ -221,53 +218,6 @@
         "title": "Desconectar *{name}*"
       }
     },
-    "mcpOauthCallback": {
-      "autoRedirect": {
-        "text": "Retornando automaticamente…"
-      },
-      "backToChatButton": {
-        "label": "Voltar ao chat"
-      },
-      "cancelled": {
-        "description": "A autorização foi cancelada ou negada, portanto nenhuma conexão foi estabelecida. Para tentar novamente, reinicie a conexão nas configurações de autenticação do servidor MCP.",
-        "title": "Autorização cancelada"
-      },
-      "continueButton": {
-        "label": "Continuar"
-      },
-      "genericError": {
-        "fallbackDetail": "Não foi possível concluir a autorização",
-        "title": "Algo deu errado"
-      },
-      "invalidLink": {
-        "description": "Este link não contém os parâmetros de autorização necessários. Reinicie a conexão nas configurações de autenticação do servidor MCP.",
-        "title": "Link de autorização inválido"
-      },
-      "processing": {
-        "description": "Finalizando a conexão com seu servidor MCP. Isso pode levar alguns instantes…",
-        "title": "Concluindo a autorização"
-      },
-      "serverNotFound": {
-        "description": "O servidor MCP ao qual esta autorização pertence não existe mais ou não está mais configurado. Recrie ou reconfigure o servidor e conecte novamente.",
-        "title": "Servidor MCP não encontrado"
-      },
-      "sessionExpired": {
-        "description": "Este link de autorização é inválido, expirou ou já foi utilizado. Reinicie a conexão nas configurações de autenticação do servidor MCP.",
-        "title": "A sessão de autorização expirou"
-      },
-      "success": {
-        "description": "A autorização foi concluída com sucesso. Agora você pode usar as ferramentas deste servidor no chat.",
-        "title": "Conectado a {serverName}"
-      },
-      "timedOut": {
-        "description": "O servidor MCP não confirmou a autorização a tempo. Tente conectar novamente. Se isso continuar acontecendo, verifique a configuração de OAuth do servidor.",
-        "title": "Tempo de autorização esgotado"
-      },
-      "tokenExchangeFailed": {
-        "description": "O provedor aprovou a autorização, mas não foi possível obter um token de acesso válido. Verifique as credenciais e os endpoints do cliente OAuth do servidor e tente conectar novamente.",
-        "title": "Falha na troca de token"
-      }
-    },
     "policyToggle": {
       "always": {
         "label": "Permitir"
@@ -297,8 +247,7 @@
         "tooltip": "Desativar todas as ferramentas"
       },
       "empty": {
-        "message": "Nenhuma ferramenta disponível",
-        "searchMessage": "Nenhuma ferramenta encontrada"
+        "message": "Nenhuma ferramenta disponível"
       },
       "showAllButton": {
         "ariaLabel": "Mostrar todas as ferramentas",
@@ -427,134 +376,18 @@
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
     "memberPlugins": {
-      "chat": {
-        "trigger": {
-          "label": "Plugins"
-        },
-        "search": {
-          "placeholder": "Buscar plugins"
-        },
-        "empty": {
-          "text": "Nenhum plugin está disponível neste chat.",
-          "searchText": "Nenhum plugin corresponde à sua busca."
-        },
-        "loading": {
-          "label": "Carregando plugins"
-        },
-        "loadError": {
-          "text": "Não foi possível carregar alguns plugins. Tente novamente."
-        },
-        "retry": {
-          "label": "Tentar novamente"
-        },
-        "browse": {
-          "label": "Explorar plugins"
-        },
-        "toggle": {
-          "ariaLabel": "Usar {name} neste chat"
-        },
-        "connect": {
-          "label": "Conectar"
-        },
-        "connection": {
-          "connected": "Conectado",
-          "workspace": "Conexão do espaço de trabalho",
-          "session": "Conexão da sessão",
-          "none": "Não requer conexão",
-          "oauth": "Conecte sua conta",
-          "credentials": "Adicione suas credenciais",
-          "checking": "Verificando conexão",
-          "unconfigured": "Requer configuração do espaço de trabalho",
-          "unavailable": "Conexão indisponível"
-        },
-        "intent": {
-          "unavailable": "Este plugin não está disponível para o agente deste chat.",
-          "invalid": "O link deste plugin é inválido."
-        }
-      },
-      "oauthComplete": {
-        "success": {
-          "title": "Plugin conectado",
-          "description": "Volte à aba anterior para continuar."
-        },
-        "error": {
-          "title": "Conexão não confirmada",
-          "description": "Volte à aba anterior e tente conectar novamente."
-        },
-        "return": {
-          "label": "Voltar aos plugins"
-        },
-        "close": {
-          "label": "Fechar aba"
-        }
-      },
-      "title": "Plugins",
-      "description": "Conecte suas contas para usar os plugins do espaço de trabalho.",
-      "manageWorkspace": "Gerenciar plugins do espaço de trabalho",
-      "search": "Buscar plugins",
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "Aplicativo Craft"
-      },
       "row": {
-        "view": "Ver {name}",
         "connect": "Conectar {name}"
       },
       "status": {
-        "connected": "Conectado",
-        "workspace": "Conexão do espaço de trabalho",
-        "session": "Usa sua conta conectada",
-        "none": "Pronto para usar",
-        "oauth": "Conecte sua conta",
-        "credentials": "Adicione suas credenciais",
-        "unconfigured": "Requer configuração do espaço de trabalho",
-        "checking": "Verificando conexão",
         "unavailable": "Conexão indisponível"
       },
-      "availability": {
-        "label": "Status da conexão de {name}",
-        "chat": "Chat principal",
-        "craft": "Craft",
-        "on": "Ativado",
-        "off": "Desativado",
-        "unknown": "Desconhecida",
-        "disabledByAdmin": "Desativado pelo administrador",
-        "disabledByYou": "Desativado por você",
-        "agents": "Agentes personalizados",
-        "notAvailable": "Não disponível"
-      },
       "state": {
-        "loading": "Carregando plugins",
         "serversError": "Não foi possível carregar os plugins MCP.",
-        "toolsError": "Não foi possível carregar as ferramentas dos plugins.",
-        "oauthError": "Não foi possível carregar as conexões das contas.",
-        "retry": "Tentar novamente",
-        "noResultsTitle": "Nenhum plugin correspondente",
-        "noResultsDescription": "Tente outro nome ou outra descrição.",
-        "clearSearch": "Ver todos os plugins",
-        "appsError": "Não foi possível carregar os apps do Craft.",
-        "appsLoading": "Carregando apps do Craft",
-        "emptyTitle": "Nenhum plugin encontrado",
-        "emptyDescription": "Tente outro filtro de conexão ou peça ao administrador do seu espaço de trabalho para adicionar um plugin."
+        "appsError": "Não foi possível carregar os apps do Craft."
       },
       "detail": {
-        "noAuthentication": "Não é necessária autenticação",
-        "connection": "Conexão",
-        "tools": "Ferramentas",
-        "toolCount": "{count, plural, one {# ação} other {# ações}}",
-        "noTools": "Não há ferramentas visíveis salvas para este plugin.",
-        "connect": "Conectar conta",
-        "useInChat": "Usar no Chat",
-        "disconnect": "Desconectar",
-        "disconnectTitle": "Desconectar {name}?",
-        "disconnectDescription": "Isso remove a conexão da sua conta. A disponibilidade no espaço de trabalho permanece igual.",
-        "oauthDisconnectWarning": "Todos os plugins e aplicativos que usam a mesma configuração OAuth compartilham esta conexão de conta. Desconectar remove sua conexão de todos eles.",
-        "disconnecting": "Desconectando...",
-        "disconnectFailed": "Não foi possível desconectar sua conta. Tente novamente.",
-        "cancel": "Cancelar",
-        "close": "Concluído",
-        "openInCraft": "Abrir no Craft"
+        "toolCount": "{count, plural, one {# ação} other {# ações}}"
       },
       "connection": {
         "title": "Conectar {name}",
@@ -582,41 +415,12 @@
           "not_connected": "Não foi possível confirmar a conexão da sua conta. Tente novamente.",
           "request_failed": "A conexão falhou. Tente novamente."
         }
-      },
-      "filters": {
-        "label": "Status da conexão",
-        "all": "Todos",
-        "connected": "Conectados",
-        "needsSignIn": "Login necessário",
-        "showAll": "Ver todos os plugins"
-      },
-      "defaults": {
-        "chat": "Ativar no Chat padrão",
-        "craft": "Ativar no Craft",
-        "chatDescription": "Disponibilize este plugin nas suas conversas sem um agente personalizado.",
-        "craftDescription": "Disponibilize este plugin nas suas sessões do Craft e tarefas agendadas. As permissões de ferramentas da sua organização continuam em vigor.",
-        "unavailable": "Seu administrador desativou este plugin para {surface}.",
-        "saveFailed": "Não foi possível salvar seus padrões de plugins. Tente novamente.",
-        "chatUnavailable": "Seu administrador desativou este plugin para {surface}. Agentes personalizados configurados com este plugin ainda podem usá-lo."
-      },
-      "openapi": {
-        "chatOnly": "Somente Chat",
-        "chatOnlyDescription": "Este plugin está disponível no Chat, não no Craft."
-      },
-      "externalApp": {
-        "description": "Use sua conta no Craft.",
-        "craftOnly": "Somente Craft",
-        "craftOnlyDescription": "Este app está disponível no Craft. O chat principal não oferece suporte a ele.",
-        "craftDisabledDescription": "Este aplicativo está desativado no Craft. O Chat principal não oferece suporte a ele."
       }
     },
     "plugins": {
       "availability": {
-        "mainChat": "Chat principal",
-        "craft": "Craft",
         "on": "Ativado",
         "off": "Desativado",
-        "unknown": "Desconhecido",
         "enabled": "Ativado",
         "disabled": "Desativado",
         "chatEnabled": "Chat ativado",
@@ -720,8 +524,6 @@
       "back": "Voltar"
     },
     "mcpTools": {
-      "enabledTab": "Ferramentas disponíveis",
-      "policiesTab": "Configurações de aprovação",
       "search": "Buscar ferramentas",
       "enabledCount": "Ferramentas ativadas: {enabled} de {total}"
     }
@@ -11014,7 +10816,8 @@
             "title": "Conecte o servidor primeiro",
             "description": "O Onyx carrega as ações de um servidor MCP depois que o servidor é conectado.",
             "open": "Abrir Configuração",
-            "individualDescription": "Cada usuário entra neste servidor. Conecte sua própria conta na página Plugins e clique em Atualizar."
+            "individualDescription": "Cada usuário entra neste servidor. Conecte sua própria conta na página Plugins e clique em Atualizar.",
+            "openPlugins": "Abrir Plugins"
           }
         }
       }
@@ -11966,40 +11769,6 @@
     }
   },
   "chat": {
-    "mcpConnections": {
-      "trigger": {
-        "label": "As ferramentas precisam de credenciais ({count})",
-        "tooltip": "Algumas ferramentas ficam indisponíveis até você conectar sua conta ou adicionar credenciais."
-      },
-      "modal": {
-        "title": "Conectar ferramentas",
-        "description": "Adicione suas credenciais para usar estas ferramentas no Onyx.",
-        "hint": "Você pode continuar conversando sem conectar estas ferramentas, mas os recursos do seu agente podem ficar limitados."
-      },
-      "connect": {
-        "label": "Conectar",
-        "accessibleLabel": "Conectar {server}"
-      },
-      "reconnect": {
-        "label": "Reconectar",
-        "accessibleLabel": "Reconectar {server}"
-      },
-      "connecting": {
-        "label": "Conectando…"
-      },
-      "connected": {
-        "label": "Conectado"
-      },
-      "required": {
-        "label": "Credenciais necessárias"
-      },
-      "done": {
-        "label": "Concluído"
-      },
-      "error": {
-        "description": "Não foi possível conectar. Tente novamente."
-      }
-    },
     "app": {
       "createSessionFailed": {
         "toast": "Não foi possível iniciar um novo chat. Tente novamente."
@@ -12426,91 +12195,6 @@
       },
       "pendingToolApproval": {
         "toast": "Primeiro aprove ou rejeite as chamadas de ferramenta pendentes."
-      }
-    },
-    "mcpApiKey": {
-      "apiKeyField": {
-        "label": "Chave de API",
-        "placeholder": "Insira sua chave de API"
-      },
-      "apiKeyVisibilityButton": {
-        "hideAriaLabel": "Ocultar chave de API",
-        "showAriaLabel": "Mostrar chave de API"
-      },
-      "cancelButton": {
-        "label": "Cancelar"
-      },
-      "credentialField": {
-        "placeholder": "Insira seu {field}"
-      },
-      "credentialVisibilityButton": {
-        "hideAriaLabel": "Ocultar credencial",
-        "showAriaLabel": "Mostrar credencial"
-      },
-      "header": {
-        "enterApiKey": {
-          "title": "Inserir chave de API"
-        },
-        "enterCredentials": {
-          "title": "Inserir credenciais"
-        },
-        "manageApiKey": {
-          "title": "Gerenciar chave de API"
-        },
-        "manageCredentials": {
-          "title": "Gerenciar credenciais"
-        }
-      },
-      "intro": {
-        "enterApiKey": {
-          "text": "Insira sua chave de API para {server} para habilitar a autenticação."
-        },
-        "enterCredentials": {
-          "text": "Insira suas credenciais para {server} para habilitar a autenticação."
-        },
-        "updateApiKey": {
-          "text": "Atualize sua chave de API para {server}."
-        },
-        "updateCredentials": {
-          "text": "Atualize suas credenciais para {server}."
-        }
-      },
-      "saveApiKeyError": {
-        "message": "Falha ao salvar a chave de API"
-      },
-      "saveCredentialsError": {
-        "message": "Falha ao salvar as credenciais"
-      },
-      "submitButton": {
-        "saveApiKey": {
-          "label": "Salvar chave de API"
-        },
-        "saveCredentials": {
-          "label": "Salvar credenciais"
-        },
-        "saving": {
-          "label": "Salvando..."
-        },
-        "updateApiKey": {
-          "label": "Atualizar chave de API"
-        },
-        "updateCredentials": {
-          "label": "Atualizar credenciais"
-        }
-      },
-      "validationNote": {
-        "apiKey": {
-          "text": "Sua chave de API será validada no servidor e armazenada com segurança."
-        },
-        "authenticated": {
-          "text": "As alterações serão validadas no servidor antes de serem salvas."
-        },
-        "credentials": {
-          "text": "Suas credenciais serão validadas no servidor e armazenadas com segurança."
-        }
-      },
-      "backButton": {
-        "label": "Voltar às ferramentas"
       }
     },
     "messages": {
@@ -14296,22 +13980,6 @@
       }
     },
     "apps": {
-      "oauthCallback": {
-        "backButton": "Voltar para meus apps",
-        "description": "Concluindo o handshake OAuth…",
-        "errors": {
-          "cancelled": "O OAuth foi cancelado ou negado: {reason}",
-          "failed": "Falha na conexão.",
-          "missingParams": "Faltando code ou state na URL de retorno."
-        },
-        "exchanging": {
-          "label": "Trocando o código de autorização…"
-        },
-        "success": {
-          "label": "Conectado. Redirecionando de volta para seus apps…"
-        },
-        "title": "Conectando seu app"
-      },
       "policyEditor": {
         "loading": {
           "label": "Carregando…"
@@ -14858,7 +14526,6 @@
       "error": {
         "generic": "Algo deu errado. Tente novamente.",
         "notConfigurable": "Este aplicativo não pode ser configurado a partir daqui.",
-        "popupBlocked": "Não foi possível abrir a janela de configuração. Permita pop-ups e tente novamente.",
         "startFailed": "Falha ao iniciar a configuração"
       },
       "loading": {
@@ -15460,10 +15127,8 @@
       "loading": "Carregando configurações de aprovação…",
       "loadError": "Não foi possível carregar as configurações de aprovação.",
       "retry": "Tentar novamente",
-      "save": "Salvar",
       "saving": "Salvando…",
       "cancel": "Cancelar",
-      "saveError": "Não foi possível salvar as configurações de aprovação.",
       "emptyActions": "Nenhuma ação conhecida. Ações desconhecidas exigem aprovação.",
       "agentPermissionRequired": "Esta execução parou porque uma ação precisava de aprovação. Revise as permissões e execute a tarefa novamente.",
       "enableForTask": "Ativar para esta tarefa",
@@ -17377,5 +17042,218 @@
     "jvmMemoryTitle": "Memória da JVM",
     "vectorMemoryTitle": "Memória vetorial",
     "viewDetails": "Ver detalhes"
+  },
+  "plugins": {
+    "member": {
+      "title": "Plugins",
+      "description": "Habilidades e integrações que você pode usar em chats e agentes.",
+      "filters": {
+        "label": "Tipo de plugin",
+        "all": {
+          "label": "Todos"
+        },
+        "skills": {
+          "label": "Habilidades"
+        },
+        "integrations": {
+          "label": "Integrações"
+        }
+      },
+      "sections": {
+        "organization": "Biblioteca da organização",
+        "mine": "Meus envios",
+        "shared": "Compartilhados com você"
+      },
+      "row": {
+        "skillCount": "{count, plural, one {# habilidade} other {# habilidades}}",
+        "integrationCount": "{count, plural, one {# integração} other {# integrações}}",
+        "needsConnection": "{count, plural, one {# precisa de login} other {# precisam de login}}",
+        "open": {
+          "label": "Abrir {name}"
+        }
+      },
+      "state": {
+        "loading": "Carregando plugins",
+        "loadFailed": "Alguns plugins não puderam ser carregados.",
+        "emptyTitle": "Nenhum plugin ainda",
+        "emptyDescription": "Peça ao seu administrador para adicionar um plugin.",
+        "noResultsTitle": "Nenhum plugin correspondente",
+        "noResultsDescription": "Tente outro nome ou filtro.",
+        "retry": {
+          "label": "Tentar novamente"
+        },
+        "clear": {
+          "label": "Mostrar todos os plugins"
+        }
+      },
+      "detail": {
+        "title": "Plugin",
+        "notFound": "Este plugin não está disponível para você.",
+        "loadFailed": "Não foi possível carregar o plugin.",
+        "tabs": {
+          "overview": "Visão geral",
+          "skills": "Habilidades",
+          "integrations": "Integrações",
+          "versions": "Versões"
+        },
+        "overview": {
+          "noDescription": "Sem descrição.",
+          "location": "Local",
+          "owner": "Proprietário",
+          "skills": "Habilidades",
+          "integrations": "Integrações"
+        },
+        "skills": {
+          "off": "Desativada",
+          "invalid": "Inválida"
+        },
+        "back": {
+          "label": "Plugins"
+        },
+        "switch": {
+          "title": "Usar este plugin",
+          "description": "Quando ativado, o agente padrão pode usar este plugin.",
+          "label": "Usar {name}",
+          "required": "Seu administrador tornou este plugin obrigatório. Você não pode desativá-lo.",
+          "notAvailable": "Seu administrador tornou este plugin indisponível.",
+          "unavailable": "Você não pode ativar nem desativar este plugin.",
+          "failed": "Não foi possível alterar o plugin."
+        },
+        "share": {
+          "label": "Compartilhar"
+        },
+        "publish": {
+          "label": "Publicar",
+          "blocked": "Somente um usuário com a permissão Gerenciar ações em toda a organização pode publicar um plugin que contém uma integração.",
+          "confirmTitle": "Publicar {name}?",
+          "confirmMessage": "O plugin vai para a biblioteca da organização. Não é possível desfazer isso. Depois, os administradores definem a configuração de instalação.",
+          "done": "{name} agora está na biblioteca da organização.",
+          "failed": "Não foi possível publicar o plugin."
+        }
+      },
+      "connection": {
+        "status": {
+          "connected": "Conectada",
+          "notConnected": "Não conectada",
+          "needsReconnect": "Precisa reconectar",
+          "notSetUp": "Não configurada"
+        },
+        "askAdmin": "Pergunte ao seu administrador",
+        "connected": "{name} conectada.",
+        "disconnected": "{name} desconectada.",
+        "failed": "Não foi possível conectar. Tente novamente.",
+        "disconnectFailed": "Não foi possível desconectar. Tente novamente.",
+        "connect": {
+          "label": "Conectar",
+          "ariaLabel": "Conectar {name}"
+        },
+        "reconnect": {
+          "label": "Reconectar",
+          "ariaLabel": "Reconectar {name}"
+        },
+        "disconnect": {
+          "label": "Desconectar",
+          "ariaLabel": "Desconectar {name}"
+        }
+      },
+      "credentials": {
+        "title": "Conectar {name}",
+        "description": "Insira suas credenciais. Somente você as usa.",
+        "required": "Adicione este valor.",
+        "failed": "Não foi possível salvar suas credenciais. Tente novamente.",
+        "submit": {
+          "label": "Conectar",
+          "pendingLabel": "Conectando…"
+        },
+        "cancel": {
+          "label": "Cancelar"
+        }
+      },
+      "alwaysAllow": {
+        "title": "Sempre Permitir",
+        "description": "Executar sem aviso uma ação que pede aprovação.",
+        "loadFailed": "Não foi possível carregar as ações.",
+        "saveFailed": "Não foi possível salvar. Tente novamente.",
+        "alwaysAsks": "O Craft pede aprovação para cada uma dessas solicitações.",
+        "switch": {
+          "label": "Sempre permitir {name}"
+        },
+        "retry": {
+          "label": "Tentar novamente"
+        }
+      },
+      "oauthCallback": {
+        "processing": "Conectando sua conta…",
+        "successTitle": "Conta conectada",
+        "successDescription": "O Onyx está levando você de volta.",
+        "errorTitle": "Não foi possível conectar",
+        "cancelled": "O login foi cancelado.",
+        "invalidLink": "Este link de login não é válido. Comece o login novamente.",
+        "failed": "O login não terminou. Tente novamente.",
+        "back": {
+          "label": "Voltar aos plugins"
+        }
+      },
+      "search": {
+        "placeholder": "Pesquisar plugins"
+      },
+      "addIntegration": {
+        "label": "Adicionar Integração"
+      },
+      "manage": {
+        "label": "Gerenciar plugins"
+      },
+      "share": {
+        "title": "Compartilhar {name}",
+        "description": "Dê acesso a este plugin para pessoas e grupos.",
+        "sharedSignIn": "{names} usa uma conta. As pessoas com acesso usam a conta que você conectou.",
+        "loadFailed": "Não foi possível carregar as pessoas com acesso.",
+        "empty": "Somente você tem acesso.",
+        "remove": {
+          "label": "Remover {name}"
+        },
+        "cancel": {
+          "label": "Cancelar"
+        },
+        "submit": {
+          "label": "Salvar",
+          "pendingLabel": "Salvando..."
+        },
+        "saved": "O acesso de {name} foi salvo.",
+        "failed": "Não foi possível salvar o acesso."
+      }
+    },
+    "chat": {
+      "popover": {
+        "empty": "Este agente não tem plugins com integrações.",
+        "searchEmpty": "Nenhum plugin corresponde à sua pesquisa.",
+        "loading": "Carregando plugins",
+        "loadError": "Alguns plugins não puderam ser carregados. Tente novamente.",
+        "trigger": {
+          "label": "Plugins"
+        },
+        "retry": {
+          "label": "Tentar novamente"
+        },
+        "browse": {
+          "label": "Explorar plugins"
+        },
+        "toggle": {
+          "label": "Usar {name} com este agente"
+        }
+      },
+      "connectPrompt": {
+        "tooltip": "O agente não pode usar estas integrações até você conectar sua conta.",
+        "title": "Conectar Integrações",
+        "description": "Faça login para usar estas integrações neste chat.",
+        "hint": "Você pode continuar conversando. O agente não usa uma integração até você conectá-la.",
+        "trigger": {
+          "label": "{count, plural, one {# integração precisa de login} other {# integrações precisam de login}}"
+        },
+        "done": {
+          "label": "Concluído"
+        }
+      }
+    }
   }
 }
