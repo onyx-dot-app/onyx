@@ -18,7 +18,7 @@ import { MCPUserCredentialsContent } from "@/lib/mcp/components/MCPUserCredentia
 
 interface MCPConnectionPromptProps {
   agent: Pick<MinimalAgent, "id" | "tools">;
-  toolConfiguration: Pick<ToolConfigurationHandle, "disabledToolIds" | "ready">;
+  toolConfiguration: Pick<ToolConfigurationHandle, "isPluginEnabled" | "ready">;
   disabled?: boolean;
   isStreaming?: boolean;
   onConnectionsClosed?: () => void;
@@ -72,10 +72,10 @@ export default function MCPConnectionPrompt({
         status === MCPConnectionStatus.REAUTH_REQUIRED) &&
       getMcpAuthenticationFlow(server) !== null &&
       agent.tools.some(
-        (tool) =>
-          tool.mcp_server_id === server.id &&
-          tool.enabled &&
-          !toolConfiguration.disabledToolIds.includes(tool.id)
+        (tool) => tool.mcp_server_id === server.id && tool.enabled
+      ) &&
+      (server.plugin_ids ?? []).some((pluginId) =>
+        toolConfiguration.isPluginEnabled(pluginId)
       )
     );
   });

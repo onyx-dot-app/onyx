@@ -40,6 +40,8 @@ export interface MCPServer {
   groups: number[];
   users: string[];
   available_in_craft?: boolean;
+  // The plugins that hold the server's integration; chat tool options name them.
+  plugin_ids?: string[];
   default_chat_enabled?: boolean | null;
   user_enabled_in_chat?: boolean;
   user_enabled_in_craft?: boolean;

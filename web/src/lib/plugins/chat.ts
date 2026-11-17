@@ -10,6 +10,25 @@ import { CODING_AGENT_TOOL_ID } from "@/lib/tools/constants";
 export interface ChatPlugin {
   plugin: Exclude<MemberPlugin, { kind: "external-app" }>;
   toolIds: number[];
+  /** The plugins that hold the plugin's integration; tool options name them. */
+  pluginIds: string[];
+}
+
+/** The plugin ids of a catalog entry; empty when chat offers none of its actions. */
+function memberPluginIds(plugin: MemberPlugin): string[] {
+  switch (plugin.kind) {
+    case "mcp":
+      return plugin.server.plugin_ids ?? [];
+    case "openapi":
+      return plugin.tool.plugin_ids ?? [];
+    case "external-app":
+      return [];
+  }
+}
+
+/** Every plugin id of the catalog, for the tool options of a send. */
+export function chatPluginIds(plugins: readonly MemberPlugin[]): string[] {
+  return [...new Set(plugins.flatMap(memberPluginIds))].sort();
 }
 
 /** Incognito chats run no child agents, so the coding agent is unavailable. */
@@ -79,27 +98,26 @@ export function chatPluginsForAgent(
           : tool.mcp_server_id == null && tool.id === plugin.tool.id
       )
       .map((tool) => tool.id);
-    return toolIds.length > 0 ? [{ plugin, toolIds }] : [];
+    const pluginIds = memberPluginIds(plugin);
+    return toolIds.length > 0 && pluginIds.length > 0
+      ? [{ plugin, toolIds, pluginIds }]
+      : [];
   });
 }
 
 export function isChatPluginEnabled(
   plugin: ChatPlugin,
-  configuration: Pick<ToolConfigurationHandle, "stateOf">
+  configuration: Pick<ToolConfigurationHandle, "isPluginEnabled">
 ): boolean {
-  return plugin.toolIds.some((id) => configuration.stateOf(id) !== "disabled");
+  return plugin.pluginIds.some((id) => configuration.isPluginEnabled(id));
 }
 
 export function setChatPluginEnabled(
   plugin: ChatPlugin,
   enabled: boolean,
-  configuration: Pick<ToolConfigurationHandle, "setToolState">
+  configuration: Pick<ToolConfigurationHandle, "setPluginEnabled">
 ): void {
-  for (const id of plugin.toolIds) {
-    configuration.setToolState(id, (current) =>
-      enabled ? (current === "disabled" ? null : current) : "disabled"
-    );
-  }
+  configuration.setPluginEnabled(plugin.pluginIds, enabled);
 }
 
 export function parseChatPluginIntent(
@@ -201,14 +219,4 @@ export function memberPluginChatHref(
   target.searchParams.set("pluginKind", reference.kind);
   target.searchParams.set("pluginId", String(reference.id));
   return `/app?${target.searchParams}`;
-}
-
-export function enabledChatToolIds(
-  tools: readonly ToolSnapshot[],
-  configuration: Pick<ToolConfigurationHandle, "disabledToolIds">
-): number[] | undefined {
-  if (configuration.disabledToolIds.length === 0) return undefined;
-  return tools
-    .filter((tool) => !configuration.disabledToolIds.includes(tool.id))
-    .map((tool) => tool.id);
 }

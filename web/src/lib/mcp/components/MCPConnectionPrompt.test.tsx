@@ -24,6 +24,7 @@ const server: MCPServer = {
   groups: [],
   users: [],
   tool_count: 1,
+  plugin_ids: ["plugin-1"],
 };
 const tool: ToolSnapshot = {
   id: 5,
@@ -41,7 +42,7 @@ const tool: ToolSnapshot = {
   default_enabled: true,
 };
 const agent = { id: 0, tools: [tool] };
-const toolConfiguration = { disabledToolIds: [], ready: true };
+const toolConfiguration = { isPluginEnabled: () => true, ready: true };
 const authenticate = jest.fn();
 const mockedUseAuthentication = jest.mocked(useMcpAuthentication);
 function setServers(servers: MCPServer[]) {
@@ -237,6 +238,7 @@ describe("MCPConnectionPrompt", () => {
         ...server,
         id: 2,
         connection_status: MCPConnectionStatus.REAUTH_REQUIRED,
+        plugin_ids: ["plugin-2"],
       },
     ]);
     render(
@@ -245,7 +247,10 @@ describe("MCPConnectionPrompt", () => {
           ...agent,
           tools: [...agent.tools, { ...tool, id: 6, mcp_server_id: 2 }],
         }}
-        toolConfiguration={{ ...toolConfiguration, disabledToolIds: [6] }}
+        toolConfiguration={{
+          ...toolConfiguration,
+          isPluginEnabled: (pluginId) => pluginId !== "plugin-2",
+        }}
       />
     );
     expect(
@@ -367,12 +372,25 @@ describe("MCPConnectionPrompt", () => {
     await user.click(screen.getByRole("button", { name: "Done" }));
     expect(onConnectionsClosed).toHaveBeenCalled();
   });
-  it("does not warn for disabled tools or unrelated servers", () => {
+  it("does not warn for disabled plugins or unrelated servers", () => {
     setServers([server, { ...server, id: 2, name: "Unrelated" }]);
     render(
       <MCPConnectionPrompt
         agent={agent}
-        toolConfiguration={{ ...toolConfiguration, disabledToolIds: [tool.id] }}
+        toolConfiguration={{
+          ...toolConfiguration,
+          isPluginEnabled: () => false,
+        }}
+      />
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+  it("does not warn for a server that chat cannot use", () => {
+    setServers([{ ...server, plugin_ids: [] }]);
+    render(
+      <MCPConnectionPrompt
+        agent={agent}
+        toolConfiguration={toolConfiguration}
       />
     );
     expect(screen.queryByRole("button")).not.toBeInTheDocument();

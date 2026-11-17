@@ -7,7 +7,6 @@ import {
   applyChatPluginIntent,
   chatPluginIntentLoadState,
   chatPluginsForAgent,
-  enabledChatToolIds,
   effectiveChatPreferredToolId,
   isChatPluginEnabled,
   memberPluginChatHref,
@@ -17,7 +16,7 @@ import {
   setChatPluginEnabled,
   withoutChatPluginIntent,
 } from "@/lib/plugins/chat";
-import { buildMemberPlugins } from "@/lib/plugins/member";
+import { buildMemberPlugins, type MemberPlugin } from "@/lib/plugins/member";
 import { MCPServerStatus, type MCPServer } from "@/lib/mcp/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import type { ToolSnapshot } from "@/lib/tools/types";
@@ -37,6 +36,14 @@ jest.mock("@/lib/navigation/hooks", () => ({
 let mockAgentTools: ToolSnapshot[] = [];
 jest.mock("@/lib/agents/hooks", () => ({
   useActiveAgent: () => ({ id: 5, tools: mockAgentTools }),
+}));
+let mockCatalog: MemberPlugin[] = [];
+jest.mock("@/lib/plugins/member", () => ({
+  ...jest.requireActual("@/lib/plugins/member"),
+  useMemberPlugins: () => ({
+    plugins: mockCatalog,
+    loading: { apps: false, servers: false, tools: false, oauth: false },
+  }),
 }));
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
@@ -74,23 +81,25 @@ const server: MCPServer = {
   tool_count: 3,
   connection_status: MCPConnectionStatus.CONNECTED,
   default_chat_enabled: false,
+  plugin_ids: ["plugin-mcp"],
 };
 const tools = [
   tool(1, { in_code_tool_id: "SearchTool", definition: null }),
   tool(2, { in_code_tool_id: "FileReaderTool", chat_selectable: false }),
   tool(10, { mcp_server_id: 7, definition: null }),
   tool(11, { mcp_server_id: 7, definition: null }),
-  tool(20),
+  tool(20, { plugin_ids: ["plugin-api"] }),
 ];
-const plugins = buildMemberPlugins([server], [...tools, tool(21)], {
-  kind: "loaded",
-  tokens: [],
-});
+const plugins = buildMemberPlugins(
+  [server],
+  [...tools, tool(21, { plugin_ids: ["plugin-other"] })],
+  { kind: "loaded", tokens: [] }
+);
 
 test("Chat excludes external apps with colliding OpenAPI IDs and rejects their intents", () => {
   const catalog = buildMemberPlugins(
     [],
-    [tool(7)],
+    [tool(7, { plugin_ids: ["plugin-7"] })],
     { kind: "loaded", tokens: [] },
     [
       {
@@ -104,7 +113,10 @@ test("Chat excludes external apps with colliding OpenAPI IDs and rejects their i
       },
     ]
   );
-  const chat = chatPluginsForAgent(catalog, { id: 5, tools: [tool(7)] });
+  const chat = chatPluginsForAgent(catalog, {
+    id: 5,
+    tools: [tool(7, { plugin_ids: ["plugin-7"] })],
+  });
   expect(chat.map(({ plugin }) => plugin.kind)).toEqual(["openapi"]);
   expect(
     parseChatPluginIntent(
@@ -257,12 +269,13 @@ beforeEach(() => {
   mockAgentId = null;
   mockProjectId = null;
   mockAgentTools = tools;
+  mockCatalog = plugins;
   // Existing chats whose details carry no saved selection yet.
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
   for (const chatSessionId of ["chat-a", "chat-b"]) {
     useChatSessionStore
       .getState()
-      .createSession(chatSessionId, { incognito: false, toolSelection: null });
+      .createSession(chatSessionId, { incognito: false, toolOptions: null });
   }
   // Each PATCH answers with the selection it saved.
   jest
@@ -277,18 +290,29 @@ afterEach(() => jest.restoreAllMocks());
 async function savedOn(chatSessionId: string): Promise<void> {
   await waitFor(() =>
     expect(
-      useChatSessionStore.getState().sessions.get(chatSessionId)?.toolSelection
+      useChatSessionStore.getState().sessions.get(chatSessionId)?.toolOptions
     ).toBeTruthy()
   );
 }
 
 test("groups only attached tools and preserves custom-agent access outside default chat", () => {
   expect(
-    groups.map(({ plugin, toolIds }) => ({ kind: plugin.kind, toolIds }))
+    groups.map(({ plugin, toolIds, pluginIds }) => ({
+      kind: plugin.kind,
+      toolIds,
+      pluginIds,
+    }))
   ).toEqual([
-    { kind: "mcp", toolIds: [10, 11] },
-    { kind: "openapi", toolIds: [20] },
+    { kind: "mcp", toolIds: [10, 11], pluginIds: ["plugin-mcp"] },
+    { kind: "openapi", toolIds: [20], pluginIds: ["plugin-api"] },
   ]);
+  // Chat offers no action of a plugin with no integration.
+  expect(
+    chatPluginsForAgent(buildMemberPlugins([], [tool(20)], { kind: "error" }), {
+      id: 5,
+      tools: [tool(20)],
+    })
+  ).toEqual([]);
   expect(
     chatPluginsForAgent(plugins, {
       id: 5,
@@ -322,7 +346,10 @@ test("personal default Chat opt-out does not change custom-agent plugins", () =>
 });
 
 test("OpenAPI personal opt-out stays in the directory and affects only default Chat", () => {
-  const personalTools = [tool(20, { user_enabled_in_chat: false }), tool(21)];
+  const personalTools = [
+    tool(20, { user_enabled_in_chat: false, plugin_ids: ["plugin-api"] }),
+    tool(21, { plugin_ids: ["plugin-other"] }),
+  ];
   const catalog = buildMemberPlugins([], personalTools, {
     kind: "loaded",
     tokens: [],
@@ -340,25 +367,20 @@ test("OpenAPI personal opt-out stays in the directory and affects only default C
   ).toEqual([20, 21]);
 });
 
-test("group enable preserves a preferred tool and group disable releases only its own preferred tool", () => {
+test("a plugin toggle switches the plugin and keeps the tool states", () => {
   const { result } = renderHook(() => useToolConfiguration());
-  act(() => {
-    result.current.setToolState(10, () => "preferred");
-    result.current.setToolState(11, () => "disabled");
-  });
-  expect(isChatPluginEnabled(mcpGroup(), result.current)).toBe(true);
-  act(() => setChatPluginEnabled(mcpGroup(), true, result.current));
-  expect(result.current.preferredToolId).toBe(10);
-  expect(result.current.disabledToolIds).toEqual([]);
-  act(() => setChatPluginEnabled(mcpGroup(), false, result.current));
-  expect(result.current.preferredToolId).toBeNull();
-  expect(result.current.disabledToolIds).toEqual([10, 11]);
   act(() => result.current.setToolState(1, () => "preferred"));
-  act(() => setChatPluginEnabled(mcpGroup(), true, result.current));
+  expect(isChatPluginEnabled(mcpGroup(), result.current)).toBe(true);
+  act(() => setChatPluginEnabled(mcpGroup(), false, result.current));
+  expect(isChatPluginEnabled(mcpGroup(), result.current)).toBe(false);
   expect(result.current.preferredToolId).toBe(1);
+  expect(result.current.disabledToolIds).toEqual([]);
+  act(() => setChatPluginEnabled(mcpGroup(), true, result.current));
+  expect(isChatPluginEnabled(mcpGroup(), result.current)).toBe(true);
+  expect(result.current.allowed).toBeNull();
 });
 
-test("a new attached MCP tool starts neutral after the existing group was disabled", () => {
+test("a plugin stays off when its server gets a new tool", () => {
   const { result } = renderHook(() => useToolConfiguration());
   act(() => setChatPluginEnabled(mcpGroup(), false, result.current));
   const expanded = chatPluginsForAgent(plugins, {
@@ -368,7 +390,24 @@ test("a new attached MCP tool starts neutral after the existing group was disabl
   if (!expanded) throw new Error("Missing expanded group");
   expect(expanded.toolIds).toEqual([10, 11, 12]);
   expect(result.current.stateOf(12)).toBeNull();
-  expect(isChatPluginEnabled(expanded, result.current)).toBe(true);
+  expect(isChatPluginEnabled(expanded, result.current)).toBe(false);
+});
+
+test("a plugin toggle saves plugin entries for each other plugin", async () => {
+  const { result } = renderHook(() => useToolConfiguration());
+  act(() => setChatPluginEnabled(mcpGroup(), false, result.current));
+  await savedOn("chat-a");
+  expect(
+    useChatSessionStore.getState().sessions.get("chat-a")?.toolOptions
+  ).toMatchObject({
+    allowed: [
+      { type: "capability", tool_id: 1 },
+      { type: "capability", tool_id: 2 },
+      { type: "plugin", plugin_id: "plugin-api" },
+      { type: "plugin", plugin_id: "plugin-other" },
+    ],
+    preferred: null,
+  });
 });
 
 test("chat plugin choices survive a reload and stay separate between chats", async () => {
@@ -377,14 +416,15 @@ test("chat plugin choices survive a reload and stay separate between chats", asy
   first.unmount();
   await savedOn("chat-a");
   const second = renderHook(() => useToolConfiguration());
-  expect(second.result.current.disabledToolIds).toEqual([10, 11]);
+  expect(isChatPluginEnabled(mcpGroup(), second.result.current)).toBe(false);
   mockChatId = "chat-b";
   second.rerender();
   expect(isChatPluginEnabled(mcpGroup(), second.result.current)).toBe(true);
-  act(() => second.result.current.setToolState(20, () => "disabled"));
+  act(() => second.result.current.setToolState(1, () => "disabled"));
   mockChatId = "chat-a";
   second.rerender();
-  expect(second.result.current.disabledToolIds).toEqual([10, 11]);
+  expect(isChatPluginEnabled(mcpGroup(), second.result.current)).toBe(false);
+  expect(second.result.current.disabledToolIds).toEqual([]);
 });
 
 test("browsing from a new project chat hands its configuration back to that composer", () => {
@@ -395,12 +435,15 @@ test("browsing from a new project chat hands its configuration back to that comp
   act(() => first.result.current.handOffToNewChatWith(5, 9));
   first.unmount();
   const second = renderHook(() => useToolConfiguration());
-  expect(second.result.current.disabledToolIds).toEqual([10, 11]);
+  expect(isChatPluginEnabled(mcpGroup(), second.result.current)).toBe(false);
   expect(sessionStorage.getItem("onyx:tools:new:5:9")).toBeNull();
   second.unmount();
   expect(
-    renderHook(() => useToolConfiguration()).result.current.disabledToolIds
-  ).toEqual([]);
+    isChatPluginEnabled(
+      mcpGroup(),
+      renderHook(() => useToolConfiguration()).result.current
+    )
+  ).toBe(true);
 });
 
 test("Use in chat waits for the configuration and cannot attach a workspace plugin", () => {
@@ -414,20 +457,20 @@ test("Use in chat waits for the configuration and cannot attach a workspace plug
       })
     ).toBe(false);
   });
-  expect(result.current.disabledToolIds).toEqual([10, 11]);
+  expect(isChatPluginEnabled(mcpGroup(), result.current)).toBe(false);
   act(() => {
     expect(
       applyChatPluginIntent({ kind: "openapi", id: 21 }, groups, result.current)
     ).toBe(false);
   });
-  expect(result.current.disabledToolIds).toEqual([10, 11]);
+  expect(isChatPluginEnabled(mcpGroup(), result.current)).toBe(false);
   act(() => {
     expect(
       applyChatPluginIntent({ kind: "mcp", id: 7 }, groups, result.current)
     ).toBe(true);
   });
   expect(isChatPluginEnabled(mcpGroup(), result.current)).toBe(true);
-  expect(result.current.disabledToolIds).toEqual([]);
+  expect(result.current.allowed).toBeNull();
 });
 
 test("MCP chat intents ignore unrelated tool loading failures", () => {
@@ -448,6 +491,7 @@ test("MCP chat intents ignore unrelated tool loading failures", () => {
 test("static-header OpenAPI intent applies despite an unrelated OAuth 503", () => {
   const staticHeaderTool = tool(20, {
     custom_headers: [{ key: "Authorization", value: "Bearer workspace-key" }],
+    plugin_ids: ["plugin-api"],
   });
   const memberPlugins = {
     plugins: buildMemberPlugins(
@@ -459,7 +503,8 @@ test("static-header OpenAPI intent applies despite an unrelated OAuth 503", () =
     errors: {},
   };
   const { result } = renderHook(() => useToolConfiguration());
-  act(() => result.current.setToolState(20, () => "disabled"));
+  act(() => result.current.setPluginEnabled(["plugin-api"], false));
+  expect(result.current.isPluginEnabled("plugin-api")).toBe(false);
   expect(
     chatPluginIntentLoadState({ kind: "openapi", id: 20 }, memberPlugins)
   ).toBe("loaded");
@@ -473,7 +518,7 @@ test("static-header OpenAPI intent applies despite an unrelated OAuth 503", () =
       result.current
     );
   });
-  expect(result.current.disabledToolIds).toEqual([]);
+  expect(result.current.isPluginEnabled("plugin-api")).toBe(true);
 });
 
 test("MCP chat intents wait for their roster and report server errors without waiting", () => {
@@ -666,37 +711,48 @@ test("group selection serializes through the send service and neutral omits the 
       return response;
     });
   const { result } = renderHook(() => useToolConfiguration());
-  act(() => {
-    result.current.setToolState(10, () => "preferred");
-    setChatPluginEnabled(mcpGroup(), false, result.current);
-  });
+  act(() => setChatPluginEnabled(mcpGroup(), false, result.current));
   await sendMessage({
     message: "Read team projects",
     chatSessionId: "chat-a",
     parentMessageId: null,
-    filters: null,
-    enabledToolIds: enabledChatToolIds(tools, result.current),
-    preferredToolId: result.current.preferredToolId,
+    toolOptions: {
+      allowed: result.current.allowed,
+      preferred: { type: "capability", tool_id: 1 },
+      internal_search_filters: null,
+    },
   }).next();
   expect(requests[0]).toMatchObject({
     message: "Read team projects",
     chat_session_id: "chat-a",
-    allowed_tool_ids: [1, 2, 20],
-    preferred_tool_id: null,
+    tool_options: {
+      allowed: [
+        { type: "capability", tool_id: 1 },
+        { type: "capability", tool_id: 2 },
+        { type: "plugin", plugin_id: "plugin-api" },
+        { type: "plugin", plugin_id: "plugin-other" },
+      ],
+      preferred: { type: "capability", tool_id: 1 },
+    },
   });
+  expect(requests[0]).not.toHaveProperty("allowed_tool_ids");
+  expect(requests[0]).not.toHaveProperty("preferred_tool_id");
   act(() => setChatPluginEnabled(mcpGroup(), true, result.current));
   await sendMessage({
     message: "Read all projects",
     chatSessionId: "chat-a",
     parentMessageId: null,
-    filters: null,
-    enabledToolIds: enabledChatToolIds(tools, result.current),
+    toolOptions: {
+      allowed: result.current.allowed,
+      preferred: null,
+      internal_search_filters: null,
+    },
   }).next();
   expect(requests[1]).toMatchObject({
     message: "Read all projects",
     chat_session_id: "chat-a",
+    tool_options: { allowed: null, preferred: null },
   });
-  expect(requests[1]).not.toHaveProperty("allowed_tool_ids");
   expect(
     fetchSpy.mock.calls.filter(([, init]) => init?.method !== "PATCH")
   ).toHaveLength(2);

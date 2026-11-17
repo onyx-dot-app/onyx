@@ -13,7 +13,6 @@ import {
 } from "@tests/setup/test-utils";
 import type { MinimalAgent } from "@/lib/agents/types";
 import { sendMessage } from "@/app/app/services/lib";
-import { enabledChatToolIds } from "@/lib/plugins/chat";
 import {
   type ToolConfigurationHandle,
   useToolConfiguration,
@@ -87,7 +86,7 @@ const attachedTools = [
   }),
   storedMcpTool,
   memberTool({ id: 72, mcp_server_id: 7, definition: null }),
-  memberTool(),
+  memberTool({ plugin_ids: ["plugin-reports"] }),
 ];
 const agent: MinimalAgent = {
   id: 5,
@@ -109,15 +108,17 @@ const agent: MinimalAgent = {
 // The composer's configuration as the harness last rendered it.
 let lastConfiguration: ToolConfigurationHandle | undefined;
 
-/** Opens chat-a with these tools switched off in its saved selection. */
-function openChatWithDisabled(disabledToolIds: number[]): void {
+/** Opens chat-a with Linear switched off in its saved options. */
+function openChatWithLinearOff(): void {
   useChatSessionStore.getState().createSession("chat-a", {
     incognito: false,
-    toolSelection: {
-      allowed_tool_ids: attachedTools
-        .map((tool) => tool.id)
-        .filter((id) => !disabledToolIds.includes(id)),
-      preferred_tool_id: null,
+    toolOptions: {
+      allowed: [
+        { type: "capability", tool_id: 1 },
+        { type: "capability", tool_id: 2 },
+        { type: "plugin", plugin_id: "plugin-reports" },
+      ],
+      preferred: null,
       internal_search_filters: null,
     },
   });
@@ -139,12 +140,11 @@ function PickerHarness({
             message: "Find support tickets",
             chatSessionId: mockChatId ?? "new-chat",
             parentMessageId: null,
-            filters: null,
-            preferredToolId: configuration.preferredToolId,
-            enabledToolIds: enabledChatToolIds(
-              selectedAgent.tools,
-              configuration
-            ),
+            toolOptions: {
+              allowed: configuration.allowed,
+              preferred: null,
+              internal_search_filters: null,
+            },
           }).next()
         }
       >
@@ -176,6 +176,7 @@ function network({
         return jsonResponse({
           mcp_servers: [
             memberServer({
+              plugin_ids: ["plugin-linear"],
               is_public: !privateAttachedServer,
               default_chat_enabled: false,
               auth_type: credentials
@@ -245,7 +246,7 @@ beforeEach(() => {
   for (const chatSessionId of ["chat-a", "chat-b"]) {
     useChatSessionStore
       .getState()
-      .createSession(chatSessionId, { incognito: false, toolSelection: null });
+      .createSession(chatSessionId, { incognito: false, toolOptions: null });
   }
 });
 afterEach(() => jest.restoreAllMocks());
@@ -378,7 +379,7 @@ test("switching agents closes a pending connection without applying it to the ne
       return Promise.resolve(jsonResponse({ mcp_servers: [] }));
     return fetchFixture(input, init);
   });
-  openChatWithDisabled([71, 72]);
+  openChatWithLinearOff();
   const { rerender } = render(<PickerHarness />);
   const user = setupUser();
   await openPlugins(user);
@@ -389,9 +390,7 @@ test("switching agents closes a pending connection without applying it to the ne
   rerender(<PickerHarness selectedAgent={{ ...agent, id: 8, tools: [] }} />);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   await act(async () => save.resolve(jsonResponse({})));
-  expect(lastConfiguration?.disabledToolIds).toEqual(
-    expect.arrayContaining([71, 72])
-  );
+  expect(lastConfiguration?.isPluginEnabled("plugin-linear")).toBe(false);
   await openPlugins(user);
   expect(
     await screen.findByText("No plugins are available in this chat.")
@@ -408,7 +407,7 @@ test("an expired OpenAPI grant offers sign-in instead of a plugin toggle", async
   ).not.toBeInTheDocument();
 });
 
-test("an MCP group toggle serializes every attached ID through the send service", async () => {
+test("an MCP plugin toggle serializes the other plugins through the send service", async () => {
   const { requests } = network();
   render(<PickerHarness />);
   const user = setupUser();
@@ -427,11 +426,18 @@ test("an MCP group toggle serializes every attached ID through the send service"
   await user.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() =>
     expect(requests[0]).toMatchObject({
-      allowed_tool_ids: [1, 2, 7],
-      preferred_tool_id: null,
+      tool_options: {
+        allowed: [
+          { type: "capability", tool_id: 1 },
+          { type: "capability", tool_id: 2 },
+          { type: "plugin", plugin_id: "plugin-reports" },
+        ],
+        preferred: null,
+      },
       chat_session_id: "chat-a",
     })
   );
+  expect(requests[0]).not.toHaveProperty("allowed_tool_ids");
 });
 
 test("an attached private MCP server stays visible and can be excluded from the send request", async () => {
@@ -449,8 +455,14 @@ test("an attached private MCP server stays visible and can be excluded from the 
   await user.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() =>
     expect(requests[0]).toMatchObject({
-      allowed_tool_ids: [1, 2, 7],
-      preferred_tool_id: null,
+      tool_options: {
+        allowed: [
+          { type: "capability", tool_id: 1 },
+          { type: "capability", tool_id: 2 },
+          { type: "plugin", plugin_id: "plugin-reports" },
+        ],
+        preferred: null,
+      },
       chat_session_id: "chat-a",
     })
   );
@@ -476,8 +488,14 @@ test("an OAuth status failure allows disabling a selected plugin but blocks enab
   await user.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() =>
     expect(requests[0]).toMatchObject({
-      allowed_tool_ids: [1, 2, 71, 72],
-      preferred_tool_id: null,
+      tool_options: {
+        allowed: [
+          { type: "capability", tool_id: 1 },
+          { type: "capability", tool_id: 2 },
+          { type: "plugin", plugin_id: "plugin-linear" },
+        ],
+        preferred: null,
+      },
       chat_session_id: "chat-a",
     })
   );
@@ -485,7 +503,7 @@ test("an OAuth status failure allows disabling a selected plugin but blocks enab
 
 test("the shared connection dialog reconnects without replacing the chat page", async () => {
   const { fetchSpy } = network({ credentials: true });
-  openChatWithDisabled([71, 72]);
+  openChatWithLinearOff();
   render(<PickerHarness />);
   const user = setupUser();
   await openPlugins(user);
@@ -523,7 +541,7 @@ test("the shared connection dialog reconnects without replacing the chat page", 
 
 test("connection failure stays in the dialog and preserves disabled selection", async () => {
   network({ credentials: true, credentialFailure: true });
-  openChatWithDisabled([71, 72]);
+  openChatWithLinearOff();
   render(<PickerHarness />);
   const user = setupUser();
   await openPlugins(user);
@@ -535,9 +553,7 @@ test("connection failure stays in the dialog and preserves disabled selection", 
     messages.actions.memberPlugins.connection.errors.request_failed
   );
   expect(screen.getByRole("dialog")).toBeVisible();
-  expect(lastConfiguration?.disabledToolIds).toEqual(
-    expect.arrayContaining([71, 72])
-  );
+  expect(lastConfiguration?.isPluginEnabled("plugin-linear")).toBe(false);
 });
 
 test("browse retains the current chat and a partial roster failure offers retry", async () => {

@@ -19,7 +19,7 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { normalizeSourceSelection } from "@/lib/searchFilters/utils";
 import {
-  flushToolSelection,
+  flushToolOptions,
   type ToolConfigurationHandle,
 } from "@/lib/tools/hooks";
 
@@ -559,7 +559,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
             ? useChatSessionStore.getState().sessions.get(sessionId)
             : undefined;
           // A turn the server starts reads the chat's saved tools.
-          if (sessionId) await flushToolSelection(sessionId);
+          if (sessionId) await flushToolOptions(sessionId);
           try {
             const accepted = await errorHandlingFetchWith<PendingChatMessage>(
               key,
@@ -610,7 +610,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
         }),
       interrupt: async (id) => {
         await request(async (key) => {
-          if (sessionId) await flushToolSelection(sessionId);
+          if (sessionId) await flushToolOptions(sessionId);
           try {
             await errorHandlingFetchWith<PendingChatMessage>(
               `${key}/${id}/interrupt`,

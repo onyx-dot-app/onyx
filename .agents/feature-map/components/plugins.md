@@ -99,21 +99,28 @@ preference routes. On the web,
 `lib/plugins/chat.ts:effectiveChatPreferredToolId` drops an unavailable preferred plugin tool in
 Default Chat when the user's preference turns it off.
 
-**Tool selection of an existing chat.** The server owns it.
-`lib/tools/hooks.ts:useToolConfiguration` reads it from the chat-session detail
-(`tool_selection`, held in the chat session store). When a signed-in user
-changes tools or filters in an existing chat, the store keeps the change as
-an unconfirmed edit, and the chat's save loop PATCHes
-`/api/chat/chat-session/{id}/tool-selection` at once with only the changed
-part: the tool fields or `internal_search_filters`. One request runs at a time
-per chat; later edits go out together in the next one. The server merges the
-fields that the body sets. The response is the stored selection, or null for a
-chat that stores no content, whose only copy stays in the tab. A chat load that
-started before a save was confirmed does not replace the saved copy.
-`flushToolSelection` resolves when the chat's save loop ends, so a caller can
-wait for the saved choice. A send that creates a chat hands its selection to that chat's
-composer, which saves it. Session storage keeps only the selection of a chat
-that does not exist yet.
+**Tool options of an existing chat.** The server owns them.
+`lib/tools/hooks.ts:useToolConfiguration` reads them from the chat-session detail
+(`tool_options`, held in the chat session store). The composer keeps built-in
+tool states by tool id and plugin states by plugin id. A plugin toggle in
+`ChatPluginsPopover` (`lib/plugins/chat.ts:setChatPluginEnabled`) switches the
+plugin ids of the MCP server or OpenAPI tool (`plugin_ids` on the
+`/api/mcp/servers` and `/api/tool` rows). When something is off, `allowed`
+names each built-in tool that is on and each plugin of the catalog that is on;
+the hook reads both member catalogs (all plugins and the agent's), because the
+server leaves out each plugin that the list does not name. When a signed-in
+user changes tools or filters in an existing chat, the store keeps the change
+as an unconfirmed edit, and the chat's save loop PATCHes
+`/api/chat/chat-session/{id}/tool-options` at once with only the changed
+part: `allowed` and `preferred`, or `internal_search_filters`. One request runs
+at a time per chat; later edits go out together in the next one. The server
+merges the fields that the body sets. The response is the stored options, or
+null for a chat that stores no content, whose only copy stays in the tab. A
+chat load that started before a save was confirmed does not replace the saved
+copy. `flushToolOptions` resolves when the chat's save loop ends, so a caller
+can wait for the saved choice. A send that creates a chat hands its
+configuration to that chat's composer, which saves it. Session storage keeps
+only the configuration of a chat that does not exist yet.
 
 ---
 
