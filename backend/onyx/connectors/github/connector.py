@@ -874,10 +874,28 @@ class GithubConnector(
     ) -> GitHubPullRequest:
         if pull_request.detailed or pull_request.base_repo_full_name is None:
             return pull_request
-        return self.source_operations.get_pull_request(
-            repo_full_name=pull_request.base_repo_full_name,
-            number=pull_request.number,
-        )
+        try:
+            return self.source_operations.get_pull_request(
+                repo_full_name=pull_request.base_repo_full_name,
+                number=pull_request.number,
+            )
+        except GitHubApiError as e:
+            # GitHub refuses to detail a pull request whose diff is too large
+            # ("too many files changed", HTTP 422). Failing here would fail the
+            # whole run, so a repo holding one such PR could never finish
+            # indexing; keep the listing's fields instead. Only the detail-only
+            # fields (merged, commits, changed files) are missing.
+            if e.status_code == 422 and "too many files changed" in (
+                e.github_message or str(e)
+            ):
+                logger.warning(
+                    "GitHub cannot detail %s#%s (too many files changed); "
+                    "indexing it from the listing",
+                    pull_request.base_repo_full_name,
+                    pull_request.number,
+                )
+                return pull_request
+            raise
 
     def _detailed_issue(self, issue: GitHubIssue) -> GitHubIssue:
         if issue.detailed:
