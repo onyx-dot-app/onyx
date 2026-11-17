@@ -11,6 +11,7 @@ from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     IndexingStatus,
+    VectorQuantization,
 )
 from onyx.db.llm import fetch_embedding_provider
 from onyx.db.models import (
@@ -370,6 +371,17 @@ def update_search_settings_status(
     search_settings: SearchSettings, new_status: IndexModelStatus, db_session: Session
 ) -> None:
     update_search_settings_status__no_commit(search_settings, new_status, db_session)
+    db_session.commit()
+
+
+def update_search_settings_vector_quantization(
+    search_settings: SearchSettings,
+    vector_quantization: VectorQuantization,
+    db_session: Session,
+) -> None:
+    """Quantization is part of the index mapping: change it only before the
+    index of these settings exists."""
+    search_settings.vector_quantization = vector_quantization
     db_session.commit()
 
 
