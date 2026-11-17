@@ -261,10 +261,12 @@ def read_connection_secret(connection: IntegrationConnection) -> ConnectionSecre
     return read_connection(connection).secret
 
 
+def secret_fingerprint(secret: ConnectionSecret) -> str:
+    return hashlib.sha256(secret.model_dump_json().encode()).hexdigest()
+
+
 def connection_secret_fingerprint(connection: IntegrationConnection) -> str:
-    return hashlib.sha256(
-        read_connection_secret(connection).model_dump_json().encode()
-    ).hexdigest()
+    return secret_fingerprint(read_connection_secret(connection))
 
 
 def legacy_organization_defaults(
@@ -392,6 +394,8 @@ class ResolvedConnection(BaseModel):
     integration_id: int
     connection_id: int | None
     secret: ConnectionSecret | None
+    # The fingerprint of the stored secret of the connection row.
+    secret_fingerprint: str | None = None
 
 
 class ConnectionProblem(BaseModel):

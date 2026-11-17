@@ -89,11 +89,6 @@ def resolve_call_credentials(
         headers = merge_mcp_headers(
             headers, {"Authorization": f"Bearer {secret.access_token}"}
         )
-    connection = (
-        get_connection_by_id(db_session, resolved.connection_id)
-        if resolved.connection_id is not None
-        else None
-    )
     return CallCredentials(
         integration_id=integration.id,
         auth_method=integration.auth_method,
@@ -105,11 +100,7 @@ def resolve_call_credentials(
             else None
         ),
         headers=headers,
-        secret_fingerprint=(
-            connection_secret_fingerprint(connection)
-            if connection is not None
-            else None
-        ),
+        secret_fingerprint=resolved.secret_fingerprint,
     )
 
 

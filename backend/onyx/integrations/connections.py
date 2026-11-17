@@ -67,12 +67,14 @@ from onyx.integrations.connection_models import (
     ResolvedConnection,
     SignInSettings,
     connection_refresh_lock_name,
+    connection_secret_fingerprint,
     expiry_from_expires_in,
     legacy_organization_defaults,
     merge_legacy_defaults,
     preset_credentials_to_secret,
     read_connection,
     read_oauth_client,
+    secret_fingerprint,
 )
 from onyx.server.features.mcp.models import merge_mcp_headers
 from onyx.server.features.mcp.oauth import (
@@ -148,11 +150,12 @@ def _connection_or_problem(
 ) -> ResolvedConnection | ConnectionProblem:
     if connection is None:
         return missing
-    if refresh:
+    record = read_connection(connection)
+    if refresh and _needs_refresh(record, datetime.now(timezone.utc)):
         connection = ensure_fresh_connection(connection, integration, db_session)
         if connection is None:
             return missing
-    record = read_connection(connection)
+        record = read_connection(connection)
     if record.status is IntegrationConnectionStatus.NEEDS_RECONNECT:
         return ConnectionProblem(
             code=ConnectionState.NEEDS_RECONNECT,
@@ -171,6 +174,7 @@ def _connection_or_problem(
         integration_id=integration.id,
         connection_id=connection.id,
         secret=record.secret,
+        secret_fingerprint=secret_fingerprint(record.secret),
     )
 
 
@@ -269,6 +273,7 @@ def _with_legacy_defaults(
                 integration_id=integration.id,
                 connection_id=organization.id,
                 secret=defaults,
+                secret_fingerprint=connection_secret_fingerprint(organization),
             )
         return resolved
     secret = resolved.secret
