@@ -12,6 +12,12 @@ export {
   type ButtonProps,
 } from "@opal/components/buttons/button/components";
 
+/* FoldButton */
+export {
+  FoldButton,
+  type FoldButtonProps,
+} from "@opal/components/buttons/fold-button/components";
+
 /* SelectButton */
 export {
   SelectButton,

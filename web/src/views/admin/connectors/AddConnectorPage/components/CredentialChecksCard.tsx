@@ -17,6 +17,7 @@ import {
   Card,
   Divider,
   Fold,
+  FoldButton,
   LinkButton,
   Log,
   type LineVariant,
@@ -27,7 +28,6 @@ import {
 import {
   SvgAlertCircle,
   SvgCheckCircle,
-  SvgChevronRight,
   SvgClock,
   SvgExpand,
   SvgFold,
@@ -39,7 +39,6 @@ import {
 } from "@opal/icons";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import {
-  cn,
   escapeMarkdown,
   markdown,
   noProp,
@@ -263,23 +262,13 @@ function CheckLog({
     />
   );
   const chevron = (
-    // Points right closed and turns down open, as a Divider's chevron does.
     // Its click reaches the line's, which toggles the details.
-    <div
-      className={cn(
-        "transition-transform duration-200 ease-in-out",
-        expanded && "rotate-90"
-      )}
-    >
-      <Button
-        icon={SvgChevronRight}
-        prominence="tertiary"
-        size="md"
-        aria-expanded={expanded}
-        tooltip={t(expanded ? "details.collapse" : "details.expand")}
-        aria-label={t(expanded ? "details.collapse" : "details.expand")}
-      />
-    </div>
+    <FoldButton
+      open={expanded}
+      size="md"
+      tooltip={t(expanded ? "details.collapse" : "details.expand")}
+      aria-label={t(expanded ? "details.collapse" : "details.expand")}
+    />
   );
   const onHover = (button: React.ReactNode) => (
     <Hoverable.Item group={ROW_HOVER_GROUP} variant="appear-on-hover">

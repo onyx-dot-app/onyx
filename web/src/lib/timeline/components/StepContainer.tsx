@@ -1,9 +1,7 @@
 import React, { FunctionComponent } from "react";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
-import { Button, Line, type LineVariant } from "@opal/components";
+import { FoldButton, Line, type LineVariant } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { SvgChevronRight } from "@opal/icons";
-import { cn } from "@opal/utils";
 import type { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 
@@ -91,21 +89,8 @@ export function StepContainer({
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={1}>
           {headerAccessory}
-          {/* As in the connector check card: points right closed and turns
-              down open. Its click reaches the line's, which toggles the step. */}
-          <div
-            className={cn(
-              "transition-transform duration-200 ease-in-out",
-              isExpanded && "rotate-90"
-            )}
-          >
-            <Button
-              icon={SvgChevronRight}
-              prominence="tertiary"
-              size="md"
-              aria-expanded={isExpanded}
-            />
-          </div>
+          {/* Its click reaches the line's, which toggles the step. */}
+          <FoldButton open={isExpanded} size="md" />
         </Section>
       }
       expandable
