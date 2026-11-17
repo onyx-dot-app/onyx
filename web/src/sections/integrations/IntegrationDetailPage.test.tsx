@@ -216,6 +216,23 @@ test("saves the sign-in settings", async () => {
   );
 });
 
+test("offers the Onyx login sign-in for an MCP server", async () => {
+  mockFetch({
+    [URL_DETAIL]: makeDetail({
+      auth_mode: "individual",
+      auth_method: "oauth2",
+    }),
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  await u.click(await view.findByRole("combobox", { name: "Sign-in Method" }));
+  expect(
+    await screen.findByRole("option", { name: "Onyx login" })
+  ).toBeInTheDocument();
+});
+
 test("sends a changed server URL with the configuration", async () => {
   const fetchMock = mockFetch({
     [URL_DETAIL]: makeDetail({ auth_mode: "none", auth_method: null }),

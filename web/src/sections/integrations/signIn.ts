@@ -14,7 +14,7 @@ export const SIGN_IN_METHODS: Record<
   Exclude<IntegrationShape, "preset">,
   readonly AuthMethod[]
 > = {
-  mcp_server: ["oauth2", "api_key"],
+  mcp_server: ["oauth2", "api_key", "onyx_login"],
   openapi: ["oauth2", "api_key", "onyx_login"],
   custom: ["api_key"],
 };
