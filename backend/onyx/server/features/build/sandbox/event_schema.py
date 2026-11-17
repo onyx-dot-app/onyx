@@ -11,7 +11,7 @@ If you replace the re-exports with local models, keep the
 stores tool-call and plan events in that shape, and saved rows are not migrated.
 """
 
-from typing import NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 from acp.schema import (
     AgentMessageChunk,
@@ -24,6 +24,7 @@ from acp.schema import (
     ToolCallProgress,
     ToolCallStart,
 )
+from pydantic import BaseModel
 
 
 class TextPartMetadata(TypedDict):
@@ -31,6 +32,28 @@ class TextPartMetadata(TypedDict):
 
     partId: str
     snapshotText: NotRequired[str]
+
+
+# The Onyx wire version a tool call carries in ``_meta.onyx.version``. Rows
+# saved without it are version 1.
+ONYX_WIRE_VERSION = 2
+
+
+class OnyxToolMeta(BaseModel):
+    """Onyx data on a tool call that ACP has no field for, in ``_meta.onyx``.
+
+    Sits beside the existing flat ``_meta`` keys (``toolName``, the subagent
+    session ids). Every field but ``version`` is optional and left out when
+    unset, so readers treat a missing key as "not reported".
+    """
+
+    version: int = ONYX_WIRE_VERSION
+    # ACP's status has no cancelled state: a cancelled call is ``failed`` with
+    # this set, so a stopped call reads apart from one that errored.
+    cancelled: bool | None = None
+
+    def to_meta(self) -> dict[str, Any]:
+        return self.model_dump(exclude_none=True)
 
 
 # Onyx-synthesized ``Error.code`` sentinels for turn-terminating failures.
@@ -50,6 +73,8 @@ class ActivityTimeoutError(Error):
 
 __all__ = [
     "ActivityTimeoutError",
+    "ONYX_WIRE_VERSION",
+    "OnyxToolMeta",
     "AgentMessageChunk",
     "AgentPlanUpdate",
     "AgentThoughtChunk",
