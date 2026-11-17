@@ -19,6 +19,8 @@ export interface PolicyEditorItem {
   description: string;
   defaultPolicy: PolicyValue;
   editable?: boolean;
+  /** Values the admin cannot choose for this item. */
+  disabledPolicies?: readonly PolicyValue[];
   lockReason?: "workspace_disabled" | "workspace_managed" | null;
   note?: string | RichStr;
 }
@@ -57,6 +59,9 @@ export default function PolicyEditor({
     `${item.name} ${item.description}`.toLocaleLowerCase().includes(search)
   );
   const editableItems = shownItems.filter((item) => item.editable !== false);
+  function accepts(item: PolicyEditorItem, value: PolicyValue): boolean {
+    return !item.disabledPolicies?.includes(value);
+  }
   const options: { value: PolicyValue; label: string }[] = [
     { value: "allow", label: policyCopy("always.label") },
     { value: "ask", label: policyCopy("ask.label") },
@@ -106,7 +111,9 @@ export default function PolicyEditor({
                 ...options.map((option) => ({
                   value: option.value,
                   title: option.label,
-                  disabled: editableItems.length === 0,
+                  disabled: !editableItems.some((item) =>
+                    accepts(item, option.value)
+                  ),
                 })),
                 {
                   options: [
@@ -129,7 +136,9 @@ export default function PolicyEditor({
                   onChange({
                     ...policies,
                     ...Object.fromEntries(
-                      editableItems.map((item) => [item.id, value])
+                      editableItems
+                        .filter((item) => accepts(item, value))
+                        .map((item) => [item.id, value])
                     ),
                   });
                 }
@@ -180,6 +189,7 @@ export default function PolicyEditor({
                 <PolicyToggle
                   label={item.name}
                   disabled={disabled || !onChange || item.editable === false}
+                  disabledValues={item.disabledPolicies}
                   value={
                     item.editable === false
                       ? item.defaultPolicy

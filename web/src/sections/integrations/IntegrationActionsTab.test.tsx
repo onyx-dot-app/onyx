@@ -241,3 +241,58 @@ test("tells the admin to connect an own account for an individual MCP server", a
     screen.queryByRole("button", { name: copy.connectFirst.open })
   ).not.toBeInTheDocument();
 });
+
+test("locks Allow for an action that Craft always asks for, with the reason", async () => {
+  const fetchMock = mockFetch({
+    [URL_ACTIONS]: {
+      default_policy: "allow",
+      actions: [
+        makeAction({ read_only: false }),
+        makeAction({
+          key: "unspecified",
+          display_name: "Other requests",
+          description: "Requests that match no other action",
+          read_only: false,
+          default_policy: "ask",
+          effective_admin_policy: "ask",
+          always_asks: true,
+        }),
+      ],
+    },
+    [`PUT ${URL_ACTIONS}`]: { default_policy: "allow", actions: [] },
+  });
+  const u = user();
+  render(
+    <IntegrationActionsTab
+      integration={makeDetail({ kind: "api", shape: "custom" })}
+      onOpenConfiguration={jest.fn()}
+    />
+  );
+  const other = within(await waitFor(() => rowOf("Other requests")));
+  expect(other.getByText(copy.alwaysAsks)).toBeInTheDocument();
+  expect(
+    other.getByRole("button", { name: labels.always.label })
+  ).toBeDisabled();
+  expect(other.getByRole("button", { name: labels.ask.label })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  expect(other.getByRole("button", { name: labels.deny.label })).toBeEnabled();
+
+  // Allow for the whole group skips the locked action.
+  await u.click(
+    screen.getByRole("combobox", {
+      name: messages.craft.actionPolicies.setPermissions,
+    })
+  );
+  await u.click(
+    await screen.findByRole("option", { name: labels.always.label })
+  );
+  await u.click(screen.getByRole("button", { name: copy.save }));
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PUT", URL_ACTIONS)).toEqual({
+      default_policy: "allow",
+      actions: { list_issues: "allow", unspecified: null },
+    })
+  );
+});

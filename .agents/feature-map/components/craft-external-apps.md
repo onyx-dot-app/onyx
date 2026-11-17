@@ -285,6 +285,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    `sandbox_proxy/addons/gate.py:GateAddon._session_grant` returns false for
    it, and `backend/onyx/server/features/build/approvals/api.py:ApprovalView.can_approve_for_session` refuses
    "approve for session" for any whole-domain action on an external app.
+   The admin Actions tab (`web/src/sections/integrations/IntegrationActionsTab.tsx`)
+   reads `always_asks` on each action and does not offer Allow for it.
 8. `approval-single-writer` **Approval decisions have one writer.** Only
    `backend/onyx/db/action_approval.py:try_record_decision` writes the decision of a
    pending row. It arbitrates between the user, a session grant and proxy

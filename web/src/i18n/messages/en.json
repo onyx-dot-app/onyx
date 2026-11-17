@@ -11218,6 +11218,7 @@
           },
           "usesDefault": "Uses default",
           "setByAdmin": "Set by admin",
+          "alwaysAsks": "Craft asks before each request that matches no other action. You cannot set Allow.",
           "useDefaults": "Use defaults",
           "readOnly": "Read-Only Actions ({count})",
           "write": "Write Actions ({count})",

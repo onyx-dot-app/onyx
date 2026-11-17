@@ -11218,6 +11218,7 @@
           },
           "usesDefault": "使用默认值",
           "setByAdmin": "由管理员设置",
+          "alwaysAsks": "对于不匹配任何其他操作的每个请求，Craft 都会先询问。您无法设置为允许。",
           "useDefaults": "使用默认值",
           "readOnly": "只读操作 ({count})",
           "write": "写入操作 ({count})",

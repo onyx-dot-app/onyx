@@ -11218,6 +11218,7 @@
           },
           "usesDefault": "Usa el predeterminado",
           "setByAdmin": "Definido por el administrador",
+          "alwaysAsks": "Craft pregunta antes de cada solicitud que no coincide con ninguna otra acción. No puede establecer Permitir.",
           "useDefaults": "Usar predeterminados",
           "readOnly": "Acciones de solo lectura ({count})",
           "write": "Acciones de escritura ({count})",

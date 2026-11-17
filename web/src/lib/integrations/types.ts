@@ -43,6 +43,8 @@ export interface IntegrationAction {
   default_policy: PolicyValue;
   admin_policy: PolicyValue | null;
   effective_admin_policy: PolicyValue;
+  /** Craft asks before each call of this action, so Allow has no effect. */
+  always_asks: boolean;
 }
 
 export interface AdminIntegration {

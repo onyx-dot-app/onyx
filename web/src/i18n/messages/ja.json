@@ -11218,6 +11218,7 @@
           },
           "usesDefault": "デフォルトを使用",
           "setByAdmin": "管理者が設定",
+          "alwaysAsks": "Craft は、他のアクションに一致しない各リクエストの前に確認します。許可は設定できません。",
           "useDefaults": "デフォルトを使用",
           "readOnly": "読み取りアクション ({count})",
           "write": "書き込みアクション ({count})",

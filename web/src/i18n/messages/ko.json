@@ -11218,6 +11218,7 @@
           },
           "usesDefault": "기본값 사용 중",
           "setByAdmin": "관리자가 설정함",
+          "alwaysAsks": "Craft는 다른 작업과 일치하지 않는 각 요청 전에 확인합니다. 허용으로 설정할 수 없습니다.",
           "useDefaults": "기본값 사용",
           "readOnly": "읽기 전용 액션({count})",
           "write": "쓰기 액션({count})",

@@ -11218,6 +11218,7 @@
           },
           "usesDefault": "Verwendet Standard",
           "setByAdmin": "Vom Admin festgelegt",
+          "alwaysAsks": "Craft fragt vor jeder Anfrage nach, die zu keiner anderen Aktion passt. Sie können Erlauben nicht festlegen.",
           "useDefaults": "Standards verwenden",
           "readOnly": "Lesende Aktionen ({count})",
           "write": "Schreibende Aktionen ({count})",
