@@ -2,10 +2,10 @@
 OpenAPI custom tool into them. Each integration stands alone. A plugin holds
 it through plugin__integration, and the copy makes one such plugin for each.
 
-The old tables stay the tables of each kind: mcp_server, external_app and the
-OpenAPI tool row each get an integration_id. The old tables only get new
-columns, and approval_request.gated_app_id becomes nullable; a rollback undoes
-both. The migration is SQL only and imports no app code. It
+The old tables stay the tables of each kind: each integration points at its
+mcp_server, external_app or OpenAPI tool row, as gated_app does. The old tables
+only get new columns, and approval_request.gated_app_id becomes nullable; a
+rollback undoes both. The migration is SQL only and imports no app code. It
 moves no secret in clear: each credential is copied as its encrypted bytes.
 
 Revision ID: 730bce2814a0
@@ -42,8 +42,6 @@ _LOCK_ATTEMPTS = 6
 _RETRY_DELAY_S = 2
 # SQLSTATE lock_not_available: the error a lock_timeout raises.
 _LOCK_NOT_AVAILABLE = "55P03"
-# The table of each kind, which points at its integration.
-KIND_TABLES = ("mcp_server", "external_app", "tool")
 # The wait for the lock of each VALIDATE CONSTRAINT.
 LOCK_TIMEOUT = "60s"
 # Created-at of a row whose source has no timestamp (tool rows have none).
@@ -104,22 +102,6 @@ def _with_bounded_lock_wait(change: Callable[[], None]) -> None:
 
 def _alter_old_tables() -> None:
     """Add the new columns to the old tables that chat and tools use."""
-    # mcp_server and external_app are small, and tool holds one row for each
-    # tool, so the unique and FK checks scan few rows.
-    for table in KIND_TABLES:
-        op.add_column(table, sa.Column("integration_id", sa.Integer(), nullable=True))
-        op.create_unique_constraint(
-            f"{table}_integration_id_key", table, ["integration_id"]
-        )
-        op.create_foreign_key(
-            f"fk_{table}_integration_id",
-            table,
-            "integration",
-            ["integration_id"],
-            ["id"],
-            ondelete="SET NULL",
-        )
-
     # No default: the column is added with no rewrite of chat_session.
     op.add_column(
         "chat_session", sa.Column("tool_options", postgresql.JSONB(), nullable=True)
@@ -174,7 +156,40 @@ def _create_tables() -> None:
             server_default=sa.text("true"),
             nullable=False,
         ),
+        # The row of its kind that holds the settings: exactly one is set, and
+        # it matches kind. Deleting that row deletes the integration.
+        sa.Column(
+            "mcp_server_id",
+            sa.Integer(),
+            sa.ForeignKey("mcp_server.id", ondelete="CASCADE"),
+            nullable=True,
+            unique=True,
+        ),
+        sa.Column(
+            "external_app_id",
+            sa.Integer(),
+            sa.ForeignKey("external_app.id", ondelete="CASCADE"),
+            nullable=True,
+            unique=True,
+        ),
+        sa.Column(
+            "tool_id",
+            sa.Integer(),
+            sa.ForeignKey("tool.id", ondelete="CASCADE"),
+            nullable=True,
+            unique=True,
+        ),
         *_timestamps(),
+        # Old code still writes the kind tables, so the database keeps each
+        # integration tied to exactly one row of its kind.
+        sa.CheckConstraint(
+            "num_nonnulls(mcp_server_id, external_app_id, tool_id) = 1",
+            name="ck_integration_single_kind_row",
+        ),
+        sa.CheckConstraint(
+            "(kind = 'mcp') = (mcp_server_id IS NOT NULL)",
+            name="ck_integration_kind_row",
+        ),
         # The value checks of these tables: SQL migrations write the columns
         # as plain strings, past the enum type of the model. A value outside
         # the enum makes each ORM read of the row raise.
@@ -798,12 +813,12 @@ _INSERT_INTEGRATIONS = """
     INSERT INTO integration (
         id, kind, name, description, created_by_user_id, enabled, auth_mode,
         auth_method, header_template, users_can_save_always_allow,
-        created_at, updated_at
+        mcp_server_id, external_app_id, tool_id, created_at, updated_at
     )
     SELECT
         id, kind, name, description, creator_user_id, enabled, auth_mode,
         auth_method, header_template, users_can_save_always_allow,
-        created_at, updated_at
+        mcp_server_id, external_app_id, tool_id, created_at, updated_at
     FROM integration_source
 """
 
@@ -813,19 +828,6 @@ _INSERT_FIRST_PLUGIN_INTEGRATIONS = """
     INSERT INTO plugin__integration (plugin_id, integration_id)
     SELECT plugin_id, id FROM integration_source ORDER BY id
 """
-
-_SET_KIND_INTEGRATIONS = [
-    f"""
-    UPDATE {table} k SET integration_id = src.id
-    FROM integration_source src
-    WHERE src.{column} = k.id
-    """
-    for table, column in (
-        ("mcp_server", "mcp_server_id"),
-        ("external_app", "external_app_id"),
-        ("tool", "tool_id"),
-    )
-]
 
 # The client settings of each OAuth integration, with no secret.
 _INSERT_OAUTH_CLIENTS = """
@@ -871,12 +873,12 @@ _INSERT_MCP_ORGANIZATION_CONNECTIONS = """
         integration_id, user_id, secret, legacy_format, status,
         created_at, updated_at
     )
-    SELECT m.integration_id, NULL, c.config, 'mcp_config', 'connected',
+    SELECT i.id, NULL, c.config, 'mcp_config', 'connected',
         c.created_at, c.updated_at
-    FROM mcp_server m
+    FROM integration i
+    JOIN mcp_server m ON m.id = i.mcp_server_id
     JOIN mcp_connection_config c ON c.id = m.admin_connection_config_id
-    WHERE m.integration_id IS NOT NULL
-    ORDER BY m.integration_id
+    ORDER BY i.id
     ON CONFLICT DO NOTHING
 """
 
@@ -887,19 +889,19 @@ _INSERT_MCP_USER_CONNECTIONS = """
         integration_id, user_id, secret, legacy_format, status,
         created_at, updated_at
     )
-    SELECT DISTINCT ON (m.integration_id, u.id)
-        m.integration_id, u.id, c.config, 'mcp_config', 'connected',
+    SELECT DISTINCT ON (i.id, u.id)
+        i.id, u.id, c.config, 'mcp_config', 'connected',
         c.created_at, c.updated_at
     FROM mcp_connection_config c
     JOIN mcp_server m ON m.id = c.mcp_server_id
+    JOIN integration i ON i.mcp_server_id = m.id
     JOIN "user" u ON lower(u.email) = lower(c.user_email) AND u.is_active
-    WHERE m.integration_id IS NOT NULL
-      AND c.id IS DISTINCT FROM m.admin_connection_config_id
+    WHERE c.id IS DISTINCT FROM m.admin_connection_config_id
       AND (
           SELECT count(*) FROM "user" o
           WHERE lower(o.email) = lower(c.user_email) AND o.is_active
       ) = 1
-    ORDER BY m.integration_id, u.id, c.updated_at DESC, c.id DESC
+    ORDER BY i.id, u.id, c.updated_at DESC, c.id DESC
     ON CONFLICT DO NOTHING
 """
 
@@ -907,9 +909,10 @@ _INSERT_MCP_USER_CONNECTIONS = """
 _SET_MCP_OAUTH_REGISTRATIONS = """
     UPDATE integration_oauth_client o
     SET registration = c.config, legacy_format = 'mcp_config'
-    FROM mcp_server m
+    FROM integration i
+    JOIN mcp_server m ON m.id = i.mcp_server_id
     JOIN mcp_connection_config c ON c.id = m.admin_connection_config_id
-    WHERE o.integration_id = m.integration_id
+    WHERE o.integration_id = i.id
 """
 
 # A built-in app holds its OAuth client in the organization credentials.
@@ -917,8 +920,9 @@ _SET_EXTERNAL_APP_OAUTH_REGISTRATIONS = """
     UPDATE integration_oauth_client o
     SET registration = a.organization_credentials,
         legacy_format = 'external_app_org'
-    FROM external_app a
-    WHERE o.integration_id = a.integration_id AND a.app_type <> 'CUSTOM'
+    FROM integration i
+    JOIN external_app a ON a.id = i.external_app_id
+    WHERE o.integration_id = i.id AND a.app_type <> 'CUSTOM'
 """
 
 # A custom app with a header template: the values the organization filled.
@@ -931,7 +935,7 @@ _INSERT_EXTERNAL_APP_ORGANIZATION_CONNECTIONS = """
     SELECT i.id, NULL, a.organization_credentials, 'external_app_org',
         'connected', a.created_at, a.updated_at
     FROM external_app a
-    JOIN integration i ON i.id = a.integration_id
+    JOIN integration i ON i.external_app_id = a.id
     WHERE a.app_type = 'CUSTOM' AND i.auth_method = 'api_key'
     ORDER BY i.id
     ON CONFLICT DO NOTHING
@@ -942,14 +946,13 @@ _INSERT_EXTERNAL_APP_USER_CONNECTIONS = """
         integration_id, user_id, secret, legacy_format, granted_scopes,
         status, created_at, updated_at
     )
-    SELECT a.integration_id, c.user_id, c.user_credentials,
+    SELECT i.id, c.user_id, c.user_credentials,
         'external_app_user', c.granted_scopes::varchar[], 'connected',
         c.created_at, c.updated_at
     FROM external_app_user_credential c
-    JOIN external_app a ON a.id = c.external_app_id
+    JOIN integration i ON i.external_app_id = c.external_app_id
     JOIN "user" u ON u.id = c.user_id AND u.is_active
-    WHERE a.integration_id IS NOT NULL
-    ORDER BY a.integration_id, c.user_id
+    ORDER BY i.id, c.user_id
     ON CONFLICT DO NOTHING
 """
 
@@ -959,13 +962,13 @@ _INSERT_OAUTH_USER_CONNECTIONS = """
         integration_id, user_id, secret, legacy_format, status,
         created_at, updated_at
     )
-    SELECT t.integration_id, k.user_id, k.token_data, 'oauth_user_token',
+    SELECT i.id, k.user_id, k.token_data, 'oauth_user_token',
         'connected', k.created_at, k.updated_at
     FROM oauth_user_token k
     JOIN tool t ON t.oauth_config_id = k.oauth_config_id
+    JOIN integration i ON i.tool_id = t.id
     JOIN "user" u ON u.id = k.user_id AND u.is_active
-    WHERE t.integration_id IS NOT NULL
-    ORDER BY t.integration_id, k.user_id
+    ORDER BY i.id, k.user_id
     ON CONFLICT DO NOTHING
 """
 
@@ -980,7 +983,7 @@ _INSERT_TOOL_HEADER_CONNECTIONS = f"""
         'tool_headers', 'connected',
         TIMESTAMPTZ '{FALLBACK_CREATED_AT}', TIMESTAMPTZ '{FALLBACK_CREATED_AT}'
     FROM tool t
-    JOIN integration i ON i.id = t.integration_id
+    JOIN integration i ON i.tool_id = t.id
     WHERE i.auth_method = 'api_key'
     ORDER BY i.id
     ON CONFLICT DO NOTHING
@@ -1002,7 +1005,7 @@ _SET_TOOL_HEADER_TEMPLATES = """
         FROM jsonb_array_elements(t.custom_headers) h
         WHERE h ->> 'key' IS NOT NULL
     ) headers
-    WHERE t.integration_id = i.id
+    WHERE t.id = i.tool_id
       AND i.auth_method IN ('oauth2', 'onyx_login')
       AND jsonb_typeof(t.custom_headers) = 'array'
       AND headers.value IS NOT NULL
@@ -1012,9 +1015,10 @@ _SET_TOOL_HEADER_TEMPLATES = """
 _SET_OPENAPI_OAUTH_CLIENTS = """
     UPDATE integration_oauth_client o
     SET client_id = c.client_id, client_secret = c.client_secret
-    FROM tool t
+    FROM integration i
+    JOIN tool t ON t.id = i.tool_id
     JOIN oauth_config c ON c.id = t.oauth_config_id
-    WHERE o.integration_id = t.integration_id
+    WHERE o.integration_id = i.id
 """
 
 _SET_INTEGRATION_SEQUENCE = """
@@ -1275,7 +1279,6 @@ def _copy_integrations() -> None:
         _INSERT_INTEGRATIONS,
         _INSERT_FIRST_PLUGIN_INTEGRATIONS,
         _SET_INTEGRATION_SEQUENCE,
-        *_SET_KIND_INTEGRATIONS,
         _INSERT_OAUTH_CLIENTS,
         _INSERT_MCP_ORGANIZATION_CONNECTIONS,
         _INSERT_MCP_USER_CONNECTIONS,
@@ -1313,7 +1316,9 @@ def upgrade() -> None:
     # The tables and the copy commit together. A retry after that commit skips
     # them and only validates.
     if not sa.inspect(bind).has_table("integration", schema=schema):
-        _create_tables()
+        # The foreign keys of integration lock mcp_server, external_app and
+        # tool against writes while the tables are made.
+        _with_bounded_lock_wait(_create_tables)
         _with_bounded_lock_wait(_alter_old_tables)
         _copy_integrations()
     # Validate only after the ALTER TABLE locks are released.
@@ -1339,8 +1344,6 @@ def downgrade() -> None:
     )
     op.drop_column("assistant__user_specific_config", "disabled_plugin_ids")
     for table in reversed(RECORD_TABLES):
-        op.drop_column(table, "integration_id")
-    for table in reversed(KIND_TABLES):
         op.drop_column(table, "integration_id")
     op.drop_column("chat_session", "tool_options")
     for table in (

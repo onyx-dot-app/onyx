@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import Connection, Engine, create_engine, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
@@ -40,8 +41,7 @@ PREVIOUS_REVISION = "ff11c4042c42"
 REVISION = "730bce2814a0"
 ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 
-# Old tables the migration reads. Their rows must not change, except the new
-# integration_id of each kind table.
+# Old tables the migration reads. Their rows must not change.
 OLD_TABLES = (
     "gated_app",
     "external_app",
@@ -661,9 +661,8 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
             "apps": [seeded.app_org_key, seeded.app_user_key],
         }
         seeded_integrations = (
-            "SELECT id FROM integration WHERE id = ANY(:gated) OR id IN "
-            "(SELECT integration_id FROM tool WHERE id = ANY(:tools)) OR id IN "
-            "(SELECT integration_id FROM external_app WHERE id = ANY(:apps))"
+            "SELECT id FROM integration WHERE id = ANY(:gated) "
+            "OR tool_id = ANY(:tools) OR external_app_id = ANY(:apps)"
         )
         conn.execute(
             text(
@@ -822,13 +821,14 @@ def _copied(conn: Connection, where: str, **params: Any) -> Copied:
     return Copied(**row._asdict())
 
 
-TOOL_INTEGRATION = "i.id = (SELECT integration_id FROM tool WHERE id = :t)"
+TOOL_INTEGRATION = "i.tool_id = :t"
 
 
 def _kind_integration(conn: Connection, table: str, row_id: int) -> int | None:
+    """The integration that points at this row of a kind table."""
     return conn.execute(
-        text(f"SELECT integration_id FROM {table} WHERE id = :id"), {"id": row_id}
-    ).scalar_one()
+        text(f"SELECT id FROM integration WHERE {table}_id = :id"), {"id": row_id}
+    ).scalar_one_or_none()
 
 
 def _actions(conn: Connection, integration_id: int) -> list[dict[str, Any]]:
@@ -889,13 +889,13 @@ def _settings(conn: Connection, table: str, key: str, owner: Any, plugin: UUID) 
 
 
 def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
-    before = _fingerprint(engine, OLD_TABLES, ignore="integration_id")
+    before = _fingerprint(engine, OLD_TABLES)
     with engine.connect() as conn:
         max_gated = conn.execute(text("SELECT max(id) FROM gated_app")).scalar_one()
 
     _migrate("upgrade", REVISION)
 
-    assert _fingerprint(engine, OLD_TABLES, ignore="integration_id") == before
+    assert _fingerprint(engine, OLD_TABLES) == before
     with engine.connect() as conn:
         public = _copied(conn, "i.id = :id", id=seeded.gated["mcp_public"])
         private = _copied(conn, "i.id = :id", id=seeded.gated["mcp_private"])
@@ -1059,9 +1059,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         assert _oauth_client(conn, app_custom.id) is None
         # A custom app with a header template: a saved user credential shows
         # that each user signs in. With none, the organization holds the key.
-        app_integration = (
-            "i.id = (SELECT integration_id FROM external_app WHERE id = :a)"
-        )
+        app_integration = "i.external_app_id = :a"
         org_key = _copied(conn, app_integration, a=seeded.app_org_key)
         user_key = _copied(conn, app_integration, a=seeded.app_user_key)
         assert (org_key.auth_mode, org_key.auth_method) == ("shared", "api_key")
@@ -1383,13 +1381,9 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
         "plugin__user",
         "plugin__user_group",
         "user_plugin_preference",
-        # With their integration_id.
-        "mcp_server",
-        "external_app",
-        "tool",
     )
     first = _fingerprint(engine, new_tables)
-    old = _fingerprint(engine, OLD_TABLES, ignore="integration_id")
+    old = _fingerprint(engine, OLD_TABLES)
     # An approval of an integration made after the upgrade has no gated_app.
     no_gated_app = uuid4()
     with engine.begin() as conn:
@@ -1459,18 +1453,7 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
             ).scalar_one()
             == 1
         )
-        for table in ("mcp_server", "external_app", "tool"):
-            assert (
-                conn.execute(
-                    text(
-                        "SELECT count(*) FROM information_schema.columns "
-                        "WHERE table_name = :t AND column_name = 'integration_id'"
-                    ),
-                    {"t": table},
-                ).scalar_one()
-                == 0
-            )
-    assert _fingerprint(engine, OLD_TABLES, ignore="integration_id") == old
+    assert _fingerprint(engine, OLD_TABLES) == old
 
     _migrate("upgrade", REVISION)
     assert _fingerprint(engine, new_tables) == first
@@ -1635,3 +1618,39 @@ def test_publishing_a_skill_named_like_an_integration(
             conn.execute(
                 text("DELETE FROM skill WHERE id = ANY(:ids)"), {"ids": skill_ids}
             )
+
+
+def test_each_integration_has_one_row_of_its_kind(
+    engine: Engine, seeded: Seeded
+) -> None:
+    """The database ties each integration to exactly one row of its kind, and
+    deleting that row deletes the integration."""
+    _migrate("upgrade", "head")
+    for row in (
+        # No row of its kind.
+        {"tool_id": None},
+        # An MCP integration that points at a tool row.
+        {"tool_id": seeded.tool_read},
+    ):
+        with engine.begin() as conn, pytest.raises(IntegrityError):
+            conn.execute(
+                text(
+                    "INSERT INTO integration (kind, name, auth_mode, tool_id) "
+                    "VALUES ('mcp', 'u1-no-kind-row', 'none', :tool_id)"
+                ),
+                row,
+            )
+
+    with engine.begin() as conn:
+        integration_id = _kind_integration(conn, "mcp_server", seeded.mcp_orphan)
+        assert integration_id is not None
+        conn.execute(
+            text("DELETE FROM mcp_server WHERE id = :id"), {"id": seeded.mcp_orphan}
+        )
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM integration WHERE id = :id"),
+                {"id": integration_id},
+            ).scalar_one()
+            == 0
+        )

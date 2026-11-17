@@ -4765,17 +4765,6 @@ class Tool(Base):
         Integer, ForeignKey("oauth_config.id", ondelete="SET NULL"), nullable=True
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    # Set on an OpenAPI custom tool: the integration whose spec this row holds.
-    integration_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey(
-            "integration.id",
-            ondelete="SET NULL",
-            name="fk_tool_integration_id",
-        ),
-        nullable=True,
-        unique=True,
-    )
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
     oauth_config: Mapped["OAuthConfig | None"] = relationship(
@@ -6037,7 +6026,7 @@ class Integration(Base):
     stands alone: a plugin holds it through ``plugin__integration``, and that
     plugin gives the access and the install setting. The settings of each kind
     stay on the kind's own table (``mcp_server``, ``external_app``, or the
-    OpenAPI ``tool`` row), which points here through ``integration_id``.
+    OpenAPI ``tool`` row), which this row points at, as ``GatedApp`` does.
 
     Read a kind table only for the settings of its kind: the server URL and
     transport, the preset and URL patterns, the spec. Its name, owner, access,
@@ -6097,6 +6086,23 @@ class Integration(Base):
     users_can_save_always_allow: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )
+    # The row of its kind that holds the settings: exactly one is set, and it
+    # matches kind. Deleting that row deletes the integration.
+    mcp_server_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("mcp_server.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+    )
+    external_app_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+    )
+    tool_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("tool.id", ondelete="CASCADE"), nullable=True, unique=True
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -6125,6 +6131,16 @@ class Integration(Base):
         # The value checks of the integration tables: SQL migrations write
         # these columns as plain strings, past the enum type. A value outside
         # the enum makes each ORM read of the row raise.
+        # Old code still writes the kind tables, so the database keeps each
+        # integration tied to exactly one row of its kind.
+        CheckConstraint(
+            "num_nonnulls(mcp_server_id, external_app_id, tool_id) = 1",
+            name="ck_integration_single_kind_row",
+        ),
+        CheckConstraint(
+            "(kind = 'mcp') = (mcp_server_id IS NOT NULL)",
+            name="ck_integration_kind_row",
+        ),
         CheckConstraint("kind IN ('mcp', 'api')", name="ck_integration_kind"),
         CheckConstraint(
             "auth_mode IN ('none', 'shared', 'individual')",
@@ -7523,17 +7539,6 @@ class MCPServer(Base):
     )
     last_refreshed_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
-    )
-    # The integration whose MCP settings this row holds.
-    integration_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey(
-            "integration.id",
-            ondelete="SET NULL",
-            name="fk_mcp_server_integration_id",
-        ),
-        nullable=True,
-        unique=True,
     )
 
     # Relationships
@@ -8994,17 +8999,6 @@ class ExternalApp(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
-    )
-    # The integration whose API settings this row holds.
-    integration_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey(
-            "integration.id",
-            ondelete="SET NULL",
-            name="fk_external_app_integration_id",
-        ),
-        nullable=True,
-        unique=True,
     )
 
     associated_skills: Mapped[list["Skill"]] = relationship(

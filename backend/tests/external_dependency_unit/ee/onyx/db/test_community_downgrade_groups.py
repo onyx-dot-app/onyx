@@ -392,10 +392,19 @@ def test_group_shared_integration_is_published(db_session: Session) -> None:
         db_session.add(
             PluginVersion(id=plugin_id, plugin_id=plugin_id, version_number=1)
         )
+        server = MCPServer(
+            owner=owner.email,
+            name=f"downgrade-{plugin_id.hex[:8]}",
+            server_url="https://example.com/mcp",
+            is_public=False,
+        )
+        db_session.add(server)
+        db_session.flush()
         integration = Integration(
             kind=IntegrationKind.MCP,
             name="downgrade-mcp",
             auth_mode=IntegrationAuthMode.NONE,
+            mcp_server_id=server.id,
         )
         db_session.add(integration)
         db_session.flush()
@@ -450,10 +459,19 @@ def test_group_shared_library_integration_stays_not_available(
         db_session.add(
             PluginVersion(id=plugin_id, plugin_id=plugin_id, version_number=1)
         )
+        server = MCPServer(
+            owner=owner.email,
+            name=f"downgrade-{plugin_id.hex[:8]}",
+            server_url="https://example.com/mcp",
+            is_public=False,
+        )
+        db_session.add(server)
+        db_session.flush()
         integration = Integration(
             kind=IntegrationKind.MCP,
             name="downgrade-mcp",
             auth_mode=IntegrationAuthMode.NONE,
+            mcp_server_id=server.id,
         )
         db_session.add(integration)
         db_session.flush()
