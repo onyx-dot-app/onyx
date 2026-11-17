@@ -1,10 +1,11 @@
-"""An in-memory Drive tenant for exercising the listing engines.
+"""An in-memory Drive tenant for exercising the shard engine.
 
 It replaces the listing functions and the gateway operations the connector
 calls (not the raw Google client), so tests control who sees what and how
 listings paginate. For the shard engine it reads only the parts of the query
-that engine writes: the folder-only term, the owner terms and the
-modifiedTime range. The tenant lists no folders. Page tokens
+that engine writes: the parent term, the folder-only term, the owner terms
+and the modifiedTime range. The tenant lists no folders, so a requested
+folder has no subfolders. Page tokens
 are scoped to the listing that issued them; reusing one for a different
 principal or partition fails the test.
 """
@@ -27,7 +28,6 @@ from onyx.connectors.google_drive.drive_access import (
 )
 from onyx.connectors.google_drive.file_retrieval import RESOLVED_FROM_SHORTCUT_KEY
 from onyx.connectors.google_drive.models import (
-    DriveRetrievalStage,
     GoogleDriveCheckpoint,
     RetrievedDriveFile,
 )
@@ -43,6 +43,7 @@ DOMAIN = "co.com"
 PAGE_SIZE = 2
 
 _OWNER_TERM = re.compile(r"'([^']+)' in owners")
+_PARENT_TERM = re.compile(r"'([^']+)' in parents")
 _TIME_TERM = re.compile(r"modifiedTime (>=|<) '([^']+)'")
 _FOLDERS_TERM = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
 
@@ -152,37 +153,6 @@ class FakeTenant:
             return False
         return self._drive_role(user_email, drive_id) is not None
 
-    def get_files_in_shared_drive(
-        self,
-        user_email: str,
-        drive_id: str,
-        max_num_pages: int,
-        page_token: str | None = None,
-        **_kwargs: object,
-    ) -> Iterator[dict[str, Any] | str]:
-        email = user_email
-        if email in self.broken_users:
-            raise GoogleDriveRefreshError("token_refresh_failed")
-        files = self._drive_listing(email, drive_id)
-        yield from _paged(files, f"drive:{drive_id}:{email}", max_num_pages, page_token)
-
-    def get_all_files_in_my_drive_and_shared(
-        self,
-        user_email: str,
-        include_shared_with_me: bool,
-        max_num_pages: int,
-        page_token: str | None = None,
-        **_kwargs: object,
-    ) -> Iterator[dict[str, Any] | str]:
-        email = user_email
-        if email in self.broken_users:
-            raise GoogleDriveRefreshError("token_refresh_failed")
-        files = list(self.my_drive.get(email, []))
-        if include_shared_with_me:
-            files += self.shared_with.get(email, [])
-        scope = f"user:{email}:{include_shared_with_me}"
-        yield from _paged(files, scope, max_num_pages, page_token)
-
     def probe_target(self, *, user_email: str, target_id: str) -> dict[str, Any] | None:
         folder = self.folders.get(target_id)
         if folder is None or user_email not in folder.visible_files:
@@ -206,23 +176,6 @@ class FakeTenant:
             if email.endswith(f"@{google_domain}")
         )
 
-    def crawl_folders_for_files(
-        self,
-        parent_id: str,
-        user_email: str,
-        **_kwargs: object,
-    ) -> Iterator[RetrievedDriveFile]:
-        folder = self.folders[parent_id]
-        if user_email in self.broken_users:
-            raise GoogleDriveRefreshError("token_refresh_failed")
-        for file_id in folder.visible_files.get(user_email, []):
-            yield RetrievedDriveFile(
-                completion_stage=DriveRetrievalStage.FOLDER_FILES,
-                drive_file=drive_file(file_id, owner=folder.owner),
-                user_email=user_email,
-                parent_id=parent_id,
-            )
-
     def list_files(
         self,
         *,
@@ -239,8 +192,19 @@ class FakeTenant:
         if user_email in self.broken_users:
             raise GoogleDriveRefreshError("token_refresh_failed")
         query = query or ""
-        if _FOLDERS_TERM in query:
+        parent = _PARENT_TERM.search(query)
+        if parent is not None:
+            # A walk of a requested folder. Only a query with a time range
+            # asks for files.
+            folder = self.folders.get(parent.group(1))
             files: list[dict[str, Any]] = []
+            if folder is not None and "modifiedTime" in query:
+                files = [
+                    drive_file(file_id, owner=folder.owner)
+                    for file_id in folder.visible_files.get(user_email, [])
+                ]
+        elif _FOLDERS_TERM in query:
+            files = []
         elif variant is DriveCorpus.DRIVE and drive_id is not None:
             files = self._drive_listing(user_email, drive_id)
         elif "not 'me' in owners" in query:
@@ -297,14 +261,7 @@ class FakeTenant:
         fakes: dict[str, object] = {
             "list_drive_members": self.list_drive_members,
             "list_group_member_emails": self.list_group_member_emails,
-            "get_files_in_shared_drive": self._without_ops(
-                self.get_files_in_shared_drive
-            ),
-            "get_all_files_in_my_drive_and_shared": self._without_ops(
-                self.get_all_files_in_my_drive_and_shared
-            ),
             "internal_principals_of": self.internal_principals_of,
-            "crawl_folders_for_files": self._without_ops(self.crawl_folders_for_files),
         }
         for name, fake in fakes.items():
             stack.enter_context(patch.object(connector_mod, name, fake))
@@ -329,20 +286,10 @@ class FakeTenant:
             patch.object(
                 connector,
                 "_convert_retrieved_files_to_documents",
-                side_effect=lambda files, _checkpoint, _perms: iter(files),
+                side_effect=lambda files, _checkpoint, _listing, _perms: iter(files),
             )
         )
         return stack
-
-    @staticmethod
-    def _without_ops(function: Any) -> Any:
-        """Drops the ``ops`` keyword the connector passes to listing
-        functions; the tenant answers them itself."""
-
-        def call(*args: Any, ops: object = None, **kwargs: Any) -> Any:  # noqa: ARG001
-            return function(*args, **kwargs)
-
-        return call
 
 
 def _paged(

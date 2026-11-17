@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
 from onyx.connectors.google_drive.models import (
-    DriveRetrievalStage,
+    DriveListingState,
     GDriveMimeType,
     RetrievedDriveFile,
 )
@@ -25,7 +25,6 @@ def _build_retrieved_file(
     permissions: list[dict[str, Any]],
 ) -> RetrievedDriveFile:
     return RetrievedDriveFile(
-        completion_stage=DriveRetrievalStage.OAUTH_FILES,
         drive_file={
             "id": "file-id",
             "name": "Test File",
@@ -90,8 +89,9 @@ def test_connector_skips_link_only_files_when_enabled() -> None:
             "onyx.connectors.google_drive.connector.convert_drive_item_to_document"
         ) as convert_mock,
         patch(
-            "onyx.connectors.google_drive.connector.GoogleDriveConnector._get_new_ancestors_for_files"
-        ) as get_new_ancestors_mock,
+            "onyx.connectors.google_drive.connector.GoogleDriveConnector._listed_folder_nodes",
+            return_value=[],
+        ) as folder_nodes_mock,
     ):
         convert_mock.return_value = "doc"
         checkpoint = connector.build_dummy_checkpoint()
@@ -99,15 +99,15 @@ def test_connector_skips_link_only_files_when_enabled() -> None:
             connector._convert_retrieved_files_to_documents(
                 drive_files_iter=iter([retrieved_file]),
                 checkpoint=checkpoint,
+                listing=DriveListingState(window_t0=0, window_t1=0),
                 include_permissions=False,
             )
         )
 
     assert results == []
     convert_mock.assert_not_called()
-    # The only file is filtered out, so no sub-batch runs and there are no
-    # ancestors to resolve.
-    get_new_ancestors_mock.assert_not_called()
+    # The only file is filtered out, so the last flush has no file.
+    assert folder_nodes_mock.call_args.args[3] == []
 
 
 def test_connector_processes_files_when_option_disabled() -> None:
@@ -125,8 +125,9 @@ def test_connector_processes_files_when_option_disabled() -> None:
             "onyx.connectors.google_drive.connector.convert_drive_item_to_document"
         ) as convert_mock,
         patch(
-            "onyx.connectors.google_drive.connector.GoogleDriveConnector._get_new_ancestors_for_files"
-        ) as get_new_ancestors_mock,
+            "onyx.connectors.google_drive.connector.GoogleDriveConnector._listed_folder_nodes",
+            return_value=[],
+        ) as folder_nodes_mock,
     ):
         convert_mock.return_value = "doc"
         checkpoint = connector.build_dummy_checkpoint()
@@ -134,10 +135,11 @@ def test_connector_processes_files_when_option_disabled() -> None:
             connector._convert_retrieved_files_to_documents(
                 drive_files_iter=iter([retrieved_file]),
                 checkpoint=checkpoint,
+                listing=DriveListingState(window_t0=0, window_t1=0),
                 include_permissions=False,
             )
         )
 
     assert len(results) == 1
     convert_mock.assert_called_once()
-    get_new_ancestors_mock.assert_called_once()
+    assert folder_nodes_mock.call_args.args[3] == [retrieved_file]
