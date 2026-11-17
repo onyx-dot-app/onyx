@@ -35,7 +35,12 @@ export const GET = async (request: NextRequest) => {
   // A native app's sign-in ends with its deep link and no web session cookie.
   const location = response.headers.get("location");
   if (isAppSignInHandoff(location)) {
-    return NextResponse.redirect(location, 302);
+    // Keep the backend's cookie cleanup (e.g. the PKCE verifier deletion).
+    const handoff = NextResponse.redirect(location, 302);
+    for (const cookie of response.headers.getSetCookie()) {
+      handoff.headers.append("set-cookie", cookie);
+    }
+    return handoff;
   }
 
   const setCookieHeaders = response.headers.getSetCookie();
