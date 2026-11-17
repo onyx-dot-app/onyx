@@ -1458,7 +1458,8 @@ class GoogleDriveConnector(
         # Permission sync and the link-only filter read the file's
         # permissions. The listing does not ask for them: with them a page
         # holds 100 files, and without them several hundred. So they are read
-        # here, for the batch.
+        # here, for the batch. A shared drive file skips the batch read:
+        # conversion reads its permissions with permissions.list.
         need_permissions = include_permissions or self.exclude_domain_link_only
         payloads: list[tuple[ResolveTarget, DriveListingPayload]] = []
         unlisted: list[ResolveTarget] = []
@@ -1479,7 +1480,11 @@ class GoogleDriveConnector(
         ] = []
         for target, payload in payloads:
             drive_file = dict(cast(GoogleDriveFileType, payload.drive_file))
-            if need_permissions and not _has_permission_fields(drive_file):
+            if (
+                need_permissions
+                and not _has_permission_fields(drive_file)
+                and not drive_file.get("driveId")
+            ):
                 fields = permission_fields.get(str(drive_file.get("id")))
                 if fields is None:
                     # No user could read its permissions. `reindex` reads the
@@ -1583,7 +1588,10 @@ class GoogleDriveConnector(
         give such a document less access than it has: for a shared drive
         file, it would leave out the drive's members. A My Drive file that no
         reader can read the permissions of is returned as it is, so it is
-        converted as on the inline path (owned outside the domain)."""
+        converted as on the inline path (owned outside the domain).
+
+        A shared drive file has no permission ids here: one permissions.list
+        read that ends with no error gives all of its permissions."""
         file_id = str(drive_file.get("id"))
         permission_ids: list[str] = drive_file.get("permissionIds") or []
         found: dict[str, dict[str, Any]] = {
@@ -1617,12 +1625,20 @@ class GoogleDriveConnector(
     ) -> dict[str, GoogleDriveFileType]:
         """The permission fields of the listed files that have none, by file
         id. One batch request for each listing user. A file whose read failed
-        is not in the result."""
+        is not in the result.
+
+        Shared drive files are left out: Drive never gives their
+        `permissions`, so conversion reads them with permissions.list, and a
+        files.get here would only spend quota."""
         ids_by_user: dict[str, list[str]] = {}
         for payload in payloads:
             drive_file = payload.drive_file or {}
             file_id = drive_file.get("id")
-            if isinstance(file_id, str) and not _has_permission_fields(drive_file):
+            if (
+                isinstance(file_id, str)
+                and not _has_permission_fields(drive_file)
+                and not drive_file.get("driveId")
+            ):
                 ids_by_user.setdefault(payload.retriever_email, []).append(file_id)
         fields: dict[str, GoogleDriveFileType] = {}
         for user_email, file_ids in ids_by_user.items():
