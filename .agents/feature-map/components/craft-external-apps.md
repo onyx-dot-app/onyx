@@ -189,7 +189,10 @@ disabled tool. A session of a scheduled run gets only the task plugins,
 also one that the owner turned off ([[craft-scheduled-tasks]]). `GET /mcp/servers/craft`
 lists the same servers, and
 `integrations/craft.py:list_connectable_apps` lists the external apps the user
-can still connect. No code reads `mcp_server.available_in_craft`.
+can still connect. No code reads `mcp_server.available_in_craft`. An
+integration change reloads running Craft sessions through
+`backend/onyx/integrations/service.py:reload_craft_sessions`, which only
+restamps `mcp_config_hash` and does not push skill files.
 
 **Credentials.** The sandbox holds only the placeholder
 `server/features/build/configs.py:SANDBOX_PROXY_INJECTED_PLACEHOLDER`. The
@@ -209,7 +212,7 @@ a connection problem, it refuses with `CredentialUnavailableError`. An internal 
 when the server belongs to a plugin that the user can see
 (`IntegrationResolver.allows_destination`).
 
-**OAuth connect.** `server/features/build/external_apps/oauth.py` binds each
+**OAuth connect.** `backend/onyx/integrations/oauth.py` binds each
 attempt to the user, app and a fingerprint of the resolved OAuth
 configuration: client, redirect and endpoints. The callback consumes the
 attempt once, rejects it when the configuration changed after the start,
@@ -315,8 +318,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     migration updates their rows. A plain append works only for literal
     patterns. A provider that overrides `resolve_upstream_url_patterns`
     (Zendesk fills `{subdomain}` from organization credentials) needs per-row
-    resolution. `db/external_app.py:update_external_app` resolves the patterns
-    again on each save of credentials or patterns.
+    resolution. `backend/onyx/integrations/service.py:update_integration__no_commit`
+    resolves the patterns again on each save of the preset settings.
 13. `connect-app-idempotent` **A connect-app decision is idempotent and
     retryable.** An expired or answered request is a no-op. When the sandbox is
     unreachable the route returns 502 and keeps the pending record, so the
@@ -427,9 +430,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 - Proxy: `backend/tests/unit/sandbox_proxy/` and
   `backend/tests/external_dependency_unit/sandbox_proxy/` (includes the
   approval claim race).
-- Matching and policies: `backend/tests/unit/external_apps/`,
-  `backend/tests/external_dependency_unit/permissions/` and
-  `backend/tests/integration/tests/external_apps/`.
+- Matching and policies: `backend/tests/unit/external_apps/` and
+  `backend/tests/external_dependency_unit/integrations/`.
 - Approval routes: `backend/tests/external_dependency_unit/craft/`.
 - End to end with a real sandbox and proxy:
   `backend/tests/integration/tests/craft/docker_e2e/`.

@@ -127,47 +127,38 @@ only the configuration of a chat that does not exist yet.
 
 ## Contracts and traps
 
-1. `default-chat-is-persona-tool` **Default Chat is `Persona__Tool` rows on the
-   default assistant.** There is no plugin or server flag.
-   `db/tools.py:get_default_chat_tool_ids` and
-   `backend/onyx/db/mcp.py:get_default_chat_mcp_server_ids` derive the state. A
-   server counts as on when any of its tools is selected.
+1. `default-chat-is-persona-tool` **Default Chat for an integration is the
+   install setting of its plugin.** Built-in tools are `Persona__Tool` rows on
+   the default assistant. The `/admin/tool/custom` aliases map
+   `default_chat_enabled` to DEFAULT
+   (`server/features/tool/api.py:_set_default_chat`).
 2. `default-chat-full-admin-only` **Only `FULL_ADMIN_PANEL_ACCESS` changes
-   Default Chat.** `server/features/tool/api.py:_validate_default_chat_permission`,
-   `server/features/mcp/api.py:_validate_mcp_setup` and the
-   `/admin/default-assistant` routes enforce it. An omitted
-   `default_chat_enabled` or `enable_chat` leaves the selection unchanged.
-3. `default-assistant-lock` **Plugin writes follow the default-assistant lock
-   rule.** [[agents-personas]] owns that rule.
-   `server/features/tool/api.py:_lock_default_chat_selection` applies it before
-   the tool row write.
-   `backend/onyx/db/persona.py:set_default_chat_tool__no_commit` changes one
-   tool and keeps the rest. On the web,
+   Default Chat.** `server/features/tool/api.py:_check_default_chat_permission`
+   and the `/admin/default-assistant` routes enforce it. An omitted
+   `default_chat_enabled` leaves the selection unchanged.
+3. `default-assistant-lock` **Built-in tool writes follow the default-assistant
+   lock rule.** [[agents-personas]] owns that rule. On the web,
    `web/src/lib/agents/hooks.ts:enqueueDefaultAssistantSave` orders saves from
    every hook instance.
 4. `missing-preference-means-enabled` **A missing preference row means
    enabled.** Both preference tables default to true. Preferences apply only to
    Default Chat and Craft; custom agents ignore them.
-   `server/features/tool/api.py:update_tool_user_preferences` and
-   `server/features/mcp/api.py:update_mcp_user_preferences` refuse to turn on
-   a plugin that is not on in Default Chat (or not available in Craft).
+   `server/features/tool/api.py:update_tool_user_preferences` sets the
+   user's choice on the plugins that hold the custom tool.
    Craft no longer reads `enabled_in_craft`: the sandbox proxy and the Craft
    MCP config use the integrations of the plugins the user runs
    (`integrations/craft.py:list_runnable_integrations`).
 5. `openapi-enabled-default-chat-only` **OpenAPI tools use `Tool.enabled` only
    for Default Chat.** `server/features/tool/models.py:CustomToolCreate`
-   rejects `enabled=false` and `server/features/tool/api.py:update_tools_status`
-   rejects OpenAPI ids. A row stored with `enabled=false`
+   rejects `enabled=false`. A row stored with `enabled=false`
    stays off in Default Chat (the upgrade leaves it out of the persona 0
    plugin links) but works on custom agents. Selecting it for Default Chat sets it to true
    (`backend/onyx/db/persona.py:_attach_default_chat_tools__no_commit`). MCP
    and built-in tools stay attached when disabled, and construction skips them.
-6. `discovery-does-not-select` **Tool discovery does not select new tools.**
-   `server/features/mcp/api.py:_sync_mcp_server_tools` never writes
-   `Persona__Tool`. A tool that a remote
-   server adds after the admin enabled the server is off in Default Chat until
-   a full admin enables the server again. Setup selects discovered tools only
-   when it is asked to (`server/features/mcp/api.py:_publish_mcp_setup`).
+6. `discovery-does-not-select` **Tool discovery writes only actions.**
+   A refresh (`backend/onyx/integrations/service.py:refresh_actions__no_commit`)
+   never writes `Persona__Tool` or agent settings. A new action follows the
+   admin default row and the agent's `default` setting.
 7. `explicit-enable-intent` **Only an explicit Enable action turns a server on
    through authentication.** `sections/actions/mcpChatEnableIntent.ts` writes a
    one-time record to session storage, bound to the user, the server and the
@@ -200,11 +191,11 @@ only the configuration of a chat that does not exist yet.
     tab (`sections/plugins/MemberPluginDetailModal.tsx`) shows for a connected
     MCP server whose `users_can_manage_policies` is on, with or without Craft.
     It reads and writes
-    `/action-policies/{kind}/{target_id}` (`server/features/action_policies/api.py`),
-    which checks server access but not Craft. External apps on the same routes
-    still need Craft. The Craft catalog list (`/build/action-policies`) and task
-    choices cover the integrations of the plugins the user runs
-    (`integrations/craft.py:list_task_plugin_views`). The plugin UI must not show
+    `/action-policies/integration/{id}` (`server/features/integrations/api.py`),
+    which checks plugin visibility but not Craft. The Craft catalog list
+    (`/build/action-policies`) and task choices cover the integrations of the
+    plugins the user runs (`integrations/craft.py:list_task_plugin_views`). The
+    plugin UI must not show
     read or write badges to members.
 12. `shared-oauth-config-shared-connection` **OpenAPI tools that share an
     `OAuthConfig` share each user's connection.** `OAuthUserToken` is unique on
@@ -258,8 +249,7 @@ only the configuration of a chat that does not exist yet.
 
 - Web unit tests sit next to the code in `web/src/sections/plugins/`,
   `web/src/sections/actions/` and `web/src/lib/plugins/`.
-- Backend: `backend/tests/unit/onyx/server/features/tool/` and the Default Chat
-  and preference tests in `backend/tests/unit/onyx/server/features/mcp/`.
+- Backend: `backend/tests/external_dependency_unit/integrations/test_integrations_api.py`.
 - Playwright: `web/tests/e2e/mcp/`, which covers Default Chat.
 - By hand, enable a server for Default Chat from the plugin page and confirm
   that Admin > Chat Preferences shows its tools selected. Then turn it off as a
