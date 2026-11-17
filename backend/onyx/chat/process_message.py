@@ -80,10 +80,10 @@ from onyx.db.chat import (
     create_new_chat_message,
     find_summary_for_branch,
     get_chat_session_by_id,
-    get_chat_session_tool_options,
     load_message_branch,
     reserve_chat_response_ids,
     reserve_stream_id,
+    resolve_tool_options,
     set_response_model_names__no_commit,
 )
 from onyx.db.chat_checkpoint import parked_response_settings
@@ -152,7 +152,7 @@ from onyx.tools.constants import (
     FILE_READER_TOOL_ID,
     SEARCH_TOOL_ID,
 )
-from onyx.tools.models import CapabilityPreference, SearchToolUsage
+from onyx.tools.models import CapabilityEntry, SearchToolUsage
 from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
@@ -349,8 +349,8 @@ def prepare_chat_turn(
             )
             # Other turns that the server starts use the chat's saved tool
             # options.
-            saved_options = parked_options or get_chat_session_tool_options(
-                db_session, chat_session
+            saved_options = parked_options or resolve_tool_options(
+                db_session, chat_session.tool_options, chat_session.tool_selection
             )
             if server_started and saved_options is not None:
                 new_msg_req = new_msg_req.model_copy(
@@ -529,7 +529,7 @@ def prepare_chat_turn(
             )
             if (
                 chat_session.incognito_record_mode is not None
-                and isinstance(preferred_tool, CapabilityPreference)
+                and isinstance(preferred_tool, CapabilityEntry)
                 and any(
                     tool.id == preferred_tool.tool_id
                     and tool.in_code_tool_id == CODING_AGENT_TOOL_ID
@@ -839,7 +839,7 @@ def prepare_chat_turn(
         # Inline project context replaces retrieval for this request.
         if (
             search_params.search_usage == SearchToolUsage.DISABLED
-            and isinstance(preferred_tool, CapabilityPreference)
+            and isinstance(preferred_tool, CapabilityEntry)
             and (
                 new_msg_req.tool_options is None
                 or new_msg_req.tool_options.allows_tool(preferred_tool.tool_id)

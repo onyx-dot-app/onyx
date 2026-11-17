@@ -47,7 +47,7 @@ from onyx.db.enums import (
     Permission,
     PermissionAuthority,
 )
-from onyx.db.integration import get_integration_plugin_ids
+from onyx.db.integration import get_mcp_server_plugin_ids
 from onyx.db.mcp import (
     affected_user_ids_for_mcp_server,
     clear_mcp_admin_connection_config__no_commit,
@@ -1413,11 +1413,6 @@ def _db_mcp_server_to_api_mcp_server(
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
         available_in_craft=db_server.available_in_craft,
-        plugin_ids=get_integration_plugin_ids([db_server.integration_id], db).get(
-            db_server.integration_id, []
-        )
-        if db_server.integration_id is not None
-        else [],
         users_can_manage_policies=users_can_manage_policies(
             db, GatedAppKind.MCP_SERVER, db_server.id
         ),
@@ -1433,6 +1428,12 @@ def _db_mcp_server_to_api_mcp_server(
         admin_credentials=admin_credentials,
         permissions=permissions or {},
     )
+
+
+def _stamp_plugin_ids(servers: list[MCPServer], db: Session) -> None:
+    plugin_ids = get_mcp_server_plugin_ids([server.id for server in servers], db)
+    for server in servers:
+        server.plugin_ids = plugin_ids.get(server.id, [])
 
 
 def _stamp_user_preferences(servers: list[MCPServer], user: User, db: Session) -> None:
@@ -1521,6 +1522,7 @@ def get_mcp_servers_for_assistant(
             for db_server in db_mcp_servers
         ]
 
+        _stamp_plugin_ids(mcp_servers, db)
         _stamp_user_preferences(mcp_servers, user, db)
         return MCPServersResponse(assistant_id=assistant_id, mcp_servers=mcp_servers)
 
@@ -1548,6 +1550,7 @@ def get_mcp_servers_for_user(
     ]
     for server in mcp_servers:
         server.default_chat_enabled = server.id in default_chat_server_ids
+    _stamp_plugin_ids(mcp_servers, db)
     _stamp_user_preferences(mcp_servers, user, db)
     return MCPServersResponse(mcp_servers=mcp_servers)
 
@@ -1584,6 +1587,7 @@ def get_craft_mcp_servers_for_user(
             server.connection_status == MCPConnectionStatus.CONNECTED
         )
         mcp_servers.append(server)
+    _stamp_plugin_ids(mcp_servers, db)
     _stamp_user_preferences(mcp_servers, user, db)
     return MCPServersResponse(mcp_servers=mcp_servers)
 
@@ -2565,6 +2569,7 @@ def get_mcp_servers_for_admin(
         ]
         for server in mcp_servers:
             server.default_chat_enabled = server.id in default_chat_server_ids
+        _stamp_plugin_ids(mcp_servers, db)
 
         return MCPServersResponse(mcp_servers=mcp_servers)
 

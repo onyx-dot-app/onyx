@@ -71,7 +71,6 @@ from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.constants import CODING_AGENT_TOOL_ID
 from onyx.tools.models import (
     CapabilityEntry,
-    CapabilityPreference,
     PersonaToolConfiguration,
     ToolOptions,
 )
@@ -589,7 +588,7 @@ def test_incognito_rejects_a_preferred_coding_agent_before_the_question_is_saved
             SendMessageRequest(
                 message="Question",
                 chat_session_id=chat_session.id,
-                tool_options=ToolOptions(preferred=CapabilityPreference(tool_id=7)),
+                tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=7)),
             ),
             User(id=uuid4(), email="reader@example.com"),
             llm_overrides=None,
@@ -608,7 +607,7 @@ def test_a_queued_turn_uses_the_saved_tools_and_search_filters(
     filters = BaseFilters(document_set=["Handbook"])
     saved = ToolOptions(
         allowed=[CapabilityEntry(tool_id=3)],
-        preferred=CapabilityPreference(tool_id=3),
+        preferred=CapabilityEntry(tool_id=3),
         internal_search_filters=filters,
     )
     chat_session.tool_options = saved
@@ -640,7 +639,7 @@ def test_a_queued_turn_uses_the_saved_tools_and_search_filters(
             ),
         )
     assert setup.new_msg_req.tool_options == saved
-    assert setup.preferred_tool == CapabilityPreference(tool_id=3)
+    assert setup.preferred_tool == CapabilityEntry(tool_id=3)
     check_access.assert_called_once_with(ANY, ["Handbook"], ANY)
     setup.admission.release()
 

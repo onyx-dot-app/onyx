@@ -45,7 +45,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import FILE_READER_TOOL_NAME, WAIT_CODE_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
-    CapabilityPreference,
+    CapabilityEntry,
     CodeModeExposure,
     CustomToolCallSummary,
     LlmPythonExecutionResult,
@@ -428,7 +428,7 @@ def test_code_mode_names_preferred_tools_without_changing_definitions(
         user_memory_context=None,
         llm=llm,
         token_counter=len,
-        preferred_tool=CapabilityPreference(tool_id=preferred_tool_id),
+        preferred_tool=CapabilityEntry(tool_id=preferred_tool_id),
     )
     run_agent(agent, messages=[UserMessage(content="Find")], max_steps=3)
 

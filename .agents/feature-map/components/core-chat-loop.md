@@ -152,7 +152,7 @@ means the agent's tools) has one writer, the
 document-set access, saves only the fields the body sets, and stores nothing
 for a chat whose record mode keeps no content. The chat-session detail returns
 the options to their owner. A chat with no `tool_options` reads the old
-`chat_session.tool_selection` column (`db/chat.py:get_chat_session_tool_options`):
+`chat_session.tool_selection` column (`db/chat.py:resolve_tool_options`):
 built-in tool ids carry over and other ids are ignored. Nothing writes the old
 column. The chat's model is `current_alternate_model`,
 which the web writes through `PUT /chat/update-chat-session-model` on each

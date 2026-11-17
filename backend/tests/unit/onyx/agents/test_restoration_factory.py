@@ -39,7 +39,7 @@ from onyx.llm.models import (
 from onyx.skills.models import ChatSkill
 from onyx.tools.constants import WAIT_CODE_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import CapabilityPreference
+from onyx.tools.models import CapabilityEntry
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
@@ -62,7 +62,7 @@ def feature(
         chat = ChatAgent(
             messages=context.messages,
             tools=[EchoTool()],
-            preferred_tool=CapabilityPreference(tool_id=1),
+            preferred_tool=CapabilityEntry(tool_id=1),
             custom_agent_prompt="Hello {{user.name}}",
             additional_context="Use the current request context.",
             base_system_prompt="Base instructions",
@@ -240,6 +240,46 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
     assert rebuilt.state == saved.agent_state
 
 
+def test_restore_drops_an_old_preferred_tool_id_that_no_tool_offers() -> None:
+    llm = FakeModelClient(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="done")])
+    )
+    original = feature("chat", llm, AgentState())
+    state = original.capture_state().model_dump(mode="json")
+    del state["preferred_tool"]
+    # An MCP tool id from a run saved before tool options; MCP tools have no id now.
+    state["preferred_tool_id"] = 999
+    checkpoint = ExecutionCheckpoint(
+        agent_state=original.state,
+        run_state=RunState(
+            run_id="legacy-run",
+            agent_id=original.id,
+            status=RunStatus.SUSPENDED,
+            steps=[],
+            progress=RunProgress(step_limit=3, feature_state=state),
+        ),
+    )
+    rebuilt = restore_chat_agent(
+        checkpoint,
+        0,
+        llm=llm,
+        tools=[EchoTool()],
+        user_identity=None,
+        subagent_factory=lambda _depth: pytest.fail("No agent tools"),
+    )
+    assert isinstance(rebuilt, ChatAgent)
+    rebuilt.restore_state(state)
+    assert rebuilt.preferred_tool is None
+    rebuilt._prepare_step(
+        StepInput(
+            history=[UserMessage(content="Question")],
+            input_messages=[],
+            messages=[],
+            step=AgentStep(index=0, limit=2),
+        )
+    )
+
+
 def test_factory_rejects_checkpoint_without_supported_feature_state() -> None:
     checkpoint = ExecutionCheckpoint(
         agent_state=AgentState(),
@@ -300,7 +340,7 @@ def _chat_agent(
         user_memory_context=None,
         llm=llm,
         token_counter=len,
-        preferred_tool=CapabilityPreference(tool_id=EchoTool().id),
+        preferred_tool=CapabilityEntry(tool_id=EchoTool().id),
         agent_id="retained-agent",
     )
 

@@ -4,7 +4,7 @@
 from onyx.configs.constants import DocumentSource
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.constants import SEARCH_TOOL_ID
-from onyx.tools.models import CapabilityPreference, ToolOptions
+from onyx.tools.models import CapabilityEntry, ToolOptions
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -88,9 +88,7 @@ def test_program_runs_nested_search_and_keeps_its_store_across_messages(
         chat_session_id=chat_session.id,
         message="Search for alpha.",
         user_performing_action=admin_user,
-        tool_options=ToolOptions(
-            preferred=CapabilityPreference(tool_id=search_tool_id)
-        ),
+        tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=search_tool_id)),
     )
 
     assert first.error is None, f"Unexpected stream error: {first.error}"

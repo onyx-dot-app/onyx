@@ -5,7 +5,7 @@ import pytest
 from onyx.configs import app_configs
 from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
-from onyx.tools.models import CapabilityPreference, ToolOptions
+from onyx.tools.models import CapabilityEntry, ToolOptions
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -96,9 +96,7 @@ def test_preferred_tool_executes_when_available(
         chat_session_id=chat_session.id,
         message="prefer the search tool",
         user_performing_action=admin_user,
-        tool_options=ToolOptions(
-            preferred=CapabilityPreference(tool_id=search_tool_id)
-        ),
+        tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=search_tool_id)),
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
@@ -152,7 +150,7 @@ def test_search_preference_uses_inline_project_files(
         user_performing_action=admin_user,
         tool_options=ToolOptions(
             allowed=None if allow_search else [],
-            preferred=CapabilityPreference(tool_id=search_tool_id),
+            preferred=CapabilityEntry(tool_id=search_tool_id),
         ),
     )
 
@@ -192,9 +190,7 @@ def test_preferred_tool_rejected_when_not_in_persona_tools(
         chat_session_id=chat_session.id,
         message="prefer a missing tool",
         user_performing_action=admin_user,
-        tool_options=ToolOptions(
-            preferred=CapabilityPreference(tool_id=search_tool_id)
-        ),
+        tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=search_tool_id)),
     )
 
     assert response.error is not None
@@ -258,7 +254,7 @@ def test_preferred_and_allowlist_conflict_returns_validation_error(
         message="prefer a tool blocked by allowlist",
         user_performing_action=admin_user,
         tool_options=ToolOptions(
-            allowed=[], preferred=CapabilityPreference(tool_id=search_tool_id)
+            allowed=[], preferred=CapabilityEntry(tool_id=search_tool_id)
         ),
     )
 
@@ -292,9 +288,7 @@ def test_preference_is_optional_and_does_not_leak_into_followup(
         chat_session_id=chat_session.id,
         message="Hello",
         user_performing_action=admin_user,
-        tool_options=ToolOptions(
-            preferred=CapabilityPreference(tool_id=search_tool_id)
-        ),
+        tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=search_tool_id)),
     )
     second = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
@@ -355,9 +349,7 @@ def test_parallel_tool_calls_each_get_a_debug_entry(
         chat_session_id=chat_session.id,
         message="run the search tool twice",
         user_performing_action=admin_user,
-        tool_options=ToolOptions(
-            preferred=CapabilityPreference(tool_id=search_tool_id)
-        ),
+        tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=search_tool_id)),
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
@@ -407,9 +399,7 @@ def test_preferred_tool_call_written_as_xml_executes(
         chat_session_id=chat_session.id,
         message="use the search tool",
         user_performing_action=admin_user,
-        tool_options=ToolOptions(
-            preferred=CapabilityPreference(tool_id=search_tool_id)
-        ),
+        tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=search_tool_id)),
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"

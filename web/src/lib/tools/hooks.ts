@@ -363,13 +363,13 @@ function effectiveOptions(
  * out is off.
  */
 function configurationFrom(
-  selection: ChatToolOptions,
+  options: ChatToolOptions,
   agentTools: readonly ToolSnapshot[],
   pluginIds: readonly string[]
 ): ChatConfiguration {
   const tools: Record<number, ToolState> = {};
   const plugins: Record<string, "disabled"> = {};
-  const allowed = selection.allowed;
+  const allowed = options.allowed;
   if (allowed !== null) {
     for (const tool of agentTools) {
       if (
@@ -391,10 +391,10 @@ function configurationFrom(
       }
     }
   }
-  if (selection.preferred?.type === "capability") {
-    tools[selection.preferred.tool_id] = "preferred";
+  if (options.preferred?.type === "capability") {
+    tools[options.preferred.tool_id] = "preferred";
   }
-  const filters = selection.internal_search_filters;
+  const filters = options.internal_search_filters;
   const rangeStart = filters?.updated_at_range?.start ?? null;
   return {
     tools,
@@ -422,9 +422,8 @@ function allowedEntries(
   agent: MinimalAgent,
   pluginIds: readonly string[]
 ): ToolOptionsEntry[] | null {
-  const ids = Object.keys(tools).map(Number);
   if (
-    !ids.some((id) => tools[id] === "disabled") &&
+    !Object.values(tools).includes("disabled") &&
     Object.keys(plugins).length === 0
   ) {
     return null;
@@ -724,16 +723,16 @@ export function useToolConfiguration(
   const { user } = useUser();
   const chatSessionId =
     newChatWithAgentId === undefined ? appPosition.chat() : null;
-  // The server's copy of an existing chat's selection, undefined until its
+  // The server's copy of an existing chat's options, undefined until its
   // details load, and the user's edits that the server has not confirmed.
   // The store holds both for every composer, so a remount or a chat switch
   // never loses a choice whose save is still running.
-  const savedSelection = useChatSessionStore((state) =>
+  const savedOptions = useChatSessionStore((state) =>
     chatSessionId === null
       ? undefined
       : state.sessions.get(chatSessionId)?.toolOptions
   );
-  const selectionEdits = useChatSessionStore((state) =>
+  const optionsEdits = useChatSessionStore((state) =>
     chatSessionId === null
       ? undefined
       : state.sessions.get(chatSessionId)?.toolOptionsEdits
@@ -806,13 +805,13 @@ export function useToolConfiguration(
   }, [key, chatSessionId, activeAgent, pluginIds]);
 
   const chatConfiguration = useMemo(() => {
-    const selection = effectiveOptions(savedSelection, selectionEdits);
-    return selection === undefined ||
+    const options = effectiveOptions(savedOptions, optionsEdits);
+    return options === undefined ||
       agentTools === undefined ||
       pluginIds === null
       ? null
-      : configurationFrom(selection, agentTools, pluginIds);
-  }, [savedSelection, selectionEdits, agentTools, pluginIds]);
+      : configurationFrom(options, agentTools, pluginIds);
+  }, [savedOptions, optionsEdits, agentTools, pluginIds]);
 
   const isChat = key !== null && isChatKey(key);
   const configuration = isChat
@@ -841,13 +840,13 @@ export function useToolConfiguration(
       }
       const store = useChatSessionStore.getState();
       const session = store.sessions.get(chatSessionId);
-      const selection = effectiveOptions(
+      const options = effectiveOptions(
         session?.toolOptions,
         session?.toolOptionsEdits
       );
-      if (selection === undefined) return;
+      if (options === undefined) return;
       const fields = change(
-        configurationFrom(selection, activeAgent.tools, pluginIds)
+        configurationFrom(options, activeAgent.tools, pluginIds)
       );
       if (fields === null) return;
       store.updateSessionData(chatSessionId, {
@@ -895,15 +894,15 @@ export function useToolConfiguration(
     (ids: readonly string[], enabled: boolean) => {
       if (key === null) return;
       const change = (current: PluginConfiguration): PluginConfiguration => {
+        if (ids.every((id) => (current[id] === "disabled") !== enabled)) {
+          return current;
+        }
         const next: Record<string, "disabled"> = { ...current };
         for (const id of ids) {
           if (enabled) delete next[id];
           else next[id] = "disabled";
         }
-        return Object.keys(next).length === Object.keys(current).length &&
-          Object.keys(next).every((id) => current[id] === next[id])
-          ? current
-          : next;
+        return next;
       };
       if (isChatKey(key)) {
         editChat((current) => {
@@ -1022,13 +1021,13 @@ export function useToolConfiguration(
   const t = useTranslations("actions");
   const signedIn = user !== null && !user.is_anonymous_user;
   useEffect(() => {
-    if (chatSessionId === null || !signedIn || selectionEdits === undefined) {
+    if (chatSessionId === null || !signedIn || optionsEdits === undefined) {
       return;
     }
     void saveToolOptionsEdits(chatSessionId, () =>
       toast.error(t("toolsPopover.selectionSaveFailed"))
     );
-  }, [chatSessionId, signedIn, selectionEdits, t]);
+  }, [chatSessionId, signedIn, optionsEdits, t]);
 
   return handle;
 }

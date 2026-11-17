@@ -128,6 +128,7 @@ def test_update_and_catalog_preserve_admin_state_and_connection(
     assert other_snapshots[0].user_enabled_in_chat is True
     monkeypatch.setattr(api, "get_tools", lambda *_, **__: [tool])
     monkeypatch.setattr(api, "get_mcp_servers_accessible_to_user", lambda *_: [])
+    monkeypatch.setattr(api, "get_tool_plugin_ids", lambda *_: {})
     monkeypatch.setattr(api, "get_default_chat_tool_ids", lambda *_: {42})
     catalog = api.list_tools(preference_db, user)
     assert [

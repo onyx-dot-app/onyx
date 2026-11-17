@@ -171,6 +171,7 @@ def test_member_catalog_retains_personal_disabled_servers(
         lambda *_: [MCPServer(id=42), MCPServer(id=43)],
     )
     monkeypatch.setattr(api, "get_default_chat_mcp_server_ids", lambda *_: {42, 43})
+    monkeypatch.setattr(api, "get_mcp_server_plugin_ids", lambda *_: {})
     monkeypatch.setattr(
         api,
         "_db_mcp_server_to_api_mcp_server",

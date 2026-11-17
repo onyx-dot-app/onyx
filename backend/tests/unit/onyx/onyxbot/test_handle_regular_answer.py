@@ -21,7 +21,7 @@ from onyx.onyxbot.slack.models import (
     SlackMessageInfo,
     ThreadMessage,
 )
-from onyx.tools.models import CapabilityPreference
+from onyx.tools.models import CapabilityEntry
 from shared_configs.contextvars import get_current_user_id
 
 _HANDLE_REGULAR_ANSWER = "onyx.onyxbot.slack.handlers.handle_regular_answer"
@@ -693,7 +693,7 @@ def test_search_tool_preferred_only_when_usable(
     stream_call_kwargs = mock_run_chat_turn.call_args.kwargs
     tool_options = stream_call_kwargs["new_msg_req"].tool_options
     assert tool_options.preferred == (
-        CapabilityPreference(tool_id=expected_preferred_id)
+        CapabilityEntry(tool_id=expected_preferred_id)
         if expected_preferred_id is not None
         else None
     )

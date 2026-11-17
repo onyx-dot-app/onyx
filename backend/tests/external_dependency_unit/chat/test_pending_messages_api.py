@@ -91,7 +91,7 @@ from onyx.server.query_and_chat.streaming_models import (
     UserMessagePacket,
 )
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
-from onyx.tools.models import CapabilityEntry, CapabilityPreference, ToolOptions
+from onyx.tools.models import CapabilityEntry, ToolOptions
 from onyx.tools.tool_implementations.code_mode.store import ProgramStore
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.external_dependency_unit.conftest import MakeTestUser
@@ -2382,7 +2382,7 @@ def test_a_queued_turn_runs_without_a_saved_preferred_tool_that_is_gone(
         response,
         db_session,
         monkeypatch,
-        tool_options=ToolOptions(preferred=CapabilityPreference(tool_id=2_000_000_000)),
+        tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=2_000_000_000)),
     )
     assert answer.response_status == RunStatus.COMPLETE
     assert answer.message == "Done"
