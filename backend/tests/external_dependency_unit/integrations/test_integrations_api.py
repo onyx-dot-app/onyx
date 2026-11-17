@@ -41,6 +41,7 @@ from onyx.db.models import (
 )
 from onyx.db.persona import upsert_persona
 from onyx.db.plugin import lock_plugin, publish_or_request_review__no_commit
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import ConnectionSecret
 from onyx.integrations.models import (
@@ -49,6 +50,7 @@ from onyx.integrations.models import (
     LinkValue,
     PersonaPluginLink,
 )
+from onyx.integrations.oauth import start_integration_oauth
 from onyx.server.features.integrations import admin_api, api
 from onyx.server.features.integrations.models import (
     ActionGrantsUpdate,
@@ -527,6 +529,27 @@ def test_client_id_change_resets_connections_and_secret_change_does_not(
     stored = get_oauth_client(db_session, detail.id)
     assert stored is not None and stored.client_secret is not None
     assert stored.client_secret.get_value(apply_mask=False) == "secret-2"
+
+
+def test_scoped_owner_starts_the_organization_sign_in_of_its_integration(
+    db_session: Session, scoped: User, member: User, created: Created
+) -> None:
+    """A scoped manage:actions holder signs in for the organization on an
+    integration in its "My uploads"; another member cannot."""
+    request = _oauth_create()
+    request.for_organization = False
+    request.auth_mode = IntegrationAuthMode.SHARED
+    detail = admin_api.create_integration(request, scoped, db_session)
+    created.add(detail.id)
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+
+    url = start_integration_oauth(integration, scoped, db_session)
+    assert url.startswith("https://auth.example.com/authorize")
+
+    with pytest.raises(OnyxError) as error:
+        start_integration_oauth(integration, member, db_session)
+    assert error.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
 
 def test_organization_connection_put_and_delete(

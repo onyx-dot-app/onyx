@@ -35,7 +35,7 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_global
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.mcp import update_mcp_server__no_commit
+from onyx.db.integration_connection import delete_connection__no_commit
 from onyx.db.models import User
 
 _HERE = Path(__file__).parent
@@ -382,7 +382,7 @@ def _dummy_app() -> FastAPI:
         _user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
         db_session: Session = Depends(get_session),
     ) -> None:
-        update_mcp_server__no_commit(server_id=1, db_session=db_session)
+        delete_connection__no_commit(db_session, 1, None)
 
     app = FastAPI()
     app.include_router(router)

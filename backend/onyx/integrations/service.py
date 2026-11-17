@@ -67,11 +67,11 @@ from onyx.integrations.connections import (
     integration_status,
     mark_sign_in_settings_changed,
     oauth_client_configured,
+    sign_in_host,
     sign_in_settings_for,
 )
 from onyx.integrations.kinds.mcp_server import fetch_mcp_actions
 from onyx.integrations.models import ApiConfig, ApiShape, EffectivePolicy
-from onyx.integrations.oauth import sign_in_host
 from onyx.integrations.policy import (
     DEFAULT_ACTION_KEY,
     STORED_TO_EFFECTIVE,
@@ -1277,13 +1277,16 @@ def craft_users_of_integration(integration_id: int, db_session: Session) -> set[
 
 def reload_craft_sessions(user_ids: set[UUID], db_session: Session) -> None:
     """Restamp the running sandboxes of ``user_ids`` so a live Craft session
-    picks up an integration change on its next turn. Call it after the
-    commit; it is best-effort."""
+    picks up an integration change on its next turn, and push their skills:
+    a built-in app skill names the actions the admin blocked and the account
+    of the preset. Call it after the commit; it is best-effort."""
     if not user_ids:
         return
-    # Imported here: the build layer imports this package.
+    # Imported here: the build layer and the skill push import this package.
     from onyx.server.features.build.session.sandbox_lifecycle import (
         refresh_mcp_config_hashes_for_users,
     )
+    from onyx.skills.push import push_skills_for_users
 
     refresh_mcp_config_hashes_for_users(user_ids, db_session)
+    push_skills_for_users(user_ids, db_session)

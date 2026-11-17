@@ -6,8 +6,7 @@
 > succeeds or fails.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
-**Edition:** CE. Restricting an MCP server to users or groups needs EE
-(`backend/onyx/db/mcp.py:make_mcp_server_private` is a CE stub).
+**Edition:** CE. Access to an integration comes from the plugins that hold it.
 
 ---
 
@@ -205,10 +204,11 @@ whose template needs values that the user did not save is Not connected. Every s
 `set_oauth_client_credentials__no_commit`) saves the new format and clears the
 tag; a status-only change keeps it. There is no import job.
 
-Chat reads only the integration tables. The old MCP, OAuth config, user OAuth
-token, Craft external app and tool status routes are removed. The sandbox proxy
-and Craft read and write the old tables (`mcp_connection_config`,
-`external_app_user_credential`) with the old refresh functions.
+Chat, the sandbox proxy and Craft read only the integration tables. The old
+MCP, OAuth config, user OAuth token, Craft external app and tool status routes
+are removed. No production code reads or writes the old sign-in, policy and
+access tables; `backend/tests/unit/onyx/integrations/test_no_old_table_access.py`
+lists the few rollback and cleanup writes that remain.
 
 **Chat on integrations.** `db/tools.py:capture_persona_tool_configuration`
 copies the agent's built-in tools and its `persona__plugin` links (plugin id
@@ -437,9 +437,8 @@ it.
 
 1. `credential-resolution-single-point` **`resolve_connection` is the only
    place that picks a credential.** Chat construction and MCP execution reach
-   it through `integrations/call_credentials.py:resolve_call_credentials`; the
-   sandbox proxy uses `server/features/mcp/credentials.py:resolve_mcp_credentials`.
-   A mode never falls back to the other one.
+   it through `integrations/call_credentials.py:resolve_call_credentials`, and
+   so does the sandbox proxy. A mode never falls back to the other one.
 2. `oauth-always-per-user` **OAuth is always per user.**
    `server/features/mcp/models.py:MCPToolCreateRequest.validate_auth_configuration`
    rejects OAuth with any performer other than `PER_USER`. The OAuth client
@@ -502,13 +501,14 @@ it.
     object in `tool_result`. Other `CustomTool` exceptions reach `Tool.run`,
     which gives the model "Tool failed with error: <exception text>" and the
     user no error detail ([[tools-framework#run-errors-become-results]]).
-12. `reauth-mark-if-current` **Only a rejected API key is marked.**
-    For a 401, `MCPTool._run` calls
-    `integrations/call_credentials.py:mark_api_key_rejected`, which locks the
-    API key connection that the call used and sets it to Needs reconnect only
-    when it still holds the key the call sent (`CallCredentials.secret_fingerprint`).
-    A key saved during the call stays connected. An OAuth2 connection is left
-    to the refresh.
+12. `reauth-mark-if-current` **A rejected credential is marked only if it is
+    the one the call used.**
+    `MCPTool._run` marks an API key connection Needs reconnect for a 401
+    through `integrations/call_credentials.py:mark_api_key_rejected`. It locks
+    the connection row that the call read (`connection_id`) and marks it only
+    when the row still holds the key the call sent
+    (`CallCredentials.secret_fingerprint`). A key saved during the call stays
+    connected. OAuth2 connections are left to the refresh.
 13. `craft-sessions-bake-mcp-config` **Craft sessions bake MCP config.** A change
     to an integration must call
     `backend/onyx/integrations/service.py:reload_craft_sessions`. Take

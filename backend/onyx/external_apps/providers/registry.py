@@ -1,9 +1,6 @@
-from onyx.db.enums import ActionPolicy, ExternalAppType
+from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.models import (
-    ActionPolicyView,
     BuiltInExternalAppDescriptor,
     EndpointDescriptor,
     OrgCredentialFieldDescriptor,
@@ -128,38 +125,6 @@ def withheld_on_cloud(app_type: ExternalAppType) -> list[EndpointSpec]:
     # uses_cloud_scope implies the provider is registered.
     catalog = PROVIDERS[app_type].spec.endpoint_catalog
     return [e for e in catalog if e.requires_self_hosted_scope]
-
-
-def normalize_action_policies(
-    policies: dict[str, ActionPolicy], catalog_defaults: dict[str, ActionPolicy]
-) -> dict[str, ActionPolicy]:
-    """Validate action identities and store only deviations from catalog defaults."""
-    if policies.keys() - catalog_defaults.keys():
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Unknown app action")
-    return {
-        action_id: policy
-        for action_id, policy in policies.items()
-        if policy != catalog_defaults[action_id]
-    }
-
-
-def action_policy_views(
-    app_type: ExternalAppType,
-    stored: dict[str, ActionPolicy],
-) -> list[ActionPolicyView]:
-    """Merge the catalog with the admin's stored overrides: each action's
-    effective ``state`` is the override if present, else the action's
-    ``default_policy``. Orphan stored ids (no longer in the catalog) are
-    silently dropped."""
-    return [
-        ActionPolicyView(
-            action_id=endpoint.id,
-            normalised_name=endpoint.normalised_name,
-            description=endpoint.description,
-            state=stored.get(endpoint.id, endpoint.default_policy),
-        )
-        for endpoint in get_endpoint_catalog(app_type)
-    ]
 
 
 def fetch_onyx_managed_built_in_apps() -> list[BuiltInExternalAppDescriptor]:

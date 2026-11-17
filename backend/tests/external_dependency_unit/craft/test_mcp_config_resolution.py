@@ -17,6 +17,7 @@ from onyx.db.enums import (
     IntegrationAuthMode,
     PluginInstallationPolicy,
 )
+from onyx.db.integration import get_mcp_server_for_integration
 from onyx.db.models import Integration, User
 from onyx.server.features.build.sandbox.util.mcp_config import (
     resolve_craft_mcp_servers,
@@ -109,18 +110,15 @@ def test_the_craft_list_agrees_with_the_session_config(
     )
 
     emitted = {c.integration_id for c in resolve_craft_mcp_servers(db_session, user)}
-    listed = {
-        server.name: server.craft_connected
+    servers = {
+        server.id: server
         for server in get_craft_mcp_servers_for_user(db_session, user).mcp_servers
     }
     assert open_mcp.id in emitted
     assert unconnected.id not in emitted
-    servers = {
-        name: connected
-        for name, connected in listed.items()
-        if name.startswith(("Open-", "Needs sign-in-"))
-    }
-    assert sorted(connected is True for connected in servers.values()) == [
-        False,
-        True,
-    ]
+    open_server = get_mcp_server_for_integration(open_mcp.id, db_session)
+    unconnected_server = get_mcp_server_for_integration(unconnected.id, db_session)
+    assert open_server is not None and unconnected_server is not None
+    assert servers[open_server.id].craft_connected is True
+    assert servers[open_server.id].name == "Open"
+    assert servers[unconnected_server.id].craft_connected is False

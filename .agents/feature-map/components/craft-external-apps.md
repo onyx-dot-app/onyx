@@ -191,8 +191,8 @@ lists the same servers, and
 `integrations/craft.py:list_connectable_apps` lists the external apps the user
 can still connect. No code reads `mcp_server.available_in_craft`. An
 integration change reloads running Craft sessions through
-`backend/onyx/integrations/service.py:reload_craft_sessions`, which only
-restamps `mcp_config_hash` and does not push skill files.
+`backend/onyx/integrations/service.py:reload_craft_sessions`. It restamps
+`mcp_config_hash` and pushes the skill files of the affected users.
 
 **Credentials.** The sandbox holds only the placeholder
 `server/features/build/configs.py:SANDBOX_PROXY_INJECTED_PLACEHOLDER`. The
@@ -309,9 +309,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     key or the Secret into the sandbox namespace. A CA rotation breaks TLS in
     every running sandbox, because sandboxes install the CA only at boot.
 12. `url-patterns-on-app-row` **URL patterns live on the app row, not the
-    provider.** `db/external_app.py:create_external_app` stores the patterns
-    that the create request submits; the admin form sends the provider's
-    descriptor patterns.
+    provider.** `backend/onyx/db/integration.py:create_external_app_row__no_commit`
+    stores the patterns of the create request; a preset gets the patterns of
+    its provider.
     `sandbox_proxy/usable_integrations.py:load_match_targets` reads the
     patterns from the row. A pattern change in provider code reaches new apps only. Existing
     apps get no credential and no policy gate on the new host until a data
