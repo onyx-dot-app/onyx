@@ -35,7 +35,9 @@ description: Verify a backend change through the running Onyx app before committ
    The first user becomes admin. For admin routes, confirm the account has admin access.
 4. Note the current time and log positions. Call the changed route with the cookie jar.
    For a worker or connector change, call the route that starts work.
-   Poll its status with a deadline and check the final result. Use local test data.
+   Poll for a terminal state with a deadline. Record the last status on timeout.
+   If cleanup removes successful jobs, check for the output by job ID too.
+   Use local test data. Seed the data the change needs before you start the probe.
    For browser steps, use the [Playwright skill](../playwright/SKILL.md).
 
    ```bash
@@ -53,8 +55,12 @@ description: Verify a backend change through the running Onyx app before committ
    The integration runner provides its own in-process API and workers.
    Use the isolated ODS environment for test infrastructure. Stop the ODS app
    services after the live probe so the test workers can own the queues.
+   If the test resets data, confirm the isolated Postgres host and port.
+   Set `POSTGRES_DB` to the database name in that stack, normally `postgres`.
    Read [integration setup](../../../backend/tests/integration/README.md) for
-   dependencies and Enterprise tests. Use the local license file if required.
+   dependencies and Enterprise tests. For Enterprise checks, upload the local
+   license to the isolated app. Pass the license to the test process with
+   `ONYX_DEV_LICENSE` if the test needs to reseed it.
 
    ```bash
    uv run --frozen --env-file .vscode/.env pytest -xv '<test node ID>' > "$scratch/test.log" 2>&1
