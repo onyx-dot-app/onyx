@@ -147,7 +147,7 @@ the composer reads and saves that agent's plugins. A switch in
 `ChatPluginsPopover` calls `setPluginEnabled`, which also saves the agent's
 `disabled_plugin_ids` (`lib/plugins/hooks.ts:useAgentPluginPreferences`,
 `PATCH /user/assistant/{id}/preferences`); a chat that does not exist yet
-starts from them. When something is off, `allowed` names each built-in tool
+starts from them, and so does an existing chat whose `allowed` is null. When something is off, `allowed` names each built-in tool
 that is on and each plugin of the agent that is on, because the server leaves
 out each plugin that the list does not name.
 `sections/plugins/IntegrationConnectPrompt.tsx` is the chat connect prompt. It

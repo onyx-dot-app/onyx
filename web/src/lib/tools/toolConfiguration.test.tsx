@@ -601,6 +601,42 @@ test("a tool change saves only the tools, so the saved filters stay as they are"
   expect(result.current.filters.documentSets).toEqual(["Handbook"]);
 });
 
+test("a chat with no saved allow-list follows the agent's plugin choice", () => {
+  mockPluginIds = ["plugin-1", "plugin-2"];
+  mockDisabledPluginIds = ["plugin-1"];
+  openSavedChats({
+    abc: {
+      allowed: null,
+      preferred: null,
+      internal_search_filters: NO_FILTERS,
+    },
+  });
+  const { result } = renderHook(() => useToolConfiguration());
+
+  expect(result.current.ready).toBe(true);
+  expect(result.current.isPluginEnabled("plugin-1")).toBe(false);
+  expect(result.current.isPluginEnabled("plugin-2")).toBe(true);
+  expect(result.current.allowed).toEqual([
+    { type: "capability", tool_id: 1 },
+    { type: "capability", tool_id: 2 },
+    { type: "plugin", plugin_id: "plugin-2" },
+  ]);
+});
+
+test("a chat with no saved allow-list waits for the agent's plugin choice", () => {
+  mockPluginIds = ["plugin-1"];
+  mockDisabledPluginIds = null;
+  openSavedChats({
+    abc: {
+      allowed: null,
+      preferred: null,
+      internal_search_filters: NO_FILTERS,
+    },
+  });
+  const { result } = renderHook(() => useToolConfiguration());
+  expect(result.current.ready).toBe(false);
+});
+
 test("a failed plugin catalog leaves the saved plugins of a chat alone", async () => {
   mockPluginIds = null;
   const saved: ChatToolOptions = {
