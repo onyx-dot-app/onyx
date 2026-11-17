@@ -532,7 +532,9 @@ def try_creating_prune_generator_task(
         )
         redis_connector.prune.set_fence(payload)
 
-        result = celery_app.send_task(  # celery-expires: allow (existing send, expiry pending)
+        # No expires=: the API sends a manual prune through this function and
+        # nothing sends it again. The fence allows one task per pair.
+        result = celery_app.send_task(  # celery-expires: allow (a manual prune is not sent again)
             OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
             kwargs={
                 "cc_pair_id": cc_pair.id,

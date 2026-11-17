@@ -20,7 +20,11 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import Permission, has_permission, require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
+from onyx.configs.constants import (
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     verify_user_can_manage_all_cc_pairs,
@@ -147,7 +151,7 @@ def submit_targeted_reindex(
         # indexing scheduler. Per-cc-pair fan-out (connector fetch +
         # docprocessing) hands off to the existing docfetching/
         # docprocessing queues from inside the task body.
-        client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
+        client_app.send_task(  # celery-expires: allow (user-started job, nothing sends it again)
             OnyxCeleryTask.TARGETED_REINDEX_TASK,
             kwargs={
                 "targeted_reindex_job_id": result.targeted_reindex_job_id,

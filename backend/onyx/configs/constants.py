@@ -261,6 +261,12 @@ CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 # Generous: a big prune can queue thousands of cleanup tasks on a busy fleet.
 CELERY_DOCUMENT_CLEANUP_TASK_EXPIRES = 6 * 60 * 60  # 6 hours (in seconds)
 
+# The cleanup checks send a task for every stale row on each run and do not
+# track what is queued. A worker drops a copy older than the check interval
+# when it takes it: the next run has sent the row again.
+CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
+CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES = 30 * 60  # 30 minutes (in seconds)
+
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
 
