@@ -304,7 +304,6 @@ ignore = [
     # Revisit only if we adopt trio or anyio cancel scopes.
     "ASYNC109", # async-function-with-timeout.
     # flake8-bandit (S) rules ignored as noisy / low-signal:
-    "S101", # `assert` — used heavily in pytest and as runtime invariant checks.
     "S105", # Hardcoded password string — very high false-positive rate.
     "S106", # Hardcoded password func arg — very high false-positive rate.
     "S107", # Hardcoded password default — very high false-positive rate.
@@ -371,6 +370,59 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # Tests use asserts, mock credentials, and lots of patterns the bandit rules
 # flag as suspicious. Disable the full S rule set in tests.
 "backend/tests/**" = ["S"]
+# S101 (`assert`) applies to application code only: backend/AGENTS.md "Key Rules".
+# `python -O` removes asserts, and a failed one gives the caller no useful error.
+# Write an explicit check that raises:
+#   - Type narrowing:   `if x is None: raise RuntimeError("why x is always set")`
+#   - Invariant:        `if not ok: raise RuntimeError("Bug: ...")` (or ValueError
+#                       for a bad argument)
+#   - Input validation: `raise OnyxError(OnyxErrorCode.INVALID_INPUT, "...")` on a
+#                       request path; ValueError for configuration;
+#                       ConnectorMissingCredentialError for connector credentials
+# A deliberate exception goes on the line: `# noqa: S101 - <reason>`.
+# The first entry turns S101 off outside application code (tests, scripts,
+# migrations, tools).
+"!backend/{onyx,ee,shared_configs,model_server}/**" = ["S101"]
+# pytest files that live in the application tree.
+"backend/onyx/connectors/salesforce/shelve_stuff/*test_salesforce_shelves.py" = ["S101"]
+# Vendored skill scripts; they run in the sandbox, not in the backend.
+"backend/onyx/skills/builtin/pptx/**" = ["S101"]
+# Ratchet: files that had asserts when S101 was enabled. The trailing number is
+# the count at the time. Convert the asserts, then remove the entry. Do not add
+# entries. NOTE: the ignore is per file, so it also hides new asserts in these
+# files. Six more files are in the C901 list below, marked `S101`.
+"backend/ee/onyx/connectors/capability_checks.py" = ["S101"] # 2
+"backend/ee/onyx/db/document_set.py" = ["S101"] # 1
+"backend/ee/onyx/external_permissions/slack/doc_sync.py" = ["S101"] # 1
+"backend/ee/onyx/server/tenants/proxy.py" = ["S101"] # 2
+"backend/onyx/cache/postgres_backend.py" = ["S101"] # 1
+"backend/onyx/configs/app_configs.py" = ["S101"] # 1
+"backend/onyx/connectors/capability_checks/registry.py" = ["S101"] # 1
+"backend/onyx/connectors/capability_checks/runner.py" = ["S101"] # 2
+"backend/onyx/connectors/discourse/connector.py" = ["S101"] # 3
+"backend/onyx/connectors/fireflies/connector.py" = ["S101"] # 1
+"backend/onyx/connectors/lumapps/client.py" = ["S101"] # 1
+"backend/onyx/connectors/mediawiki/family.py" = ["S101"] # 3
+"backend/onyx/connectors/microsoft_utils/drive_items.py" = ["S101"] # 1
+"backend/onyx/connectors/onedrive/connector.py" = ["S101"] # 1
+"backend/onyx/context/search/utils.py" = ["S101"] # 4
+"backend/onyx/db/connector_credential_pair.py" = ["S101"] # 1
+"backend/onyx/db/credential_capability.py" = ["S101"] # 1
+"backend/onyx/document_index/opensearch/client.py" = ["S101"] # 2
+"backend/onyx/document_index/opensearch/opensearch_document_index.py" = ["S101"] # 2
+"backend/onyx/image_gen/providers/azure_img_gen.py" = ["S101"] # 3
+"backend/onyx/image_gen/providers/openai_img_gen.py" = ["S101"] # 1
+"backend/onyx/indexing/chunk_batch_store.py" = ["S101"] # 1
+"backend/onyx/indexing/chunker.py" = ["S101"] # 1
+"backend/onyx/indexing/chunking/image_section_chunker.py" = ["S101"] # 1
+"backend/onyx/indexing/persistent_indexing.py" = ["S101"] # 1
+"backend/onyx/natural_language_processing/utils.py" = ["S101"] # 1
+"backend/onyx/onyxbot/slack/formatting.py" = ["S101"] # 1
+"backend/onyx/redis/lock_context.py" = ["S101"] # 1
+"backend/onyx/server/documents/capability_check_runs.py" = ["S101"] # 1
+"backend/onyx/server/features/build/scheduled_tasks/schedule.py" = ["S101"] # 1
+"backend/onyx/server/features/mcp/client.py" = ["S101"] # 1
+"backend/onyx/skills/bundle.py" = ["S101"] # 2
 # Docs site tooling (documentation/scripts, documentation/audit), imported with the
 # docs. format_docs.py is one long line-by-line formatter; leave its shape alone.
 "documentation/**" = ["C901", "PERF401", "ARG001"]
@@ -388,10 +440,10 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/ee/onyx/server/gateway/anthropic_passthrough.py" = ["C901"] # 23
 "backend/ee/onyx/server/gateway/api.py" = ["C901"] # 27
 "backend/ee/onyx/server/gateway/openai_passthrough.py" = ["C901"] # 32
-"backend/onyx/auth/users.py" = ["C901"] # 30
+"backend/onyx/auth/users.py" = ["C901", "S101"] # 30; 2 asserts
 "backend/onyx/background/celery/tasks/docfetching/tasks.py" = ["C901"] # 43
 "backend/onyx/background/celery/tasks/docprocessing/tasks.py" = ["C901"] # 24
-"backend/onyx/background/celery/tasks/port/tasks.py" = ["C901"] # 27
+"backend/onyx/background/celery/tasks/port/tasks.py" = ["C901", "S101"] # 27; 4 asserts
 "backend/onyx/background/indexing/run_docfetching.py" = ["C901"] # 33
 "backend/onyx/chat/citation_processor.py" = ["C901"] # 30
 "backend/onyx/chat/llm_loop.py" = ["C901"] # 46
@@ -409,14 +461,14 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/connectors/hubspot/connector.py" = ["C901"] # 23
 "backend/onyx/connectors/notion/connector.py" = ["C901"] # 22
 "backend/onyx/connectors/sharepoint/connector.py" = ["C901"] # 34
-"backend/onyx/connectors/slack/connector.py" = ["C901"] # 26
+"backend/onyx/connectors/slack/connector.py" = ["C901", "S101"] # 26; 1 assert
 "backend/onyx/connectors/testrail/connector.py" = ["C901"] # 21
 "backend/onyx/connectors/web/connector.py" = ["C901"] # 23
 "backend/onyx/context/search/federated/slack_search.py" = ["C901"] # 31
 "backend/onyx/db/persona.py" = ["C901"] # 49
 "backend/onyx/deep_research/dr_loop.py" = ["C901"] # 26
-"backend/onyx/document_index/opensearch/search.py" = ["C901"] # 48
-"backend/onyx/federated_connectors/federated_retrieval.py" = ["C901"] # 21
+"backend/onyx/document_index/opensearch/search.py" = ["C901", "S101"] # 48; 1 assert
+"backend/onyx/federated_connectors/federated_retrieval.py" = ["C901", "S101"] # 21; 1 assert
 "backend/onyx/llm/multi_llm.py" = ["C901"] # 45
 "backend/onyx/llm/utils.py" = ["C901"] # 30
 "backend/onyx/onyxbot/slack/handlers/handle_message.py" = ["C901"] # 34
@@ -426,7 +478,7 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/server/documents/connector.py" = ["C901"] # 28
 "backend/onyx/server/features/build/interactive_turns/api.py" = ["C901"] # 22
 "backend/onyx/server/features/build/interactive_turns/executor.py" = ["C901"] # 35
-"backend/onyx/server/features/build/sandbox/opencode/serve_client.py" = ["C901"] # 56
+"backend/onyx/server/features/build/sandbox/opencode/serve_client.py" = ["C901", "S101"] # 56; 1 assert
 "backend/onyx/server/features/build/session/streaming.py" = ["C901"] # 24
 "backend/onyx/server/features/mcp/api.py" = ["C901"] # 33
 "backend/onyx/server/manage/users.py" = ["C901"] # 22

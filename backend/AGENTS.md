@@ -5,7 +5,20 @@ tests. Additive to the root `AGENTS.md`.
 
 ## Key Rules
 
-- Use explicit validation in application code. Reserve `assert` for tests.
+- Use explicit validation in application code. Reserve `assert` for tests. `python -O` removes
+  asserts, and a failed one gives the caller no useful error. Ruff rule `S101` checks this on
+  pre-commit for `backend/onyx`, `backend/ee`, `backend/shared_configs` and `backend/model_server`.
+  Write an explicit check that raises:
+  - Type narrowing: `if x is None: raise RuntimeError("why x is always set")`.
+  - Internal invariant: `if not ok: raise RuntimeError("Bug: ...")`, or `ValueError` for a bad
+    argument.
+  - Input validation: `raise OnyxError(OnyxErrorCode.INVALID_INPUT, "...")` on a request path
+    (see "Error Handling"). Use `ValueError` for configuration and
+    `ConnectorMissingCredentialError` for missing connector credentials.
+
+  A deliberate exception goes on the line as `# noqa: S101 - <reason>`. Files that had asserts
+  when the check was added are listed in `[tool.ruff.lint.per-file-ignores]` in `pyproject.toml`.
+  Do not add files to that list. Remove a file when you convert its asserts.
 - Declare owned protocol implementations through explicit inheritance.
 
 - Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run
