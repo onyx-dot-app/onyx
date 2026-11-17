@@ -11,7 +11,6 @@ import { worldTest as test, expect, actAsManager } from "./fixtures";
 import { AdminConnectorDetailPage } from "@tests/e2e/pages/AdminConnectorDetailPage";
 import { AdminDocumentSetsPage } from "@tests/e2e/pages/AdminDocumentSetsPage";
 import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
-import { AdminPluginsPage } from "@tests/e2e/pages/AdminPluginsPage";
 
 // seeding a whole scoped world plus several re-logins puts these well past the
 // default budget; the work is real, not a hang
@@ -91,20 +90,20 @@ test.describe("scoped manager affordances", () => {
     );
   });
 
-  test("actions list shows own and agent-connected, not the orphan", async ({
+  test("actions list offers edit only on the manager's own action", async ({
     page,
     world,
   }) => {
     const managerClient = await actAsManager(page, world.manager);
     const visible = await managerClient.listOpenApiTools();
-    const ids = new Set(visible.map((tool) => tool.id));
+    const editable = new Map(
+      visible.map((tool) => [tool.id, tool.permissions.edit === true])
+    );
 
-    expect(ids.has(world.ownActionId)).toBe(true);
-    expect(ids.has(world.connectedActionId)).toBe(true);
-    expect(ids.has(world.orphanActionId)).toBe(false);
-
-    const plugins = new AdminPluginsPage(page);
-    await plugins.goto();
-    await plugins.expectPluginAbsent(/orphan-action-/);
+    // a scoped manager manages only the integrations in its own "My uploads"
+    expect(editable.get(world.ownActionId)).toBe(true);
+    // Organization library integrations reach every member, read-only here
+    expect(editable.get(world.connectedActionId)).toBe(false);
+    expect(editable.get(world.orphanActionId)).toBe(false);
   });
 });
