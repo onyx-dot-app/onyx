@@ -13993,16 +13993,6 @@
           "description": "Définissez une politique pour chaque action individuellement.",
           "title": "Avancé"
         }
-      },
-      "userCredentials": {
-        "cancelButton": "Annuler",
-        "connectButton": "Connecter",
-        "connectingButton": "Connexion…",
-        "description": "Saisissez vos identifiants pour autoriser cette app sur votre compte.",
-        "errors": {
-          "connectFailedTitle": "Connexion impossible"
-        },
-        "title": "Connecter {name}"
       }
     },
     "artifactsTab": {

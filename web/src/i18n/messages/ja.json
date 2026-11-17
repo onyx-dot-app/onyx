@@ -13993,16 +13993,6 @@
           "description": "アクションごとに個別のポリシーを設定します。",
           "title": "詳細設定"
         }
-      },
-      "userCredentials": {
-        "cancelButton": "キャンセル",
-        "connectButton": "接続",
-        "connectingButton": "接続中…",
-        "description": "このアプリをアカウントで認可するには、認証情報を入力してください。",
-        "errors": {
-          "connectFailedTitle": "接続できませんでした"
-        },
-        "title": "{name} を接続"
       }
     },
     "artifactsTab": {

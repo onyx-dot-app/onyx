@@ -105,13 +105,14 @@ integrations `PUT /plugins/{id}/enabled`. `sections/plugins/SharePluginModal.tsx
 reads and replaces the shares through `/plugins/{id}/access`.
 `sections/plugins/IntegrationConnectionRow.tsx` shows the
 status of one integration and its action; the API key form
-(`web/src/sections/plugins/IntegrationCredentialsModal.tsx`) is made from `credential_fields` and
-`PUT /integrations/{id}/connection`; Disconnect is `DELETE` on the same path.
+(`web/src/sections/plugins/IntegrationCredentialsModal.tsx`, which the Craft
+setup card also opens) renders `CredentialFieldInputs` from `credential_fields`
+and calls `PUT /integrations/{id}/connection`; Disconnect is `DELETE` on the same path.
 `web/src/sections/plugins/AlwaysAllowList.tsx` reads and writes `/action-policies/integration/{id}`.
 
 **Member OAuth.** `lib/integrations/connect.ts:connectWithOAuth` calls
 `POST /integrations/{id}/oauth/start` (`organization: false`, the page as
-`return_path`) through `lib/oauth/launch.ts:launchOAuth`: a new tab on the
+`return_path`; the admin Configuration tab passes `organization: true`) through `lib/oauth/launch.ts:launchOAuth`: a new tab on the
 web, the system browser in the desktop app. When the browser blocks the tab,
 it loads the provider in the same tab. Each redirect URI
 (`/craft/v1/apps/oauth/callback` for presets, `/oauth-config/callback` for

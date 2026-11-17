@@ -14,13 +14,14 @@ import {
 } from "@/app/craft/services/externalAppsService";
 import CometEdge from "@/refresh-components/CometEdge";
 import { connectWithOAuth } from "@/lib/integrations/connect";
-import { saveUserConnection } from "@/lib/integrations/svc";
+import { useMemberIntegrations } from "@/lib/integrations/hooks";
+import { startUserOAuth } from "@/lib/integrations/svc";
 import { isSilentOAuthOutcome, oauthFailureDetail } from "@/lib/oauth/launch";
 import {
   ExternalAppUserResponse,
   getAppTypeLogo,
 } from "@/app/craft/v1/apps/registry";
-import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
+import IntegrationCredentialsModal from "@/sections/plugins/IntegrationCredentialsModal";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { refreshSkillLists } from "@/lib/skills/cache";
 import { locationKey } from "@/app/app/services/submitLocation";
@@ -58,6 +59,7 @@ export default function SetupCard({
   const [error, setError] = useState<string | null>(null);
   const [credModalOpen, setCredModalOpen] = useState(false);
   const [decision, setDecision] = useState<ConnectAppDecision | null>(null);
+  const { data: integrations } = useMemberIntegrations();
 
   const mountedRef = useRef(true);
   const resolvingRef = useRef(false);
@@ -73,6 +75,9 @@ export default function SetupCard({
     userApp?.name ?? t("appFallback.label", { id: externalAppId });
   const supportsOauth = userApp?.supports_oauth ?? false;
   const appLoading = userApp === undefined;
+  const integration = integrations?.find(
+    (candidate) => candidate.id === userApp?.integration_id
+  );
 
   const resolve = useCallback(
     async (result: ConnectAppDecision) => {
@@ -122,6 +127,10 @@ export default function SetupCard({
       return;
     }
     if (!supportsOauth) {
+      if (!integration) {
+        setError(t("error.notConfigurable"));
+        return;
+      }
       // Lock the actions so "Not now" can't decline while the form is open.
       setBusy(true);
       setCredModalOpen(true);
@@ -131,7 +140,7 @@ export default function SetupCard({
     setBusy(true);
     try {
       const result = await connectWithOAuth(
-        userApp.integration_id,
+        (path) => startUserOAuth(userApp.integration_id, path),
         locationKey(pathname, searchParams.toString())
       );
       if (!mountedRef.current) return;
@@ -231,20 +240,16 @@ export default function SetupCard({
                 : t("connect.title", { app: appName })}
           </Button>
         </div>
-        {userApp && (
-          <UserCredentialsModal
-            open={credModalOpen}
+        {credModalOpen && integration && (
+          <IntegrationCredentialsModal
+            integration={integration}
             onClose={() => {
               setCredModalOpen(false);
               setBusy(false);
             }}
-            onSaved={() => void resolve("connected")}
-            name={userApp.name}
-            logo={getAppTypeLogo(userApp.app_type)}
-            credentialKeys={userApp.credential_keys}
-            credentialValues={userApp.credential_values}
-            save={async (values) => {
-              await saveUserConnection(userApp.integration_id, values);
+            onConnected={() => {
+              setCredModalOpen(false);
+              void resolve("connected");
             }}
           />
         )}

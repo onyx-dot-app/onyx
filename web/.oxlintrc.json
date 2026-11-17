@@ -480,7 +480,6 @@
         "src/app/craft/onboarding/components/LivingMapDiagram.tsx",
         "src/app/craft/onboarding/components/LivingMapModal.tsx",
         "src/app/craft/page.tsx",
-        "src/app/craft/v1/apps/UserCredentialsModal.tsx",
         "src/app/craft/v1/apps/admin/ActionPolicyEditorModal.tsx",
         "src/app/craft/v1/apps/admin/AssociatedSkillsEditor.tsx",
         "src/app/craft/v1/apps/admin/CreateCustomAppModal.tsx",

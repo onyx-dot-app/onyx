@@ -13993,16 +13993,6 @@
           "description": "为每个操作单独设置策略。",
           "title": "高级"
         }
-      },
-      "userCredentials": {
-        "cancelButton": "取消",
-        "connectButton": "连接",
-        "connectingButton": "正在连接…",
-        "description": "输入您的凭据，为您的账户授权此应用。",
-        "errors": {
-          "connectFailedTitle": "无法连接"
-        },
-        "title": "连接 {name}"
       }
     },
     "artifactsTab": {

@@ -13993,16 +13993,6 @@
           "description": "Legen Sie für jede Aktion einzeln eine Richtlinie fest.",
           "title": "Erweitert"
         }
-      },
-      "userCredentials": {
-        "cancelButton": "Abbrechen",
-        "connectButton": "Verbinden",
-        "connectingButton": "Wird verbunden…",
-        "description": "Geben Sie Ihre Zugangsdaten ein, um diese App für Ihr Konto zu autorisieren.",
-        "errors": {
-          "connectFailedTitle": "Verbindung nicht möglich"
-        },
-        "title": "{name} verbinden"
       }
     },
     "artifactsTab": {

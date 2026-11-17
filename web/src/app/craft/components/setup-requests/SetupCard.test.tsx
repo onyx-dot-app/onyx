@@ -34,14 +34,17 @@ jest.mock("@/lib/integrations/connect", () => ({
   connectWithOAuth: (...args: unknown[]) => mockConnectWithOAuth(...args),
 }));
 
-jest.mock("@/app/craft/v1/apps/UserCredentialsModal", () => ({
+jest.mock("@/lib/integrations/hooks", () => ({
+  useMemberIntegrations: () => ({ data: [{ id: 7, name: "Acme CRM" }] }),
+}));
+
+jest.mock("@/sections/plugins/IntegrationCredentialsModal", () => ({
   __esModule: true,
-  default: ({ open, onSaved }: { open: boolean; onSaved: () => void }) =>
-    open ? (
-      <button type="button" onClick={onSaved}>
-        Save credentials
-      </button>
-    ) : null,
+  default: ({ onConnected }: { onConnected: () => void }) => (
+    <button type="button" onClick={onConnected}>
+      Save credentials
+    </button>
+  ),
 }));
 
 const userApp: ExternalAppUserResponse = {
@@ -83,7 +86,10 @@ describe("SetupCard", () => {
         "connected"
       )
     );
-    expect(mockConnectWithOAuth).toHaveBeenCalledWith(7, expect.any(String));
+    expect(mockConnectWithOAuth).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(String)
+    );
   });
 
   it("waits for the pending request to resolve before showing an existing connection", async () => {
