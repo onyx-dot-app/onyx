@@ -3,11 +3,12 @@
 import { useFormatter, useTranslations } from "next-intl";
 import { ProgressBar, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
+import type { RichStr } from "@opal/types";
 import type { IndexAttemptProgress } from "@/lib/types";
 import { formatRunLength } from "@/views/admin/connectors/ConnectorDetailPage/runLength";
 
 interface StageBarProps {
-  label: string;
+  label: string | RichStr;
   value: number;
   max: number;
 }
@@ -15,6 +16,7 @@ interface StageBarProps {
 function StageBar({ label, value, max }: StageBarProps) {
   const format = useFormatter();
   const share = max > 0 ? Math.min(1, value / max) : 0;
+  const plainLabel = typeof label === "string" ? label : label.raw;
   return (
     <Section gap={0.25} height="fit" alignItems="stretch">
       <Section
@@ -30,7 +32,7 @@ function StageBar({ label, value, max }: StageBarProps) {
           {format.number(share, { style: "percent", maximumFractionDigits: 0 })}
         </Text>
       </Section>
-      <ProgressBar value={value} max={max} aria-label={label} />
+      <ProgressBar value={value} max={max} aria-label={plainLabel} />
     </Section>
   );
 }
@@ -44,6 +46,8 @@ export interface RunProgressProps {
  * separate stages. While the listing runs the total is not known, so it shows
  * the count so far. After that it shows one bar for each stage. It sits in the
  * run's card, padded as the line's parts are, so the bars line up with them.
+ * It is its own container query root, so the bars stack when the run's card
+ * is narrow, whatever the width of the page.
  */
 export default function RunProgress({ progress }: RunProgressProps) {
   const t = useTranslations("admin.connector.runs.progress");
@@ -56,6 +60,7 @@ export default function RunProgress({ progress }: RunProgressProps) {
       padding={2}
       height="fit"
       alignItems="stretch"
+      className="@container"
       data-testid="run-progress"
     >
       {!progress.listing_done || total === null ? (
