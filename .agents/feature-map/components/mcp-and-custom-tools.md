@@ -308,15 +308,19 @@ admin value is not Ask.
   its integration (`db/integration_policy.py:legacy_tool_plugin_links`; MCP
   links get `default: blocked` and each listed tool `inherit`). Built-in ids
   stay on `persona__tool`. With `plugins` null, `tool_ids` replaces the links
-  of the plugins that hold a custom tool. Agent detail returns `plugins`, and
-  its `tools` lists the OpenAPI `tool` row of each linked plugin
-  (`db/integration_policy.py:list_persona_openapi_tools`), so the old tool ids
-  round-trip.
+  of the plugins that hold a custom tool or an old MCP tool row; an MCP link
+  whose selection did not change keeps its settings. Agent detail returns
+  `plugins`, and its `tools` lists the OpenAPI `tool` row of each linked
+  plugin and the old MCP `tool` rows that the links do not block
+  (`db/integration_policy.py:list_persona_openapi_tools`,
+  `list_persona_mcp_tools`), so the old tool ids round-trip.
 - The eight public `/tool` and `/admin/tool` routes
   (`server/features/tool/api.py`) are aliases on `api` integrations with an
   OpenAPI schema and return the `tool` row id. Plain headers become a shared
   API key connection; `passthrough_auth` is `onyx_login`; `oauth_config_id` is
-  refused; `default_chat_enabled` is the plugin install setting (DEFAULT).
+  refused; `default_chat_enabled` is the plugin install setting (DEFAULT). A
+  save of an OAuth integration keeps its sign-in when the headers and
+  `passthrough_auth` are the values the read returned, and refuses others.
 - The four admin MCP server routes of the public API, which the Terraform
   provider calls (`POST /admin/mcp/servers/create`,
   `GET /admin/mcp/servers/{id}`, `PATCH` and `DELETE /admin/mcp/server/{id}`,
