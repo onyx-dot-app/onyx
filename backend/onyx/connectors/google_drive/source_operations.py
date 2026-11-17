@@ -500,9 +500,9 @@ def _quota_limit_names(body: str | None) -> list[str]:
 
 class _LimitedRequest:
     """A googleapiclient request that counts each ``execute`` by its outcome.
-    With a limiter, it also spends before each ``execute`` and reports a
-    rate-limit answer. The retry helpers call ``execute`` again for each try,
-    so each try counts and spends.
+    With a limiter, it also spends before each ``execute``, and it gives an
+    error answer to ``report_rate_limit``. The retry helpers call ``execute``
+    again for each try, so each try counts and spends.
 
     ``answers_counted`` is for a batch: its callback counts the answer of each
     request in it, so a batch that Google answers is not counted here."""
@@ -514,6 +514,7 @@ class _LimitedRequest:
         api: str,
         units: int = 0,
         user_email: str | None = None,
+        report_rate_limit: Callable[[Exception], None] | None = None,
         request_count: int = 1,
         answers_counted: bool = False,
     ) -> None:
@@ -522,6 +523,7 @@ class _LimitedRequest:
         self._api = api
         self._units = units
         self._user_email = user_email
+        self._report_rate_limit = report_rate_limit
         self._request_count = request_count
         self._answers_counted = answers_counted
 
@@ -534,12 +536,8 @@ class _LimitedRequest:
             result = self._request.execute()
         except Exception as error:
             _record_request(self._api, _request_outcome(error), self._request_count)
-            if self._limiter is not None and isinstance(error, HttpError):
-                translated = _from_http_error(error)
-                if translated.rate_limited:
-                    self._limiter.report_rate_limit(
-                        self._api, self._user_email, _is_user_rate_limit(translated)
-                    )
+            if self._report_rate_limit is not None and isinstance(error, HttpError):
+                self._report_rate_limit(error)
             raise
         if not self._answers_counted:
             _record_request(self._api, RequestOutcome.OK, self._request_count)
@@ -727,7 +725,9 @@ class GoogleDriveSourceOperations(SourceOperations):
         """Builds a request from the user's Drive client and executes it. A
         lost connection, a rate limit or a server error is tried again with
         backoff. After a lost connection, the next try uses a new client.
-        ``request_count`` is the number of calls in a batch."""
+        ``request_count`` is the number of calls in a batch. Each try spends,
+        but only the first rate-limit answer of the call reports."""
+        report_rate_limit = self._report_once_per_call(DriveQuotaApi.DRIVE, user_email)
 
         def execute_once() -> Any:
             try:
@@ -736,6 +736,7 @@ class GoogleDriveSourceOperations(SourceOperations):
                     units,
                     user_email,
                     request_count,
+                    report_rate_limit,
                     answers_counted,
                 ).execute()
             except TRANSIENT_CONNECTION_ERRORS:
@@ -786,17 +787,23 @@ class GoogleDriveSourceOperations(SourceOperations):
         units: int,
         user_email: str,
         request_count: int = 1,
+        report_rate_limit: Callable[[Exception], None] | None = None,
         answers_counted: bool = False,
     ) -> _LimitedRequest:
         """A Drive request that is counted, and spends Drive quota units when
         a limiter is attached. ``request_count`` is the number of calls in a
-        batch."""
+        batch. A caller that retries passes one ``report_rate_limit`` for all
+        its tries; by default each rate-limit answer reports."""
         return _LimitedRequest(
             request,
             self._limiter(),
             DriveQuotaApi.DRIVE.value,
             units,
             user_email,
+            report_rate_limit
+            or functools.partial(
+                self._report_rate_limit, DriveQuotaApi.DRIVE, user_email
+            ),
             request_count,
             answers_counted,
         )
