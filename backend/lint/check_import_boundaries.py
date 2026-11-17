@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail when a backend import crosses a boundary in import_boundaries.toml.
 
-Each contract in backend/import_boundaries.toml names code that must not
+Each contract in backend/lint/import_boundaries.toml names code that must not
 import other code. The check reads every `import` and `from ... import`
 statement, at any depth: module level, inside a function, and under
 `TYPE_CHECKING`. Imports made from a string, such as
@@ -11,9 +11,9 @@ Paths decide which contract applies, so directories without `__init__.py`
 and directories that ship outside the backend image are covered.
 
 Usage, from the repo root:
-    python3 backend/scripts/check_import_boundaries.py            # whole tree
-    python3 backend/scripts/check_import_boundaries.py backend/onyx/db/user.py ...
-    python3 backend/scripts/check_import_boundaries.py --changed [file ...]
+    python3 backend/lint/check_import_boundaries.py            # whole tree
+    python3 backend/lint/check_import_boundaries.py backend/onyx/db/user.py ...
+    python3 backend/lint/check_import_boundaries.py --changed [file ...]
 
 `--changed` is for the hook: it validates the contracts and checks only the
 given files, so a commit that changes no backend Python stays fast.
@@ -29,7 +29,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-CONFIG_PATH = BACKEND_DIR / "import_boundaries.toml"
+CONFIG_PATH = Path(__file__).resolve().parent / "import_boundaries.toml"
+_CONFIG_NAME = CONFIG_PATH.relative_to(BACKEND_DIR.parent).as_posix()
 _SKIP_DIRS = {".venv", "__pycache__", "node_modules"}
 _FORBIDDEN = "forbidden"
 _INDEPENDENCE = "independence"
@@ -362,7 +363,7 @@ def check_file(
     stale = [
         f"backend/{path}: the exception for `{exception.imports}` in contract "
         f"`{contract.name}` matches no import. Remove it from "
-        f"backend/{CONFIG_PATH.name}."
+        f"{_CONFIG_NAME}."
         for contract, exception in recorded
         if exception not in used
     ]
@@ -421,7 +422,7 @@ def main(arguments: list[str]) -> int:
     try:
         contracts = load_contracts(CONFIG_PATH, BACKEND_DIR)
     except (ConfigError, tomllib.TOMLDecodeError) as error:
-        print(f"backend/{CONFIG_PATH.name}: {error}")
+        print(f"{_CONFIG_NAME}: {error}")
         return 2
 
     changed_only = "--changed" in arguments
@@ -451,7 +452,7 @@ def main(arguments: list[str]) -> int:
     if violations:
         print(
             f"{len(violations)} import boundary violation(s). The contracts are in "
-            f"backend/{CONFIG_PATH.name}. Move the code as `instead` says. For a "
+            f"{_CONFIG_NAME}. Move the code as `instead` says. For a "
             "deliberate import, add a [[contract.exception]] entry with a reason."
         )
     return 1 if violations or stale else 0

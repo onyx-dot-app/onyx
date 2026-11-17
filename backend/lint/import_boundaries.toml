@@ -1,4 +1,4 @@
-# Import boundaries for backend/. Checked by scripts/check_import_boundaries.py
+# Import boundaries for backend/. Checked by lint/check_import_boundaries.py
 # (pre-commit hook `import-boundaries`).
 #
 # A contract:
@@ -33,7 +33,7 @@ rule = "shared_configs must not import another backend package"
 reason = "The API server image and the model server image both ship shared_configs, and each has only part of the other code."
 instead = "Keep shared_configs to settings and context variables. Put the logic in onyx/ and import shared_configs from there."
 source = ["shared_configs/"]
-forbidden = ["onyx", "ee", "model_server", "scripts", "tests", "alembic_tenants"]
+forbidden = ["onyx", "ee", "model_server", "scripts", "lint", "tests", "alembic_tenants"]
 
 [[contract]]
 name = "model-server-image"
@@ -41,7 +41,7 @@ rule = "model_server may import from onyx only the modules that Dockerfile.model
 reason = "The model server image has no other onyx, ee, scripts or tests code, so any other import fails at start."
 instead = "Put code that both servers need in shared_configs. To share one more onyx module, add its COPY line to Dockerfile.model_server and its name to `allowed`."
 source = ["model_server/"]
-forbidden = ["onyx", "ee", "scripts", "tests"]
+forbidden = ["onyx", "ee", "scripts", "lint", "tests"]
 allowed = [
     "onyx.__version__",
     "onyx.configs.sentry",
@@ -52,19 +52,19 @@ allowed = [
 ]
 
 [[contract]]
-name = "app-not-model-server-or-scripts"
-rule = "onyx and ee must not import model_server or scripts"
-reason = "The backend image has no model_server package and only a few named scripts. The API server reaches the model server over HTTP."
+name = "app-not-model-server-or-tooling"
+rule = "onyx and ee must not import model_server, scripts or lint"
+reason = "The backend image has no model_server or lint package and only a few named scripts. The API server reaches the model server over HTTP."
 instead = "Call the model server through its HTTP client in onyx/natural_language_processing. Move code that a script and the app share into onyx/."
 source = ["onyx/", "ee/"]
-forbidden = ["model_server", "scripts"]
+forbidden = ["model_server", "scripts", "lint"]
 
 [[contract]]
 name = "no-test-code-in-shipped-packages"
-rule = "ee, model_server, shared_configs, scripts and alembic must not import tests"
+rule = "ee, model_server, shared_configs, scripts, lint and alembic must not import tests"
 reason = "No image ships tests/, and test helpers are not written for production use."
 instead = "Move the helper into the package that needs it and import it from the test."
-source = ["ee/", "model_server/", "shared_configs/", "scripts/", "alembic/", "alembic_tenants/"]
+source = ["ee/", "model_server/", "shared_configs/", "scripts/", "lint/", "alembic/", "alembic_tenants/"]
 forbidden = ["tests"]
 
 [[contract]]
@@ -74,7 +74,7 @@ reason = "sandbox_daemon ships alone in the sandbox image as the top-level packa
 instead = "Keep the code inside sandbox_daemon/. Where the API server needs the same value, define it on both sides and name the twin in a comment."
 source = ["onyx/server/features/build/sandbox/image/"]
 standalone = true
-forbidden = ["onyx", "ee", "shared_configs", "model_server", "scripts", "tests"]
+forbidden = ["onyx", "ee", "shared_configs", "model_server", "scripts", "lint", "tests"]
 
 [[contract]]
 name = "builtin-skills-are-standalone"
@@ -83,7 +83,7 @@ reason = "Built-in skill scripts run inside the sandbox, which has no backend co
 instead = "Keep the helper inside the skill directory. Reach Onyx from a skill through its HTTP API."
 source = ["onyx/skills/builtin/"]
 standalone = true
-forbidden = ["onyx", "ee", "shared_configs", "model_server", "scripts", "tests"]
+forbidden = ["onyx", "ee", "shared_configs", "model_server", "scripts", "lint", "tests"]
 
 [[contract]]
 name = "backend-does-not-import-builtin-skills"

@@ -60,15 +60,15 @@ tests. Additive to the root `AGENTS.md`.
 
 ## Import Boundaries
 
-`scripts/check_import_boundaries.py` (pre-commit hook `import-boundaries`) fails a commit that
-adds an import across one of these boundaries. The contracts are in `import_boundaries.toml`.
+`lint/check_import_boundaries.py` (pre-commit hook `import-boundaries`) fails a commit that
+adds an import across one of these boundaries. The contracts are in `lint/import_boundaries.toml`.
 
 | Code | Must not import |
 | --- | --- |
 | `shared_configs` | Any other backend package |
-| `model_server` | `ee`, `scripts`, `tests`, and `onyx` except the modules that `Dockerfile.model_server` copies |
-| `onyx`, `ee` | `model_server`, `scripts` |
-| `ee`, `model_server`, `shared_configs`, `scripts`, `alembic` | `tests` |
+| `model_server` | `ee`, `scripts`, `lint`, `tests`, and `onyx` except the modules that `Dockerfile.model_server` copies |
+| `onyx`, `ee` | `model_server`, `scripts`, `lint` |
+| `ee`, `model_server`, `shared_configs`, `scripts`, `lint`, `alembic` | `tests` |
 | `onyx/server/features/build/sandbox/image` (sandbox daemon) | Any backend package |
 | `onyx/skills/builtin` | Any backend package. `onyx` and `ee` must not import it |
 | `onyx`, `ee` | The entry points `onyx.main`, `ee.onyx.main`, `onyx.mcp_server_main`, `onyx.webhook_server_main` |
@@ -79,7 +79,7 @@ adds an import across one of these boundaries. The contracts are in `import_boun
 - The failure message gives the contract and where the code goes. Move the code. Do not move the
   import into a function to hide it.
 - A deliberate import needs a `[[contract.exception]]` entry with a reason.
-- Run all contracts with `python3 backend/scripts/check_import_boundaries.py`.
+- Run all contracts with `python3 backend/lint/check_import_boundaries.py`.
 - A tree without Enterprise code, such as the FOSS mirror, skips the paths under `ee/`.
 
 ## Background Workers (Celery)

@@ -5,8 +5,8 @@ matches nothing, and rejects a contract that names a missing path."""
 from pathlib import Path
 
 import pytest
-from scripts import check_import_boundaries
-from scripts.check_import_boundaries import ConfigError, Contract
+from lint import check_import_boundaries
+from lint.check_import_boundaries import ConfigError, Contract
 
 _FORBIDDEN_CONTRACT = """
 [[contract]]
