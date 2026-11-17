@@ -291,7 +291,8 @@ def _preset_methods(preset: Preset) -> list[IntegrationAuthMethod | None]:
 
 
 def preset_views(user: User) -> list[PresetView]:
-    """Empty when Craft is not available: only Craft runs a preset app."""
+    """The presets an admin can add. Empty when Craft is not available:
+    only Craft runs a preset app."""
     if not is_craft_available_for_deployment(user):
         return []
     return [
@@ -307,6 +308,7 @@ def preset_views(user: User) -> list[PresetView]:
             or None,
         )
         for preset in sorted(PRESETS.values(), key=lambda preset: preset.name)
+        if not _is_onyx_managed(preset)
     ]
 
 
