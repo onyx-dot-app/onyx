@@ -2,7 +2,7 @@
 """Check new Alembic revisions without loading Alembic or running migration code.
 
 Run from any directory: python3 backend/lint/check_migration_design.py
-The hook checks both complete chains whenever a version file changes.
+The hook checks both complete chains, including when a commit deletes a revision.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import io
 import re
 import tokenize
 from collections.abc import Iterator
+from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
 
 _BACKEND = Path(__file__).resolve().parents[1]
@@ -40,12 +41,14 @@ _SA_CONSTRAINTS = {
 }
 
 
-def _walk_upgrade(node: ast.AST) -> Iterator[ast.AST]:
-    if isinstance(node, ast.FunctionDef) and node.name == "downgrade":
+def _walk_upgrade(node: ast.AST, *, enter_functions: bool = True) -> Iterator[ast.AST]:
+    if isinstance(node, ast.FunctionDef) and (
+        node.name == "downgrade" or not enter_functions
+    ):
         return
     yield node
     for child in ast.iter_child_nodes(node):
-        yield from _walk_upgrade(child)
+        yield from _walk_upgrade(child, enter_functions=enter_functions)
 
 
 def _argument(call: ast.Call, name: str, position: int = -1) -> ast.expr | None:
@@ -126,12 +129,12 @@ def find_violations(tree: ast.Module, source: str) -> list[tuple[int, str]]:
 
     violations: set[tuple[int, str]] = set()
     # Only use unconditional table creation in the same function as an exemption.
-    for function in tree.body:
-        if not isinstance(function, ast.FunctionDef) or function.name == "downgrade":
+    for function in _walk_upgrade(tree):
+        if not isinstance(function, ast.FunctionDef):
             continue
         created: set[tuple[str, str | None]] = set()
         for statement in function.body:
-            for call in _walk_upgrade(statement):
+            for call in _walk_upgrade(statement, enter_functions=False):
                 if not isinstance(call, ast.Call):
                     continue
                 for rule in (
@@ -224,16 +227,21 @@ def check_chain(directory: Path, marker: str) -> Iterator[str]:
         yield f"{directory}:1: revision-metadata: Restore missing revisions: {', '.join(sorted(missing))}."
         return
 
+    try:
+        TopologicalSorter(parents).prepare()
+    except CycleError as error:
+        cycle = error.args[1]
+        path, tree, _ = files[cycle[0]]
+        line = _metadata(tree)["down_revision"].lineno
+        yield f"{path}:{line}: revision-metadata: Fix the down_revision links to break this cycle: {' -> '.join(cycle)}."
+        return
+
     heads = files.keys() - {parent for down in parents.values() for parent in down}
     if len(heads) != 1:
         for head in sorted(heads):
             path, tree, _ = files[head]
             line = _metadata(tree)["down_revision"].lineno
             yield f"{path}:{line}: single-head: Rebase the new revision onto the current head or add a merge revision. Heads: {', '.join(sorted(heads))}."
-        if not heads:
-            yield f"{directory}:1: single-head: Repair the revision links to produce one head."
-    elif _ancestors(parents, next(iter(heads))) != files.keys():
-        yield f"{directory}:1: single-head: Link every revision to the chain that leads to the head."
 
     exempt = _ancestors(parents, marker)
     for revision in files.keys() - exempt:

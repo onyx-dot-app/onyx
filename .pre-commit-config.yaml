@@ -344,6 +344,8 @@ repos:
         language: system
         entry: python3 backend/lint/check_migration_design.py
         pass_filenames: false
+        # Pre-commit removes deleted files before applying the path filter.
+        always_run: true
         stages: [pre-commit]
         files: ^backend/alembic(_tenants)?/versions/.*\.py$
       - id: celery-task-expires

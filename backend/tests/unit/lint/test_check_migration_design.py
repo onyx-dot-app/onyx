@@ -114,3 +114,31 @@ def test_second_head_and_merge(tmp_path: Path) -> None:
     assert len(list(check_migration_design.check_chain(tmp_path, "marker"))) == 1
     _revision(tmp_path, "fork", "base", "pass")
     assert list(check_migration_design.check_chain(tmp_path, "marker")) == []
+
+
+def test_cycle_below_single_head(tmp_path: Path) -> None:
+    _revision(tmp_path, "marker", None, "pass")
+    _revision(tmp_path, "a", "b", "pass")
+    _revision(tmp_path, "b", "a", "pass")
+    head = _revision(tmp_path, "head", "a", "pass")
+    head.write_text('revision = "head"\ndown_revision = ("a", "marker")\n')
+    failures = list(check_migration_design.check_chain(tmp_path, "marker"))
+    assert len(failures) == 1
+    assert "revision-metadata:" in failures[0]
+    assert "cycle" in failures[0]
+
+
+def test_nested_helper_uses_its_own_table_creations(tmp_path: Path) -> None:
+    _revision(tmp_path, "marker", None, "pass")
+    _revision(
+        tmp_path,
+        "new",
+        "marker",
+        "def helper():\n"
+        '    op.create_table("events")\n'
+        '    op.create_index("ix", "events", ["created_at"])\n'
+        '    op.add_column("events", sa.Column("name", sa.String(), nullable=False))\n'
+        '    op.create_check_constraint("ck", "events", "name <> \'\'")\n'
+        "helper()",
+    )
+    assert list(check_migration_design.check_chain(tmp_path, "marker")) == []
