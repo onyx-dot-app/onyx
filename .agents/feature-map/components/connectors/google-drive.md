@@ -52,13 +52,19 @@ credential of the other kind.
 listing, the shard engine (see **Shard engine**), for a service account and
 for OAuth. `GoogleDriveConnector._plan_listing` plans it on the first call of
 an attempt, and `_fetch_drive_items` runs one call. The listing state grows
-with drives, users and open shards. Only the dedup set grows with files
-([[#dedup-set-capped]]).
+with drives, users and open shards, and with folders: `folder_names` keeps the
+name and parent of each listed folder, so a stub's folder path needs no read.
+Only the dedup set grows with files ([[#dedup-set-capped]]).
 
 **Checkpointed slim listing.**
 `GoogleDriveConnector.retrieve_slim_docs_from_checkpoint` runs one call of the
 slim listing and returns the checkpoint. It yields `SlimDocumentStub`s with a
-`DriveListingPayload` (the user who listed the file).
+`DriveListingPayload` (the user who listed the file). It asks Drive for no
+permissions; `resolve_targets` reads every permission of a file before the
+link-only filter and permission sync use them. With permission sync, each
+folder node still gets its permissions (`_listed_folder_node`), so a private
+folder is never a public node. Inline indexing and pruning ask for permissions
+when `exclude_domain_link_only` is on, because they filter at the listing.
 
 **Indexability.** `connectors/google_drive/doc_conversion.py:drive_file_skip_reason` is the metadata
 check: shortcut or folder, `exclude_domain_link_only`, size, images and the
