@@ -106,9 +106,13 @@ def _update_user_record(
 
 
 def record_seen(user_id: UUID, now: datetime) -> UserRecord:
-    return _update_user_record(
-        user_id, lambda record: record.model_copy(update={"last_seen_at": now})
-    )
+    def mark(record: UserRecord) -> UserRecord:
+        # Two tabs can take the lock out of order; never move the time back.
+        if record.last_seen_at is not None and record.last_seen_at >= now:
+            return record
+        return record.model_copy(update={"last_seen_at": now})
+
+    return _update_user_record(user_id, mark)
 
 
 def mark_used(user_id: UUID, question_id: str) -> UserRecord:
