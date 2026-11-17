@@ -25,7 +25,9 @@ Usage, from the repo root:
 
 import argparse
 import ast
+import io
 import re
+import tokenize
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -269,10 +271,20 @@ def _calls_with_statement(tree: ast.AST) -> list[tuple[ast.Call, ast.stmt]]:
     return found
 
 
+def _comments(source: str) -> dict[int, str]:
+    """The comment on each line, so a marker inside a string does not count."""
+    comments: dict[int, str] = {}
+    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+        if token.type == tokenize.COMMENT:
+            comments[token.start[0]] = token.string
+    return comments
+
+
 def find_db_operations(source: str) -> tuple[list[int], list[int]]:
     """One-based lines of database operations, and of allow markers with no reason."""
     tree = ast.parse(source)
     lines = source.splitlines()
+    comments = _comments(source)
     imports = _Imports(tree)
     sessions = _session_names(tree, imports)
     found: set[int] = set()
@@ -294,8 +306,10 @@ def find_db_operations(source: str) -> tuple[list[int], list[int]]:
         above = statement.lineno - 1
         if above >= 1 and lines[above - 1].lstrip().startswith("#"):
             marker_lines.append(above)
-        marked = [line for line in marker_lines if ALLOW_MARKER in lines[line - 1]]
-        if any(_ALLOW_WITH_REASON.search(lines[line - 1]) for line in marked):
+        marked = [
+            line for line in marker_lines if ALLOW_MARKER in comments.get(line, "")
+        ]
+        if any(_ALLOW_WITH_REASON.search(comments[line]) for line in marked):
             continue
         no_reason.update(marked)
         found.add(call.lineno)
@@ -427,6 +441,10 @@ def main(argv: list[str] | None = None) -> int:
     risen, stale = check(operations, baseline, existing)
 
     if args.write_baseline:
+        if no_reason:
+            print(f"`# {ALLOW_MARKER}` needs a reason after it:")
+            print("\n".join(f"  {entry}" for entry in no_reason))
+            return 1
         # Regeneration lowers counts. A rise needs a marker or an edit by hand.
         if risen and has_baseline:
             print("The baseline can only go down. These files have new operations:")

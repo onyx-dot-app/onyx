@@ -392,9 +392,10 @@ repos:
         description: "Fail when a file outside backend/onyx/db and backend/ee/onyx/db gains a database operation"
         language: system
         entry: python3 backend/lint/check_db_ops_outside_db.py
-        pass_filenames: true
+        pass_filenames: false
+        # A commit that only deletes a baselined file must run the check too.
+        always_run: true
         stages: [pre-commit]
-        files: ^backend/((onyx|ee/onyx)/.*\.py|lint/db_ops_outside_db_baseline\.txt)$
       # Runs on every commit so a rename or deletion of a file the map cites
       # fails in the same PR.
       - id: feature-map-integrity

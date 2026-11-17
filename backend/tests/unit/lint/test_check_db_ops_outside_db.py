@@ -221,6 +221,13 @@ def test_allow_marker_with_a_reason_exempts_its_call(body: str) -> None:
     assert check_db_ops_outside_db.find_db_operations(_source(body)) == ([], [])
 
 
+def test_allow_marker_inside_a_string_does_not_count() -> None:
+    body = "db_session.execute(text(\"SELECT 'db-ops-outside-db: allow sample'\"))"
+    lines, no_reason = check_db_ops_outside_db.find_db_operations(_source(body))
+    assert lines == [_FIRST_BODY_LINE]
+    assert no_reason == []
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -338,6 +345,21 @@ def test_write_baseline_lowers_a_count_and_refuses_a_rise(
     (tmp_path / _CORE_FILE).write_text(_ONE_OPERATION)
     assert check_db_ops_outside_db.main(["--write-baseline"]) == 1
     assert check_db_ops_outside_db.read_baseline(baseline) == {}
+
+
+def test_write_baseline_refuses_a_marker_without_a_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    baseline = _repo(tmp_path, monkeypatch, {_CORE_FILE: _TWO_OPERATIONS})
+    assert check_db_ops_outside_db.main(["--write-baseline"]) == 0
+    (tmp_path / _CORE_FILE).write_text(
+        _source(
+            "db_session.execute(stmt)\n"
+            "db_session.scalar(stmt)  # db-ops-outside-db: allow"
+        )
+    )
+    assert check_db_ops_outside_db.main(["--write-baseline"]) == 1
+    assert check_db_ops_outside_db.read_baseline(baseline) == {_CORE_FILE: 2}
 
 
 def test_a_deleted_file_fails_a_full_scan_only(
