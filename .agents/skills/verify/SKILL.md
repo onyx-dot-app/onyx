@@ -5,7 +5,8 @@ description: Verify a backend change through the running Onyx app before committ
 
 # Verify a backend change
 
-1. Identify changed paths with `git diff HEAD` or `git show <commit>`.
+1. Check `git status --short` for untracked paths. Read `git diff HEAD` or
+   `git show <commit>` for the diff.
    Use [PATHS.md](../../feature-map/PATHS.md) and
    [VERIFYING.md](../../feature-map/VERIFYING.md) to find affected features.
    Pick the API entry point, expected result, service logs, and narrowest integration test.
@@ -53,8 +54,10 @@ description: Verify a backend change through the running Onyx app before committ
    service output if the path is missing. Record missing log evidence.
 5. Run the selected test per [backend/AGENTS.md](../../../backend/AGENTS.md).
    The integration runner provides its own in-process API and workers.
-   Use the isolated ODS environment for test infrastructure. Stop the ODS app
-   services after the live probe so the test workers can own the queues.
+   Use isolated ODS infrastructure for the test workers.
+   If you started that stack for the probe, stop its app services and keep its
+   infrastructure. If you reused a shared app, keep it running and use a separate
+   isolated stack for the test.
    If the test resets data, confirm the isolated Postgres host and port.
    Set `POSTGRES_DB` to the database name in that stack, normally `postgres`.
    Read [integration setup](../../../backend/tests/integration/README.md) for

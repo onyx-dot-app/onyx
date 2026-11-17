@@ -172,7 +172,7 @@ Add a `Verified-by:` trailer to each commit. Use `e2e`, `integration`, `unit`, o
 `none (short reason)`.
 
 Install the Git hooks with `pre-commit install` to enable the gate in Claude Code and Codex.
-The default mode is `observe`. Set `onyx.verificationMode` with `git config --local`
+The gate runs on `git commit`. The default mode is `observe`. Set `onyx.verificationMode` with `git config --local`
 to `off`, `observe`, or `enforce`. Observe mode logs missing or invalid trailers in
 `$(git rev-parse --git-path onyx-verification.log)`. Enforce mode permits a reason in
 `Verified-by: none (short reason)`. After two blocks in the same agent session,

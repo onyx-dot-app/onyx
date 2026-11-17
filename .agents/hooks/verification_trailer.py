@@ -59,11 +59,12 @@ def main() -> int:
     counter = Path(git("rev-parse", "--git-path", counter_name))
     if len(sys.argv) == 1:
         counter.unlink(missing_ok=True)
-        if not has_stamp(git("log", "-1", "--format=%B")):
+        sha = git("rev-parse", "HEAD")
+        if not has_stamp(git("show", "-s", "--format=%B", sha)):
             log = Path(git("rev-parse", "--git-path", "onyx-verification.log"))
             with log.open("a", encoding="utf-8") as output:
                 output.write(
-                    f"{datetime.now(UTC).isoformat()} {git('rev-parse', 'HEAD')} missing or invalid Verified-by\n"
+                    f"{datetime.now(UTC).isoformat()} {sha} missing or invalid Verified-by\n"
                 )
         return 0
 
