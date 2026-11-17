@@ -120,8 +120,12 @@ test("a report that finishes while cached jobs show appears", async ({
     })
   );
   const reports = new UsageReportsPage(page);
+  // Reports load after the jobs read, so the empty jobs list is cached then.
+  const reportsRead = page.waitForResponse((response) =>
+    response.url().endsWith("/api/admin/usage-report")
+  );
   await reports.goto();
-  await reports.expectCanGenerate();
+  await reportsRead;
   await reports.leave();
   // The page mounts again with the cached empty jobs list.
   delayJobs = true;

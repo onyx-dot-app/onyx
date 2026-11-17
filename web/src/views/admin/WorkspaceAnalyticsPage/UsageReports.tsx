@@ -4,7 +4,7 @@ import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { format, startOfDay, subDays } from "date-fns";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import {
   Button,
   Calendar,
@@ -305,26 +305,38 @@ export default function UsageReports() {
   );
   const abortRef = useRef<AbortController | null>(null);
 
+  const { mutate: mutateKey } = useSWRConfig();
+  // A worker records the report in the transaction that deletes its job, so
+  // reports read after a jobs response include every job that response lacks.
+  // Read reports again after the first jobs read of a visit and when an open
+  // job ends. A forced read also drops any older reports read in flight.
+  const visitReadJobsRef = useRef(false);
+  const openJobIdsRef = useRef<Set<string>>(new Set());
   const {
     data: jobs,
     error: jobsError,
     isLoading: jobsLoading,
     mutate: mutateJobs,
   } = useSWR<UsageReportJob[]>(SWR_KEYS.usageReportJobs, errorHandlingFetcher, {
-    // The mount effect below fetches jobs, so cached jobs cannot start reports.
+    // The mount effect reads jobs, so cached jobs never replace a fresh read.
     revalidateOnMount: false,
     refreshInterval: (latest) => (latest?.some(isOpen) ? POLL_INTERVAL_MS : 0),
+    onSuccess: (latest) => {
+      const open = new Set(latest.filter(isOpen).map((job) => job.report_id));
+      const ended = [...openJobIdsRef.current].some((id) => !open.has(id));
+      openJobIdsRef.current = open;
+      if (visitReadJobsRef.current && !ended) return;
+      visitReadJobsRef.current = true;
+      void mutateKey(SWR_KEYS.usageReport).catch((error: unknown) => {
+        console.error("Failed to refresh the usage report list:", error);
+      });
+    },
   });
-  const [jobsFetched, setJobsFetched] = useState(false);
   useEffect(() => {
-    let active = true;
-    void mutateJobs().finally(() => {
-      if (active) setJobsFetched(true);
-    });
+    void mutateJobs();
     return () => {
-      active = false;
       // A back navigation can show this page again with its state kept.
-      setJobsFetched(false);
+      visitReadJobsRef.current = false;
     };
   }, [mutateJobs]);
   // Only the admin's own request blocks Generate. Jobs of other admins, or
@@ -332,33 +344,15 @@ export default function UsageReports() {
   const pending = (jobs ?? []).some(
     (job) => job.report_id === requestedReportId && isOpen(job)
   );
-  // A worker records the report in the transaction that deletes its job, so
-  // reports read after a fresh jobs response include every job it lacks.
   const {
     data: reports,
     error: listError,
     mutate,
-  } = useSWR<UsageReport[]>(
-    jobsFetched && jobs ? SWR_KEYS.usageReport : null,
-    errorHandlingFetcher,
-    // A deduplicated read could predate the fresh jobs read.
-    { dedupingInterval: 0 }
-  );
+  } = useSWR<UsageReport[]>(SWR_KEYS.usageReport, errorHandlingFetcher, {
+    // Reports load only after a jobs read, from the jobs onSuccess above.
+    revalidateOnMount: false,
+  });
   const listLoading = !reports && !listError;
-
-  // Reload the reports once an open job ends.
-  const openJobIdsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (!jobs) return;
-    const open = new Set(jobs.filter(isOpen).map((job) => job.report_id));
-    const ended = [...openJobIdsRef.current].some((id) => !open.has(id));
-    openJobIdsRef.current = open;
-    if (ended) {
-      void mutate().catch((error: unknown) => {
-        console.error("Failed to refresh the usage report list:", error);
-      });
-    }
-  }, [jobs, mutate]);
 
   useEffect(() => {
     if (listError) console.error("Failed to load usage reports:", listError);
