@@ -52,6 +52,23 @@ import {
 import { saveSession, loadSession, clearSession } from "./utils/storage";
 import { DEFAULT_LOGO } from "./assets/logo";
 
+let linkHookAdded = false;
+
+/** Sanitizes answer HTML; its links open in a new tab so the visitor keeps the host page. */
+function sanitizeAnswerHtml(dirty: string): string {
+  // Added on first use: DOMPurify has no hooks API until it runs with a DOM
+  if (!linkHookAdded) {
+    DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+      if (node.tagName === "A") {
+        node.setAttribute("target", "_blank");
+        node.setAttribute("rel", "noopener noreferrer");
+      }
+    });
+    linkHookAdded = true;
+  }
+  return DOMPurify.sanitize(dirty, { ADD_TAGS: ["sup"] });
+}
+
 /** What a followed stream applied, and where a reattach continues from. */
 interface StreamFollow {
   message: ChatMessage | null;
@@ -374,10 +391,7 @@ export class OnyxChatWidget extends LitElement {
         }
       }
       const htmlContent = marked.parse(stripped, { async: false }) as string;
-      const sanitizedHTML = DOMPurify.sanitize(htmlContent, {
-        ADD_TAGS: ["sup"],
-      });
-      return unsafeHTML(sanitizedHTML);
+      return unsafeHTML(sanitizeAnswerHtml(htmlContent));
     } catch (err) {
       console.error("Failed to parse markdown:", err);
       return content; // Fallback to plain text
