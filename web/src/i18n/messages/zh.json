@@ -10798,7 +10798,8 @@
         "askHint": "要在不询问的情况下运行，管理员需在集成中将其设为允许，或每位用户选择始终允许。",
         "askHintAdminOnly": "要在不询问的情况下运行，管理员需在集成中将其设为允许。",
         "choice": {
-          "inherit": "使用集成设置"
+          "inherit": "使用集成设置",
+          "agentDefault": "使用智能体默认设置"
         },
         "default": {
           "description": "适用于没有自身设置的每个操作，也适用于集成以后添加的操作。",
@@ -10833,7 +10834,8 @@
         },
         "openIntegration": {
           "label": "打开 {integration} 的操作"
-        }
+        },
+        "stricterPlugin": "此智能体的 {plugin} 插件为此操作设置了更严格的设置。"
       },
       "prompts": {
         "instructions": {

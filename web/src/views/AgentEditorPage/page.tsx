@@ -388,15 +388,17 @@ export function AgentDraftManager({
     if (!loaded || restoredRef.current) return;
     restoredRef.current = true;
     if (hasDraft && draft && !dirty) {
-      // Revive the date field that JSON serialized to an ISO string.
+      // Revive the date field that JSON serialized to an ISO string. A draft
+      // from an older version can lack a field, so the form values fill it.
       const cutoff = draft.knowledge_cutoff_date;
       setValues({
+        ...values,
         ...draft,
         knowledge_cutoff_date:
           typeof cutoff === "string" ? new Date(cutoff) : (cutoff ?? null),
       });
     }
-  }, [loaded, hasDraft, draft, dirty, setValues]);
+  }, [loaded, hasDraft, draft, dirty, setValues, values]);
 
   return null;
 }
