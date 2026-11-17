@@ -1496,11 +1496,12 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             else:
                 release_child.set()
             first_coordinator.completion(direct_child.run_id).result(timeout=10)
-        # Agents from the earlier turn are listed on request.
+        # Agents from the earlier turn are listed on request, and keep their paths.
         later_calls = [
             ToolCall(
                 id="list", name="list_agents", arguments={"include_finished": True}
-            )
+            ),
+            spawn_call("respawn", "research", "Find the answer again"),
         ]
         if action == "cancel":
             later_calls.append(
@@ -1508,7 +1509,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
                     id="queue",
                     name="send_message",
                     arguments={
-                        "agent_id": child.agent_id,
+                        "target": child.agent_path,
                         "message": "Continue later",
                         "delivery": "queue",
                     },
@@ -1518,7 +1519,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
                 ToolCall(
                     id="interrupt",
                     name="interrupt_agent",
-                    arguments={"agent_id": child.agent_id},
+                    arguments={"target": child.agent_path},
                 )
             )
             later_calls.append(ToolCall(id="refresh", name="list_agents", arguments={}))
@@ -1547,7 +1548,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             FakeModelClient(later_reply),
             agent_id=str(branch[0]),
             prompt="Help",
-            create_subagent=lambda: pytest.fail("A later turn must not spawn"),
+            create_subagent=create_leaf,
         )
         # The root comes first; the cap keeps each listed agent's parent.
         with patch("onyx.db.chat_subagents.MAX_DISCOVERED_AGENTS", 2):
@@ -1568,17 +1569,22 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             )
             assert later.result(timeout=15).output.text == "Checked"
             assert later.wait_for_idle(timeout=10)
-        later_results = [
-            tool.result
+        later_results = {
+            call_id: tool.result
             for step in later.snapshot().steps
-            for tool in step.tools.values()
-        ]
-        assert all(
-            result is not None and not result.is_error for result in later_results
+            for call_id, tool in step.tools.items()
+        }
+        refused = later_results.pop("respawn")
+        assert refused is not None and refused.text == (
+            "Tool failed with error: An agent at /root/research already exists. "
+            "Use send_message to continue it, or pick another name."
         )
-        listed = later_results[0]
+        assert all(
+            result is not None and not result.is_error
+            for result in later_results.values()
+        )
+        listed = later_results["list"]
         assert listed is not None
-        assert child.agent_id in listed.text
         assert child.agent_path in listed.text
         later_coordinator.completion(later.id).result(timeout=10)
         first_coordinator.completion(child.run_id).result(timeout=10)
@@ -1752,7 +1758,7 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
                         id="send",
                         name="send_message",
                         arguments={
-                            "agent_id": child.agent_id,
+                            "target": child.agent_path,
                             "message": "follow up",
                             "delivery": delivery,
                         },
@@ -1876,7 +1882,7 @@ def test_message_from_an_earlier_turn_continues_the_recipients_latest_run(
             ToolCall(
                 id="tell",
                 name="send_message",
-                arguments={"agent_id": c_ids[0], "message": "from X"},
+                arguments={"target": "/root/c", "message": "from X"},
             )
         )
 
@@ -1968,7 +1974,7 @@ def test_message_from_an_earlier_turn_continues_the_recipients_latest_run(
                     ToolCall(
                         id="ask",
                         name="send_message",
-                        arguments={"agent_id": c_ids[0], "message": "from root"},
+                        arguments={"target": "/root/c", "message": "from root"},
                     )
                 )
             assert finish_later_root.wait(30)
@@ -2542,9 +2548,6 @@ def test_interrupt_stops_one_run_without_a_result_or_follow_up(
     leaf_started = threading.Event()
     release_leaf = threading.Event()
 
-    def agent_id(path: str) -> str:
-        return next(info.id for info in owner.list_agents() if info.path == path)
-
     def leaf_reply(*_: object) -> AssistantMessage:
         leaf_started.set()
         assert release_leaf.wait(10)
@@ -2552,7 +2555,7 @@ def test_interrupt_stops_one_run_without_a_result_or_follow_up(
 
     def interrupt(call_id: str, target: str) -> ToolCall:
         return ToolCall(
-            id=call_id, name="interrupt_agent", arguments={"agent_id": target}
+            id=call_id, name="interrupt_agent", arguments={"target": target}
         )
 
     child_calls = 0
@@ -2565,8 +2568,8 @@ def test_interrupt_stops_one_run_without_a_result_or_follow_up(
         if child_calls > 1:
             return text("Evidence delegated")
         return calls(
-            interrupt("root", str(branch[0])),
-            interrupt("self", agent_id("/root/research")),
+            interrupt("root", "/root"),
+            interrupt("self", "/root/research"),
             spawn_call("leaf", "leaf", "Collect evidence"),
         )
 
@@ -2600,7 +2603,7 @@ def test_interrupt_stops_one_run_without_a_result_or_follow_up(
                 )
             )
             assert child.wait_until_settled(10).status == RunStatus.SUSPENDED
-            return calls(interrupt("interrupt", agent_id("/root/research")))
+            return calls(interrupt("interrupt", "/root/research"))
         return text("Done")
 
     root = fake_agent(
@@ -2683,7 +2686,7 @@ def test_agent_message_to_the_root_waits_for_its_next_run(
                 ToolCall(
                     id="status",
                     name="send_message",
-                    arguments={"agent_id": str(branch[0]), "message": "Halfway there"},
+                    arguments={"target": "/root", "message": "Halfway there"},
                 )
             )
         sent.set()
@@ -2705,9 +2708,6 @@ def test_agent_message_to_the_root_waits_for_its_next_run(
         assert first.result(timeout=10).output.text == "Started"
         assert first.wait_for_idle(timeout=10)
         assert sent.wait(10)
-        child_id = next(
-            info.id for info in owner.list_agents() if info.path == "/root/research"
-        )
         monkeypatch.setattr("onyx.chat.run_store.INPUT_POLL_SECONDS", 0)
         # One inbox scan leaves the message in the root's inbox and starts no root response.
         with patch("onyx.db.chat_inputs.pending_inputs", wraps=pending_inputs) as scan:
@@ -2722,9 +2722,7 @@ def test_agent_message_to_the_root_waits_for_its_next_run(
                     ChatInput.source == InputSource.AGENT,
                 )
             )
-        ] == [
-            f"Message from agent /root/research (agent_id: {child_id}):\nHalfway there"
-        ]
+        ] == ["Message from agent /root/research:\nHalfway there"]
         assert assistant_count(db_session, branch[0]) == 1
         assert queued_root_turn(db_session, branch[0]) is None
 
@@ -2960,7 +2958,7 @@ def test_results_follow_up_restores_through_the_spawner_after_another_sender(
                 id="queue-research",
                 name="send_message",
                 arguments={
-                    "agent_id": agent_info("/root/research").id,
+                    "target": "/root/research",
                     "message": "Use C",
                     "delivery": "queue",
                 },

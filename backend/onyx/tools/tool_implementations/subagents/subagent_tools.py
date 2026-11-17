@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel
 
-from onyx.agents.models import MessageDelivery, RunFailureKind
+from onyx.agents.models import AgentInfo, MessageDelivery, RunFailureKind
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentLifetime, ToolInvocation
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
@@ -38,6 +38,34 @@ from onyx.tools.tool_implementations.subagents.models import (
 
 # An agent name is a path segment shown in agent lists and the UI.
 MAX_AGENT_NAME_BYTES = 256
+
+
+def _find_agent(agents: list[AgentInfo], caller_id: str, target: str) -> AgentInfo:
+    """The agent at `target`: a path, `..` for the caller's parent, or an agent ID.
+
+    `register_child` keeps paths unique, but an older chat can repeat a path.
+    Discovery keeps the directory's order (spawned_by_message_id descending),
+    so the agent from the newest spawning response wins.
+    """
+    if target == "..":
+        parent_id = next(
+            (agent.parent_id for agent in agents if agent.id == caller_id), None
+        )
+        if parent_id is None:
+            raise ToolCallException(
+                "The root has no parent.",
+                "You are the root agent, so you have no parent. Use list_agents "
+                "to find agents.",
+            )
+        target = parent_id
+    found = next((agent for agent in agents if target in (agent.path, agent.id)), None)
+    if found is None:
+        raise ToolCallException(
+            f"No visible agent matches {target!r}.",
+            f"No agent on this chat branch has the path {target!r}. Use a path "
+            "that list_agents shows.",
+        )
+    return found
 
 
 class _SubagentTool(Tool):
@@ -88,15 +116,13 @@ class SpawnAgentTool(_SubagentTool):
             lifetime=AgentLifetime.BACKGROUND,
             total_timeout_s=CHAT_EXECUTION_TIMEOUT_S,
         )
-        return ToolResult(
-            content=f"Started {started.agent_path} (agent_id: {started.agent_id})."
-        )
+        return ToolResult(content=f"Started {started.agent_path}.")
 
 
 class ListAgentsTool(_SubagentTool):
     name = "list_agents"
     display_name = "List agents"
-    description = "List agents with their path, agent_id, parent and status."
+    description = "List agents with their path and status."
     arguments = ListAgentsArguments
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
@@ -130,8 +156,7 @@ class ListAgentsTool(_SubagentTool):
                 if agent.status is not None
                 else "not started"
             )
-            parent = f"parent {agent.parent_id}" if agent.parent_id else "root"
-            line = f"{agent.path} (agent_id: {agent.id}; {parent}): {status}"
+            line = f"{agent.path}: {status}"
             if agent.id == control.agent_id:
                 line += " [you]"
             lines.append(line)
@@ -157,8 +182,9 @@ class SendMessageTool(_SubagentTool):
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         request = parse_tool_arguments(SendMessageArguments, invocation.arguments)
-        receipt = invocation.agents.send_message(
-            request.agent_id,
+        control = invocation.agents
+        receipt = control.send_message(
+            _find_agent(control.discover_agents(), control.agent_id, request.target).id,
             message=request.message,
             delivery=request.delivery,
             max_steps=self.max_steps,
@@ -179,12 +205,17 @@ class InterruptAgentTool(_SubagentTool):
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         selection = parse_tool_arguments(AgentSelectionArguments, invocation.arguments)
-        agent = invocation.agents.interrupt_agent(selection.agent_id)
+        control = invocation.agents
+        agent = control.interrupt_agent(
+            _find_agent(
+                control.discover_agents(), control.agent_id, selection.target
+            ).id
+        )
         if agent is None:
             raise ToolCallException(
                 "Agent cannot be interrupted on this chat branch.",
-                "That agent cannot be interrupted: it is you, the root, or not on this "
-                "chat branch. Use list_agents to find agents.",
+                "That agent cannot be interrupted: it is you or the root. Use "
+                "list_agents to find agents.",
             )
         return ToolResult(content=f"Interruption requested for {agent.path}.")
 
@@ -210,19 +241,23 @@ class WaitAgentsTool(_SubagentTool):
                 "it. Wait for it with wait_code first.",
             )
         control = invocation.agents
+        agents = control.discover_agents()
         children = {
-            agent.id: agent
-            for agent in control.discover_agents()
-            if agent.parent_id == control.agent_id
+            agent.id: agent for agent in agents if agent.parent_id == control.agent_id
         }
-        agent_ids = request.agent_ids
-        unknown = [agent_id for agent_id in agent_ids or [] if agent_id not in children]
+        selected = [
+            _find_agent(agents, control.agent_id, target)
+            for target in request.targets or []
+        ]
+        unknown = [agent.path for agent in selected if agent.id not in children]
         if unknown:
             raise ToolCallException(
                 "Agents to wait for are not the caller's agents.",
                 f"You did not start these agents: {', '.join(unknown)}. "
                 "Use list_agents to find the agents that you started.",
             )
+        # No targets means all of the caller's agents.
+        agent_ids = [agent.id for agent in selected] or None
         running = sorted(
             children[agent_id].path
             for agent_id in agent_ids or children

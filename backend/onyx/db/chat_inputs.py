@@ -859,8 +859,7 @@ def enqueue_message(
         if sender is None:
             raise ValueError("Message sender is unavailable")
         content = (
-            f"Message from agent {agent_session_path(session, sender)} "
-            f"(agent_id: {sender.id}):\n{content}"
+            f"Message from agent {agent_session_path(session, sender)}:\n{content}"
         )
     row = ChatInput(
         recipient_session_id=UUID(request.agent_id),

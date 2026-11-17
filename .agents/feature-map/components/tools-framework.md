@@ -250,8 +250,10 @@ The root can finish its response while background children continue.
 An idle agent starts a follow-up response for unread child results.
 Only the root gets `wait_agents` and the `ROOT_AGENT_INSTRUCTIONS` prompt block; the wait rule is in [[chat-persistence]]. These results
 stay in model history; only the parent's response appears as a chat message.
-Tool replies use concise text. The `agent_id` from spawn/list is the control
-handle; paths are display labels and need not be unique.
+Tool replies use concise text, and models see agent paths, never IDs. `send_message` and
+`interrupt_agent` take a `target`, and `wait_agents` takes `targets`: a path from spawn/list, or
+`..` for the caller's parent (`tools/tool_implementations/subagents/subagent_tools.py:_find_agent`, over `discover_agents`). A path names one agent on the branch: `spawn_agent` refuses a name whose
+path any visible agent holds, finished agents included (`agents/agent_coordination.py:register_child`).
 
 **Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
 runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
