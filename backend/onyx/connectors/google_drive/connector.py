@@ -1607,8 +1607,10 @@ class GoogleDriveConnector(
                 if not error.access_denied:
                     raise
                 continue
+            # A later read wins: a stored permission can be out of date, for
+            # example its allowFileDiscovery.
             for permission in permissions:
-                found.setdefault(str(permission.get("id")), permission)
+                found[str(permission.get("id"))] = permission
             if found and not _missing_permission_ids(found.values(), permission_ids):
                 return {**drive_file, "permissions": list(found.values())}
         if found or drive_file.get("driveId"):
@@ -1637,11 +1639,22 @@ class GoogleDriveConnector(
                 ids_by_user.setdefault(payload.retriever_email, []).append(file_id)
         fields: dict[str, GoogleDriveFileType] = {}
         for user_email, file_ids in ids_by_user.items():
-            result = self.ops.batch_get_files(
-                user_email=user_email,
-                file_ids_by_key={file_id: file_id for file_id in file_ids},
-                fields=_PERMISSION_FIELDS,
-            )
+            try:
+                result = self.ops.batch_get_files(
+                    user_email=user_email,
+                    file_ids_by_key={file_id: file_id for file_id in file_ids},
+                    fields=_PERMISSION_FIELDS,
+                )
+            except GoogleDriveRefreshError as error:
+                # The listing user cannot be impersonated now. Its files go
+                # through `reindex`, which reads them as the admin.
+                logger.warning(
+                    "Could not read the permissions of %s Drive files as %s: %s",
+                    len(file_ids),
+                    user_email,
+                    error,
+                )
+                continue
             fields.update(result.files)
             if result.errors:
                 logger.warning(
