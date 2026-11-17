@@ -147,34 +147,6 @@
         "tooltip": "{description}\nDieses Tool für diesen Chat bevorzugen. Der Agent kann antworten, ohne es zu verwenden."
       }
     },
-    "addMcpModal": {
-      "cancelButton": {
-        "label": "Abbrechen"
-      },
-      "description": {
-        "placeholder": "Was kann Ihr Team mit diesem Server tun?",
-        "suffix": "optional",
-        "title": "Beschreibung"
-      },
-      "name": {
-        "placeholder": "z. B. Linear",
-        "required": "Der Servername ist erforderlich",
-        "title": "Servername"
-      },
-      "submitButton": {
-        "savingLabel": "Wird gespeichert..."
-      },
-      "access": {
-        "title": "Zugriffssteuerung",
-        "description": "Wählen Sie, wer diesen MCP verwenden kann.",
-        "groups": {
-          "description": "Ausgewählte Benutzergruppen können diesen MCP verwenden."
-        }
-      },
-      "defaultChat": {
-        "title": "Im Standardchat von Onyx verfügbar"
-      }
-    },
     "addOpenApiModal": {
       "cancelButton": {
         "label": "Abbrechen"
@@ -249,123 +221,6 @@
         "title": "*{name}* trennen"
       }
     },
-    "mcpAuthModal": {
-      "additionalAuthParams": {
-        "label": "Zusätzliche Auth-Parameter (JSON)"
-      },
-      "authType": {
-        "apiToken": {
-          "description": "Verwenden Sie einen individuellen API-Schlüssel pro Benutzer oder einen gemeinsamen API-Schlüssel für die gesamte Organisation."
-        },
-        "none": {
-          "label": "Keine Authentifizierung",
-          "description": "Nicht empfohlen"
-        },
-        "oauth": {
-          "description": "Jeder Benutzer muss sich über OAuth mit eigenen Anmeldedaten authentifizieren."
-        },
-        "placeholder": "Methode auswählen",
-        "ptOauth": {
-          "description": "Das OAuth-Zugriffstoken des Benutzers weiterleiten, mit dem {appName} authentifiziert wird."
-        }
-      },
-      "authorizationEndpoint": {
-        "label": "Autorisierungs-Endpunkt"
-      },
-      "cancelButton": {
-        "label": "Abbrechen"
-      },
-      "clientId": {
-        "label": "Client ID"
-      },
-      "clientSecret": {
-        "label": "Client Secret"
-      },
-      "errors": {
-        "additionalParamsInvalid": "Ungültiges JSON für zusätzliche Auth-Parameter",
-        "additionalParamsInvalidWithReason": "Ungültiges JSON für zusätzliche Auth-Parameter: {reason}",
-        "additionalParamsNotObject": "Zusätzliche Auth-Parameter müssen ein JSON-Objekt sein",
-        "saveConfigFailed": "Die Serverkonfiguration konnte nicht gespeichert werden",
-        "loadStage": "Verbindungseinstellungen konnten nicht geladen werden",
-        "oauthInitFailed": "OAuth konnte nicht gestartet werden: {detail}"
-      },
-      "header": {
-        "defaultTitle": "Authentifizierung konfigurieren",
-        "description": "Authentifizierung des MCP-Servers konfigurieren",
-        "title": "*{name}* konfigurieren"
-      },
-      "noAuthNotice": {
-        "title": "Keine Authentifizierung erforderlich"
-      },
-      "oauthInfo": {
-        "manualRegistration": "Registrieren Sie diese Weiterleitungs-URI bei Ihrem Anbieter.",
-        "title": "OAuth-Konfiguration"
-      },
-      "passThroughNotice": {
-        "title": "Verwenden Sie Pass-through für Dienste mit gemeinsamem Identitätsanbieter."
-      },
-      "providerMode": {
-        "autoDiscovery": {
-          "description": "Die vom Server veröffentlichten Anmeldeeinstellungen lesen.",
-          "label": "Anmelde-Endpunkte automatisch finden"
-        },
-        "knownProvider": {
-          "description": "Geben Sie die Anmelde- und Token-URLs selbst ein.",
-          "label": "Endpunkte manuell eingeben"
-        },
-        "label": "OAuth-Endpunkte",
-        "placeholder": "Modus auswählen"
-      },
-      "redirectUri": {
-        "copyTooltip": "Weiterleitungs-URI kopieren",
-        "label": "**Weiterleitungs-URI** verwenden:"
-      },
-      "scopesOverride": {
-        "label": "Scopes überschreiben (durch Kommas getrennt)"
-      },
-      "submitButton": {
-        "label": "Änderungen speichern"
-      },
-      "tokenEndpoint": {
-        "label": "Token-Endpunkt"
-      },
-      "apiTokenInfo": {
-        "title": "API-Schlüssel-Konfiguration"
-      },
-      "oauthSetup": {
-        "label": "OAuth-Einrichtung",
-        "automatic": {
-          "label": "Automatisch einrichten",
-          "description": "Lassen Sie {appName} anhand der veröffentlichten Servereinstellungen einen OAuth-Client registrieren."
-        },
-        "ownClient": {
-          "label": "Eigenen OAuth-Client verwenden",
-          "description": "Geben Sie eine Client-ID Ihres Anbieters ein. Fügen Sie nur bei Bedarf ein Geheimnis hinzu."
-        }
-      },
-      "cimd": {
-        "label": "Client-Metadatendokument verwenden",
-        "description": "Wenn aktiviert, ruft der Anbieter das Client-Metadatendokument von {appName} über das öffentliche Internet ab. Schalten Sie dies aus, wenn diese {appName}-Instanz privat ist. {appName} verwendet dann stattdessen die automatische Client-Registrierung."
-      },
-      "advanced": {
-        "description": "Konfigurieren Sie einen bekannten OAuth-Anbieter mit expliziten Autorisierungs- und Token-Endpunkten statt mit automatischer Erkennung.",
-        "title": "Erweitert"
-      },
-      "knownProvider": {
-        "hint": "Der Modus für bekannte Anbieter erfordert eine Endpunktkonfiguration. Referenz-Endpunkte von Google: Autorisierung {authorizationEndpoint} und Token {tokenEndpoint}."
-      }
-    },
-    "mcpCard": {
-      "deleteModal": {
-        "body": {
-          "description": "Dadurch werden <emphasis>{title}</emphasis> und alle zugehörigen Tools für alle Benutzer Ihrer Organisation gelöscht. Das Löschen kann nicht rückgängig gemacht werden."
-        },
-        "submitButton": {
-          "label": "Löschen"
-        },
-        "title": "MCP-Server löschen"
-      }
-    },
     "mcpOauthCallback": {
       "autoRedirect": {
         "text": "Sie werden automatisch zurückgeleitet …"
@@ -411,67 +266,6 @@
       "tokenExchangeFailed": {
         "description": "Der Anbieter hat die Autorisierung genehmigt, aber es konnte kein gültiges Zugriffstoken abgerufen werden. Überprüfen Sie die OAuth-Client-Anmeldedaten und -Endpunkte des Servers und versuchen Sie dann erneut, eine Verbindung herzustellen.",
         "title": "Token-Austausch fehlgeschlagen"
-      }
-    },
-    "mcpPage": {
-      "addButton": {
-        "label": "MCP-Server hinzufügen"
-      },
-      "empty": {
-        "description": "Verbinden Sie einen MCP-Server, um benutzerdefinierte Aktionen hinzuzufügen."
-      },
-      "toasts": {
-        "deleteFailed": "Der MCP-Server konnte nicht gelöscht werden",
-        "disconnectFailed": "Der MCP-Server konnte nicht getrennt werden",
-        "reconnectFailed": "Der MCP-Server konnte nicht erneut verbunden werden"
-      }
-    },
-    "openApiCard": {
-      "card": {
-        "ariaLabel": "OpenAPI-Aktionskarte {name}"
-      },
-      "deleteModal": {
-        "body": {
-          "confirmation": "Möchten Sie diese OpenAPI-Aktion wirklich löschen?",
-          "description": "Dadurch werden die OpenAPI-Aktion <emphasis>{name}</emphasis> und ihre Konfiguration dauerhaft gelöscht."
-        },
-        "submitButton": {
-          "label": "Löschen"
-        },
-        "title": "OpenAPI-Plugin löschen"
-      },
-      "method": {
-        "noSummary": "Keine Zusammenfassung angegeben"
-      },
-      "toolsList": {
-        "emptyMessage": "Für dieses OpenAPI-Schema sind keine Aktionen definiert",
-        "emptySearchMessage": "Keine Aktionen entsprechen Ihrer Suche"
-      }
-    },
-    "openApiPage": {
-      "addButton": {
-        "label": "OpenAPI-Aktion hinzufügen"
-      },
-      "empty": {
-        "description": "Fügen Sie benutzerdefinierte Aktionen aus OpenAPI-Schemas hinzu."
-      },
-      "toasts": {
-        "deleteFailed": "Das Tool konnte nicht gelöscht werden.",
-        "disconnectFailed": "Die OpenAPI-Aktion konnte nicht getrennt werden."
-      }
-    },
-    "perUserAuth": {
-      "credentialField": {
-        "placeholder": "{field} eingeben"
-      },
-      "credentials": {
-        "perUserTitle": "Nur für Ihr eigenes Konto",
-        "sharedTitle": "Gemeinsame Werte der Organisation"
-      },
-      "headers": {
-        "addButton": {
-          "label": "Header hinzufügen"
-        }
       }
     },
     "policyToggle": {
@@ -930,11 +724,6 @@
       "policiesTab": "Genehmigungseinstellungen",
       "search": "Tools suchen",
       "enabledCount": "Aktivierte Tools: {enabled} von {total}"
-    },
-    "mcpDetail": {
-      "loadError": "MCP-Server konnte nicht geladen werden",
-      "notFound": "MCP-Server nicht gefunden",
-      "availabilitySaved": "Verfügbarkeit aktualisiert"
     }
   },
   "admin": {
@@ -14507,37 +14296,6 @@
       }
     },
     "apps": {
-      "addCatalog": {
-        "addButton": "Hinzufügen",
-        "createButton": "Erstellen",
-        "mcpHint": {
-          "label": "Brauchen Sie stattdessen einen MCP-Server? Verbinden Sie ihn unter „Aktionen“ und aktivieren Sie ihn hier für Craft.",
-          "openActionsButton": "Aktionen öffnen"
-        },
-        "modal": {
-          "description": "Stellen Sie eine Integration Ihrer gesamten Organisation zur Verfügung. Integrierte Anbieter bringen Aktionen mit, die dem Craft-Agenten deren Nutzung beibringen; bereits konfigurierte Anbieter werden nicht aufgeführt.",
-          "title": "App hinzufügen"
-        }
-      },
-      "configureProvider": {
-        "addTitle": "{name} hinzufügen",
-        "editTitle": "{name} bearbeiten",
-        "managedDescription": "Von Onyx bereitgestellt: Legen Sie fest, was der Agent tun darf."
-      },
-      "customApp": {
-        "createDescription": "Konfigurieren Sie, wie der Egress-Proxy diese App erreicht und sich authentifiziert. Ein Skill ist nicht erforderlich.",
-        "editDescription": "Aktualisieren Sie die Gateway-Einstellungen und verwalten Sie verknüpfte Skills.",
-        "editTitle": "{name} bearbeiten",
-        "fields": {
-          "name": {
-            "placeholder": "Meine benutzerdefinierte App"
-          }
-        }
-      },
-      "mcpPolicy": {
-        "saveButton": "Speichern",
-        "title": "{name} bearbeiten"
-      },
       "oauthCallback": {
         "backButton": "Zurück zu meinen Apps",
         "description": "OAuth-Handshake wird abgeschlossen…",
@@ -14553,23 +14311,6 @@
           "label": "Verbunden. Weiterleitung zurück zu Ihren Apps…"
         },
         "title": "App wird verbunden"
-      },
-      "page": {
-        "empty": {
-          "description": "Für Ihre Organisation sind noch keine Apps oder MCP-Server konfiguriert.",
-          "title": "Noch nichts zu verbinden"
-        },
-        "header": {
-          "description": "Verbinden Sie die Tools, die Onyx Craft während der Arbeit als Kontext nutzen kann.",
-          "title": "Apps"
-        },
-        "loading": {
-          "label": "Wird geladen…"
-        },
-        "status": {
-          "connected": "Verbunden",
-          "notAvailable": "Für Ihr Konto nicht verfügbar: Fragen Sie einen Admin"
-        }
       },
       "policyEditor": {
         "loading": {

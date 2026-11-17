@@ -147,34 +147,6 @@
         "tooltip": "{description}\n在此聊天中优先使用此工具。智能体也可能不使用该工具直接回答。"
       }
     },
-    "addMcpModal": {
-      "cancelButton": {
-        "label": "取消"
-      },
-      "description": {
-        "placeholder": "您的团队可以使用此服务器做什么？",
-        "suffix": "可选",
-        "title": "描述"
-      },
-      "name": {
-        "placeholder": "例如 Linear",
-        "required": "必须填写服务器名称",
-        "title": "服务器名称"
-      },
-      "submitButton": {
-        "savingLabel": "正在保存..."
-      },
-      "access": {
-        "title": "访问控制",
-        "description": "选择谁可以使用此 MCP。",
-        "groups": {
-          "description": "选定的用户组可以使用此 MCP。"
-        }
-      },
-      "defaultChat": {
-        "title": "在默认 Onyx 聊天中可用"
-      }
-    },
     "addOpenApiModal": {
       "cancelButton": {
         "label": "取消"
@@ -249,123 +221,6 @@
         "title": "断开 *{name}* 的连接"
       }
     },
-    "mcpAuthModal": {
-      "additionalAuthParams": {
-        "label": "附加身份验证参数（JSON）"
-      },
-      "authType": {
-        "apiToken": {
-          "description": "使用每位用户的独立 API 密钥，或组织范围的共享 API 密钥。"
-        },
-        "none": {
-          "label": "无需身份验证",
-          "description": "不推荐"
-        },
-        "oauth": {
-          "description": "每位用户需要使用各自的凭据通过 OAuth 验证身份。"
-        },
-        "placeholder": "选择方式",
-        "ptOauth": {
-          "description": "转发用户用于验证 {appName} 身份的 OAuth 访问 token。"
-        }
-      },
-      "authorizationEndpoint": {
-        "label": "授权端点"
-      },
-      "cancelButton": {
-        "label": "取消"
-      },
-      "clientId": {
-        "label": "客户端 ID"
-      },
-      "clientSecret": {
-        "label": "客户端密钥"
-      },
-      "errors": {
-        "additionalParamsInvalid": "附加身份验证参数的 JSON 无效",
-        "additionalParamsInvalidWithReason": "附加身份验证参数的 JSON 无效：{reason}",
-        "additionalParamsNotObject": "附加身份验证参数必须是 JSON 对象",
-        "saveConfigFailed": "保存服务器配置失败",
-        "loadStage": "无法加载连接设置",
-        "oauthInitFailed": "发起 OAuth 失败：{detail}"
-      },
-      "header": {
-        "defaultTitle": "配置身份验证",
-        "description": "配置 MCP 服务器身份验证",
-        "title": "配置 *{name}*"
-      },
-      "noAuthNotice": {
-        "title": "无需身份验证"
-      },
-      "oauthInfo": {
-        "manualRegistration": "在提供商处注册此重定向 URI。",
-        "title": "OAuth 配置"
-      },
-      "passThroughNotice": {
-        "title": "对使用同一身份提供方的服务，请使用透传方式。"
-      },
-      "providerMode": {
-        "autoDiscovery": {
-          "description": "读取服务器公布的登录设置。",
-          "label": "自动查找登录端点"
-        },
-        "knownProvider": {
-          "description": "自行输入登录 URL 和令牌 URL。",
-          "label": "手动输入端点"
-        },
-        "label": "OAuth 端点",
-        "placeholder": "选择模式"
-      },
-      "redirectUri": {
-        "copyTooltip": "复制重定向 URI",
-        "label": "使用**重定向 URI**："
-      },
-      "scopesOverride": {
-        "label": "权限范围覆盖（以逗号分隔）"
-      },
-      "submitButton": {
-        "label": "保存更改"
-      },
-      "tokenEndpoint": {
-        "label": "Token 端点"
-      },
-      "apiTokenInfo": {
-        "title": "API 密钥配置"
-      },
-      "oauthSetup": {
-        "label": "OAuth 设置",
-        "automatic": {
-          "label": "自动设置",
-          "description": "让 {appName} 使用服务器公布的设置注册 OAuth 客户端。"
-        },
-        "ownClient": {
-          "label": "使用自己的 OAuth 客户端",
-          "description": "输入提供商提供的客户端 ID。仅在需要时添加密钥。"
-        }
-      },
-      "cimd": {
-        "label": "使用客户端元数据文档",
-        "description": "开启后，提供方会通过公共互联网获取 {appName} 的客户端元数据文档。如果此 {appName} 实例不对外公开，请关闭此选项。{appName} 将改用自动客户端注册。"
-      },
-      "advanced": {
-        "description": "配置已知的 OAuth 提供方，明确指定授权端点和 token 端点，不使用自动发现。",
-        "title": "高级"
-      },
-      "knownProvider": {
-        "hint": "已知提供方模式需要配置端点。Google 参考端点：授权端点 {authorizationEndpoint}，token 端点 {tokenEndpoint}。"
-      }
-    },
-    "mcpCard": {
-      "deleteModal": {
-        "body": {
-          "description": "这会为组织内所有用户删除 <emphasis>{title}</emphasis> 及其所有工具。删除后无法恢复。"
-        },
-        "submitButton": {
-          "label": "删除"
-        },
-        "title": "删除 MCP 服务器"
-      }
-    },
     "mcpOauthCallback": {
       "autoRedirect": {
         "text": "正在自动返回…"
@@ -411,67 +266,6 @@
       "tokenExchangeFailed": {
         "description": "提供方已批准授权，但未能获取有效的访问令牌。请检查服务器的 OAuth 客户端凭据和端点，然后重新尝试连接。",
         "title": "令牌交换失败"
-      }
-    },
-    "mcpPage": {
-      "addButton": {
-        "label": "添加 MCP 服务器"
-      },
-      "empty": {
-        "description": "连接 MCP 服务器以添加自定义操作。"
-      },
-      "toasts": {
-        "deleteFailed": "删除 MCP 服务器失败",
-        "disconnectFailed": "断开 MCP 服务器连接失败",
-        "reconnectFailed": "重新连接 MCP 服务器失败"
-      }
-    },
-    "openApiCard": {
-      "card": {
-        "ariaLabel": "{name} OpenAPI 操作卡片"
-      },
-      "deleteModal": {
-        "body": {
-          "confirmation": "确定要删除此 OpenAPI 操作吗？",
-          "description": "此操作将永久删除 OpenAPI 操作 <emphasis>{name}</emphasis> 及其配置。"
-        },
-        "submitButton": {
-          "label": "删除"
-        },
-        "title": "删除 OpenAPI 插件"
-      },
-      "method": {
-        "noSummary": "未提供摘要"
-      },
-      "toolsList": {
-        "emptyMessage": "此 OpenAPI 架构未定义任何操作",
-        "emptySearchMessage": "没有与搜索匹配的操作"
-      }
-    },
-    "openApiPage": {
-      "addButton": {
-        "label": "添加 OpenAPI 操作"
-      },
-      "empty": {
-        "description": "通过 OpenAPI 架构添加自定义操作。"
-      },
-      "toasts": {
-        "deleteFailed": "删除工具失败。",
-        "disconnectFailed": "断开 OpenAPI 操作连接失败。"
-      }
-    },
-    "perUserAuth": {
-      "credentialField": {
-        "placeholder": "输入 {field}"
-      },
-      "credentials": {
-        "perUserTitle": "仅用于您自己的账户",
-        "sharedTitle": "组织共享的值"
-      },
-      "headers": {
-        "addButton": {
-          "label": "添加请求头"
-        }
       }
     },
     "policyToggle": {
@@ -930,11 +724,6 @@
       "policiesTab": "审批设置",
       "search": "搜索工具",
       "enabledCount": "已启用工具：{enabled} / {total}"
-    },
-    "mcpDetail": {
-      "loadError": "无法加载 MCP 服务器",
-      "notFound": "未找到 MCP 服务器",
-      "availabilitySaved": "可用范围已更新"
     }
   },
   "admin": {
@@ -14507,37 +14296,6 @@
       }
     },
     "apps": {
-      "addCatalog": {
-        "addButton": "添加",
-        "createButton": "创建",
-        "mcpHint": {
-          "label": "需要 MCP 服务器？请先在“操作”中连接它，然后在此处为 Craft 启用。",
-          "openActionsButton": "打开操作"
-        },
-        "modal": {
-          "description": "让整个组织都可以使用某个集成。内置提供商附带可教 Craft 智能体使用方法的操作；已配置的提供商不会列出。",
-          "title": "添加应用"
-        }
-      },
-      "configureProvider": {
-        "addTitle": "添加 {name}",
-        "editTitle": "编辑 {name}",
-        "managedDescription": "由 Onyx 提供，请配置智能体可以执行的操作。"
-      },
-      "customApp": {
-        "createDescription": "配置出站代理如何访问此应用并进行身份验证。技能不是必需的。",
-        "editDescription": "更新网关设置并管理关联的技能。",
-        "editTitle": "编辑 {name}",
-        "fields": {
-          "name": {
-            "placeholder": "我的自定义应用"
-          }
-        }
-      },
-      "mcpPolicy": {
-        "saveButton": "保存",
-        "title": "编辑 {name}"
-      },
       "oauthCallback": {
         "backButton": "返回我的应用",
         "description": "正在完成 OAuth 握手…",
@@ -14553,23 +14311,6 @@
           "label": "已连接。正在返回您的应用…"
         },
         "title": "正在连接您的应用"
-      },
-      "page": {
-        "empty": {
-          "description": "您的组织尚未配置任何应用或 MCP 服务器。",
-          "title": "暂无可连接的内容"
-        },
-        "header": {
-          "description": "连接 Onyx Craft 在工作时可用作上下文的工具。",
-          "title": "应用"
-        },
-        "loading": {
-          "label": "正在加载…"
-        },
-        "status": {
-          "connected": "已连接",
-          "notAvailable": "您的账户不可用，请咨询管理员"
-        }
       },
       "policyEditor": {
         "loading": {

@@ -147,34 +147,6 @@
         "tooltip": "{description}\nこのチャットではこのツールを優先します。エージェントは使用せずに回答する場合があります。"
       }
     },
-    "addMcpModal": {
-      "cancelButton": {
-        "label": "キャンセル"
-      },
-      "description": {
-        "placeholder": "このサーバーでチームは何ができますか？",
-        "suffix": "任意",
-        "title": "説明"
-      },
-      "name": {
-        "placeholder": "例：Linear",
-        "required": "サーバー名は必須です",
-        "title": "サーバー名"
-      },
-      "submitButton": {
-        "savingLabel": "保存中..."
-      },
-      "access": {
-        "title": "アクセス制御",
-        "description": "このMCPを使用できるユーザーを選択します。",
-        "groups": {
-          "description": "選択したユーザーグループはこのMCPを使用できます。"
-        }
-      },
-      "defaultChat": {
-        "title": "Onyx のデフォルトチャットで利用可能"
-      }
-    },
     "addOpenApiModal": {
       "cancelButton": {
         "label": "キャンセル"
@@ -249,123 +221,6 @@
         "title": "*{name}* を切断"
       }
     },
-    "mcpAuthModal": {
-      "additionalAuthParams": {
-        "label": "追加の認証パラメーター (JSON)"
-      },
-      "authType": {
-        "apiToken": {
-          "description": "ユーザーごとの個別 API キー、または組織全体の共有 API キーを使用します。"
-        },
-        "none": {
-          "label": "認証なし",
-          "description": "推奨しません"
-        },
-        "oauth": {
-          "description": "各ユーザーが自分の資格情報で OAuth 認証を行う必要があります。"
-        },
-        "placeholder": "方法を選択",
-        "ptOauth": {
-          "description": "{appName} の認証に使用したユーザーの OAuth アクセストークンを転送します。"
-        }
-      },
-      "authorizationEndpoint": {
-        "label": "認可エンドポイント"
-      },
-      "cancelButton": {
-        "label": "キャンセル"
-      },
-      "clientId": {
-        "label": "クライアント ID"
-      },
-      "clientSecret": {
-        "label": "クライアントシークレット"
-      },
-      "errors": {
-        "additionalParamsInvalid": "追加の認証パラメーターの JSON が無効です",
-        "additionalParamsInvalidWithReason": "追加の認証パラメーターの JSON が無効です: {reason}",
-        "additionalParamsNotObject": "追加の認証パラメーターは JSON オブジェクトである必要があります",
-        "saveConfigFailed": "サーバー設定の保存に失敗しました",
-        "loadStage": "接続設定を読み込めませんでした",
-        "oauthInitFailed": "OAuth の開始に失敗しました: {detail}"
-      },
-      "header": {
-        "defaultTitle": "認証を設定",
-        "description": "MCPサーバーの認証を設定",
-        "title": "*{name}*を設定"
-      },
-      "noAuthNotice": {
-        "title": "認証不要"
-      },
-      "oauthInfo": {
-        "manualRegistration": "このリダイレクトURIをプロバイダーに登録してください。",
-        "title": "OAuth設定"
-      },
-      "passThroughNotice": {
-        "title": "ID プロバイダーを共有するサービスにはパススルーを使用してください。"
-      },
-      "providerMode": {
-        "autoDiscovery": {
-          "description": "サーバーが公開しているサインイン設定を読み取ります。",
-          "label": "サインインエンドポイントを自動検索"
-        },
-        "knownProvider": {
-          "description": "サインインURLとトークンURLを自分で入力します。",
-          "label": "エンドポイントを手動入力"
-        },
-        "label": "OAuthエンドポイント",
-        "placeholder": "モードを選択"
-      },
-      "redirectUri": {
-        "copyTooltip": "リダイレクト URI をコピー",
-        "label": "**リダイレクト URI** を使用:"
-      },
-      "scopesOverride": {
-        "label": "スコープの上書き (カンマ区切り)"
-      },
-      "submitButton": {
-        "label": "変更を保存"
-      },
-      "tokenEndpoint": {
-        "label": "トークンエンドポイント"
-      },
-      "apiTokenInfo": {
-        "title": "APIキー設定"
-      },
-      "oauthSetup": {
-        "label": "OAuth設定",
-        "automatic": {
-          "label": "自動で設定",
-          "description": "サーバーが公開する設定を使って、{appName}にOAuthクライアントを登録させます。"
-        },
-        "ownClient": {
-          "label": "独自のOAuthクライアントを使用",
-          "description": "プロバイダーのクライアントIDを入力してください。シークレットは必要な場合にのみ追加してください。"
-        }
-      },
-      "cimd": {
-        "label": "クライアントメタデータドキュメントを使用",
-        "description": "オンの場合、プロバイダーは公開インターネット経由で {appName} のクライアントメタデータドキュメントを取得します。この {appName} インスタンスが非公開の場合はオフにしてください。その場合 {appName} は自動クライアント登録を使用します。"
-      },
-      "advanced": {
-        "description": "自動検出の代わりに、認可エンドポイントとトークンエンドポイントを明示的に指定して、既知の OAuth プロバイダーを設定します。",
-        "title": "詳細設定"
-      },
-      "knownProvider": {
-        "hint": "既知のプロバイダーモードでは、エンドポイントの設定が必要です。Google の参考エンドポイント: 認可 {authorizationEndpoint}、トークン {tokenEndpoint}。"
-      }
-    },
-    "mcpCard": {
-      "deleteModal": {
-        "body": {
-          "description": "組織内のすべてのユーザーに対して、<emphasis>{title}</emphasis> とそのすべてのツールが削除されます。削除は取り消せません。"
-        },
-        "submitButton": {
-          "label": "削除"
-        },
-        "title": "MCP サーバーを削除"
-      }
-    },
     "mcpOauthCallback": {
       "autoRedirect": {
         "text": "自動的に元のページに戻ります…"
@@ -411,67 +266,6 @@
       "tokenExchangeFailed": {
         "description": "プロバイダーは認可を承認しましたが、有効なアクセストークンを取得できませんでした。サーバーの OAuth クライアント認証情報とエンドポイントを確認してから、もう一度接続してください。",
         "title": "トークン交換に失敗しました"
-      }
-    },
-    "mcpPage": {
-      "addButton": {
-        "label": "MCP サーバーを追加"
-      },
-      "empty": {
-        "description": "MCP サーバーに接続して、カスタムアクションを追加します。"
-      },
-      "toasts": {
-        "deleteFailed": "MCP サーバーの削除に失敗しました",
-        "disconnectFailed": "MCP サーバーの切断に失敗しました",
-        "reconnectFailed": "MCP サーバーの再接続に失敗しました"
-      }
-    },
-    "openApiCard": {
-      "card": {
-        "ariaLabel": "{name} OpenAPI アクションカード"
-      },
-      "deleteModal": {
-        "body": {
-          "confirmation": "この OpenAPI アクションを削除してもよろしいですか？",
-          "description": "OpenAPI アクション <emphasis>{name}</emphasis> とその設定を完全に削除します。"
-        },
-        "submitButton": {
-          "label": "削除"
-        },
-        "title": "OpenAPI プラグインを削除"
-      },
-      "method": {
-        "noSummary": "概要はありません"
-      },
-      "toolsList": {
-        "emptyMessage": "この OpenAPI スキーマにはアクションが定義されていません",
-        "emptySearchMessage": "検索条件に一致するアクションはありません"
-      }
-    },
-    "openApiPage": {
-      "addButton": {
-        "label": "OpenAPI アクションを追加"
-      },
-      "empty": {
-        "description": "OpenAPI スキーマからカスタムアクションを追加します。"
-      },
-      "toasts": {
-        "deleteFailed": "ツールの削除に失敗しました。",
-        "disconnectFailed": "OpenAPI アクションの切断に失敗しました。"
-      }
-    },
-    "perUserAuth": {
-      "credentialField": {
-        "placeholder": "{field} を入力"
-      },
-      "credentials": {
-        "perUserTitle": "自分のアカウント専用",
-        "sharedTitle": "組織で共有する値"
-      },
-      "headers": {
-        "addButton": {
-          "label": "ヘッダーを追加"
-        }
       }
     },
     "policyToggle": {
@@ -930,11 +724,6 @@
       "policiesTab": "承認設定",
       "search": "ツールを検索",
       "enabledCount": "有効なツール: {total} 個中 {enabled} 個"
-    },
-    "mcpDetail": {
-      "loadError": "MCPサーバーを読み込めませんでした",
-      "notFound": "MCPサーバーが見つかりません",
-      "availabilitySaved": "利用設定を更新しました"
     }
   },
   "admin": {
@@ -14507,37 +14296,6 @@
       }
     },
     "apps": {
-      "addCatalog": {
-        "addButton": "追加",
-        "createButton": "作成",
-        "mcpHint": {
-          "label": "MCP サーバーが必要な場合は、まず「アクション」で接続してから、ここで Craft 向けに有効化してください。",
-          "openActionsButton": "アクションを開く"
-        },
-        "modal": {
-          "description": "組織全体で使えるインテグレーションを追加します。組み込みプロバイダーには Craft エージェントに使い方を教えるアクションが付属しています。設定済みのプロバイダーは表示されません。",
-          "title": "アプリを追加"
-        }
-      },
-      "configureProvider": {
-        "addTitle": "{name} を追加",
-        "editTitle": "{name} を編集",
-        "managedDescription": "Onyx が提供。エージェントに許可する操作を設定してください。"
-      },
-      "customApp": {
-        "createDescription": "エグレスプロキシがこのアプリに到達し認証する方法を設定します。スキルは必須ではありません。",
-        "editDescription": "ゲートウェイ設定を更新し、関連スキルを管理します。",
-        "editTitle": "{name} を編集",
-        "fields": {
-          "name": {
-            "placeholder": "マイカスタムアプリ"
-          }
-        }
-      },
-      "mcpPolicy": {
-        "saveButton": "保存",
-        "title": "{name} を編集"
-      },
       "oauthCallback": {
         "backButton": "マイアプリに戻る",
         "description": "OAuth ハンドシェイクを完了しています…",
@@ -14553,23 +14311,6 @@
           "label": "接続しました。アプリ一覧に戻ります…"
         },
         "title": "アプリを接続しています"
-      },
-      "page": {
-        "empty": {
-          "description": "組織向けに設定されたアプリや MCP サーバーはまだありません。",
-          "title": "まだ接続できるものがありません"
-        },
-        "header": {
-          "description": "Onyx Craft が作業中にコンテキストとして使えるツールを接続します。",
-          "title": "アプリ"
-        },
-        "loading": {
-          "label": "読み込み中…"
-        },
-        "status": {
-          "connected": "接続済み",
-          "notAvailable": "お使いのアカウントでは利用できません。管理者にお問い合わせください"
-        }
       },
       "policyEditor": {
         "loading": {

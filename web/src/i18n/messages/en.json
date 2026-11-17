@@ -147,34 +147,6 @@
         "tooltip": "{description}\nPrefer this tool for this chat. The agent may answer without using it."
       }
     },
-    "addMcpModal": {
-      "cancelButton": {
-        "label": "Cancel"
-      },
-      "description": {
-        "placeholder": "What can your team do with this server?",
-        "suffix": "optional",
-        "title": "Description"
-      },
-      "name": {
-        "placeholder": "e.g. Linear",
-        "required": "Server name is required",
-        "title": "Server Name"
-      },
-      "submitButton": {
-        "savingLabel": "Saving..."
-      },
-      "access": {
-        "title": "Access control",
-        "description": "Choose who can use this MCP.",
-        "groups": {
-          "description": "Selected user groups can use this MCP."
-        }
-      },
-      "defaultChat": {
-        "title": "Available in default Onyx Chat"
-      }
-    },
     "addOpenApiModal": {
       "cancelButton": {
         "label": "Cancel"
@@ -249,123 +221,6 @@
         "title": "Disconnect *{name}*"
       }
     },
-    "mcpAuthModal": {
-      "additionalAuthParams": {
-        "label": "Additional Auth Params (JSON)"
-      },
-      "authType": {
-        "apiToken": {
-          "description": "Use per-user individual API key or organization-wide shared API key."
-        },
-        "none": {
-          "label": "No authentication",
-          "description": "Not Recommended"
-        },
-        "oauth": {
-          "description": "Each user need to authenticate via OAuth with their own credentials."
-        },
-        "placeholder": "Select method",
-        "ptOauth": {
-          "description": "Forward the user's OAuth access token used to authenticate {appName}."
-        }
-      },
-      "authorizationEndpoint": {
-        "label": "Authorization Endpoint"
-      },
-      "cancelButton": {
-        "label": "Cancel"
-      },
-      "clientId": {
-        "label": "Client ID"
-      },
-      "clientSecret": {
-        "label": "Client Secret"
-      },
-      "errors": {
-        "additionalParamsInvalid": "Invalid additional auth params JSON",
-        "additionalParamsInvalidWithReason": "Invalid additional auth params JSON: {reason}",
-        "additionalParamsNotObject": "Additional auth params must be a JSON object",
-        "saveConfigFailed": "Failed to save server configuration",
-        "loadStage": "Could not load connection settings",
-        "oauthInitFailed": "Failed to initiate OAuth: {detail}"
-      },
-      "header": {
-        "defaultTitle": "Configure authentication",
-        "description": "Configure MCP server authentication",
-        "title": "Configure *{name}*"
-      },
-      "noAuthNotice": {
-        "title": "No authentication required"
-      },
-      "oauthInfo": {
-        "manualRegistration": "Register this redirect URI with your provider.",
-        "title": "OAuth configuration"
-      },
-      "passThroughNotice": {
-        "title": "Use pass-through for services with shared identity provider."
-      },
-      "providerMode": {
-        "autoDiscovery": {
-          "description": "Read the sign-in settings published by the server.",
-          "label": "Find sign-in endpoints automatically"
-        },
-        "knownProvider": {
-          "description": "Enter the sign-in and token URLs yourself.",
-          "label": "Enter endpoints manually"
-        },
-        "label": "OAuth endpoints",
-        "placeholder": "Select mode"
-      },
-      "redirectUri": {
-        "copyTooltip": "Copy redirect URI",
-        "label": "Use **redirect URI**:"
-      },
-      "scopesOverride": {
-        "label": "Scopes Override (comma-separated)"
-      },
-      "submitButton": {
-        "label": "Save Changes"
-      },
-      "tokenEndpoint": {
-        "label": "Token Endpoint"
-      },
-      "apiTokenInfo": {
-        "title": "API key configuration"
-      },
-      "oauthSetup": {
-        "label": "OAuth setup",
-        "automatic": {
-          "label": "Set up automatically",
-          "description": "Let {appName} register an OAuth client using the server’s published settings."
-        },
-        "ownClient": {
-          "label": "Use your own OAuth client",
-          "description": "Enter a client ID from your provider. Add a secret only if required."
-        }
-      },
-      "cimd": {
-        "label": "Use client metadata document",
-        "description": "When on, the provider fetches {appName}'s client metadata document over the public internet. Turn this off if this {appName} instance is private. {appName} then uses automatic client registration instead."
-      },
-      "advanced": {
-        "description": "Configure a known OAuth provider with explicit authorization and token endpoints instead of automatic discovery.",
-        "title": "Advanced"
-      },
-      "knownProvider": {
-        "hint": "Known-provider mode requires endpoint configuration. Google reference endpoints: authorization {authorizationEndpoint} and token {tokenEndpoint}."
-      }
-    },
-    "mcpCard": {
-      "deleteModal": {
-        "body": {
-          "description": "This deletes <emphasis>{title}</emphasis> and all its tools for everyone in your organization. Deletion is irreversible."
-        },
-        "submitButton": {
-          "label": "Delete"
-        },
-        "title": "Delete MCP server"
-      }
-    },
     "mcpOauthCallback": {
       "autoRedirect": {
         "text": "Taking you back automatically…"
@@ -411,67 +266,6 @@
       "tokenExchangeFailed": {
         "description": "The provider approved the authorization but a valid access token could not be obtained. Check the server's OAuth client credentials and endpoints, then try connecting again.",
         "title": "Token exchange failed"
-      }
-    },
-    "mcpPage": {
-      "addButton": {
-        "label": "Add MCP Server"
-      },
-      "empty": {
-        "description": "Connect MCP server to add custom actions."
-      },
-      "toasts": {
-        "deleteFailed": "Failed to delete MCP Server",
-        "disconnectFailed": "Failed to disconnect MCP Server",
-        "reconnectFailed": "Failed to reconnect MCP Server"
-      }
-    },
-    "openApiCard": {
-      "card": {
-        "ariaLabel": "{name} OpenAPI action card"
-      },
-      "deleteModal": {
-        "body": {
-          "confirmation": "Are you sure you want to delete this OpenAPI action?",
-          "description": "This will permanently delete the OpenAPI action <emphasis>{name}</emphasis> and its configuration."
-        },
-        "submitButton": {
-          "label": "Delete"
-        },
-        "title": "Delete OpenAPI plugin"
-      },
-      "method": {
-        "noSummary": "No summary provided"
-      },
-      "toolsList": {
-        "emptyMessage": "No actions defined for this OpenAPI schema",
-        "emptySearchMessage": "No actions match your search"
-      }
-    },
-    "openApiPage": {
-      "addButton": {
-        "label": "Add OpenAPI Action"
-      },
-      "empty": {
-        "description": "Add custom actions from OpenAPI schemas."
-      },
-      "toasts": {
-        "deleteFailed": "Failed to delete tool.",
-        "disconnectFailed": "Failed to disconnect OpenAPI action."
-      }
-    },
-    "perUserAuth": {
-      "credentialField": {
-        "placeholder": "Enter {field}"
-      },
-      "credentials": {
-        "perUserTitle": "Only for your own account",
-        "sharedTitle": "Shared organization values"
-      },
-      "headers": {
-        "addButton": {
-          "label": "Add Header"
-        }
       }
     },
     "policyToggle": {
@@ -930,11 +724,6 @@
       "policiesTab": "Approval settings",
       "search": "Search tools",
       "enabledCount": "Tools enabled: {enabled} of {total}"
-    },
-    "mcpDetail": {
-      "loadError": "Could not load MCP server",
-      "notFound": "MCP server not found",
-      "availabilitySaved": "Availability updated"
     }
   },
   "admin": {
@@ -14507,37 +14296,6 @@
       }
     },
     "apps": {
-      "addCatalog": {
-        "addButton": "Add",
-        "createButton": "Create",
-        "mcpHint": {
-          "label": "Need an MCP server instead? Connect it in Actions, then enable it for Craft here.",
-          "openActionsButton": "Open Actions"
-        },
-        "modal": {
-          "description": "Make an integration available to your whole organization. Built-in providers come with actions that teach the Craft agent how to use them; already-configured providers are not listed.",
-          "title": "Add an app"
-        }
-      },
-      "configureProvider": {
-        "addTitle": "Add {name}",
-        "editTitle": "Edit {name}",
-        "managedDescription": "Provided by Onyx — configure what the agent may do."
-      },
-      "customApp": {
-        "createDescription": "Configure how the egress proxy reaches and authenticates this app. A skill is not required.",
-        "editDescription": "Update gateway settings and manage associated skills.",
-        "editTitle": "Edit {name}",
-        "fields": {
-          "name": {
-            "placeholder": "My Custom App"
-          }
-        }
-      },
-      "mcpPolicy": {
-        "saveButton": "Save",
-        "title": "Edit {name}"
-      },
       "oauthCallback": {
         "backButton": "Back to My Apps",
         "description": "Finishing the OAuth handshake…",
@@ -14553,23 +14311,6 @@
           "label": "Connected. Redirecting back to your apps…"
         },
         "title": "Connecting your app"
-      },
-      "page": {
-        "empty": {
-          "description": "No apps or MCP servers are configured for your organization yet.",
-          "title": "Nothing to connect yet"
-        },
-        "header": {
-          "description": "Connect the tools Onyx Craft can use as context while it works.",
-          "title": "Apps"
-        },
-        "loading": {
-          "label": "Loading…"
-        },
-        "status": {
-          "connected": "Connected",
-          "notAvailable": "Not available for your account — ask an admin"
-        }
       },
       "policyEditor": {
         "loading": {
