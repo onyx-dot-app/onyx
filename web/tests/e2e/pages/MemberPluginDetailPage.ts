@@ -40,6 +40,22 @@ export class MemberPluginDetailPage {
     await expect(this.page.getByRole("tab")).toHaveText(tabs);
   }
 
+  pluginSwitch(plugin: string): Locator {
+    return this.page.getByRole("switch", {
+      name: `Use ${plugin}`,
+      exact: true,
+    });
+  }
+
+  /** The user's on/off switch on the Overview tab. */
+  async setPluginEnabled(plugin: string, enabled: boolean): Promise<void> {
+    const toggle = this.pluginSwitch(plugin);
+    await expect(toggle).toBeEnabled();
+    if ((await toggle.getAttribute("aria-checked")) !== String(enabled))
+      await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", String(enabled));
+  }
+
   connectButton(integration: string): Locator {
     return this.page.getByRole("button", {
       name: `Connect ${integration}`,
