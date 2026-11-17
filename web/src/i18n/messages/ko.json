@@ -242,22 +242,6 @@
         "label": "도구를 사용할 수 없음"
       }
     },
-    "toolsList": {
-      "disableAllButton": {
-        "tooltip": "모든 도구 비활성화"
-      },
-      "empty": {
-        "message": "사용할 수 있는 도구가 없습니다"
-      },
-      "showAllButton": {
-        "ariaLabel": "모든 도구 표시",
-        "tooltip": "모든 도구 표시"
-      },
-      "showEnabledButton": {
-        "ariaLabel": "활성화된 도구만 표시",
-        "tooltip": "활성화된 항목만 표시"
-      }
-    },
     "toolNames": {
       "internalSearch": {
         "label": "내부 검색"
@@ -375,138 +359,6 @@
     "placeholders": {
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
-    "memberPlugins": {
-      "row": {
-        "connect": "{name} 연결"
-      },
-      "status": {
-        "unavailable": "연결을 사용할 수 없음"
-      },
-      "state": {
-        "serversError": "MCP 플러그인을 불러오지 못했습니다.",
-        "appsError": "Craft 앱을 불러오지 못했습니다."
-      },
-      "detail": {
-        "toolCount": "{count, plural, other {작업 #개}}"
-      },
-      "connection": {
-        "title": "{name} 연결",
-        "description": "워크스페이스에서 이 플러그인을 설정했습니다. 계정을 연결하여 사용하세요.",
-        "credentialsDescription": "이 플러그인의 인증 정보를 입력하세요. 계정 연결은 다른 멤버와 별도로 관리됩니다.",
-        "oauthDescription": "계속 진행하여 계정으로 로그인하세요. 제공업체에서 요청된 접근 권한을 표시합니다.",
-        "continue": "{name}(으)로 계속",
-        "connect": "연결",
-        "connecting": "연결 중...",
-        "cancel": "취소",
-        "done": "완료",
-        "workspaceDescription": "워크스페이스에서 이 연결을 제공합니다. 계정을 연결할 필요가 없습니다.",
-        "sessionDescription": "이 플러그인은 현재 로그인을 사용합니다.",
-        "noneDescription": "이 플러그인은 계정 연결이 필요하지 않습니다.",
-        "connectedDescription": "계정이 연결되었습니다.",
-        "unconfiguredDescription": "연결하려면 워크스페이스 관리자가 이 플러그인의 설정을 완료해야 합니다.",
-        "checkingDescription": "연결 상태를 불러오는 중입니다. 완료된 후 다시 시도하세요.",
-        "unavailableDescription": "연결 상태를 불러오지 못했습니다. 플러그인 페이지에서 다시 시도하세요.",
-        "errors": {
-          "popup_blocked": "브라우저에서 로그인 창을 차단했습니다. 팝업을 허용하고 다시 시도하세요.",
-          "cancelled": "로그인이 취소되었습니다. 다시 시도할 수 있습니다.",
-          "timed_out": "로그인 시간이 초과되었습니다. 다시 시도하세요.",
-          "credentials_required": "필요한 인증 정보를 모두 입력하세요.",
-          "unconfigured": "워크스페이스 관리자가 이 플러그인의 설정을 완료해야 합니다.",
-          "not_connected": "계정 연결을 확인하지 못했습니다. 다시 시도하세요.",
-          "request_failed": "연결하지 못했습니다. 다시 시도하세요."
-        }
-      }
-    },
-    "plugins": {
-      "availability": {
-        "on": "켜짐",
-        "off": "꺼짐",
-        "enabled": "활성화됨",
-        "disabled": "비활성화됨",
-        "chatEnabled": "Chat 켜짐",
-        "chatDisabled": "Chat 꺼짐",
-        "chatUnknown": "Chat 상태 알 수 없음",
-        "craftEnabled": "Craft 켜짐",
-        "craftDisabled": "Craft 꺼짐"
-      },
-      "controls": {
-        "disconnect": "워크스페이스에서 활성화 또는 비활성화",
-        "disable": "워크스페이스에서 비활성화",
-        "manageAvailability": "워크스페이스 가용성 관리",
-        "more": "추가 작업",
-        "disableChat": "기본 채팅에서 비활성화",
-        "disableCraft": "Craft에서 비활성화"
-      },
-      "craftApp": {
-        "tabs": {
-          "configuration": "설정",
-          "permissions": "권한"
-        }
-      },
-      "disableConfirmation": {
-        "workspaceTitle": "워크스페이스에서 {name}을(를) 비활성화할까요?",
-        "workspaceDescription": "사용자 지정 에이전트를 포함하여 워크스페이스의 모든 사용자에게 {name}이(가) 비활성화됩니다. 저장된 설정과 자격 증명은 유지됩니다. 다시 활성화할 수 있습니다.",
-        "scope": "조직의 모든 사용자",
-        "chatTitle": "메인 채팅에서 {name}을(를) 비활성화할까요?",
-        "chatDescription": "조직의 모든 사용자의 기본 채팅에서 {name}이(가) 제거됩니다. 사용자 지정 에이전트에는 영향을 주지 않습니다. 다시 활성화할 수 있습니다.",
-        "craftTitle": "Craft에서 {name}을(를) 비활성화할까요?",
-        "craftDescription": "조직의 모든 사용자가 Craft에서 {name}을(를) 사용할 수 없게 됩니다. 메인 채팅에는 영향을 주지 않습니다. 다시 활성화할 수 있습니다."
-      },
-      "openapi": {
-        "schemaPreview": {
-          "detected": "{count, plural, one {도구 #개 감지됨} other {도구 #개 감지됨}}",
-          "viewTools": "도구 보기",
-          "saveToUpdate": "변경 사항을 저장하여 도구를 업데이트하세요."
-        },
-        "schemaTitle": "OpenAPI 스키마"
-      },
-      "title": "플러그인",
-      "description": "도구와 앱을 워크스페이스에 연결하세요.",
-      "search": {
-        "placeholder": "플러그인 검색"
-      },
-      "add": {
-        "label": "추가",
-        "openapi": "OpenAPI 플러그인 추가"
-      },
-      "catalog": {
-        "linear": {
-          "summary": "이슈, 프로젝트, 팀을 관리합니다",
-          "description": "이슈, 프로젝트, 팀을 관리합니다."
-        },
-        "notion": {
-          "summary": "Notion 워크스페이스를 검색하고 업데이트합니다",
-          "description": "Notion 워크스페이스를 검색하고 업데이트합니다."
-        },
-        "sentry": {
-          "summary": "오류와 성능 문제를 조사합니다",
-          "description": "오류와 성능 문제를 조사합니다."
-        },
-        "atlassian": {
-          "summary": "Jira와 Confluence를 사용합니다",
-          "description": "Jira와 Confluence를 사용합니다."
-        },
-        "add": {
-          "label": "{name} 추가"
-        }
-      },
-      "filters": {
-        "label": "플러그인 유형"
-      },
-      "state": {
-        "retry": {
-          "label": "다시 시도"
-        },
-        "loading": "플러그인 불러오는 중",
-        "empty": {
-          "title": "설치된 플러그인 없음",
-          "description": "워크스페이스에 플러그인을 추가하세요.",
-          "explore": {
-            "label": "플러그인 둘러보기"
-          }
-        }
-      }
-    },
     "mcpSetup": {
       "contactingServer": "서버에 연결 중",
       "detectingAuthentication": "인증 방식 감지 중",
@@ -523,9 +375,8 @@
       "continue": "계속",
       "back": "뒤로"
     },
-    "mcpTools": {
-      "search": "도구 검색",
-      "enabledCount": "활성화된 도구: {total}개 중 {enabled}개"
+    "policyEditor": {
+      "toolCount": "{count, plural, other {작업 #개}}"
     }
   },
   "admin": {
@@ -10775,7 +10626,6 @@
           "organization": {
             "title": "조직 연결",
             "description": "각 사용자는 이 계정으로 작업합니다.",
-            "state": "{state, select, connected {연결됨} not_connected {연결 안 됨} needs_reconnect {재연결 필요} not_set_up {설정되지 않음} other {알 수 없음}}",
             "connect": "연결",
             "disconnect": "연결 해제",
             "connected": "조직 계정을 연결했습니다.",
@@ -13979,22 +13829,7 @@
         "ariaLabel": "에이전트 전환"
       }
     },
-    "apps": {
-      "policyEditor": {
-        "loading": {
-          "label": "불러오는 중…"
-        },
-        "permissions": {
-          "defaultOption": "기본값",
-          "description": "에이전트가 할 수 있는 작업을 선택하세요. \"확인 요청\"은 각 작업 전에 승인을 요청하고, \"허용\"은 확인 없이 실행합니다.",
-          "title": "권한"
-        },
-        "advanced": {
-          "description": "각 작업에 대해 개별적으로 정책을 설정합니다.",
-          "title": "고급"
-        }
-      }
-    },
+    "apps": {},
     "artifactsTab": {
       "download": {
         "button": "다운로드"
@@ -15110,8 +14945,6 @@
       "title": "승인 설정",
       "personalDescription": "이 설정은 Craft 대화, 새 작업, 채팅의 MCP 도구 호출에서 동작을 자동으로 실행할지 승인을 요청할지 결정하며, 기존 작업은 자체 설정을 유지합니다.",
       "taskDescription": "이 작업에서 사용할 플러그인과 자동으로 실행할 동작을 선택하세요. 변경 사항은 이 작업에만 적용됩니다.",
-      "workspace_disabled": "워크스페이스에서 비활성화됨",
-      "workspace_managed": "워크스페이스에서 관리",
       "userManagement": "사용자가 승인 설정을 관리하도록 허용",
       "userManagementDescription": "사용자는 사용 가능한 작업의 승인 설정을 변경할 수 있습니다.",
       "loading": "승인 설정 로드 중…",
@@ -15134,12 +14967,10 @@
       "searchActions": "작업 검색",
       "setPermissions": "권한 설정",
       "applyMatching": "일치하는 편집 가능한 작업 {count}개",
-      "noMatchingActions": "검색과 일치하는 작업이 없습니다.",
       "close": "닫기",
       "saveChanges": "변경 사항 저장",
       "resetDefaults": "모두 기본값으로 재설정",
       "resetAll": "모두 워크스페이스 기본값으로 재설정",
-      "workspaceDisabledTooltip": "관리자가 워크스페이스에서 이 작업을 비활성화했습니다.",
       "newTaskPluginsDescription": "이 작업에서 사용할 수 있는 플러그인을 켜세요. 변경하기 전까지 각 작업은 통합 설정을 사용합니다.",
       "emptyPlugins": "통합이 포함된 플러그인이 없습니다.",
       "needsSignIn": "{name}에 로그인해야 합니다.",
@@ -17122,12 +16953,6 @@
         }
       },
       "connection": {
-        "status": {
-          "connected": "연결됨",
-          "notConnected": "연결되지 않음",
-          "needsReconnect": "다시 연결 필요",
-          "notSetUp": "설정되지 않음"
-        },
         "askAdmin": "관리자에게 문의하세요",
         "connected": "{name}을(를) 연결했습니다.",
         "disconnected": "{name} 연결을 해제했습니다.",
@@ -17245,5 +17070,8 @@
         }
       }
     }
+  },
+  "integrations": {
+    "connectionState": "{state, select, connected {연결됨} not_connected {연결 안 됨} needs_reconnect {재연결 필요} not_set_up {설정되지 않음} other {알 수 없음}}"
   }
 }

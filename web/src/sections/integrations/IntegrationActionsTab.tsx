@@ -334,7 +334,6 @@ export default function IntegrationActionsTab({
               <Card key={group.id} padding={4}>
                 <PolicyEditor
                   title={group.title}
-                  searchable={false}
                   disabled={busy || readOnly}
                   resetLabel={t("useDefaults")}
                   onReset={() => resetGroup(group.actions)}

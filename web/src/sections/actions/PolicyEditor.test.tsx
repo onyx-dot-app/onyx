@@ -7,6 +7,9 @@ function Editor() {
   const [policies, setPolicies] = useState<Record<string, PolicyValue>>({});
   return (
     <PolicyEditor
+      title="Actions"
+      resetLabel="Use defaults"
+      onReset={jest.fn()}
       items={[
         {
           id: "search",
@@ -41,43 +44,13 @@ test("shows per-action permissions immediately without an Advanced disclosure", 
   ).toHaveAttribute("aria-pressed", "true");
 });
 
-test("restores each action's default without changing policies outside the list", async () => {
-  const onChange = jest.fn();
-  render(
-    <PolicyEditor
-      items={[
-        {
-          id: "read",
-          name: "Read",
-          description: "Read data",
-          defaultPolicy: "allow",
-        },
-        {
-          id: "write",
-          name: "Write",
-          description: "Write data",
-          defaultPolicy: "ask",
-        },
-      ]}
-      policies={{ read: "blocked", write: "blocked", other: "ask" }}
-      onChange={onChange}
-    />
-  );
-  const user = setupUser();
-  await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
-  await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
-  expect(onChange).toHaveBeenCalledWith({
-    read: "allow",
-    write: "ask",
-    other: "ask",
-  });
-});
-
-test("bulk changes only matching editable actions and reset delegates to the owner", async () => {
+test("bulk changes only the actions that accept the value and reset delegates to the owner", async () => {
   const onChange = jest.fn();
   const onReset = jest.fn();
   render(
     <PolicyEditor
+      title="Actions"
+      resetLabel="Use defaults"
       items={[
         {
           id: "read",
@@ -86,30 +59,19 @@ test("bulk changes only matching editable actions and reset delegates to the own
           defaultPolicy: "ask",
         },
         {
-          id: "blocked",
+          id: "secrets",
           name: "Read secrets",
           description: "",
-          defaultPolicy: "blocked",
-          editable: false,
-          lockReason: "workspace_disabled",
-        },
-        {
-          id: "write",
-          name: "Write data",
-          description: "",
           defaultPolicy: "ask",
+          disabledPolicies: ["allow"],
         },
       ]}
-      policies={{ read: "ask", blocked: "blocked", write: "ask" }}
+      policies={{ read: "ask", secrets: "ask" }}
       onChange={onChange}
       onReset={onReset}
     />
   );
   const user = setupUser();
-  await user.type(
-    screen.getByRole("searchbox", { name: "Search tools" }),
-    "Read"
-  );
   expect(
     within(screen.getByRole("group", { name: "Read secrets" })).getByRole(
       "button",
@@ -118,11 +80,7 @@ test("bulk changes only matching editable actions and reset delegates to the own
   ).toBeDisabled();
   await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
   await user.keyboard("{ArrowDown}{Enter}");
-  expect(onChange).toHaveBeenCalledWith({
-    read: "allow",
-    blocked: "blocked",
-    write: "ask",
-  });
+  expect(onChange).toHaveBeenCalledWith({ read: "allow", secrets: "ask" });
   await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
   await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
   expect(onReset).toHaveBeenCalledTimes(1);

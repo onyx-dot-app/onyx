@@ -242,22 +242,6 @@
         "label": "工具不可用"
       }
     },
-    "toolsList": {
-      "disableAllButton": {
-        "tooltip": "禁用所有工具"
-      },
-      "empty": {
-        "message": "没有可用的工具"
-      },
-      "showAllButton": {
-        "ariaLabel": "显示所有工具",
-        "tooltip": "显示所有工具"
-      },
-      "showEnabledButton": {
-        "ariaLabel": "仅显示已启用的工具",
-        "tooltip": "仅显示已启用"
-      }
-    },
     "toolNames": {
       "internalSearch": {
         "label": "内部搜索"
@@ -375,138 +359,6 @@
     "placeholders": {
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
-    "memberPlugins": {
-      "row": {
-        "connect": "连接{name}"
-      },
-      "status": {
-        "unavailable": "连接不可用"
-      },
-      "state": {
-        "serversError": "无法加载MCP插件。",
-        "appsError": "无法加载 Craft 应用。"
-      },
-      "detail": {
-        "toolCount": "{count, plural, other {#个操作}}"
-      },
-      "connection": {
-        "title": "连接{name}",
-        "description": "您的工作区已配置此插件。请连接账户后使用。",
-        "credentialsDescription": "输入此插件的凭据。您的账户连接与其他成员的账户连接分开管理。",
-        "oauthDescription": "继续并登录您的账户。服务提供方会显示请求的访问权限。",
-        "continue": "继续前往{name}",
-        "connect": "连接",
-        "connecting": "正在连接...",
-        "cancel": "取消",
-        "done": "完成",
-        "workspaceDescription": "您的工作区提供此连接。您无需连接账户。",
-        "sessionDescription": "此插件使用您当前的登录信息。",
-        "noneDescription": "此插件无需连接账户。",
-        "connectedDescription": "您的账户已连接。",
-        "unconfiguredDescription": "工作区管理员需要完成此插件的设置，您才能连接。",
-        "checkingDescription": "您的连接状态仍在加载中。请在加载完成后重试。",
-        "unavailableDescription": "无法加载您的连接状态。请从插件页面重试。",
-        "errors": {
-          "popup_blocked": "您的浏览器拦截了登录窗口。请允许弹出式窗口后重试。",
-          "cancelled": "登录已取消。您可以重试。",
-          "timed_out": "登录耗时过长。请重试。",
-          "credentials_required": "请输入所有必需的凭据。",
-          "unconfigured": "工作区管理员需要完成此插件的设置。",
-          "not_connected": "无法确认您的账户连接。请重试。",
-          "request_failed": "连接失败。请重试。"
-        }
-      }
-    },
-    "plugins": {
-      "availability": {
-        "on": "开启",
-        "off": "关闭",
-        "enabled": "已启用",
-        "disabled": "已禁用",
-        "chatEnabled": "Chat 已开启",
-        "chatDisabled": "Chat 已关闭",
-        "chatUnknown": "Chat 状态未知",
-        "craftEnabled": "Craft 已开启",
-        "craftDisabled": "Craft 已关闭"
-      },
-      "controls": {
-        "disconnect": "为工作区启用或禁用",
-        "disable": "为工作区禁用",
-        "manageAvailability": "管理工作区可用性",
-        "more": "更多操作",
-        "disableChat": "在主聊天中禁用",
-        "disableCraft": "在 Craft 中禁用"
-      },
-      "craftApp": {
-        "tabs": {
-          "configuration": "配置",
-          "permissions": "权限"
-        }
-      },
-      "disableConfirmation": {
-        "workspaceTitle": "为工作区禁用 {name}？",
-        "workspaceDescription": "这将为工作区中的所有人禁用 {name}，包括自定义智能体。已保存的设置和凭据将被保留。您可以再次启用。",
-        "scope": "组织内的所有用户",
-        "chatTitle": "要为主聊天禁用 {name} 吗？",
-        "chatDescription": "这会从组织内所有用户的默认聊天中移除 {name}。自定义智能体不受影响。你可以重新启用它。",
-        "craftTitle": "要为 Craft 禁用 {name} 吗？",
-        "craftDescription": "这会使组织内所有用户都无法在 Craft 中使用 {name}。主聊天不受影响。你可以重新启用它。"
-      },
-      "openapi": {
-        "schemaPreview": {
-          "detected": "{count, plural, one {检测到 # 个工具} other {检测到 # 个工具}}",
-          "viewTools": "查看工具",
-          "saveToUpdate": "保存更改以更新工具。"
-        },
-        "schemaTitle": "OpenAPI 架构"
-      },
-      "title": "插件",
-      "description": "将工具和应用连接到你的工作区。",
-      "search": {
-        "placeholder": "搜索插件"
-      },
-      "add": {
-        "label": "添加",
-        "openapi": "添加 OpenAPI 插件"
-      },
-      "catalog": {
-        "linear": {
-          "summary": "管理问题、项目和团队",
-          "description": "管理问题、项目和团队。"
-        },
-        "notion": {
-          "summary": "搜索和更新 Notion 工作区",
-          "description": "搜索和更新 Notion 工作区。"
-        },
-        "sentry": {
-          "summary": "调查错误和性能问题",
-          "description": "调查错误和性能问题。"
-        },
-        "atlassian": {
-          "summary": "使用 Jira 和 Confluence",
-          "description": "使用 Jira 和 Confluence。"
-        },
-        "add": {
-          "label": "添加 {name}"
-        }
-      },
-      "filters": {
-        "label": "插件类型"
-      },
-      "state": {
-        "retry": {
-          "label": "重试"
-        },
-        "loading": "正在加载插件",
-        "empty": {
-          "title": "未安装插件",
-          "description": "向工作区添加插件。",
-          "explore": {
-            "label": "探索插件"
-          }
-        }
-      }
-    },
     "mcpSetup": {
       "contactingServer": "正在连接服务器",
       "detectingAuthentication": "正在检测身份验证",
@@ -523,9 +375,8 @@
       "continue": "继续",
       "back": "返回"
     },
-    "mcpTools": {
-      "search": "搜索工具",
-      "enabledCount": "已启用工具：{enabled} / {total}"
+    "policyEditor": {
+      "toolCount": "{count, plural, other {#个操作}}"
     }
   },
   "admin": {
@@ -10775,7 +10626,6 @@
           "organization": {
             "title": "组织连接",
             "description": "每个用户都使用此账户执行操作。",
-            "state": "{state, select, connected {已连接} not_connected {未连接} needs_reconnect {需要重新连接} not_set_up {未设置} other {未知}}",
             "connect": "连接",
             "disconnect": "断开连接",
             "connected": "已连接组织账户。",
@@ -13979,22 +13829,7 @@
         "ariaLabel": "切换代理"
       }
     },
-    "apps": {
-      "policyEditor": {
-        "loading": {
-          "label": "正在加载…"
-        },
-        "permissions": {
-          "defaultOption": "默认",
-          "description": "选择智能体可以执行的操作。“询问”会在每个操作前请求批准；“允许”则无需提示即可运行。",
-          "title": "权限"
-        },
-        "advanced": {
-          "description": "为每个操作单独设置策略。",
-          "title": "高级"
-        }
-      }
-    },
+    "apps": {},
     "artifactsTab": {
       "download": {
         "button": "下载"
@@ -15110,8 +14945,6 @@
       "title": "审批设置",
       "personalDescription": "这些设置决定 Craft 对话、新任务和聊天中的 MCP 工具调用是自动运行还是需要批准；现有任务保留各自的设置。",
       "taskDescription": "选择此任务可使用的插件，并管理哪些操作可自动执行。更改仅适用于此任务。",
-      "workspace_disabled": "工作区已禁用",
-      "workspace_managed": "由工作区管理",
       "userManagement": "允许用户管理审批设置",
       "userManagementDescription": "用户可以更改可用操作的审批设置。",
       "loading": "正在加载审批设置…",
@@ -15134,12 +14967,10 @@
       "searchActions": "搜索操作",
       "setPermissions": "设置权限",
       "applyMatching": "{count} 个匹配的可编辑操作",
-      "noMatchingActions": "没有与搜索条件匹配的操作。",
       "close": "关闭",
       "saveChanges": "保存更改",
       "resetDefaults": "全部重置为默认值",
       "resetAll": "全部重置为工作区默认值",
-      "workspaceDisabledTooltip": "管理员已在工作区中禁用此操作。",
       "newTaskPluginsDescription": "开启此任务可以使用的插件。在你更改之前，每个操作都使用其集成的设置。",
       "emptyPlugins": "没有包含集成的插件。",
       "needsSignIn": "{name} 需要登录。",
@@ -17122,12 +16953,6 @@
         }
       },
       "connection": {
-        "status": {
-          "connected": "已连接",
-          "notConnected": "未连接",
-          "needsReconnect": "需要重新连接",
-          "notSetUp": "未设置"
-        },
         "askAdmin": "请询问管理员",
         "connected": "已连接 {name}。",
         "disconnected": "已断开 {name}。",
@@ -17245,5 +17070,8 @@
         }
       }
     }
+  },
+  "integrations": {
+    "connectionState": "{state, select, connected {已连接} not_connected {未连接} needs_reconnect {需要重新连接} not_set_up {未设置} other {未知}}"
   }
 }

@@ -242,22 +242,6 @@
         "label": "Tool unavailable"
       }
     },
-    "toolsList": {
-      "disableAllButton": {
-        "tooltip": "Disable all tools"
-      },
-      "empty": {
-        "message": "No tools available"
-      },
-      "showAllButton": {
-        "ariaLabel": "Show all tools",
-        "tooltip": "Show all tools"
-      },
-      "showEnabledButton": {
-        "ariaLabel": "Show only enabled tools",
-        "tooltip": "Show only enabled"
-      }
-    },
     "toolNames": {
       "internalSearch": {
         "label": "Internal Search"
@@ -375,138 +359,6 @@
     "placeholders": {
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
-    "memberPlugins": {
-      "row": {
-        "connect": "Connect {name}"
-      },
-      "status": {
-        "unavailable": "Connection unavailable"
-      },
-      "state": {
-        "serversError": "MCP plugins could not load.",
-        "appsError": "Craft apps could not load."
-      },
-      "detail": {
-        "toolCount": "{count, plural, one {# action} other {# actions}}"
-      },
-      "connection": {
-        "title": "Connect {name}",
-        "description": "Your workspace has configured this plugin. Connect your account to use it.",
-        "credentialsDescription": "Enter your credentials for this plugin. Your account connection is separate from other members.",
-        "oauthDescription": "Continue to sign in with your account. Your provider will show the requested access.",
-        "continue": "Continue to {name}",
-        "connect": "Connect",
-        "connecting": "Connecting...",
-        "cancel": "Cancel",
-        "done": "Done",
-        "workspaceDescription": "Your workspace provides this connection. You do not need to connect an account.",
-        "sessionDescription": "This plugin uses your current sign-in.",
-        "noneDescription": "This plugin does not require an account connection.",
-        "connectedDescription": "Your account is connected.",
-        "unconfiguredDescription": "A workspace admin needs to finish this plugin's setup before you can connect.",
-        "checkingDescription": "Your connection status is still loading. Try again after it finishes.",
-        "unavailableDescription": "Your connection status could not load. Retry from the Plugins page.",
-        "errors": {
-          "popup_blocked": "Your browser blocked the sign-in window. Allow popups and try again.",
-          "cancelled": "Sign-in was cancelled. You can try again.",
-          "timed_out": "Sign-in took too long. Try again.",
-          "credentials_required": "Enter all required credentials.",
-          "unconfigured": "A workspace admin needs to finish this plugin's setup.",
-          "not_connected": "Your account connection could not be confirmed. Try again.",
-          "request_failed": "The connection failed. Try again."
-        }
-      }
-    },
-    "plugins": {
-      "availability": {
-        "on": "On",
-        "off": "Off",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "chatEnabled": "Chat on",
-        "chatDisabled": "Chat off",
-        "chatUnknown": "Chat unknown",
-        "craftEnabled": "Craft on",
-        "craftDisabled": "Craft off"
-      },
-      "controls": {
-        "disconnect": "Enable or disable for workspace",
-        "disable": "Disable for workspace",
-        "manageAvailability": "Manage workspace availability",
-        "more": "More actions",
-        "disableChat": "Disable for main Chat",
-        "disableCraft": "Disable for Craft"
-      },
-      "craftApp": {
-        "tabs": {
-          "configuration": "Configuration",
-          "permissions": "Permissions"
-        }
-      },
-      "disableConfirmation": {
-        "workspaceTitle": "Disable {name} for the workspace?",
-        "workspaceDescription": "This disables {name} for everyone in your workspace, including custom agents. Saved settings and credentials are kept. You can enable it again.",
-        "scope": "All users in your organization",
-        "chatTitle": "Disable {name} for main Chat?",
-        "chatDescription": "This removes {name} from default Chat for everyone in your organization. Custom agents are not affected. You can enable it again.",
-        "craftTitle": "Disable {name} for Craft?",
-        "craftDescription": "This makes {name} unavailable in Craft for everyone in your organization. Main Chat is not affected. You can enable it again."
-      },
-      "openapi": {
-        "schemaPreview": {
-          "detected": "{count, plural, one {# tool detected} other {# tools detected}}",
-          "viewTools": "View tools",
-          "saveToUpdate": "Save changes to update tools."
-        },
-        "schemaTitle": "OpenAPI schema"
-      },
-      "title": "Plugins",
-      "description": "Connect tools and apps to your workspace.",
-      "search": {
-        "placeholder": "Search plugins"
-      },
-      "add": {
-        "label": "Add",
-        "openapi": "Add OpenAPI plugin"
-      },
-      "catalog": {
-        "linear": {
-          "summary": "Manage issues, projects, and teams",
-          "description": "Manage issues, projects, and teams."
-        },
-        "notion": {
-          "summary": "Search and update your Notion workspace",
-          "description": "Search and update your Notion workspace."
-        },
-        "sentry": {
-          "summary": "Investigate errors and performance issues",
-          "description": "Investigate errors and performance issues."
-        },
-        "atlassian": {
-          "summary": "Work with Jira and Confluence",
-          "description": "Work with Jira and Confluence."
-        },
-        "add": {
-          "label": "Add {name}"
-        }
-      },
-      "filters": {
-        "label": "Plugin type"
-      },
-      "state": {
-        "retry": {
-          "label": "Retry"
-        },
-        "loading": "Loading plugins",
-        "empty": {
-          "title": "No plugins installed",
-          "description": "Add a plugin to your workspace.",
-          "explore": {
-            "label": "Explore plugins"
-          }
-        }
-      }
-    },
     "mcpSetup": {
       "contactingServer": "Contacting server",
       "detectingAuthentication": "Detecting authentication",
@@ -523,9 +375,8 @@
       "continue": "Continue",
       "back": "Back"
     },
-    "mcpTools": {
-      "search": "Search tools",
-      "enabledCount": "Tools enabled: {enabled} of {total}"
+    "policyEditor": {
+      "toolCount": "{count, plural, one {# action} other {# actions}}"
     }
   },
   "admin": {
@@ -10775,7 +10626,6 @@
           "organization": {
             "title": "Organization Connection",
             "description": "Each user acts with this account.",
-            "state": "{state, select, connected {Connected} not_connected {Not connected} needs_reconnect {Needs reconnect} not_set_up {Not set up} other {Unknown}}",
             "connect": "Connect",
             "disconnect": "Disconnect",
             "connected": "Connected the organization account.",
@@ -13979,22 +13829,7 @@
         "ariaLabel": "Switch agent"
       }
     },
-    "apps": {
-      "policyEditor": {
-        "loading": {
-          "label": "Loading…"
-        },
-        "permissions": {
-          "defaultOption": "Default",
-          "description": "Choose what the agent may do. “Ask” requests approval before each action; “Allow” runs without prompting.",
-          "title": "Permissions"
-        },
-        "advanced": {
-          "description": "Set a policy for each action individually.",
-          "title": "Advanced"
-        }
-      }
-    },
+    "apps": {},
     "artifactsTab": {
       "download": {
         "button": "Download"
@@ -15110,8 +14945,6 @@
       "title": "Approval settings",
       "personalDescription": "These settings control whether actions run automatically or require approval in Craft conversations, new tasks, and MCP tool calls in chat; existing tasks keep their own settings.",
       "taskDescription": "Choose the plugins this task can use, then manage which actions run automatically. Changes apply only to this task.",
-      "workspace_disabled": "Disabled for the workspace",
-      "workspace_managed": "Managed by your workspace",
       "userManagement": "Let users manage approval settings",
       "userManagementDescription": "Users can change approval settings for available actions.",
       "loading": "Loading approval settings…",
@@ -15134,12 +14967,10 @@
       "searchActions": "Search actions",
       "setPermissions": "Set permissions",
       "applyMatching": "{count} matching editable actions",
-      "noMatchingActions": "No actions match your search.",
       "close": "Close",
       "saveChanges": "Save changes",
       "resetDefaults": "Reset all to defaults",
       "resetAll": "Reset all to workspace defaults",
-      "workspaceDisabledTooltip": "An admin disabled this action for the workspace.",
       "newTaskPluginsDescription": "Turn on the plugins this task can use. Each action uses its integration setting until you change it.",
       "emptyPlugins": "No plugins with integrations are available.",
       "needsSignIn": "{name} needs sign-in.",
@@ -17122,12 +16953,6 @@
         }
       },
       "connection": {
-        "status": {
-          "connected": "Connected",
-          "notConnected": "Not connected",
-          "needsReconnect": "Needs reconnect",
-          "notSetUp": "Not set up"
-        },
         "askAdmin": "Ask your admin",
         "connected": "Connected {name}.",
         "disconnected": "Disconnected {name}.",
@@ -17245,5 +17070,8 @@
         }
       }
     }
+  },
+  "integrations": {
+    "connectionState": "{state, select, connected {Connected} not_connected {Not connected} needs_reconnect {Needs reconnect} not_set_up {Not set up} other {Unknown}}"
   }
 }

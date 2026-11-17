@@ -31,6 +31,7 @@ export default function IntegrationConnectionRow({
   allowDisconnect = false,
 }: IntegrationConnectionRowProps) {
   const t = useTranslations("plugins.member.connection");
+  const stateCopy = useTranslations("integrations");
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
@@ -89,13 +90,9 @@ export default function IntegrationConnectionRow({
   }
 
   const description =
-    state === "connected"
-      ? t("status.connected")
-      : state === "not_connected"
-        ? t("status.notConnected")
-        : state === "needs_reconnect"
-          ? (reason ?? t("status.needsReconnect"))
-          : t("status.notSetUp");
+    state === "needs_reconnect" && reason
+      ? reason
+      : stateCopy("connectionState", { state });
 
   return (
     <>
