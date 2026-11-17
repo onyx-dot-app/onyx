@@ -320,7 +320,6 @@ def unlink_user_file_from_project(
 
 @router.post(
     "/{project_id}/files/{file_id}",
-    response_model=UserFileSnapshot,
     tags=PUBLIC_API_TAGS,
 )
 def link_user_file_to_project(
@@ -369,7 +368,6 @@ class ProjectInstructionsResponse(BaseModel):
 
 @router.get(
     "/{project_id}/instructions",
-    response_model=ProjectInstructionsResponse,
     tags=PUBLIC_API_TAGS,
 )
 def get_project_instructions(
@@ -396,7 +394,6 @@ class UpsertProjectInstructionsRequest(BaseModel):
 
 @router.post(
     "/{project_id}/instructions",
-    response_model=ProjectInstructionsResponse,
     tags=PUBLIC_API_TAGS,
 )
 def upsert_project_instructions(
@@ -428,9 +425,7 @@ class ProjectPayload(BaseModel):
     persona_id_to_is_featured: dict[int, bool] | None = None
 
 
-@router.get(
-    "/{project_id}/details", response_model=ProjectPayload, tags=PUBLIC_API_TAGS
-)
+@router.get("/{project_id}/details", tags=PUBLIC_API_TAGS)
 def get_project_details(
     project_id: int,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -459,7 +454,7 @@ class UpdateProjectRequest(BaseModel):
     description: str | None = None
 
 
-@router.patch("/{project_id}", response_model=UserProjectSnapshot, tags=PUBLIC_API_TAGS)
+@router.patch("/{project_id}", tags=PUBLIC_API_TAGS)
 def update_project(
     project_id: int,
     body: UpdateProjectRequest,
@@ -577,7 +572,7 @@ def delete_user_file(
     )
 
 
-@router.get("/file/{file_id}", response_model=UserFileSnapshot, tags=PUBLIC_API_TAGS)
+@router.get("/file/{file_id}", tags=PUBLIC_API_TAGS)
 def get_user_file(
     file_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -603,9 +598,7 @@ class UserFileIdsRequest(BaseModel):
     file_ids: list[UUID]
 
 
-@router.post(
-    "/file/statuses", response_model=list[UserFileSnapshot], tags=PUBLIC_API_TAGS
-)
+@router.post("/file/statuses", tags=PUBLIC_API_TAGS)
 def get_user_file_statuses(
     body: UserFileIdsRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -663,7 +656,7 @@ def remove_chat_session(
     return Response(status_code=204)
 
 
-@router.get("/session/{chat_session_id}/token-count", response_model=TokenCountResponse)
+@router.get("/session/{chat_session_id}/token-count")
 def get_chat_session_project_token_count(
     chat_session_id: str,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -721,7 +714,7 @@ def get_chat_session_project_files(
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
 
 
-@router.get("/{project_id}/token-count", response_model=TokenCountResponse)
+@router.get("/{project_id}/token-count")
 def get_project_total_token_count(
     project_id: int,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),

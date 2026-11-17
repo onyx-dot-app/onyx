@@ -3145,7 +3145,7 @@ def get_oauth_router(
     @router.get(
         "/authorize",
         name=f"oauth:{oauth_client.name}.{backend.name}.authorize",
-        response_model=OAuth2AuthorizeResponse,
+        response_model=OAuth2AuthorizeResponse,  # no-response-model: allow the handler also returns a Response, so the annotation is a union
     )
     async def authorize(
         request: Request,

@@ -698,7 +698,7 @@ def _get_authorized_discovery_url(server_id: int, user: User) -> str:
         return server.server_url
 
 
-@admin_router.post("/oauth/connect", response_model=MCPUserOAuthConnectResponse)
+@admin_router.post("/oauth/connect")
 async def connect_admin_oauth(
     request: MCPUserOAuthConnectRequest,
     db: Session = Depends(get_session),
@@ -710,7 +710,7 @@ async def connect_admin_oauth(
     return await _connect_oauth(request, db, is_admin=True, user=user)
 
 
-@router.post("/oauth/connect", response_model=MCPUserOAuthConnectResponse)
+@router.post("/oauth/connect")
 async def connect_user_oauth(
     request: MCPUserOAuthConnectRequest,
     db: Session = Depends(get_session),
@@ -972,7 +972,7 @@ async def _connect_oauth(
     )
 
 
-@router.post("/oauth/callback", response_model=MCPOAuthCallbackResponse)
+@router.post("/oauth/callback")
 async def process_oauth_callback(
     request: Request,
     db_session: Session = Depends(get_session),
@@ -1080,7 +1080,7 @@ async def process_oauth_callback(
     )
 
 
-@router.post("/user-credentials", response_model=MCPApiKeyResponse)
+@router.post("/user-credentials")
 def save_user_credentials(
     request: MCPUserCredentialsRequest,
     db_session: Session = Depends(get_session),
@@ -1481,7 +1481,7 @@ def update_mcp_user_preferences(
     return response
 
 
-@router.get("/servers/persona/{assistant_id}", response_model=MCPServersResponse)
+@router.get("/servers/persona/{assistant_id}")
 def get_mcp_servers_for_assistant(
     assistant_id: str,
     db: Session = Depends(get_session),
@@ -1523,7 +1523,7 @@ def get_mcp_servers_for_assistant(
         raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to fetch MCP servers")
 
 
-@router.get("/servers", response_model=MCPServersResponse)
+@router.get("/servers")
 def get_mcp_servers_for_user(
     db: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -1546,7 +1546,7 @@ def get_mcp_servers_for_user(
     return MCPServersResponse(mcp_servers=mcp_servers)
 
 
-@router.get("/servers/craft", response_model=MCPServersResponse)
+@router.get("/servers/craft")
 def get_craft_mcp_servers_for_user(
     db: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -2413,7 +2413,7 @@ def _sync_tools_for_server(
     return updated_tools
 
 
-@admin_router.get("/servers/{server_id}", response_model=MCPServer)
+@admin_router.get("/servers/{server_id}")
 def get_mcp_server_detail(
     server_id: int,
     db_session: Session = Depends(get_session),
@@ -2510,7 +2510,7 @@ def update_mcp_server_status(
     return {"message": f"Server status updated to {status.value}"}
 
 
-@admin_router.get("/servers", response_model=MCPServersResponse)
+@admin_router.get("/servers")
 def get_mcp_servers_for_admin(
     db: Session = Depends(get_session),
     user: User = Depends(
@@ -2613,7 +2613,7 @@ def get_mcp_server_db_tools(
     )
 
 
-@admin_router.post("/servers/create", response_model=MCPServerCreateResponse)
+@admin_router.post("/servers/create")
 def upsert_mcp_server(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
@@ -2701,7 +2701,7 @@ def upsert_mcp_server(
         )
 
 
-@admin_router.post("/servers/update", response_model=MCPServerUpdateResponse)
+@admin_router.post("/servers/update")
 def update_mcp_server_with_tools(
     request: MCPToolUpdateRequest,
     db_session: Session = Depends(get_session),
@@ -3369,7 +3369,7 @@ async def _complete_mcp_setup(
     )
 
 
-@admin_router.post("/server", response_model=MCPServer)
+@admin_router.post("/server")
 def create_mcp_server_simple(
     request: MCPServerSimpleCreateRequest,
     db_session: Session = Depends(get_session),
@@ -3433,7 +3433,7 @@ def create_mcp_server_simple(
     )
 
 
-@admin_router.patch("/server/{server_id}", response_model=MCPServer)
+@admin_router.patch("/server/{server_id}")
 def update_mcp_server_simple(
     server_id: int,
     request: MCPServerSimpleUpdateRequest,

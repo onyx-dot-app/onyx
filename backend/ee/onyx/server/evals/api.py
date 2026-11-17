@@ -13,7 +13,7 @@ logger = setup_logger()
 router = APIRouter(prefix="/evals")
 
 
-@router.post("/eval_run", response_model=EvalRunAck)
+@router.post("/eval_run")
 def eval_run(
     request: EvalConfigurationOptions,
     user: User = Depends(current_cloud_superuser),  # noqa: ARG001

@@ -99,7 +99,7 @@ def search_flow_classification(
 # compatible across versions.
 @router.post(
     "/send-search-message",
-    response_model=SearchFullResponse,
+    response_model=SearchFullResponse,  # no-response-model: allow the handler also returns a Response, so the annotation is a union
     dependencies=[Depends(require_vector_db)],
     tags=PUBLIC_API_TAGS,
     responses={

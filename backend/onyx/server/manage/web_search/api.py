@@ -139,7 +139,7 @@ def _require_stored_key_target_unchanged(
         )
 
 
-@admin_router.get("/search-providers", response_model=list[WebSearchProviderView])
+@admin_router.get("/search-providers")
 def list_search_providers(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -162,7 +162,7 @@ def list_search_providers(
     ]
 
 
-@admin_router.post("/search-providers", response_model=WebSearchProviderView)
+@admin_router.post("/search-providers")
 def upsert_search_provider_endpoint(
     request: WebSearchProviderUpsertRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -349,7 +349,7 @@ def test_search_provider(
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e)) from e
 
 
-@admin_router.get("/content-providers", response_model=list[WebContentProviderView])
+@admin_router.get("/content-providers")
 def list_content_providers(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -372,7 +372,7 @@ def list_content_providers(
     ]
 
 
-@admin_router.post("/content-providers", response_model=WebContentProviderView)
+@admin_router.post("/content-providers")
 def upsert_content_provider_endpoint(
     request: WebContentProviderUpsertRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
