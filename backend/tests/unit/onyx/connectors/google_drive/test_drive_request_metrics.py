@@ -186,6 +186,42 @@ def test_each_request_of_a_batch_counts_by_its_own_answer() -> None:
     }
 
 
+class _LostBatch(_FakeBatch):
+    """A batch whose HTTP request gets no answer."""
+
+    tries = 0
+
+    def execute(self) -> None:
+        _LostBatch.tries += 1
+        raise ConnectionResetError("reset")
+
+
+def test_a_batch_with_no_answer_counts_as_one_network_error() -> None:
+    gateway = _gateway()
+    drive = mock.MagicMock()
+    drive.new_batch_http_request.side_effect = lambda callback: _LostBatch(callback)
+
+    _LostBatch.tries = 0
+
+    def run() -> None:
+        with (
+            mock.patch.object(
+                GoogleDriveSourceOperations, "_drive", return_value=drive
+            ),
+            mock.patch("time.sleep"),
+            pytest.raises(ConnectionResetError),
+        ):
+            gateway.batch_get_files(
+                user_email="a@co.com",
+                file_ids_by_key={f"k{i}": f"f{i}" for i in range(5)},
+                fields="id",
+            )
+
+    # Each try is one HTTP request that carried the 5 calls.
+    assert _added("drive", run) == {RequestOutcome.NETWORK_ERROR: _LostBatch.tries}
+    assert _LostBatch.tries >= 1
+
+
 def test_directory_requests_count_as_admin() -> None:
     gateway = _gateway()
     directory = mock.MagicMock()

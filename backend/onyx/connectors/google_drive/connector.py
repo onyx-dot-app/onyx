@@ -104,6 +104,7 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
+    ConnectorStopSignal,
     Document,
     DocumentFailure,
     EntityFailure,
@@ -2130,6 +2131,9 @@ class GoogleDriveConnector(
                     f"Unexpected Google Drive error (status={status_code}): {e}"
                 )
 
+        except ConnectorStopSignal:
+            # The attempt stopped while it waited for the API budget.
+            raise
         except Exception as e:
             # Check for scope-related hints from the error message
             if MISSING_SCOPES_ERROR_STR in str(e):
@@ -2166,6 +2170,8 @@ class GoogleDriveConnector(
             raise ConnectorValidationError(
                 f"Unexpected Google Workspace directory API error (status={status_code}): {e}"
             )
+        except ConnectorStopSignal:
+            raise
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise InsufficientPermissionsError(

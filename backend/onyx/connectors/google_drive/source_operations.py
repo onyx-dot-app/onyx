@@ -487,7 +487,9 @@ class _LimitedRequest:
     so each try counts and spends.
 
     ``answers_counted`` is for a batch: its callback counts the answer of each
-    request in it, so a batch that Google answers is not counted here."""
+    request in it, so a batch that Google answers is not counted here. A
+    batch that gets no answer is one HTTP request, so it counts as one
+    network error."""
 
     def __init__(
         self,
@@ -515,12 +517,20 @@ class _LimitedRequest:
         try:
             result = self._request.execute()
         except Exception as error:
-            _record_request(self._api, _request_outcome(error), self._request_count)
+            outcome = _request_outcome(error)
+            _record_request(
+                self._api,
+                outcome,
+                (1 if outcome == RequestOutcome.NETWORK_ERROR else self._request_count),
+            )
             if self._limiter is not None and isinstance(error, HttpError):
                 translated = _from_http_error(error)
                 if translated.rate_limited:
                     self._limiter.report_rate_limit(
-                        self._api, self._user_email, _is_user_rate_limit(translated)
+                        self._api,
+                        self._user_email,
+                        _is_user_rate_limit(translated),
+                        self._request_count,
                     )
             raise
         if not self._answers_counted:
@@ -744,7 +754,7 @@ class GoogleDriveSourceOperations(SourceOperations):
             self._limiter(),
             DriveQuotaApi.DRIVE.value,
             units,
-            user_email,
+            self._quota_user(user_email),
             request_count,
             answers_counted,
         )
@@ -784,42 +794,54 @@ class GoogleDriveSourceOperations(SourceOperations):
             report_rate_limit(error)
             raise
 
+    def _quota_user(self, user_email: str) -> str:
+        """The user whose quota a call spends. A service account acts as the
+        user it impersonates. An OAuth credential always acts as the user who
+        granted it, whatever user the caller names. Only a limiter reads it."""
+        if self._limiter() is None:
+            return user_email
+        auth = self._auth()
+        if auth.kind == GoogleCredentialKind.SERVICE_ACCOUNT:
+            return user_email
+        return auth.primary_admin_email
+
     def _spend(self, api: DriveQuotaApi, units: int, user_email: str) -> None:
         """For a call that is not a plain request, such as a media download."""
         limiter = self._limiter()
         if limiter is not None:
-            limiter.acquire(api.value, units, user_email)
+            limiter.acquire(api.value, units, self._quota_user(user_email))
 
     def _report_rate_limit(
         self, api: DriveQuotaApi, user_email: str, error: Exception
     ) -> None:
+        """Reports one try that Google refused for its rate. Each refused try
+        reports: the limiter cuts on the refused share, not on one answer."""
+        self._report_rate_limits(api, user_email, [error])
+
+    def _report_rate_limits(
+        self, api: DriveQuotaApi, user_email: str, errors: list[Exception]
+    ) -> None:
+        """Reports the rate-limit answers among ``errors``, one report for
+        each scope with its count."""
         limiter = self._limiter()
         if limiter is None:
             return
-        translated = _translate(error)
-        if isinstance(translated, GoogleDriveHttpError) and translated.rate_limited:
-            limiter.report_rate_limit(
-                api.value, user_email, _is_user_rate_limit(translated)
-            )
-
-    def _report_once_per_call(
-        self, api: DriveQuotaApi, user_email: str
-    ) -> Callable[[Exception], None]:
-        """A reporter for one call that retries a rate limit. Each try still
-        spends, but only the first rate-limit answer reports: each report
-        halves the budget, and the retry waits outlast the cut's hold."""
-        reported = False
-
-        def report(error: Exception) -> None:
-            nonlocal reported
-            if reported:
-                return
+        by_scope = {True: 0, False: 0}
+        for error in errors:
             translated = _translate(error)
             if isinstance(translated, GoogleDriveHttpError) and translated.rate_limited:
-                reported = True
-                self._report_rate_limit(api, user_email, error)
+                by_scope[_is_user_rate_limit(translated)] += 1
+        for user_scope, count in by_scope.items():
+            if count:
+                limiter.report_rate_limit(
+                    api.value, self._quota_user(user_email), user_scope, count
+                )
 
-        return report
+    def _reporter(
+        self, api: DriveQuotaApi, user_email: str
+    ) -> Callable[[Exception], None]:
+        """A reporter for each try of one call."""
+        return functools.partial(self._report_rate_limit, api, user_email)
 
     def _domain(self) -> str:
         return self._auth().primary_admin_email.split("@")[-1]
@@ -1043,10 +1065,10 @@ class GoogleDriveSourceOperations(SourceOperations):
                 request_count=len(batch_keys),
                 answers_counted=True,
             ).execute()
-            # One report for the batch: each report halves the budget.
+            # The refused calls of the batch, by scope.
             if rate_limit_errors:
-                self._report_rate_limit(
-                    DriveQuotaApi.DRIVE, user_email, rate_limit_errors[0]
+                self._report_rate_limits(
+                    DriveQuotaApi.DRIVE, user_email, rate_limit_errors
                 )
         return result
 
@@ -1234,7 +1256,7 @@ class GoogleDriveSourceOperations(SourceOperations):
             file_id,
             size_threshold,
             user_email,
-            self._report_once_per_call(DriveQuotaApi.DRIVE, user_email),
+            self._reporter(DriveQuotaApi.DRIVE, user_email),
         )
 
     @source_operation(
@@ -1264,7 +1286,7 @@ class GoogleDriveSourceOperations(SourceOperations):
             file_id,
             size_threshold,
             user_email,
-            self._report_once_per_call(DriveQuotaApi.DRIVE, user_email),
+            self._reporter(DriveQuotaApi.DRIVE, user_email),
         )
 
     @source_operation(
@@ -1283,9 +1305,7 @@ class GoogleDriveSourceOperations(SourceOperations):
             user_email=user_email,
             doc_id=doc_id,
             max_response_bytes=max_response_bytes,
-            report_rate_limit=self._report_once_per_call(
-                DriveQuotaApi.DOCS, user_email
-            ),
+            report_rate_limit=self._reporter(DriveQuotaApi.DOCS, user_email),
         )
 
     @source_operation(

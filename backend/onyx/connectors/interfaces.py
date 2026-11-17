@@ -60,10 +60,14 @@ class SourceApiLimiter(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def report_rate_limit(self, api: str, user: str | None, user_scope: bool) -> None:
-        """Tells the limiter that the source refused a call for its rate.
-        ``user_scope`` is True when the source limited the user, and False
-        when it limited the whole credential."""
+    def report_rate_limit(
+        self, api: str, user: str | None, user_scope: bool, count: int = 1
+    ) -> None:
+        """Tells the limiter that the source refused ``count`` requests for
+        its rate. Report each refused try: the limiter cuts on the refused
+        share of the recent requests, not on one refusal. ``user_scope`` is
+        True when the source limited the user, and False when it limited the
+        whole credential."""
         raise NotImplementedError
 
 
