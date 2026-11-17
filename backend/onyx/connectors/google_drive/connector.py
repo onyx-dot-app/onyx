@@ -2904,13 +2904,23 @@ class GoogleDriveConnector(
         state = checkpoint.listing
         if state is None:
             return None
-        # A shared drive that was listed only in part, or a requested drive
-        # or folder that no user could reach, leaves files out of the count.
+        # A shared drive that was listed only in part, a requested drive or
+        # folder that no user could reach, or a user whose My Drive could not
+        # be listed as them leaves files out of the count.
+        failed_users = {
+            email.lower() for email in checkpoint.failed_impersonation_emails
+        }
+        unlisted_my_drives = any(
+            email.lower() in failed_users
+            for email in self._my_drive_partition_emails(checkpoint)
+        )
         return ListingCounts(
             docs_by_type=state.docs_by_type,
             bytes_by_type=state.bytes_by_type,
             partial=bool(
-                checkpoint.incomplete_drive_ids or checkpoint.unreachable_target_ids
+                checkpoint.incomplete_drive_ids
+                or checkpoint.unreachable_target_ids
+                or unlisted_my_drives
             ),
         )
 
