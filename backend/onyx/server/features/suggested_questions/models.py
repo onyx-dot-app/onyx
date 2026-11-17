@@ -21,6 +21,13 @@ class UseCase(StrEnum):
     OTHER = "other"
 
 
+class CandidateDocument(BaseModel):
+    """A document a run may write a question about."""
+
+    document_id: str
+    kind: QuestionKind
+
+
 class PoolQuestion(BaseModel):
     """A question that passed the search test. It stores the document it came
     from, never who may see it: access is checked when a person opens the chat."""

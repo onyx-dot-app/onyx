@@ -1,6 +1,5 @@
 from collections import Counter
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
@@ -13,8 +12,10 @@ from onyx.db.suggested_questions import (
     get_recent_user_file_ids,
 )
 from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import DocumentSectionRequest
 from onyx.server.features.suggested_questions.config import (
     SQ_CHUNKS_PER_DOC,
+    SQ_FETCH_CHUNKS_PER_DOC,
     SQ_MAX_LINE_REPEATS,
     SQ_MAX_LINK_RATIO,
     SQ_MAX_WORD_OVERLAP,
@@ -24,12 +25,10 @@ from onyx.server.features.suggested_questions.config import (
     SQ_SHARED_DOCS,
     SQ_TRIAGE_CHUNKS_MAX,
 )
-from onyx.server.features.suggested_questions.models import QuestionKind
-
-
-class CandidateDocument(BaseModel):
-    document_id: str
-    kind: QuestionKind
+from onyx.server.features.suggested_questions.models import (
+    CandidateDocument,
+    QuestionKind,
+)
 
 
 def choose_documents(
@@ -95,26 +94,25 @@ def choose_documents(
 def fetch_chunks(
     db_session: Session, candidates: list[CandidateDocument], tenant_id: str
 ) -> list[InferenceChunk]:
-    """Random chunks of the chosen documents in one search-index call, with
-    obvious junk dropped and at most SQ_CHUNKS_PER_DOC per document."""
+    """The first chunks of each chosen document, with obvious junk dropped and
+    at most SQ_CHUNKS_PER_DOC per document. Each document gets its own range,
+    so a long document cannot take the share of a short one."""
     if not candidates:
         return []
-    filters = IndexFilters(
-        # No user filter: access is checked per person when they open the chat.
-        access_control_list=None,
-        tenant_id=tenant_id,
-        attached_document_ids=[candidate.document_id for candidate in candidates],
-    )
     document_index = get_default_document_index(
         get_current_search_settings(db_session), None
     )
-    # Ask for twice what we keep: some chunks are junk, and long documents
-    # would otherwise take most of a random sample.
-    chunks = document_index.random_retrieval(
-        filters=filters,
-        num_to_retrieve=min(
-            2 * SQ_CHUNKS_PER_DOC * len(candidates), 2 * SQ_TRIAGE_CHUNKS_MAX
-        ),
+    chunks = document_index.id_based_retrieval(
+        chunk_requests=[
+            DocumentSectionRequest(
+                document_id=candidate.document_id,
+                min_chunk_ind=0,
+                max_chunk_ind=SQ_FETCH_CHUNKS_PER_DOC - 1,
+            )
+            for candidate in candidates
+        ],
+        # No user filter: access is checked per person when they open the chat.
+        filters=IndexFilters(access_control_list=None, tenant_id=tenant_id),
     )
     return keep_useful_chunks(chunks)
 

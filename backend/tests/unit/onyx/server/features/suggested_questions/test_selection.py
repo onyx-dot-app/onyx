@@ -8,9 +8,12 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.models import User
+from onyx.document_index.interfaces import DocumentSectionRequest
 from onyx.server.features.suggested_questions import selection
-from onyx.server.features.suggested_questions.models import QuestionKind
-from onyx.server.features.suggested_questions.selection import CandidateDocument
+from onyx.server.features.suggested_questions.models import (
+    CandidateDocument,
+    QuestionKind,
+)
 
 PROSE = (
     "Employees may work from another country for up to thirty working days in "
@@ -145,18 +148,21 @@ def test_documents_already_in_the_pool_are_skipped(
     assert [c.document_id for c in candidates] == ["alice-doc"]
 
 
-def test_fetch_chunks_asks_the_index_for_the_chosen_documents_without_acl(
+def test_fetch_chunks_reads_the_start_of_each_document_without_acl(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
 
-    def random_retrieval(filters: IndexFilters, num_to_retrieve: int) -> list:
+    def id_based_retrieval(
+        chunk_requests: list[DocumentSectionRequest], filters: IndexFilters
+    ) -> list:
+        captured["requests"] = chunk_requests
         captured["filters"] = filters
-        captured["num_to_retrieve"] = num_to_retrieve
         return [_chunk("a"), _chunk("b", content="too short")]
 
+    monkeypatch.setattr(selection, "SQ_FETCH_CHUNKS_PER_DOC", 4)
     index = MagicMock()
-    index.random_retrieval.side_effect = random_retrieval
+    index.id_based_retrieval.side_effect = id_based_retrieval
     monkeypatch.setattr(selection, "get_current_search_settings", lambda _s: None)
     monkeypatch.setattr(selection, "get_default_document_index", lambda *_a: index)
     candidates = [
@@ -167,10 +173,12 @@ def test_fetch_chunks_asks_the_index_for_the_chosen_documents_without_acl(
     chunks = selection.fetch_chunks(MagicMock(spec=Session), candidates, "tenant")
 
     assert [chunk.document_id for chunk in chunks] == ["a"]
-    assert captured["filters"].attached_document_ids == ["a", "b"]
+    assert captured["requests"] == [
+        DocumentSectionRequest(document_id="a", min_chunk_ind=0, max_chunk_ind=3),
+        DocumentSectionRequest(document_id="b", min_chunk_ind=0, max_chunk_ind=3),
+    ]
     assert captured["filters"].access_control_list is None
     assert captured["filters"].tenant_id == "tenant"
-    assert captured["num_to_retrieve"] == 12
 
 
 def test_keep_useful_chunks_caps_per_document_and_prefers_early_chunks(
