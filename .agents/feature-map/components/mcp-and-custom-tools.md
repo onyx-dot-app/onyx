@@ -307,12 +307,27 @@ admin value is not Ask.
   (null keeps them). An old custom or MCP id in `tool_ids` adds the plugin of
   its integration (`db/integration_policy.py:legacy_tool_plugin_links`; MCP
   links get `default: blocked` and each listed tool `inherit`). Built-in ids
-  stay on `persona__tool`. Agent detail returns `plugins`.
+  stay on `persona__tool`. With `plugins` null, `tool_ids` replaces the links
+  of the plugins that hold a custom tool. Agent detail returns `plugins`, and
+  its `tools` lists the OpenAPI `tool` row of each linked plugin
+  (`db/integration_policy.py:list_persona_openapi_tools`), so the old tool ids
+  round-trip.
 - The eight public `/tool` and `/admin/tool` routes
   (`server/features/tool/api.py`) are aliases on `api` integrations with an
   OpenAPI schema and return the `tool` row id. Plain headers become a shared
   API key connection; `passthrough_auth` is `onyx_login`; `oauth_config_id` is
   refused; `default_chat_enabled` is the plugin install setting (DEFAULT).
+- The four admin MCP server routes of the public API, which the Terraform
+  provider calls (`POST /admin/mcp/servers/create`,
+  `GET /admin/mcp/servers/{id}`, `PATCH` and `DELETE /admin/mcp/server/{id}`,
+  in `server/features/mcp/api.py`), are aliases on `mcp` integrations and take
+  and return the `mcp_server` row id. `API_TOKEN` maps to `api_key`: `ADMIN` is
+  `shared` with the token on the organization connection, `PER_USER` is
+  `individual` with the admin values on the admin's own connection. An omitted
+  template keeps the stored one. OAuth types are refused. `is_public` is the
+  Organization library; private is the owner's "My uploads" with `users` and
+  `groups` as shares (the owner may be a share). `available_in_craft` is the
+  old kind row column, which only the alias reads.
 - Changes call `backend/onyx/integrations/service.py:reload_craft_sessions` after the commit so running
   Craft sandboxes pick them up.
 
@@ -794,9 +809,8 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 - **Validate before publish.** The staged flow keeps the saved server untouched
   until authentication and discovery succeed. A failed edit leaves the working
   configuration in place, and an abandoned OAuth attempt expires with no
-  partial server. The direct routes `POST /admin/mcp/servers/create` and
-  `POST /admin/mcp/server` save without discovery. The web UI sets up and
-  authenticates only through `/admin/mcp/setup`.
+  partial server. The public alias `POST /admin/mcp/servers/create` saves
+  without the staged flow. The web UI uses `/admin/integrations`.
 
 ---
 

@@ -225,6 +225,28 @@ def legacy_tool_plugin_links(
     return list(links.values())
 
 
+def list_persona_openapi_tools(
+    persona_id: int, db_session: Session
+) -> list[tuple[UUID, Tool, Integration]]:
+    """The OpenAPI tool row of each integration that a plugin of the agent
+    holds, with the plugin and the integration. These are the old custom
+    tool ids of the agent."""
+    return [
+        (plugin_id, tool, integration)
+        for plugin_id, tool, integration in db_session.execute(
+            select(Persona__Plugin.plugin_id, Tool, Integration)
+            .join(
+                Plugin__Integration,
+                Plugin__Integration.plugin_id == Persona__Plugin.plugin_id,
+            )
+            .join(Integration, Integration.id == Plugin__Integration.integration_id)
+            .join(Tool, Tool.id == Integration.tool_id)
+            .where(Persona__Plugin.persona_id == persona_id)
+            .order_by(Tool.id, Persona__Plugin.plugin_id)
+        ).tuples()
+    ]
+
+
 def write_persona_plugin_links__no_commit(
     persona_id: int,
     links: Sequence[PersonaPluginLink],

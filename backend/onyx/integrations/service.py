@@ -1087,7 +1087,7 @@ def keep_masked_values(
     return resolved
 
 
-def _masked_header_template(
+def masked_header_template(
     header_template: Mapping[str, str] | None,
 ) -> dict[str, str] | None:
     """A value with no placeholder is a stored secret, so it is masked."""
@@ -1120,7 +1120,7 @@ def admin_detail(
         header_template=(
             None
             if managed or not view.can_manage
-            else _masked_header_template(integration.header_template)
+            else masked_header_template(integration.header_template)
         ),
         users_can_save_always_allow=integration.users_can_save_always_allow,
         oauth_client=(

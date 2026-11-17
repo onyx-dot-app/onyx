@@ -25,6 +25,7 @@ from onyx.db.enums import (
 from onyx.db.hierarchy import filter_accessible_hierarchy_node_ids
 from onyx.db.integration_policy import (
     legacy_tool_plugin_links,
+    list_persona_openapi_tools,
     list_persona_plugin_links,
     list_persona_plugin_snapshots,
     write_persona_plugin_links__no_commit,
@@ -59,7 +60,7 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
-from onyx.integrations.models import PersonaPluginLink
+from onyx.integrations.models import ActionSettings, PersonaPluginLink
 from onyx.server.features.persona.models import (
     FullPersonaSnapshot,
     MinimalPersonaSnapshot,
@@ -1867,7 +1868,7 @@ def upsert_persona(
         persona = new_persona
     # flush the session so that the persona has an ID
     db_session.flush()
-    if plugin_links is not None or legacy_links:
+    if plugin_links is not None or tool_ids is not None:
         _write_persona_plugins(persona.id, user, plugin_links, legacy_links, db_session)
     if commit:
         db_session.commit()
@@ -1883,20 +1884,37 @@ def _write_persona_plugins(
     db_session: Session,
 ) -> None:
     """Write the plugin links of an agent. A plugin that is new on the
-    agent must be one the user can see."""
-    links = list(plugin_links) if plugin_links is not None else []
+    agent must be one the user can see. With no ``plugin_links``, the old
+    tool ids replace the links of the plugins that hold a custom tool."""
+    rows = list_persona_plugin_links(db_session, persona_id)
+    existing = {row.plugin_id for row in rows}
+    if plugin_links is not None:
+        links = list(plugin_links)
+    else:
+        legacy_ids = {link.plugin_id for link in legacy_links}
+        dropped = {
+            plugin_id
+            for plugin_id, _, _ in list_persona_openapi_tools(persona_id, db_session)
+        } - legacy_ids
+        links = [
+            PersonaPluginLink(
+                plugin_id=row.plugin_id,
+                action_settings=ActionSettings.model_validate(
+                    row.action_settings or {}
+                ),
+            )
+            for row in rows
+            if row.plugin_id not in dropped
+        ]
     linked = {link.plugin_id for link in links}
     links += [link for link in legacy_links if link.plugin_id not in linked]
-    existing = {
-        link.plugin_id for link in list_persona_plugin_links(db_session, persona_id)
-    }
     added = {link.plugin_id for link in links} - existing
     if added and user is not None:
         visible = set(db_session.scalars(visible_plugin_ids(user.id)).all())
         if not added <= visible:
             raise ValueError("You do not have access to one or more of the plugins.")
     write_persona_plugin_links__no_commit(
-        persona_id, links, replace=plugin_links is not None, db_session=db_session
+        persona_id, links, replace=True, db_session=db_session
     )
 
 

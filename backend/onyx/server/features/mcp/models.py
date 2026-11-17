@@ -1,3 +1,4 @@
+import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal, NotRequired, TypedDict
 from uuid import UUID
@@ -5,6 +6,7 @@ from uuid import UUID
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 
 from onyx.db.enums import (
+    MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
     MCPServerStatus,
@@ -188,3 +190,80 @@ class MCPServer(BaseModel):
 
 class MCPServersResponse(BaseModel):
     mcp_servers: list[MCPServer]
+
+
+# The admin MCP server routes of the public API (the Terraform provider uses
+# them). They keep the shapes of the release before integrations.
+
+
+class MCPAuthTemplate(BaseModel):
+    headers: dict[str, str] = Field(default_factory=dict)
+    # Derived from the placeholders of ``headers``.
+    required_fields: list[str] = Field(default_factory=list)
+
+
+class MCPToolCreateRequest(BaseModel):
+    name: str
+    description: str | None = None
+    server_url: str
+    auth_type: MCPAuthenticationType
+    auth_performer: MCPAuthenticationPerformer
+    api_token: str | None = None
+    # False on an update keeps the stored token.
+    api_token_changed: bool = False
+    transport: MCPTransport | None = None
+    # Omitted on an update keeps the stored template.
+    auth_template: MCPAuthTemplate | None = None
+    admin_credentials: dict[str, str] | None = None
+    # False for a key on an update keeps the stored value.
+    admin_credentials_changed: dict[str, bool] = Field(default_factory=dict)
+    existing_server_id: int | None = None
+    # None keeps the stored access.
+    is_public: bool | None = None
+    groups: list[int] | None = None
+    users: list[UUID] | None = None
+
+
+class MCPServerCreateResponse(BaseModel):
+    server_id: int
+    server_name: str
+    server_url: str
+    auth_type: str
+    auth_performer: str | None
+    no_user_authentication_required: bool
+
+
+class MCPServerSimpleUpdateRequest(BaseModel):
+    """Each field that is None stays as it is."""
+
+    name: str | None = None
+    description: str | None = None
+    server_url: str | None = None
+    is_public: bool | None = None
+    groups: list[int] | None = None
+    users: list[UUID] | None = None
+    available_in_craft: bool | None = None
+
+
+class MCPServerAdminView(BaseModel):
+    id: int
+    name: str
+    description: str | None
+    server_url: str
+    owner: str
+    transport: MCPTransport | None
+    auth_type: MCPAuthenticationType
+    auth_performer: MCPAuthenticationPerformer
+    status: MCPServerStatus
+    is_public: bool
+    groups: list[int]
+    users: list[UUID]
+    available_in_craft: bool
+    plugin_ids: list[UUID]
+    last_refreshed_at: datetime.datetime | None
+    tool_count: int
+    auth_template: MCPAuthTemplate | None
+
+
+class MCPServerDeleteResponse(BaseModel):
+    success: bool
