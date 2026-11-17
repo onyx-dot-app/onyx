@@ -51,7 +51,11 @@ from onyx.document_index.opensearch.client import (
     is_cluster_block_error,
 )
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
-from onyx.document_index.opensearch.constants import OpenSearchSearchType
+from onyx.document_index.opensearch.constants import (
+    DEFAULT_MAX_CHUNK_SIZE,
+    DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
+    OpenSearchSearchType,
+)
 from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
     CC_PAIR_IDS_FIELD_NAME,
@@ -995,6 +999,44 @@ class OpenSearchDocumentIndex(DocumentIndex):
             results.extend(inference_chunks)
         return results
 
+    def leading_chunks_retrieval(
+        self,
+        filters: IndexFilters,
+        max_chunk_index: int,
+    ) -> list[InferenceChunk]:
+        # Without it, the query would read the start of every document.
+        if not filters.attached_document_ids:
+            raise ValueError("Set attached_document_ids to choose the documents.")
+        # One query returns at most this many chunks.
+        if (
+            len(filters.attached_document_ids) * (max_chunk_index + 1)
+            > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
+        ):
+            raise ValueError("Too many chunks requested for one query.")
+        self._log_cc_pair_access_shadow_disagreement(filters)
+        query_body = DocumentQuery.get_from_document_id_query(
+            document_id=None,
+            tenant_state=self._tenant_state,
+            index_filters=filters,
+            include_hidden=False,
+            max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
+            min_chunk_index=0,
+            max_chunk_index=max_chunk_index,
+        )
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
+            body=query_body,
+            search_pipeline_id=None,
+            search_type=OpenSearchSearchType.DOC_ID_RETRIEVAL,
+        )
+        return cleanup_content_for_chunks(
+            [
+                convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+                    search_hit.document_chunk, None, {}
+                )
+                for search_hit in search_hits
+            ]
+        )
+
     def _log_cc_pair_access_shadow_disagreement(
         self, filters: IndexFilters, document_ids: list[str] | None = None
     ) -> None:
@@ -1460,6 +1502,13 @@ class OpenSearchIndexPair(DocumentIndex):
         return self._primary.id_based_retrieval(
             chunk_requests, filters, batch_retrieval
         )
+
+    def leading_chunks_retrieval(
+        self,
+        filters: IndexFilters,
+        max_chunk_index: int,
+    ) -> list[InferenceChunk]:
+        return self._primary.leading_chunks_retrieval(filters, max_chunk_index)
 
     def hybrid_retrieval(
         self,

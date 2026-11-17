@@ -361,6 +361,29 @@ class IdRetrievalCapable(abc.ABC):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def leading_chunks_retrieval(
+        self,
+        filters: IndexFilters,
+        max_chunk_index: int,
+    ) -> list[InferenceChunk]:
+        """Fetches chunks 0 to max_chunk_index, inclusive, of every document
+        in filters.attached_document_ids, in one call.
+
+        Args:
+            filters: Filters for the retrieval. attached_document_ids must be
+                set: it chooses the documents.
+            max_chunk_index: The last chunk index to retrieve per document.
+
+        Raises:
+            ValueError: attached_document_ids is empty, or the request could
+                return more chunks than one query allows.
+
+        Returns:
+            The chunks found, in no particular order.
+        """
+        raise NotImplementedError
+
 
 class HybridCapable(abc.ABC):
     """

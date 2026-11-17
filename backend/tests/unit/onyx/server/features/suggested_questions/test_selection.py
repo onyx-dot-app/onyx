@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.models import User
-from onyx.document_index.interfaces import DocumentSectionRequest
 from onyx.server.features.suggested_questions import selection
 from onyx.server.features.suggested_questions.models import (
     CandidateDocument,
@@ -153,16 +152,14 @@ def test_fetch_chunks_reads_the_start_of_each_document_without_acl(
 ) -> None:
     captured: dict[str, Any] = {}
 
-    def id_based_retrieval(
-        chunk_requests: list[DocumentSectionRequest], filters: IndexFilters
-    ) -> list:
-        captured["requests"] = chunk_requests
+    def leading_chunks_retrieval(filters: IndexFilters, max_chunk_index: int) -> list:
+        captured["max_chunk_index"] = max_chunk_index
         captured["filters"] = filters
         return [_chunk("a"), _chunk("b", content="too short")]
 
     monkeypatch.setattr(selection, "SQ_FETCH_CHUNKS_PER_DOC", 4)
     index = MagicMock()
-    index.id_based_retrieval.side_effect = id_based_retrieval
+    index.leading_chunks_retrieval.side_effect = leading_chunks_retrieval
     monkeypatch.setattr(selection, "get_current_search_settings", lambda _s: None)
     monkeypatch.setattr(selection, "get_default_document_index", lambda *_a: index)
     candidates = [
@@ -173,10 +170,9 @@ def test_fetch_chunks_reads_the_start_of_each_document_without_acl(
     chunks = selection.fetch_chunks(MagicMock(spec=Session), candidates, "tenant")
 
     assert [chunk.document_id for chunk in chunks] == ["a"]
-    assert captured["requests"] == [
-        DocumentSectionRequest(document_id="a", min_chunk_ind=0, max_chunk_ind=3),
-        DocumentSectionRequest(document_id="b", min_chunk_ind=0, max_chunk_ind=3),
-    ]
+    assert index.leading_chunks_retrieval.call_count == 1
+    assert captured["filters"].attached_document_ids == ["a", "b"]
+    assert captured["max_chunk_index"] == 3
     assert captured["filters"].access_control_list is None
     assert captured["filters"].tenant_id == "tenant"
 

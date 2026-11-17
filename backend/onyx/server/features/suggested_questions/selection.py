@@ -12,7 +12,6 @@ from onyx.db.suggested_questions import (
     get_recent_user_file_ids,
 )
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces import DocumentSectionRequest
 from onyx.server.features.suggested_questions.config import (
     SQ_CHUNKS_PER_DOC,
     SQ_FETCH_CHUNKS_PER_DOC,
@@ -96,23 +95,20 @@ def fetch_chunks(
 ) -> list[InferenceChunk]:
     """The first chunks of each chosen document, with obvious junk dropped and
     at most SQ_CHUNKS_PER_DOC per document. Each document gets its own range,
-    so a long document cannot take the share of a short one."""
+    so a long document cannot take the share of a short one. One index call."""
     if not candidates:
         return []
     document_index = get_default_document_index(
         get_current_search_settings(db_session), None
     )
-    chunks = document_index.id_based_retrieval(
-        chunk_requests=[
-            DocumentSectionRequest(
-                document_id=candidate.document_id,
-                min_chunk_ind=0,
-                max_chunk_ind=SQ_FETCH_CHUNKS_PER_DOC - 1,
-            )
-            for candidate in candidates
-        ],
-        # No user filter: access is checked per person when they open the chat.
-        filters=IndexFilters(access_control_list=None, tenant_id=tenant_id),
+    chunks = document_index.leading_chunks_retrieval(
+        filters=IndexFilters(
+            # No user filter: access is checked per person when they open the chat.
+            access_control_list=None,
+            tenant_id=tenant_id,
+            attached_document_ids=[candidate.document_id for candidate in candidates],
+        ),
+        max_chunk_index=SQ_FETCH_CHUNKS_PER_DOC - 1,
     )
     return keep_useful_chunks(chunks)
 
