@@ -1,13 +1,12 @@
 import datetime
 from uuid import UUID
 
-from sqlalchemy import Select, and_, delete, select
+from sqlalchemy import Select, and_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.auth.permissions import has_global_permission
-from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
@@ -15,7 +14,6 @@ from onyx.db.enums import (
     MCPServerStatus,
     MCPTransport,
     Permission,
-    SandboxStatus,
 )
 from onyx.db.models import (
     GatedApp,
@@ -25,14 +23,10 @@ from onyx.db.models import (
     MCPServer__User,
     MCPServer__UserGroup,
     MCPServerUserPreference,
-    Persona,
-    Persona__Tool,
-    Sandbox,
     Tool,
     User,
     User__UserGroup,
 )
-from onyx.db.tools import can_manage_mcp_server
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.logger import setup_logger
 
@@ -55,64 +49,7 @@ def get_mcp_server_user_preferences(
     }
 
 
-def upsert_mcp_server_user_preferences__no_commit(
-    server_id: int,
-    user_id: UUID,
-    db_session: Session,
-    *,
-    enabled_in_chat: bool | None = None,
-    enabled_in_craft: bool | None = None,
-) -> MCPServerUserPreference:
-    values: dict[str, bool] = {}
-    if enabled_in_chat is not None:
-        values["enabled_in_chat"] = enabled_in_chat
-    if enabled_in_craft is not None:
-        values["enabled_in_craft"] = enabled_in_craft
-    if not values:
-        raise ValueError("At least one preference is required")
-    stmt = insert(MCPServerUserPreference).values(
-        user_id=user_id, mcp_server_id=server_id, **values
-    )
-    return db_session.scalars(
-        stmt.on_conflict_do_update(
-            index_elements=[
-                MCPServerUserPreference.user_id,
-                MCPServerUserPreference.mcp_server_id,
-            ],
-            set_=values,
-        ).returning(MCPServerUserPreference),
-        execution_options={"populate_existing": True},
-    ).one()
-
-
 # MCPServer operations
-def get_default_chat_mcp_server_ids(
-    server_ids: list[int], db_session: Session
-) -> set[int]:
-    if not server_ids:
-        return set()
-    stmt = (
-        select(Tool.mcp_server_id)
-        .join(Persona__Tool, Persona__Tool.tool_id == Tool.id)
-        .join(Persona, Persona.id == Persona__Tool.persona_id)
-        .where(
-            Persona.id == DEFAULT_PERSONA_ID,
-            Persona.builtin_persona.is_(True),
-            Persona.deleted.is_(False),
-            Tool.mcp_server_id.in_(server_ids),
-        )
-        .distinct()
-    )
-    return {
-        server_id for server_id in db_session.scalars(stmt) if server_id is not None
-    }
-
-
-def get_all_mcp_servers(db_session: Session) -> list[MCPServer]:
-    """Get all MCP servers"""
-    return list(
-        db_session.scalars(select(MCPServer).order_by(MCPServer.created_at)).all()
-    )
 
 
 def get_mcp_server_by_id(
@@ -126,45 +63,6 @@ def get_mcp_server_by_id(
     if not server:
         raise ValueError("MCP server by specified id does not exist")
     return server
-
-
-def get_mcp_servers_by_owner(owner_email: str, db_session: Session) -> list[MCPServer]:
-    """Get all MCP servers owned by a specific user"""
-    return list(
-        db_session.scalars(
-            select(MCPServer).where(MCPServer.owner == owner_email)
-        ).all()
-    )
-
-
-def get_mcp_servers_for_persona(
-    persona_id: int,
-    db_session: Session,
-    user: User,
-) -> list[MCPServer]:
-    """Attached servers. Default Chat also checks server access.
-
-    Custom agents retain their attached-server access for all agent users.
-    """
-    # Get the persona and its tools
-    persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
-    if not persona:
-        return []
-
-    # Collect unique MCP server IDs from the persona's tools
-    mcp_server_ids = set()
-    for tool in persona.tools:
-        if tool.mcp_server_id:
-            mcp_server_ids.add(tool.mcp_server_id)
-
-    if not mcp_server_ids:
-        return []
-
-    # Fetch the MCP servers
-    stmt = select(MCPServer).where(MCPServer.id.in_(mcp_server_ids))
-    if persona_id == DEFAULT_PERSONA_ID:
-        stmt = _add_mcp_server_access_filter(stmt, user)
-    return list(db_session.scalars(stmt).all())
 
 
 def _add_mcp_server_access_filter(stmt: Select, user: User) -> Select:
@@ -212,60 +110,6 @@ def user_can_access_mcp_server(user: User, server_id: int, db_session: Session) 
     return db_session.scalar(stmt) is not None
 
 
-def user_can_configure_mcp_credentials(
-    user: User, server: MCPServer, db_session: Session
-) -> bool:
-    """Whether the user may connect their own credentials to this server: users
-    who may attach it, plus its managers. Kept apart from
-    ``user_can_access_mcp_server``, which also gates agent attachment and
-    shared-credential injection."""
-    return user_can_access_mcp_server(
-        user, server.id, db_session
-    ) or can_manage_mcp_server(user, server)
-
-
-def affected_user_ids_for_mcp_server(
-    server: MCPServer, db_session: Session
-) -> set[UUID]:
-    """User IDs with a RUNNING sandbox whose Craft session should be reloaded
-    after this server changes (enabled/disabled for craft, tools toggled, URL
-    edited). Scoped to running sandboxes so the hot-reload push has somewhere to
-    land. Access must match what ``resolve_craft_mcp_servers`` bakes into a
-    session: public / group / direct / owner, plus admins (who bypass the access
-    filter in ``_add_mcp_server_access_filter`` and therefore see every
-    craft-enabled server)."""
-    stmt = select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
-    if server.is_public:
-        return set(db_session.scalars(stmt))
-
-    group_users = (
-        select(User__UserGroup.user_id)
-        .join(
-            MCPServer__UserGroup,
-            MCPServer__UserGroup.user_group_id == User__UserGroup.user_group_id,
-        )
-        .where(MCPServer__UserGroup.mcp_server_id == server.id)
-    )
-    direct_users = select(MCPServer__User.user_id).where(
-        MCPServer__User.mcp_server_id == server.id
-    )
-    owner_users = select(User.id).where(  # ty: ignore[no-matching-overload]
-        User.email == server.owner
-    )
-    # Admins see every craft-enabled server (ACL bypass), so any change to a
-    # private server can be baked into an admin's session and must reload it.
-    admin_users = select(User.id).where(  # ty: ignore[no-matching-overload]
-        User.effective_permissions.contains([Permission.FULL_ADMIN_PANEL_ACCESS.value])
-    )
-    stmt = stmt.where(
-        Sandbox.user_id.in_(group_users)
-        | Sandbox.user_id.in_(direct_users)
-        | Sandbox.user_id.in_(owner_users)
-        | Sandbox.user_id.in_(admin_users)
-    )
-    return set(db_session.scalars(stmt))
-
-
 def make_mcp_server_private(
     server_id: int,  # noqa: ARG001
     user_ids: list[UUID] | None,
@@ -279,6 +123,89 @@ def make_mcp_server_private(
         raise NotImplementedError(
             "Onyx MIT does not support restricting MCP servers to users/groups"
         )
+
+
+def get_mcp_tools_for_servers(server_ids: list[int], db_session: Session) -> list[Tool]:
+    """All MCP tools across ``server_ids`` in a single query"""
+    if not server_ids:
+        return []
+    return list(
+        db_session.scalars(select(Tool).where(Tool.mcp_server_id.in_(server_ids))).all()
+    )
+
+
+# MCPConnectionConfig operations
+def get_connection_config_by_id(
+    config_id: int, db_session: Session, *, for_update: bool = False
+) -> MCPConnectionConfig:
+    """Get connection config by ID. ``for_update`` row-locks the config so a
+    read-compare-write over its JSON blob is atomic against concurrent writers."""
+    stmt = select(MCPConnectionConfig).where(MCPConnectionConfig.id == config_id)
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    config = db_session.scalar(stmt)
+    if not config:
+        raise ValueError("Connection config by specified id does not exist")
+    return config
+
+
+def get_user_connection_config(
+    server_id: int, user_email: str, db_session: Session
+) -> MCPConnectionConfig | None:
+    """Get a user's connection config for a specific MCP server"""
+    return db_session.scalar(
+        select(MCPConnectionConfig).where(
+            and_(
+                MCPConnectionConfig.mcp_server_id == server_id,
+                MCPConnectionConfig.user_email == user_email,
+            )
+        )
+    )
+
+
+def get_user_connection_configs(
+    server_ids: list[int], user_email: str, db_session: Session
+) -> dict[int, MCPConnectionConfig]:
+    """`user_email`'s own connection configs for `server_ids`, keyed by server id.
+    One query, for callers resolving credentials across many servers."""
+    if not server_ids:
+        return {}
+    rows = db_session.scalars(
+        select(MCPConnectionConfig).where(
+            and_(
+                MCPConnectionConfig.mcp_server_id.in_(server_ids),
+                MCPConnectionConfig.user_email == user_email,
+            )
+        )
+    )
+    return {row.mcp_server_id: row for row in rows if row.mcp_server_id is not None}
+
+
+def update_connection_config(
+    config_id: int,
+    db_session: Session,
+    config_data: MCPConnectionData | None = None,
+) -> MCPConnectionConfig:
+    """Update an existing connection config"""
+    config = update_connection_config__no_commit(config_id, db_session, config_data)
+    db_session.commit()
+    return config
+
+
+def update_connection_config__no_commit(
+    config_id: int,
+    db_session: Session,
+    config_data: MCPConnectionData | None = None,
+) -> MCPConnectionConfig:
+    """Update a connection config without owning the transaction."""
+    config = get_connection_config_by_id(config_id, db_session)
+
+    if config_data is not None:
+        config.config = config_data  # ty: ignore[invalid-assignment]
+        flag_modified(config, "config")
+
+    db_session.flush()
+    return config
 
 
 def create_mcp_server__no_commit(
@@ -389,128 +316,6 @@ def update_mcp_server__no_commit(
     return server
 
 
-def delete_mcp_server(server_id: int, db_session: Session) -> None:
-    """Delete an MCP server and all associated tools (via CASCADE)"""
-    server = get_mcp_server_by_id(server_id, db_session)
-
-    # Count tools that will be deleted
-    tools_count = db_session.query(Tool).filter(Tool.mcp_server_id == server_id).count()
-    logger.info(
-        "Deleting MCP server %s with %s associated tools", server_id, tools_count
-    )
-
-    db_session.delete(server)
-    db_session.commit()
-
-    logger.info("Successfully deleted MCP server %s and its tools", server_id)
-
-
-def get_all_mcp_tools_for_server(server_id: int, db_session: Session) -> list[Tool]:
-    """Get all MCP tools for a server"""
-    return list(
-        db_session.scalars(select(Tool).where(Tool.mcp_server_id == server_id)).all()
-    )
-
-
-def get_mcp_tools_for_servers(server_ids: list[int], db_session: Session) -> list[Tool]:
-    """All MCP tools across ``server_ids`` in a single query"""
-    if not server_ids:
-        return []
-    return list(
-        db_session.scalars(select(Tool).where(Tool.mcp_server_id.in_(server_ids))).all()
-    )
-
-
-def add_user_to_mcp_server(server_id: int, user_id: UUID, db_session: Session) -> None:
-    """Grant a user access to an MCP server"""
-    server = get_mcp_server_by_id(server_id, db_session)
-    user = db_session.scalar(
-        select(User).where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-    )
-    if not user:
-        raise ValueError("User not found")
-
-    if user not in server.users:
-        server.users.append(user)
-        db_session.commit()
-
-
-def remove_user_from_mcp_server(
-    server_id: int, user_id: UUID, db_session: Session
-) -> None:
-    """Remove a user's access to an MCP server"""
-    server = get_mcp_server_by_id(server_id, db_session)
-    user = db_session.scalar(
-        select(User).where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-    )
-    if not user:
-        raise ValueError("User not found")
-
-    if user in server.users:
-        server.users.remove(user)
-        db_session.commit()
-
-
-# MCPConnectionConfig operations
-def get_connection_config_by_id(
-    config_id: int, db_session: Session, *, for_update: bool = False
-) -> MCPConnectionConfig:
-    """Get connection config by ID. ``for_update`` row-locks the config so a
-    read-compare-write over its JSON blob is atomic against concurrent writers."""
-    stmt = select(MCPConnectionConfig).where(MCPConnectionConfig.id == config_id)
-    if for_update:
-        stmt = stmt.with_for_update().execution_options(populate_existing=True)
-    config = db_session.scalar(stmt)
-    if not config:
-        raise ValueError("Connection config by specified id does not exist")
-    return config
-
-
-def get_user_connection_config(
-    server_id: int, user_email: str, db_session: Session
-) -> MCPConnectionConfig | None:
-    """Get a user's connection config for a specific MCP server"""
-    return db_session.scalar(
-        select(MCPConnectionConfig).where(
-            and_(
-                MCPConnectionConfig.mcp_server_id == server_id,
-                MCPConnectionConfig.user_email == user_email,
-            )
-        )
-    )
-
-
-def get_user_connection_configs(
-    server_ids: list[int], user_email: str, db_session: Session
-) -> dict[int, MCPConnectionConfig]:
-    """`user_email`'s own connection configs for `server_ids`, keyed by server id.
-    One query, for callers resolving credentials across many servers."""
-    if not server_ids:
-        return {}
-    rows = db_session.scalars(
-        select(MCPConnectionConfig).where(
-            and_(
-                MCPConnectionConfig.mcp_server_id.in_(server_ids),
-                MCPConnectionConfig.user_email == user_email,
-            )
-        )
-    )
-    return {row.mcp_server_id: row for row in rows if row.mcp_server_id is not None}
-
-
-def get_user_connection_configs_for_server(
-    server_id: int, db_session: Session
-) -> list[MCPConnectionConfig]:
-    """Get all user connection configs for a specific MCP server"""
-    return list(
-        db_session.scalars(
-            select(MCPConnectionConfig).where(
-                MCPConnectionConfig.mcp_server_id == server_id
-            )
-        ).all()
-    )
-
-
 def create_connection_config(
     config_data: MCPConnectionData,
     db_session: Session,
@@ -528,101 +333,31 @@ def create_connection_config(
     return new_config
 
 
-def update_connection_config(
-    config_id: int,
-    db_session: Session,
-    config_data: MCPConnectionData | None = None,
-) -> MCPConnectionConfig:
-    """Update an existing connection config"""
-    config = update_connection_config__no_commit(config_id, db_session, config_data)
-    db_session.commit()
-    return config
-
-
-def update_connection_config__no_commit(
-    config_id: int,
-    db_session: Session,
-    config_data: MCPConnectionData | None = None,
-) -> MCPConnectionConfig:
-    """Update a connection config without owning the transaction."""
-    config = get_connection_config_by_id(config_id, db_session)
-
-    if config_data is not None:
-        config.config = config_data  # ty: ignore[invalid-assignment]
-        flag_modified(config, "config")
-
-    db_session.flush()
-    return config
-
-
-def upsert_user_connection_config(
+def upsert_mcp_server_user_preferences__no_commit(
     server_id: int,
-    user_email: str,
-    config_data: MCPConnectionData,
+    user_id: UUID,
     db_session: Session,
-) -> MCPConnectionConfig:
-    """Create or update a user's connection config for an MCP server"""
-    existing_config = get_user_connection_config(server_id, user_email, db_session)
-
-    if existing_config:
-        existing_config.config = config_data  # ty: ignore[invalid-assignment]
-        db_session.flush()  # Don't commit yet, let caller decide when to commit
-        return existing_config
-    else:
-        return create_connection_config(
-            config_data=config_data,
-            mcp_server_id=server_id,
-            user_email=user_email,
-            db_session=db_session,
-        )
-
-
-def clear_mcp_admin_connection_config__no_commit(
-    server: MCPServer, db_session: Session
-) -> None:
-    config_id = server.admin_connection_config_id
-    server.admin_connection_config = None
-    server.admin_connection_config_id = None
-    if config_id is not None:
-        delete_connection_config(config_id, db_session)
-
-
-def delete_connection_config(config_id: int, db_session: Session) -> None:
-    """Delete a connection config"""
-    config = get_connection_config_by_id(config_id, db_session)
-    db_session.delete(config)
-    db_session.flush()  # Don't commit yet, let caller decide when to commit
-
-
-def delete_user_connection_configs_for_server(
-    server_id: int, user_email: str, db_session: Session
-) -> None:
-    """Delete all connection configs for a user on a specific server"""
-    configs = db_session.scalars(
-        select(MCPConnectionConfig).where(
-            and_(
-                MCPConnectionConfig.mcp_server_id == server_id,
-                MCPConnectionConfig.user_email == user_email,
-            )
-        )
-    ).all()
-
-    for config in configs:
-        db_session.delete(config)
-
-    db_session.commit()
-
-
-def delete_all_user_connection_configs_for_server_no_commit(
-    server_id: int, db_session: Session
-) -> None:
-    """Delete all user connection configs for a specific MCP server"""
-    db_session.execute(
-        delete(MCPConnectionConfig).where(
-            and_(
-                MCPConnectionConfig.mcp_server_id == server_id,
-                MCPConnectionConfig.user_email != "",
-            )
-        )
+    *,
+    enabled_in_chat: bool | None = None,
+    enabled_in_craft: bool | None = None,
+) -> MCPServerUserPreference:
+    values: dict[str, bool] = {}
+    if enabled_in_chat is not None:
+        values["enabled_in_chat"] = enabled_in_chat
+    if enabled_in_craft is not None:
+        values["enabled_in_craft"] = enabled_in_craft
+    if not values:
+        raise ValueError("At least one preference is required")
+    stmt = insert(MCPServerUserPreference).values(
+        user_id=user_id, mcp_server_id=server_id, **values
     )
-    db_session.flush()  # Don't commit yet, let caller decide when to commit
+    return db_session.scalars(
+        stmt.on_conflict_do_update(
+            index_elements=[
+                MCPServerUserPreference.user_id,
+                MCPServerUserPreference.mcp_server_id,
+            ],
+            set_=values,
+        ).returning(MCPServerUserPreference),
+        execution_options={"populate_existing": True},
+    ).one()

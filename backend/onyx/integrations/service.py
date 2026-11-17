@@ -1,0 +1,1289 @@
+"""The logic of the integration API: who manages an integration, create,
+update and delete, the views, the action policies and the connections."""
+
+from collections.abc import Collection, Mapping
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from onyx.auth.permissions import has_global_permission, has_permission
+from onyx.db.enums import (
+    ExternalAppType,
+    IntegrationActionPolicyValue,
+    IntegrationActionSource,
+    IntegrationAuthMethod,
+    IntegrationAuthMode,
+    IntegrationKind,
+    IntegrationOAuthProviderMode,
+    MCPTransport,
+    Permission,
+    PermissionAuthority,
+)
+from onyx.db.external_app import (
+    associate_built_in_skill__no_commit,
+    delete_external_app,
+)
+from onyx.db.integration import (
+    IntegrationPluginRow,
+    create_external_app_row__no_commit,
+    create_mcp_server_row__no_commit,
+    create_openapi_tool_row__no_commit,
+    delete_integration__no_commit,
+    delete_oauth_client__no_commit,
+    get_external_app_for_integration,
+    get_integration_by_id,
+    get_mcp_server_for_integration,
+    get_openapi_tool_for_integration,
+    insert_integration__no_commit,
+    list_integration_actions,
+    list_integration_ids_held_by_plugins,
+    list_integration_plugin_rows,
+    list_integrations,
+    list_integrations_by_ids,
+    lock_integration,
+    replace_integration_actions__no_commit,
+    set_policy_rows__no_commit,
+    upsert_oauth_client__no_commit,
+)
+from onyx.db.integration_connection import get_oauth_client, user_can_see_integration
+from onyx.db.integration_policy import get_policy_rows
+from onyx.db.models import Integration, IntegrationAction, IntegrationOAuthClient, User
+from onyx.db.plugin import create_integration_plugin__no_commit
+from onyx.db.plugin_access import (
+    affected_user_ids_for_plugins,
+    load_user_plugin_states,
+    visible_plugin_ids,
+)
+from onyx.db.utils import UNSET
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.base import OAuthExternalAppProvider
+from onyx.external_apps.url_glob import UrlGlob
+from onyx.integrations.connection_models import ConnectionState
+from onyx.integrations.connections import (
+    credential_field_keys,
+    header_field_keys,
+    integration_status,
+    mark_sign_in_settings_changed,
+    oauth_client_configured,
+    sign_in_settings_for,
+)
+from onyx.integrations.kinds.mcp_server import fetch_mcp_actions
+from onyx.integrations.models import ApiConfig, ApiShape, EffectivePolicy
+from onyx.integrations.oauth import sign_in_host
+from onyx.integrations.policy import (
+    DEFAULT_ACTION_KEY,
+    STORED_TO_EFFECTIVE,
+    action_default_policy,
+    admin_policy,
+)
+from onyx.integrations.presets import PRESETS, Preset, get_preset
+from onyx.integrations.registry import get_kind_handler
+from onyx.integrations.sync import sync_integration_actions__no_commit
+from onyx.server.features.integrations.models import (
+    ActionGrantsResponse,
+    AdminIntegration,
+    AdminIntegrationDetail,
+    AgentIntegrationOption,
+    AgentPluginOption,
+    CredentialField,
+    CustomConfigInput,
+    IntegrationActionsResponse,
+    IntegrationActionsUpdate,
+    IntegrationActionView,
+    IntegrationConfigInput,
+    IntegrationConfigView,
+    IntegrationCreate,
+    IntegrationKindName,
+    IntegrationPluginRef,
+    IntegrationShape,
+    IntegrationUpdate,
+    McpServerConfigInput,
+    MemberAction,
+    MemberIntegration,
+    MemberIntegrationDetail,
+    OAuthClientInput,
+    OAuthClientView,
+    OpenApiConfigInput,
+    PresetConfigInput,
+    PresetConfigView,
+    PresetView,
+)
+from onyx.server.features.mcp.ssrf import validate_mcp_url
+from onyx.tools.tool_implementations.custom.custom_tool import validate_custom_tool_url
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_url,
+    validate_openapi_schema,
+)
+from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException
+
+logger = setup_logger()
+
+_CLIENT_CREDENTIAL_KEYS = ("client_id", "client_secret")
+
+_KIND_NAMES: dict[IntegrationKind, IntegrationKindName] = {
+    IntegrationKind.MCP: IntegrationKindName.MCP_SERVER,
+    IntegrationKind.API: IntegrationKindName.API,
+}
+_API_SHAPES: dict[ApiShape, IntegrationShape] = {
+    ApiShape.OPENAPI: IntegrationShape.OPENAPI,
+    ApiShape.PRESET: IntegrationShape.PRESET,
+    ApiShape.CUSTOM: IntegrationShape.CUSTOM,
+}
+_TOKEN_METHODS = frozenset(
+    {
+        IntegrationAuthMethod.OAUTH2,
+        IntegrationAuthMethod.API_KEY,
+        IntegrationAuthMethod.ONYX_LOGIN,
+    }
+)
+
+
+# Permissions
+
+
+def manages_integration(user: User, plugins: Collection[IntegrationPluginRow]) -> bool:
+    """Organization-wide manage:actions manages each integration. Another
+    holder of manage:actions manages an integration when each plugin that
+    holds it is in that user's "My uploads". A plugin in the Organization
+    library needs organization-wide manage:actions."""
+    authority = has_permission(user, Permission.MANAGE_ACTIONS)
+    if authority is PermissionAuthority.GLOBAL:
+        return True
+    if authority is PermissionAuthority.NONE or not plugins:
+        return False
+    return all(
+        not plugin.in_organization_library and plugin.author_user_id == user.id
+        for plugin in plugins
+    )
+
+
+def _integration_or_404(integration_id: int, db_session: Session) -> Integration:
+    integration = get_integration_by_id(integration_id, db_session)
+    if integration is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
+    return integration
+
+
+def _can_view(
+    user: User,
+    integration: Integration,
+    plugins: Collection[IntegrationPluginRow],
+    db_session: Session,
+) -> bool:
+    return manages_integration(user, plugins) or user_can_see_integration(
+        db_session, integration.id, user.id
+    )
+
+
+def get_viewable_integration(
+    user: User, integration_id: int, db_session: Session
+) -> Integration:
+    integration = _integration_or_404(integration_id, db_session)
+    plugins = list_integration_plugin_rows([integration.id], db_session)[integration.id]
+    if not _can_view(user, integration, plugins, db_session):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
+    return integration
+
+
+def get_manageable_integration(
+    user: User, integration_id: int, db_session: Session, *, lock: bool = False
+) -> Integration:
+    """The integration, when ``user`` may change it. Locks the row on
+    ``lock``."""
+    integration = (
+        lock_integration(integration_id, db_session)
+        if lock
+        else get_integration_by_id(integration_id, db_session)
+    )
+    if integration is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
+    plugins = list_integration_plugin_rows([integration.id], db_session)[integration.id]
+    if manages_integration(user, plugins):
+        return integration
+    if user_can_see_integration(db_session, integration.id, user.id):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only an organization-wide action manager can change this integration.",
+        )
+    raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
+
+
+def _check_onyx_login(user: User, method: IntegrationAuthMethod | None) -> None:
+    if method is IntegrationAuthMethod.ONYX_LOGIN and not has_global_permission(
+        user, Permission.MANAGE_ACTIONS
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only an organization-wide action manager can send users' Onyx login "
+            "to an integration.",
+        )
+
+
+# Shapes and settings
+
+
+def kind_name(integration: Integration) -> IntegrationKindName:
+    return _KIND_NAMES[integration.kind]
+
+
+def shape_of(integration: Integration, db_session: Session) -> IntegrationShape:
+    if integration.kind is IntegrationKind.MCP:
+        return IntegrationShape.MCP_SERVER
+    config = get_kind_handler(integration.kind).load_config(integration, db_session)
+    if not isinstance(config, ApiConfig):
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, "Unexpected integration settings."
+        )
+    return _API_SHAPES[config.shape]
+
+
+def _preset_id(integration: Integration, db_session: Session) -> str | None:
+    app = get_external_app_for_integration(integration.id, db_session)
+    if app is None or app.app_type == ExternalAppType.CUSTOM:
+        return None
+    return app.app_type.value
+
+
+def _preset_or_400(preset_id: str) -> Preset:
+    try:
+        app_type = ExternalAppType(preset_id)
+    except ValueError as error:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, f"Unknown preset '{preset_id}'."
+        ) from error
+    preset = get_preset(app_type)
+    if preset is None:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"Unknown preset '{preset_id}'.")
+    return preset
+
+
+def _preset_methods(preset: Preset) -> list[IntegrationAuthMethod | None]:
+    if isinstance(preset.provider, OAuthExternalAppProvider):
+        return [IntegrationAuthMethod.OAUTH2]
+    if preset.provider.spec.descriptor.auth_template:
+        return [IntegrationAuthMethod.API_KEY]
+    return [None]
+
+
+def preset_views() -> list[PresetView]:
+    return [
+        PresetView(
+            id=preset.id,
+            name=preset.name,
+            auth_methods=_preset_methods(preset),
+            required_org_credential_fields=[
+                CredentialField(key=field.key, label=field.label, secret=field.secret)
+                for field in preset.provider.spec.descriptor.required_org_credential_fields
+            ],
+            setup_instructions=preset.provider.spec.descriptor.setup_instructions
+            or None,
+        )
+        for preset in sorted(PRESETS.values(), key=lambda preset: preset.name)
+    ]
+
+
+def _allowed_methods(
+    shape: IntegrationShape, preset: Preset | None
+) -> list[IntegrationAuthMethod | None]:
+    if shape is IntegrationShape.PRESET and preset is not None:
+        return _preset_methods(preset)
+    if shape is IntegrationShape.CUSTOM:
+        return [IntegrationAuthMethod.API_KEY]
+    return list(_TOKEN_METHODS)
+
+
+def validate_openapi_definition(definition: dict[str, Any]) -> None:
+    try:
+        validate_openapi_schema(definition)
+    except (ValueError, TypeError, KeyError, AttributeError) as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
+    server_url = openapi_to_url(definition)
+    try:
+        # No DNS at save time; each call resolves and checks again.
+        validate_custom_tool_url(server_url, resolve_dns=False)
+    except (SSRFException, ValueError) as e:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Server URL '{server_url}' is not allowed: {e}",
+        ) from e
+
+
+def _validate_url_patterns(patterns: list[str]) -> None:
+    if not patterns:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Add at least one URL pattern.")
+    for pattern in patterns:
+        try:
+            UrlGlob.parse(pattern)
+        except ValueError as error:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+
+
+def _credential_fields_json(
+    fields: list[CredentialField] | None, header_template: Mapping[str, str] | None
+) -> list[dict[str, Any]] | None:
+    if fields is not None:
+        return [field.model_dump() for field in fields]
+    if not header_template:
+        return None
+    return [
+        {"key": key, "label": key.replace("_", " "), "secret": True}
+        for key in header_field_keys(header_template)
+    ] or None
+
+
+def _validate_sign_in(
+    *,
+    shape: IntegrationShape,
+    preset: Preset | None,
+    auth_mode: IntegrationAuthMode,
+    auth_method: IntegrationAuthMethod | None,
+    header_template: Mapping[str, str] | None,
+    oauth_client: OAuthClientInput | None,
+    has_stored_client: bool,
+) -> None:
+    if auth_mode is IntegrationAuthMode.NONE:
+        if auth_method is not None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "An integration with no sign-in has no sign-in method.",
+            )
+        return
+    if auth_method is None:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Pick a sign-in method.")
+    if auth_method not in _allowed_methods(shape, preset):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"This integration cannot sign in with {auth_method.value}.",
+        )
+    if (
+        auth_method is IntegrationAuthMethod.ONYX_LOGIN
+        and auth_mode is not IntegrationAuthMode.INDIVIDUAL
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The Onyx login sign-in needs a connection for each user.",
+        )
+    if (
+        auth_method is IntegrationAuthMethod.API_KEY
+        and shape is not IntegrationShape.PRESET
+        and not (header_template and header_field_keys(header_template))
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "An API key sign-in needs a header with a {placeholder}.",
+        )
+    if auth_method is not IntegrationAuthMethod.OAUTH2:
+        return
+    if oauth_client is None:
+        if has_stored_client:
+            return
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Add the OAuth client settings.")
+    mode = oauth_client.provider_mode
+    if (mode is IntegrationOAuthProviderMode.PRESET) != (
+        shape is IntegrationShape.PRESET
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only a preset uses the preset OAuth settings.",
+        )
+    if (
+        mode is IntegrationOAuthProviderMode.DISCOVERY
+        and shape is not IntegrationShape.MCP_SERVER
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only an MCP server can discover its OAuth settings.",
+        )
+    if mode is IntegrationOAuthProviderMode.MANUAL:
+        if not oauth_client.authorization_url or not oauth_client.token_url:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Add the authorization URL and the token URL.",
+            )
+        validate_mcp_url(
+            oauth_client.authorization_url, "authorization_url", require_https=True
+        )
+        validate_mcp_url(oauth_client.token_url, "token_url", require_https=True)
+
+
+def _write_oauth_client(
+    integration: Integration,
+    oauth_client: OAuthClientInput,
+    shape: IntegrationShape,
+    org_credentials: Mapping[str, str],
+    *,
+    keep_secret: bool,
+    db_session: Session,
+) -> None:
+    preset_mode = shape is IntegrationShape.PRESET
+    client_secret = oauth_client.client_secret or org_credentials.get("client_secret")
+    additional_params = oauth_client.additional_params
+    if preset_mode:
+        # A preset keeps its host settings here (``preset_host_values``).
+        stored = get_oauth_client(db_session, integration.id)
+        additional_params = (
+            _host_values(org_credentials)
+            if org_credentials
+            else (stored.additional_params if stored is not None else None)
+        )
+    upsert_oauth_client__no_commit(
+        integration_id=integration.id,
+        provider_mode=oauth_client.provider_mode,
+        authorization_url=None
+        if preset_mode
+        else oauth_client.authorization_url or None,
+        token_url=None if preset_mode else oauth_client.token_url or None,
+        scopes=oauth_client.scopes,
+        additional_params=additional_params,
+        pkce=oauth_client.pkce,
+        client_id=oauth_client.client_id or org_credentials.get("client_id") or None,
+        client_secret=(UNSET if keep_secret and not client_secret else client_secret),
+        db_session=db_session,
+    )
+
+
+def _preset_org_credentials(
+    preset: Preset, organization_credentials: Mapping[str, str] | None
+) -> dict[str, str]:
+    values = {
+        key: value.strip()
+        for key, value in (organization_credentials or {}).items()
+        if value.strip()
+    }
+    missing = [
+        field.label
+        for field in preset.provider.spec.descriptor.required_org_credential_fields
+        if field.key not in values
+    ]
+    if missing:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Fill in: " + ", ".join(missing))
+    return values
+
+
+def _host_values(org_credentials: Mapping[str, str]) -> dict[str, str]:
+    return {
+        key: value
+        for key, value in org_credentials.items()
+        if key not in _CLIENT_CREDENTIAL_KEYS
+    }
+
+
+def _sync_actions(
+    integration: Integration, user: User, db_session: Session, *, discover: bool
+) -> None:
+    """Sync the actions. With ``discover``, an MCP server is asked for its
+    tools first."""
+    if discover and integration.kind is IntegrationKind.MCP:
+        replace_integration_actions__no_commit(
+            integration.id,
+            IntegrationActionSource.MCP,
+            fetch_mcp_actions(integration, user, db_session),
+            db_session,
+        )
+    sync_integration_actions__no_commit(integration, db_session)
+
+
+# Create
+
+
+def create_integration__no_commit(
+    user: User, request: IntegrationCreate, db_session: Session
+) -> Integration:
+    """Make the integration, its kind row, its OAuth client, one plugin that
+    holds it, and its actions. The caller commits; an error leaves nothing."""
+    if request.for_organization and not has_global_permission(
+        user, Permission.MANAGE_ACTIONS
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only an organization-wide action manager can add an integration "
+            "for the organization.",
+        )
+    name = request.name.strip()
+    if not name:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Give the integration a name.")
+    config = request.config
+    shape = IntegrationShape(config.shape)
+    preset = (
+        _preset_or_400(config.preset_id)
+        if isinstance(config, PresetConfigInput)
+        else None
+    )
+    auth_method = (
+        None if request.auth_mode is IntegrationAuthMode.NONE else request.auth_method
+    )
+    header_template = request.header_template
+    if (
+        preset is not None
+        and header_template is None
+        and auth_method is IntegrationAuthMethod.API_KEY
+    ):
+        header_template = dict(preset.provider.spec.descriptor.auth_template)
+    _check_onyx_login(user, auth_method)
+    _validate_sign_in(
+        shape=shape,
+        preset=preset,
+        auth_mode=request.auth_mode,
+        auth_method=auth_method,
+        header_template=header_template,
+        oauth_client=request.oauth_client,
+        has_stored_client=False,
+    )
+    org_credentials = (
+        _preset_org_credentials(preset, config.organization_credentials)
+        if preset is not None and isinstance(config, PresetConfigInput)
+        else {}
+    )
+    if isinstance(config, McpServerConfigInput):
+        validate_mcp_url(config.server_url, "server_url", require_https=False)
+    elif isinstance(config, OpenApiConfigInput):
+        validate_openapi_definition(config.openapi_spec)
+    elif isinstance(config, CustomConfigInput):
+        _validate_url_patterns(config.upstream_url_patterns)
+
+    integration = insert_integration__no_commit(
+        kind=(
+            IntegrationKind.MCP
+            if isinstance(config, McpServerConfigInput)
+            else IntegrationKind.API
+        ),
+        name=name,
+        description=request.description,
+        created_by_user_id=user.id,
+        auth_mode=request.auth_mode,
+        auth_method=auth_method,
+        credential_fields=(
+            _credential_fields_json(request.credential_fields, header_template)
+            if auth_method is IntegrationAuthMethod.API_KEY
+            else None
+        ),
+        header_template=header_template,
+        db_session=db_session,
+    )
+    if isinstance(config, McpServerConfigInput):
+        create_mcp_server_row__no_commit(
+            integration=integration,
+            owner_email=user.email,
+            server_url=config.server_url,
+            transport=config.transport,
+            db_session=db_session,
+        )
+    elif isinstance(config, OpenApiConfigInput):
+        create_openapi_tool_row__no_commit(
+            integration=integration,
+            openapi_spec=config.openapi_spec,
+            db_session=db_session,
+        )
+    elif preset is not None:
+        app = create_external_app_row__no_commit(
+            integration=integration,
+            app_type=preset.app_type,
+            upstream_url_patterns=preset.provider.resolve_upstream_url_patterns(
+                _host_values(org_credentials),
+                list(preset.provider.spec.descriptor.upstream_url_patterns),
+            ),
+            auth_template=dict(preset.provider.spec.descriptor.auth_template),
+            db_session=db_session,
+        )
+        associate_built_in_skill__no_commit(db_session, app)
+    elif isinstance(config, CustomConfigInput):
+        create_external_app_row__no_commit(
+            integration=integration,
+            app_type=ExternalAppType.CUSTOM,
+            upstream_url_patterns=config.upstream_url_patterns,
+            auth_template=dict(header_template or {}),
+            db_session=db_session,
+        )
+
+    if auth_method is IntegrationAuthMethod.OAUTH2 and request.oauth_client:
+        _write_oauth_client(
+            integration,
+            request.oauth_client,
+            shape,
+            org_credentials,
+            keep_secret=False,
+            db_session=db_session,
+        )
+
+    create_integration_plugin__no_commit(
+        integration_id=integration.id,
+        name=name,
+        description=request.description or "",
+        author=user,
+        for_organization=request.for_organization,
+        db_session=db_session,
+    )
+
+    discover = (
+        shape is IntegrationShape.MCP_SERVER
+        and request.auth_mode is IntegrationAuthMode.NONE
+    )
+    if discover:
+        try:
+            _sync_actions(integration, user, db_session, discover=True)
+            return integration
+        except Exception:
+            # The server can be down at create; a refresh asks again.
+            logger.exception(
+                "Could not discover the tools of integration %s", integration.id
+            )
+    sync_integration_actions__no_commit(integration, db_session)
+    return integration
+
+
+# Update and delete
+
+
+def _apply_config(
+    integration: Integration,
+    shape: IntegrationShape,
+    config: IntegrationConfigInput,
+    oauth_client: OAuthClientInput | None,
+    db_session: Session,
+) -> bool:
+    """Write the kind settings of an update. Returns whether the actions
+    need a sync."""
+    if IntegrationShape(config.shape) is not shape:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "The kind of an integration cannot change."
+        )
+    if isinstance(config, McpServerConfigInput):
+        validate_mcp_url(config.server_url, "server_url", require_https=False)
+        server = get_mcp_server_for_integration(integration.id, db_session)
+        if server is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "The MCP server is missing.")
+        server.server_url = config.server_url
+        server.transport = config.transport
+        return False
+    if isinstance(config, OpenApiConfigInput):
+        validate_openapi_definition(config.openapi_spec)
+        tool = get_openapi_tool_for_integration(integration.id, db_session)
+        if tool is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "The OpenAPI schema is missing.")
+        tool.openapi_schema = config.openapi_spec
+        return True
+    app = get_external_app_for_integration(integration.id, db_session)
+    if app is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "The app settings are missing.")
+    if isinstance(config, PresetConfigInput):
+        preset = _preset_or_400(config.preset_id)
+        if preset.app_type != app.app_type:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "The preset of an integration cannot change.",
+            )
+        if config.organization_credentials is not None:
+            org_credentials = _preset_org_credentials(
+                preset, config.organization_credentials
+            )
+            app.upstream_url_patterns = preset.provider.resolve_upstream_url_patterns(
+                _host_values(org_credentials),
+                list(preset.provider.spec.descriptor.upstream_url_patterns),
+            )
+            if integration.auth_method is IntegrationAuthMethod.OAUTH2:
+                _write_oauth_client(
+                    integration,
+                    oauth_client
+                    or OAuthClientInput(
+                        provider_mode=IntegrationOAuthProviderMode.PRESET
+                    ),
+                    shape,
+                    org_credentials,
+                    keep_secret=True,
+                    db_session=db_session,
+                )
+        return False
+    _validate_url_patterns(config.upstream_url_patterns)
+    app.upstream_url_patterns = config.upstream_url_patterns
+    return False
+
+
+def update_integration__no_commit(
+    user: User,
+    integration_id: int,
+    request: IntegrationUpdate,
+    db_session: Session,
+) -> Integration:
+    """Apply a partial update. A change of the sign-in settings sets each
+    connection to Needs reconnect; a change of only the client secret does
+    not. The caller commits."""
+    integration = get_manageable_integration(
+        user, integration_id, db_session, lock=True
+    )
+    fields = request.model_fields_set
+    shape = shape_of(integration, db_session)
+    preset_id = _preset_id(integration, db_session)
+    preset = _preset_or_400(preset_id) if preset_id is not None else None
+    stored_client = get_oauth_client(db_session, integration.id, for_update=True)
+    before = sign_in_settings_for(
+        integration, stored_client, sign_in_host(integration, db_session)
+    )
+
+    if "name" in fields and request.name is not None:
+        name = request.name.strip()
+        if not name:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Give the integration a name.")
+        integration.name = name
+    if "description" in fields:
+        integration.description = request.description
+    if "enabled" in fields and request.enabled is not None:
+        integration.enabled = request.enabled
+    if (
+        "users_can_save_always_allow" in fields
+        and request.users_can_save_always_allow is not None
+    ):
+        integration.users_can_save_always_allow = request.users_can_save_always_allow
+
+    auth_mode = (
+        request.auth_mode
+        if "auth_mode" in fields and request.auth_mode is not None
+        else integration.auth_mode
+    )
+    auth_method = (
+        request.auth_method if "auth_method" in fields else integration.auth_method
+    )
+    if auth_mode is IntegrationAuthMode.NONE:
+        auth_method = None
+    header_template = (
+        request.header_template
+        if "header_template" in fields
+        else integration.header_template
+    )
+    if auth_method is not integration.auth_method:
+        _check_onyx_login(user, auth_method)
+    _validate_sign_in(
+        shape=shape,
+        preset=preset,
+        auth_mode=auth_mode,
+        auth_method=auth_method,
+        header_template=header_template,
+        oauth_client=request.oauth_client if "oauth_client" in fields else None,
+        has_stored_client=stored_client is not None,
+    )
+    integration.auth_mode = auth_mode
+    integration.auth_method = auth_method
+    integration.header_template = header_template
+    if "credential_fields" in fields or "header_template" in fields:
+        integration.credential_fields = (
+            _credential_fields_json(request.credential_fields, header_template)
+            if auth_method is IntegrationAuthMethod.API_KEY
+            else None
+        )
+
+    if auth_method is not IntegrationAuthMethod.OAUTH2:
+        if stored_client is not None:
+            delete_oauth_client__no_commit(integration.id, db_session)
+    elif "oauth_client" in fields and request.oauth_client is not None:
+        _write_oauth_client(
+            integration,
+            request.oauth_client,
+            shape,
+            {},
+            keep_secret=True,
+            db_session=db_session,
+        )
+
+    needs_sync = False
+    if "config" in fields and request.config is not None:
+        needs_sync = _apply_config(
+            integration, shape, request.config, request.oauth_client, db_session
+        )
+    if shape is IntegrationShape.CUSTOM and "header_template" in fields:
+        app = get_external_app_for_integration(integration.id, db_session)
+        if app is not None:
+            app.auth_template = dict(header_template or {})
+    db_session.flush()
+
+    after = sign_in_settings_for(
+        integration,
+        get_oauth_client(db_session, integration.id),
+        sign_in_host(integration, db_session),
+    )
+    if before != after:
+        mark_sign_in_settings_changed(integration.id, db_session)
+    if needs_sync:
+        sync_integration_actions__no_commit(integration, db_session)
+    return integration
+
+
+def delete_integration_for_user__no_commit(
+    user: User, integration_id: int, db_session: Session
+) -> None:
+    integration = get_manageable_integration(
+        user, integration_id, db_session, lock=True
+    )
+    app = get_external_app_for_integration(integration.id, db_session)
+    if app is not None:
+        delete_external_app(db_session, app.id)
+    delete_integration__no_commit(integration, db_session)
+
+
+# Views
+
+
+def _plugin_ref(row: IntegrationPluginRow) -> IntegrationPluginRef:
+    return IntegrationPluginRef(
+        plugin_id=row.plugin_id,
+        plugin_name=row.plugin_name,
+        scope="organization" if row.in_organization_library else "personal",
+        owner_email=row.owner_email,
+        installation_policy=row.installation_policy,
+    )
+
+
+def _credential_fields(integration: Integration) -> list[CredentialField]:
+    stored: dict[str, dict[str, Any]] = {
+        str(field.get("key")): field for field in integration.credential_fields or []
+    }
+    fields: list[CredentialField] = []
+    for key in credential_field_keys(integration):
+        field = stored.get(key, {})
+        fields.append(
+            CredentialField(
+                key=key,
+                label=str(field.get("label") or key.replace("_", " ")),
+                secret=bool(field.get("secret", True)),
+            )
+        )
+    return fields
+
+
+def _action_views(
+    actions: list[IntegrationAction],
+    admin_rows: Mapping[str, IntegrationActionPolicyValue],
+) -> list[IntegrationActionView]:
+    return [
+        IntegrationActionView(
+            key=action.key,
+            display_name=action.display_name,
+            description=action.description,
+            read_only=action.read_only,
+            default_policy=action_default_policy(action),
+            admin_policy=(
+                STORED_TO_EFFECTIVE[admin_rows[action.key]]
+                if action.key in admin_rows
+                else None
+            ),
+            effective_admin_policy=admin_policy(admin_rows, action.key, action),
+        )
+        for action in actions
+    ]
+
+
+def action_views(
+    integration: Integration, db_session: Session
+) -> list[IntegrationActionView]:
+    rows = get_policy_rows(db_session, integration.id, None)
+    return _action_views(
+        list_integration_actions(integration.id, db_session), rows.admin
+    )
+
+
+def _setup_reason(
+    integration: Integration, oauth_client: IntegrationOAuthClient | None
+) -> str:
+    if not oauth_client_configured(integration, oauth_client):
+        return "Add the OAuth client ID."
+    return "Connect the account of the organization."
+
+
+def _admin_view(
+    user: User,
+    integration: Integration,
+    plugins: list[IntegrationPluginRow],
+    db_session: Session,
+) -> AdminIntegration:
+    organization_status = integration_status(integration, None, db_session)
+    needs_setup = organization_status.state is ConnectionState.NOT_SET_UP
+    creator = (
+        db_session.get(User, integration.created_by_user_id)
+        if integration.created_by_user_id is not None
+        else None
+    )
+    return AdminIntegration(
+        id=integration.id,
+        kind=kind_name(integration),
+        shape=shape_of(integration, db_session),
+        name=integration.name,
+        description=integration.description,
+        preset_id=_preset_id(integration, db_session),
+        enabled=integration.enabled,
+        auth_mode=integration.auth_mode,
+        auth_method=integration.auth_method,
+        plugins=[_plugin_ref(row) for row in plugins],
+        created_by_email=creator.email if creator is not None else None,
+        action_count=len(list_integration_actions(integration.id, db_session)),
+        needs_setup=needs_setup,
+        setup_reason=(
+            _setup_reason(integration, get_oauth_client(db_session, integration.id))
+            if needs_setup
+            else None
+        ),
+        organization_status=(
+            organization_status
+            if integration.auth_mode is IntegrationAuthMode.SHARED
+            else None
+        ),
+        can_manage=manages_integration(user, plugins),
+    )
+
+
+def list_admin_integrations(user: User, db_session: Session) -> list[AdminIntegration]:
+    """Each integration for an organization-wide manager. Another manager
+    gets the ones it manages and the ones it can see through a plugin."""
+    integrations = list_integrations(db_session)
+    plugin_rows = list_integration_plugin_rows(
+        [integration.id for integration in integrations], db_session
+    )
+    visible: set[int] | None = None
+    if not has_global_permission(user, Permission.MANAGE_ACTIONS):
+        visible = set(
+            list_integration_ids_held_by_plugins(
+                visible_plugin_ids(user.id), db_session
+            )
+        )
+    views: list[AdminIntegration] = []
+    for integration in integrations:
+        plugins = plugin_rows[integration.id]
+        if (
+            visible is not None
+            and integration.id not in visible
+            and not manages_integration(user, plugins)
+        ):
+            continue
+        views.append(_admin_view(user, integration, plugins, db_session))
+    return views
+
+
+def _config_view(
+    integration: Integration, shape: IntegrationShape, db_session: Session
+) -> IntegrationConfigView:
+    if shape is IntegrationShape.MCP_SERVER:
+        server = get_mcp_server_for_integration(integration.id, db_session)
+        if server is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "The MCP server is missing.")
+        return McpServerConfigInput(
+            server_url=server.server_url,
+            transport=server.transport or MCPTransport.STREAMABLE_HTTP,
+        )
+    if shape is IntegrationShape.OPENAPI:
+        tool = get_openapi_tool_for_integration(integration.id, db_session)
+        if tool is None or tool.openapi_schema is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "The OpenAPI schema is missing.")
+        return OpenApiConfigInput(openapi_spec=tool.openapi_schema)
+    app = get_external_app_for_integration(integration.id, db_session)
+    if app is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "The app settings are missing.")
+    if shape is IntegrationShape.PRESET:
+        return PresetConfigView(preset_id=app.app_type.value)
+    return CustomConfigInput(upstream_url_patterns=list(app.upstream_url_patterns))
+
+
+def _oauth_client_view(
+    oauth_client: IntegrationOAuthClient | None,
+) -> OAuthClientView | None:
+    if oauth_client is None:
+        return None
+    return OAuthClientView(
+        provider_mode=oauth_client.provider_mode,
+        authorization_url=oauth_client.authorization_url or "",
+        token_url=oauth_client.token_url or "",
+        scopes=oauth_client.scopes,
+        additional_params=oauth_client.additional_params,
+        pkce=oauth_client.pkce,
+        client_id=(
+            oauth_client.client_id.get_value(apply_mask=False)
+            if oauth_client.client_id is not None
+            else None
+        ),
+        has_client_secret=oauth_client.client_secret is not None
+        and bool(oauth_client.client_secret.get_value(apply_mask=False)),
+    )
+
+
+def admin_detail(
+    user: User, integration: Integration, db_session: Session
+) -> AdminIntegrationDetail:
+    plugins = list_integration_plugin_rows([integration.id], db_session)[integration.id]
+    view = _admin_view(user, integration, plugins, db_session)
+    return AdminIntegrationDetail(
+        **view.model_dump(),
+        config=_config_view(integration, view.shape, db_session),
+        credential_fields=_credential_fields(integration),
+        header_template=integration.header_template,
+        users_can_save_always_allow=integration.users_can_save_always_allow,
+        oauth_client=_oauth_client_view(get_oauth_client(db_session, integration.id)),
+    )
+
+
+# Actions
+
+
+def admin_actions(
+    integration: Integration, db_session: Session
+) -> IntegrationActionsResponse:
+    rows = get_policy_rows(db_session, integration.id, None)
+    default_row = rows.admin.get(DEFAULT_ACTION_KEY)
+    return IntegrationActionsResponse(
+        default_policy=(
+            STORED_TO_EFFECTIVE[default_row] if default_row is not None else None
+        ),
+        actions=_action_views(
+            list_integration_actions(integration.id, db_session), rows.admin
+        ),
+    )
+
+
+def _stored_value(
+    policy: EffectivePolicy | None,
+) -> IntegrationActionPolicyValue | None:
+    return IntegrationActionPolicyValue(policy.value) if policy is not None else None
+
+
+def _check_action_keys(
+    integration: Integration, keys: Collection[str], db_session: Session
+) -> None:
+    known = {
+        action.key for action in list_integration_actions(integration.id, db_session)
+    }
+    unknown = sorted(set(keys) - known)
+    if unknown:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "Unknown actions: " + ", ".join(unknown)
+        )
+
+
+def set_admin_actions__no_commit(
+    integration: Integration, request: IntegrationActionsUpdate, db_session: Session
+) -> None:
+    _check_action_keys(integration, request.actions, db_session)
+    values: dict[str, IntegrationActionPolicyValue | None] = {
+        DEFAULT_ACTION_KEY: _stored_value(request.default_policy)
+    }
+    values.update(
+        {key: _stored_value(policy) for key, policy in request.actions.items()}
+    )
+    set_policy_rows__no_commit(
+        integration_id=integration.id,
+        user_id=None,
+        values=values,
+        db_session=db_session,
+    )
+
+
+def refresh_actions__no_commit(
+    user: User, integration: Integration, db_session: Session
+) -> None:
+    """Ask an MCP server for its tools again; sync the other kinds."""
+    try:
+        _sync_actions(integration, user, db_session, discover=True)
+    except OnyxError:
+        raise
+    except Exception as error:
+        logger.exception("Could not refresh the actions of %s", integration.id)
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, f"Could not reach {integration.name}."
+        ) from error
+
+
+# Member
+
+
+def _visible_plugin_rows(
+    user: User, integration_ids: Collection[int], db_session: Session
+) -> dict[int, list[IntegrationPluginRow]]:
+    visible = {
+        state.plugin_id for state in load_user_plugin_states([user.id], db_session)
+    }
+    return {
+        integration_id: [row for row in rows if row.plugin_id in visible]
+        for integration_id, rows in list_integration_plugin_rows(
+            integration_ids, db_session
+        ).items()
+    }
+
+
+def _member_view(
+    user: User,
+    integration: Integration,
+    plugins: list[IntegrationPluginRow],
+    db_session: Session,
+) -> MemberIntegration:
+    return MemberIntegration(
+        id=integration.id,
+        kind=kind_name(integration),
+        shape=shape_of(integration, db_session),
+        name=integration.name,
+        description=integration.description,
+        preset_id=_preset_id(integration, db_session),
+        auth_mode=integration.auth_mode,
+        auth_method=integration.auth_method,
+        credential_fields=_credential_fields(integration),
+        status=integration_status(integration, user, db_session),
+        plugins=[_plugin_ref(row) for row in plugins],
+        users_can_save_always_allow=integration.users_can_save_always_allow,
+    )
+
+
+def list_member_integrations(
+    user: User, db_session: Session
+) -> list[MemberIntegration]:
+    """The enabled integrations the user can use through a visible plugin."""
+    integration_ids = list_integration_ids_held_by_plugins(
+        visible_plugin_ids(user.id), db_session
+    )
+    plugin_rows = _visible_plugin_rows(user, integration_ids, db_session)
+    return [
+        _member_view(user, integration, plugin_rows[integration.id], db_session)
+        for integration in list_integrations_by_ids(integration_ids, db_session)
+        if integration.enabled and plugin_rows[integration.id]
+    ]
+
+
+def get_member_integration(
+    user: User, integration_id: int, db_session: Session
+) -> Integration:
+    integration = get_integration_by_id(integration_id, db_session)
+    if integration is None or not user_can_see_integration(
+        db_session, integration_id, user.id
+    ):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
+    return integration
+
+
+def member_actions(
+    user: User, integration: Integration, db_session: Session
+) -> list[MemberAction]:
+    rows = get_policy_rows(db_session, integration.id, user.id)
+    return [
+        MemberAction(
+            **view.model_dump(),
+            user_policy=(
+                "allow"
+                if rows.user.get(view.key) is IntegrationActionPolicyValue.ALLOW
+                else None
+            ),
+        )
+        for view in _action_views(
+            list_integration_actions(integration.id, db_session), rows.admin
+        )
+    ]
+
+
+def member_detail(
+    user: User, integration: Integration, db_session: Session
+) -> MemberIntegrationDetail:
+    plugins = _visible_plugin_rows(user, [integration.id], db_session)[integration.id]
+    return MemberIntegrationDetail(
+        **_member_view(user, integration, plugins, db_session).model_dump(),
+        actions=member_actions(user, integration, db_session),
+    )
+
+
+def action_grants(
+    user: User, integration: Integration, db_session: Session
+) -> ActionGrantsResponse:
+    return ActionGrantsResponse(
+        users_can_save_always_allow=integration.users_can_save_always_allow,
+        actions=member_actions(user, integration, db_session),
+    )
+
+
+def set_action_grants__no_commit(
+    user: User,
+    integration: Integration,
+    grants: Mapping[str, str | None],
+    db_session: Session,
+) -> None:
+    """Save the user's Always allow choices: Allow or no choice."""
+    if not integration.users_can_save_always_allow:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            f"Your admin does not let users save Always allow for {integration.name}.",
+        )
+    _check_action_keys(integration, grants, db_session)
+    set_policy_rows__no_commit(
+        integration_id=integration.id,
+        user_id=user.id,
+        values={
+            key: IntegrationActionPolicyValue.ALLOW if value == "allow" else None
+            for key, value in grants.items()
+        },
+        db_session=db_session,
+    )
+
+
+def agent_catalog(user: User, db_session: Session) -> list[AgentPluginOption]:
+    """The plugins the user can see that hold an enabled integration."""
+    visible = {
+        state.plugin_id for state in load_user_plugin_states([user.id], db_session)
+    }
+    integrations = {
+        integration.id: integration
+        for integration in list_integrations_by_ids(
+            list_integration_ids_held_by_plugins(visible, db_session), db_session
+        )
+        if integration.enabled
+    }
+    options: dict[UUID, AgentPluginOption] = {}
+    for integration_id, rows in list_integration_plugin_rows(
+        list(integrations), db_session
+    ).items():
+        integration = integrations[integration_id]
+        for row in rows:
+            if row.plugin_id not in visible:
+                continue
+            option = options.setdefault(
+                row.plugin_id,
+                AgentPluginOption(
+                    plugin_id=row.plugin_id,
+                    plugin_name=row.plugin_name,
+                    description=row.plugin_description,
+                    integrations=[],
+                ),
+            )
+            option.integrations.append(
+                AgentIntegrationOption(
+                    id=integration.id,
+                    name=integration.name,
+                    kind=kind_name(integration),
+                    shape=shape_of(integration, db_session),
+                    users_can_save_always_allow=integration.users_can_save_always_allow,
+                    actions=action_views(integration, db_session),
+                )
+            )
+    return sorted(options.values(), key=lambda option: option.plugin_name.lower())
+
+
+# Craft sessions
+
+
+def craft_users_of_integration(integration_id: int, db_session: Session) -> set[UUID]:
+    """The users with a running sandbox who can see a plugin that holds the
+    integration. Read it before a delete."""
+    return affected_user_ids_for_plugins(
+        [
+            row.plugin_id
+            for row in list_integration_plugin_rows([integration_id], db_session)[
+                integration_id
+            ]
+        ],
+        db_session,
+    )
+
+
+def reload_craft_sessions(user_ids: set[UUID], db_session: Session) -> None:
+    """Restamp the running sandboxes of ``user_ids`` so a live Craft session
+    picks up an integration change on its next turn. Call it after the
+    commit; it is best-effort."""
+    if not user_ids:
+        return
+    # Imported here: the build layer imports this package.
+    from onyx.server.features.build.session.sandbox_lifecycle import (
+        refresh_mcp_config_hashes_for_users,
+    )
+
+    refresh_mcp_config_hashes_for_users(user_ids, db_session)

@@ -1,4 +1,4 @@
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from uuid import UUID
 
 from sqlalchemy import delete, or_, select
@@ -10,10 +10,19 @@ from onyx.db.models import (
     ChatSession,
     Integration,
     IntegrationActionPolicy,
+    MCPServer,
     Persona__Plugin,
     Plugin,
     Plugin__Integration,
     ScheduledTask__Plugin,
+    Tool,
+)
+from onyx.db.plugin_access import visible_plugin_ids
+from onyx.integrations.models import (
+    ActionSettings,
+    LinkValue,
+    PersonaPluginLink,
+    PersonaPluginSnapshot,
 )
 from onyx.integrations.models import PolicyRows
 
@@ -135,3 +144,139 @@ def get_plugin_names(
         .tuples()
         .all()
     )
+
+
+def plugin_ids_for_integrations(
+    integration_ids: Collection[int], user_id: UUID | None, db_session: Session
+) -> dict[int, UUID]:
+    """One plugin for each integration: the first one the user can see, else
+    the first one, by plugin id."""
+    if not integration_ids:
+        return {}
+    visible = (
+        set(db_session.scalars(visible_plugin_ids(user_id)).all())
+        if user_id is not None
+        else set()
+    )
+    chosen: dict[int, UUID] = {}
+    for integration_id, plugin_id in db_session.execute(
+        select(Plugin__Integration.integration_id, Plugin__Integration.plugin_id)
+        .where(Plugin__Integration.integration_id.in_(integration_ids))
+        .order_by(Plugin__Integration.integration_id, Plugin__Integration.plugin_id)
+    ).tuples():
+        current = chosen.get(integration_id)
+        if current is None or (plugin_id in visible and current not in visible):
+            chosen[integration_id] = plugin_id
+    return chosen
+
+
+def legacy_tool_plugin_links(
+    tools: Sequence[Tool], user_id: UUID | None, db_session: Session
+) -> list[PersonaPluginLink]:
+    """The plugin links for old tool ids of an agent request. A custom tool
+    gives the plugin of its integration with no settings. MCP tools give the
+    plugin of their server, with each other action blocked, as the migration
+    does. A tool with no integration gives nothing."""
+    custom_integration_ids = {
+        tool.integration_id
+        for tool in tools
+        if tool.integration_id is not None and tool.openapi_schema is not None
+    }
+    mcp_tool_names: dict[int, list[str]] = {}
+    for tool in tools:
+        if tool.mcp_server_id is not None:
+            mcp_tool_names.setdefault(tool.mcp_server_id, []).append(tool.name)
+    server_integrations: dict[int, int] = (
+        {
+            server_id: integration_id
+            for server_id, integration_id in db_session.execute(
+                select(MCPServer.id, MCPServer.integration_id).where(
+                    MCPServer.id.in_(mcp_tool_names),
+                    MCPServer.integration_id.is_not(None),
+                )
+            ).tuples()
+            if integration_id is not None
+        }
+        if mcp_tool_names
+        else {}
+    )
+    plugins = plugin_ids_for_integrations(
+        custom_integration_ids | set(server_integrations.values()),
+        user_id,
+        db_session,
+    )
+    links: dict[UUID, PersonaPluginLink] = {}
+    for integration_id in sorted(custom_integration_ids):
+        plugin_id = plugins.get(integration_id)
+        if plugin_id is not None:
+            links.setdefault(plugin_id, PersonaPluginLink(plugin_id=plugin_id))
+    for server_id, names in sorted(mcp_tool_names.items()):
+        server_integration_id = server_integrations.get(server_id)
+        if server_integration_id is None:
+            continue
+        plugin_id = plugins.get(server_integration_id)
+        if plugin_id is None or plugin_id in links:
+            continue
+        links[plugin_id] = PersonaPluginLink(
+            plugin_id=plugin_id,
+            action_settings=ActionSettings(
+                default=LinkValue.BLOCKED,
+                actions=dict.fromkeys(sorted(names), LinkValue.INHERIT),
+            ),
+        )
+    return list(links.values())
+
+
+def write_persona_plugin_links__no_commit(
+    persona_id: int,
+    links: Sequence[PersonaPluginLink],
+    *,
+    replace: bool,
+    db_session: Session,
+) -> None:
+    """Write the plugin links of an agent. ``replace`` deletes the links that
+    are not in ``links`` and rewrites the settings; otherwise a link that
+    exists stays as it is."""
+    existing = {
+        link.plugin_id: link
+        for link in list_persona_plugin_links(db_session, persona_id)
+    }
+    wanted = {link.plugin_id: link for link in links}
+    if replace:
+        for plugin_id, row in existing.items():
+            if plugin_id not in wanted:
+                db_session.delete(row)
+    for plugin_id, link in wanted.items():
+        settings = link.action_settings.model_dump(mode="json", exclude_defaults=True)
+        row = existing.get(plugin_id)
+        if row is None:
+            db_session.add(
+                Persona__Plugin(
+                    persona_id=persona_id,
+                    plugin_id=plugin_id,
+                    action_settings=settings,
+                )
+            )
+        elif replace and row.action_settings != settings:
+            row.action_settings = settings
+    db_session.flush()
+
+
+def list_persona_plugin_snapshots(
+    persona_id: int, db_session: Session
+) -> list[PersonaPluginSnapshot]:
+    return [
+        PersonaPluginSnapshot(
+            plugin_id=plugin_id,
+            plugin_name=name,
+            action_settings=ActionSettings.model_validate(settings or {}),
+        )
+        for plugin_id, name, settings in db_session.execute(
+            select(
+                Persona__Plugin.plugin_id, Plugin.name, Persona__Plugin.action_settings
+            )
+            .join(Plugin, Plugin.id == Persona__Plugin.plugin_id)
+            .where(Persona__Plugin.persona_id == persona_id)
+            .order_by(Plugin.name, Plugin.id)
+        ).tuples()
+    ]

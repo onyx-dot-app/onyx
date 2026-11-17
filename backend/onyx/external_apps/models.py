@@ -82,11 +82,6 @@ class AppActionPoliciesView(BaseModel):
     actions: list[ActionPolicySettingView]
 
 
-class SaveActionPolicies(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    action_policies: dict[str, ActionPolicy]
-
-
 class PresetGrant(BaseModel):
     # Provider credentials with an absolute ``expires_at`` (ISO string).
     credentials: dict[str, Any]

@@ -188,3 +188,14 @@ class UsableIntegrationIds(BaseModel):
     @property
     def visible(self) -> frozenset[int]:
         return frozenset().union(*self.by_visible_plugin.values())
+
+
+class PersonaPluginLink(BaseModel):
+    """A plugin on an agent (``persona__plugin``)."""
+
+    plugin_id: UUID
+    action_settings: ActionSettings = ActionSettings()
+
+
+class PersonaPluginSnapshot(PersonaPluginLink):
+    plugin_name: str

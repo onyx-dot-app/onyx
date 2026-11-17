@@ -29,7 +29,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.models import (
     ActionPolicySettingView,
-    AppActionPolicies,
     AppActionPoliciesView,
     EndpointDescriptor,
 )
@@ -129,48 +128,6 @@ def _catalog_defaults(db_session: Session, app: GatedApp) -> dict[str, ActionPol
             for endpoint in get_endpoint_catalog(external_app.app_type)
         }
     return get_mcp_tool_default_policies(db_session, app.mcp_server_id)
-
-
-def replace_workspace_action_policies(
-    db_session: Session,
-    gated_app_id: int,
-    policies: dict[str, ActionPolicy] | None,
-    *,
-    users_can_manage: bool | None = None,
-) -> None:
-    """Validate and replace workspace choices. Omitted fields remain unchanged."""
-    app = db_session.scalar(
-        select(GatedApp)
-        .where(GatedApp.id == gated_app_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-    if app is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "App not found")
-    if policies is not None:
-        policies = normalize_action_policies(
-            policies, _catalog_defaults(db_session, app)
-        )
-        db_session.execute(
-            delete(WorkspaceActionPolicy).where(
-                WorkspaceActionPolicy.gated_app_id == gated_app_id
-            )
-        )
-        if policies:
-            db_session.execute(
-                insert(WorkspaceActionPolicy),
-                [
-                    {
-                        "gated_app_id": gated_app_id,
-                        "action_id": action_id,
-                        "policy": policy,
-                    }
-                    for action_id, policy in policies.items()
-                ],
-            )
-    if users_can_manage is not None:
-        app.users_can_manage_policies = users_can_manage
-    db_session.flush()
 
 
 def effective_action_policy(
@@ -391,56 +348,6 @@ def _validate_owner_choices(
     return editable
 
 
-def save_user_action_policies(
-    db_session: Session,
-    user: User,
-    setting: AppActionPolicies,
-) -> None:
-    """Replace personal choices. An empty mapping resets all personal overrides."""
-    db_session.execute(select(User).filter_by(id=user.id).with_for_update(of=User))
-    db_session.execute(
-        select(GatedApp.id).where(GatedApp.id == setting.gated_app_id).with_for_update()
-    )
-    app, workspace = _load_workspace_rules(db_session, user, setting.gated_app_id)
-    if not app.users_can_manage_policies:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Workspace settings prevent this action policy change",
-        )
-    stored = _stored_policies(db_session, user.id, [app.id]).get(app.id, {})
-    editable = _validate_owner_choices(
-        workspace, app.users_can_manage_policies, setting.action_policies, stored
-    )
-    values = {
-        key: value for key, value in setting.action_policies.items() if key in editable
-    }
-    values.update(
-        {
-            key: value
-            for key, value in stored.items()
-            if key not in editable and key in setting.action_policies
-        }
-    )
-    delete_query = delete(UserActionPolicy).where(
-        UserActionPolicy.user_id == user.id,
-        UserActionPolicy.gated_app_id == setting.gated_app_id,
-    )
-    if setting.action_policies:
-        delete_query = delete_query.where(UserActionPolicy.action_id.in_(workspace))
-    db_session.execute(delete_query)
-    if values:
-        db_session.execute(
-            insert(UserActionPolicy),
-            [
-                {
-                    "user_id": user.id,
-                    "gated_app_id": setting.gated_app_id,
-                    "action_id": key,
-                    "policy": value,
-                }
-                for key, value in values.items()
-            ],
-        )
 
 
 def users_can_manage_policies(
@@ -452,3 +359,45 @@ def users_can_manage_policies(
         )
     )
     return value if value is not None else True
+
+
+def replace_workspace_action_policies(
+    db_session: Session,
+    gated_app_id: int,
+    policies: dict[str, ActionPolicy] | None,
+    *,
+    users_can_manage: bool | None = None,
+) -> None:
+    """Validate and replace workspace choices. Omitted fields remain unchanged."""
+    app = db_session.scalar(
+        select(GatedApp)
+        .where(GatedApp.id == gated_app_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if app is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "App not found")
+    if policies is not None:
+        policies = normalize_action_policies(
+            policies, _catalog_defaults(db_session, app)
+        )
+        db_session.execute(
+            delete(WorkspaceActionPolicy).where(
+                WorkspaceActionPolicy.gated_app_id == gated_app_id
+            )
+        )
+        if policies:
+            db_session.execute(
+                insert(WorkspaceActionPolicy),
+                [
+                    {
+                        "gated_app_id": gated_app_id,
+                        "action_id": action_id,
+                        "policy": policy,
+                    }
+                    for action_id, policy in policies.items()
+                ],
+            )
+    if users_can_manage is not None:
+        app.users_can_manage_policies = users_can_manage
+    db_session.flush()

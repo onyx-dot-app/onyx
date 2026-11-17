@@ -9,7 +9,7 @@ from onyx.auth.permissions import (
     token_allows,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import IntegrationAuthMode, Permission
 from onyx.db.integration import get_integration_by_id
 from onyx.db.integration_connection import user_can_see_integration
 from onyx.db.models import User
@@ -43,6 +43,16 @@ def start_oauth(
         or user_can_see_integration(db_session, integration_id, user.id)
     ):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
+    if request.organization != (integration.auth_mode is IntegrationAuthMode.SHARED):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{integration.name} uses "
+            + (
+                "one connection for the organization."
+                if integration.auth_mode is IntegrationAuthMode.SHARED
+                else "a connection for each user."
+            ),
+        )
     return IntegrationOAuthStartResponse(
         authorization_url=start_integration_oauth(
             integration,

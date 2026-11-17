@@ -38,6 +38,7 @@ from onyx.db.integration_connection import (
     mark_integration_connections_needs_reconnect__no_commit,
     reload_connection,
     update_connection_secret__no_commit,
+    upsert_connection__no_commit,
 )
 from onyx.db.models import (
     Integration,
@@ -903,6 +904,85 @@ def disconnect(integration: Integration, user: User, db_session: Session) -> boo
     deleted = delete_connection__no_commit(db_session, integration.id, user.id)
     db_session.commit()
     return deleted
+
+
+def disconnect_organization(integration: Integration, db_session: Session) -> bool:
+    """Delete the organization connection. Returns whether a row went."""
+    deleted = delete_connection__no_commit(db_session, integration.id, None)
+    db_session.commit()
+    return deleted
+
+
+def credential_field_keys(integration: Integration) -> list[str]:
+    """The keys a person fills for an api_key connection: the stored
+    credential fields, else the placeholders of the header template."""
+    if integration.credential_fields:
+        return [
+            str(field["key"])
+            for field in integration.credential_fields
+            if isinstance(field.get("key"), str)
+        ]
+    return header_field_keys(integration.header_template or {})
+
+
+def header_field_keys(header_template: Mapping[str, str]) -> list[str]:
+    """The placeholders of a header template that a person fills, in
+    order. ``user_email`` is filled by Onyx."""
+    keys: list[str] = []
+    for value in header_template.values():
+        for match in _TEMPLATE_TOKEN_RE.finditer(value):
+            key = match.group(1)
+            if key is not None and key != "user_email" and key not in keys:
+                keys.append(key)
+    return keys
+
+
+def connect_with_fields(
+    integration: Integration,
+    user: User | None,
+    fields: Mapping[str, str],
+    db_session: Session,
+) -> IntegrationConnection:
+    """Save an api_key connection for ``user``, or for the organization when
+    ``user`` is None. Each credential field needs a value; other keys are
+    refused."""
+    if integration.auth_method is not IntegrationAuthMethod.API_KEY:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{integration.name} does not sign in with an API key.",
+        )
+    expected_mode = (
+        IntegrationAuthMode.SHARED if user is None else IntegrationAuthMode.INDIVIDUAL
+    )
+    if integration.auth_mode is not expected_mode:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{integration.name} uses "
+            + (
+                "one connection for the organization."
+                if integration.auth_mode is IntegrationAuthMode.SHARED
+                else "a connection for each user."
+            ),
+        )
+    keys = credential_field_keys(integration)
+    unknown = sorted(set(fields) - set(keys))
+    if unknown:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "Unknown fields: " + ", ".join(unknown)
+        )
+    missing = [key for key in keys if not fields.get(key, "").strip()]
+    if missing:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Fill in: " + ", ".join(missing))
+    connection = upsert_connection__no_commit(
+        db_session,
+        integration_id=integration.id,
+        user_id=user.id if user is not None else None,
+        secret=ConnectionSecret(fields=dict(fields)).model_dump(mode="json"),
+        expires_at=None,
+        granted_scopes=None,
+    )
+    db_session.commit()
+    return connection
 
 
 def sign_in_settings_for(

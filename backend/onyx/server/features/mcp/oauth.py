@@ -83,7 +83,6 @@ from onyx.server.features.mcp.credentials import (
 )
 from onyx.server.features.mcp.models import (
     MCPConnectionData,
-    MCPOAuthFlowState,
     MCPOAuthKeys,
     MCPPendingOAuthAuthorization,
     MCPServerConnection,
@@ -1110,38 +1109,6 @@ def make_oauth_provider_with_storage(
     if known_metadata is not None:
         provider.context.oauth_metadata = known_metadata
     return provider
-
-
-async def complete_mcp_oauth_authorization(
-    flow: MCPOAuthFlowState,
-    mcp_server: MCPServer,
-    client_information: OAuthClientInformationFull,
-    authorization_code: str,
-) -> None:
-    """Restore one persisted attempt and complete it through the MCP SDK."""
-    provider = make_oauth_provider(
-        mcp_server,
-        flow.connection_config_id,
-        mcp_server.admin_connection_config_id,
-        load_stored_tokens=False,
-        expected_connection_headers_fingerprint=flow.connection_headers_fingerprint,
-        expected_client_information_fingerprint=(flow.client_information_fingerprint),
-    )
-    context = provider.context
-    if flow.server_snapshot.provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY:
-        context.protected_resource_metadata = flow.protected_resource_metadata
-        context.oauth_metadata = flow.oauth_metadata
-        context.auth_server_url = flow.authorization_server_url
-        context.protocol_version = flow.protocol_version
-    context.client_metadata.scope = flow.scope
-    context.client_metadata.redirect_uris = [flow.redirect_uri]
-    context.client_info = client_information
-
-    await provider.complete_authorization_code_exchange(
-        authorization_code,
-        flow.code_verifier,
-        resource=str(flow.resource) if flow.resource else None,
-    )
 
 
 def _oauth_token_from_secret(

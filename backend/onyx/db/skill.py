@@ -1204,7 +1204,7 @@ def _lock_pending_plugin(skill: Skill, version_id: UUID, db_session: Session) ->
 
 
 def approve_skill_review__no_commit(
-    skill: Skill, version_id: UUID, db_session: Session
+    skill: Skill, version_id: UUID, approver: User, db_session: Session
 ) -> set[UUID]:
     """Publish the pending version of a skill. A first publish moves the skill
     to the Organization library, and a name clash there is refused with
@@ -1213,7 +1213,7 @@ def approve_skill_review__no_commit(
     plugin = _lock_pending_plugin(skill, version_id, db_session)
     before = affected_user_ids_for_plugins([plugin.id], db_session)
     publish_or_request_review__no_commit(
-        plugin, skill, version_id, None, "raise", db_session
+        plugin, skill, version_id, None, "raise", db_session, approver=approver
     )
     return before | affected_user_ids_for_plugins([plugin.id], db_session)
 
