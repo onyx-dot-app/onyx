@@ -5,12 +5,19 @@ import aiohttp  # Async HTTP client
 import httpx
 import requests
 from fastapi import Request
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
+from ee.onyx.db.tenant_provisioning import (
+    delete_available_tenant__no_commit,
+    get_available_tenant_by_id,
+    get_first_search_settings_by_status,
+    get_latest_search_settings_by_status,
+    lock_oldest_available_tenant,
+)
 from ee.onyx.db.user_tenant_mapping import (
     add_users_to_tenant,
+    delete_user_tenant_mappings__no_commit,
     resolve_tenant_id,
     user_owns_a_tenant,
 )
@@ -53,12 +60,8 @@ from onyx.db.llm import (
     upsert_cloud_embedding_provider,
     upsert_llm_provider,
 )
-from onyx.db.models import (
-    AvailableTenant,
-    IndexModelStatus,
-    SearchSettings,
-    UserTenantMapping,
-)
+from onyx.db.models import IndexModelStatus
+from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.tenant_shard import clear_tenant_placement, record_tenant_placement
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -352,9 +355,7 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
         with get_session_with_shared_schema() as db_session:
             db_session.begin()
             try:
-                db_session.query(UserTenantMapping).filter(
-                    UserTenantMapping.tenant_id == tenant_id
-                ).delete()
+                delete_user_tenant_mappings__no_commit(db_session, tenant_id)
                 db_session.commit()
                 logger.info(
                     "Successfully removed user mappings for tenant %s", tenant_id
@@ -372,14 +373,10 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
         with get_session_with_shared_schema() as db_session:
             db_session.begin()
             try:
-                available_tenant = (
-                    db_session.query(AvailableTenant)
-                    .filter(AvailableTenant.tenant_id == tenant_id)
-                    .first()
-                )
+                available_tenant = get_available_tenant_by_id(db_session, tenant_id)
 
                 if available_tenant:
-                    db_session.delete(available_tenant)
+                    delete_available_tenant__no_commit(db_session, available_tenant)
                     db_session.commit()
                     logger.info(
                         "Removed tenant %s from available tenants table", tenant_id
@@ -617,13 +614,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             logger.info("Successfully upserted Cohere cloud embedding provider")
 
             logger.info("Updating search settings with Cohere embedding model details")
-            query = (
-                select(SearchSettings)
-                .where(SearchSettings.status == IndexModelStatus.FUTURE)
-                .order_by(SearchSettings.id.desc())
-            )
-            result = db_session.execute(query)
-            current_search_settings = result.scalars().first()
+            current_search_settings = get_secondary_search_settings(db_session)
 
             if current_search_settings:
                 current_search_settings.model_name = (
@@ -644,13 +635,7 @@ def configure_default_api_keys(db_session: Session) -> None:
                     "No search settings specified, DB is not in a valid state"
                 )
             logger.info("Fetching updated search settings to verify changes")
-            updated_query = (
-                select(SearchSettings)
-                .where(SearchSettings.status == IndexModelStatus.PRESENT)
-                .order_by(SearchSettings.id.desc())
-            )
-            updated_result = db_session.execute(updated_query)
-            updated_result.scalars().first()
+            get_latest_search_settings_by_status(db_session, IndexModelStatus.PRESENT)
 
         except Exception:
             logger.exception("Failed to configure Cohere embedding provider")
@@ -775,17 +760,12 @@ async def get_available_tenant() -> str | None:
             db_session.begin()
 
             # Get the oldest available tenant with FOR UPDATE lock to prevent race conditions
-            available_tenant = (
-                db_session.query(AvailableTenant)
-                .order_by(AvailableTenant.date_created)
-                .with_for_update(skip_locked=True)  # Skip locked rows to avoid blocking
-                .first()
-            )
+            available_tenant = lock_oldest_available_tenant(db_session)
 
             if available_tenant:
                 tenant_id = available_tenant.tenant_id
                 # Remove the tenant from the available tenants table
-                db_session.delete(available_tenant)
+                delete_available_tenant__no_commit(db_session, available_tenant)
                 db_session.commit()
                 logger.info("Using pre-provisioned tenant %s", tenant_id)
                 return tenant_id
@@ -817,10 +797,8 @@ async def setup_tenant(tenant_id: str) -> None:
             configure_default_api_keys(db_session)
 
             # Set up Onyx with appropriate settings
-            current_search_settings = (
-                db_session.query(SearchSettings)
-                .filter_by(status=IndexModelStatus.FUTURE)
-                .first()
+            current_search_settings = get_first_search_settings_by_status(
+                db_session, IndexModelStatus.FUTURE
             )
             cohere_enabled = (
                 current_search_settings is not None

@@ -115,6 +115,17 @@ def update_entity_types_and_related_connectors__commit(
     db_session.commit()
 
 
+def disable_kg_processing_for_all_connectors__no_commit(db_session: Session) -> None:
+    db_session.query(Connector).update({"kg_processing_enabled": False})
+
+
+def deactivate_grounded_entity_types__no_commit(db_session: Session) -> None:
+    """Ungrounded entity types stay active."""
+    db_session.query(KGEntityType).filter(
+        KGEntityType.grounded_source_name.isnot(None)
+    ).update({"active": False})
+
+
 def get_entity_type_id_names(db_session: Session) -> set[str]:
     return {et.id_name for et in db_session.query(KGEntityType).all()}
 

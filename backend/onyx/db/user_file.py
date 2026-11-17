@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from typing import NamedTuple
 from uuid import UUID
 
-from sqlalchemy import column, exists, func, or_, select, true, update, values
+from sqlalchemy import and_, column, exists, func, or_, select, true, update, values
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -118,6 +118,48 @@ def get_user_file_by_id(
     """Fetch a UserFile row by id. Accepts str for callers whose input may not
     even be a UserFile id (e.g. a storage file_id) — those resolve to None."""
     return db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
+
+
+def get_user_file_by_pk(db_session: Session, user_file_id: UUID) -> UserFile | None:
+    """Primary-key lookup. Unlike `get_user_file_by_id`, this returns the row the
+    session already holds without a query."""
+    return db_session.get(UserFile, user_file_id)
+
+
+def fetch_user_file_ids_by_status(
+    db_session: Session, status: UserFileStatus
+) -> Sequence[UUID]:
+    return (
+        db_session.execute(select(UserFile.id).where(UserFile.status == status))
+        .scalars()
+        .all()
+    )
+
+
+def fetch_user_file_ids_needing_sync(db_session: Session) -> Sequence[UUID]:
+    """COMPLETED files that wait for a project sync, a persona sync or a
+    secondary-index reconcile."""
+    return (
+        db_session.execute(
+            select(UserFile.id).where(
+                and_(
+                    or_(
+                        UserFile.needs_project_sync.is_(True),
+                        UserFile.needs_persona_sync.is_(True),
+                        # re-enqueue un-reconciled files so the reconciler retries
+                        UserFile.secondary_reconcile_pending.is_(True),
+                    ),
+                    UserFile.status == UserFileStatus.COMPLETED,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def delete_user_file__no_commit(db_session: Session, user_file: UserFile) -> None:
+    db_session.delete(user_file)
 
 
 def capture_user_file_metadata(
@@ -481,3 +523,66 @@ def fetch_recent_user_files(db_session: Session, user_id: UUID) -> list[UserFile
         .order_by(UserFile.last_accessed_at.desc())
         .all()
     )
+
+
+def claim_next_processing_user_file__no_commit(db_session: Session) -> UUID | None:
+    """Lock the oldest PROCESSING file and move it to INDEXING. The caller's
+    commit releases the row lock. Returns None when no file is eligible."""
+    file_id = db_session.execute(
+        select(UserFile.id)
+        .where(UserFile.status == UserFileStatus.PROCESSING)
+        .order_by(UserFile.created_at)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    ).scalar_one_or_none()
+    if file_id is None:
+        return None
+
+    db_session.execute(
+        update(UserFile)
+        .where(UserFile.id == file_id)
+        .values(status=UserFileStatus.INDEXING)
+    )
+    return file_id
+
+
+def lock_next_deleting_user_file_id(
+    db_session: Session, exclude_ids: set[UUID] | None = None
+) -> UUID | None:
+    """Lock the oldest DELETING file that is not in exclude_ids, until the
+    caller's transaction ends."""
+    stmt = (
+        select(UserFile.id)
+        .where(UserFile.status == UserFileStatus.DELETING)
+        .order_by(UserFile.created_at)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    if exclude_ids:
+        stmt = stmt.where(UserFile.id.notin_(exclude_ids))
+    return db_session.execute(stmt).scalar_one_or_none()
+
+
+def lock_next_sync_user_file_id(
+    db_session: Session, exclude_ids: set[UUID] | None = None
+) -> UUID | None:
+    """Lock the oldest COMPLETED file that needs a project or persona sync and
+    is not in exclude_ids, until the caller's transaction ends."""
+    stmt = (
+        select(UserFile.id)
+        .where(
+            and_(
+                or_(
+                    UserFile.needs_project_sync.is_(True),
+                    UserFile.needs_persona_sync.is_(True),
+                ),
+                UserFile.status == UserFileStatus.COMPLETED,
+            )
+        )
+        .order_by(UserFile.created_at)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    if exclude_ids:
+        stmt = stmt.where(UserFile.id.notin_(exclude_ids))
+    return db_session.execute(stmt).scalar_one_or_none()

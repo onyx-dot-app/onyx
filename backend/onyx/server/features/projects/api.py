@@ -29,11 +29,20 @@ from onyx.db.chat import get_owned_chat_session
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, UserFileStatus
 from onyx.db.incognito import mark_incognito_user_files_deleting
-from onyx.db.models import Project__UserFile, User, UserFile, UserProject
+from onyx.db.models import User
 from onyx.db.persona import get_personas_by_ids
 from onyx.db.projects import (
     check_project_ownership,
+    create_user_project__no_commit,
+    delete_user_project__no_commit,
+    get_owned_project_user_files_by_link_date,
+    get_owned_project_user_files_by_upload_date,
+    get_owned_user_file,
+    get_owned_user_file_not_deleting,
+    get_owned_user_files_not_deleting_by_ids,
+    get_owned_user_project,
     get_project_token_count,
+    get_user_projects,
     upload_files_to_user_files_with_indexing,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -153,9 +162,7 @@ def get_projects(
     db_session: Session = Depends(get_session),
 ) -> list[UserProjectSnapshot]:
     user_id = user.id
-    projects = (
-        db_session.query(UserProject).filter(UserProject.user_id == user_id).all()
-    )
+    projects = get_user_projects(user_id, db_session)
     return [UserProjectSnapshot.from_model(project) for project in projects]
 
 
@@ -169,8 +176,7 @@ def create_project(
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Project name cannot be empty")
     _validate_project_field_length(name, "name")
     user_id = user.id
-    project = UserProject(name=name, user_id=user_id)
-    db_session.add(project)
+    project = create_user_project__no_commit(name, user_id, db_session)
     db_session.commit()
     return UserProjectSnapshot.from_model(project)
 
@@ -245,11 +251,7 @@ def get_project(
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
     user_id = user.id
-    project = (
-        db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
-        .one_or_none()
-    )
+    project = get_owned_user_project(project_id, user_id, db_session)
     if project is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
     return UserProjectSnapshot.from_model(project)
@@ -266,16 +268,8 @@ def get_files_in_project(
     if not check_project_ownership(project_id, user_id, db_session):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
 
-    user_files = (
-        db_session.query(UserFile)
-        .join(Project__UserFile, UserFile.id == Project__UserFile.user_file_id)
-        .filter(
-            Project__UserFile.project_id == project_id,
-            UserFile.user_id == user_id,
-            UserFile.status != UserFileStatus.FAILED,
-        )
-        .order_by(Project__UserFile.created_at.desc())
-        .all()
+    user_files = get_owned_project_user_files_by_link_date(
+        project_id, user_id, db_session
     )
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
 
@@ -293,19 +287,11 @@ def unlink_user_file_from_project(
     Does not delete the underlying file; only removes the association.
     """
     user_id = user.id
-    project = (
-        db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
-        .one_or_none()
-    )
+    project = get_owned_user_project(project_id, user_id, db_session)
     if project is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
 
-    user_file = (
-        db_session.query(UserFile)
-        .filter(UserFile.id == file_id, UserFile.user_id == user_id)
-        .one_or_none()
-    )
+    user_file = get_owned_user_file(file_id, user_id, db_session)
     if user_file is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
@@ -338,19 +324,11 @@ def link_user_file_to_project(
     Returns the linked user file snapshot.
     """
     user_id = user.id
-    project = (
-        db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
-        .one_or_none()
-    )
+    project = get_owned_user_project(project_id, user_id, db_session)
     if project is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
 
-    user_file = (
-        db_session.query(UserFile)
-        .filter(UserFile.id == file_id, UserFile.user_id == user_id)
-        .one_or_none()
-    )
+    user_file = get_owned_user_file(file_id, user_id, db_session)
     if user_file is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
@@ -379,11 +357,7 @@ def get_project_instructions(
     db_session: Session = Depends(get_session),
 ) -> ProjectInstructionsResponse:
     user_id = user.id
-    project = (
-        db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
-        .one_or_none()
-    )
+    project = get_owned_user_project(project_id, user_id, db_session)
 
     if project is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
@@ -408,11 +382,7 @@ def upsert_project_instructions(
     """Create or update this project's instructions stored on the project itself."""
     # Ensure the project exists and belongs to the user
     user_id = user.id
-    project = (
-        db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
-        .one_or_none()
-    )
+    project = get_owned_user_project(project_id, user_id, db_session)
     if project is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
     project.instructions = body.instructions
@@ -465,11 +435,7 @@ def update_project(
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
     user_id = user.id
-    project = (
-        db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
-        .one_or_none()
-    )
+    project = get_owned_user_project(project_id, user_id, db_session)
     if project is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
 
@@ -492,11 +458,7 @@ def delete_project(
     db_session: Session = Depends(get_session),
 ) -> Response:
     user_id = user.id
-    project = (
-        db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
-        .one_or_none()
-    )
+    project = get_owned_user_project(project_id, user_id, db_session)
     if project is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
 
@@ -508,7 +470,7 @@ def delete_project(
     for uf in list(project.user_files):
         project.user_files.remove(uf)
 
-    db_session.delete(project)
+    delete_user_project__no_commit(project, db_session)
     db_session.commit()
     return Response(status_code=204)
 
@@ -525,11 +487,7 @@ def delete_user_file(
     This will also remove any project associations for the file.
     """
     user_id = user.id
-    user_file = (
-        db_session.query(UserFile)
-        .filter(UserFile.id == file_id, UserFile.user_id == user_id)
-        .one_or_none()
-    )
+    user_file = get_owned_user_file(file_id, user_id, db_session)
     if user_file is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
@@ -586,12 +544,7 @@ def get_user_file(
     Includes files in any status (including FAILED) to allow status polling.
     """
     user_id = user.id
-    user_file = (
-        db_session.query(UserFile)
-        .filter(UserFile.id == file_id, UserFile.user_id == user_id)
-        .filter(UserFile.status != UserFileStatus.DELETING)
-        .one_or_none()
-    )
+    user_file = get_owned_user_file_not_deleting(file_id, user_id, db_session)
     if user_file is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
     return UserFileSnapshot.from_model(user_file)
@@ -615,12 +568,8 @@ def get_user_file_statuses(
         return []
 
     user_id = user.id
-    user_files = (
-        db_session.query(UserFile)
-        .filter(UserFile.user_id == user_id)
-        .filter(UserFile.id.in_(body.file_ids))
-        .filter(UserFile.status != UserFileStatus.DELETING)
-        .all()
+    user_files = get_owned_user_files_not_deleting_by_ids(
+        body.file_ids, user_id, db_session
     )
 
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
@@ -703,15 +652,8 @@ def get_chat_session_project_files(
     if chat_session.project_id is None:
         return []
 
-    user_files = (
-        db_session.query(UserFile)
-        .filter(
-            UserFile.projects.any(id=chat_session.project_id),
-            UserFile.user_id == user_id,
-            UserFile.status != UserFileStatus.FAILED,
-        )
-        .order_by(UserFile.created_at.desc())
-        .all()
+    user_files = get_owned_project_user_files_by_upload_date(
+        chat_session.project_id, user_id, db_session
     )
 
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
@@ -727,11 +669,7 @@ def get_project_total_token_count(
 
     # Verify the project belongs to the current user
     user_id = user.id
-    project = (
-        db_session.query(UserProject)
-        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
-        .one_or_none()
-    )
+    project = get_owned_user_project(project_id, user_id, db_session)
     if project is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
 
