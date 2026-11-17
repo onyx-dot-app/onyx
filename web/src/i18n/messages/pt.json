@@ -10798,7 +10798,8 @@
         "askHint": "Para executar sem perguntar, um administrador define como Permitir na integração, ou cada usuário escolhe Sempre permitir.",
         "askHintAdminOnly": "Para executar sem perguntar, um administrador define como Permitir na integração.",
         "choice": {
-          "inherit": "Usar a configuração da integração"
+          "inherit": "Usar a configuração da integração",
+          "agentDefault": "Usar o padrão do agente"
         },
         "default": {
           "description": "Aplica-se a cada ação sem configuração própria, também às ações que a integração adicionar depois.",
@@ -10833,7 +10834,8 @@
         },
         "openIntegration": {
           "label": "Abrir ações de {integration}"
-        }
+        },
+        "stricterPlugin": "O plugin {plugin} deste agente define uma configuração mais restrita para esta ação."
       },
       "prompts": {
         "instructions": {

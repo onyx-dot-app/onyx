@@ -183,11 +183,12 @@ test("says when no plugin holds an integration", async () => {
 
 // ── Choices ──────────────────────────────────────────────────────────────────
 
-test("offers the four choices, with no Auto, and sets each action", async () => {
+test("offers the agent default and four choices, with no Auto, and sets each action", async () => {
   const onChange = setup([draft()]);
   const createIssue = "Setting for Create issue";
   await screen.findByRole("combobox", { name: createIssue });
   expect(await optionsOf(createIssue)).toEqual([
+    copy.choice.agentDefault,
     copy.choice.inherit,
     "Allow",
     "Ask",
@@ -207,7 +208,45 @@ test("offers the four choices, with no Auto, and sets each action", async () => 
     draft({ actions: { create_issue: "ask" } }),
   ]);
   await pick(createIssue, copy.choice.inherit);
+  expect(onChange).toHaveBeenLastCalledWith([
+    draft({ actions: { create_issue: "inherit" } }),
+  ]);
+  await pick(createIssue, copy.choice.agentDefault);
   expect(onChange).toHaveBeenLastCalledWith([draft()]);
+});
+
+test("shows a migrated inherit action as the integration setting under a blocked default", async () => {
+  setup([draft({ default: "blocked", actions: { list_issues: "inherit" } })]);
+  expect(
+    await screen.findByRole("combobox", { name: "Setting for List issues" })
+  ).toHaveValue(copy.choice.inherit);
+  expect(screen.getByText("Allows (integration setting)")).toBeInTheDocument();
+  expect(
+    screen.getByRole("combobox", { name: "Setting for Create issue" })
+  ).toHaveValue(copy.choice.agentDefault);
+});
+
+test("shows the stricter setting of another plugin that holds the integration", async () => {
+  const other = plugin({
+    plugin_id: "plugin-other",
+    plugin_name: "Other plugin",
+  });
+  setup(
+    [
+      draft(),
+      draft({
+        plugin_id: "plugin-other",
+        plugin_name: "Other plugin",
+        actions: { list_issues: "blocked" },
+      }),
+    ],
+    [plugin(), other]
+  );
+  expect(
+    await screen.findByText(
+      copy.stricterPlugin.replace("{plugin}", "Other plugin")
+    )
+  ).toBeInTheDocument();
 });
 
 test("sets the default for other actions", async () => {
@@ -232,6 +271,7 @@ test("does not offer Allow on an action the admin blocked", async () => {
   const deleteIssue = "Setting for Delete issue";
   await screen.findByRole("combobox", { name: deleteIssue });
   expect(await optionsOf(deleteIssue)).toEqual([
+    copy.choice.agentDefault,
     copy.choice.inherit,
     "Ask",
     "Blocked",

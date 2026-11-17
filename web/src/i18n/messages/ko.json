@@ -10798,7 +10798,8 @@
         "askHint": "확인 없이 실행하려면 관리자가 통합에서 허용으로 설정하거나, 각 사용자가 항상 허용을 선택합니다.",
         "askHintAdminOnly": "확인 없이 실행하려면 관리자가 통합에서 허용으로 설정합니다.",
         "choice": {
-          "inherit": "통합 설정 사용"
+          "inherit": "통합 설정 사용",
+          "agentDefault": "에이전트 기본값 사용"
         },
         "default": {
           "description": "자체 설정이 없는 각 작업에 적용되며, 통합이 나중에 추가하는 작업에도 적용됩니다.",
@@ -10833,7 +10834,8 @@
         },
         "openIntegration": {
           "label": "{integration} 작업 열기"
-        }
+        },
+        "stricterPlugin": "이 에이전트의 {plugin} 플러그인이 이 작업에 더 엄격한 설정을 적용합니다."
       },
       "prompts": {
         "instructions": {

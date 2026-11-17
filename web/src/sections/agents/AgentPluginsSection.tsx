@@ -16,6 +16,7 @@ import type { LinkValue } from "@/lib/integrations/types";
 import {
   effectiveSetting,
   lockReason,
+  stricterPlugin,
   type AgentPluginDraft,
 } from "@/lib/agents/plugins";
 import { useAgentPluginCatalog } from "@/lib/integrations/hooks";
@@ -28,22 +29,32 @@ import { integrationDetailHref } from "@/lib/integrations/utils";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 
+/** An action with no setting of its own uses the agent default. */
+const AGENT_DEFAULT = "agent_default" as const;
+type SettingChoice = LinkValue | typeof AGENT_DEFAULT;
+
 interface SettingSelectProps {
   label: string;
-  value: LinkValue;
+  value: SettingChoice;
   offerAllow: boolean;
-  onChange: (value: LinkValue) => void;
+  /** Whether "Use the agent default" is a choice: true for an action. */
+  offerAgentDefault: boolean;
+  onChange: (value: SettingChoice) => void;
 }
 
 function SettingSelect({
   label,
   value,
   offerAllow,
+  offerAgentDefault,
   onChange,
 }: SettingSelectProps) {
   const t = useTranslations("agents.editor.plugins");
   const policy = useTranslations("actions.policyToggle");
-  const options: { value: LinkValue; title: string }[] = [
+  const options: { value: SettingChoice; title: string }[] = [
+    ...(offerAgentDefault
+      ? [{ value: AGENT_DEFAULT, title: t("choice.agentDefault") }]
+      : []),
     { value: "inherit", title: t("choice.inherit") },
     ...(offerAllow || value === "allow"
       ? [{ value: "allow" as const, title: policy("always.label") }]
@@ -55,7 +66,7 @@ function SettingSelect({
     <InputSingleSelect
       placeholder={label}
       value={value}
-      defaultOption="inherit"
+      defaultOption={offerAgentDefault ? AGENT_DEFAULT : "inherit"}
       options={options}
       onValueChange={(next) => {
         const choice = options.find((option) => option.value === next);
@@ -69,22 +80,27 @@ interface ActionRowProps {
   integration: AgentCatalogIntegration;
   action: IntegrationAction;
   draft: AgentPluginDraft;
+  /** The other plugins of the agent that hold the integration. */
+  others: readonly AgentPluginDraft[];
   canManageIntegrations: boolean;
-  onChange: (value: LinkValue) => void;
+  onChange: (value: SettingChoice) => void;
 }
 
 function ActionRow({
   integration,
   action,
   draft,
+  others,
   canManageIntegrations,
   onChange,
 }: ActionRowProps) {
   const t = useTranslations("agents.editor.plugins");
   const navigation = useNavigation();
   const lock = lockReason(integration, action);
-  const effective = effectiveSetting(integration, action, draft);
-  const value = draft.actions[action.key] ?? "inherit";
+  const stricter = stricterPlugin(integration, action, draft, others);
+  const effective =
+    stricter?.setting ?? effectiveSetting(integration, action, draft);
+  const value: SettingChoice = draft.actions[action.key] ?? AGENT_DEFAULT;
 
   return (
     <Section gap={0.5} alignItems="stretch" height="auto">
@@ -99,6 +115,7 @@ function ActionRow({
             label={t("actionSetting.label", { action: action.display_name })}
             value={value}
             offerAllow={lock === null}
+            offerAgentDefault
             onChange={onChange}
           />
         }
@@ -109,6 +126,11 @@ function ActionRow({
           source: effective.source,
         })}
       </Text>
+      {stricter && (
+        <Text font="secondary-body" color="text-03">
+          {t("stricterPlugin", { plugin: stricter.draft.plugin_name })}
+        </Text>
+      )}
       {lock && (
         <Text font="secondary-body" color="text-03">
           {t(`lock.${lock}`)}
@@ -148,6 +170,8 @@ function ActionRow({
 interface PluginCardProps {
   draft: AgentPluginDraft;
   option: AgentPluginOption | undefined;
+  /** The other plugins of the agent that hold each integration, by id. */
+  othersByIntegration: ReadonlyMap<number, readonly AgentPluginDraft[]>;
   canManageIntegrations: boolean;
   onChange: (draft: AgentPluginDraft) => void;
   onRemove: () => void;
@@ -156,6 +180,7 @@ interface PluginCardProps {
 function PluginCard({
   draft,
   option,
+  othersByIntegration,
   canManageIntegrations,
   onChange,
   onRemove,
@@ -166,11 +191,11 @@ function PluginCard({
     (integration) => integration.users_can_save_always_allow
   );
 
-  function setAction(key: string, value: LinkValue) {
+  function setAction(key: string, value: SettingChoice) {
     const { [key]: _removed, ...rest } = draft.actions;
     onChange({
       ...draft,
-      actions: value === "inherit" ? rest : { ...rest, [key]: value },
+      actions: value === AGENT_DEFAULT ? rest : { ...rest, [key]: value },
     });
   }
 
@@ -212,7 +237,11 @@ function PluginCard({
                     })}
                     value={draft.default}
                     offerAllow={offerDefaultAllow}
-                    onChange={(value) => onChange({ ...draft, default: value })}
+                    offerAgentDefault={false}
+                    onChange={(value) => {
+                      if (value !== AGENT_DEFAULT)
+                        onChange({ ...draft, default: value });
+                    }}
                   />
                 }
               />
@@ -243,6 +272,9 @@ function PluginCard({
                       integration={integration}
                       action={action}
                       draft={draft}
+                      others={(
+                        othersByIntegration.get(integration.id) ?? []
+                      ).filter((other) => other.plugin_id !== draft.plugin_id)}
                       canManageIntegrations={canManageIntegrations}
                       onChange={(value) => setAction(action.key, value)}
                     />
@@ -289,6 +321,17 @@ export default function AgentPluginsSection({
         actions: {},
       },
     ]);
+  }
+
+  const draftsByIntegration = new Map<number, AgentPluginDraft[]>();
+  for (const draft of value) {
+    const option = catalog.find((entry) => entry.plugin_id === draft.plugin_id);
+    for (const integration of option?.integrations ?? []) {
+      draftsByIntegration.set(integration.id, [
+        ...(draftsByIntegration.get(integration.id) ?? []),
+        draft,
+      ]);
+    }
   }
 
   function replace(index: number, draft: AgentPluginDraft) {
@@ -343,6 +386,7 @@ export default function AgentPluginsSection({
             option={catalog.find(
               (entry) => entry.plugin_id === draft.plugin_id
             )}
+            othersByIntegration={draftsByIntegration}
             canManageIntegrations={canManageIntegrations}
             onChange={(next) => replace(index, next)}
             onRemove={() =>

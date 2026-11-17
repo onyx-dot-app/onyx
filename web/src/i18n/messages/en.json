@@ -10798,7 +10798,8 @@
         "askHint": "To run this with no prompt, an admin sets it to Allow on the integration, or each user picks Always allow.",
         "askHintAdminOnly": "To run this with no prompt, an admin sets it to Allow on the integration.",
         "choice": {
-          "inherit": "Use the integration setting"
+          "inherit": "Use the integration setting",
+          "agentDefault": "Use the agent default"
         },
         "default": {
           "description": "Applies to each action with no setting of its own, also to actions that the integration adds later.",
@@ -10833,7 +10834,8 @@
         },
         "openIntegration": {
           "label": "Open {integration} actions"
-        }
+        },
+        "stricterPlugin": "The {plugin} plugin of this agent sets a stricter setting for this action."
       },
       "prompts": {
         "instructions": {
