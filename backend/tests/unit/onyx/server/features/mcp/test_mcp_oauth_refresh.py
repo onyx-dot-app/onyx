@@ -12,24 +12,36 @@ the DB layer and the outbound network call.
 import asyncio
 import threading
 import time
-from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager, contextmanager
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from functools import partial
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlencode
 
 import httpx
 import pytest
+from mcp.types import Tool as MCPToolDefinition
 
 import onyx.server.features.mcp.oauth as mcp_oauth
 from onyx.cache.interface import CacheLockAcquisitionError
-from onyx.db.enums import MCPOAuthProviderMode, MCPTransport
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPOAuthProviderMode,
+    MCPTransport,
+)
 from onyx.db.models import MCPServer as DbMCPServer
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal, cancellation_scope
+from onyx.server.features.mcp import client as mcp_client
+from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.server.features.mcp.oauth import (
     make_oauth_provider,
     refresh_mcp_oauth_token_if_expired,
 )
+from onyx.tools import tool_constructor
 
 _TOKEN_ENDPOINT = "https://gitlab.example.com/oauth/token"
 _REDIRECT_URI = "https://onyx.example.com/mcp/oauth/callback"
@@ -46,6 +58,8 @@ def _server_stub(transport: MCPTransport = MCPTransport.SSE) -> DbMCPServer:
             name="gitlab",
             server_url="https://mcp.gitlab.example.com",
             transport=transport,
+            auth_type=MCPAuthenticationType.OAUTH,
+            auth_performer=MCPAuthenticationPerformer.PER_USER,
             oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
             oauth_cimd_enabled=True,
             oauth_authorization_endpoint=None,
@@ -80,13 +94,6 @@ class _FakeAsyncHttpClient:
         return self._response
 
 
-@contextmanager
-def _noop_shared_lock(*_args: Any, **_kwargs: Any) -> Iterator[None]:
-    """Stand-in for the real shared cache lock so these stay pure unit tests (no
-    live Redis/Postgres). Single-flight coordination is covered elsewhere."""
-    yield
-
-
 @asynccontextmanager
 async def _noop_async_shared_lock(*_args: Any, **_kwargs: Any) -> AsyncIterator[None]:
     yield
@@ -105,7 +112,6 @@ def _install_mocks(
     captured: dict[str, Any] = {}
 
     # Keep this a true unit test: no live cache backend for the single-flight lock.
-    monkeypatch.setattr(mcp_oauth, "cache_shared_lock", _noop_shared_lock)
     monkeypatch.setattr(mcp_oauth, "async_cache_shared_lock", _noop_async_shared_lock)
     monkeypatch.setattr(
         mcp_oauth, "get_session_with_current_tenant", lambda: _FakeDbSession()
@@ -609,12 +615,12 @@ def test_lock_contention_returns_persisted_header_or_none(
     }
     captured = _install_mocks(monkeypatch, config_data, response=_token_response())
 
-    @contextmanager
-    def _contended_lock(*_args: Any, **_kwargs: Any) -> Iterator[None]:
+    @asynccontextmanager
+    async def _contended_lock(*_args: Any, **_kwargs: Any) -> AsyncIterator[None]:
         raise CacheLockAcquisitionError("held by a concurrent refresher")
         yield  # pragma: no cover — unreachable, satisfies the generator contract
 
-    monkeypatch.setattr(mcp_oauth, "cache_shared_lock", _contended_lock)
+    monkeypatch.setattr(mcp_oauth, "async_cache_shared_lock", _contended_lock)
 
     header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
@@ -822,3 +828,125 @@ def test_sdk_auth_flow_contention_on_one_event_loop(
     assert len(refresh_posts) == 1
     assert config_data[MCPOAuthKeys.TOKENS.value]["refresh_token"] == "REFRESH_2"
     assert config_data["headers"]["Authorization"] == "Bearer NEW"
+
+
+@pytest.mark.parametrize("phase", ["lock", "token"])
+@pytest.mark.parametrize("operation", ["deadline", "stop", "call-stop"])
+def test_mcp_oauth_preparation_respects_deadlines_and_cancellation(
+    monkeypatch: pytest.MonkeyPatch, phase: str, operation: str
+) -> None:
+    stop = operation != "deadline"
+    config_data = _expired_grant_config()
+    _install_mocks(monkeypatch, config_data, response=_token_response())
+    started = threading.Event()
+    interrupted = threading.Event()
+    signal = CancellationSignal()
+
+    async def slow_operation() -> None:
+        started.set()
+        try:
+            await asyncio.sleep(0.2)
+        except asyncio.CancelledError:
+            interrupted.set()
+            raise
+
+    @asynccontextmanager
+    async def slow_lock(*_args: Any, **_kwargs: Any) -> AsyncIterator[None]:
+        await slow_operation()
+        yield
+
+    async def slow_send(
+        _self: _FakeAsyncHttpClient, _request: httpx.Request
+    ) -> httpx.Response:
+        await slow_operation()
+        return _token_response()
+
+    if phase == "lock":
+        monkeypatch.setattr(mcp_oauth, "async_cache_shared_lock", slow_lock)
+    else:
+        monkeypatch.setattr(_FakeAsyncHttpClient, "send", slow_send)
+
+    async def empty_discovery() -> list[MCPToolDefinition]:
+        return []
+
+    transport = MagicMock(return_value=empty_discovery)
+    monkeypatch.setattr(mcp_client, "_create_mcp_client_function_runner", transport)
+    monkeypatch.setattr(tool_constructor, "_MCP_CHAT_DISCOVERY_TIMEOUT_SECONDS", 0.05)
+    credentials = ResolvedMCPCredentials(
+        connection_config_id=42,
+        connection_data=config_data,
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.OAUTH,
+        auth_template=None,
+    )
+
+    def stop_refresh() -> None:
+        if started.wait(2):
+            signal.cancel()
+
+    def run_request() -> None:
+        server = _server_stub()
+        if operation == "call-stop":
+            headers = credentials.build_request_headers(None)
+            mcp_client.call_mcp_tool(
+                server.server_url,
+                "available",
+                {},
+                connection_headers=headers,
+                transport=MCPTransport.SSE,
+                cancellation=signal,
+                auth_factory=partial(
+                    mcp_oauth.prepare_mcp_request_auth, server, 42, headers
+                ),
+            )
+        else:
+            assert (
+                tool_constructor._discover_user_mcp_tool_names(
+                    server, credentials, None
+                )
+                == set()
+            )
+
+    stopper = threading.Thread(target=stop_refresh)
+    if stop:
+        stopper.start()
+    try:
+        with cancellation_scope(signal):
+            if stop:
+                with pytest.raises(AgentCancelled):
+                    run_request()
+            else:
+                run_request()
+    finally:
+        if stop:
+            stopper.join(3)
+    assert started.is_set()
+    assert interrupted.is_set()
+    assert not signal._callbacks
+    transport.assert_not_called()
+
+
+def test_chat_discovery_uses_the_refreshed_sse_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_data = _expired_grant_config()
+    captured = _install_mocks(monkeypatch, config_data, response=_token_response())
+    credentials = ResolvedMCPCredentials(
+        connection_config_id=42,
+        connection_data=config_data,
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.OAUTH,
+        auth_template=None,
+    )
+
+    async def discovered_tools() -> list[MCPToolDefinition]:
+        return [MCPToolDefinition(name="available", inputSchema={})]
+
+    transport = MagicMock(return_value=discovered_tools)
+    monkeypatch.setattr(mcp_client, "_create_mcp_client_function_runner", transport)
+    assert tool_constructor._discover_user_mcp_tool_names(
+        _server_stub(), credentials, {"authorization": "Bearer request"}
+    ) == {"available"}
+    assert "sent_request" in captured
+    assert transport.call_args.args[2] == {"Authorization": "Bearer NEW"}
+    assert transport.call_args.args[4] is None

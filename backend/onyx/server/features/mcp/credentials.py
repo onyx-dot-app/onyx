@@ -28,8 +28,12 @@ from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import BaseModel, ConfigDict, JsonValue, SkipValidation
 from sqlalchemy.orm import Session
 
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPAuthenticationPerformer, MCPAuthenticationType
-from onyx.db.mcp import get_user_connection_config
+from onyx.db.mcp import (
+    get_user_connection_config,
+    mark_connection_config_reauth_required,
+)
 from onyx.db.models import MCPConnectionConfig, MCPServer, User
 from onyx.oauth.authorization_attempt import canonical_json_fingerprint
 from onyx.server.features.mcp.client_metadata import is_mcp_oauth_cimd_client_id
@@ -249,6 +253,34 @@ class ResolvedMCPCredentials(BaseModel):
                 sorted(k for k in stored if k.lower() in DENYLISTED_MCP_HEADERS),
             )
         return headers
+
+    def build_request_headers(
+        self, additional_headers: Mapping[str, str] | None
+    ) -> dict[str, str]:
+        request_headers = {
+            name: value
+            for name, value in (additional_headers or {}).items()
+            if name.lower() not in DENYLISTED_MCP_HEADERS
+        }
+        if denylisted := sorted(set(additional_headers or {}) - request_headers.keys()):
+            logger.warning("Filtered denylisted MCP request headers: %s", denylisted)
+        return merge_mcp_headers(request_headers, self.build_headers())
+
+    def record_rejected_credentials(
+        self, auth_performer: MCPAuthenticationPerformer | None
+    ) -> None:
+        """Mark only the saved user credentials that the failed request used."""
+        if self.connection_config_id is None or not uses_user_managed_headers(
+            self.auth_type, auth_performer, self.auth_template
+        ):
+            return
+        try:
+            with get_session_with_current_tenant() as db_session:
+                mark_connection_config_reauth_required(
+                    self.connection_config_id, self.connection_data, db_session
+                )
+        except Exception:
+            logger.exception("Could not record rejected MCP credentials")
 
     def needs_reauth(self) -> bool:
         """Credentials were rejected, or an OAuth grant cannot refresh."""

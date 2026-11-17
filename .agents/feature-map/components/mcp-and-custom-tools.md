@@ -110,6 +110,10 @@ Tool (openapi_schema) ---------------------> build_custom_tools_from_openapi_sch
                                                operationId, all with the same Tool.id
 ```
 
+For personal API keys and OAuth, Chat intersects the captured tools with
+the tools/list result for the active credentials. If discovery fails, Chat omits
+that server's tools for the response.
+
 **Staged MCP setup.** `server/features/mcp/api.py:setup_mcp_server` handles both
 new servers and authentication edits:
 1. `_prepare_mcp_setup` resolves masked fields against stored values and takes
@@ -355,9 +359,9 @@ calls run with no row unless the policy is now DENY.
     user no error detail ([[tools-framework#run-errors-become-results]]).
 12. `reauth-mark-if-current` **A rejected credential is marked only if it is
     still current.**
-    `MCPTool._run` marks it only for a 401 on a connection config whose headers
-    the user manages
-    (`server/features/mcp/credentials.py:uses_user_managed_headers`).
+    Tool calls and per-user discovery record a 401 through
+    `server/features/mcp/credentials.py:ResolvedMCPCredentials.record_rejected_credentials`.
+    Only connection configs with user-managed headers can be marked.
     `backend/onyx/db/mcp.py:mark_connection_config_reauth_required` compares
     the stored data with the data the call used, so a call with old values
     cannot mark a newer credential. The mark makes `connection_status` report
@@ -378,9 +382,13 @@ calls run with no row unless the policy is now DENY.
     records `cancelled`, not `error`, in MCP call metrics.
     `utils/threadpool_concurrency.py:run_until_cancelled` owns coroutine cancellation
     and cleanup. The MCP client supplies signal callbacks and `AgentCancelled`.
-    A result that already completed wins a concurrent cancellation. Discovery
-    calls that have no signal keep the existing synchronous behavior. Stopping
-    the local request cannot undo work already performed by the remote server.
+    A result that already completed wins a concurrent cancellation. Per-user
+    discovery includes OAuth preparation, lock waits, and token requests in its
+    deadline and cancellation scope.
+    `cache/locks.py:async_cache_shared_lock` releases late acquisitions on the
+    acquiring thread, even after the request event loop closes.
+    Discovery calls that have no signal keep the existing synchronous behavior.
+    Stopping the local request cannot undo work already performed by the remote server.
 15. `chat-approval-needs-waiting-client` **Every client handles approvals;
     any run of a signed-in owner's chat can wait.**
     `chat/run_store.py:ChatRunStore.request_approval` opens the request for

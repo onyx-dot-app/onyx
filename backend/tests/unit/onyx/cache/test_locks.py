@@ -226,3 +226,62 @@ def test_async_lock_releases_late_acquire_after_cancellation(
         assert not fake.owned()
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("stop", ["cancel", "deadline"])
+def test_late_acquisition_is_released_after_event_loop_closes(
+    monkeypatch: pytest.MonkeyPatch, stop: str
+) -> None:
+    started = threading.Event()
+    resume = threading.Event()
+    released = threading.Event()
+    worker_threads: list[int] = []
+
+    class DelayedLock(_FakeLock):
+        def acquire(
+            self, blocking: bool = True, blocking_timeout: float | None = None
+        ) -> bool:
+            worker_threads.append(threading.get_ident())
+            started.set()
+            if not resume.wait(5):
+                raise RuntimeError("Test did not resume lock acquisition")
+            return super().acquire(blocking, blocking_timeout)
+
+        def release(self) -> None:
+            worker_threads.append(threading.get_ident())
+            super().release()
+            released.set()
+
+    fake = DelayedLock()
+    monkeypatch.setattr(
+        locks_module, "get_shared_cache_backend", lambda: _fake_backend(fake)
+    )
+
+    async def waiter() -> None:
+        async with locks_module.async_cache_shared_lock("test-lock", 60.0, 5.0, logger):
+            raise AssertionError("Cancelled waiter must not enter the lock")
+
+    async def run() -> asyncio.AbstractEventLoop:
+        task = asyncio.create_task(waiter())
+        assert await asyncio.to_thread(started.wait, 2)
+        if stop == "deadline":
+            with pytest.raises(TimeoutError):
+                async with asyncio.timeout(0.01):
+                    await task
+        else:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        return asyncio.get_running_loop()
+
+    try:
+        closed_loop = asyncio.run(run())
+        assert closed_loop.is_closed()
+    finally:
+        resume.set()
+
+    assert released.wait(2), "Late lock was stranded after the event loop closed"
+    assert fake.release_calls == 1
+    assert not fake.owned()
+    assert len(worker_threads) == 2
+    assert worker_threads[0] == worker_threads[1]

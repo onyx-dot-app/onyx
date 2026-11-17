@@ -27,9 +27,9 @@ from pydantic import AnyUrl, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheLockAcquisitionError
-from onyx.cache.locks import async_cache_shared_lock, cache_shared_lock
+from onyx.cache.locks import async_cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import MCPOAuthProviderMode
+from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode, MCPTransport
 from onyx.db.mcp import (
     get_connection_config_by_id,
     update_connection_config,
@@ -221,9 +221,19 @@ def refresh_mcp_oauth_token_if_expired(
     lock still can't be acquired *and* the stored token is expired does it return
     None; the caller then falls back to its existing header.
     """
+    return run_async_sync_no_cancel(
+        refresh_mcp_oauth_token_if_expired_async(mcp_server, connection_config_id)
+    )
+
+
+async def refresh_mcp_oauth_token_if_expired_async(
+    mcp_server: MCPServer | MCPServerConnection,
+    connection_config_id: int,
+) -> str | None:
+    """Refresh under the shared lock without blocking the caller's event loop."""
     lock_name = _refresh_lock_name(connection_config_id)
     try:
-        with cache_shared_lock(
+        async with async_cache_shared_lock(
             lock_name,
             max_time_lock_held_s=_REFRESH_LOCK_LEASE_S,
             wait_for_lock_s=_REFRESH_LOCK_WAIT_S,
@@ -234,9 +244,7 @@ def refresh_mcp_oauth_token_if_expired(
                 connection_config_id,
                 None,
             )
-            tokens = run_async_sync_no_cancel(
-                provider.refresh_access_token_if_expired()
-            )
+            tokens = await provider.refresh_access_token_if_expired()
             if tokens is None:
                 return None
             return f"{tokens.token_type} {tokens.access_token}"
@@ -1095,6 +1103,32 @@ def make_oauth_provider(
     )
     storage.bind_oauth_context(provider.context)
     return provider
+
+
+async def prepare_mcp_request_auth(
+    server: MCPServer | MCPServerConnection,
+    connection_config_id: int | None,
+    headers: dict[str, str],
+) -> OAuthClientProvider | None:
+    """Set up OAuth for an authenticated MCP request (updates SSE headers)."""
+    if server.auth_type != MCPAuthenticationType.OAUTH or connection_config_id is None:
+        return None
+    if server.transport != MCPTransport.SSE:
+        return make_oauth_provider(server, connection_config_id, None)
+    # SSE cannot refresh via httpx.Auth while the stream is open.
+    try:
+        refreshed = await refresh_mcp_oauth_token_if_expired_async(
+            server, connection_config_id
+        )
+    except Exception:
+        logger.warning("SSE OAuth refresh failed for MCP server %s", server.id)
+        return None
+    if refreshed is not None:
+        for name in tuple(headers):
+            if name.lower() == "authorization":
+                del headers[name]
+        headers["Authorization"] = refreshed
+    return None
 
 
 def make_oauth_provider_with_storage(

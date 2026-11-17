@@ -120,6 +120,10 @@ Enter a key to test the server and load its tools. A test key is saved to your a
 - In **Available tools**, turn tools on or off for the whole workspace.
 - Click **Refresh tools** after the server adds, removes, or changes tools. Save or discard pending changes first.
 
+For servers that use a personal API key or OAuth, Chat checks the tool list with the current user's credentials.
+The agent gets only configured tools that the server lists for that user. If the check fails,
+the agent continues without tools from that server for the response.
+
 The **Approval settings** tab sets the approval policy for each tool. The policy applies in Chat, in custom agents,
 and in Craft.
 

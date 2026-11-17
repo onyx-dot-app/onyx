@@ -1,4 +1,5 @@
 from collections.abc import Callable, Sequence
+from functools import partial
 from typing import cast
 from uuid import UUID
 
@@ -15,25 +16,35 @@ from onyx.db.action_policy import (
     resolve_user_action_policies,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.enums import ActionPolicy, GatedAppKind
+from onyx.db.enums import (
+    ActionPolicy,
+    GatedAppKind,
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPTransport,
+)
 from onyx.db.image_generation import get_default_image_generation_config
 from onyx.db.mcp import (
     get_mcp_server_by_id,
     get_mcp_server_user_preferences,
     user_can_access_mcp_server,
 )
-from onyx.db.models import User
+from onyx.db.models import MCPServer, User
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool, get_tool_user_preferences
 from onyx.document_index.factory import get_default_document_index
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
+from onyx.llm.cancellation import current_cancellation
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.server.features.mcp import client as mcp_client
 from onyx.server.features.mcp.credentials import (
     MCPCredentialsError,
+    ResolvedMCPCredentials,
     resolve_mcp_credentials,
 )
+from onyx.server.features.mcp.oauth import prepare_mcp_request_auth
 from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
@@ -64,6 +75,8 @@ from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_MCP_CHAT_DISCOVERY_TIMEOUT_SECONDS = 5
 
 
 class SearchToolConfig(BaseModel):
@@ -156,6 +169,42 @@ def should_disable_open_url_web_fetch(
         and tool.id not in allowed_tool_ids
         for tool in persona_tools
     )
+
+
+def _discover_user_mcp_tool_names(
+    server: MCPServer,
+    credentials: ResolvedMCPCredentials,
+    additional_headers: dict[str, str] | None,
+) -> set[str]:
+    try:
+        headers = credentials.build_request_headers(additional_headers)
+        return {
+            tool.name
+            for tool in mcp_client.discover_mcp_tools(
+                server.server_url,
+                connection_headers=headers,
+                transport=server.transport or MCPTransport.STREAMABLE_HTTP,
+                auth_factory=partial(
+                    prepare_mcp_request_auth,
+                    server,
+                    credentials.connection_config_id,
+                    headers,
+                ),
+                all_pages=True,
+                cancellation=current_cancellation(),
+                timeout_seconds=_MCP_CHAT_DISCOVERY_TIMEOUT_SECONDS,
+            )
+        }
+    except Exception as error:
+        if mcp_client.has_unauthorized_response(error):
+            credentials.record_rejected_credentials(server.auth_performer)
+        # The saved list belongs to a different credential. Do not fall back to it.
+        logger.warning(
+            "Skipping MCP server %s after per-user discovery failed (%s)",
+            server.id,
+            type(error).__name__,
+        )
+        return set()
 
 
 def construct_tools(
@@ -520,9 +569,6 @@ def _construct_tools_impl(
                 if tool.mcp_server_id == mcp_server.id
             ]
 
-            # Find the specific tool that this database entry represents
-            expected_tool_name = db_tool_model.display_name
-
             # Extract additional MCP headers from config
             additional_mcp_headers = None
             if custom_tool_config and custom_tool_config.mcp_headers:
@@ -536,11 +582,27 @@ def _construct_tools_impl(
                 )
                 continue
 
+            visible_tool_names: set[str] | None = None
+            if (
+                mcp_server.auth_performer == MCPAuthenticationPerformer.PER_USER
+                and mcp_server.auth_type
+                in (MCPAuthenticationType.API_TOKEN, MCPAuthenticationType.OAUTH)
+            ):
+                # The construction cache is scoped to this user and response.
+                visible_tool_names = _discover_user_mcp_tool_names(
+                    mcp_server, mcp_credentials, additional_mcp_headers
+                )
+
             server_tools: dict[int, MCPTool] = {}
             mcp_tool_cache[db_tool_model.mcp_server_id] = server_tools
             policies = mcp_policies[mcp_server.id]
             # Find the matching tool definition
             for saved_tool in saved_tools:
+                if (
+                    visible_tool_names is not None
+                    and saved_tool.name not in visible_tool_names
+                ):
+                    continue
                 policy = policies[saved_tool.name]
                 if policy == ActionPolicy.DENY:
                     continue
@@ -569,15 +631,6 @@ def _construct_tools_impl(
 
                 if saved_tool.id == db_tool_model.id:
                     tool_dict[saved_tool.id] = [mcp_tool]
-            if (
-                db_tool_model.id not in tool_dict
-                and policies.get(db_tool_model.name) != ActionPolicy.DENY
-            ):
-                logger.warning(
-                    "Tool '%s' not found in MCP server '%s'",
-                    expected_tool_name,
-                    mcp_server.name,
-                )
 
     if (
         not added_search_tool
