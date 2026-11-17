@@ -324,10 +324,12 @@ jobs:
         id: prebuilt
         uses: ./.github/actions/prebuilt-image
         with:
-          name: devcontainer
+          name: integration-devcontainer
           context: .devcontainer
           dockerfile: .devcontainer/Dockerfile
-          build-config: BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          build-config: |
+            target=integration-tests
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           image-repo: ${{ env.RUNS_ON_ECR_CACHE }}
 
       - name: Build and push Devcontainer Docker image
@@ -337,6 +339,7 @@ jobs:
         with:
           context: .devcontainer
           file: .devcontainer/Dockerfile
+          target: integration-tests
           # Push by digest: the devcontainer image is content-stable, so
           # per-run tags accumulated on a single ECR image digest until they
           # hit the 1000-tags-per-image cap. Downstream jobs pull
@@ -351,19 +354,19 @@ jobs:
           # Any pull_request job can push to the RunsOn ECR cache, so only fork PR runs,
           # which get no secrets, import it. Other runs import only the published image.
           cache-from: |
-            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache-{1}', env.RUNS_ON_ECR_CACHE, runner.arch) || '' }}
-            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache', env.RUNS_ON_ECR_CACHE) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:integration-devcontainer-cache-{1}', env.RUNS_ON_ECR_CACHE, runner.arch) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:integration-devcontainer-cache', env.RUNS_ON_ECR_CACHE) || '' }}
             type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-devcontainer:latest
           # Bound cache tags per architecture, even when many PRs build the same digest.
           cache-to: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ runner.arch }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-devcontainer-cache-${{ runner.arch }},mode=max
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
       - name: Save the Devcontainer image digest
         if: steps.build.outcome == 'success'
         uses: ./.github/actions/prebuilt-image
         with:
-          name: devcontainer
+          name: integration-devcontainer
           save-key: ${{ steps.prebuilt.outputs.save-key }}
           save-digest: ${{ steps.build.outputs.digest }}
 
