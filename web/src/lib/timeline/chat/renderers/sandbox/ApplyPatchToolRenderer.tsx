@@ -166,7 +166,6 @@ export function ApplyPatchToolRenderer({
       icon: STEP_ICONS.edit,
       status,
       supportsCollapsible: true,
-      noPaddingRight: true,
       content,
     },
   ]);
