@@ -27,7 +27,10 @@ from onyx.background.indexing.run_docfetching import (
     set_document_parent_node_ids,
     strip_null_characters,
 )
-from onyx.configs.app_configs import DOCCONVERSION_WINDOW_BATCHES
+from onyx.configs.app_configs import (
+    DOCCONVERSION_WINDOW_BATCHES,
+    PERSISTENT_INDEXING,
+)
 from onyx.configs.constants import (
     DocumentSource,
     OnyxCeleryPriority,
@@ -39,8 +42,10 @@ from onyx.connectors.interfaces import BaseConnector, Resolver
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
+    DocumentFailure,
     HierarchyNode,
     ResolveTarget,
+    SlimDocumentStub,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, IndexModelStatus
@@ -69,6 +74,11 @@ DOCCONVERSION_TASK_EXPIRES_SECONDS = 4 * 60 * 60
 # the credential and signs in, so one build for each task is too many.
 _CONNECTOR_CACHE_SECONDS = 10 * 60
 _CONNECTOR_CACHE_MAX_ENTRIES = 16
+# The attempt fails when more than this many stub batches failed as a whole,
+# and they are more than this share of the converted batches. Docprocessing
+# uses the same limits for failed documents.
+_FAILED_BATCH_THRESHOLD = 3
+_FAILED_BATCH_RATIO_THRESHOLD = 0.1
 
 
 class ConversionContext(BaseModel):
@@ -274,6 +284,48 @@ def send_docconversion_batch(
     )
 
 
+def _unconverted_stub_failures(
+    stubs: list[SlimDocumentStub],
+    documents: list[Document],
+    failures: list[ConnectorFailure],
+    error: Exception,
+) -> list[ConnectorFailure]:
+    """A failure for each stub that the failed conversion gave no document
+    and no failure. Each names its document, so the attempt can still end
+    with errors, and a later attempt converts the document again."""
+    done = {document.id for document in documents} | {
+        failure.failed_document.document_id
+        for failure in failures
+        if failure.failed_document is not None
+    }
+    return [
+        ConnectorFailure(
+            failed_document=DocumentFailure(document_id=stub.id),
+            failure_message=f"The conversion of its stub batch failed: {error}",
+            exception=error,
+        )
+        for stub in stubs
+        if stub.id not in done
+    ]
+
+
+def _check_failed_batch_threshold(
+    failed_batches: int, converted_batches: int, error: Exception
+) -> None:
+    """Fails the attempt when the source fails for many of its batches, not
+    for one of them."""
+    if PERSISTENT_INDEXING:
+        return
+    if (
+        failed_batches > _FAILED_BATCH_THRESHOLD
+        and failed_batches / max(converted_batches, 1) > _FAILED_BATCH_RATIO_THRESHOLD
+    ):
+        raise RuntimeError(
+            f"The conversion failed for {failed_batches} of {converted_batches} "
+            f"stub batches. Last error: {error}"
+        ) from error
+
+
 def convert_stub_batch(
     app: Celery,
     *,
@@ -336,20 +388,37 @@ def convert_stub_batch(
     documents: list[Document] = []
     hierarchy_nodes: list[HierarchyNode] = []
     failures: list[ConnectorFailure] = []
+    batch_error: Exception | None = None
     with time_stage(IndexAttemptStage.CONVERSION, index_attempt_id):
-        for item in connector.resolve_targets(
-            [
-                ResolveTarget(document_id=stub.id, listing_payload=stub.listing_payload)
-                for stub in stubs
-            ],
-            context.include_permissions,
-        ):
-            if isinstance(item, Document):
-                documents.append(item)
-            elif isinstance(item, HierarchyNode):
-                hierarchy_nodes.append(item)
-            else:
-                failures.append(item)
+        try:
+            for item in connector.resolve_targets(
+                [
+                    ResolveTarget(
+                        document_id=stub.id, listing_payload=stub.listing_payload
+                    )
+                    for stub in stubs
+                ],
+                context.include_permissions,
+            ):
+                if isinstance(item, Document):
+                    documents.append(item)
+                elif isinstance(item, HierarchyNode):
+                    hierarchy_nodes.append(item)
+                else:
+                    failures.append(item)
+        except Exception as e:
+            # One batch's error does not end the attempt: the documents it did
+            # not convert become failures. The threshold below ends an
+            # attempt whose source fails for many batches.
+            logger.exception(
+                "Conversion failed: attempt=%s batch_num=%s",
+                index_attempt_id,
+                batch_num,
+            )
+            batch_error = e
+            failures.extend(
+                _unconverted_stub_failures(stubs, documents, failures, batch_error)
+            )
 
     # The conversion can take minutes. Do not store work for a stopped attempt.
     if attempt_should_stop(index_attempt_id, cc_pair_id, tenant_id):
@@ -423,6 +492,14 @@ def convert_stub_batch(
         len(documents),
         len(failures),
     )
+    if batch_error is not None:
+        with get_session_with_current_tenant() as db_session:
+            failed_batches, converted_batches = (
+                IndexingCoordination.record_stub_batch_conversion_failed(
+                    db_session, index_attempt_id
+                )
+            )
+        _check_failed_batch_threshold(failed_batches, converted_batches, batch_error)
 
     with time_stage(IndexAttemptStage.CONVERSION_DISPATCH, index_attempt_id):
         dispatch_stub_batches(
