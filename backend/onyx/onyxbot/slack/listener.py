@@ -92,6 +92,7 @@ from onyx.onyxbot.slack.utils import (
 )
 from onyx.server.manage.models import SlackBotTokens
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
@@ -1406,6 +1407,7 @@ if __name__ == "__main__":
     tenant_handler = SlackbotHandler()
 
     set_is_ee_if_available()
+    validate_encryption_configuration()
     setup_tracing()
 
     try:

@@ -24,6 +24,7 @@ import sys
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
+from ee.onyx.db.rotate_encryption_key import rotate_encryption_key  # noqa: E402
 from ee.onyx.db.tenant_snapshot import template_session  # noqa: E402
 from onyx.db.engine.sql_engine import (  # noqa: E402
     SqlEngine,
@@ -33,7 +34,6 @@ from onyx.db.engine.tenant_utils import (  # noqa: E402
     get_all_tenant_ids,
     get_template_shards,
 )
-from onyx.db.rotate_encryption_key import rotate_encryption_key  # noqa: E402
 from onyx.utils.variable_functionality import global_version  # noqa: E402
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA  # noqa: E402
 

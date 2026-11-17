@@ -44,6 +44,7 @@ from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import (
     ColoredFormatter,
@@ -297,6 +298,18 @@ def on_celeryd_init(
     logger.info(
         "Multiprocessing selected start method: %s", multiprocessing.get_start_method()
     )
+
+    validate_encryption_configuration_or_exit()
+
+
+def validate_encryption_configuration_or_exit() -> None:
+    """Celery catches an exception raised in a signal handler and starts anyway,
+    so unusable encryption settings must stop the process here."""
+    try:
+        validate_encryption_configuration()
+    except RuntimeError as e:
+        logger.critical("Encryption settings are unusable, stopping: %s", e)
+        raise SystemExit(1) from e
 
     # Initialize tracing in workers if credentials are available.
     setup_tracing()

@@ -10,6 +10,7 @@ Requires a running Postgres instance. Run with::
     python -m dotenv -f .vscode/.env run -- pytest tests/external_dependency_unit/db/test_rotate_encryption_key.py
 """
 
+import base64
 import json
 from collections.abc import Generator
 from unittest.mock import patch
@@ -18,7 +19,15 @@ import pytest
 from sqlalchemy import LargeBinary, select, text
 from sqlalchemy.orm import Session
 
-from ee.onyx.utils.encryption import _decrypt_bytes, _encrypt_string, _get_trimmed_key
+from ee.onyx.db.rotate_encryption_key import (
+    _discover_encrypted_columns,
+    rotate_encryption_key,
+)
+from ee.onyx.utils.encryption import (
+    build_keyring,
+    decrypt_with_keyring,
+    encrypt_with_keyring,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import (
     Credential,
@@ -26,20 +35,19 @@ from onyx.db.models import (
     EncryptedString,
     InternetSearchProvider,
 )
-from onyx.db.rotate_encryption_key import (
-    _discover_encrypted_columns,
-    rotate_encryption_key,
-)
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
     global_version,
 )
 
 EE_MODULE = "ee.onyx.utils.encryption"
-ROTATE_MODULE = "onyx.db.rotate_encryption_key"
+ROTATE_MODULE = "ee.onyx.db.rotate_encryption_key"
 
 OLD_KEY = "o" * 16
-NEW_KEY = "n" * 16
+OLD_KEYRING = build_keyring(OLD_KEY, "", "")
+NEW_KEYRING = build_keyring(
+    "", json.dumps({"k2026": base64.b64encode(b"n" * 32).decode()}), "k2026"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -53,8 +61,12 @@ def _enable_ee() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
-def _clear_key_cache() -> None:
-    _get_trimmed_key.cache_clear()
+def _write_under_new_key() -> Generator[None, None, None]:
+    with (
+        patch(f"{EE_MODULE}.get_keyring", return_value=NEW_KEYRING),
+        patch(f"{ROTATE_MODULE}.get_keyring", return_value=NEW_KEYRING),
+    ):
+        yield
 
 
 def _raw_credential_bytes(db_session: Session, credential_id: int) -> bytes | None:
@@ -150,7 +162,7 @@ class TestRotateCredential:
     ) -> Generator[int, None, None]:
         """Insert a Credential row with raw encrypted bytes, clean up after."""
         config = {"api_key": "sk-test-1234", "endpoint": "https://example.com"}
-        encrypted = _encrypt_string(json.dumps(config), key=OLD_KEY)
+        encrypted = encrypt_with_keyring(OLD_KEYRING, json.dumps(config))
 
         result = db_session.execute(
             text(
@@ -174,33 +186,25 @@ class TestRotateCredential:
     def test_rotates_credential_json(
         self, db_session: Session, credential_id: int
     ) -> None:
-        with (
-            patch(f"{ROTATE_MODULE}.ENCRYPTION_KEY_SECRET", NEW_KEY),
-            patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", NEW_KEY),
-        ):
-            totals = rotate_encryption_key(db_session, old_key=OLD_KEY)
+        totals = rotate_encryption_key(db_session, old_key=OLD_KEY)
 
         assert totals.get("credential.credential_json", 0) >= 1
 
         raw = _raw_credential_bytes(db_session, credential_id)
         assert raw is not None
-        decrypted = json.loads(_decrypt_bytes(raw, key=NEW_KEY))
+        decrypted = json.loads(decrypt_with_keyring(NEW_KEYRING, raw).plaintext)
         assert decrypted["api_key"] == "sk-test-1234"
         assert decrypted["endpoint"] == "https://example.com"
 
     def test_skips_already_rotated(
         self, db_session: Session, credential_id: int
     ) -> None:
-        with (
-            patch(f"{ROTATE_MODULE}.ENCRYPTION_KEY_SECRET", NEW_KEY),
-            patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", NEW_KEY),
-        ):
-            rotate_encryption_key(db_session, old_key=OLD_KEY)
-            _ = rotate_encryption_key(db_session, old_key=OLD_KEY)
+        rotate_encryption_key(db_session, old_key=OLD_KEY)
+        _ = rotate_encryption_key(db_session, old_key=OLD_KEY)
 
         raw = _raw_credential_bytes(db_session, credential_id)
         assert raw is not None
-        decrypted = json.loads(_decrypt_bytes(raw, key=NEW_KEY))
+        decrypted = json.loads(decrypt_with_keyring(NEW_KEYRING, raw).plaintext)
         assert decrypted["api_key"] == "sk-test-1234"
 
     def test_dry_run_does_not_modify(
@@ -208,11 +212,7 @@ class TestRotateCredential:
     ) -> None:
         original = _raw_credential_bytes(db_session, credential_id)
 
-        with (
-            patch(f"{ROTATE_MODULE}.ENCRYPTION_KEY_SECRET", NEW_KEY),
-            patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", NEW_KEY),
-        ):
-            totals = rotate_encryption_key(db_session, old_key=OLD_KEY, dry_run=True)
+        totals = rotate_encryption_key(db_session, old_key=OLD_KEY, dry_run=True)
 
         assert totals.get("credential.credential_json", 0) >= 1
 
@@ -244,7 +244,7 @@ class TestRotateInternetSearchProvider:
         tenant_context: None,  # noqa: ARG002
     ) -> Generator[int, None, None]:
         """Insert an InternetSearchProvider row with raw encrypted bytes."""
-        encrypted = _encrypt_string("sk-secret-api-key", key=OLD_KEY)
+        encrypted = encrypt_with_keyring(OLD_KEYRING, "sk-secret-api-key")
 
         result = db_session.execute(
             text(
@@ -271,17 +271,13 @@ class TestRotateInternetSearchProvider:
         db_session.commit()
 
     def test_rotates_api_key(self, db_session: Session, isp_id: int) -> None:
-        with (
-            patch(f"{ROTATE_MODULE}.ENCRYPTION_KEY_SECRET", NEW_KEY),
-            patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", NEW_KEY),
-        ):
-            totals = rotate_encryption_key(db_session, old_key=OLD_KEY)
+        totals = rotate_encryption_key(db_session, old_key=OLD_KEY)
 
         assert totals.get("internet_search_provider.api_key", 0) >= 1
 
         raw = _raw_isp_bytes(db_session, isp_id)
         assert raw is not None
-        assert _decrypt_bytes(raw, key=NEW_KEY) == "sk-secret-api-key"
+        assert decrypt_with_keyring(NEW_KEYRING, raw).plaintext == "sk-secret-api-key"
 
     def test_rotates_from_unencrypted(
         self,
@@ -306,17 +302,13 @@ class TestRotateInternetSearchProvider:
         db_session.commit()
 
         try:
-            with (
-                patch(f"{ROTATE_MODULE}.ENCRYPTION_KEY_SECRET", NEW_KEY),
-                patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", NEW_KEY),
-            ):
-                totals = rotate_encryption_key(db_session, old_key=None)
+            totals = rotate_encryption_key(db_session, old_key=None)
 
             assert totals.get("internet_search_provider.api_key", 0) >= 1
 
             raw = _raw_isp_bytes(db_session, isp_id)
             assert raw is not None
-            assert _decrypt_bytes(raw, key=NEW_KEY) == "raw-api-key"
+            assert decrypt_with_keyring(NEW_KEYRING, raw).plaintext == "raw-api-key"
         finally:
             db_session.execute(
                 text("DELETE FROM internet_search_provider WHERE id = :id"),

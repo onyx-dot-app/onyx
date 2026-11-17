@@ -338,9 +338,24 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
 
     `PASSWORD_REQUIRE_SPECIAL_CHAR`: For basic auth. Require special characters in passwords
 
-    `ENCRYPTION_KEY_SECRET`: Key that Onyx uses to AES-encrypt connector credentials, API keys,
-    and other secrets at rest. Encryption is on whenever the key is set. Keep it stable:
-    changing it makes stored credentials unreadable.
+    `ENCRYPTION_KEY_SECRET`: Key that Onyx uses to encrypt connector credentials, API keys,
+    and other secrets at rest (Enterprise Edition). Encryption is on whenever a key is set. Keep the value:
+    Onyx needs it to read every value that it wrote with it. To change keys,
+    use `ENCRYPTION_KEYS` and `ENCRYPTION_WRITE_KEY_ID`. Do not change this value in place,
+    because that makes stored credentials unreadable.
+
+    `ENCRYPTION_KEYS`: Keys for key rotation, as a JSON object of key id to key, for example `{"2026-11": "<base64>"}`.
+    Each key is the base64 encoding of 32 random bytes (`openssl rand -base64 32`).
+    Onyx can read values written under any key in this object and under `ENCRYPTION_KEY_SECRET`.
+    A key id has 1 to 32 characters from letters, digits, `.`, `_` and `-`.
+    The id `legacy` is reserved for `ENCRYPTION_KEY_SECRET`. Onyx refuses to start when a key is malformed,
+    an id repeats, or `ENCRYPTION_WRITE_KEY_ID` names a key that is not configured.
+
+    `ENCRYPTION_WRITE_KEY_ID`: The key id that Onyx uses for new writes. When it is unset,
+    Onyx keeps writing in the format of `ENCRYPTION_KEY_SECRET`. Set it only after every Onyx process (API server,
+    background workers, bots) runs with that key in `ENCRYPTION_KEYS`,
+    because a process without the key cannot read the new values.
+    The value `legacy` moves new writes to the authenticated format with a key derived from `ENCRYPTION_KEY_SECRET`.
 
     `MASK_CREDENTIAL_PREFIX`: Mask connector credentials in the admin UI.
     Turn off if admins should see the credentials in the admin panel.

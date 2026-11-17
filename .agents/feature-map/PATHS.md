@@ -122,7 +122,7 @@ covers new files that match it.
 | `backend/onyx/file_store/document_batch_storage.py`, `backend/onyx/db/targeted_reindex.py`, `backend/onyx/redis/redis_docprocessing.py` | indexing-pipeline |
 | `backend/onyx/db/connector.py`, `backend/onyx/db/credentials.py`, `backend/onyx/db/connector_credential_pair.py`, `backend/onyx/db/credential_capability.py`, `backend/ee/onyx/db/connector.py`, `backend/ee/onyx/db/credentials.py` | cc-pairs-and-creds |
 | `backend/onyx/db/cc_pair_runs.py`, `backend/onyx/db/cc_pair_runs_models.py`, `backend/onyx/db/cc_pair_run_resolution.py`, `backend/onyx/db/deletion_attempt.py` | cc-pairs-and-creds |
-| `backend/onyx/utils/encryption.py`, `backend/onyx/utils/sensitive.py`, `backend/ee/onyx/utils/encryption.py`, `backend/onyx/db/rotate_encryption_key.py` | cc-pairs-and-creds |
+| `backend/onyx/utils/encryption.py`, `backend/onyx/utils/sensitive.py`, `backend/ee/onyx/utils/encryption.py`, `backend/ee/onyx/db/rotate_encryption_key.py` | cc-pairs-and-creds |
 | `backend/onyx/server/manage/administrative.py` | cc-pairs-and-creds, indexing-pipeline |
 | `backend/ee/onyx/server/oauth/` | cc-pairs-and-creds |
 | `backend/ee/onyx/server/documents/`, `backend/ee/onyx/db/connector_credential_pair.py` | cc-pairs-and-creds, permission-sync |

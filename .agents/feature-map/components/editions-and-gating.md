@@ -156,10 +156,13 @@ to the no-op when no PostHog client is configured.
    `backend/ee/onyx/utils/encryption.py:_encrypt_string`, which encrypts with
    AES. Read the `ee.` mirror before you conclude what Onyx does. Every
    encrypted column and cache entry is encrypted only when EE code is loaded and
-   `ENCRYPTION_KEY_SECRET` is set. Without the key, the EE function also stores
-   plain text, and a key shorter than 16 bytes raises `RuntimeError`
-   (`backend/ee/onyx/utils/encryption.py:_get_trimmed_key`). The CE function only
-   logs a warning when the key is set.
+   `ENCRYPTION_KEY_SECRET` or `ENCRYPTION_WRITE_KEY_ID` is set. Without a key,
+   the EE function also stores plain text. Unusable key settings raise
+   `EncryptionConfigError` from
+   `backend/ee/onyx/utils/encryption.py:build_keyring`, which every process
+   runs at startup through
+   `backend/onyx/utils/encryption.py:validate_encryption_configuration`. The CE
+   function only logs a warning when a key setting is set.
 2. `loaded-ee-not-unlocked` **Loaded EE code is not an unlocked feature.** Gate a
    paid feature on `backend/onyx/server/settings/tier_order.py:tier_at_least`,
    never on `global_version.is_ee_version()`. The latter is true on every
