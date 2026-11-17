@@ -2912,9 +2912,13 @@ class GoogleDriveConnector(
         add_prefix: bool,
     ) -> _FolderRead:
         """The node for one folder, and the parent to read next. Reads as each
-        of ``emails`` and then as the admin, until one can read the folder.
-        A folder that no one can read is not marked as seen: a later child
-        that names it adds readers for another try."""
+        of ``emails`` and then as the admin, until one read shows the
+        folder's parent or shows a drive root. A user who cannot see the
+        parent gets the folder with no parent, so the reads go on to the next
+        user. When no read shows the parent, the first read gives the node
+        with no parent. A folder that no one can read is not marked as seen:
+        a later child that names it adds readers for another try. A folder
+        with no parent is not marked as seen either, for the same reason."""
         field_type = (
             DriveFileFieldType.WITH_PERMISSIONS
             if permission_sync_context
@@ -2922,12 +2926,30 @@ class GoogleDriveConnector(
         )
         folder: GoogleDriveFileType | None = None
         email = ""
-        for email in emails:
-            folder = self._get_folder_metadata(
-                folder_id, email, field_type, checkpoint.failed_folder_ids_by_email
+        parentless: tuple[GoogleDriveFileType, str] | None = None
+        for reader in emails:
+            read = self._get_folder_metadata(
+                folder_id, reader, field_type, checkpoint.failed_folder_ids_by_email
             )
-            if folder is not None:
+            if read is None:
+                continue
+            if (
+                _get_parent_id_from_file(read)
+                or _is_shared_drive_root(read)
+                or self._is_my_drive_root(read, reader)
+            ):
+                folder, email = read, reader
                 break
+            if parentless is None:
+                parentless = (read, reader)
+        if folder is None and parentless is not None:
+            if folder_id in checkpoint.seen_hierarchy_node_raw_ids:
+                return _FolderRead(None, None, None, None)
+            folder, email = parentless
+            node = self._folder_node(
+                folder, permission_sync_context, add_prefix, raw_id=folder_id
+            )
+            return _FolderRead(node, None, email, folder.get("driveId"))
         if folder is None:
             # Documents under it keep their STUB parent.
             return _FolderRead(None, None, None, None)

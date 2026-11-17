@@ -411,3 +411,91 @@ def test_a_folder_that_one_reader_cannot_read_is_read_again_as_a_later_one(
 
     nodes = sorted(node.raw_node_id for batch in batches for node in batch)
     assert nodes == ["C", "P"]
+
+
+def test_a_folder_read_with_no_parent_is_read_again_as_the_next_reader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """user_a (and the admin) can read P but cannot see its parent. user_b
+    can. The read goes on to user_b, and P gets its parent."""
+    connector = _connector()
+    checkpoint = _checkpoint(connector)
+    listing = checkpoint.listing
+    assert listing is not None
+    listing.add_parent_reader("P", "user_a@x.com")
+    listing.add_parent_reader("P", "user_b@x.com")
+    reads: list[tuple[str, str]] = []
+
+    def read_folder(
+        _self: GoogleDriveConnector,
+        folder_id: str,
+        retriever_email: str,
+        *_args: Any,
+        **_kwargs: Any,
+    ) -> GoogleDriveFileType | None:
+        reads.append((folder_id, retriever_email))
+        if folder_id == "P" and retriever_email == "user_b@x.com":
+            return _folder("P", parent_id="top").drive_file
+        return _folder(folder_id).drive_file
+
+    monkeypatch.setattr(GoogleDriveConnector, "_get_folder_metadata", read_folder)
+    monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: False)
+
+    batches = list(
+        connector._resolve_unlisted_parents(
+            checkpoint, include_permissions=False, add_prefix=False
+        )
+    )
+
+    nodes = [
+        (node.raw_node_id, node.raw_parent_id) for batch in batches for node in batch
+    ]
+    assert nodes[0] == ("P", "top")
+    assert reads[:2] == [("P", "user_a@x.com"), ("P", "user_b@x.com")]
+    # The parent is read next, first as the user who saw it.
+    assert ("top", "user_b@x.com") in reads
+
+
+def test_a_folder_read_with_no_parent_is_read_again_for_a_later_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """user_a can read P but cannot see its parent, so P is yielded with no
+    parent. The read of P's child C as user_b names P again. user_b can see
+    P's parent, so P is yielded again with it."""
+    connector = _connector()
+    checkpoint = _checkpoint(connector)
+    listing = checkpoint.listing
+    assert listing is not None
+    listing.add_parent_reader("P", "user_a@x.com")
+    listing.add_parent_reader("C", "user_b@x.com")
+
+    def read_folder(
+        _self: GoogleDriveConnector,
+        folder_id: str,
+        retriever_email: str,
+        *_args: Any,
+        **_kwargs: Any,
+    ) -> GoogleDriveFileType | None:
+        if folder_id == "C":
+            return _folder("C", parent_id="P").drive_file
+        if folder_id == "P" and retriever_email == "user_b@x.com":
+            return _folder("P", parent_id="top").drive_file
+        if folder_id == "P":
+            return _folder("P").drive_file
+        return None
+
+    monkeypatch.setattr(GoogleDriveConnector, "_get_folder_metadata", read_folder)
+    monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: False)
+
+    batches = list(
+        connector._resolve_unlisted_parents(
+            checkpoint, include_permissions=False, add_prefix=False
+        )
+    )
+
+    nodes = [
+        (node.raw_node_id, node.raw_parent_id) for batch in batches for node in batch
+    ]
+    assert ("C", "P") in nodes
+    # The last node yielded for P has its parent.
+    assert [node for node in nodes if node[0] == "P"][-1] == ("P", "top")
