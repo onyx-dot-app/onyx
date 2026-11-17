@@ -90,7 +90,6 @@ export function useAgentChatPlugins(
 }
 
 interface AgentPreference {
-  disabled_tool_ids: number[];
   disabled_plugin_ids?: string[] | null;
 }
 
@@ -131,19 +130,18 @@ export function useAgentPluginPreferences(enabled: boolean) {
       const pending: PendingWrite = { body: null };
       await mutate(
         (current) => {
-          // Not loaded: a write would replace the saved built-in tool choices.
+          // Not loaded: a write would drop the saved plugin choices.
           if (current === undefined) return current;
           const record = current?.[key];
           const saved = record?.disabled_plugin_ids ?? [];
           const next = disabled
             ? [...new Set([...saved, ...pluginIds])]
             : saved.filter((id) => !pluginIds.includes(id));
-          const body: AgentPreference = {
-            disabled_tool_ids: record?.disabled_tool_ids ?? [],
-            disabled_plugin_ids: next,
+          pending.body = { disabled_plugin_ids: next };
+          return {
+            ...current,
+            [key]: { ...record, disabled_plugin_ids: next },
           };
-          pending.body = body;
-          return { ...current, [key]: body };
         },
         { revalidate: false }
       );
