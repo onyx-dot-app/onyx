@@ -9,16 +9,19 @@ from collections.abc import Iterator
 from uuid import uuid4
 
 import pytest
+from prometheus_client import REGISTRY
 
 from onyx.background.indexing.source_api_limiter import (
     RedisSourceApiLimiter,
     SourceApiBudget,
 )
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive import parallel_listing
 from onyx.connectors.google_drive.quota import DriveQuotaApi
 from onyx.connectors.google_drive.source_operations import GoogleDriveHttpError
 from onyx.connectors.interfaces import SourceApiLimiter
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.metrics.source_api_metrics import RequestOutcome
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
 from tests.external_dependency_unit.connectors.google_drive.test_checkpointed_slim_listing import (
     list_with_resume,
@@ -48,6 +51,25 @@ def tenant_id() -> Iterator[str]:
         client.delete(key)
 
 
+def _metric(name: str, **labels: str) -> float:
+    return REGISTRY.get_sample_value(name, labels) or 0.0
+
+
+def _counted_requests(outcome: RequestOutcome | None = None) -> float:
+    """The Drive requests that the gateway counted, of every API."""
+    outcomes = [outcome] if outcome is not None else list(RequestOutcome)
+    return sum(
+        _metric(
+            "onyx_source_api_requests_total",
+            source="google_drive",
+            api=api,
+            outcome=counted.value,
+        )
+        for api in ("drive", "docs", "admin")
+        for counted in outcomes
+    )
+
+
 def _list(
     mock: MockDrive, limiter: RedisSourceApiLimiter | None
 ) -> tuple[set[str], int]:
@@ -55,12 +77,25 @@ def _list(
     if limiter is not None:
         connector.set_source_api_limiter(limiter)
     mock.reset_stats()
+    requests_before = _counted_requests()
+    refusals_before = _counted_requests(RequestOutcome.RATE_LIMITED)
     # A folder read that Google refuses fails its call. The call then runs
     # again from its checkpoint, as the next attempt does.
     listing = list_with_resume(connector, retry_failed_calls=True)
     assert listing.failures == []
     assert len(listing.file_ids) == len(set(listing.file_ids))
-    return set(listing.file_ids), int(mock.stats()["rate_limited"])
+    stats = mock.stats()
+    # The request metrics count what Google got, retries included. Token
+    # requests are not API requests.
+    api_requests = sum(
+        op["count"] for name, op in stats["ops"].items() if name != "oauth.token"
+    )
+    assert _counted_requests() - requests_before == api_requests
+    assert (
+        _counted_requests(RequestOutcome.RATE_LIMITED) - refusals_before
+        == stats["rate_limited"]
+    )
+    return set(listing.file_ids), int(stats["rate_limited"])
 
 
 def test_the_limiter_keeps_the_listing_under_the_quota(
@@ -79,7 +114,13 @@ def test_the_limiter_keeps_the_listing_under_the_quota(
         }
     )
 
+    pool_cuts_before = _metric("onyx_adaptive_pool_cuts_total", pool="drive_listing")
     unlimited_ids, unlimited_refusals = _list(own_mock_drive, None)
+    # The listing pool answered the refusals with fewer workers.
+    assert (
+        _metric("onyx_adaptive_pool_cuts_total", pool="drive_listing")
+        > pool_cuts_before
+    )
 
     limiter = RedisSourceApiLimiter(
         tenant_id,
@@ -91,8 +132,30 @@ def test_the_limiter_keeps_the_listing_under_the_quota(
                 period_seconds=_WINDOW_SECONDS,
             )
         },
+        source=DocumentSource.GOOGLE_DRIVE,
+    )
+    waited_before = _metric(
+        "onyx_source_api_limiter_wait_seconds_total", source="google_drive", api="drive"
     )
     limited_ids, limited_refusals = _list(own_mock_drive, limiter)
+    # The calls waited for the budget, and the gauge shows the budget.
+    assert (
+        _metric(
+            "onyx_source_api_limiter_wait_seconds_total",
+            source="google_drive",
+            api="drive",
+        )
+        > waited_before
+    )
+    assert (
+        _metric(
+            "onyx_source_api_limiter_budget",
+            source="google_drive",
+            api="drive",
+            scope="project",
+        )
+        > 0
+    )
 
     assert unlimited_ids == expected
     assert limited_ids == expected

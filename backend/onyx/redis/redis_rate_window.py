@@ -36,6 +36,23 @@ _UNREACHABLE_WARNING_INTERVAL_SECONDS = 60.0
 _META_TTL_SECONDS = 600
 
 
+class AcquireResult(BaseModel):
+    # 0 when the request took its units, or the seconds until a full window
+    # has room.
+    wait_seconds: float
+    # The share of its limit that each window allows, in the order of the
+    # windows. Empty when Redis cannot be reached.
+    shares: list[float]
+
+
+class CutResult(BaseModel):
+    # The share of its limit that the window allows, from MIN_BUDGET_FACTOR
+    # to 1.
+    share: float
+    # False when the hold of an earlier cut covered this one.
+    applied: bool
+
+
 class RateWindow(BaseModel):
     """One budget: ``limit`` units in any ``period_seconds``."""
 
@@ -49,9 +66,10 @@ class RateWindow(BaseModel):
 # Each window has a log (a sorted set of requests by start time, with the cost
 # in the member) and a meta hash (the running total and the adaptive state).
 # The script reads the Redis clock, so clock skew between pods has no effect.
-# It returns 0 when the request took its units from every window. If one
-# window is full, it takes nothing and returns the ms until that window's
-# oldest request leaves.
+# It returns a list: first 0 when the request took its units from every
+# window, or, if one window is full, the ms until that window's oldest request
+# leaves (it then takes nothing). Then the share of its limit that each window
+# allows, in thousandths.
 _ACQUIRE_SCRIPT = """
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
@@ -61,6 +79,7 @@ local grow_step = tonumber(ARGV[3])
 local meta_ttl = tonumber(ARGV[4])
 local n = #KEYS / 2
 local wait = 0
+local shares = {}
 for i = 1, n do
   local log = KEYS[2 * i - 1]
   local meta = KEYS[2 * i]
@@ -89,6 +108,7 @@ for i = 1, n do
       redis.call('HSET', meta, 'factor', tostring(factor), 'grown_at', now)
     end
   end
+  shares[i] = math.floor(factor * 1000)
   -- One request always fits an empty window, however large its cost.
   local allowed = math.max(cost, math.floor(limit * factor))
   if total + cost > allowed then
@@ -101,7 +121,7 @@ for i = 1, n do
   end
 end
 if wait > 0 then
-  return wait
+  return {wait, unpack(shares)}
 end
 for i = 1, n do
   local log = KEYS[2 * i - 1]
@@ -113,11 +133,12 @@ for i = 1, n do
   redis.call('PEXPIRE', log, period)
   redis.call('PEXPIRE', meta, math.max(period, meta_ttl))
 end
-return 0
+return {0, unpack(shares)}
 """
 
 # Halves the window's share of its limit, at most once in each hold. Returns
-# the share in thousandths.
+# the share in thousandths, and 1 when this call cut or 0 when a hold covered
+# it.
 _CUT_SCRIPT = """
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
@@ -126,13 +147,15 @@ local hold_ms = tonumber(ARGV[2])
 local meta_ttl = tonumber(ARGV[3])
 local factor = tonumber(redis.call('HGET', KEYS[1], 'factor') or '1')
 local hold_until = tonumber(redis.call('HGET', KEYS[1], 'hold_until') or '0')
+local applied = 0
 if now >= hold_until then
   factor = math.max(min_factor, factor / 2)
+  applied = 1
   redis.call('HSET', KEYS[1], 'factor', tostring(factor),
              'hold_until', now + hold_ms, 'grown_at', now + hold_ms)
 end
 redis.call('PEXPIRE', KEYS[1], meta_ttl)
-return math.floor(factor * 1000)
+return {math.floor(factor * 1000), applied}
 """
 
 
@@ -173,8 +196,15 @@ class RedisRateWindows:
         """Takes ``cost`` units from every window and returns 0, or takes
         nothing and returns the seconds until a full window has room. When
         Redis cannot be reached, the request is not limited."""
+        return self.try_acquire_with_shares(windows, cost).wait_seconds
+
+    def try_acquire_with_shares(
+        self, windows: Sequence[RateWindow], cost: int = 1
+    ) -> AcquireResult:
+        """``try_acquire``, which also returns the share of its limit that
+        each window allows now."""
         if not windows:
-            return 0
+            return AcquireResult(wait_seconds=0, shares=[])
         keys: list[str] = []
         args: list[int | float] = [
             cost,
@@ -186,17 +216,21 @@ class RedisRateWindows:
             keys.extend([_log_key(window), _meta_key(window)])
             args.extend([window.limit, int(window.period_seconds * 1000)])
         try:
-            wait_ms = self._redis.eval(_ACQUIRE_SCRIPT, keys=keys, args=args)
+            result = self._redis.eval(_ACQUIRE_SCRIPT, keys=keys, args=args)
         except RedisError as error:
             _warn_redis_unreachable(error)
-            return 0
-        return int(wait_ms) / 1000
+            return AcquireResult(wait_seconds=0, shares=[])
+        wait_ms, *thousandths = (int(value) for value in result)
+        return AcquireResult(
+            wait_seconds=wait_ms / 1000,
+            shares=[value / 1000 for value in thousandths],
+        )
 
-    def cut(self, window: RateWindow) -> float:
+    def cut(self, window: RateWindow) -> CutResult:
         """Halves the share of its limit that the window allows, after the
-        service pushed back. Returns the share, from MIN_BUDGET_FACTOR to 1."""
+        service pushed back. At most one cut in each hold applies."""
         try:
-            thousandths = self._redis.eval(
+            thousandths, applied = self._redis.eval(
                 _CUT_SCRIPT,
                 keys=[_meta_key(window)],
                 args=[
@@ -207,8 +241,8 @@ class RedisRateWindows:
             )
         except RedisError as error:
             _warn_redis_unreachable(error)
-            return 1.0
-        return int(thousandths) / 1000
+            return CutResult(share=1.0, applied=False)
+        return CutResult(share=int(thousandths) / 1000, applied=bool(int(applied)))
 
     def delete(self, window: RateWindow) -> None:
         """Removes the window's state. For tests."""
