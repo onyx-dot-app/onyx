@@ -408,15 +408,19 @@ class _LimitedRequest:
         api: DriveQuotaApi,
         units: int,
         user_email: str,
+        request_count: int = 1,
     ) -> None:
         self._request = request
         self._limiter = limiter
         self._api = api
         self._units = units
         self._user_email = user_email
+        self._request_count = request_count
 
     def execute(self) -> Any:
-        self._limiter.acquire(self._api.value, self._units, self._user_email)
+        self._limiter.acquire(
+            self._api.value, self._units, self._user_email, self._request_count
+        )
         try:
             return self._request.execute()
         except HttpError as error:
@@ -626,13 +630,17 @@ class GoogleDriveSourceOperations(SourceOperations):
     def _limiter(self) -> SourceApiLimiter | None:
         return vars(self).get(_LIMITER_ATTRIBUTE)
 
-    def _limited(self, request: Any, units: int, user_email: str) -> Any:
+    def _limited(
+        self, request: Any, units: int, user_email: str, request_count: int = 1
+    ) -> Any:
         """``request``, or a wrapper that spends Drive quota units when a
-        limiter is attached."""
+        limiter is attached. ``request_count`` is the number of calls in a batch."""
         limiter = self._limiter()
         if limiter is None:
             return request
-        return _LimitedRequest(request, limiter, DriveQuotaApi.DRIVE, units, user_email)
+        return _LimitedRequest(
+            request, limiter, DriveQuotaApi.DRIVE, units, user_email, request_count
+        )
 
     def _limited_list(
         self, list_function: Callable[..., Any], user_email: str
@@ -847,7 +855,10 @@ class GoogleDriveSourceOperations(SourceOperations):
         result = DriveBatchResult()
         keys = list(file_ids_by_key)
         service = self._drive(user_email)
+        # Google can refuse single calls of a batch for their rate.
+        rate_limit_errors: list[Exception] = []
         for start in range(0, len(keys), _MAX_BATCH_SIZE):
+            rate_limit_errors.clear()
 
             def callback(
                 request_id: str,
@@ -858,7 +869,13 @@ class GoogleDriveSourceOperations(SourceOperations):
                     logger.warning(
                         "Error retrieving file %s: %s", request_id, exception
                     )
-                    result.errors[request_id] = _translate(exception)
+                    translated = _translate(exception)
+                    result.errors[request_id] = translated
+                    if (
+                        isinstance(translated, GoogleDriveHttpError)
+                        and translated.rate_limited
+                    ):
+                        rate_limit_errors.append(exception)
                 else:
                     result.files[request_id] = response
 
@@ -877,8 +894,16 @@ class GoogleDriveSourceOperations(SourceOperations):
                 )
             # A batch counts as one read for each file in it.
             self._limited(
-                batch, DRIVE_READ_UNITS * len(batch_keys), user_email
+                batch,
+                DRIVE_READ_UNITS * len(batch_keys),
+                user_email,
+                request_count=len(batch_keys),
             ).execute()
+            # One report for the batch: each report halves the budget.
+            if rate_limit_errors:
+                self._report_rate_limit(
+                    DriveQuotaApi.DRIVE, user_email, rate_limit_errors[0]
+                )
         return result
 
     @source_operation(

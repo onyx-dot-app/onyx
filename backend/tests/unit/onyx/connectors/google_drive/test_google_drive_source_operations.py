@@ -518,10 +518,14 @@ def test_download_retries_outlast_one_minute() -> None:
 class _RecordingLimiter(SourceApiLimiter):
     def __init__(self) -> None:
         self.spent: list[tuple[str, int, str | None]] = []
+        self.request_counts: list[int] = []
         self.reported: list[tuple[str, str | None, bool]] = []
 
-    def acquire(self, api: str, cost: int, user: str | None = None) -> None:
+    def acquire(
+        self, api: str, cost: int, user: str | None = None, request_count: int = 1
+    ) -> None:
         self.spent.append((api, cost, user))
+        self.request_counts.append(request_count)
 
     def report_rate_limit(self, api: str, user: str | None, user_scope: bool) -> None:
         self.reported.append((api, user, user_scope))
@@ -673,6 +677,8 @@ def test_a_batch_read_spends_one_read_for_each_file() -> None:
         )
 
     assert limiter.spent == [("drive", 15, "a@co.com")]
+    # The requests quota model counts three requests.
+    assert limiter.request_counts == [3]
 
 
 def test_drive_and_member_listings_spend_list_units() -> None:

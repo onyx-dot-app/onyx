@@ -160,8 +160,13 @@ until the folder's node arrives.
 `SourceApiLimiter` (`background/indexing/source_api_limiter.py`). The gateway
 spends from it before each Drive and Docs request
 (`connectors/google_drive/source_operations.py:attach_source_api_limiter`) and
-reports a rate-limit answer with its scope: 403 `userRateLimitExceeded` cuts
-that user's budget, and 429 cuts the project's. The budgets live in Redis
+reports a rate-limit answer with its scope
+(`connectors/google_drive/source_operations.py:_is_user_rate_limit`): 403
+`userRateLimitExceeded`, or a 429 whose `quota_limit` names a per-user quota
+(for example `ReadRequestsPerMinutePerUser`), cuts that user's budget; any
+other 429 cuts the project's. A batch of N files spends N requests under the
+requests quota model, and a refusal of one file in a batch also cuts. The
+budgets live in Redis
 (`redis/redis_rate_window.py`), so every worker that uses the credential shares
 them. Connector code does not import Redis.
 
