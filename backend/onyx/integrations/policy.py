@@ -238,11 +238,11 @@ def agent_link_settings_by_integration(
     for plugin_id, integration in list_plugin_integrations(
         db_session, list(settings_by_plugin)
     ):
-        links = by_integration.setdefault(
+        held = by_integration.setdefault(
             integration.id, AgentIntegrationLinks(integration=integration)
         )
-        links.plugin_ids.append(plugin_id)
-        links.settings.append(settings_by_plugin[plugin_id])
+        held.plugin_ids.append(plugin_id)
+        held.settings.append(settings_by_plugin[plugin_id])
     return by_integration
 
 
