@@ -411,3 +411,46 @@ def test_a_failed_permission_read_fails_closed() -> None:
 
     convert.assert_not_called()
     assert [type(r) for r in results] == [ConnectorFailure]
+
+
+def test_a_shared_drive_file_skips_the_batch_permission_read() -> None:
+    """Drive never gives `permissions` for a shared drive file, so the batch
+    files.get would only spend quota. Conversion reads the permissions with
+    one permissions.list, as the listing user, and batch-reads only the
+    other files."""
+    connector = _make_connector()
+    ops = cast(MagicMock, connector.ops)
+    ops.batch_get_files.return_value = _permission_batch(
+        {"file-b": {"id": "file-b", "permissionIds": ["p1"]}}
+    )
+    ops.list_file_permissions.return_value = _PERMISSIONS
+    converted: list[dict[str, object]] = []
+
+    def convert(*args: object, **_kwargs: object) -> Document:
+        drive_file = cast(dict[str, object], args[5])
+        converted.append(drive_file)
+        return _doc(str(drive_file["id"]))
+
+    with patch(f"{_CONN_MODULE}.convert_drive_item_to_document", side_effect=convert):
+        results = list(
+            connector.resolve_targets(
+                [
+                    _shared_drive_target("file-a", ["member@example.com"]),
+                    _target("file-b", []),
+                ],
+                include_permissions=True,
+            )
+        )
+
+    assert [type(r) for r in results] == [Document, Document]
+    ops.batch_get_files.assert_called_once()
+    assert list(ops.batch_get_files.call_args.kwargs["file_ids_by_key"]) == ["file-b"]
+    shared_reads = [
+        call
+        for call in ops.list_file_permissions.call_args_list
+        if call.kwargs["file_id"] == "file-a"
+    ]
+    assert len(shared_reads) == 1
+    assert shared_reads[0].kwargs["user_email"] == "lister@example.com"
+    by_id = {str(f["id"]): f for f in converted}
+    assert by_id["file-a"]["permissions"] == _PERMISSIONS
