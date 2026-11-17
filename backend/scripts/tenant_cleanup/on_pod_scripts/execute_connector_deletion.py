@@ -129,7 +129,7 @@ def mark_connector_for_deletion(
             file=sys.stderr,
         )
         task_start: float = time.time()
-        client_app.send_task(
+        client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
             OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
             priority=OnyxCeleryPriority.HIGH,
             kwargs={"tenant_id": tenant_id},
@@ -251,7 +251,7 @@ def mark_all_connectors_for_deletion(tenant_id: str) -> dict[str, Any]:
             file=sys.stderr,
         )
         task_start: float = time.time()
-        client_app.send_task(
+        client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
             OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
             priority=OnyxCeleryPriority.HIGH,
             kwargs={"tenant_id": tenant_id},

@@ -184,12 +184,14 @@ on `task_revoked`, by the same prefixes, because an expired task never reaches
 ## Contracts and traps
 
 1. `send-expires` **Give each new send `expires=`.** The backend AGENTS file
-   requires it, and every beat entry sets it. Many sends at the verified commit
-   omit it. Some do so on purpose: the docfetching and docprocessing sends wait
-   in queues for hours, and the heartbeat check and batch reissue recover a
-   lost one. Others, such as the pruning generator send and several
-   API-triggered sends, give no reason. Do not copy a send without checking why
-   it omits `expires`.
+   requires it, and `backend/lint/check_celery_task_expires.py` fails a
+   commit that omits it. A send with `# celery-expires: allow (<reason>)` has
+   no expiry. Five are on purpose: the docfetching and docprocessing sends
+   wait in queues for hours, and an expired one drops work. An expired
+   per-document sync task of a document set or user group leaves its taskset
+   through `task_revoked`, so the set would count as synced. The sends marked
+   `expiry pending` have no reason yet. Do not copy a marked send to a new
+   task.
 2. `default-acks-late` **The default ack mode is late.**
    `background/celery/configs/base.py` sets `task_acks_late`, and the broker
    redelivers an unacked task after `visibility_timeout`. A task that can run

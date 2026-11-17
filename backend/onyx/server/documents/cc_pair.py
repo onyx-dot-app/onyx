@@ -954,7 +954,7 @@ def update_cc_pair_status(
     )
 
     # this speeds up the start of indexing by firing the check immediately
-    client_app.send_task(
+    client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
         OnyxCeleryTask.CHECK_FOR_INDEXING,
         kwargs={"tenant_id": tenant_id},
         priority=OnyxCeleryPriority.HIGH,
@@ -1458,7 +1458,7 @@ def associate_credential_to_connector(
         maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
 
         # trigger indexing immediately
-        client_app.send_task(
+        client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
             OnyxCeleryTask.CHECK_FOR_INDEXING,
             priority=OnyxCeleryPriority.HIGH,
             kwargs={"tenant_id": tenant_id},

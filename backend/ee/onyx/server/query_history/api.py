@@ -337,7 +337,7 @@ def start_query_history_export(
         start_time=start_time,
     )
 
-    client_app.send_task(
+    client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
         OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK,
         task_id=task_id,
         priority=OnyxCeleryPriority.MEDIUM,

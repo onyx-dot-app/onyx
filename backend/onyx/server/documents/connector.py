@@ -911,7 +911,7 @@ def update_connector_files(
             )
 
             # Send task to check for indexing immediately
-            client_app.send_task(
+            client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
                 OnyxCeleryTask.CHECK_FOR_INDEXING,
                 kwargs={"tenant_id": tenant_id},
                 priority=OnyxCeleryPriority.HIGH,
@@ -2536,7 +2536,7 @@ def trigger_indexing_for_cc_pair(
 
     # run the beat task to pick up the triggers immediately
     logger.info("Sending indexing check task with priority %s", priority)
-    client_app.send_task(
+    client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
         OnyxCeleryTask.CHECK_FOR_INDEXING,
         priority=priority,
         kwargs={"tenant_id": tenant_id},

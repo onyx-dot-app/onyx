@@ -559,7 +559,7 @@ def delete_user_file(
     else:
         from onyx.background.celery.versioned_apps.client import app as client_app
 
-        task = client_app.send_task(
+        task = client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
             OnyxCeleryTask.DELETE_SINGLE_USER_FILE,
             kwargs={"user_file_id": str(user_file.id), "tenant_id": tenant_id},
             queue=OnyxCeleryQueues.USER_FILE_DELETE,

@@ -532,7 +532,7 @@ def try_creating_prune_generator_task(
         )
         redis_connector.prune.set_fence(payload)
 
-        result = celery_app.send_task(
+        result = celery_app.send_task(  # celery-expires: allow (existing send, expiry pending)
             OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
             kwargs={
                 "cc_pair_id": cc_pair.id,

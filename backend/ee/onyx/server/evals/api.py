@@ -22,7 +22,7 @@ def eval_run(
     Run an evaluation with the given message and optional dataset.
     This endpoint requires a valid API key for authentication.
     """
-    client_app.send_task(
+    client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
         OnyxCeleryTask.EVAL_RUN_TASK,
         kwargs={
             "configuration_dict": request.model_dump(),

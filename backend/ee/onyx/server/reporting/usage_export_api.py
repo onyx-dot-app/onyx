@@ -55,7 +55,7 @@ def generate_report(
         )
 
     tenant_id = get_current_tenant_id()
-    client_app.send_task(
+    client_app.send_task(  # celery-expires: allow (existing send, expiry pending)
         OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
         kwargs={
             "tenant_id": tenant_id,

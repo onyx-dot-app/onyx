@@ -1580,7 +1580,7 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
                 task_logger.info(
                     f"Cleaning up checkpoint for index attempt {attempt.id}"
                 )
-                self.app.send_task(
+                self.app.send_task(  # celery-expires: allow (existing send, expiry pending)
                     OnyxCeleryTask.CLEANUP_CHECKPOINT,
                     kwargs={
                         "index_attempt_id": attempt.id,
@@ -1669,7 +1669,7 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
                 task_logger.info(
                     f"check_for_index_attempt_cleanup - Cleaning up index attempts {len(batch)}"
                 )
-                self.app.send_task(
+                self.app.send_task(  # celery-expires: allow (existing send, expiry pending)
                     OnyxCeleryTask.CLEANUP_INDEX_ATTEMPT,
                     kwargs={
                         "index_attempt_ids": batch,
