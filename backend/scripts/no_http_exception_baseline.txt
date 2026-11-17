@@ -1,0 +1,61 @@
+# Per-file counts of HTTPException and fastapi/starlette status-constant uses that
+# predate the check in backend/scripts/check_no_http_exception.py. Do not add
+# entries or raise a count: raise OnyxError instead (backend/AGENTS.md, "Error
+# Handling"). After you remove violations, regenerate with:
+#   python3 backend/scripts/check_no_http_exception.py --write-baseline
+backend/ee/onyx/auth/users.py 4
+backend/ee/onyx/server/enterprise_settings/api.py 9
+backend/ee/onyx/server/manage/standard_answer.py 2
+backend/ee/onyx/server/middleware/tenant_tracking.py 3
+backend/ee/onyx/server/oauth/api.py 2
+backend/ee/onyx/server/oauth/confluence_cloud.py 4
+backend/ee/onyx/server/oauth/google_drive.py 2
+backend/ee/onyx/server/oauth/slack.py 3
+backend/ee/onyx/server/query_and_chat/query_backend.py 1
+backend/ee/onyx/server/query_and_chat/search_backend.py 3
+backend/ee/onyx/server/query_history/api.py 9
+backend/ee/onyx/server/reporting/usage_export_api.py 3
+backend/ee/onyx/server/tenants/access.py 5
+backend/ee/onyx/server/tenants/admin_api.py 2
+backend/ee/onyx/server/tenants/anonymous_users_api.py 6
+backend/ee/onyx/server/tenants/provisioning.py 5
+backend/ee/onyx/server/tenants/proxy.py 12
+backend/ee/onyx/server/tenants/team_membership_api.py 3
+backend/ee/onyx/server/tenants/user_invitations_api.py 2
+backend/onyx/auth/users.py 5
+backend/onyx/db/connector_credential_pair.py 4
+backend/onyx/db/engine/async_sql_engine.py 1
+backend/onyx/db/engine/sql_engine.py 3
+backend/onyx/db/feedback.py 2
+backend/onyx/db/input_prompt.py 7
+backend/onyx/db/persona.py 2
+backend/onyx/db/projects.py 1
+backend/onyx/main.py 5
+backend/onyx/server/documents/connector.py 24
+backend/onyx/server/documents/document.py 2
+backend/onyx/server/features/build/debug.py 3
+backend/onyx/server/features/build/session/api.py 43
+backend/onyx/server/features/build/session/messages.py 1
+backend/onyx/server/features/build/webapp_proxy.py 8
+backend/onyx/server/features/input_prompt/api.py 3
+backend/onyx/server/features/mcp/api.py 22
+backend/onyx/server/features/persona/api.py 14
+backend/onyx/server/features/projects/api.py 17
+backend/onyx/server/features/tool/api.py 8
+backend/onyx/server/federated/api.py 30
+backend/onyx/server/manage/get_state.py 2
+backend/onyx/server/manage/image_generation/api.py 12
+backend/onyx/server/manage/search_settings.py 2
+backend/onyx/server/manage/slack_bot.py 3
+backend/onyx/server/manage/users.py 7
+backend/onyx/server/manage/validate_tokens.py 7
+backend/onyx/server/manage/web_search/api.py 14
+backend/onyx/server/query_and_chat/chat_backend.py 16
+backend/onyx/server/utils.py 2
+backend/onyx/server/utils_vector_db.py 2
+backend/onyx/tools/tool_implementations/web_search/clients/brave_client.py 4
+backend/onyx/tools/tool_implementations/web_search/clients/exa_client.py 3
+backend/onyx/tools/tool_implementations/web_search/clients/google_pse_client.py 3
+backend/onyx/tools/tool_implementations/web_search/clients/searxng_client.py 6
+backend/onyx/tools/tool_implementations/web_search/clients/serper_client.py 3
+backend/onyx/tools/tool_implementations/web_search/clients/tavily_client.py 4
