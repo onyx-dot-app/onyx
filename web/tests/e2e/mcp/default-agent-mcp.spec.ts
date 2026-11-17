@@ -155,7 +155,10 @@ test.describe("Default Agent MCP Integration", () => {
     await expect(detail.disconnectButton(serverName)).toHaveCount(0);
   });
 
-  test("A member switches the plugin in the default agent", async ({
+  // The default agent runs only the plugins that a member turned on, and no
+  // page can turn on a plugin that holds only an integration or give it the
+  // install setting "Installed by default".
+  test.fixme("A member switches the plugin in the default agent", async ({
     page,
   }) => {
     await page.context().clearCookies();

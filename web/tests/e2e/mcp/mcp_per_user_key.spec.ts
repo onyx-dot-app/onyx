@@ -36,6 +36,7 @@ test.describe("MCP per-user API key auth (two credential fields)", () => {
   let pluginId: string;
   let serverName: string;
   let serverUrl: string;
+  let agentId: number | null = null;
   const users: { email: string; password: string }[] = [];
   let createdProviderId: number | null = null;
 
@@ -88,6 +89,13 @@ test.describe("MCP per-user API key auth (two credential fields)", () => {
     );
     expect(connect.ok(), await connect.text()).toBeTruthy();
     await adminClient.refreshIntegrationActions(integrationId);
+    // The connect prompt test chats with an agent that has the plugin. The
+    // default agent runs only the plugins that a member turned on.
+    agentId = await adminClient.createAgentWithPlugins(
+      `PW Per-User Key Agent ${Date.now()}`,
+      [pluginId],
+      { isPublic: true }
+    );
 
     for (const name of ["page", "chat"]) {
       const email = `pw-per-user-${name}-${Date.now()}@example.com`;
@@ -103,6 +111,7 @@ test.describe("MCP per-user API key auth (two credential fields)", () => {
       storageState: "admin_auth.json",
     });
     const adminClient = new OnyxApiClient(adminContext.request);
+    if (agentId !== null) await adminClient.deleteAgent(agentId);
     if (integrationId) await adminClient.deleteIntegration(integrationId);
     if (createdProviderId !== null)
       await adminClient.deleteProvider(createdProviderId);
@@ -132,7 +141,7 @@ test.describe("MCP per-user API key auth (two credential fields)", () => {
     const member = users[1]!;
     await page.context().clearCookies();
     await apiLogin(page, member.email, member.password);
-    await page.goto("/app");
+    await page.goto(`/app?agentId=${agentId}`);
     await ensureOnboardingComplete(page);
 
     const prompt = new IntegrationConnectPrompt(page);
