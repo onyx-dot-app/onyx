@@ -158,9 +158,7 @@ test("filters by kind and by search", async () => {
   expect(screen.queryByText("Linear")).not.toBeInTheDocument();
   expect(screen.getByText("Reports API")).toBeInTheDocument();
 
-  await user.click(
-    screen.getByRole("button", { name: copy.filters.mcp_server })
-  );
+  await user.click(screen.getByRole("button", { name: copy.filters.mcp }));
   expect(screen.getByText("Linear")).toBeInTheDocument();
   expect(screen.queryByText("Reports API")).not.toBeInTheDocument();
 

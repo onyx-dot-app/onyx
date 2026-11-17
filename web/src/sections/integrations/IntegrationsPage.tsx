@@ -29,7 +29,7 @@ import { useIntegrationLabels } from "@/sections/integrations/integrationLabels"
 import AddIntegrationModal from "@/sections/integrations/AddIntegrationModal";
 
 type KindFilter = "all" | IntegrationKind;
-const KIND_FILTERS: readonly KindFilter[] = ["all", "mcp_server", "api"];
+const KIND_FILTERS: readonly KindFilter[] = ["all", "mcp", "api"];
 
 export default function IntegrationsPage() {
   const t = useTranslations("admin.integrations");

@@ -10813,7 +10813,7 @@
       "filters": {
         "label": "Integration type",
         "all": "All",
-        "mcp_server": "MCP servers",
+        "mcp": "MCP servers",
         "api": "Apps"
       },
       "columns": {

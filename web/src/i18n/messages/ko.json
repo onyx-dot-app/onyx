@@ -10813,7 +10813,7 @@
       "filters": {
         "label": "연동 유형",
         "all": "전체",
-        "mcp_server": "MCP 서버",
+        "mcp": "MCP 서버",
         "api": "앱"
       },
       "columns": {

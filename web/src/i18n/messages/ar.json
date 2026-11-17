@@ -10813,7 +10813,7 @@
       "filters": {
         "label": "نوع التكامل",
         "all": "الكل",
-        "mcp_server": "خوادم MCP",
+        "mcp": "خوادم MCP",
         "api": "التطبيقات"
       },
       "columns": {

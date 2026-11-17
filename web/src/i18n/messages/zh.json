@@ -10813,7 +10813,7 @@
       "filters": {
         "label": "集成类型",
         "all": "全部",
-        "mcp_server": "MCP 服务器",
+        "mcp": "MCP 服务器",
         "api": "应用"
       },
       "columns": {
