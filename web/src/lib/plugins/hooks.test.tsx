@@ -34,6 +34,7 @@ const reports = makeMemberIntegration({
       scope: "organization",
       owner_email: null,
       installation_policy: "AVAILABLE",
+      enabled: true,
     },
   ],
 });
@@ -77,6 +78,23 @@ test("the default agent uses each plugin of the user that holds integrations", a
   expect(result.current.plugins.map((plugin) => plugin.name)).toEqual([
     "Linear",
     "Reports",
+  ]);
+});
+
+test("the default agent leaves out a plugin the user turned off", async () => {
+  const [ref] = reports.plugins;
+  if (!ref) throw new Error("Missing fixture plugin");
+  mockFetch({
+    "/api/integrations": [
+      linear,
+      { ...reports, plugins: [{ ...ref, enabled: false }] },
+    ],
+  });
+  const { result } = renderHook(() => useAgentChatPlugins(0), { wrapper });
+  await waitFor(() => expect(result.current.pluginIds).not.toBeNull());
+  expect(result.current.pluginIds).toEqual([LINEAR_PLUGIN_ID]);
+  expect(result.current.plugins.map((plugin) => plugin.name)).toEqual([
+    "Linear",
   ]);
 });
 

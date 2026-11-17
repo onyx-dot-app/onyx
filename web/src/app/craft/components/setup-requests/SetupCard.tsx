@@ -1,6 +1,6 @@
 "use client";
 
-import { useNavigation } from "@opal/navigation";
+import { useNavigation, usePathname, useSearchParams } from "@opal/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
@@ -11,14 +11,11 @@ import { cn } from "@opal/utils";
 import {
   ConnectAppDecision,
   postConnectAppDecision,
-  startExternalAppOAuth,
-  upsertUserCredentials,
 } from "@/app/craft/services/externalAppsService";
 import CometEdge from "@/refresh-components/CometEdge";
-import {
-  OAUTH_POPUP_MESSAGE_SOURCE,
-  OAuthPopupMessage,
-} from "@/app/craft/types/setupRequests";
+import { connectWithOAuth } from "@/lib/integrations/connect";
+import { saveUserConnection } from "@/lib/integrations/svc";
+import { isSilentOAuthOutcome, oauthFailureDetail } from "@/lib/oauth/launch";
 import {
   ExternalAppUserResponse,
   getAppTypeLogo,
@@ -38,12 +35,10 @@ interface SetupCardProps {
   userApp?: ExternalAppUserResponse;
 }
 
-const POPUP_FEATURES = "popup,width=520,height=720";
-const POPUP_POLL_MS = 600;
-
 /**
  * Connect-app card rendered from a `connect_app_request` packet. "Connect" runs
- * the OAuth popup (or the credential form for token apps); finishing posts a
+ * the integration OAuth sign-in in a new tab (or the credential form for token
+ * apps); finishing posts a
  * "connected" decision (→ the parked agent tool resumes with access), "Not now"
  * posts "declined" (→ the agent gets a rejection and picks an alternative).
  */
@@ -56,6 +51,8 @@ export default function SetupCard({
   const t = useTranslations("craft.setupCard");
   const tActionPolicies = useTranslations("craft.actionPolicies");
   const navigation = useNavigation();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,13 +62,10 @@ export default function SetupCard({
   const mountedRef = useRef(true);
   const resolvingRef = useRef(false);
   const autoResolvedRef = useRef(false);
-  // Tears down the in-flight OAuth poll/listener; run on finish and on unmount.
-  const cleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      cleanupRef.current?.();
     };
   }, []);
 
@@ -115,60 +109,6 @@ export default function SetupCard({
     void resolve("connected");
   }, [userApp?.authenticated, decision, resolve]);
 
-  async function confirmConnected(): Promise<boolean> {
-    try {
-      const apps = await mutate<ExternalAppUserResponse[]>(
-        SWR_KEYS.buildExternalApps
-      );
-      return !!apps?.some(
-        (app) => app.id === externalAppId && app.authenticated
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  function awaitOAuthCompletion(popup: Window) {
-    let settled = false;
-
-    function onMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return;
-      const data = event.data as Partial<OAuthPopupMessage> | undefined;
-      if (data?.source !== OAUTH_POPUP_MESSAGE_SOURCE) return;
-      if (data.externalAppId !== externalAppId) return;
-      finish(true);
-    }
-
-    // Close alone isn't a cancel: the success postMessage can lose the race with
-    // this poll, so confirm against the server before giving up.
-    async function onClose() {
-      if (settled) return;
-      clearInterval(poll);
-      finish(await confirmConnected());
-    }
-
-    const poll = setInterval(() => {
-      if (popup.closed) void onClose();
-    }, POPUP_POLL_MS);
-    window.addEventListener("message", onMessage);
-
-    const teardown = () => {
-      window.removeEventListener("message", onMessage);
-      clearInterval(poll);
-    };
-    cleanupRef.current = teardown;
-
-    function finish(connected: boolean) {
-      if (settled) return;
-      settled = true;
-      teardown();
-      cleanupRef.current = null;
-      if (mountedRef.current) setBusy(false);
-      // Unconfirmed attempts leave the card live to retry rather than decline.
-      if (connected) void resolve("connected");
-    }
-  }
-
   async function connect() {
     setError(null);
     // Capabilities are unknown until the app row loads (the button is disabled).
@@ -189,18 +129,25 @@ export default function SetupCard({
     }
 
     setBusy(true);
+    const query = searchParams.toString();
     try {
-      const { authorize_url } = await startExternalAppOAuth(externalAppId);
-      const popup = window.open(authorize_url, "_blank", POPUP_FEATURES);
-      if (!popup) {
-        setBusy(false);
-        setError(t("error.popupBlocked"));
-        return;
-      }
-      awaitOAuthCompletion(popup);
-    } catch (e) {
+      const result = await connectWithOAuth(
+        userApp.integration_id,
+        query ? `${pathname}?${query}` : pathname
+      );
+      if (!mountedRef.current) return;
       setBusy(false);
-      setError(e instanceof Error ? e.message : t("error.startFailed"));
+      if (result === "connected") await resolve("connected");
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setBusy(false);
+      if (!isSilentOAuthOutcome(e))
+        setError(
+          oauthFailureDetail(e)?.description ??
+            (e instanceof Error && e.message
+              ? e.message
+              : t("error.startFailed"))
+        );
     }
   }
 
@@ -236,9 +183,7 @@ export default function SetupCard({
           {connected && (
             <Button
               prominence="tertiary"
-              {...navigation.linkTo(
-                `/craft/v1/plugins?actionPolicies=app-${externalAppId}`
-              )}
+              {...navigation.linkTo("/craft/v1/plugins")}
             >
               {tActionPolicies("title")}
             </Button>
@@ -299,7 +244,9 @@ export default function SetupCard({
             logo={getAppTypeLogo(userApp.app_type)}
             credentialKeys={userApp.credential_keys}
             credentialValues={userApp.credential_values}
-            save={(values) => upsertUserCredentials(userApp.id, values)}
+            save={async (values) => {
+              await saveUserConnection(userApp.integration_id, values);
+            }}
           />
         )}
       </div>

@@ -120,6 +120,7 @@ const toolConfiguration: ToolConfigurationHandle = {
   toggleToolState: jest.fn(),
   clearPreferredTool: jest.fn(),
   preferredToolId: null,
+  preferredAction: null,
   disabledToolIds: [],
   isPluginEnabled: jest.fn(() => true),
   setPluginEnabled: jest.fn(),

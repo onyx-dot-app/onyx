@@ -25,7 +25,7 @@ import { MinimalOnyxDocument } from "@/lib/search/types";
 import { ChatState } from "@/app/app/types";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { effectiveChatPreferredToolId } from "@/lib/plugins/chat";
+import { effectiveChatPreference } from "@/lib/plugins/chat";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import type {
@@ -455,11 +455,15 @@ const AppInputBar = React.memo(
     }, [isNewSession, initialMessage]);
 
     const { clearPreferredTool } = toolConfiguration;
-    const preferredToolId = effectiveChatPreferredToolId({
+    const preference = effectiveChatPreference({
       requestedToolId: toolConfiguration.preferredToolId,
+      requestedAction: toolConfiguration.preferredAction,
       agent: activeAgent,
       incognito: incognitoEnabled,
+      isPluginEnabled: toolConfiguration.isPluginEnabled,
     });
+    const preferredToolId =
+      preference?.type === "capability" ? preference.tool_id : null;
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
 

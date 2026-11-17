@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
 import { useTranslations } from "next-intl";
+import { useNavigation } from "@opal/navigation";
 import { ToolSnapshot } from "@/lib/tools/types";
-import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
+import { memberPluginHref } from "@/lib/plugins/directory";
 import { SvgArrowExchange } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
 
@@ -11,38 +11,18 @@ interface CustomToolAuthCardProps {
   toolName: string;
   toolId: number | null;
   tools: ToolSnapshot[];
-  agentId: number;
 }
 
+/** A tool call that needs the user's sign-in. Connect opens the tool's plugin. */
 function CustomToolAuthCard({
   toolName,
   toolId,
   tools,
-  agentId,
 }: CustomToolAuthCardProps) {
   const t = useTranslations("chat.messages");
-  const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(agentId);
-  const matchedTool = useMemo(() => {
-    if (toolId == null) return null;
-    return tools.find((t) => t.id === toolId) ?? null;
-  }, [toolId, tools]);
-
-  // Hide the card if the user already has a valid token
-  const authStatus = matchedTool ? getToolAuthStatus(matchedTool) : undefined;
-  if (authStatus?.hasToken && !authStatus.isTokenExpired) {
-    return null;
-  }
-
-  const oauthConfigId = matchedTool?.oauth_config_id ?? null;
-
-  // No OAuth config — nothing actionable to show
-  if (!oauthConfigId) {
-    return null;
-  }
-
-  const handleAuthenticate = () => {
-    if (matchedTool) void authenticateTool(matchedTool);
-  };
+  const navigation = useNavigation();
+  const pluginId = tools.find((tool) => tool.id === toolId)?.plugin_ids?.[0];
+  if (!pluginId) return null;
 
   return (
     <MessageCard
@@ -54,7 +34,7 @@ function CustomToolAuthCard({
         <Button
           prominence="primary"
           icon={SvgArrowExchange}
-          onClick={handleAuthenticate}
+          {...navigation.linkTo(memberPluginHref(pluginId, "integrations"))}
         >
           {t("customToolAuth.connectButton.label")}
         </Button>

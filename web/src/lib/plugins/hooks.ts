@@ -28,7 +28,8 @@ export interface AgentChatPlugins {
 
 /**
  * The plugins of an agent (persona detail `plugins`). The default agent has
- * none of its own: it uses each plugin of the user that holds integrations.
+ * none of its own: it uses each plugin of the user that holds integrations
+ * and that the user turned on.
  */
 export function useAgentChatPlugins(
   agentId: number | undefined
@@ -44,6 +45,8 @@ export function useAgentChatPlugins(
     for (const integration of data ?? []) {
       for (const ref of integration.plugins) {
         if (ref.installation_policy === "NOT_AVAILABLE") continue;
+        // The default agent runs only the plugins the user turned on.
+        if (isDefault && !ref.enabled) continue;
         const entry = byPlugin.get(ref.plugin_id);
         if (entry) entry.integrations.push(integration);
         else

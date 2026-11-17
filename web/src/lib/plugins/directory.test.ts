@@ -27,6 +27,7 @@ const personal = makeMemberIntegration({
       scope: "personal",
       owner_email: "me@example.com",
       installation_policy: null,
+      enabled: true,
     },
   ],
 });

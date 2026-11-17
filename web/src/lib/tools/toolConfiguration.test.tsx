@@ -627,6 +627,37 @@ test("a tool change keeps a saved preferred tool that the composer cannot offer"
   });
 });
 
+test("a saved preferred action stays through a plugin switch and a tool pin releases it", async () => {
+  mockPluginIds = ["plugin-a", "plugin-b"];
+  const action = {
+    type: "action",
+    plugin_id: "plugin-a",
+    action: "create_issue",
+  } as const;
+  const saved: ChatToolOptions = {
+    allowed: null,
+    preferred: action,
+    internal_search_filters: NO_FILTERS,
+  };
+  openSavedChats({ abc: saved });
+  const fetchSpy = echoSaves((sent) => ({ ...saved, ...sent }));
+  const { result } = renderHook(() => useToolConfiguration());
+  expect(result.current.preferredAction).toEqual(action);
+
+  act(() => result.current.setPluginEnabled(["plugin-b"], false));
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
+  expect(JSON.parse(String(patchesOf(fetchSpy)[0]![1].body)).preferred).toEqual(
+    action
+  );
+
+  act(() => result.current.toggleToolState(1, "preferred"));
+  await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(2));
+  expect(JSON.parse(String(patchesOf(fetchSpy)[1]![1].body)).preferred).toEqual(
+    { type: "capability", tool_id: 1 }
+  );
+  expect(result.current.preferredAction).toBeNull();
+});
+
 test("a source change is saved at once, so a reload right after keeps it", async () => {
   openSavedChats();
   const fetchSpy = echoSaves();

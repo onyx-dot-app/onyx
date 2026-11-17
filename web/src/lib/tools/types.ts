@@ -61,22 +61,9 @@ export interface ToolSnapshot {
   permissions?: PermissionsOf<"Action">;
 }
 
-export interface ToolUserPreferencesRequest {
-  enabled_in_chat: boolean;
-}
-
-export type ToolUserPreferencesResponse = ToolUserPreferencesRequest;
-
 export interface ApiResponse<T> {
   data: T | null;
   error: string | null;
-}
-
-export interface OAuthTokenStatus {
-  oauth_config_id: number;
-  expires_at: number | null;
-  is_expired: boolean;
-  can_refresh?: boolean;
 }
 
 /**
@@ -116,6 +103,9 @@ export type ToolOptionsEntry =
 export type ToolPreference =
   | { type: "capability"; tool_id: number }
   | { type: "action"; plugin_id: string; action: string };
+
+/** A preferred plugin action. The web keeps it but has no control for it. */
+export type ActionPreference = Extract<ToolPreference, { type: "action" }>;
 
 /**
  * The tools, plugins and search filters of a chat. A send carries them, and

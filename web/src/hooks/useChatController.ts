@@ -78,7 +78,7 @@ import {
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { effectiveChatPreferredToolId } from "@/lib/plugins/chat";
+import { effectiveChatPreference } from "@/lib/plugins/chat";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
@@ -1058,12 +1058,14 @@ export default function useChatController({
           }
         }
 
-        const effectivePreferredToolId = deepResearch
+        const effectivePreference = deepResearch
           ? null
-          : effectiveChatPreferredToolId({
+          : effectiveChatPreference({
               requestedToolId: toolConfiguration.preferredToolId,
+              requestedAction: toolConfiguration.preferredAction,
               agent: activeAgent,
               incognito,
+              isPluginEnabled: toolConfiguration.isPluginEnabled,
             });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
@@ -1101,10 +1103,7 @@ export default function useChatController({
           chatSessionId: currChatSessionId,
           toolOptions: {
             allowed: activeAgent ? toolConfiguration.allowed : null,
-            preferred:
-              effectivePreferredToolId === null
-                ? null
-                : { type: "capability", tool_id: effectivePreferredToolId },
+            preferred: effectivePreference,
             internal_search_filters: searchFilters,
           },
           modelProvider: isMultiModel

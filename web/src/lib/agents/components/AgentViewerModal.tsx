@@ -1,35 +1,23 @@
 "use client";
 
 import { useNavigation } from "@opal/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { FullAgent } from "@/lib/agents/types";
 import { Modal } from "@opal/components";
-import {
-  Content,
-  ContentAction,
-  InputHorizontal,
-  Section,
-} from "@opal/layouts";
+import { Content, InputHorizontal, Section } from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, Divider, Text } from "@opal/components";
 import { Collapsible } from "@opal/components";
 import {
   SvgActions,
   SvgBubbleText,
-  SvgExpand,
-  SvgFold,
   SvgOrganization,
   SvgStar,
   SvgUser,
 } from "@opal/icons";
-import { useMcpServers } from "@/lib/mcp/hooks";
-import { getActionIcon } from "@/lib/tools/utils";
-import { ToolSnapshot } from "@/lib/tools/types";
-import { MCPServer } from "@/lib/mcp/types";
 import { EmptyMessageCard } from "@opal/components";
 import { InputSwitch } from "@opal/components";
-import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import type { ComposedMessage } from "@/lib/chat/types";
 import AppInputBar from "@/sections/input/AppInputBar";
@@ -45,78 +33,11 @@ import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { Interactive } from "@opal/core";
 import { useSettings } from "@/lib/settings/hooks";
 
-/**
- * Read-only MCP Server card for the viewer modal.
- * Displays the server header with its tools listed in the expandable content area.
- */
-interface ViewerMCPServerCardProps {
-  server: MCPServer;
-  tools: ToolSnapshot[];
-}
-
-function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
-  const t = useTranslations("agents.modals");
-  const [expanded, setExpanded] = useState(true);
-  const serverIcon = getActionIcon(server.server_url, server.name);
-
-  return (
-    <Card
-      expandable
-      expanded={expanded}
-      border="solid"
-      rounding={4}
-      padding={2}
-      expandedContent={
-        tools.length > 0 ? (
-          <div className="flex flex-col gap-2 p-2">
-            {tools.map((tool) => (
-              <Section key={tool.id} padding={1}>
-                <Content
-                  font="main-ui-action"
-                  title={tool.display_name}
-                  description={tool.description}
-                />
-              </Section>
-            ))}
-          </div>
-        ) : undefined
-      }
-    >
-      <ContentAction
-        font="main-ui-action"
-        icon={serverIcon}
-        title={server.name}
-        description={server.description}
-        padding={2}
-        rightChildren={
-          <Button
-            prominence="internal"
-            rightIcon={expanded ? SvgFold : SvgExpand}
-            onClick={() => setExpanded((prev) => !prev)}
-          >
-            {expanded
-              ? t("viewer.mcpCard.fold.label")
-              : t("viewer.mcpCard.expand.label")}
-          </Button>
-        }
-      />
-    </Card>
-  );
-}
-
-/**
- * Read-only OpenAPI tool card for the viewer modal.
- * Displays just the tool header (no expandable content).
- */
-function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
+/** Read-only card for one plugin of the agent. */
+function ViewerPluginCard({ name }: { name: string }) {
   return (
     <Card border="solid" rounding={4} padding={4}>
-      <Content
-        font="main-ui-action"
-        icon={SvgActions}
-        title={tool.display_name}
-        description={tool.description}
-      />
+      <Content font="main-ui-action" icon={SvgActions} title={name} />
     </Card>
   );
 }
@@ -223,41 +144,8 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
     (agent.hierarchy_nodes && agent.hierarchy_nodes.length > 0) ||
     (agent.user_file_ids && agent.user_file_ids.length > 0);
 
-  // Categorize tools into MCP, OpenAPI, and built-in
-  const mcpToolsByServerId = useMemo(() => {
-    const map = new Map<number, ToolSnapshot[]>();
-    agent.tools.forEach((tool) => {
-      if (tool.mcp_server_id != null) {
-        const existing = map.get(tool.mcp_server_id) || [];
-        existing.push(tool);
-        map.set(tool.mcp_server_id, existing);
-      }
-    });
-    return map;
-  }, [agent.tools]);
-
-  const openApiTools = useMemo(
-    () =>
-      agent.tools.filter((t) => !t.in_code_tool_id && t.mcp_server_id == null),
-    [agent.tools]
-  );
-
-  // Fetch MCP server metadata for display
-  const { mcpData } = useMcpServers();
-  const mcpServers = mcpData?.mcp_servers ?? [];
-
-  const mcpServersWithTools = useMemo(
-    () =>
-      mcpServers
-        .filter((server) => mcpToolsByServerId.has(server.id))
-        .map((server) => ({
-          server,
-          tools: mcpToolsByServerId.get(server.id)!,
-        })),
-    [mcpServers, mcpToolsByServerId]
-  );
-
-  const hasActions = mcpServersWithTools.length > 0 || openApiTools.length > 0;
+  const plugins = agent.plugins ?? [];
+  const hasActions = plugins.length > 0;
   const defaultModel = getDisplayName(agent, llmProviders ?? []);
 
   return (
@@ -348,15 +236,11 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
           <Collapsible title={t("viewer.actions.title")}>
             {hasActions ? (
               <Section gap={2} alignItems="start">
-                {mcpServersWithTools.map(({ server, tools }) => (
-                  <ViewerMCPServerCard
-                    key={server.id}
-                    server={server}
-                    tools={tools}
+                {plugins.map((plugin) => (
+                  <ViewerPluginCard
+                    key={plugin.plugin_id}
+                    name={plugin.plugin_name}
                   />
-                ))}
-                {openApiTools.map((tool) => (
-                  <ViewerOpenApiToolCard key={tool.id} tool={tool} />
                 ))}
               </Section>
             ) : (
