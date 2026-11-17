@@ -9,7 +9,7 @@ const DELETE_ACTION = "delete_report";
 function openApiSpec(title: string): Record<string, unknown> {
   return {
     openapi: "3.0.0",
-    info: { title, version: "1.0.0" },
+    info: { title, description: `${title} API`, version: "1.0.0" },
     servers: [{ url: "https://api.example.com" }],
     paths: {
       "/reports": {
