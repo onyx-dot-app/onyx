@@ -152,6 +152,8 @@ dev = [
     "matplotlib==3.10.8",
     "ty==0.0.63",
     "openapi-generator-cli==7.17.0",
+    # deployment/tests and tools/helm import yaml when CI installs only this group.
+    "pyyaml==6.0.3",
     "pytest-alembic==0.12.1",
     "pytest-asyncio==1.4.0",
     "pytest-dotenv==0.5.2",
@@ -189,7 +191,8 @@ ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
 
 # The hook runner for .pre-commit-config.yaml. Keep the same version in
-# prek-version of the j178/prek-action steps and in .devcontainer/Dockerfile.
+# prek-version of the j178/prek-action steps, in .devcontainer/Dockerfile and
+# in cve-alerts.yml.
 prek = ["prek==0.5.10"]
 
 # Enterprise Edition features
