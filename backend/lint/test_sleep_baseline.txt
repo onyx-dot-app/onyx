@@ -178,7 +178,6 @@
 7 web/tests/e2e/agents/user_file_attachment.spec.ts
 2 web/tests/e2e/auth/password_managements.spec.ts
 1 web/tests/e2e/auth/pat_management.spec.ts
-7 web/tests/e2e/chat/chat-search-command-menu.spec.ts
 3 web/tests/e2e/chat/current_agent.spec.ts
 7 web/tests/e2e/chat/input_bar_behaviors.spec.ts
 4 web/tests/e2e/connectors/federated_slack.spec.ts
