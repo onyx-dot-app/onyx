@@ -490,6 +490,58 @@ test("adds an app from a preset with its organization credentials", async () => 
   );
 });
 
+test("asks for the preset again after the kind is chosen again", async () => {
+  const fetchMock = mockList({
+    "/api/admin/integrations/presets": [
+      {
+        id: "github",
+        name: "GitHub",
+        auth_methods: ["oauth2"],
+        required_org_credential_fields: [],
+        setup_instructions: null,
+      },
+    ],
+    "POST /api/admin/integrations": makeDetail({ id: 12 }),
+  });
+  const user = await openAdd("preset");
+  await user.click(
+    await screen.findByRole("combobox", { name: copy.add.preset.placeholder })
+  );
+  await user.click(await screen.findByRole("option", { name: "GitHub" }));
+  await user.click(screen.getByRole("button", { name: copy.add.back }));
+  await user.click(screen.getByRole("button", { name: copy.shape.preset }));
+  await user.click(screen.getByRole("button", { name: copy.add.submit }));
+
+  expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(
+    false
+  );
+});
+
+test("offers only no sign-in for a preset with no sign-in method", async () => {
+  mockList({
+    "/api/admin/integrations/presets": [
+      {
+        id: "public",
+        name: "Public data",
+        auth_methods: [null],
+        required_org_credential_fields: [],
+        setup_instructions: null,
+      },
+    ],
+  });
+  const user = await openAdd("preset");
+  await user.click(
+    await screen.findByRole("combobox", { name: copy.add.preset.placeholder })
+  );
+  await user.click(await screen.findByRole("option", { name: "Public data" }));
+  await user.click(
+    screen.getByRole("combobox", { name: copy.signIn.mode.title })
+  );
+  expect(
+    (await screen.findAllByRole("option")).map((option) => option.textContent)
+  ).toEqual([copy.signIn.mode.none]);
+});
+
 test("adds a custom app with URL patterns", async () => {
   const fetchMock = mockList({
     "POST /api/admin/integrations": makeDetail({ id: 13 }),

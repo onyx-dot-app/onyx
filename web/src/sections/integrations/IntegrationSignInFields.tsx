@@ -38,6 +38,7 @@ export default function IntegrationSignInFields({
   disabled,
 }: IntegrationSignInFieldsProps) {
   const providerModes = PROVIDER_MODES[shape];
+  const authModes: readonly AuthMode[] = methods.length ? AUTH_MODES : ["none"];
   const t = useTranslations("admin.integrations.signIn");
   const errors = showErrors ? signInErrors(draft) : [];
   const variant = disabled ? "disabled" : "primary";
@@ -70,12 +71,12 @@ export default function IntegrationSignInFields({
           placeholder={t("mode.title")}
           value={draft.authMode}
           disabled={disabled}
-          options={AUTH_MODES.map((mode) => ({
+          options={authModes.map((mode) => ({
             value: mode,
             title: t(`mode.${mode}`),
           }))}
           onValueChange={(value) => {
-            const mode = AUTH_MODES.find((option) => option === value);
+            const mode = authModes.find((option) => option === value);
             if (!mode) return;
             update({
               authMode: mode,
