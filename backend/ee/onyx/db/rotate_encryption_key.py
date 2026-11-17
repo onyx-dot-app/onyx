@@ -384,16 +384,20 @@ def rotate_sandbox_daemon_keys(
 
 
 def _present_columns(db_session: Session, schema_name: str) -> set[tuple[str, str]]:
+    """Every column of every table in the schema. Read from pg_catalog, which
+    lists a table whatever the role's privileges: information_schema hides
+    tables the role cannot use, and those must fail the run, not be skipped."""
     rows = db_session.execute(
         text(
-            "SELECT table_name, column_name FROM information_schema.columns "
-            "WHERE table_schema = :schema"
+            "SELECT c.relname, a.attname FROM pg_catalog.pg_attribute a "
+            "JOIN pg_catalog.pg_class c ON c.oid = a.attrelid "
+            "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = :schema AND c.relkind IN ('r', 'p') "
+            "AND a.attnum > 0 AND NOT a.attisdropped"
         ),
         {"schema": schema_name},
     )
-    present = {(row[0], row[1]) for row in rows}
-    db_session.rollback()
-    return present
+    return {(row[0], row[1]) for row in rows}
 
 
 def rotate_schema(

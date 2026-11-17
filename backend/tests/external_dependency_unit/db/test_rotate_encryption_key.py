@@ -23,9 +23,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import SecretStr
 from scripts.reencrypt_secrets import main as reencrypt_main
-from sqlalchemy import LargeBinary, Table, bindparam, select
+from sqlalchemy import LargeBinary, Table, bindparam, select, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, CreateTable, DropSchema, DropTable
 
@@ -459,6 +460,37 @@ class TestPartialSchemas:
         with session_on(schema) as db_session:
             raw = raw_credential(db_session, credential_id)
         assert raw is not None and is_current_ciphertext(NEW, raw)
+
+    def test_a_table_the_role_cannot_read_fails_instead_of_being_skipped(
+        self, schema: str
+    ) -> None:
+        """A missing privilege must not look like a missing table."""
+        role = f"rotation_test_{uuid.uuid4().hex[:8]}"
+        engine = get_engine_for_shard(get_default_shard_name())
+        with engine.begin() as connection:
+            connection.execute(text(f'CREATE ROLE "{role}"'))
+            connection.execute(text(f'GRANT USAGE ON SCHEMA "{schema}" TO "{role}"'))
+            connection.execute(
+                text(f'GRANT SELECT ON "{schema}".credential TO "{role}"')
+            )
+        try:
+            with session_on(schema) as db_session:
+                insert_provider(db_session, encrypt_with_keyring(OLD, "sk-1"))
+                db_session.execute(text(f'SET LOCAL ROLE "{role}"'))
+                with pytest.raises(ProgrammingError, match="permission denied"):
+                    rotate_schema(
+                        db_session,
+                        schema,
+                        NEW,
+                        SCRATCH_COLUMNS,
+                        RotationMode.VERIFY,
+                        None,
+                    )
+                db_session.rollback()
+        finally:
+            with engine.begin() as connection:
+                connection.execute(text(f'DROP OWNED BY "{role}"'))
+                connection.execute(text(f'DROP ROLE "{role}"'))
 
     def test_an_empty_schema_completes_every_mode(self) -> None:
         engine = get_engine_for_shard(get_default_shard_name())
