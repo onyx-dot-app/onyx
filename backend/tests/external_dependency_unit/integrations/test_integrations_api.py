@@ -8,6 +8,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from httpx import ConnectError, HTTPStatusError, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -744,6 +745,83 @@ def test_refresh_of_an_mcp_server_stores_discovered_tools(
             integration.id, admin, db_session
         )
     assert [action.key for action in refreshed.actions] == ["new"]
+
+
+def _unauthorized(status: int) -> HTTPStatusError:
+    request = Request("POST", "https://mcp.example.com/mcp")
+    return HTTPStatusError(
+        "refused", request=request, response=Response(status, request=request)
+    )
+
+
+@pytest.mark.parametrize(
+    ("connect", "failure", "status", "detail"),
+    [
+        (False, None, 400, "Connect {name} first to load its actions."),
+        (
+            True,
+            _unauthorized(401),
+            400,
+            "{name} refused the credential. Reconnect it and try again.",
+        ),
+        (
+            True,
+            _unauthorized(403),
+            400,
+            "{name} refused the credential. Reconnect it and try again.",
+        ),
+        (True, ConnectError("refused"), 502, "Could not reach {name}."),
+    ],
+)
+def test_refresh_of_an_individual_mcp_server_uses_the_admin_connection(
+    db_session: Session,
+    admin: User,
+    created: Created,
+    connect: bool,
+    failure: Exception | None,
+    status: int,
+    detail: str,
+) -> None:
+    name = f"mcp-{uuid4().hex[:8]}"
+    with patch(
+        "onyx.integrations.kinds.mcp_server.discover_mcp_tools",
+        side_effect=AssertionError("Create does not discover"),
+    ):
+        integration = admin_api.create_integration(
+            IntegrationCreate(
+                name=name,
+                auth_mode=IntegrationAuthMode.INDIVIDUAL,
+                auth_method=IntegrationAuthMethod.API_KEY,
+                header_template={"Authorization": "Bearer {api_key}"},
+                config=McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
+            ),
+            admin,
+            db_session,
+        )
+    created.add(integration.id)
+    if connect:
+        api.save_member_connection(
+            integration.id,
+            ConnectionFieldsRequest(fields={"api_key": "admin-key"}),
+            admin,
+            db_session,
+        )
+
+    with (
+        patch(
+            "onyx.integrations.kinds.mcp_server.discover_mcp_tools",
+            side_effect=failure,
+        ) as discover,
+        pytest.raises(OnyxError) as error,
+    ):
+        admin_api.refresh_integration_actions(integration.id, admin, db_session)
+
+    assert error.value.status_code == status
+    assert error.value.detail == detail.format(name=name)
+    if connect:
+        assert discover.call_args.args[1] == {"Authorization": "Bearer admin-key"}
+    else:
+        discover.assert_not_called()
 
 
 # Member

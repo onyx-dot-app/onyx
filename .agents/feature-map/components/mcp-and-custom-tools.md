@@ -468,7 +468,10 @@ it.
    `backend/onyx/integrations/kinds/mcp_server.py:fetch_mcp_actions`) or a
    create of a public server. OpenAPI tools need no refresh. The refresh saves
    the declared `outputSchema` and `annotations.readOnlyHint`, which sets the
-   default policy of the action.
+   default policy of the action. The refresh uses the organization connection
+   of a shared server and the acting admin's own connection of an individual
+   server. No usable connection, or a 401 or 403 from the server, gives a 400.
+   Other failures give a 502.
 6. `sync-matches-by-name` **Sync matches actions by key.**
    `db/integration.py:replace_integration_actions__no_commit` treats a tool
    that the remote server renames as a new action, and the policy rows and
