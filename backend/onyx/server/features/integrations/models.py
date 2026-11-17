@@ -59,6 +59,8 @@ class IntegrationActionView(BaseModel):
     default_policy: EffectivePolicy
     admin_policy: EffectivePolicy | None
     effective_admin_policy: EffectivePolicy
+    # Craft asks before each call, whatever the policy is, unless Blocked.
+    always_asks: bool
 
 
 class MemberAction(IntegrationActionView):

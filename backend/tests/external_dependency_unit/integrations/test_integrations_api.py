@@ -54,6 +54,7 @@ from onyx.db.plugin import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.integrations.connection_models import (
     ConnectionSecret,
     IntegrationOAuthCallbackResult,
@@ -333,6 +334,30 @@ def test_create_custom_app(db_session: Session, admin: User, created: Created) -
     assert detail.shape is IntegrationShape.CUSTOM
     assert [ref.scope for ref in detail.plugins] == ["personal"]
     assert detail.config.shape is IntegrationShape.CUSTOM
+
+
+@pytest.mark.usefixtures("craft_available")
+def test_action_views_flag_the_custom_app_action_that_always_asks(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    custom = admin_api.create_integration(_custom_create(), admin, db_session)
+    created.add(custom.id)
+    openapi = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(openapi.id)
+
+    custom_actions = admin_api.get_integration_actions(
+        custom.id, admin, db_session
+    ).actions
+    assert [(a.key, a.always_asks) for a in custom_actions] == [
+        (WHOLE_DOMAIN_ACTION_TYPE, True)
+    ]
+    member_actions = api.get_integration_for_member(custom.id, admin, db_session)
+    assert [a.always_asks for a in member_actions.actions] == [True]
+    openapi_actions = admin_api.get_integration_actions(
+        openapi.id, admin, db_session
+    ).actions
+    assert openapi_actions
+    assert not any(a.always_asks for a in openapi_actions)
 
 
 def test_without_craft_no_external_app_and_no_presets(
@@ -1119,9 +1144,7 @@ def test_persona_plugins_and_legacy_tool_ids(
     ]
 
     # None keeps the links.
-    _persona(
-        db_session, admin, tool_ids=None, plugin_links=None, persona_id=persona_id
-    )
+    _persona(db_session, admin, tool_ids=None, plugin_links=None, persona_id=persona_id)
     assert len(list_persona_plugin_links(db_session, persona_id)) == 1
 
     # Old tool ids with no MCP tool remove the link of the old MCP tool.
