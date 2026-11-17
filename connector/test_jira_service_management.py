@@ -134,6 +134,8 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
 
         self.assertEqual(len(tickets), 3)
         self.assertEqual(mock_get.call_count, 3)
+        offsets = [c.kwargs["params"]["startAt"] for c in mock_get.call_args_list]
+        self.assertEqual(offsets, [0, 2, 3])
 
 if __name__ == "__main__":
     unittest.main()
