@@ -137,6 +137,34 @@ test("an organization-wide action manager changes the install setting", async ()
   );
 });
 
+test("locks the install setting while its change saves", async () => {
+  mockFetch({
+    "/api/admin/integrations": [
+      makeIntegration({ id: 1, name: "Linear", plugins: [workspace] }),
+    ],
+    "PUT /api/admin/plugins/plugin-work/installation-policy": () =>
+      new Promise(() => {}),
+  });
+  const user = setupUser();
+  render(<AdminPluginsPage />);
+  const select = await screen.findByRole("combobox", {
+    name: "Install setting of Workspace tools",
+  });
+  await user.click(select);
+  await user.click(
+    await screen.findByRole("option", {
+      name: new RegExp(policyCopy.DEFAULT.label),
+    })
+  );
+  await waitFor(() =>
+    expect(
+      screen.getByRole("combobox", {
+        name: "Install setting of Workspace tools",
+      })
+    ).toBeDisabled()
+  );
+});
+
 test("a scoped manager sees the install setting but cannot change it", async () => {
   mockGlobalHolder = false;
   mockFetch({
