@@ -1147,7 +1147,8 @@ class OpencodeServeClient:
                     e,
                 )
                 time.sleep(delay)
-        assert last_exc is not None
+        if last_exc is None:
+            raise RuntimeError("Cold-pod retry loop ended without an error.")
         raise last_exc
 
     def _request(

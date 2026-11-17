@@ -68,7 +68,7 @@ class ImageGenerationProvider(abc.ABC):
         Given credentials, builds an instance of the provider.
         Should NOT be called directly - use build_from_credentials instead.
 
-        AssertionError if credentials are invalid.
+        Raises ImageProviderCredentialsError if credentials are invalid.
         """
         raise NotImplementedError("build_from_credentials not implemented")
 

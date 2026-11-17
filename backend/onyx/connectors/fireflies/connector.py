@@ -207,7 +207,8 @@ class FirefliesConnector(PollConnector, LoadConnector):
                 )
                 time.sleep(_FIREFLIES_RETRY_BASE_DELAY_SECONDS * (2**attempt))
 
-            assert response is not None  # loop always runs at least once
+            if response is None:
+                raise RuntimeError("Fireflies retry loop made no request.")
             response.raise_for_status()
 
             if response.status_code == 204:

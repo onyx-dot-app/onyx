@@ -124,9 +124,8 @@ class _PermSyncFallbackCheck(CapabilityCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        assert context.connector is not None, (
-            "The runner guarantees an instance of a connector."
-        )
+        if context.connector is None:
+            raise RuntimeError("The runner did not provide a connector instance.")
         context.connector.validate_perm_sync()
 
 
@@ -154,13 +153,14 @@ def get_perm_sync_capability_checks(source: DocumentSource) -> list[CapabilityCh
             _EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE.get(source, [])
         ),
     }
-    assert (
-        not any(registered_by_capability.values())
-        or get_source_operations_class(source) is not None
-    ), (
-        f"{source.value} registers named perm-sync checks but no "
-        "source-operations gateway; migrate the connector first."
-    )
+    if (
+        any(registered_by_capability.values())
+        and get_source_operations_class(source) is None
+    ):
+        raise RuntimeError(
+            f"{source.value} registers named perm-sync checks but no "
+            "source-operations gateway; migrate the connector first."
+        )
     checks: list[CapabilityCheck] = []
     for capability, registered in registered_by_capability.items():
         if registered:

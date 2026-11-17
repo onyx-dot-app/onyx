@@ -117,12 +117,14 @@ def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
 
     Raises:
         ValueError: A two-step link is not sound (``validate_step_links``).
+        RuntimeError: A source registers named checks but no gateway.
     """
     checks = list(_INDEXING_CHECKS_BY_SOURCE.get(source, []))
-    assert not checks or get_source_operations_class(source) is not None, (
-        f"{source.value} registers named INDEXING checks but no "
-        "source-operations gateway; migrate the connector first."
-    )
+    if checks and get_source_operations_class(source) is None:
+        raise RuntimeError(
+            f"{source.value} registers named INDEXING checks but no "
+            "source-operations gateway; migrate the connector first."
+        )
     if not checks and source_has_settings_probe(source):
         checks.append(_ConnectorSettingsFallbackCheck(source))
     get_perm_sync_checks = fetch_ee_implementation_or_noop(

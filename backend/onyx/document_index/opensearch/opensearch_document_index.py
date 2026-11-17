@@ -567,7 +567,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         deleted_doc_ids: set[str] = set()
 
         def _flush_chunks(group: list[DocMetadataAwareIndexChunk]) -> None:
-            assert len(group) > 0, "group is empty"
+            if not group:
+                raise RuntimeError("Bug: group is empty.")
 
             # An error midway can leave a doc with its chunks deleted and not
             # all of its new chunks indexed.
@@ -1405,9 +1406,8 @@ class OpenSearchIndexPair(DocumentIndex):
     def verify_and_create_index_if_necessary(self, embedding_dim: int) -> None:
         self._primary.verify_and_create_index_if_necessary(embedding_dim)
         if self._secondary is not None:
-            assert self._secondary_embedding_dim is not None, (
-                "Bug: Secondary embedding dimension is not set."
-            )
+            if self._secondary_embedding_dim is None:
+                raise RuntimeError("Bug: Secondary embedding dimension is not set.")
             self._secondary.verify_and_create_index_if_necessary(
                 self._secondary_embedding_dim
             )
