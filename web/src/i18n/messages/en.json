@@ -13256,7 +13256,9 @@
           "tool": "Tool",
           "webSearch": "Web Search",
           "terminal": "Terminal",
-          "applyPatch": "Apply Patch"
+          "applyPatch": "Apply Patch",
+          "editFile": "Edit File",
+          "writeFile": "Write File"
         },
         "webSearch": {
           "searching": {
@@ -13296,7 +13298,7 @@
               "status": "{count, plural, one {Edited # file} other {Edited # files}}"
             },
             "failed": {
-              "status": "Patch failed"
+              "status": "Edit failed"
             },
             "title": "Patch"
           },

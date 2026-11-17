@@ -11,6 +11,8 @@ SANDBOX_CODE_MODE_NOTE = " Call them from `execute_code` programs."
 EXEC_COMMAND_USE = "run commands with {name}"
 WRITE_STDIN_USE = "use {name} for commands that are still running"
 APPLY_PATCH_USE = "edit files with {name}"
+EDIT_USE = "edit files with {name}"
+WRITE_USE = "create or overwrite files with {name}"
 
 EXEC_COMMAND_DESCRIPTION = (
     "Runs a command with bash, returning output or a session ID for ongoing "
@@ -69,4 +71,24 @@ Example:
      return None
 *** Delete File: obsolete.txt
 *** End Patch
+"""
+
+# The shape of Claude Code's Edit tool, which Claude models are trained on.
+EDIT_DESCRIPTION = """Performs exact string replacements in files.
+
+Usage:
+- `old_string` must match the file exactly, including indentation. View the file with exec_command first, and copy the text without any line numbers.
+- The edit will FAIL if `old_string` is not unique in the file. Either provide a larger string with more surrounding context to make it unique or use `replace_all` to change every instance of `old_string`.
+- Use `replace_all` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.
+- An empty `old_string` creates a new file with `new_string` as its contents. It fails when the file exists and is not empty.
+- Paths are relative to the chat session directory, or absolute inside it. To change files elsewhere, use exec_command.
+"""
+
+# The shape of Claude Code's Write tool.
+WRITE_DESCRIPTION = """Writes a file, overwriting the existing file if there is one at the path.
+
+Usage:
+- Prefer edit for changes to an existing file: it sends only the changed text.
+- Missing parent directories are created. An existing file keeps its permissions.
+- Paths are relative to the chat session directory, or absolute inside it. To change files elsewhere, use exec_command.
 """

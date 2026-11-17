@@ -95,7 +95,6 @@ from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
-    SANDBOX_TOOLS,
     SandboxTool,
     sandbox_guidance,
 )
@@ -282,6 +281,7 @@ def calculate_reserved_tokens(
     persona_system_prompt: str,
     base_system_prompt: str,
     token_counter: Callable[[str], int],
+    sandbox_tools: Sequence[type[SandboxTool]],
     files: list[FileDescriptor] | None = None,
     user_memory_context: UserMemoryContext | None = None,
 ) -> int:
@@ -296,6 +296,7 @@ def calculate_reserved_tokens(
         db_session: Database session
         persona_system_prompt: Custom agent system prompt (can be empty string)
         token_counter: Function that counts tokens in text
+        sandbox_tools: The turn's sandbox tools (sandbox_tools_for_model), if any
         files: List of file descriptors from the chat message (optional)
         user_memory_context: User memory context (optional)
 
@@ -310,6 +311,7 @@ def calculate_reserved_tokens(
         tools=None,
         should_cite_documents=True,
         include_all_guidance=True,
+        all_guidance_sandbox_tools=sandbox_tools,
     )
 
     custom_agent_prompt = persona_system_prompt or ""
@@ -465,12 +467,15 @@ def build_system_prompt(
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
     include_user_info: bool = True,
+    all_guidance_sandbox_tools: Sequence[type[SandboxTool]] = (),
 ) -> str:
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
 
     `tools` are the offered tools. Tools that run inside their calls, such as code
     mode functions, get their guidance too, and the prompt names them as functions.
+    With include_all_guidance, the prompt names every guided tool for a token
+    estimate, and `all_guidance_sandbox_tools` are the sandbox tools it names.
 
     With include_user_info=False the per-user block is left out so the result is
     byte-identical across users; emit it separately via build_user_information_prompt.
@@ -509,7 +514,7 @@ def build_system_prompt(
             CODE_MODE_GUIDANCE,
         ]
         sandbox_section = sandbox_guidance(
-            SANDBOX_TOOLS, lambda name: name, code_mode=True
+            all_guidance_sandbox_tools, str, code_mode=True
         )
         if sandbox_section is not None:
             tool_sections.append(sandbox_section)

@@ -285,7 +285,8 @@ The `ToolInvocation` argument provides everything the tool needs:
   drains, calls `on_drained` and becomes idle only after that work.
 
 Tool calls run in parallel by default. `SEQUENTIAL` orders calls to the same registered tool name
-within one step. The next call waits for the previous call and its completion hook to finish.
+within one step. Sequential tools with the same `sequence_group`, such as the sandbox file tools,
+share one order. The next call waits for the previous call and its completion hook to finish.
 A call waiting for input or children also holds that place in order. Other tool names can run concurrently.
 This setting does not coordinate separate runs or API requests.
 Results are accepted in whatever order tools finish, but model history keeps the original call order.

@@ -66,6 +66,7 @@ from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_token_counter, get_search_selection_llm
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_capabilities import model_identity_names
 from onyx.server.query_and_chat.models import (
     ModelResponseSlot,
     response_id_info,
@@ -88,7 +89,9 @@ from onyx.tools.tool_constructor import (
     SearchToolConfig,
     construct_tools,
 )
-from onyx.tools.tool_implementations.sandbox.sandbox_tools import SANDBOX_TOOLS
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    sandbox_tools_for_model,
+)
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
@@ -1047,7 +1050,14 @@ def create_chat_agent(
             else None
         )
         if turn is not None:
-            tools += [tool(turn) for tool in SANDBOX_TOOLS]
+            tools += [
+                tool(turn)
+                for tool in sandbox_tools_for_model(
+                    model_identity_names(
+                        llm.config.model_name, llm.config.deployment_name
+                    )
+                )
+            ]
         return build_chat_agent(
             AgentState(messages=list(setup.messages), checkpoint=setup.checkpoint),
             agent_id,

@@ -13256,7 +13256,9 @@
           "tool": "Herramienta",
           "webSearch": "Búsqueda web",
           "terminal": "Terminal",
-          "applyPatch": "Aplicar parche"
+          "applyPatch": "Aplicar parche",
+          "editFile": "Editar archivo",
+          "writeFile": "Escribir archivo"
         },
         "webSearch": {
           "searching": {
@@ -13296,7 +13298,7 @@
               "status": "{count, plural, one {# archivo editado} other {# archivos editados}}"
             },
             "failed": {
-              "status": "El parche falló"
+              "status": "La edición falló"
             },
             "title": "Parche"
           },

@@ -65,6 +65,7 @@ from onyx.llm.model_capabilities import (
     find_model_obj,
     gemini_lowest_thinking_level_is_low,
     get_model_map,
+    is_claude_model,
     is_true_openai_model,
     model_is_reasoning_model,
     model_prefers_auto_tool_choice,
@@ -1031,7 +1032,7 @@ class LitellmLLM(LLM):
         model_identity_names = resolve_model_identity_names(
             self.config.model_name, self.config.deployment_name
         )
-        is_claude_model = any("claude" in name.lower() for name in model_identity_names)
+        is_claude = is_claude_model(model_identity_names)
         uses_adaptive_thinking = any(
             anthropic_uses_adaptive_thinking(name) for name in model_identity_names
         )
@@ -1239,7 +1240,7 @@ class LitellmLLM(LLM):
                 openai_style_reasoning["summary"] = "auto"
 
             if reasoning_style is ReasoningParamStyle.OPENAI:
-                if is_claude_model:
+                if is_claude:
                     # Only a gateway routes Claude here, and it still translates
                     # to Anthropic, so the signed-thinking-block constraint
                     # described below applies to these requests too.
@@ -1358,10 +1359,7 @@ class LitellmLLM(LLM):
         if structured_response_format:
             optional_kwargs["response_format"] = structured_response_format
 
-        if (
-            not (is_claude_model or is_ollama or is_mistral)
-            or is_openai_compatible_proxy
-        ):
+        if not (is_claude or is_ollama or is_mistral) or is_openai_compatible_proxy:
             # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
             # However, this param breaks Anthropic and Mistral models,
             # so it must be conditionally included unless the request is
@@ -1434,7 +1432,7 @@ class LitellmLLM(LLM):
             messages = _prompt_to_dicts(prompt)
 
             if not (
-                is_claude_model
+                is_claude
                 and (
                     self._model_provider in _THINKING_BLOCK_PROVIDERS
                     or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES

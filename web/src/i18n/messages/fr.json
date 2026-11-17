@@ -13256,7 +13256,9 @@
           "tool": "Outil",
           "webSearch": "Recherche web",
           "terminal": "Terminal",
-          "applyPatch": "Appliquer le correctif"
+          "applyPatch": "Appliquer le correctif",
+          "editFile": "Modifier le fichier",
+          "writeFile": "Écrire le fichier"
         },
         "webSearch": {
           "searching": {
@@ -13296,7 +13298,7 @@
               "status": "{count, plural, one {# fichier modifié} other {# fichiers modifiés}}"
             },
             "failed": {
-              "status": "Échec du correctif"
+              "status": "Échec de la modification"
             },
             "title": "Correctif"
           },
