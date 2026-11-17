@@ -1,6 +1,6 @@
 {{- /* Metrics port must match the default in metrics_server.py (_DEFAULT_PORTS).
        Do NOT use PROMETHEUS_METRICS_PORT env var in Helm — each worker needs its own port. */ -}}
-{{- if and .Values.vectorDB.enabled .Values.celery_worker_docconversion.enabled (or .Values.celery_worker_docconversion.autoscaling.enabled (gt (int .Values.celery_worker_docconversion.replicaCount) 0)) }}
+{{- if eq (include "onyx.docconversion.deployed" .) "true" }}
 apiVersion: v1
 kind: Service
 metadata:

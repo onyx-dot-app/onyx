@@ -94,7 +94,7 @@ spec:
                 name: {{ . }}
             {{- end }}
           env:
-            {{- if .Values.celery_worker_docconversion.enabled }}
+            {{- if eq (include "onyx.docconversion.deployed" .) "true" }}
             # Docfetching lists, and the docconversion worker fetches.
             - name: ENABLE_CONVERSION_STAGE
               value: "true"
