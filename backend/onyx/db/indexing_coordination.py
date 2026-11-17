@@ -282,6 +282,26 @@ class IndexingCoordination:
         return list(range(sent_before, sent_after))
 
     @staticmethod
+    def record_stub_batch_conversion_failed(
+        db_session: Session, index_attempt_id: int
+    ) -> tuple[int, int]:
+        """Counts one stub batch whose conversion failed as a whole. Returns
+        the failed count and the converted count."""
+        row = db_session.execute(
+            update(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .values(
+                total_failures_batch_level=IndexAttempt.total_failures_batch_level + 1
+            )
+            .returning(
+                IndexAttempt.total_failures_batch_level,
+                IndexAttempt.stub_batches_converted,
+            )
+        ).one()
+        db_session.commit()
+        return row[0], row[1]
+
+    @staticmethod
     def record_stub_batch_converted(db_session: Session, index_attempt_id: int) -> int:
         """Counts one sent stub batch as converted and returns the new count.
         The count never passes `sent`, so a redelivered task cannot open the
