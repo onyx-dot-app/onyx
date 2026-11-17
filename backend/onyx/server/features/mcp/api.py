@@ -1,41 +1,96 @@
 """MCP helper routes for the integration add form: the probe and the OAuth
 discovery, and the MCP servers that Craft runs. Integrations are managed
-through ``/admin/integrations``."""
+through ``/admin/integrations``.
+
+The admin server routes are the public API of the release before
+integrations, which the Terraform provider calls. They read and write the
+integration of the server and return the id of its ``mcp_server`` row."""
+
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
+from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
-from onyx.db.enums import IntegrationKind, Permission
+from onyx.db.enums import (
+    IntegrationAuthMethod,
+    IntegrationAuthMode,
+    IntegrationKind,
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPTransport,
+    Permission,
+    SkillSharePermission,
+)
 from onyx.db.integration import (
+    count_integration_actions,
     get_integration_by_kind_row,
     get_mcp_server_for_integration,
     list_integration_plugin_rows,
 )
+from onyx.db.integration_connection import get_connection
 from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.models import Integration, User
+from onyx.db.models import MCPServer as DbMCPServer
+from onyx.db.plugin import (
+    add_author_share__no_commit,
+    unpublish_integration_plugin__no_commit,
+)
+from onyx.db.plugin_access import load_plugin_access
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.connection_models import ConnectionState
-from onyx.integrations.connections import integration_status
+from onyx.integrations.connection_models import ConnectionState, read_connection_secret
+from onyx.integrations.connections import (
+    connect_with_fields__no_commit,
+    header_field_keys,
+    integration_status,
+)
 from onyx.integrations.craft import list_runnable_integrations
-from onyx.integrations.service import get_manageable_integration
+from onyx.integrations.plugin_settings import (
+    publish_plugin_for_user__no_commit,
+    share_plugin__no_commit,
+)
+from onyx.integrations.service import (
+    craft_users_of_integration,
+    create_integration__no_commit,
+    delete_integration_for_user__no_commit,
+    get_manageable_integration,
+    get_viewable_integration,
+    masked_header_template,
+    reload_craft_sessions,
+    update_integration__no_commit,
+)
+from onyx.server.features.integrations.models import (
+    IntegrationCreate,
+    IntegrationUpdate,
+    McpServerConfigInput,
+    PluginAccessUpdate,
+    PluginGroupShare,
+    PluginUserShare,
+)
 from onyx.server.features.mcp.client_metadata import (
     router as client_metadata_router,
 )
 from onyx.server.features.mcp.models import (
+    MCPAuthTemplate,
     MCPConnectionStatus,
     MCPOAuthDiscoveryRequest,
     MCPOAuthDiscoveryResponse,
     MCPServer,
+    MCPServerAdminView,
+    MCPServerCreateResponse,
+    MCPServerDeleteResponse,
+    MCPServerSimpleUpdateRequest,
     MCPServersResponse,
     MCPSetupProbeRequest,
+    MCPToolCreateRequest,
 )
 from onyx.server.features.mcp.oauth_discovery import discover_oauth_capabilities
 from onyx.server.features.mcp.setup_probe import stream_mcp_probe
+from onyx.utils.encryption import is_masked_credential
 
 router = APIRouter(prefix="/mcp")
 router.include_router(client_metadata_router)
@@ -132,3 +187,388 @@ def get_craft_mcp_servers_for_user(
             )
         )
     return MCPServersResponse(mcp_servers=servers)
+
+
+_SHARED_TOKEN_TEMPLATE = {"Authorization": "Bearer {api_key}"}
+_manager = require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+
+
+def _alias_integration(server_id: int, db_session: Session) -> Integration:
+    integration = get_integration_by_kind_row(
+        Integration.mcp_server_id, server_id, db_session
+    )
+    if integration is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
+    return integration
+
+
+def _server_row(integration: Integration, db_session: Session) -> DbMCPServer:
+    server = get_mcp_server_for_integration(integration.id, db_session)
+    if server is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
+    return server
+
+
+def _legacy_auth(
+    integration: Integration,
+) -> tuple[MCPAuthenticationType, MCPAuthenticationPerformer]:
+    performer = (
+        MCPAuthenticationPerformer.ADMIN
+        if integration.auth_mode is not IntegrationAuthMode.INDIVIDUAL
+        else MCPAuthenticationPerformer.PER_USER
+    )
+    if integration.auth_mode is IntegrationAuthMode.NONE:
+        return MCPAuthenticationType.NONE, performer
+    if integration.auth_method is IntegrationAuthMethod.ONYX_LOGIN:
+        return MCPAuthenticationType.PT_OAUTH, performer
+    if integration.auth_method is IntegrationAuthMethod.OAUTH2:
+        return MCPAuthenticationType.OAUTH, performer
+    return MCPAuthenticationType.API_TOKEN, performer
+
+
+def _sign_in(
+    request: MCPToolCreateRequest, stored_template: dict[str, str] | None
+) -> tuple[IntegrationAuthMode, IntegrationAuthMethod | None, dict[str, str] | None]:
+    """The integration sign-in of the request. An omitted template keeps the
+    stored one; a shared token defaults to a Bearer header."""
+    if request.auth_type is MCPAuthenticationType.NONE:
+        return IntegrationAuthMode.NONE, None, None
+    if request.auth_type is not MCPAuthenticationType.API_TOKEN:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Set up OAuth sign-in of an MCP server on its integration "
+            "(/admin/integrations).",
+        )
+    shared = request.auth_performer is MCPAuthenticationPerformer.ADMIN
+    template = (
+        dict(request.auth_template.headers)
+        if request.auth_template is not None
+        else stored_template
+    )
+    if template is None:
+        if not shared:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "auth_template is required when auth_performer is 'per_user'",
+            )
+        template = dict(_SHARED_TOKEN_TEMPLATE)
+    return (
+        IntegrationAuthMode.SHARED if shared else IntegrationAuthMode.INDIVIDUAL,
+        IntegrationAuthMethod.API_KEY,
+        template,
+    )
+
+
+def _save_credentials(
+    integration: Integration,
+    request: MCPToolCreateRequest,
+    user: User,
+    *,
+    is_new: bool,
+    db_session: Session,
+) -> None:
+    """A shared token and the admin values go to the organization connection
+    of a shared server. The admin values of a per-user server go to the
+    admin's own connection. A value that is not sent as changed stays."""
+    if integration.auth_mode is IntegrationAuthMode.NONE:
+        return
+    owner = user if integration.auth_mode is IntegrationAuthMode.INDIVIDUAL else None
+    connection = get_connection(
+        db_session, integration.id, owner.id if owner is not None else None
+    )
+    stored = read_connection_secret(connection).fields if connection else {}
+    values = {
+        **stored,
+        **{
+            key: value
+            for key, value in (request.admin_credentials or {}).items()
+            if request.admin_credentials_changed.get(key) or key not in stored
+        },
+    }
+    token = request.api_token
+    if (
+        owner is None
+        and token
+        and (request.api_token_changed or not is_masked_credential(token))
+    ):
+        values["api_key"] = token
+    fields = {
+        key: values[key]
+        for key in header_field_keys(integration.header_template or {})
+        if key in values
+    }
+    if not is_new and fields == stored:
+        return
+    if not fields and owner is not None:
+        return
+    connect_with_fields__no_commit(integration, owner, fields, db_session)
+
+
+def _apply_access(
+    user: User,
+    integration: Integration,
+    *,
+    is_public: bool | None,
+    group_ids: list[int] | None,
+    user_ids: list[UUID] | None,
+    db_session: Session,
+) -> set[UUID]:
+    """Public is the Organization library. Private is the owner's "My
+    uploads" with the users and groups as shares. Returns the affected
+    users."""
+    if is_public is None and group_ids is None and user_ids is None:
+        return set()
+    affected: set[UUID] = set()
+    for row in list_integration_plugin_rows([integration.id], db_session)[
+        integration.id
+    ]:
+        if row.in_organization_library if is_public is None else is_public:
+            if not row.in_organization_library:
+                affected |= share_plugin__no_commit(
+                    user,
+                    row.plugin_id,
+                    PluginAccessUpdate(user_shares=[], group_shares=[]),
+                    db_session,
+                )
+                affected |= publish_plugin_for_user__no_commit(
+                    user, row.plugin_id, db_session
+                )
+            continue
+        if row.in_organization_library:
+            affected |= unpublish_integration_plugin__no_commit(
+                row.plugin_id, db_session
+            )
+        users, groups = _shares(row.plugin_id, user, db_session)
+        users = list(user_ids) if user_ids is not None else users
+        groups = list(group_ids) if group_ids is not None else groups
+        affected |= share_plugin__no_commit(
+            user,
+            row.plugin_id,
+            PluginAccessUpdate(
+                user_shares=[
+                    PluginUserShare(
+                        user_id=user_id, permission=SkillSharePermission.VIEWER
+                    )
+                    for user_id in users
+                ],
+                group_shares=[
+                    PluginGroupShare(
+                        group_id=group_id, permission=SkillSharePermission.VIEWER
+                    )
+                    for group_id in groups
+                ],
+            ),
+            db_session,
+        )
+        if row.author_user_id is not None and row.author_user_id in users:
+            add_author_share__no_commit(row.plugin_id, row.author_user_id, db_session)
+    return affected
+
+
+def _shares(
+    plugin_id: UUID, user: User, db_session: Session
+) -> tuple[list[UUID], list[int]]:
+    access = load_plugin_access([plugin_id], user.id, db_session).get(plugin_id)
+    if access is None:
+        return [], []
+    return (
+        [share.user_id for share in access.user_shares],
+        [share.group_id for share in access.group_shares],
+    )
+
+
+def _admin_view(
+    user: User, integration: Integration, db_session: Session
+) -> MCPServerAdminView:
+    server = _server_row(integration, db_session)
+    rows = list_integration_plugin_rows([integration.id], db_session)[integration.id]
+    is_public = any(row.in_organization_library for row in rows)
+    users: list[UUID] = []
+    groups: list[int] = []
+    if not is_public:
+        for row in rows:
+            row_users, row_groups = _shares(row.plugin_id, user, db_session)
+            users += [user_id for user_id in row_users if user_id not in users]
+            groups += [group_id for group_id in row_groups if group_id not in groups]
+    auth_type, auth_performer = _legacy_auth(integration)
+    template = masked_header_template(integration.header_template)
+    return MCPServerAdminView(
+        id=server.id,
+        name=integration.name,
+        description=integration.description,
+        server_url=server.server_url,
+        owner=server.owner,
+        transport=server.transport,
+        auth_type=auth_type,
+        auth_performer=auth_performer,
+        status=server.status,
+        is_public=is_public,
+        groups=groups,
+        users=users,
+        available_in_craft=server.available_in_craft,
+        plugin_ids=[row.plugin_id for row in rows],
+        last_refreshed_at=server.last_refreshed_at,
+        tool_count=count_integration_actions(integration.id, db_session),
+        auth_template=(
+            MCPAuthTemplate(
+                headers=template,
+                required_fields=sorted(header_field_keys(template)),
+            )
+            if template
+            else None
+        ),
+    )
+
+
+@admin_router.post("/servers/create")
+def upsert_mcp_server_alias(
+    request: MCPToolCreateRequest,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(_manager),
+) -> MCPServerCreateResponse:
+    """Create an MCP server, or update the one of ``existing_server_id``."""
+    if request.existing_server_id is None:
+        stored_template = None
+        integration = None
+    else:
+        integration = get_manageable_integration(
+            user,
+            _alias_integration(request.existing_server_id, db_session).id,
+            db_session,
+        )
+        stored_template = integration.header_template
+    auth_mode, auth_method, header_template = _sign_in(request, stored_template)
+    if integration is None:
+        integration = create_integration__no_commit(
+            user,
+            IntegrationCreate(
+                for_organization=(
+                    request.is_public
+                    if request.is_public is not None
+                    else has_global_permission(user, Permission.MANAGE_ACTIONS)
+                ),
+                name=request.name,
+                description=request.description,
+                auth_mode=auth_mode,
+                auth_method=auth_method,
+                header_template=header_template,
+                config=McpServerConfigInput(
+                    server_url=request.server_url,
+                    transport=request.transport or MCPTransport.STREAMABLE_HTTP,
+                ),
+            ),
+            db_session,
+        )
+        is_new = True
+    else:
+        server = _server_row(integration, db_session)
+        update = IntegrationUpdate(
+            name=request.name,
+            auth_mode=auth_mode,
+            auth_method=auth_method,
+            header_template=header_template,
+            config=McpServerConfigInput(
+                server_url=request.server_url,
+                transport=request.transport
+                or server.transport
+                or MCPTransport.STREAMABLE_HTTP,
+            ),
+        )
+        if request.description is not None:
+            update.description = request.description
+        integration = update_integration__no_commit(
+            user, integration.id, update, db_session
+        )
+        is_new = False
+    _save_credentials(integration, request, user, is_new=is_new, db_session=db_session)
+    affected = _apply_access(
+        user,
+        integration,
+        is_public=None if is_new else request.is_public,
+        group_ids=request.groups,
+        user_ids=request.users,
+        db_session=db_session,
+    )
+    db_session.commit()
+    reload_craft_sessions(
+        affected | craft_users_of_integration(integration.id, db_session), db_session
+    )
+    server = _server_row(integration, db_session)
+    auth_type, auth_performer = _legacy_auth(integration)
+    return MCPServerCreateResponse(
+        server_id=server.id,
+        server_name=integration.name,
+        server_url=server.server_url,
+        auth_type=auth_type.value,
+        auth_performer=auth_performer.value,
+        no_user_authentication_required=integration.auth_mode
+        is not IntegrationAuthMode.INDIVIDUAL,
+    )
+
+
+@admin_router.get("/servers/{server_id}")
+def get_mcp_server_alias(
+    server_id: int,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(_manager),
+) -> MCPServerAdminView:
+    integration = get_viewable_integration(
+        user, _alias_integration(server_id, db_session).id, db_session
+    )
+    return _admin_view(user, integration, db_session)
+
+
+@admin_router.patch("/server/{server_id}")
+def update_mcp_server_alias(
+    server_id: int,
+    request: MCPServerSimpleUpdateRequest,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(_manager),
+) -> MCPServerAdminView:
+    integration = get_manageable_integration(
+        user, _alias_integration(server_id, db_session).id, db_session
+    )
+    server = _server_row(integration, db_session)
+    update = IntegrationUpdate()
+    if request.name is not None:
+        update.name = request.name
+    if request.description is not None:
+        update.description = request.description
+    if request.server_url is not None:
+        update.config = McpServerConfigInput(
+            server_url=request.server_url,
+            transport=server.transport or MCPTransport.STREAMABLE_HTTP,
+        )
+    integration = update_integration__no_commit(
+        user, integration.id, update, db_session
+    )
+    if request.available_in_craft is not None:
+        # A kind setting that the alias returns; the runtime does not read it.
+        server.available_in_craft = request.available_in_craft
+    affected = _apply_access(
+        user,
+        integration,
+        is_public=request.is_public,
+        group_ids=request.groups,
+        user_ids=request.users,
+        db_session=db_session,
+    )
+    db_session.commit()
+    reload_craft_sessions(
+        affected | craft_users_of_integration(integration.id, db_session), db_session
+    )
+    return _admin_view(user, integration, db_session)
+
+
+@admin_router.delete("/server/{server_id}")
+def delete_mcp_server_alias(
+    server_id: int,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(_manager),
+) -> MCPServerDeleteResponse:
+    integration_id = _alias_integration(server_id, db_session).id
+    affected = craft_users_of_integration(integration_id, db_session)
+    delete_integration_for_user__no_commit(user, integration_id, db_session)
+    db_session.commit()
+    reload_craft_sessions(affected, db_session)
+    return MCPServerDeleteResponse(success=True)

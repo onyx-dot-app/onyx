@@ -896,6 +896,59 @@ def publish_plugin__no_commit(
     db_session.flush()
 
 
+def unpublish_integration_plugin__no_commit(
+    plugin_id: UUID, db_session: Session
+) -> set[UUID]:
+    """Move an Organization library plugin that holds only integrations back
+    to its author's "My uploads". Only the MCP server alias of the public API
+    does this. A used name takes the next free name. Returns the affected
+    users."""
+    plugin = lock_plugin(plugin_id, db_session)
+    if plugin is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
+    if plugin.author_user_id is None or not plugin_holds_only_integrations(
+        plugin_id, db_session
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only a plugin with an owner that holds only integrations can be "
+            "made private.",
+        )
+    before = affected_user_ids_for_plugins([plugin_id], db_session)
+    _move_plugin__no_commit(
+        plugin=plugin,
+        marketplace_id=get_or_create_user_uploads__no_commit(
+            plugin.author_user_id, db_session
+        ),
+        on_name_clash="rename",
+        clash_detail=lambda name: f"The owner already has a plugin named '{name}'.",
+        db_session=db_session,
+    )
+    plugin.published_version_id = None
+    plugin.pending_version_id = None
+    plugin.installation_policy = None
+    db_session.flush()
+    return before | affected_user_ids_for_plugins([plugin_id], db_session)
+
+
+def add_author_share__no_commit(
+    plugin_id: UUID, author_user_id: UUID, db_session: Session
+) -> None:
+    """Share the plugin with its own author. The MCP server alias of the
+    public API keeps the owner in the access list it returns this way. A
+    later share change through the plugin routes removes the row."""
+    db_session.execute(
+        insert(Plugin__User)
+        .values(
+            plugin_id=plugin_id,
+            user_id=author_user_id,
+            permission=SkillSharePermission.VIEWER,
+        )
+        .on_conflict_do_nothing()
+    )
+    db_session.flush()
+
+
 def publish_or_request_review__no_commit(
     plugin: Plugin,
     skill: Skill | None,

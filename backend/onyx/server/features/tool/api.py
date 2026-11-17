@@ -259,7 +259,7 @@ def _openapi_tool_or_404(tool_id: int, db_session: Session) -> tuple[Tool, Integ
     return pair
 
 
-def _snapshot_for(
+def openapi_tool_snapshot(
     tool: Tool, integration: Integration, db_session: Session
 ) -> ToolSnapshot:
     plugins = list_integration_plugin_rows([integration.id], db_session)[integration.id]
@@ -297,7 +297,7 @@ def create_custom_tool(
     tool = get_openapi_tool_for_integration(integration.id, db_session)
     if tool is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "The OpenAPI schema is missing.")
-    return _snapshot_for(tool, integration, db_session)
+    return openapi_tool_snapshot(tool, integration, db_session)
 
 
 @admin_router.put("/custom/{tool_id}", tags=PUBLIC_API_TAGS)
@@ -351,7 +351,7 @@ def update_custom_tool(
         _save_organization_fields(integration, organization_fields, db_session)
     _set_default_chat(integration, tool_data.default_chat_enabled, db_session)
     db_session.commit()
-    return _snapshot_for(tool, integration, db_session)
+    return openapi_tool_snapshot(tool, integration, db_session)
 
 
 @admin_router.delete("/custom/{tool_id}", tags=PUBLIC_API_TAGS)
