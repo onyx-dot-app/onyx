@@ -18,7 +18,10 @@ import {
   makeMemberAction,
   makeMemberIntegration,
 } from "@/sections/plugins/__tests__/memberIntegrationFixtures";
-import type { MemberIntegration } from "@/lib/integrations/types";
+import type {
+  MemberIntegration,
+  PluginAccessView,
+} from "@/lib/integrations/types";
 
 const copy = messages.plugins.member;
 const mockLoadPage = jest.fn();
@@ -416,6 +419,13 @@ test("a required plugin cannot be turned off", async () => {
 });
 
 test("the owner shares a private integration plugin", async () => {
+  let stored: PluginAccessView = {
+    plugin_id: LINEAR_PLUGIN_ID,
+    user_shares: [
+      { user_id: "u2", email: "ana@example.com", permission: "VIEWER" },
+    ],
+    group_shares: [],
+  };
   const fetchMock = overview(
     [
       withPlugin({
@@ -425,17 +435,14 @@ test("the owner shares a private integration plugin", async () => {
       }),
     ],
     {
-      [`/api/plugins/${LINEAR_PLUGIN_ID}/access`]: {
-        plugin_id: LINEAR_PLUGIN_ID,
-        user_shares: [
-          { user_id: "u2", email: "ana@example.com", permission: "VIEWER" },
-        ],
-        group_shares: [],
-      },
-      [`PUT /api/plugins/${LINEAR_PLUGIN_ID}/access`]: {
-        plugin_id: LINEAR_PLUGIN_ID,
-        user_shares: [],
-        group_shares: [],
+      [`/api/plugins/${LINEAR_PLUGIN_ID}/access`]: () => stored,
+      [`PUT /api/plugins/${LINEAR_PLUGIN_ID}/access`]: () => {
+        stored = {
+          plugin_id: LINEAR_PLUGIN_ID,
+          user_shares: [],
+          group_shares: [],
+        };
+        return stored;
       },
       "/api/users/shareable": [],
       "/api/settings": {},

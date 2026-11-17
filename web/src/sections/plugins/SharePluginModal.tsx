@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { BasicModalFooter, Button, MessageCard, Modal } from "@opal/components";
@@ -20,17 +20,23 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
+import {
+  applyStagedShares,
+  type ShareDraftState,
+} from "@/sections/modals/shareDraftState";
 
-interface UserShare {
-  user_id: string;
-  email: string;
-  permission: PluginSharePermission;
-}
+type PluginShareDraft = ShareDraftState<PluginSharePermission>;
 
-interface GroupShare {
-  group_id: number;
-  group_name: string;
-  permission: PluginSharePermission;
+function draftFrom(view: PluginAccessView): PluginShareDraft {
+  return {
+    userShares: view.user_shares.map((share) => ({
+      user: { id: share.user_id, email: share.email },
+      permission: share.permission,
+    })),
+    groupShares: view.group_shares,
+    isPublic: false,
+    publicPermission: "VIEWER",
+  };
 }
 
 export interface SharePluginModalProps {
@@ -57,8 +63,7 @@ export default function SharePluginModal({
   );
   const { data: users } = useShareableUsers({ includeApiKeys: false });
   const { data: groups } = useShareableGroups();
-  const [userShares, setUserShares] = useState<UserShare[] | null>(null);
-  const [groupShares, setGroupShares] = useState<GroupShare[] | null>(null);
+  const [edited, setEdited] = useState<PluginShareDraft | null>(null);
   const [stagedUsers, setStagedUsers] = useState<MinimalUserSnapshot[]>([]);
   const [stagedGroups, setStagedGroups] = useState<MinimalUserGroupSnapshot[]>(
     []
@@ -67,35 +72,32 @@ export default function SharePluginModal({
     useState<PluginSharePermission>("VIEWER");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!data || userShares !== null) return;
-    setUserShares(data.user_shares);
-    setGroupShares(data.group_shares);
-  }, [data, userShares]);
+  const draft = edited ?? (data ? draftFrom(data) : null);
+  const currentUsers = draft?.userShares ?? [];
+  const currentGroups = draft?.groupShares ?? [];
 
-  const currentUsers = userShares ?? [];
-  const currentGroups = groupShares ?? [];
+  function edit(change: (current: PluginShareDraft) => PluginShareDraft) {
+    if (draft) setEdited(change(draft));
+  }
 
   async function save() {
-    const nextUsers = new Map(
-      currentUsers.map((share) => [share.user_id, share.permission])
+    if (!draft) return;
+    const next = applyStagedShares(
+      draft,
+      stagedUsers,
+      stagedGroups,
+      stagedPermission
     );
-    for (const user of stagedUsers) nextUsers.set(user.id, stagedPermission);
-    const nextGroups = new Map(
-      currentGroups.map((share) => [share.group_id, share.permission])
-    );
-    for (const group of stagedGroups)
-      nextGroups.set(group.id, stagedPermission);
     setBusy(true);
     try {
       const saved = await updatePluginAccess(pluginId, {
-        user_shares: [...nextUsers].map(([user_id, permission]) => ({
-          user_id,
-          permission,
+        user_shares: next.userShares.map((share) => ({
+          user_id: share.user.id,
+          permission: share.permission,
         })),
-        group_shares: [...nextGroups].map(([group_id, permission]) => ({
-          group_id,
-          permission,
+        group_shares: next.groupShares.map((share) => ({
+          group_id: share.group_id,
+          permission: share.permission,
         })),
       });
       // A reopened dialog starts from the cache, so it must hold the saved list.
@@ -127,9 +129,9 @@ export default function SharePluginModal({
           )}
           {error && <MessageCard variant="error" title={t("loadFailed")} />}
           <AddPeoplePicker
-            disabled={busy || userShares === null}
+            disabled={busy || draft === null}
             existingUserIds={
-              new Set(currentUsers.map((share) => share.user_id))
+              new Set(currentUsers.map((share) => share.user.id))
             }
             existingGroupIds={
               new Set(currentGroups.map((share) => share.group_id))
@@ -161,23 +163,24 @@ export default function SharePluginModal({
             )}
             {currentUsers.map((share) => (
               <ShareAccessRow
-                key={share.user_id}
+                key={share.user.id}
                 icon={SvgUser}
-                avatarInitial={share.email.charAt(0).toUpperCase()}
-                title={share.email}
+                avatarInitial={share.user.email.charAt(0).toUpperCase()}
+                title={share.user.email}
                 rightChildren={
                   <Button
                     size="sm"
                     prominence="tertiary"
                     icon={SvgX}
                     disabled={busy}
-                    aria-label={t("remove.label", { name: share.email })}
+                    aria-label={t("remove.label", { name: share.user.email })}
                     onClick={() =>
-                      setUserShares(
-                        currentUsers.filter(
-                          (other) => other.user_id !== share.user_id
-                        )
-                      )
+                      edit((current) => ({
+                        ...current,
+                        userShares: current.userShares.filter(
+                          (other) => other.user.id !== share.user.id
+                        ),
+                      }))
                     }
                   />
                 }
@@ -197,11 +200,12 @@ export default function SharePluginModal({
                     disabled={busy}
                     aria-label={t("remove.label", { name: share.group_name })}
                     onClick={() =>
-                      setGroupShares(
-                        currentGroups.filter(
+                      edit((current) => ({
+                        ...current,
+                        groupShares: current.groupShares.filter(
                           (other) => other.group_id !== share.group_id
-                        )
-                      )
+                        ),
+                      }))
                     }
                   />
                 }
@@ -218,7 +222,7 @@ export default function SharePluginModal({
             }
             submit={
               <Button
-                disabled={busy || userShares === null}
+                disabled={busy || draft === null}
                 onClick={() => void save()}
               >
                 {busy ? t("submit.pendingLabel") : t("submit.label")}
