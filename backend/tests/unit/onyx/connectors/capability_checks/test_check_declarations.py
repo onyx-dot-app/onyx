@@ -252,6 +252,9 @@ _SIGN_IN_CHECK_IDS: dict[DocumentSource, frozenset[str]] = {
     DocumentSource.GOOGLE_DRIVE: frozenset({"google_drive_auth"}),
     DocumentSource.HUBSPOT: frozenset({"hubspot_token"}),
     DocumentSource.JIRA: frozenset({"jira_auth", "jira_scoped_token_auth"}),
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: frozenset(
+        {"jira_service_management_auth"}
+    ),
     DocumentSource.LINEAR: frozenset({"linear_token"}),
     DocumentSource.NOTION: frozenset({"notion_auth"}),
     DocumentSource.ONEDRIVE: frozenset({"onedrive_token_auth"}),

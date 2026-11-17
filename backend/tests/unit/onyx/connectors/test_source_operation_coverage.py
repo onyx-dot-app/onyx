@@ -57,6 +57,12 @@ from onyx.connectors.google_drive.models import (
 )
 from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
 from onyx.connectors.jira.models import JiraGroupPage
+from onyx.connectors.jira_service_management.models import (
+    JsmComment,
+    JsmRequest,
+    JsmServiceDesk,
+    JsmSla,
+)
 from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaFetchResult,
     DriveDeltaPage,
@@ -357,6 +363,19 @@ def _configure_youtrack_spy(spy: MagicMock) -> None:
     )
 
 
+def _configure_jsm_spy(spy: MagicMock) -> None:
+    """One service desk serving the configured project, with one ticket, so
+    the checks reach the service desk listing, the ticket search, and the
+    request, comment, and SLA reads."""
+    spy.list_service_desks.return_value = [
+        JsmServiceDesk(id="1", project_key="SD", project_name="Service Desk")
+    ]
+    spy.search_issue_keys.return_value = ["SD-1"]
+    spy.get_request.return_value = JsmRequest(issue_key="SD-1")
+    spy.get_request_comments.return_value = [JsmComment(id="1", public=True)]
+    spy.get_request_slas.return_value = [JsmSla(name="TTR", breached=False)]
+
+
 def _configure_azure_datalake_spy(spy: MagicMock) -> None:
     """A container holding one file, so the read check reaches the download,
     in an account that Azure Resource Manager lists with one role assignment,
@@ -453,6 +472,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     ],
     DocumentSource.GOOGLE_DRIVE: [_configure_google_drive_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: [_configure_jsm_spy],
     DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],
     DocumentSource.GITHUB: [_configure_github_spy, _configure_github_user_owner_spy],
     DocumentSource.SLACK: [_configure_slack_spy],
@@ -481,6 +501,9 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
     ],
     DocumentSource.YOUTRACK: [
         {"base_url": "https://example.youtrack.cloud", "projects": ["ABC"]}
+    ],
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: [
+        {"jira_base_url": "https://example.atlassian.net", "project_key": "SD"}
     ],
     # The root page check reads a page only when a root page is set.
     DocumentSource.NOTION: [{"root_page_id": "17ab3186873d418fb899c3f6a43f68de"}],
