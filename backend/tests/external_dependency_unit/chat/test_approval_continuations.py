@@ -67,7 +67,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    AWAITING_APPROVAL,
+    AWAITING_USER,
     OverallStop,
     Packet,
     ToolApprovalRequest,
@@ -252,7 +252,7 @@ def _park_both(
     turns: ApprovalTurns, monkeypatch: pytest.MonkeyPatch, script: Script
 ) -> list[ApprovalRequest]:
     stops = turns.start(monkeypatch, script, models=_TWO_MODELS)
-    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL] * 2
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER] * 2
     requests = turns.requests()
     assert len(requests) == 2
     return requests
@@ -318,7 +318,7 @@ def test_a_continuation_that_fails_to_start_for_a_moment_retries_alone(
     until then."""
     script = Script(turns.tool)
     stops = turns.start(monkeypatch, script)
-    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER]
     [request] = turns.requests()
     failures = [OperationalError("SELECT 1", {}, Exception("connection lost"))]
     prepare = process_message.prepare_chat_turn
@@ -370,7 +370,7 @@ def test_a_continuation_keeps_the_tools_and_search_filters_of_its_request(
         internal_search_filters=BaseFilters(source_type=[DocumentSource.WEB]),
     )
     stops = turns.start(monkeypatch, Script(turns.tool), selection=selection)
-    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER]
     [request] = turns.requests()
 
     turns.decide(request)
@@ -392,7 +392,7 @@ def test_a_parked_response_saves_no_request_context(
     continues after the decision."""
     context = f"open tab {uuid4().hex}"
     stops = turns.start(monkeypatch, Script(turns.tool), additional_context=context)
-    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER]
     [request] = turns.requests()
     with get_session_with_current_tenant() as session:
         checkpoint = session.get_one(ChatResponseCheckpoint, request.chat_message_id)
@@ -415,7 +415,7 @@ def test_the_latest_page_reaches_back_to_a_waiting_reply(
     so a client that loads only that page shows its waiting card. An older
     page keeps its own limit."""
     stops = turns.start(monkeypatch, Script(turns.tool))
-    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER]
     [request] = turns.requests()
     with get_session_with_current_tenant() as session:
         last = session.get_one(ChatMessage, request.chat_message_id)

@@ -800,7 +800,7 @@ function interruptRequests() {
 test.each([
   ["a live single-model stop", { turn_index: 0, model_index: 0 }, undefined],
   ["a replayed stop", { turn_index: 0 }, undefined],
-  ["an approval wait's stop", { turn_index: 0 }, StopReason.AWAITING_APPROVAL],
+  ["an approval wait's stop", { turn_index: 0 }, StopReason.AWAITING_USER],
 ])("Stop is withdrawn once %s arrives", async (_case, placement, reason) => {
   const user = setupUser();
   const store = useChatSessionStore.getState();

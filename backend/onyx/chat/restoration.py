@@ -34,8 +34,10 @@ from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import AssistantMessage, Message, ToolResult
+from onyx.tools.constants import QUESTION_TOOL_NAMES
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.interface import Tool
+from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.tools.tool_implementations.subagents.subagent_tools import ListAgentsTool
 
@@ -103,6 +105,7 @@ def restore_chat_agent(
     user_identity: LLMUserIdentity | None,
     subagent_factory: Callable[[int], Callable[[], Agent]],
     on_root_drained: Callable[[], None] | None = None,
+    question_tool: Callable[[str, int], QuestionTool] | None = None,
 ) -> Agent:
     """Build feature code and resources; Agent.resume restores saved execution state.
 
@@ -110,7 +113,9 @@ def restore_chat_agent(
     agent tools when it had them: every subagent, and a root whose saved step
     declared them. Its children are one level deeper (`subagent_factory`); an
     agent at `MAX_CHILD_DEPTH` cannot start agents. A root chat agent gets
-    `on_root_drained` as its on_drained hook.
+    `on_root_drained` as its on_drained hook, and the question tool
+    (`question_tool(name, response_id)`) when its saved step declared it,
+    under the declared name.
     """
     snapshot = checkpoint.run_state
     if snapshot.progress is None:
@@ -121,6 +126,14 @@ def restore_chat_agent(
     context = checkpoint.agent_state
     token_counter = get_llm_token_counter(llm)
     if isinstance(state, ChatFeatureState):
+        question_name = next(
+            (
+                tool.name
+                for tool in snapshot.progress.tools
+                if tool.name in QUESTION_TOOL_NAMES
+            ),
+            None,
+        )
         return ChatAgent(
             is_subagent=snapshot.parent_run_id is not None,
             on_drained=on_root_drained if snapshot.parent_run_id is None else None,
@@ -150,6 +163,9 @@ def restore_chat_agent(
             or any(tool.name == ListAgentsTool.name for tool in snapshot.progress.tools)
             else None,
             can_spawn=depth < MAX_CHILD_DEPTH,
+            question_tool=question_tool(question_name, int(snapshot.run_id))
+            if question_tool is not None and question_name is not None
+            else None,
         )
     if isinstance(state, ResearchFeatureState):
         return ResearchAgent(

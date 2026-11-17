@@ -66,7 +66,7 @@
   until the resolution packet arrives; from then on the reply's timeline
   shows it next to its tool call (`AgentMessage`, `orderApprovalsByTurn`), and
   a reload replays it there. While the turn waits, its stream ends with
-  `stop(awaiting_approval)` and the chat goes idle. That stop pauses the
+  `stop(awaiting_user)` and the chat goes idle. That stop pauses the
   answer: `processPackets` does not count it. No stop changes a card: the
   server sends `tool_approval_resolved` for every request that it ends, live
   and in replay, with `cancelled` when there is no decision. A card's status
@@ -96,7 +96,7 @@
   shows a waiting card was resolved elsewhere, so the refresh reads it again
   from the page that ends at it (`fetchSettledChatSession` with
   `beforeMessageId`). A stream that ends
-  with `stop(awaiting_approval)` settles like any other: the status reads
+  with `stop(awaiting_user)` settles like any other: the status reads
   follow a new `current_stream` until the session is idle. After a 409 or
   404 decision, the card reads the status once and follows `current_stream`
   while the server processes it. A subagent's requests and resolutions

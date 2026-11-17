@@ -133,8 +133,8 @@ sub-turn indexes.
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamingType` holds every type string, and `PacketObj` is the union that `Packet.obj` is
 validated against. Families are control (`stop`, `section_end`, `error`,
 `chat_heartbeat`), reasoning, answer (`message_start`, `message_delta`),
-citations, one family per tool, tool approval, deep research, and the coding
-agent with the bash tool. `tool_approval_request` and `tool_approval_resolved`
+citations, one family per tool, tool approval, tool question, deep research,
+and the coding agent with the bash tool. `tool_approval_request` and `tool_approval_resolved`
 come from the runtime's `input_required` and `input_ended` events
 (`chat/renderer.py:ToolRenderer.consume`) at the call's placement, only for
 requests that `ToolApprovals` opened (`PendingToolInput.approval`). A
@@ -149,7 +149,7 @@ approval of a tool that the policy now disables, or a request deleted with its
 tool's server), or `cancelled` for a call that stopped waiting without a
 decision. Requests have no deadline. A turn whose run has nothing left but
 approval waits ends its stream with its requests, then
-`stop(awaiting_approval)` (`chat/presentation.py:overall_stop` maps
+`stop(awaiting_user)` (`chat/presentation.py:overall_stop` maps
 `SUSPENDED`); after the decisions the response continues in a new stream,
 under a new stream ID, that clients follow from cursor 0: it replays the saved
 response, then the decisions and the rest live
@@ -170,7 +170,7 @@ their current stream. A decision while the response's first turn still runs,
 or while a multi-model sibling still runs, gets null. A response that parks stays in its stream's `response_ids`,
 which keep the turn's model order for the stream's life, so a packet's
 `model_index` indexes them; the parked response's packets end with its
-`stop(awaiting_approval)`. A run that ends publishes
+`stop(awaiting_user)`. A run that ends publishes
 `input_ended` for every request still open, direct or nested, before
 `agent_end` (`agents/runtime.py:Run._withdraw_pending_inputs`), with the answer
 that the run recorded, such as a Stop's rejection. Every request that the
@@ -183,10 +183,15 @@ program's call, the events carry `nested_call`, and
 the packet sits on the `execute_code` or `wait_code` card with the nested
 call's name and arguments. Every client gets them
 ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]); web, mobile,
-the widget and the CLI mirror them. Saved-session replay sends the request,
+the widget and the CLI mirror them. A question call
+(`chat/renderer.py:QuestionToolRenderer`) sends only `tool_question_request`
+(its questions) and `tool_question_resolved` (`answered` with `answered_via`
+`card` and `answers`, or `message` and the typed `message`; else
+`cancelled`) at its placement, through the same wait, Stop, stop reason and
+replay rules. Saved-session replay sends the request,
 and its resolution once decided, for each request of an ended or suspended
 response from its `approval_request` row, and a suspended response ends with
-`stop(awaiting_approval)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
+`stop(awaiting_user)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
 `chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
 model writes it, with the tool name as `tool_type`; the configured reasoning
 tool streams as reasoning packets instead
@@ -313,7 +318,7 @@ its background task end ([[#pure-asgi-middleware]]).
    can continue from the last cursor without a repeated packet. It reports a
    404 as `StreamUnavailableEvent`; only that stops the CLI from requesting
    the response again, and a clean end before the first cursor is retried.
-   After a `stop` with `stop_reason` `awaiting_approval`, `cli/cmd/ask.go`
+   After a `stop` with `stop_reason` `awaiting_user`, `cli/cmd/ask.go`
    and `cli/internal/tui/app.go` keep the approval cards and stop reading.
    They follow the stream that a decision response names in `continuation`
    from cursor 0. When it is `null`, or after another client's decision, and
@@ -552,8 +557,9 @@ its background task end ([[#pure-asgi-middleware]]).
      non-streaming API (`chat/process_message.py:gather_stream_full`) builds
      `ChatFullResponse` from the saved response snapshot, not from packets, so
      decide whether the snapshot needs the new data. It reads the approval
-     packets and the last `stop`: when that is `awaiting_approval`, the
-     unresolved requests become `pending_tool_approvals`.
+     packets and the last `stop`: when that is `awaiting_user`, the
+     unresolved requests become `pending_tool_approvals`, and the unresolved
+     questions `pending_tool_questions`.
   7. If a test mocks the stream, update `web/tests/e2e/utils/chatMock.ts`.
 - `cli-packet-type` **A packet type in the CLI.** Copy the search start event:
   list every place that knows it with `git grep -n SearchStartEvent -- cli`. A

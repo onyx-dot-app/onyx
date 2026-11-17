@@ -316,7 +316,7 @@ function handleStopPacket(state: ProcessorState, packet: Packet): void {
   // An approval wait pauses the response: it continues after the decisions.
   if (
     packet.obj.type !== PacketType.STOP ||
-    packet.obj.stop_reason === StopReason.AWAITING_APPROVAL ||
+    packet.obj.stop_reason === StopReason.AWAITING_USER ||
     state.stopPacketSeen
   ) {
     return;

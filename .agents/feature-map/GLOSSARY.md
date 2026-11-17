@@ -105,6 +105,8 @@ usage events sent to the Onyx fleet service ([[fleet-telemetry]]).
 - Chat: `ApprovalRequest` rows (`approval_request`) for paused MCP calls, with no
   deadline; the response is saved while they wait. "Approve for this chat" is
   scoped to a chat session. See [[mcp-and-custom-tools#chat-approval-durable-wait]].
+  The root agent's questions (`QuestionRequest`, "tool question") wait the
+  same way.
 
 **"Sandbox"** means four things.
 - Code mode's sandbox: Monty worker processes that run `execute_code`
@@ -207,7 +209,8 @@ mobile code checks for it. See [[streaming-protocol]].
 | Reserved message | An assistant `ChatMessage` row created with placeholder text before streaming starts. See [[chat-persistence]]. |
 | Incognito and record mode | `IncognitoRecordMode` is fixed on a session and decides what the database keeps. See [[chat-persistence]]. |
 | Child session | A `ChatSession` with `spawned_by_message_id` set. Research and coding child agents get one in a session that keeps content. See [[chat-persistence]]. |
-| Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`). Suspension on `ChildRunWait` and on chat tool approvals is live, and so are checkpoint handoff and resume: a run whose waits are all on people parks and resumes on any pod ([[mcp-and-custom-tools#chat-approval-durable-wait]]). See [[agent-runtime#wire-module]]. |
+| Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`). Suspension on `ChildRunWait`, on chat tool approvals and on tool questions is live, and so are checkpoint handoff and resume: a run whose waits are all on people parks and resumes on any pod ([[mcp-and-custom-tools#chat-approval-durable-wait]]). See [[agent-runtime#wire-module]]. |
+| Tool question | A question that the root chat agent's question tool asks the user (`QuestionRequest`, `question_request`), not the user's chat message, which code also calls a question. Its run waits like an approval. See [[tools-framework]]. |
 | `use_memories` vs `enable_memory_tool` | `use_memories` controls whether memories reach the prompt. `enable_memory_tool` controls whether the memory tool can write them. See [[chat-preferences]]. |
 | Decision model | A model that answers typed predicate, choice or score questions with probabilities, not through LiteLLM. See [[llm-providers]]. |
 | Passthrough (LLM gateway) | A native OpenAI Responses or Anthropic Messages forward that skips `LitellmLLM`. See [[llm-gateway]]. |

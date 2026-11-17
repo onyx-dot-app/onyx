@@ -721,7 +721,7 @@ test("a program call whose stream stopped for approval shows a waiting header an
     // The stream ends while the call waits; the response is not finished.
     {
       placement: { turn_index: 0 },
-      obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_USER },
     },
   ];
   const view = render(

@@ -5,7 +5,7 @@
 import { Packet, Message, SearchDocument } from "@/types/api-types";
 import { ChatMessage } from "@/types/widget-types";
 import {
-  AWAITING_APPROVAL_STOP_REASON,
+  AWAITING_USER_STOP_REASON,
   readOutcome,
 } from "@/services/approvals";
 
@@ -252,7 +252,7 @@ export function processPacket(
             isStreaming: false,
             awaitingApproval:
               obj.type === "stop" &&
-              obj.stop_reason === AWAITING_APPROVAL_STOP_REASON,
+              obj.stop_reason === AWAITING_USER_STOP_REASON,
           },
         };
       }

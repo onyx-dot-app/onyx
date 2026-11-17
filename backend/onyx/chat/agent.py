@@ -74,6 +74,7 @@ from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
+from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
@@ -122,9 +123,11 @@ class ChatAgent(Agent, RestorableFeature):
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
         on_drained: Callable[[], None] | None = None,
+        question_tool: QuestionTool | None = None,
     ) -> None:
         """`on_drained`: see Agent; a root agent's runs end per-run tool state
-        there (subagents share the root's tools and pass none)."""
+        there (subagents share the root's tools and pass none). Only a root
+        agent gets `question_tool`."""
         # The fixed system block for the agent's role: a subagent, or a root
         # that can start agents.
         self.agent_instructions = (
@@ -222,6 +225,8 @@ class ChatAgent(Agent, RestorableFeature):
                     ]
                 ),
             ]
+        if question_tool is not None and not is_subagent:
+            self.application_tools = [*self.application_tools, question_tool]
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools],
@@ -523,6 +528,7 @@ def build_chat_agent(
     is_subagent: bool = False,
     depth: int = 0,
     on_drained: Callable[[], None] | None = None,
+    question_tool: QuestionTool | None = None,
 ) -> ChatAgent:
     """Build a chat conversation independently of the current root's feature.
 
@@ -564,6 +570,7 @@ def build_chat_agent(
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
         on_drained=on_drained,
+        question_tool=question_tool,
     )
 
 

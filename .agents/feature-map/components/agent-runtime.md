@@ -185,10 +185,12 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 
 **Live paths.** In-process suspension is live: deep research and the coding
 agent suspend the parent on `ChildRunWait`, and it continues in the same
-process. Checkpoint transfer is live for chat tool approvals only: the runtime
-gates calls of `AgentTool.approval_required` through the coordinator's
-`ToolApprovals` (`chat/run_store.py:ChatRunStore.request_approval`), and any
-run whose waits are all on people hands off in one park pass of
+process. Checkpoint transfer is live for chat tool approvals and the root's
+questions: the runtime gates calls of `AgentTool.approval_required` through
+the coordinator's `ToolApprovals`
+(`chat/run_store.py:ChatRunStore.request_approval`), the question tool returns
+a `RESULT` request (`chat/tool_questions.py:open_tool_question`), and any run
+whose waits are all on people hands off in one park pass of
 `ChatRunStore.poll_control` after `ChatRunStore.may_park`, the root included;
 the root reports its park to its turn through the store's `on_root_parked`
 callback. A parent
@@ -200,8 +202,9 @@ the saved answers), the leaf first
 call waits in a saved `NestedInputWait`
 ([[mcp-and-custom-tools#program-call-waits-in-cell]]). No product code calls
 `Run.suspend`. Only a user Stop calls `Run.submit`:
-`ChatRunStore.reject_waiting_approvals` gives each live run that the Stop
-cancels its saved rejections, then cancels it, under the run's execution lock. `chat/run_store.py:ChatRunStore.restore_agent`
+`ChatRunStore.reject_waiting_inputs` gives each live run that the Stop
+cancels its saved rejections and question cancellations, then cancels it,
+under the run's execution lock. `chat/run_store.py:ChatRunStore.restore_agent`
 loads a saved child for a new run, and `chat/restoration.py:restore_subagent`
 rebuilds it with the current request's tools and settings. Product saves lock
 the response, check the checkpoint owner and delete any row at a terminal
@@ -210,7 +213,8 @@ To check again, run
 `git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
 and ignore thread-pool and job `submit` calls and the code mode `resume`
 calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
-(`resume`) and `chat/tool_approvals.py:open_tool_approval`.
+(`resume`), `chat/tool_approvals.py:open_tool_approval` and
+`chat/tool_questions.py:open_tool_question`.
 
 ---
 
@@ -228,8 +232,9 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
    from a product path as a side effect.** A new tool, hook or `ToolApprovals`
    that returns a `PendingToolInput`, or a caller of `Run.suspend`, `ChatRunStore.handoff` or
    `ChatRunStore.resume`, makes that path live without review of its storage, ownership and display.
-   Chat tool approvals are the one reviewed source of `PendingToolInput`; a
-   new source needs its own saved requests and resume trigger, as
+   Chat tool approvals and the root's question tool are the reviewed sources
+   of `PendingToolInput`; a new source needs its own saved requests and
+   resume trigger, as
    [[mcp-and-custom-tools#chat-approval-durable-wait]] has. Update the
    Live paths paragraph in the same change ([[#wire-module]]).
 3. `restored-tools-must-match` **A restored run needs the same tools and

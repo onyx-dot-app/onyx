@@ -255,6 +255,20 @@ Tool replies use concise text, and models see agent paths, never IDs. `send_mess
 `..` for the caller's parent (`tools/tool_implementations/subagents/subagent_tools.py:_find_agent`, over `discover_agents`). A path names one agent on the branch: `spawn_agent` refuses a name whose
 path any visible agent holds, finished agents included (`agents/agent_coordination.py:register_child`).
 
+**Question tool.** `tools/tool_implementations/question/question_tool.py:QuestionTool`
+asks the user 1-3 multiple-choice questions and waits for the answers. Only the
+root `ChatAgent` gets it (`question_tool`), after code mode wraps the configured
+tools, so it stays direct and subagents never get it. Its name is
+`ask_user_question` for Claude models and `request_user_input` for others
+(`tools/constants.py:QUESTION_TOOL_NAMES`); a restored root gets it under the
+name its saved step declared (`chat/restoration.py:restore_chat_agent`). Which
+turns offer it, and how its call parks and resumes, is
+[[mcp-and-custom-tools#chat-approval-needs-waiting-client]]. Its arguments are not
+strict: the nested question models are `$defs` references. The model reads a card
+answer as `{"answers": {"<id>": {"answers": ["<label>", "user_note: <text>"]}}}`,
+or the text that the user typed, after the query hook and with nothing added
+(`chat/tool_questions.py:question_answer`).
+
 **Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
 runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
 return `ChildRunWait`; the runtime calls `result_from_children` when the child
@@ -336,7 +350,9 @@ Their control functions, such as `think_tool`, `generate_report` and
    deltas go only to `run_python` and `execute_code`
    (`chat/renderer.py:MessageRenderer.consume`). Code mode calls render with
    `chat/renderer.py:CodeModeRenderer`, a `ToolRenderer` that
-   `tool_renderer` picks by tool name. A result that a run release hook sets
+   `tool_renderer` picks by tool name; question calls render only their card
+   (`chat/renderer.py:QuestionToolRenderer`: `tool_question_request` and
+   `tool_question_resolved`, then a section end). A result that a run release hook sets
    streams through `ToolRenderer.amend`. Only a code mode card renders what
    the amendment added (the cell's closing record), after the call's section
    end, live and on replay. The generic display adds nothing live; replay

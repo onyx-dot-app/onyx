@@ -138,7 +138,7 @@ uses `--approve` instead:
 
 If you set `--approve`, `ask` uses it on a terminal too. With `--json`, approval
 requests appear as `tool_approval_request` and `tool_approval_resolved` events.
-A `stop` event with `stop_reason` `awaiting_approval` marks where the response
+A `stop` event with `stop_reason` `awaiting_user` marks where the response
 waits for the answers; the events of its continuation follow. They do not
 repeat events that `ask` already printed.
 

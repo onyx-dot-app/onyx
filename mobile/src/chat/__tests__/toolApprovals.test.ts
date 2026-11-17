@@ -91,7 +91,7 @@ describe("toolApprovalStatus", () => {
         placement: { turn_index: 0 },
         obj: {
           type: PacketType.STOP,
-          stop_reason: StopReason.AWAITING_APPROVAL,
+          stop_reason: StopReason.AWAITING_USER,
         },
       },
     ],

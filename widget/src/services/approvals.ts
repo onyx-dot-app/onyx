@@ -11,8 +11,8 @@ import type { ChatMessage } from "@/types/widget-types";
 /** `error_code` of the 409 a send gets while the chat waits for a decision. */
 export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
 
-/** `stop_reason` of a stream that stops while the response waits for decisions. */
-export const AWAITING_APPROVAL_STOP_REASON = "awaiting_approval";
+/** `stop_reason` of a stream that stops while the response waits for the user. */
+export const AWAITING_USER_STOP_REASON = "awaiting_user";
 
 export type ApprovalDecision = "approve_once" | "approve_session" | "reject";
 

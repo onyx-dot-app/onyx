@@ -21,6 +21,8 @@ from onyx.llm.override_models import LLMOverride
 from onyx.server.features.action_policies.models import DecisionBody
 from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
 from onyx.tools.models import ChatToolSelection
+from onyx.tools.tool_implementations.question.models import ToolQuestionAnswer
+from onyx.utils.postgres_sanitization import sanitize_string
 
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
 
@@ -332,6 +334,36 @@ class ApprovalDecisionResponse(BaseModel):
     # The stream that continues the request's response, when the decision
     # started it or found it running; None while the response still waits, or
     # for a background agent's request, which continues without a stream.
+    continuation: CurrentStreamInfo | None = None
+
+
+class ChatQuestionAnswersRequest(BaseModel):
+    """The user's answers to a question request's questions, from its card, or
+    a message that the user typed in the chat instead, which answers every
+    question of the response that waits."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    answers: list[ToolQuestionAnswer] | None = None
+    message: str | None = None
+    # Headers for the MCP servers that the response's continuation calls;
+    # they are not saved.
+    mcp_headers: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def require_one_answer(self) -> "ChatQuestionAnswersRequest":
+        if (self.answers is None) == (self.message is None):
+            raise ValueError("Give either answers or a message")
+        # The message counts by the text that the answer saves.
+        if self.message is not None and not sanitize_string(self.message).strip():
+            raise ValueError("A message must contain text")
+        return self
+
+
+class QuestionAnswersResponse(BaseModel):
+    question_request_id: UUID
+    # The stream that continues the question's response, when the answer
+    # started it or found it running; None while the response still waits.
     continuation: CurrentStreamInfo | None = None
 
 
