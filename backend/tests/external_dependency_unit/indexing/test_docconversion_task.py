@@ -6,6 +6,7 @@ stopped attempt converts nothing. The connector is a stand-in: the Drive
 conversion has its own tests."""
 
 from collections.abc import Generator
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -14,6 +15,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.docprocessing.tasks import _docprocessing_task
 from onyx.background.indexing import run_docconversion
 from onyx.background.indexing.run_docconversion import (
     DOCCONVERSION_TASK_EXPIRES_SECONDS,
@@ -22,6 +24,7 @@ from onyx.background.indexing.run_docconversion import (
 )
 from onyx.configs.constants import (
     DocumentSource,
+    OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
@@ -57,6 +60,7 @@ from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
     make_doc,
+    make_future_search_settings,
 )
 
 
@@ -281,18 +285,81 @@ def test_a_worker_builds_the_connector_once_for_an_attempt(run: _Run) -> None:
     assert len(run.connector.calls) == 2
 
 
+def _process(run: _Run, batch_num: int) -> None:
+    _docprocessing_task(run.attempt_id, run.pair.id, run.tenant_id, batch_num)
+
+
 def test_a_batch_with_no_documents_counts_as_complete(run: _Run) -> None:
+    """The batch is stored empty and sent on, so a worker that stops after the
+    stub delete loses no completion. Docprocessing counts it complete."""
     run.store_stub_batch(0, ["nothing", "failure"])
     run.dispatch()
 
     run.convert(0)
 
     assert run.stubs.get_batch(0, _Payload) is None
-    assert run.docs.get_batch(0) is None
+    assert run.docs.get_batch(0) == []
     attempt = run.attempt()
     assert attempt.stub_batches_converted == 1
-    assert attempt.completed_batches == 1
-    assert run.sends(OnyxCeleryTask.DOCPROCESSING_TASK) == []
+    assert (attempt.completed_batches or 0) == 0
+    (docprocessing,) = run.sends(OnyxCeleryTask.DOCPROCESSING_TASK)
+    assert docprocessing["kwargs"]["batch_num"] == 0
+
+    _process(run, 0)
+
+    assert run.attempt().completed_batches == 1
+    assert run.docs.get_batch(0) is None
+
+
+def test_a_retry_with_no_documents_drops_the_dead_run_batch(run: _Run) -> None:
+    """A worker died after it stored the document batch. The next run gives no
+    document. The old batch must not be sent too: it would count the batch
+    twice."""
+    run.store_stub_batch(0, ["nothing"])
+    run.dispatch()
+    run.docs.store_batch(0, [make_doc("left_by_the_dead_run")])
+
+    run.convert(0)
+
+    assert run.docs.get_batch(0) == []
+    assert len(run.sends(OnyxCeleryTask.DOCPROCESSING_TASK)) == 1
+
+
+def test_a_future_attempt_sends_at_high_once_its_reindex_finalizes(
+    run: _Run, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The context is cached for minutes. A FUTURE attempt of an indexed
+    connector starts at MEDIUM, and its batches go at HIGH as soon as the
+    reindex finalizes, as in docfetching."""
+    future = make_future_search_settings(run.db_session)
+    attempt = run.attempt()
+    present_id = attempt.search_settings_id
+    attempt.search_settings_id = future.id
+    run.pair.last_successful_index_time = datetime.now(timezone.utc)
+    run.db_session.commit()
+    finalizing = False
+    monkeypatch.setattr(
+        run_docconversion, "reindex_finalizing", lambda *_args: finalizing
+    )
+    try:
+        run.store_stub_batch(0, ["document"])
+        run.store_stub_batch(1, ["document"])
+        run.dispatch()
+
+        run.convert(0)
+        finalizing = True
+        run.convert(1)
+
+        priorities = [
+            send["priority"] for send in run.sends(OnyxCeleryTask.DOCPROCESSING_TASK)
+        ]
+        assert priorities == [OnyxCeleryPriority.MEDIUM, OnyxCeleryPriority.HIGH]
+    finally:
+        attempt = run.attempt()
+        attempt.search_settings_id = present_id
+        run.db_session.commit()
+        run.db_session.delete(future)
+        run.db_session.commit()
 
 
 @pytest.mark.parametrize("how", ["stop_fence", "cancellation", "ended"])
