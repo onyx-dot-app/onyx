@@ -264,7 +264,6 @@ test("adds an MCP server for the organization with the probed sign-in", async ()
       description: null,
       auth_mode: "individual",
       auth_method: "oauth2",
-      credential_fields: null,
       header_template: null,
       oauth_client: {
         provider_mode: "discovery",
@@ -429,7 +428,6 @@ test("adds an OpenAPI app with an API key header", async () => {
       description: "Weekly reports",
       auth_mode: "shared",
       auth_method: "api_key",
-      credential_fields: [{ key: "api_key", label: "api key", secret: true }],
       header_template: { Authorization: "Bearer {api_key}" },
       oauth_client: null,
       config: {
