@@ -67,6 +67,11 @@ instead = "Move the helper into the package that needs it and import it from the
 source = ["ee/", "model_server/", "shared_configs/", "scripts/", "lint/", "alembic/", "alembic_tenants/"]
 forbidden = ["tests"]
 
+[[contract.exception]]
+importer = "scripts/benchmark_google_drive_connector.py"
+imports = "tests.integration.mock_services.mock_google_drive_server"
+reason = "The benchmark points the connector at the mock Drive server, which is part of the integration tests."
+
 [[contract]]
 name = "sandbox-daemon-is-standalone"
 rule = "The sandbox image code must not import a backend package"
