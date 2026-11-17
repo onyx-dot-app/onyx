@@ -1,6 +1,8 @@
 """
 Jira Service Management (JSM) Connector for Onyx
 Pulls tickets, incidents, and service requests from Jira Service Management projects.
+Supports both Jira Cloud (/rest/api/3/search/jql with nextPageToken)
+and Jira Server/Data Center (/rest/api/2/search with offset pagination).
 """
 
 import logging
@@ -89,12 +91,62 @@ class JiraServiceManagementConnector:
         full_jql = f"{filter_clause} ORDER BY created DESC, id DESC"
 
         all_issues: List[Dict[str, Any]] = []
-        start_at = 0
         limit = min(page_size, 100)
 
-        # Jira Server/Data Center uses v2 search endpoint; Jira Cloud uses v3
-        search_path = "/rest/api/3/search" if self.user_email else "/rest/api/2/search"
-        endpoint = f"{self.jira_url}{search_path}"
+        # Jira Cloud uses /rest/api/3/search/jql with nextPageToken pagination
+        # Jira Server/Data Center uses /rest/api/2/search with offset (startAt) pagination
+        if self.user_email:
+            endpoint = f"{self.jira_url}/rest/api/3/search/jql"
+            next_page_token: Optional[str] = None
+
+            while True:
+                remaining = max_tickets - len(all_issues) if max_tickets is not None else limit
+                page_limit = min(limit, remaining)
+                if page_limit <= 0:
+                    break
+
+                params: Dict[str, Union[str, int]] = {
+                    "jql": full_jql,
+                    "maxResults": page_limit,
+                }
+                if next_page_token:
+                    params["nextPageToken"] = next_page_token
+
+                try:
+                    response = self.session.get(
+                        endpoint,
+                        params=params,
+                        headers=headers,
+                        auth=auth,
+                        timeout=self.timeout,
+                    )
+                except requests.RequestException as e:
+                    logger.error(f"Network error querying Jira Cloud at {endpoint}: {e}")
+                    raise JiraApiError(0, f"Network request failed: {e}") from e
+
+                if response.status_code != 200:
+                    raise JiraApiError(response.status_code, response.reason, response.text)
+
+                data = response.json()
+                issues = data.get("issues", [])
+                if not issues:
+                    break
+
+                all_issues.extend(issues)
+
+                if max_tickets is not None and len(all_issues) >= max_tickets:
+                    all_issues = all_issues[:max_tickets]
+                    break
+
+                next_page_token = data.get("nextPageToken")
+                if not next_page_token or data.get("isLast") is True:
+                    break
+
+            return all_issues
+
+        # Server / Data Center flow (offset pagination)
+        endpoint = f"{self.jira_url}/rest/api/2/search"
+        start_at = 0
 
         while True:
             remaining = max_tickets - len(all_issues) if max_tickets is not None else limit
@@ -102,7 +154,7 @@ class JiraServiceManagementConnector:
             if page_limit <= 0:
                 break
 
-            params: Dict[str, Union[str, int]] = {
+            params_dc: Dict[str, Union[str, int]] = {
                 "jql": full_jql,
                 "startAt": start_at,
                 "maxResults": page_limit,
@@ -112,13 +164,13 @@ class JiraServiceManagementConnector:
             try:
                 response = self.session.get(
                     endpoint,
-                    params=params,
+                    params=params_dc,
                     headers=headers,
                     auth=auth,
                     timeout=self.timeout,
                 )
             except requests.RequestException as e:
-                logger.error(f"Network error querying Jira Service Management at {endpoint}: {e}")
+                logger.error(f"Network error querying Jira Server/DC at {endpoint}: {e}")
                 raise JiraApiError(0, f"Network request failed: {e}") from e
 
             if response.status_code != 200:
