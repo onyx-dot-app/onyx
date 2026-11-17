@@ -601,6 +601,32 @@ test("a tool change saves only the tools, so the saved filters stay as they are"
   expect(result.current.filters.documentSets).toEqual(["Handbook"]);
 });
 
+test("a failed plugin catalog leaves the saved plugins of a chat alone", async () => {
+  mockPluginIds = null;
+  const saved: ChatToolOptions = {
+    allowed: [
+      { type: "capability", tool_id: 1 },
+      { type: "capability", tool_id: 2 },
+      { type: "plugin", plugin_id: "plugin-mcp" },
+    ],
+    preferred: null,
+    internal_search_filters: NO_FILTERS,
+  };
+  openSavedChats({ abc: saved });
+  const fetchSpy = echoSaves();
+  const { result } = renderHook(() => useToolConfiguration());
+
+  act(() => result.current.setToolState(2, () => "disabled"));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(patchesOf(fetchSpy)).toEqual([]);
+  expect(
+    useChatSessionStore.getState().sessions.get("abc")?.toolOptions
+  ).toEqual(saved);
+});
+
 test("a tool change keeps a saved preferred tool that the composer cannot offer", async () => {
   // A send drops a preferred tool that it cannot build; the saved choice
   // stays.
