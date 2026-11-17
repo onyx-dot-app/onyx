@@ -87,7 +87,7 @@ class ToolSnapshot(BaseModel):
             mcp_server_id=tool.mcp_server_id,
             user_id=str(tool.user_id) if tool.user_id else None,
             oauth_config_id=tool.oauth_config_id,
-            oauth_config_name=tool.oauth_config.name if tool.oauth_config else None,
+            oauth_config_name=None,
             enabled=tool.enabled or is_openapi_tool(tool),
             # Populate visibility settings from config or use defaults
             chat_selectable=config.chat_selectable if config else True,

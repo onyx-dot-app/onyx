@@ -45,7 +45,7 @@ This component owns the plugin admin directory and editors, the member plugin
 directory and its connection states, member OAuth in a new tab, and the
 suggested-server catalog. It also owns two rules whose backend code other
 components map: the Default Chat selection of plugin tools, and per-user plugin
-preferences (`MCPServerUserPreference`, `ToolUserPreference`).
+preferences (`db/plugin.py:set_plugin_preferences__no_commit`).
 
 Its neighbours own:
 - [[mcp-and-custom-tools]]: the plugin API, credentials, setup and tool sync.
@@ -93,9 +93,8 @@ result.
 assistant the integrations of each plugin the user runs (visible and enabled in
 `db/plugin_access.py:load_user_plugin_states`), with the settings of its
 persona 0 link. A custom agent uses each plugin of its links that the user can
-see, whatever the user's on/off choice. The preferences
-(`MCPServerUserPreference`, `ToolUserPreference`) back only the MCP and tool
-preference routes. On the web,
+see, whatever the user's on/off choice. `PATCH /tool/{id}/preferences` sets
+the on/off of the plugins that hold the custom tool. On the web,
 `lib/plugins/chat.ts:effectiveChatPreferredToolId` drops an unavailable preferred plugin tool in
 Default Chat when the user's preference turns it off.
 
@@ -197,12 +196,14 @@ only the configuration of a chat that does not exist yet.
     plugins the user runs (`integrations/craft.py:list_task_plugin_views`). The
     plugin UI must not show
     read or write badges to members.
-12. `shared-oauth-config-shared-connection` **OpenAPI tools that share an
-    `OAuthConfig` share each user's connection.** `OAuthUserToken` is unique on
-    the configuration and the user, not the tool. A member who connects or
-    disconnects one such plugin changes the state of every plugin linked to the
-    same configuration. An expired grant needs a new sign-in only when the token
-    status has `can_refresh` not true (`lib/plugins/member.ts`).
+12. `shared-oauth-config-shared-connection` **OpenAPI tools that shared an
+    `OAuthConfig` before the upgrade have one connection each.** The migration
+    copies the user's token to the integration of each tool. A member who
+    connects or disconnects one such plugin changes only that plugin. On a
+    provider that rotates refresh tokens, the other copies go to Needs
+    reconnect after the first refresh. An expired grant needs a new sign-in
+    only when the token status has `can_refresh` not true
+    (`lib/plugins/member.ts`).
 
 ---
 
