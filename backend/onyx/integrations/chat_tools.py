@@ -21,7 +21,6 @@ from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import ActionSettings, EffectivePolicy
 from onyx.integrations.policy import agent_plugin_settings, resolve_action_policies
 from onyx.integrations.registry import get_kind_handler
-from onyx.integrations.sync import sync_api_actions_if_missing
 from onyx.tools.interface import Tool
 from onyx.tools.models import IntegrationChatRequest, ToolApprovalScope
 from onyx.utils.logger import setup_logger
@@ -44,10 +43,6 @@ def _integration_tools(
         )
         return []
     actions = list_integration_actions(integration.id, db_session)
-    if not actions:
-        # Read again also when another chat wrote the actions first.
-        sync_api_actions_if_missing(integration.id)
-        actions = list_integration_actions(integration.id, db_session)
     keys = [action.key for action in actions]
     policies = resolve_action_policies(
         db_session,

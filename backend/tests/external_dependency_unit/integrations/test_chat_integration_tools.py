@@ -27,7 +27,6 @@ from onyx.db.models import (
 )
 from onyx.integrations.connection_models import ConnectionSecret
 from onyx.integrations.models import ActionSettings, ApprovalMode
-from onyx.integrations.sync import sync_api_actions_if_missing
 from onyx.llm.interfaces import LLM
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
@@ -229,37 +228,6 @@ def test_an_agent_default_of_blocked_offers_only_listed_actions(
     )
 
     assert set(tools) == {f"mcp__{mcp.id}__crm__update"}
-
-
-def test_a_migrated_openapi_integration_with_no_actions_offers_its_operations(
-    db_session: Session, user: User, integration_ids: list[int]
-) -> None:
-    api = _openapi(db_session, integration_ids, sync_actions=False)
-    plugin = _plugin(db_session, [api])
-
-    tools = _build(db_session, user, _configuration({plugin.id: {}}))
-
-    assert {f"custom__{api.id}__listOrders", f"custom__{api.id}__createOrder"} <= set(
-        tools
-    )
-
-
-def test_a_first_chat_offers_the_actions_that_another_chat_wrote(
-    db_session: Session, user: User, integration_ids: list[int]
-) -> None:
-    api = _openapi(db_session, integration_ids, sync_actions=False)
-    plugin = _plugin(db_session, [api])
-
-    def another_chat_writes_first(integration_id: int) -> None:
-        sync_api_actions_if_missing(integration_id)
-
-    with patch(
-        "onyx.integrations.chat_tools.sync_api_actions_if_missing",
-        side_effect=another_chat_writes_first,
-    ):
-        tools = _build(db_session, user, _configuration({plugin.id: {}}))
-
-    assert f"custom__{api.id}__listOrders" in tools
 
 
 def test_the_user_token_wins_over_a_literal_authorization_header(
