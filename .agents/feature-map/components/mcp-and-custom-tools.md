@@ -172,8 +172,9 @@ OpenAPI tool, external app). Queries are in `db/integration_connection.py`.
   header missing.
 - `ensure_fresh_connection` is the one refresh. It holds one cache lock per
   connection (`integrations/connection_models.py:connection_refresh_lock_name`), which the
-  MCP SDK storage also uses. A 400 or 401 or `invalid_grant` sets
-  `needs_reconnect` with a reason and keeps the row. Other errors keep the token.
+  MCP SDK storage also uses. `invalid_grant`, or a 400 or 401 without an OAuth
+  error, sets `needs_reconnect` with a reason and keeps the row. Other errors,
+  including `invalid_client`, keep the token.
 - `integration_status` gives Connected, Not connected, Needs reconnect or Not set
   up. It maps `resolve_connection(..., refresh=False)`, so it never calls the
   service.
