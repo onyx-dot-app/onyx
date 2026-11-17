@@ -32,6 +32,18 @@ const MCP_OAUTH_FLOW_TEST_TIMEOUT_MS = Number(
   process.env.MCP_OAUTH_TEST_TIMEOUT_MS || 300_000
 );
 const TOOL_NAME = "tool_0";
+// Onyx saves only https OAuth endpoints. The local mock issuer is http and
+// supports dynamic client registration, so only a real issuer gets a client.
+function manualOAuthClient(): {
+  clientId: string;
+  clientSecret: string;
+} | null {
+  if (!process.env.MCP_OAUTH_ISSUER?.startsWith("https://")) return null;
+  return {
+    clientId: oauthConfig().clientId,
+    clientSecret: oauthConfig().clientSecret,
+  };
+}
 
 function buildMcpServerUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, "");
@@ -130,10 +142,13 @@ test.describe("MCP OAuth flows", () => {
     });
     await adminMcp.integrations.expectOAuthProbe();
     await adminMcp.integrations.selectSignIn("Each user signs in", "OAuth");
-    await adminMcp.integrations.fillOAuthClient(
-      oauthConfig().clientId,
-      oauthConfig().clientSecret
-    );
+    const client = manualOAuthClient();
+    if (client) {
+      await adminMcp.integrations.fillOAuthClient(
+        client.clientId,
+        client.clientSecret
+      );
+    }
     await adminMcp.integrations.chooseOwner("For the organization");
     integrationId = await adminMcp.integrations.submit();
     createdIntegrationIds.push(integrationId);
@@ -241,10 +256,7 @@ test.describe("MCP OAuth flows", () => {
     const created = await plugins.addMcpServer({
       name: personalName,
       url: serverUrl,
-      oauthClient: {
-        clientId: oauthConfig().clientId,
-        clientSecret: oauthConfig().clientSecret,
-      },
+      oauth: { client: manualOAuthClient() },
     });
     createdIntegrationIds.push(created.integrationId);
 
