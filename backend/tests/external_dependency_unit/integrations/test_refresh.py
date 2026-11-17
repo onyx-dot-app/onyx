@@ -4,7 +4,8 @@ errors, and each token endpoint source."""
 import asyncio
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs
 from uuid import uuid4
@@ -28,6 +29,7 @@ from onyx.db.enums import (
 )
 from onyx.db.integration import get_integration_by_id
 from onyx.db.integration_connection import (
+    delete_connection__no_commit,
     get_connection_by_id,
     upsert_connection__no_commit,
 )
@@ -106,6 +108,7 @@ def test_two_concurrent_refreshes_make_one_call(
                 fresh = ensure_fresh_connection(
                     own_connection, own_integration, session
                 )
+                assert fresh is not None
                 results.append(read_connection_secret(fresh).access_token)
         except BaseException as error:
             errors.append(error)
@@ -282,6 +285,56 @@ def test_temporary_error_keeps_token(
     assert connection.status is IntegrationConnectionStatus.CONNECTED
     assert read_connection_secret(connection).access_token == "old-access"
     assert len(token_endpoint.requests) == 1
+
+
+def test_client_error_keeps_the_connection_connected(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+    token_endpoint: FakeTokenEndpoint,
+) -> None:
+    integration = _manual_integration(make_integration)
+    user = make_test_user("invalid_client_refresh")
+    connection = add_connection(
+        db_session, integration, user.id, _stale_secret(), expires_at=expired()
+    )
+    token_endpoint.status_code = 401
+    token_endpoint.body = {"error": "invalid_client"}
+
+    ensure_fresh_connection(connection, integration, db_session)
+
+    db_session.refresh(connection)
+    assert connection.status is IntegrationConnectionStatus.CONNECTED
+    assert len(token_endpoint.requests) == 1
+
+
+def test_connection_deleted_during_the_lock_wait_is_not_connected(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+    token_endpoint: FakeTokenEndpoint,
+) -> None:
+    integration = _manual_integration(make_integration)
+    user = make_test_user("deleted_during_refresh")
+    add_connection(
+        db_session, integration, user.id, _stale_secret(), expires_at=expired()
+    )
+
+    @contextmanager
+    def lock_after_a_disconnect(*_: object, **__: object) -> Iterator[None]:
+        with get_session_with_current_tenant() as other_session:
+            delete_connection__no_commit(other_session, integration.id, user.id)
+            other_session.commit()
+        yield
+
+    with patch(
+        "onyx.integrations.connections.cache_shared_lock", lock_after_a_disconnect
+    ):
+        result = resolve_connection(integration, user, db_session)
+
+    assert isinstance(result, ConnectionProblem)
+    assert result.code is ConnectionState.NOT_CONNECTED
+    assert token_endpoint.requests == []
 
 
 def test_expired_token_without_refresh_token_needs_reconnect(

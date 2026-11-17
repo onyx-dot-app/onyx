@@ -148,6 +148,8 @@ def _connection_or_problem(
         return missing
     if refresh:
         connection = ensure_fresh_connection(connection, integration, db_session)
+        if connection is None:
+            return missing
     record = read_connection(connection)
     if record.status is IntegrationConnectionStatus.NEEDS_RECONNECT:
         return ConnectionProblem(
@@ -395,6 +397,8 @@ def _fresh_onyx_login_token(
                     and refresh_oauth_account_sync(db_user, account, db_session)
                 ):
                     db_session.commit()
+                    # A refresh with no expires_in keeps the old expiry.
+                    return account.access_token
         except CacheLockAcquisitionError:
             account = _reload_account(db_session, account)
     if _login_token_expired(account):
@@ -506,9 +510,9 @@ def ensure_fresh_connection(
     connection: IntegrationConnection,
     integration: Integration,
     db_session: Session,
-) -> IntegrationConnection:
+) -> IntegrationConnection | None:
     """One lock per connection; a permanent error sets Needs reconnect and
-    keeps the row."""
+    keeps the row. None when another caller deleted the row."""
     if not _needs_refresh(read_connection(connection), datetime.now(timezone.utc)):
         return connection
     try:
@@ -518,8 +522,9 @@ def ensure_fresh_connection(
             wait_for_lock_s=_REFRESH_LOCK_WAIT_S,
             logger=logger,
         ):
-            # Another caller may have refreshed while this one waited.
-            reload_connection(db_session, connection)
+            # Another caller may have refreshed or deleted it while this one waited.
+            if not reload_connection(db_session, connection):
+                return None
             record = read_connection(connection)
             if _needs_refresh(record, datetime.now(timezone.utc)):
                 _refresh_under_lock(connection, record, integration, db_session)
@@ -528,7 +533,8 @@ def ensure_fresh_connection(
             "integration_connection.refresh.lock_contended connection_id=%s",
             connection.id,
         )
-        reload_connection(db_session, connection)
+        if not reload_connection(db_session, connection):
+            return None
     return connection
 
 
@@ -676,8 +682,10 @@ def _grant_from_token_response(request: httpx.Request, mcp: bool) -> RefreshedGr
     oauth_error, _ = oauth_error_from_response(
         response.content, response.headers.get("content-type")
     )
-    if response.status_code in _PERMANENT_REFRESH_STATUSES or (
-        oauth_error == "invalid_grant"
+    # Other OAuth errors, such as invalid_client, come from the client
+    # settings, not from a revoked grant. An admin can fix them.
+    if oauth_error == "invalid_grant" or (
+        response.status_code in _PERMANENT_REFRESH_STATUSES and oauth_error is None
     ):
         detail = f" ({oauth_error})" if oauth_error else ""
         raise _RefreshPermanentError(
