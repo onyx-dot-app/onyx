@@ -10,13 +10,12 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import (
     GatedAppKind,
     IntegrationActionPolicyValue,
-    IntegrationActionSource,
     IntegrationAuthMode,
     IntegrationKind,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
 )
-from onyx.db.models import Integration, IntegrationAction, MCPServer, Tool
+from onyx.db.models import Integration, IntegrationAction, MCPServer
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.kinds import mcp_server as mcp_kind
 from onyx.integrations.kinds.mcp_server import McpServerKindHandler
@@ -79,52 +78,6 @@ def _request(
         url=url,
         headers={"content-type": "application/json"},
     )
-
-
-def test_discover_actions_maps_tool_rows_with_read_only_defaults(
-    monkeypatch: pytest.MonkeyPatch,
-    integration: Integration,
-) -> None:
-    schema = {"type": "object", "properties": {"q": {"type": "string"}}}
-    rows = [
-        Tool(
-            id=1,
-            name="search",
-            display_name="Search",
-            description="Find",
-            mcp_read_only=True,
-            mcp_input_schema=schema,
-            mcp_output_schema={"type": "object"},
-        ),
-        Tool(
-            id=2,
-            name="create",
-            display_name=None,
-            description=None,
-            mcp_read_only=False,
-        ),
-        Tool(id=3, name="plain", display_name="", description="d", mcp_read_only=None),
-        Tool(
-            id=4,
-            name="search",
-            display_name="Dup",
-            description="dup",
-            mcp_read_only=False,
-        ),
-    ]
-    monkeypatch.setattr(mcp_kind, "get_tools_by_mcp_server_id", lambda *_a, **_k: rows)
-
-    specs = McpServerKindHandler().discover_actions(integration, DB)
-
-    assert [(s.key, s.display_name, s.read_only, s.default_policy) for s in specs] == [
-        ("search", "Search", True, IntegrationActionPolicyValue.ALLOW),
-        ("create", "create", False, IntegrationActionPolicyValue.ASK),
-        ("plain", "plain", None, IntegrationActionPolicyValue.ASK),
-    ]
-    assert all(s.source is IntegrationActionSource.MCP for s in specs)
-    assert specs[0].input_schema == schema
-    assert specs[0].output_schema == {"type": "object"}
-    assert specs[0].http_method is None and specs[0].path_template is None
 
 
 def test_match_tools_call_uses_action_defaults(

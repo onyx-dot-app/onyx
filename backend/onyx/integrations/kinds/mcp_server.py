@@ -4,26 +4,18 @@ from collections.abc import Sequence
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import (
-    IntegrationActionPolicyValue,
-    IntegrationActionSource,
-)
+from onyx.db.enums import IntegrationActionPolicyValue
 from onyx.db.integration import (
     get_mcp_server_for_integration,
     list_integration_actions,
 )
 from onyx.db.models import Integration, IntegrationAction, MCPServer
-from onyx.db.tools import get_tools_by_mcp_server_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.kinds.base import IntegrationKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
-from onyx.integrations.models import (
-    IntegrationActionSpec,
-    MatchedIntegrationAction,
-    McpServerConfig,
-)
+from onyx.integrations.models import MatchedIntegrationAction, McpServerConfig
 from onyx.sandbox_proxy.mcp_jsonrpc import classify_mcp_request
 from onyx.sandbox_proxy.models import McpRpcKind
 from onyx.sandbox_proxy.request_evaluator import MCP_UNCLASSIFIABLE_ACTION_TYPE
@@ -80,27 +72,6 @@ class McpServerKindHandler(IntegrationKindHandler):
             server_url=server.server_url,
             transport=server.transport,
         )
-
-    def discover_actions(
-        self, integration: Integration, db_session: Session
-    ) -> list[IntegrationActionSpec]:
-        server = self._server(integration, db_session)
-        specs: dict[str, IntegrationActionSpec] = {}
-        for tool in get_tools_by_mcp_server_id(server.id, db_session, order_by_id=True):
-            # An old sync could store a name twice; the oldest row wins.
-            if tool.name in specs:
-                continue
-            specs[tool.name] = IntegrationActionSpec(
-                key=tool.name,
-                source=IntegrationActionSource.MCP,
-                display_name=tool.display_name or tool.name,
-                description=tool.description,
-                read_only=tool.mcp_read_only,
-                default_policy=mcp_action_default_policy(tool.mcp_read_only),
-                input_schema=tool.mcp_input_schema,
-                output_schema=tool.mcp_output_schema,
-            )
-        return list(specs.values())
 
     def build_chat_tools(
         self,
