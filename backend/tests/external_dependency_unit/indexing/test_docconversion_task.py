@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.docconversion.tasks import docconversion_task
 from onyx.background.celery.tasks.docprocessing.tasks import _docprocessing_task
 from onyx.background.indexing import run_docconversion
 from onyx.background.indexing.run_docconversion import (
@@ -471,3 +472,24 @@ def test_many_failed_batches_fail_the_conversion(run: _Run) -> None:
         run.convert(batch_num)
     with pytest.raises(RuntimeError, match="failed for 4 of 4 stub batches"):
         run.convert(3)
+
+
+def test_a_task_whose_batch_raises_leaves_the_attempt_running(run: _Run) -> None:
+    doc_ids = run.store_stub_batch(0, ["raise"])
+    run.dispatch()
+
+    kwargs: dict[str, Any] = {
+        "index_attempt_id": run.attempt_id,
+        "cc_pair_id": run.pair.id,
+        "tenant_id": run.tenant_id,
+        "batch_num": 0,
+    }
+    docconversion_task.run(**kwargs)
+
+    assert run.attempt().status == IndexingStatus.IN_PROGRESS
+    errors = run.db_session.scalars(
+        select(IndexAttemptError).where(
+            IndexAttemptError.index_attempt_id == run.attempt_id
+        )
+    ).all()
+    assert [error.document_id for error in errors] == doc_ids
