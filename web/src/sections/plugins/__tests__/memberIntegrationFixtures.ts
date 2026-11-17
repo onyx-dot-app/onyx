@@ -43,6 +43,7 @@ export function makeMemberAction(
     default_policy: "ask",
     admin_policy: null,
     effective_admin_policy: "ask",
+    always_asks: false,
     user_policy: null,
     ...overrides,
   };
