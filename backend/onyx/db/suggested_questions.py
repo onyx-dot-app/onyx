@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import Select, select
@@ -10,7 +11,7 @@ from onyx.db.models import Document, KVStore, UserFile
 from onyx.utils.special_types import JSON_ro
 
 
-def _indexed_documents(exclude_ids: set[str]) -> Select:
+def _indexed_documents(exclude_ids: set[str]) -> Select[tuple[str, datetime | None]]:
     stmt = select(Document.id, Document.last_synced).where(
         Document.last_synced.is_not(None), Document.hidden.is_(False)
     )
@@ -19,14 +20,16 @@ def _indexed_documents(exclude_ids: set[str]) -> Select:
     return stmt
 
 
-def _public_document_ids(db_session: Session) -> Select:
+def _public_document_ids(db_session: Session) -> Select[tuple[str]]:
     # With no user, the access filter keeps only what everyone can see.
     return apply_document_access_filter(
         db_session, select(Document.id), user_email=None, external_group_ids=[]
     )
 
 
-def _newest_ids(db_session: Session, stmt: Select, limit: int) -> list[str]:
+def _newest_ids(
+    db_session: Session, stmt: Select[tuple[str, datetime | None]], limit: int
+) -> list[str]:
     # The access filter joins one row per connector pair, so de-duplicate.
     stmt = stmt.distinct().order_by(Document.last_synced.desc()).limit(limit)
     return [document_id for document_id, _ in db_session.execute(stmt).tuples()]
@@ -82,7 +85,7 @@ def get_recent_user_file_ids(
         .where(
             UserFile.user_id == user_id,
             UserFile.status == UserFileStatus.COMPLETED,
-            UserFile.incognito_session_id.is_(None),
+            UserFile.incognito.is_(False),
         )
         .order_by(
             UserFile.last_project_sync_at.desc().nulls_last(),

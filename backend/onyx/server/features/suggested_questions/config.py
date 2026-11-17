@@ -18,6 +18,9 @@ SQ_USER_RECORD_LOCK_TIMEOUT_S = 5.0
 SQ_SHARED_DOCS = 30
 # Newest documents only that person (or a few people) can see, per person.
 SQ_PRIVATE_DOCS_PER_USER = 12
+# Chunks read from the start of each document; junk rules then keep up to
+# SQ_CHUNKS_PER_DOC of them.
+SQ_FETCH_CHUNKS_PER_DOC = 6
 # Chunks kept per document, and in all, for the triage step.
 SQ_CHUNKS_PER_DOC = 3
 SQ_TRIAGE_CHUNKS_MAX = 300
