@@ -78,10 +78,7 @@ import {
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import {
-  effectiveChatPreferredToolId,
-  enabledChatToolIds,
-} from "@/lib/plugins/chat";
+import { effectiveChatPreferredToolId } from "@/lib/plugins/chat";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
@@ -1106,7 +1103,15 @@ export default function useChatController({
             return parentId === SYSTEM_MESSAGE_ID ? null : parentId;
           })(),
           chatSessionId: currChatSessionId,
-          filters: searchFilters,
+          toolOptions: {
+            // Only set when something is off; see `allowed` on the handle.
+            allowed: activeAgent ? toolConfiguration.allowed : null,
+            preferred:
+              effectivePreferredToolId === null
+                ? null
+                : { type: "capability", tool_id: effectivePreferredToolId },
+            internal_search_filters: searchFilters,
+          },
           modelProvider: isMultiModel
             ? undefined
             : modelOverride?.name || llmManager.currentLlm.name || undefined,
@@ -1127,15 +1132,6 @@ export default function useChatController({
             ? llmManager.temperature
             : undefined,
           deepResearch,
-          // Only sent when something is actually disabled. To the backend an
-          // explicit list is a whitelist, and this one is built from the tools
-          // the frontend can see — which excludes those marked
-          // `expose_to_frontend=False`. Sending it always would quietly
-          // withhold tools nobody chose to disable.
-          enabledToolIds: activeAgent
-            ? enabledChatToolIds(activeAgent.tools, toolConfiguration)
-            : undefined,
-          preferredToolId: effectivePreferredToolId,
           origin: messageOrigin,
           additionalContext,
           llmOverrides: isMultiModel

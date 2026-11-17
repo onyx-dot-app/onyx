@@ -3,11 +3,11 @@ import {
   type SourceMetadata,
   ValidSources,
 } from "@/lib/connectors/types/source";
-import { flushToolSelection, useToolConfiguration } from "@/lib/tools/hooks";
+import { flushToolOptions, useToolConfiguration } from "@/lib/tools/hooks";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import type { MinimalAgent } from "@/lib/agents/types";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
-import type { ChatToolSelection, ToolSnapshot } from "@/lib/tools/types";
+import type { ChatToolOptions, ToolSnapshot } from "@/lib/tools/types";
 import type { User } from "@/lib/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
@@ -52,6 +52,13 @@ const SIGNED_IN: Pick<User, "id" | "email" | "is_anonymous_user"> = {
 };
 let mockUser: Pick<User, "id" | "email" | "is_anonymous_user"> | null =
   SIGNED_IN;
+// No plugins: these tests cover the built-in tools and the filters.
+jest.mock("@/lib/plugins/member", () => ({
+  useMemberPlugins: () => ({
+    plugins: [],
+    loading: { apps: false, servers: false, tools: false, oauth: false },
+  }),
+}));
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: mockUser }),
 }));
@@ -102,7 +109,10 @@ const AGENT: MinimalAgent = {
   id: 7,
   name: "Agent",
   description: "",
-  tools: [tool(1), tool(2)],
+  tools: [
+    { ...tool(1), in_code_tool_id: "SearchTool" },
+    { ...tool(2), in_code_tool_id: "WebSearchTool" },
+  ],
   starter_messages: null,
   document_sets: [],
   is_public: true,
@@ -124,15 +134,15 @@ const NO_FILTERS = {
 
 /** Opens existing chats whose details carry these saved selections. */
 function openSavedChats(
-  saved: Record<string, ChatToolSelection | null> = { abc: null },
+  saved: Record<string, ChatToolOptions | null> = { abc: null },
   incognito: boolean = false
 ): void {
   mockActiveAgent = AGENT;
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
-  for (const [chatSessionId, toolSelection] of Object.entries(saved)) {
+  for (const [chatSessionId, toolOptions] of Object.entries(saved)) {
     useChatSessionStore
       .getState()
-      .createSession(chatSessionId, { incognito, toolSelection });
+      .createSession(chatSessionId, { incognito, toolOptions });
   }
 }
 
@@ -151,13 +161,13 @@ function staleChatDetail(chatSessionId: string): BackendChatSession {
     current_reasoning_effort_override: null,
     owner_name: null,
     packets: [],
-    tool_selection: null,
+    tool_options: null,
   };
 }
 
 /** Answers each PATCH with the selection it sent, as a chat that keeps content does. */
 function echoSaves(
-  answer: (sent: ChatToolSelection) => ChatToolSelection | null = (sent) => sent
+  answer: (sent: ChatToolOptions) => ChatToolOptions | null = (sent) => sent
 ): jest.SpyInstance {
   return jest
     .spyOn(global, "fetch")
@@ -234,8 +244,8 @@ describe("useToolConfiguration: an existing chat", () => {
     );
     openSavedChats({
       abc: {
-        allowed_tool_ids: [1],
-        preferred_tool_id: 1,
+        allowed: [{ type: "capability", tool_id: 1 }],
+        preferred: { type: "capability", tool_id: 1 },
         internal_search_filters: {
           source_type: ["notion"],
           document_set: ["Handbook"],
@@ -267,7 +277,7 @@ describe("useToolConfiguration: an existing chat", () => {
     act(() =>
       useChatSessionStore
         .getState()
-        .createSession("abc", { incognito: false, toolSelection: null })
+        .createSession("abc", { incognito: false, toolOptions: null })
     );
     rerender();
     expect(result.current.ready).toBe(true);
@@ -288,7 +298,7 @@ describe("useToolConfiguration: an existing chat", () => {
     await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
     await waitFor(() =>
       expect(
-        useChatSessionStore.getState().sessions.get("abc")?.toolSelection
+        useChatSessionStore.getState().sessions.get("abc")?.toolOptions
       ).not.toBeNull()
     );
 
@@ -438,15 +448,15 @@ test("a send's chosen tools carry over to the chat it creates and are saved ther
   expect(result.current.disabledToolIds).toEqual([2]);
   await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
   const [url, init] = patchesOf(fetchSpy)[0]!;
-  expect(url).toBe("/api/chat/chat-session/created/tool-selection");
+  expect(url).toBe("/api/chat/chat-session/created/tool-options");
   expect(JSON.parse(String(init.body))).toEqual({
-    allowed_tool_ids: [1],
-    preferred_tool_id: 1,
+    allowed: [{ type: "capability", tool_id: 1 }],
+    preferred: { type: "capability", tool_id: 1 },
     internal_search_filters: NO_FILTERS,
   });
   await waitFor(() =>
     expect(
-      useChatSessionStore.getState().sessions.get("created")?.toolSelection
+      useChatSessionStore.getState().sessions.get("created")?.toolOptions
     ).toBeTruthy()
   );
   unmount();
@@ -498,9 +508,9 @@ test("incognito masks Deep Research and leaving incognito restores it", () => {
 });
 
 test("a tool change saves only the tools, so the saved filters stay as they are", async () => {
-  const saved: ChatToolSelection = {
-    allowed_tool_ids: null,
-    preferred_tool_id: null,
+  const saved: ChatToolOptions = {
+    allowed: null,
+    preferred: null,
     internal_search_filters: {
       ...NO_FILTERS,
       source_type: ["notion"],
@@ -519,36 +529,36 @@ test("a tool change saves only the tools, so the saved filters stay as they are"
   });
   await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
   const [url, init] = patchesOf(fetchSpy)[0]!;
-  expect(url).toBe("/api/chat/chat-session/abc/tool-selection");
+  expect(url).toBe("/api/chat/chat-session/abc/tool-options");
   // The source roster plays no part, so an unloaded one cannot clear the
   // saved sources.
   expect(JSON.parse(String(init.body))).toEqual({
-    allowed_tool_ids: [1],
-    preferred_tool_id: 1,
+    allowed: [{ type: "capability", tool_id: 1 }],
+    preferred: { type: "capability", tool_id: 1 },
   });
   await waitFor(() =>
     expect(
-      useChatSessionStore.getState().sessions.get("abc")?.toolSelectionEdits
+      useChatSessionStore.getState().sessions.get("abc")?.toolOptionsEdits
     ).toBeUndefined()
   );
   expect(result.current.filters.selectedSources).toEqual(["notion"]);
   expect(result.current.filters.documentSets).toEqual(["Handbook"]);
 });
 
-test("a tool change keeps a saved preferred plugin tool while the plugin catalog loads", async () => {
-  // In Default Chat a plugin tool is offered only once the plugin catalog
-  // says so; until it loads, the catalog is empty.
+test("a tool change keeps a saved preferred tool that the composer cannot offer", async () => {
+  // A send drops a preferred tool that it cannot build; the saved choice
+  // stays.
   const mcpTool: ToolSnapshot = { ...tool(3), mcp_server_id: 9 };
-  const saved: ChatToolSelection = {
-    allowed_tool_ids: null,
-    preferred_tool_id: mcpTool.id,
+  const saved: ChatToolOptions = {
+    allowed: null,
+    preferred: { type: "capability", tool_id: mcpTool.id },
     internal_search_filters: NO_FILTERS,
   };
   openSavedChats({ abc: saved });
   mockActiveAgent = {
     ...AGENT,
     id: DEFAULT_AGENT_ID,
-    tools: [tool(1), tool(2), mcpTool],
+    tools: [...AGENT.tools, mcpTool],
   };
   const fetchSpy = echoSaves((sent) => ({ ...saved, ...sent }));
   const { result } = renderHook(() => useToolConfiguration());
@@ -560,8 +570,8 @@ test("a tool change keeps a saved preferred plugin tool while the plugin catalog
   await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
   const [, init] = patchesOf(fetchSpy)[0]!;
   expect(JSON.parse(String(init.body))).toEqual({
-    allowed_tool_ids: [1, mcpTool.id],
-    preferred_tool_id: mcpTool.id,
+    allowed: [{ type: "capability", tool_id: 1 }],
+    preferred: { type: "capability", tool_id: mcpTool.id },
   });
 });
 
@@ -587,7 +597,7 @@ test("a source change is saved at once, so a reload right after keeps it", async
   });
   await waitFor(() =>
     expect(
-      useChatSessionStore.getState().sessions.get("abc")?.toolSelectionEdits
+      useChatSessionStore.getState().sessions.get("abc")?.toolOptionsEdits
     ).toBeUndefined()
   );
   unmount();
@@ -627,16 +637,16 @@ test("a choice whose save is running survives a chat switch and a later edit", a
   finishFirst(
     new Response(
       JSON.stringify({
-        allowed_tool_ids: [1],
-        preferred_tool_id: null,
+        allowed: [{ type: "capability", tool_id: 1 }],
+        preferred: null,
         internal_search_filters: null,
       })
     )
   );
   await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(2));
   expect(JSON.parse(String(patchesOf(fetchSpy)[1]![1].body))).toEqual({
-    allowed_tool_ids: [1],
-    preferred_tool_id: 1,
+    allowed: [{ type: "capability", tool_id: 1 }],
+    preferred: { type: "capability", tool_id: 1 },
   });
 });
 
@@ -645,13 +655,13 @@ test("a chat load that started before a save finished keeps the saved choice", a
   echoSaves();
   const store = useChatSessionStore.getState();
   // A chat load reads the selection before the save below is confirmed.
-  const loadStartedAt = store.sessions.get("abc")?.toolSelectionVersion ?? 0;
+  const loadStartedAt = store.sessions.get("abc")?.toolOptionsVersion ?? 0;
   const { result } = renderHook(() => useToolConfiguration());
   act(() => result.current.toggleToolState(2, "disabled"));
   await act(async () => {
     await Promise.resolve();
   });
-  await act(() => flushToolSelection("abc"));
+  await act(() => flushToolOptions("abc"));
 
   act(() =>
     useChatSessionStore
@@ -670,9 +680,9 @@ test("a chat that stores no selection keeps the tab's choice when it loads again
   await act(async () => {
     await Promise.resolve();
   });
-  await act(() => flushToolSelection("abc"));
+  await act(() => flushToolOptions("abc"));
   const store = useChatSessionStore.getState();
-  const loadStartedAt = store.sessions.get("abc")?.toolSelectionVersion ?? 0;
+  const loadStartedAt = store.sessions.get("abc")?.toolOptionsVersion ?? 0;
 
   act(() =>
     useChatSessionStore
@@ -690,16 +700,16 @@ test("a flush resolves once the chat's selection is saved", async () => {
   await act(async () => {
     await Promise.resolve();
   });
-  await act(() => flushToolSelection("abc"));
+  await act(() => flushToolOptions("abc"));
   expect(
-    useChatSessionStore.getState().sessions.get("abc")?.toolSelection
-  ).toMatchObject({ allowed_tool_ids: [1] });
+    useChatSessionStore.getState().sessions.get("abc")?.toolOptions
+  ).toMatchObject({ allowed: [{ type: "capability", tool_id: 1 }] });
   expect(
-    useChatSessionStore.getState().sessions.get("abc")?.toolSelectionEdits
+    useChatSessionStore.getState().sessions.get("abc")?.toolOptionsEdits
   ).toBeUndefined();
 });
 
-test("a tool-selection save waits for the save before it", async () => {
+test("a tool-options save waits for the save before it", async () => {
   openSavedChats();
   let finishFirst: (response: Response) => void = () => {};
   let patchCount = 0;
@@ -724,8 +734,8 @@ test("a tool-selection save waits for the save before it", async () => {
   finishFirst(new Response(JSON.stringify(null)));
   await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(2));
   expect(JSON.parse(String(patchesOf(fetchSpy)[1]![1].body))).toMatchObject({
-    allowed_tool_ids: [1],
-    preferred_tool_id: 1,
+    allowed: [{ type: "capability", tool_id: 1 }],
+    preferred: { type: "capability", tool_id: 1 },
   });
 });
 
@@ -758,7 +768,7 @@ test("a remounted composer's save waits for the save before it", async () => {
   await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(2));
 });
 
-test("a failed tool-selection save warns the user", async () => {
+test("a failed tool-options save warns the user", async () => {
   openSavedChats();
   jest
     .spyOn(global, "fetch")
@@ -803,8 +813,8 @@ test("an incognito chat sends its selection and keeps it when the server stores 
   await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
   await waitFor(() =>
     expect(
-      useChatSessionStore.getState().sessions.get("abc")?.toolSelection
-    ).toMatchObject({ allowed_tool_ids: [1] })
+      useChatSessionStore.getState().sessions.get("abc")?.toolOptions
+    ).toMatchObject({ allowed: [{ type: "capability", tool_id: 1 }] })
   );
   unmount();
   const reopened = renderHook(() => useToolConfiguration());

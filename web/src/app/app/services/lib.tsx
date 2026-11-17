@@ -1,5 +1,5 @@
 import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/types";
-import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
+import type { ChatToolOptions } from "@/lib/tools/types";
 import { mutate } from "swr";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -180,12 +180,11 @@ export interface SendMessageParams {
   mentions?: ComposedMention[];
   parentMessageId: number | null;
   chatSessionId: string;
-  filters: SearchFiltersRequest | null;
+  // The tools, plugins and search filters of this request. A preferred tool
+  // is a preference; invocation is not guaranteed.
+  toolOptions: ChatToolOptions;
   signal?: AbortSignal;
   deepResearch?: boolean;
-  enabledToolIds?: number[];
-  // Preferred tool for this request; invocation is not guaranteed
-  preferredToolId?: number | null;
   // LLM override parameters
   modelProvider?: string;
   modelVersion?: string;
@@ -211,11 +210,9 @@ export async function* sendMessage({
   mentions,
   parentMessageId,
   chatSessionId,
-  filters,
+  toolOptions,
   signal,
   deepResearch,
-  enabledToolIds,
-  preferredToolId,
   modelProvider,
   modelVersion,
   modelConfigurationId,
@@ -231,10 +228,8 @@ export async function* sendMessage({
     parent_message_id: parentMessageId,
     file_descriptors: fileDescriptors,
     mentions: requestMentions(mentions ?? []),
-    internal_search_filters: filters,
+    tool_options: toolOptions,
     deep_research: deepResearch ?? false,
-    allowed_tool_ids: enabledToolIds,
-    preferred_tool_id: preferredToolId ?? null,
     llm_override:
       temperature || modelVersion || modelConfigurationId != null
         ? {

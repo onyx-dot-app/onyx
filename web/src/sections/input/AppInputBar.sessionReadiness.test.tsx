@@ -16,7 +16,7 @@ import {
 } from "@/lib/chat/sessionReadiness";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
-import { flushToolSelection } from "@/lib/tools/hooks";
+import { flushToolOptions } from "@/lib/tools/hooks";
 import type { ChatSessionStatus, PendingChatMessage } from "@/lib/chat/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@opal/layouts";
@@ -119,7 +119,7 @@ jest.mock("@/refresh-components/popovers/FilePickerPopover", () => ({
 jest.mock("@/lib/tools/components", () => ({ ToolsPopover: () => null }));
 jest.mock("@/lib/tools/hooks", () => ({
   ...jest.requireActual("@/lib/tools/hooks"),
-  flushToolSelection: jest.fn(() => Promise.resolve()),
+  flushToolOptions: jest.fn(() => Promise.resolve()),
 }));
 jest.mock("@/components/voice/Waveform", () => ({
   __esModule: true,
@@ -606,7 +606,7 @@ test("a server refusal for an approval this tab does not show loads the server's
 test("a queued message waits for the chat's tool selection to save", async () => {
   const user = setupUser();
   const saved = deferred<void>();
-  const flush = jest.mocked(flushToolSelection);
+  const flush = jest.mocked(flushToolOptions);
   flush.mockReturnValueOnce(saved.promise);
   const posted = jest.fn();
   fetchSpy.mockImplementation(async (url, init) => {
