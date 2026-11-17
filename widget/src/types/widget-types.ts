@@ -55,4 +55,8 @@ export interface ChatMessage {
   approvals?: ApprovalEntry[];
   // The stream stopped while the response waits for decisions
   awaitingApproval?: boolean;
+  // The visitor's rating of this response
+  feedback?: MessageFeedback;
 }
+
+export type MessageFeedback = "like" | "dislike";

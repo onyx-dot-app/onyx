@@ -308,6 +308,28 @@ export class ApiService {
     };
   }
 
+  /** Record the visitor's rating of a response, or remove it when `isPositive` is null. */
+  async setMessageFeedback(
+    chatMessageId: number,
+    isPositive: boolean | null
+  ): Promise<void> {
+    const response =
+      isPositive === null
+        ? await fetch(
+            `${this.backendUrl}/chat/remove-chat-message-feedback?chat_message_id=${chatMessageId}`,
+            { method: "DELETE", headers: await this.getHeaders() }
+          )
+        : await fetch(`${this.backendUrl}/chat/create-chat-message-feedback`, {
+            method: "POST",
+            headers: await this.getHeaders(),
+            body: JSON.stringify({
+              chat_message_id: chatMessageId,
+              is_positive: isPositive,
+            }),
+          });
+    if (!response.ok) throw await apiErrorFrom(response);
+  }
+
   /**
    * Parse the NDJSON stream. A response-ID line comes without a packet
    * wrapper; a resumed stream adds its cursor lines.
