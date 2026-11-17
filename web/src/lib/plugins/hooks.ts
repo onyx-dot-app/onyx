@@ -23,7 +23,7 @@ export interface AgentChatPlugins {
   plugins: ChatPluginEntry[];
   isLoading: boolean;
   error: Error | undefined;
-  refresh: () => Promise<MemberIntegration[] | undefined>;
+  refresh: () => Promise<void>;
 }
 
 /**
@@ -43,7 +43,6 @@ export function useAgentChatPlugins(
     const byPlugin = new Map<string, ChatPluginEntry>();
     for (const integration of data ?? []) {
       for (const ref of integration.plugins) {
-        if (ref.installation_policy === "NOT_AVAILABLE") continue;
         // The default agent runs only the plugins the user turned on.
         if (isDefault && !ref.enabled) continue;
         const entry = byPlugin.get(ref.plugin_id);
@@ -56,13 +55,12 @@ export function useAgentChatPlugins(
           });
       }
     }
+    // Null also on a failed read: an empty list would read as a complete
+    // catalog, and the composer would leave every plugin out of a send.
     function agentPluginIds(): string[] | null {
       if (agentId === undefined) return null;
-      if (isDefault)
-        return data === undefined && !integrations.error
-          ? null
-          : [...byPlugin.keys()];
-      if (agent.agent === null) return agent.error ? [] : null;
+      if (isDefault) return data === undefined ? null : [...byPlugin.keys()];
+      if (agent.agent === null) return null;
       return (agent.agent.plugins ?? []).map((link) => link.plugin_id);
     }
     const ids = agentPluginIds();
@@ -74,14 +72,20 @@ export function useAgentChatPlugins(
       pluginIds: ids === null ? null : [...new Set(ids)].sort(),
       plugins: entries.sort((a, b) => a.name.localeCompare(b.name)),
     };
-  }, [agentId, isDefault, data, integrations.error, agent.agent, agent.error]);
+  }, [agentId, isDefault, data, agent.agent]);
+
+  const { mutate: refreshIntegrations } = integrations;
+  const { refresh: refreshAgent } = agent;
+  const refresh = useCallback(async () => {
+    await Promise.all([refreshIntegrations(), refreshAgent()]);
+  }, [refreshIntegrations, refreshAgent]);
 
   return {
     pluginIds,
     plugins,
     isLoading: integrations.isLoading || agent.isLoading,
-    error: integrations.error,
-    refresh: () => integrations.mutate(),
+    error: integrations.error ?? agent.error,
+    refresh,
   };
 }
 
@@ -106,13 +110,16 @@ export function useAgentPluginPreferences(enabled: boolean) {
     errorHandlingFetcher,
     { onErrorRetry: skipRetryOnAuthError, revalidateOnFocus: false }
   );
-  const loaded = !enabled || data !== undefined || error !== undefined;
+  // A failed read is not loaded: an empty list would show every plugin on,
+  // and a switch could not save.
+  const loaded = !enabled || data !== undefined;
 
   const disabledPluginIds = useCallback(
     (agentId: number): string[] | null =>
       loaded ? (data?.[String(agentId)]?.disabled_plugin_ids ?? []) : null,
     [data, loaded]
   );
+  const retry = useCallback(() => mutate(), [mutate]);
 
   const setPluginsDisabled = useCallback(
     async (
@@ -141,7 +148,8 @@ export function useAgentPluginPreferences(enabled: boolean) {
         { revalidate: false }
       );
       const sent = pending.body;
-      if (sent === null) return;
+      if (sent === null)
+        throw new Error("The plugin preferences have not loaded.");
       const write = preferenceWrites.then(async () => {
         const response = await fetch(
           `/api/user/assistant/${agentId}/preferences`,
@@ -164,5 +172,5 @@ export function useAgentPluginPreferences(enabled: boolean) {
     [mutate]
   );
 
-  return { loaded, disabledPluginIds, setPluginsDisabled };
+  return { loaded, error, retry, disabledPluginIds, setPluginsDisabled };
 }

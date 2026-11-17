@@ -12,6 +12,8 @@ export function connectAction(integration: MemberIntegration): ConnectAction {
     integration.auth_method !== "api_key"
   )
     return null;
+  // Only an admin connects the organization account.
+  if (integration.auth_mode === "shared") return null;
   if (integration.status.state === "not_connected") return "connect";
   if (integration.status.state === "needs_reconnect") return "reconnect";
   return null;

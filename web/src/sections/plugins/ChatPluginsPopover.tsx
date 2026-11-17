@@ -18,7 +18,12 @@ import { useNavigation } from "@opal/navigation";
 import useScreenSize from "@/hooks/useScreenSize";
 import { connectAction } from "@/lib/integrations/connect";
 import { useAppPosition } from "@/lib/navigation/hooks";
-import type { AgentChatPlugins, ChatPluginEntry } from "@/lib/plugins/hooks";
+import {
+  useAgentPluginPreferences,
+  type AgentChatPlugins,
+  type ChatPluginEntry,
+} from "@/lib/plugins/hooks";
+import { useUser } from "@/providers/UserProvider";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 
 export interface ChatPluginsPopoverProps {
@@ -42,7 +47,12 @@ export default function ChatPluginsPopover({
   const t = useTranslations("plugins.chat.popover");
   const memberCopy = useTranslations("plugins.member");
   const connectionCopy = useTranslations("plugins.member.connection");
-  const { plugins, isLoading, error, refresh } = catalog;
+  const { plugins, isLoading, refresh } = catalog;
+  const { user } = useUser();
+  const preferences = useAgentPluginPreferences(
+    user !== null && !user.is_anonymous_user
+  );
+  const error = catalog.error ?? preferences.error;
   const appPosition = useAppPosition();
   const navigation = useNavigation();
   const { isMobile } = useScreenSize();
@@ -265,7 +275,10 @@ export default function ChatPluginsPopover({
                 <Button
                   size="sm"
                   prominence="secondary"
-                  onClick={() => void refresh()}
+                  onClick={() => {
+                    void refresh();
+                    void preferences.retry();
+                  }}
                 >
                   {t("retry.label")}
                 </Button>
