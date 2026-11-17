@@ -43,4 +43,10 @@ export class UsageReportsPage {
       this.page.getByRole("button", { name: "Generate report", exact: true })
     ).toBeEnabled();
   }
+
+  async expectReport(period: string): Promise<void> {
+    await expect(
+      this.page.getByText(period, { exact: true }).first()
+    ).toBeVisible();
+  }
 }

@@ -311,23 +311,38 @@ export default function UsageReports() {
     isLoading: jobsLoading,
     mutate: mutateJobs,
   } = useSWR<UsageReportJob[]>(SWR_KEYS.usageReportJobs, errorHandlingFetcher, {
-    refreshInterval: (latest) =>
-      requestedReportId !== null || latest?.some(isOpen) ? POLL_INTERVAL_MS : 0,
+    refreshInterval: (latest) => (latest?.some(isOpen) ? POLL_INTERVAL_MS : 0),
   });
   // Only the admin's own request blocks Generate. Jobs of other admins, or
   // from before a reload, show as rows but do not block a new request.
   const pending = (jobs ?? []).some(
     (job) => job.report_id === requestedReportId && isOpen(job)
   );
-  const polling = requestedReportId !== null || (jobs ?? []).some(isOpen);
+  // A worker records the report in the transaction that deletes its job, so
+  // reports read after a jobs response include every job that response lacks.
   const {
     data: reports,
     error: listError,
-    isLoading: listLoading,
     mutate,
-  } = useSWR<UsageReport[]>(SWR_KEYS.usageReport, errorHandlingFetcher, {
-    refreshInterval: polling ? POLL_INTERVAL_MS : 0,
-  });
+  } = useSWR<UsageReport[]>(
+    jobs ? SWR_KEYS.usageReport : null,
+    errorHandlingFetcher
+  );
+  const listLoading = !reports && !listError;
+
+  // Reload the reports once an open job ends.
+  const openJobIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!jobs) return;
+    const open = new Set(jobs.filter(isOpen).map((job) => job.report_id));
+    const ended = [...openJobIdsRef.current].some((id) => !open.has(id));
+    openJobIdsRef.current = open;
+    if (ended) {
+      void mutate().catch((error: unknown) => {
+        console.error("Failed to refresh the usage report list:", error);
+      });
+    }
+  }, [jobs, mutate]);
 
   useEffect(() => {
     if (listError) console.error("Failed to load usage reports:", listError);
@@ -365,10 +380,13 @@ export default function UsageReports() {
       setArrivedReportName(null);
       // Generation already started, so a failed refresh must not surface as
       // "failed to start report generation". Keep the button disabled until
-      // the job list shows the new job.
-      await Promise.all([mutate(), mutateJobs()]).catch((error: unknown) => {
+      // the job list shows the new job. Read reports after jobs, as above.
+      try {
+        await mutateJobs();
+        await mutate();
+      } catch (error) {
         console.error("Failed to refresh the usage report list:", error);
-      });
+      }
     } catch (error) {
       if (abort.signal.aborted) return;
       console.error("Failed to start usage report generation:", error);
@@ -429,14 +447,14 @@ export default function UsageReports() {
         />
       </div>
 
-      {listLoading || jobsLoading ? (
-        <PageLoader />
-      ) : listError || jobsError ? (
+      {listError || jobsError ? (
         <MessageCard
           variant="error"
           icon={SvgX}
           title={t("reports.listError.title")}
         />
+      ) : listLoading || jobsLoading ? (
+        <PageLoader />
       ) : (
         <Section
           flexDirection="column"

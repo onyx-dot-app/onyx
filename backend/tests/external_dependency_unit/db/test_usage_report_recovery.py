@@ -41,6 +41,14 @@ def test_api_persists_report_before_dispatch(
     assert row.status == "PENDING"
     assert send.call_args.kwargs["task_id"] == report_id
     assert send.call_args.kwargs["expires"] == 3600
+    # Workers still on the earlier release accept only these arguments.
+    assert set(send.call_args.kwargs["kwargs"]) <= {
+        "tenant_id",
+        "user_id",
+        "period_from",
+        "period_to",
+        "report_id",
+    }
 
 
 @pytest.mark.parametrize("status", ["PENDING", "STARTED"])
@@ -80,7 +88,7 @@ def test_lost_report_is_visible_as_failure(
     ) as generate:
         generate_usage_report_task.apply(
             task_id=report_id,
-            kwargs={"tenant_id": "public", "report_id": report_id, "track_job": True},
+            kwargs={"tenant_id": "public", "report_id": report_id},
             throw=True,
         )
         generate.assert_not_called()
@@ -108,7 +116,6 @@ def test_worker_exception_is_visible(db_session: Session, report_id: str) -> Non
                 kwargs={
                     "tenant_id": "public",
                     "report_id": report_id,
-                    "track_job": True,
                 },
                 throw=True,
             )
@@ -142,7 +149,6 @@ def test_success_commits_report_and_removes_job(
             kwargs={
                 "tenant_id": "public",
                 "report_id": report_id,
-                "track_job": tracked,
             },
             throw=True,
         )

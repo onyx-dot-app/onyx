@@ -91,7 +91,6 @@ def generate_report(
                 "period_from": params.period_from,
                 "period_to": params.period_to,
                 "report_id": str(report_id),
-                "track_job": True,
             },
         )
     except Exception:
