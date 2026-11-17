@@ -2431,7 +2431,7 @@ def _idle_worker_with_queued_message(
         )
 
     # Agent tools come from the chat agent; persona tools play no part here.
-    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: {})
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
     model = QueueTestLLM(generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
@@ -2636,7 +2636,7 @@ def test_one_shot_turns_offer_no_agent_tools(
         return AssistantMessage(content=[TextContent(text="Done")])
 
     # Agent tools come from the chat agent; persona tools play no part here.
-    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: {})
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
     model = QueueTestLLM(generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
@@ -2711,7 +2711,7 @@ def test_stop_subagents_interrupts_unfinished_agents_without_waking_the_root(
             ]
         )
 
-    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: {})
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
     model = QueueTestLLM(generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
