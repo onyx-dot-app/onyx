@@ -398,10 +398,12 @@ function effectiveOptions(
 function configurationFrom(
   options: ChatToolOptions,
   agentTools: readonly ToolSnapshot[],
-  pluginIds: readonly string[]
+  pluginIds: readonly string[],
+  preferredPlugins: PluginConfiguration
 ): ChatConfiguration {
   const tools: Record<number, ToolState> = {};
-  const plugins: Record<string, "disabled"> = {};
+  const plugins: Record<string, "disabled"> =
+    options.allowed === null ? { ...preferredPlugins } : {};
   const pluginActions: Record<string, string[] | null> = {};
   const allowed = options.allowed;
   if (allowed !== null) {
@@ -910,8 +912,13 @@ export function useToolConfiguration(
     () =>
       chatOptions === undefined || agentTools === undefined
         ? null
-        : configurationFrom(chatOptions, agentTools, pluginIds ?? []),
-    [chatOptions, agentTools, pluginIds]
+        : configurationFrom(
+            chatOptions,
+            agentTools,
+            pluginIds ?? [],
+            preferredPlugins ?? {}
+          ),
+    [chatOptions, agentTools, pluginIds, preferredPlugins]
   );
 
   const isChat = key !== null && isChatKey(key);
@@ -928,7 +935,9 @@ export function useToolConfiguration(
     ? (chatConfiguration ?? NEUTRAL)
     : newChatConfiguration;
   const ready = isChat
-    ? chatConfiguration !== null && pluginIds !== null
+    ? chatConfiguration !== null &&
+      pluginIds !== null &&
+      (chatOptions?.allowed !== null || preferredPlugins !== null)
     : key !== null &&
       entry.key === key &&
       pluginIds !== null &&
@@ -961,14 +970,19 @@ export function useToolConfiguration(
       );
       if (options === undefined) return;
       const fields = change(
-        configurationFrom(options, activeAgent.tools, pluginIds)
+        configurationFrom(
+          options,
+          activeAgent.tools,
+          pluginIds,
+          preferredPlugins ?? {}
+        )
       );
       if (fields === null) return;
       store.updateSessionData(chatSessionId, {
         toolOptionsEdits: { ...session?.toolOptionsEdits, ...fields },
       });
     },
-    [chatSessionId, activeAgent, pluginIds]
+    [chatSessionId, activeAgent, pluginIds, preferredPlugins]
   );
 
   const setToolState = useCallback(
