@@ -109,6 +109,21 @@ describe.each([
     );
   });
 
+  it("hands a native app's sign-in back to its deep link", async () => {
+    const deepLink = "onyx://auth/callback?code=one-time&state=app-state";
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: new Headers({ location: deepLink }),
+      })
+    );
+
+    const result = await handler(callbackRequest(path));
+
+    expect(result.status).toBe(302);
+    expect(result.headers.get("location")).toBe(deepLink);
+  });
+
   it("sends a cookieless success to the error page", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue(
       new Response(null, {

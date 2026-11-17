@@ -2,6 +2,7 @@ import { authErrorRedirect } from "@/app/auth/libSS";
 import { getDomain } from "@/lib/redirectSS";
 import { buildUrl } from "@/lib/utilsSS";
 import { NextRequest, NextResponse } from "next/server";
+import { isAppSignInHandoff } from "@/lib/auth/appHandoff";
 
 export const GET = async (request: NextRequest) => {
   // Wrapper around the FastAPI endpoint /auth/oidc/callback,
@@ -29,6 +30,12 @@ export const GET = async (request: NextRequest) => {
       errorRedirect.headers.append("set-cookie", cookie);
     }
     return errorRedirect;
+  }
+
+  // A native app's sign-in ends with its deep link and no web session cookie.
+  const location = response.headers.get("location");
+  if (isAppSignInHandoff(location)) {
+    return NextResponse.redirect(location, 302);
   }
 
   const setCookieHeaders = response.headers.getSetCookie();
