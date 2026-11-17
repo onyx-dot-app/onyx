@@ -10,6 +10,9 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 import requests
+from mcp.client.auth import OAuthClientProvider
+from mcp.shared.auth import OAuthClientInformationFull, OAuthMetadata
+from pydantic import AnyHttpUrl
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -25,18 +28,22 @@ from onyx.db.integration_connection import get_connection, get_oauth_client
 from onyx.db.models import Integration
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.connection_models import read_connection_secret
+from onyx.integrations.connection_models import (
+    read_connection_secret,
+    read_oauth_client,
+)
 from onyx.integrations.connections import preset_host_values
 from onyx.integrations.oauth import (
     complete_integration_oauth,
     start_integration_oauth,
 )
-from onyx.server.features.integrations.connections_api import (
-    IntegrationOAuthStartRequest,
-    start_oauth,
-)
+from onyx.server.features.integrations.connections_api import start_oauth
+from onyx.server.features.integrations.models import IntegrationOAuthStartRequest
+from onyx.server.features.mcp.oauth import OAuthAuthorizationRequired
+from onyx.server.features.mcp.oauth_flow import OAuthAuthorizationRedirect
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integrations.conftest import (
+    AUTHORIZE_URL,
     TOKEN_URL,
     MakeIntegration,
     token_response,
@@ -279,6 +286,87 @@ def test_mcp_known_provider_sign_in_uses_sdk_exchange(
         "mcp-access",
         "mcp-refresh",
     )
+
+
+def test_first_mcp_discovery_sign_in_registers_a_client_and_completes(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    """Dynamic registration writes the client id during the sign-in. The
+    callback must still accept the attempt."""
+    integration = make_integration(
+        kind=IntegrationKind.MCP,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        provider_mode=IntegrationOAuthProviderMode.DISCOVERY,
+    )
+    user = make_test_user("oauth_mcp_discovery")
+
+    async def discover_and_register(
+        oauth_provider: OAuthClientProvider, **_: Any
+    ) -> OAuthAuthorizationRedirect:
+        context = oauth_provider.context
+        context.oauth_metadata = OAuthMetadata(
+            issuer=AnyHttpUrl("https://auth.example.test"),
+            authorization_endpoint=AnyHttpUrl(AUTHORIZE_URL),
+            token_endpoint=AnyHttpUrl(TOKEN_URL),
+        )
+        registered = OAuthClientInformationFull(
+            client_id="registered-client",
+            redirect_uris=context.client_metadata.redirect_uris,
+            token_endpoint_auth_method="none",
+        )
+        await context.storage.set_client_info(registered)
+        context.client_info = registered
+        try:
+            await oauth_provider._perform_authorization_code_grant()
+        except OAuthAuthorizationRequired as required:
+            return OAuthAuthorizationRedirect(
+                url=required.authorization.authorization_url
+            )
+        raise AssertionError("discovery did not stop at the browser boundary")
+
+    seen: list[httpx.Request] = []
+
+    def token_handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            content=json.dumps(
+                {
+                    "access_token": "dcr-access",
+                    "refresh_token": "dcr-refresh",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                }
+            ),
+            headers={"content-type": "application/json"},
+        )
+
+    def client_factory(**kwargs: Any) -> httpx.AsyncClient:  # noqa: ARG001
+        return httpx.AsyncClient(transport=httpx.MockTransport(token_handler))
+
+    with patch("onyx.integrations.oauth.run_oauth_discovery", discover_and_register):
+        url = start_integration_oauth(integration, user, db_session)
+    query = _query(url)
+    assert query["client_id"] == "registered-client"
+    db_session.expire_all()
+    oauth_client = get_oauth_client(db_session, integration.id)
+    assert oauth_client is not None
+    assert read_oauth_client(oauth_client).client_id == "registered-client"
+
+    with patch(
+        "onyx.server.features.mcp.oauth.mcp_ssrf_httpx_client_factory",
+        client_factory,
+    ):
+        complete_integration_oauth("dcr-code", query["state"], user, db_session)
+
+    assert len(seen) == 1
+    assert str(seen[0].url) == TOKEN_URL
+    connection = get_connection(db_session, integration.id, user.id)
+    assert connection is not None
+    assert read_connection_secret(connection).access_token == "dcr-access"
 
 
 def test_start_route_hides_integrations_the_user_cannot_see(

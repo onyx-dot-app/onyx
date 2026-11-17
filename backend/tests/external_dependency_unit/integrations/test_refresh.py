@@ -1,13 +1,22 @@
 """ensure_fresh_connection: one call per connection, temporary and permanent
 errors, and each token endpoint source."""
 
+import asyncio
 import threading
-from unittest.mock import MagicMock, patch
+import time
+from collections.abc import Callable
+from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs
+from uuid import uuid4
 
+import httpx
+import pytest
 import requests
 from sqlalchemy.orm import Session
 
+from onyx.auth import oauth_refresher
+from onyx.auth.oauth_refresher import onyx_login_refresh_lock_name
+from onyx.cache.locks import cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     ExternalAppType,
@@ -18,8 +27,11 @@ from onyx.db.enums import (
     IntegrationOAuthProviderMode,
 )
 from onyx.db.integration import get_integration_by_id
-from onyx.db.integration_connection import get_connection_by_id
-from onyx.db.models import Integration, User
+from onyx.db.integration_connection import (
+    get_connection_by_id,
+    upsert_connection__no_commit,
+)
+from onyx.db.models import Integration, OAuthAccount, User
 from onyx.integrations.connection_models import (
     OAUTH_CLIENT_INFO_KEY,
     OAUTH_METADATA_KEY,
@@ -32,6 +44,7 @@ from onyx.integrations.connections import (
     ensure_fresh_connection,
     resolve_connection,
 )
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integrations.conftest import (
@@ -43,6 +56,8 @@ from tests.external_dependency_unit.integrations.conftest import (
     far_future,
     token_response,
 )
+
+logger = setup_logger()
 
 
 def _manual_integration(make_integration: MakeIntegration) -> Integration:
@@ -115,6 +130,61 @@ def test_two_concurrent_refreshes_make_one_call(
     secret = read_connection_secret(connection)
     assert secret.refresh_token == "new-refresh"
     assert connection.expires_at is not None and connection.expires_at > expired()
+
+
+def _sign_in_during_refresh(
+    integration: Integration, user: User, token_endpoint: FakeTokenEndpoint
+) -> Callable[..., httpx.Response]:
+    """A token endpoint that lets an OAuth callback store a new grant while
+    the refresh waits for the response."""
+
+    def send(request: httpx.Request, *, mcp: bool) -> httpx.Response:
+        with get_session_with_current_tenant() as session:
+            upsert_connection__no_commit(
+                session,
+                integration_id=integration.id,
+                user_id=user.id,
+                secret=ConnectionSecret(
+                    access_token="callback-access", refresh_token="callback-refresh"
+                ).model_dump(mode="json"),
+                expires_at=far_future(),
+                granted_scopes=None,
+            )
+            session.commit()
+        return token_endpoint.send(request, mcp=mcp)
+
+    return send
+
+
+@pytest.mark.parametrize("status_code", [200, 400], ids=["refreshed", "refused"])
+def test_refresh_result_does_not_replace_a_newer_sign_in(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+    token_endpoint: FakeTokenEndpoint,
+    status_code: int,
+) -> None:
+    integration = _manual_integration(make_integration)
+    user = make_test_user("refresh_race")
+    connection = add_connection(
+        db_session, integration, user.id, _stale_secret(), expires_at=expired()
+    )
+    token_endpoint.status_code = status_code
+    if status_code != 200:
+        token_endpoint.body = {"error": "invalid_grant"}
+
+    with patch(
+        "onyx.integrations.connections._send_token_request",
+        _sign_in_during_refresh(integration, user, token_endpoint),
+    ):
+        ensure_fresh_connection(connection, integration, db_session)
+
+    assert len(token_endpoint.requests) == 1
+    db_session.expire_all()
+    kept = get_connection_by_id(db_session, connection.id)
+    assert kept is not None
+    assert kept.status is IntegrationConnectionStatus.CONNECTED
+    assert read_connection_secret(kept).access_token == "callback-access"
 
 
 def test_fresh_token_makes_no_call(
@@ -317,3 +387,41 @@ def test_mcp_refresh_uses_sdk_request(
     assert body["refresh_token"] == ["old-refresh"]
     assert body["client_id"] == ["dcr-client"]
     assert read_connection_secret(connection).access_token == "new-access"
+
+
+def test_web_login_refresh_waits_for_the_shared_login_lock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The web refresher and the background refresher take one lock, so they
+    do not redeem the same rotating refresh token at the same time."""
+    user = MagicMock(spec=User)
+    user.id = uuid4()
+    user.email = "login-lock@example.com"
+    account = MagicMock(spec=OAuthAccount)
+    account.refresh_token = "login-refresh"
+    account.expires_at = int(time.time())
+    user.oauth_accounts = [account]
+    db_session = MagicMock()
+    db_session.refresh = AsyncMock()
+    refresh = AsyncMock(return_value=True)
+    monkeypatch.setattr(oauth_refresher, "refresh_oauth_token", refresh)
+    monkeypatch.setattr(oauth_refresher, "reload_user_oidc_expiry", AsyncMock())
+    monkeypatch.setattr(oauth_refresher, "LOGIN_REFRESH_LOCK_WAIT_S", 0.2)
+
+    with cache_shared_lock(
+        onyx_login_refresh_lock_name(user.id),
+        max_time_lock_held_s=10,
+        wait_for_lock_s=1,
+        logger=logger,
+    ):
+        asyncio.run(
+            oauth_refresher.check_and_refresh_oauth_tokens(
+                user, db_session, MagicMock()
+            )
+        )
+    refresh.assert_not_awaited()
+
+    asyncio.run(
+        oauth_refresher.check_and_refresh_oauth_tokens(user, db_session, MagicMock())
+    )
+    refresh.assert_awaited_once()

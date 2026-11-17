@@ -53,7 +53,8 @@ def get_connection(
         ),
     )
     if for_update:
-        stmt = stmt.with_for_update()
+        # The locked read replaces what the session holds for the row.
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     return db_session.scalars(stmt).one_or_none()
 
 
@@ -64,8 +65,14 @@ def get_connection_by_id(
         IntegrationConnection.id == connection_id
     )
     if for_update:
-        stmt = stmt.with_for_update()
+        # The locked read replaces what the session holds for the row.
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     return db_session.scalars(stmt).one_or_none()
+
+
+def reload_connection(db_session: Session, connection: IntegrationConnection) -> None:
+    """Re-read the row: another caller may have written it."""
+    db_session.refresh(connection)
 
 
 def _conflict_target(user_id: UUID | None) -> dict[str, Any]:
@@ -199,7 +206,8 @@ def get_oauth_client(
         IntegrationOAuthClient.integration_id == integration_id
     )
     if for_update:
-        stmt = stmt.with_for_update()
+        # The locked read replaces what the session holds for the row.
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     return db_session.scalars(stmt).one_or_none()
 
 

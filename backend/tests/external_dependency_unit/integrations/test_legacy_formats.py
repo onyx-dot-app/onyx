@@ -517,6 +517,32 @@ def test_individual_custom_app_merges_organization_fields(
     )
 
 
+def test_custom_app_user_fields_named_like_token_fields_are_kept(
+    db_session: Session,
+    make_integration: MakeIntegration,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = make_integration(
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Scope": "{scope}", "X-Until": "{expires_at}"},
+    )
+    user = make_test_user("legacy_custom_fields")
+    _seed(
+        db_session,
+        integration,
+        user.id,
+        IntegrationLegacyFormat.EXTERNAL_APP_USER,
+        {"scope": "tenant-a", "expires_at": "never"},
+    )
+
+    secret = expect_resolved(resolve_connection(integration, user, db_session)).secret
+    assert render_headers(integration.header_template, secret) == {
+        "X-Scope": "tenant-a",
+        "X-Until": "never",
+    }
+
+
 def test_tool_headers_plain_json(
     db_session: Session, make_integration: MakeIntegration
 ) -> None:

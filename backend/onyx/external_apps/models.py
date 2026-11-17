@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -90,3 +90,10 @@ class AppActionPoliciesView(BaseModel):
 class SaveActionPolicies(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action_policies: dict[str, ActionPolicy]
+
+
+class PresetGrant(BaseModel):
+    # Provider credentials with an absolute ``expires_at`` (ISO string).
+    credentials: dict[str, Any]
+    # None when the provider gives no signal.
+    granted_scopes: list[str] | None

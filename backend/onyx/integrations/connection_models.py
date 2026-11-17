@@ -8,14 +8,21 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from mcp.shared.auth import OAuthMetadata, ProtectedResourceMetadata
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 
 from onyx.db.enums import (
+    IntegrationAuthMethod,
     IntegrationConnectionStatus,
     IntegrationLegacyFormat,
     IntegrationOAuthProviderMode,
 )
 from onyx.db.models import IntegrationConnection, IntegrationOAuthClient
+from onyx.oauth.models import (
+    OAuthConfigurationFingerprint,
+    PKCECodeVerifier,
+    SafeOAuthReturnPath,
+)
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
     MCPOAuthKeys,
@@ -208,7 +215,13 @@ def _read_legacy_connection(
         case IntegrationLegacyFormat.OAUTH_USER_TOKEN:
             return _read_oauth_user_token(_dict(raw))
         case IntegrationLegacyFormat.EXTERNAL_APP_USER:
-            secret, expires_at = preset_credentials_to_secret(_dict(raw))
+            data = _dict(raw)
+            if "access_token" not in data:
+                # The field values of a custom app, which can use any name.
+                return _LegacyConnection(
+                    secret=ConnectionSecret(fields=_str_values(data))
+                )
+            secret, expires_at = preset_credentials_to_secret(data)
             return _LegacyConnection(secret=secret, expires_at=expires_at)
         case IntegrationLegacyFormat.EXTERNAL_APP_ORG:
             return _LegacyConnection(secret=ConnectionSecret(fields=_str_values(raw)))
@@ -366,3 +379,64 @@ def connection_refresh_lock_name(integration_id: int, user_id: UUID | None) -> s
         f"integration_connection_refresh:{get_current_tenant_id()}:"
         f"{integration_id}:{owner}"
     )
+
+
+class ResolvedConnection(BaseModel):
+    integration_id: int
+    connection_id: int | None
+    secret: ConnectionSecret | None
+
+
+class ConnectionProblem(BaseModel):
+    code: ConnectionState
+    reason: str
+
+
+class IntegrationStatus(BaseModel):
+    state: ConnectionState
+    reason: str | None
+
+
+class SignInSettings(BaseModel):
+    """A change of only the client secret or a label keeps the connections."""
+
+    auth_method: IntegrationAuthMethod | None
+    client_id: str | None
+    authorization_url: str | None
+    token_url: str | None
+    scopes: list[str] | None
+    host: str | None
+
+
+class RefreshedGrant(BaseModel):
+    secret: ConnectionSecret
+    expires_in: float | None
+
+
+class IntegrationMCPAttempt(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    redirect_uri: AnyUrl
+    client_information_fingerprint: OAuthConfigurationFingerprint
+    protected_resource_metadata: ProtectedResourceMetadata | None = None
+    oauth_metadata: OAuthMetadata | None = None
+    authorization_server_url: str | None = None
+    protocol_version: str | None = None
+    scope: str | None = None
+    resource: AnyUrl | None = None
+
+
+class IntegrationOAuthAttemptPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    integration_id: int
+    for_organization: bool
+    configuration_fingerprint: OAuthConfigurationFingerprint
+    code_verifier: PKCECodeVerifier | None = None
+    return_path: SafeOAuthReturnPath | None = None
+    mcp: IntegrationMCPAttempt | None = None
+
+
+class IntegrationOAuthCallbackResult(BaseModel):
+    integration_id: int
+    return_path: str | None

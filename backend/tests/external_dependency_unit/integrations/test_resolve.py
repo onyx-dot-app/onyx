@@ -8,7 +8,8 @@ import pytest
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from onyx.auth.oauth_refresher import RefreshedLoginToken, _RefreshContext
+from onyx.auth.oauth_refresher import _RefreshContext
+from onyx.auth.schemas import RefreshedLoginToken
 from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.db.enums import (
     IntegrationAuthMethod,

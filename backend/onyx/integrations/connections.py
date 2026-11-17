@@ -5,10 +5,12 @@ from typing import Any
 
 import httpx
 import requests
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.oauth_refresher import refresh_oauth_account_sync
+from onyx.auth.oauth_refresher import (
+    onyx_login_refresh_lock_name,
+    refresh_oauth_account_sync,
+)
 from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.cache.locks import cache_shared_lock
@@ -27,9 +29,11 @@ from onyx.db.integration import (
 from onyx.db.integration_connection import (
     delete_connection__no_commit,
     get_connection,
+    get_connection_by_id,
     get_oauth_client,
     mark_connection_needs_reconnect__no_commit,
     mark_integration_connections_needs_reconnect__no_commit,
+    reload_connection,
     update_connection_secret__no_commit,
 )
 from onyx.db.models import (
@@ -39,6 +43,7 @@ from onyx.db.models import (
     OAuthAccount,
     User,
 )
+from onyx.db.users import fetch_user_by_id, reload_oauth_account
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import (
@@ -50,15 +55,21 @@ from onyx.external_apps.providers.registry import get_provider_for_app
 from onyx.integrations.connection_models import (
     SIGN_IN_EXPIRED_REASON,
     SIGN_IN_SETTINGS_CHANGED_REASON,
+    ConnectionProblem,
     ConnectionRecord,
     ConnectionSecret,
     ConnectionState,
+    IntegrationStatus,
+    RefreshedGrant,
+    ResolvedConnection,
+    SignInSettings,
     connection_refresh_lock_name,
     expiry_from_expires_in,
     legacy_organization_defaults,
     merge_legacy_defaults,
     preset_credentials_to_secret,
     read_connection,
+    read_connection_secret,
     read_oauth_client,
 )
 from onyx.server.features.mcp.models import merge_mcp_headers
@@ -70,7 +81,6 @@ from onyx.server.features.mcp.oauth import (
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -86,33 +96,6 @@ _LOGIN_REFRESH_WINDOW_S = 300
 # "{{" and "}}" are literal braces; "{name}" is a placeholder.
 _TEMPLATE_TOKEN_RE = re.compile(r"\{\{|\}\}|\{([^{}]+)\}")
 _PERMANENT_REFRESH_STATUSES = frozenset({400, 401})
-
-
-class ResolvedConnection(BaseModel):
-    integration_id: int
-    connection_id: int | None
-    secret: ConnectionSecret | None
-
-
-class ConnectionProblem(BaseModel):
-    code: ConnectionState
-    reason: str
-
-
-class IntegrationStatus(BaseModel):
-    state: ConnectionState
-    reason: str | None
-
-
-class SignInSettings(BaseModel):
-    """A change of only the client secret or a label keeps the connections."""
-
-    auth_method: IntegrationAuthMethod | None
-    client_id: str | None
-    authorization_url: str | None
-    token_url: str | None
-    scopes: list[str] | None
-    host: str | None
 
 
 class MissingHeaderValueError(OnyxError):
@@ -132,11 +115,6 @@ class _RefreshPermanentError(Exception):
 
 class _RefreshTemporaryError(Exception):
     pass
-
-
-class _RefreshedGrant(BaseModel):
-    secret: ConnectionSecret
-    expires_in: float | None
 
 
 def not_set_up_reason(integration: Integration) -> str:
@@ -371,11 +349,7 @@ def _login_token_stale(account: OAuthAccount, now: float) -> bool:
 def _reload_account(db_session: Session, account: OAuthAccount) -> OAuthAccount:
     """The account row in this session, re-read. The user may come from the
     auth session of the request, so its rows can belong to another session."""
-    db_account = db_session.get(OAuthAccount, account.id)
-    if db_account is None:
-        return account
-    db_session.refresh(db_account)
-    return db_account
+    return reload_oauth_account(db_session, account.id) or account
 
 
 def _fresh_onyx_login_token(
@@ -388,13 +362,13 @@ def _fresh_onyx_login_token(
     if account.refresh_token:
         try:
             with cache_shared_lock(
-                f"onyx_login_refresh:{get_current_tenant_id()}:{user.id}",
+                onyx_login_refresh_lock_name(user.id),
                 max_time_lock_held_s=_REFRESH_LOCK_LEASE_S,
                 wait_for_lock_s=_REFRESH_LOCK_WAIT_S,
                 logger=logger,
             ):
                 account = _reload_account(db_session, account)
-                db_user = db_session.get(User, user.id)
+                db_user = fetch_user_by_id(db_session, user.id)
                 if (
                     db_user is not None
                     and _login_token_stale(
@@ -511,7 +485,7 @@ def ensure_fresh_connection(
             logger=logger,
         ):
             # Another caller may have refreshed while this one waited.
-            db_session.refresh(connection)
+            reload_connection(db_session, connection)
             record = read_connection(connection)
             if _needs_refresh(record, datetime.now(timezone.utc)):
                 _refresh_under_lock(connection, record, integration, db_session)
@@ -520,8 +494,29 @@ def ensure_fresh_connection(
             "integration_connection.refresh.lock_contended connection_id=%s",
             connection.id,
         )
-        db_session.refresh(connection)
+        reload_connection(db_session, connection)
     return connection
+
+
+def _still_holds(
+    connection: IntegrationConnection, secret: ConnectionSecret, db_session: Session
+) -> bool:
+    """Lock the row and check that it still holds ``secret``. An OAuth
+    callback does not take the refresh lock, so it can store a new grant
+    while a refresh runs."""
+    current = get_connection_by_id(db_session, connection.id, for_update=True)
+    if current is not None:
+        stored = read_connection_secret(current)
+        if (stored.access_token, stored.refresh_token) == (
+            secret.access_token,
+            secret.refresh_token,
+        ):
+            return True
+    db_session.rollback()
+    logger.info(
+        "integration_connection.refresh.superseded connection_id=%s", connection.id
+    )
+    return False
 
 
 def _refresh_under_lock(
@@ -532,8 +527,10 @@ def _refresh_under_lock(
 ) -> None:
     secret = record.secret
     if not secret.refresh_token:
-        if record.expires_at is not None and record.expires_at <= datetime.now(
-            timezone.utc
+        if (
+            record.expires_at is not None
+            and record.expires_at <= datetime.now(timezone.utc)
+            and _still_holds(connection, secret, db_session)
         ):
             mark_connection_needs_reconnect__no_commit(
                 db_session, connection, SIGN_IN_EXPIRED_REASON
@@ -555,6 +552,8 @@ def _refresh_under_lock(
             "integration_connection.refresh.permanent connection_id=%s",
             connection.id,
         )
+        if not _still_holds(connection, secret, db_session):
+            return
         mark_connection_needs_reconnect__no_commit(db_session, connection, error.reason)
         db_session.commit()
         return
@@ -567,6 +566,8 @@ def _refresh_under_lock(
             "fields": {**secret.fields, **grant.secret.fields},
         }
     )
+    if not _still_holds(connection, secret, db_session):
+        return
     update_connection_secret__no_commit(
         db_session,
         connection,
@@ -585,7 +586,7 @@ def _request_refreshed_grant(
     connection: IntegrationConnection,
     secret: ConnectionSecret,
     db_session: Session,
-) -> _RefreshedGrant:
+) -> RefreshedGrant:
     oauth_client = get_oauth_client(db_session, integration.id)
     if oauth_client is None:
         raise _RefreshTemporaryError("the integration has no OAuth client")
@@ -643,7 +644,7 @@ def _expires_in(value: object) -> float | None:
         return None
 
 
-def _grant_from_token_response(request: httpx.Request, mcp: bool) -> _RefreshedGrant:
+def _grant_from_token_response(request: httpx.Request, mcp: bool) -> RefreshedGrant:
     try:
         response = _send_token_request(request, mcp=mcp)
     except (httpx.HTTPError, OnyxError, ValueError) as error:
@@ -670,7 +671,7 @@ def _grant_from_token_response(request: httpx.Request, mcp: bool) -> _RefreshedG
         raise _RefreshTemporaryError("token response has no access token")
     refresh_token = body.get("refresh_token")
     token_type = body.get("token_type")
-    return _RefreshedGrant(
+    return RefreshedGrant(
         secret=ConnectionSecret(
             access_token=access_token,
             refresh_token=refresh_token if isinstance(refresh_token, str) else None,
@@ -682,7 +683,7 @@ def _grant_from_token_response(request: httpx.Request, mcp: bool) -> _RefreshedG
 
 def _refresh_with_token_url(
     secret: ConnectionSecret, oauth_client: IntegrationOAuthClient
-) -> _RefreshedGrant:
+) -> RefreshedGrant:
     if not oauth_client.token_url:
         raise _RefreshTemporaryError("the OAuth client has no token URL")
     client_id, client_secret = _client_credentials(oauth_client)
@@ -727,7 +728,7 @@ def _refresh_with_preset(
     secret: ConnectionSecret,
     oauth_client: IntegrationOAuthClient,
     db_session: Session,
-) -> _RefreshedGrant:
+) -> RefreshedGrant:
     provider = preset_provider_for(integration, db_session)
     client_id, client_secret = _client_credentials(oauth_client)
     if provider is None or not client_id or not client_secret:
@@ -759,7 +760,7 @@ def _refresh_with_preset(
     refreshed_secret, _ = preset_credentials_to_secret(refreshed)
     if not refreshed_secret.access_token:
         raise _RefreshTemporaryError("the preset refresh gave no access token")
-    return _RefreshedGrant(
+    return RefreshedGrant(
         secret=refreshed_secret, expires_in=_expires_in(refreshed.get("expires_in"))
     )
 
@@ -769,7 +770,7 @@ def _refresh_with_mcp_sdk(
     connection: IntegrationConnection,
     oauth_client: IntegrationOAuthClient,
     db_session: Session,
-) -> _RefreshedGrant:
+) -> RefreshedGrant:
     mcp_server = get_mcp_server_for_integration(integration.id, db_session)
     if mcp_server is None:
         raise _RefreshTemporaryError("the integration has no MCP server")
