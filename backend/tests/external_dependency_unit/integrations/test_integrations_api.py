@@ -10,6 +10,8 @@ from uuid import uuid4
 
 import pytest
 from httpx import ConnectError, HTTPStatusError, Request, Response
+from mcp.types import Tool as MCPLibTool
+from mcp.types import ToolAnnotations
 from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -237,16 +239,25 @@ def test_a_spec_with_no_server_url_does_not_break_the_admin_list(
 def test_create_mcp_discovers_tools_of_a_public_server(
     db_session: Session, scoped: User, created: Created
 ) -> None:
-    spec = IntegrationActionSpec(
-        key="search",
-        source=IntegrationActionSource.MCP,
-        display_name="Search",
-        description=None,
-        read_only=True,
-        default_policy=IntegrationActionPolicyValue.ALLOW,
-    )
+    def discover(*_args: Any, **_kwargs: Any) -> list[MCPLibTool]:
+        assert (
+            db_session.scalar(
+                select(MCPServer.id).where(
+                    MCPServer.server_url == "https://mcp.example.com/mcp"
+                )
+            )
+            is None
+        )
+        return [
+            MCPLibTool(
+                name="search",
+                inputSchema={"type": "object"},
+                annotations=ToolAnnotations(readOnlyHint=True),
+            )
+        ]
+
     with patch(
-        "onyx.integrations.service.fetch_mcp_actions", return_value=[spec]
+        "onyx.integrations.service.discover_mcp_tools", side_effect=discover
     ) as fetch:
         detail = admin_api.create_integration(
             IntegrationCreate(
@@ -385,6 +396,35 @@ def test_without_craft_no_external_app_and_no_presets(
                 )
                 is None
             )
+
+
+def test_create_mcp_saves_nothing_when_discovery_fails(
+    db_session: Session, admin: User
+) -> None:
+    name = f"mcp-down-{uuid4().hex[:8]}"
+    with (
+        patch(
+            "onyx.integrations.service.discover_mcp_tools",
+            side_effect=ConnectError("down"),
+        ),
+        pytest.raises(OnyxError) as error,
+    ):
+        admin_api.create_integration(
+            IntegrationCreate(
+                name=name,
+                auth_mode=IntegrationAuthMode.NONE,
+                config=McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
+            ),
+            admin,
+            db_session,
+        )
+    assert error.value.error_code is OnyxErrorCode.BAD_GATEWAY
+    db_session.rollback()
+    assert (
+        db_session.scalar(select(Integration.id).where(Integration.name == name))
+        is None
+    )
+    assert db_session.scalar(select(MCPServer.id).where(MCPServer.name == name)) is None
 
 
 def test_create_rolls_back_when_a_step_fails(db_session: Session, admin: User) -> None:

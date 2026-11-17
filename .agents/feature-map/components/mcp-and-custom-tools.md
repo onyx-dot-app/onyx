@@ -16,9 +16,10 @@
   credentials and reports whether the server is open, asks for OAuth, asks for
   some other credential, or cannot be reached. The admin then picks none, a
   shared or per-user API token, per-user OAuth, or pass-through of the user's
-  Onyx login token. The server is saved only after sign-in and tool discovery
-  succeed. On failure the admin sees the error in the form and nothing is
-  saved. A URL that SSRF protection blocks fails with a hint that names the
+  Onyx login token. A server with no sign-in is asked for its tools before
+  Onyx saves anything; if the server cannot be reached, the admin sees the
+  error and nothing is saved. A server with a sign-in is saved with no
+  actions, and the admin refreshes the actions after the sign-in. A URL that SSRF protection blocks fails with a hint that names the
   SSRF Protection level that allows it, or says that no level does.
 - **An admin adds an OpenAPI action.** The admin pastes an OpenAPI 3 schema with
   one server URL. Each operation in it becomes a tool that the model can call.
@@ -278,8 +279,9 @@ admin value is not Ask.
   `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client, one
   plugin that holds it (`db/plugin.py:create_integration_plugin__no_commit`:
   version 1 with no files, Organization library or the creator's "My uploads")
-  and the actions. A public MCP server is asked for its tools at create; a
-  failure leaves no actions until a refresh.
+  and the actions. A public MCP server (`auth_mode` none) is asked for its
+  tools before the first insert (`_discover_new_server`); a failure gives a
+  502 and saves nothing. An MCP server with a sign-in starts with no actions.
 - Delete (`db/integration.py:delete_integration__no_commit`) deletes the
   integration and then its kind row. A plugin left with no skill and no
   integration goes too. A deleted kind row deletes its integration by cascade.
