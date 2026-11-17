@@ -283,9 +283,9 @@ def test_openapi_match_picks_the_path_before_the_method_under_an_encoded_server_
     )
 
     assert matched is not None
-    assert [m.action_key for m in matched] == expected
+    assert [m.action_key for m in matched.actions] == expected
     if expected == [WHOLE_DOMAIN_ACTION_TYPE]:
-        assert matched[0].default_policy is IntegrationActionPolicyValue.ASK
+        assert matched.actions[0].default_policy is IntegrationActionPolicyValue.ASK
 
 
 @pytest.mark.parametrize(
