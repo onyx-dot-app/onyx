@@ -11802,9 +11802,17 @@
         "loginBadCredentials": "Dieses Konto kann sich nicht anmelden. Es ist möglicherweise deaktiviert. Wenden Sie sich an den Administrator Ihres Arbeitsbereichs.",
         "loginRequired": "Sie müssen sich zuerst bei Ihrem Identitätsanbieter anmelden.",
         "oauthUserAlreadyExists": "Ein Konto mit dieser E-Mail-Adresse existiert bereits mit einer anderen Anmeldemethode. Melden Sie sich wie beim ersten Mal an, oder bitten Sie Ihren Administrator, diesen Anbieter zu verknüpfen.",
+        "playgroundActiveTenant": "Ein Team aus Ihrem Unternehmen testet Onyx bereits. Ihrem Team beitreten oder ein neues Team starten?",
+        "playgroundAskAdmin": "Bitten Sie Ihren Admin, Sie einzuladen.",
+        "playgroundCheckFailed": "Wir konnten Ihre Registrierung nicht prüfen. Versuchen Sie es später erneut.",
+        "playgroundEmailUsed": "Sie haben Ihren Playground-Zugang bereits genutzt.",
+        "playgroundLimitReached": "Ihr Unternehmen hat seinen Playground-Zugang bereits genutzt.",
         "serverError": "Bei Ihrem Identitätsanbieter ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
         "staleSignIn": "Dieser Anmeldelink ist abgelaufen oder nicht mehr gültig. Bitte melden Sie sich erneut an.",
         "temporarilyUnavailable": "Ihr Identitätsanbieter ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut."
+      },
+      "contactSalesButton": {
+        "label": "Vertrieb kontaktieren"
       },
       "credentialsIssue": {
         "description": "Falsche oder abgelaufene Anmeldedaten"
@@ -11812,6 +11820,12 @@
       "heading": {
         "description": "Bei Ihrem Anmeldeversuch ist ein Problem aufgetreten.",
         "title": "Authentifizierungsfehler"
+      },
+      "joinTeamButton": {
+        "label": "Ihrem Team beitreten"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "Mögliche Ursachen:"
@@ -11821,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "Wenn das Problem weiterhin besteht, wenden Sie sich an Ihren Systemadministrator."
+      },
+      "startNewTeamButton": {
+        "label": "Neues Team starten"
       },
       "systemDisruptionIssue": {
         "description": "Vorübergehende Störung des Authentifizierungssystems"

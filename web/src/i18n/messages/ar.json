@@ -11802,9 +11802,17 @@
         "loginBadCredentials": "لا يمكن لهذا الحساب تسجيل الدخول. قد يكون معطّلًا. تواصل مع مسؤول مساحة العمل.",
         "loginRequired": "يجب تسجيل الدخول عبر موفر الهوية أولًا.",
         "oauthUserAlreadyExists": "يوجد حساب بهذا البريد الإلكتروني بطريقة تسجيل دخول مختلفة. سجّل الدخول بالطريقة التي استخدمتها أول مرة، أو اطلب من المسؤول ربط هذا الموفر.",
+        "playgroundActiveTenant": "فريق من شركتك يجرّب Onyx بالفعل. هل تريد الانضمام إلى فريقك أم بدء فريق جديد؟",
+        "playgroundAskAdmin": "اطلب من مسؤولك دعوتك.",
+        "playgroundCheckFailed": "لم نتمكن من التحقق من تسجيلك. حاول مرة أخرى لاحقًا.",
+        "playgroundEmailUsed": "لقد استخدمت وصولك إلى الـ playground.",
+        "playgroundLimitReached": "لقد استخدمت شركتك وصولها إلى الـ playground.",
         "serverError": "واجه موفر الهوية خطأً. يرجى المحاولة مرة أخرى.",
         "staleSignIn": "انتهت صلاحية رابط تسجيل الدخول هذا أو لم يعد صالحًا. يرجى تسجيل الدخول مرة أخرى.",
         "temporarilyUnavailable": "موفر الهوية غير متاح مؤقتًا. يرجى المحاولة لاحقًا."
+      },
+      "contactSalesButton": {
+        "label": "تواصل مع المبيعات"
       },
       "credentialsIssue": {
         "description": "بيانات تسجيل دخول غير صحيحة أو منتهية الصلاحية"
@@ -11812,6 +11820,12 @@
       "heading": {
         "description": "حدثت مشكلة أثناء محاولة تسجيل الدخول.",
         "title": "خطأ في المصادقة"
+      },
+      "joinTeamButton": {
+        "label": "الانضمام إلى فريقي"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "المشكلات المحتملة:"
@@ -11821,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "إذا استمرت المشكلة، يرجى التواصل مع مسؤول النظام للمساعدة."
+      },
+      "startNewTeamButton": {
+        "label": "بدء فريق جديد"
       },
       "systemDisruptionIssue": {
         "description": "انقطاع مؤقت في نظام المصادقة"

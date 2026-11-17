@@ -11802,9 +11802,17 @@
         "loginBadCredentials": "このアカウントはサインインできません。無効化されている可能性があります。ワークスペースの管理者にお問い合わせください。",
         "loginRequired": "先に ID プロバイダーでログインする必要があります。",
         "oauthUserAlreadyExists": "このメールアドレスのアカウントは、別のサインイン方法で既に存在します。最初に使用した方法でサインインするか、管理者にこのプロバイダーの連携を依頼してください。",
+        "playgroundActiveTenant": "あなたの会社のチームがすでに Onyx を試用しています。チームに参加しますか、それとも新しいチームを始めますか？",
+        "playgroundAskAdmin": "管理者に招待を依頼してください。",
+        "playgroundCheckFailed": "サインアップを確認できませんでした。しばらくしてからもう一度お試しください。",
+        "playgroundEmailUsed": "プレイグラウンドへのアクセスはすでに使用済みです。",
+        "playgroundLimitReached": "貴社はプレイグラウンドへのアクセスをすでに使用済みです。",
         "serverError": "ID プロバイダーでエラーが発生しました。もう一度お試しください。",
         "staleSignIn": "このログインリンクは期限切れか、無効になっています。もう一度ログインしてください。",
         "temporarilyUnavailable": "ID プロバイダーは一時的に利用できません。しばらくしてからもう一度お試しください。"
+      },
+      "contactSalesButton": {
+        "label": "営業に問い合わせる"
       },
       "credentialsIssue": {
         "description": "ログイン認証情報の誤りまたは期限切れ"
@@ -11812,6 +11820,12 @@
       "heading": {
         "description": "ログインの試行中に問題が発生しました。",
         "title": "認証エラー"
+      },
+      "joinTeamButton": {
+        "label": "チームに参加"
+      },
+      "playgroundHeading": {
+        "title": "Onyx プレイグラウンド"
       },
       "possibleIssues": {
         "title": "考えられる原因："
@@ -11821,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "問題が解決しない場合は、システム管理者にお問い合わせください。"
+      },
+      "startNewTeamButton": {
+        "label": "新しいチームを始める"
       },
       "systemDisruptionIssue": {
         "description": "認証システムの一時的な障害"

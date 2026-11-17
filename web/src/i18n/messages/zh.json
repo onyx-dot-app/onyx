@@ -11802,9 +11802,17 @@
         "loginBadCredentials": "此账户无法登录，可能已被停用。请联系您的工作区管理员。",
         "loginRequired": "您需要先通过身份提供方登录。",
         "oauthUserAlreadyExists": "使用此邮箱的账户已通过其他登录方式存在。请使用您首次使用的方式登录，或请管理员关联此提供方。",
+        "playgroundActiveTenant": "您公司的团队已经在试用 Onyx。加入您的团队，还是创建新团队？",
+        "playgroundAskAdmin": "请让您的管理员邀请您。",
+        "playgroundCheckFailed": "我们无法核验您的注册。请稍后重试。",
+        "playgroundEmailUsed": "您已使用过 playground 访问权限。",
+        "playgroundLimitReached": "贵公司已使用过 playground 访问权限。",
         "serverError": "您的身份提供方遇到错误。请重试。",
         "staleSignIn": "此登录链接已过期或已失效。请重新登录。",
         "temporarilyUnavailable": "您的身份提供方暂时不可用。请稍后重试。"
+      },
+      "contactSalesButton": {
+        "label": "联系销售"
       },
       "credentialsIssue": {
         "description": "登录凭据不正确或已过期"
@@ -11812,6 +11820,12 @@
       "heading": {
         "description": "您的登录尝试出现问题。",
         "title": "身份验证错误"
+      },
+      "joinTeamButton": {
+        "label": "加入我的团队"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "可能的原因："
@@ -11821,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "如果问题持续存在，请联系您的系统管理员寻求帮助。"
+      },
+      "startNewTeamButton": {
+        "label": "创建新团队"
       },
       "systemDisruptionIssue": {
         "description": "身份验证系统临时中断"

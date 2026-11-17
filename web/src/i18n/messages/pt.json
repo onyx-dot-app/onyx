@@ -11802,9 +11802,17 @@
         "loginBadCredentials": "Esta conta não pode entrar. Ela pode estar desativada. Contate o administrador do seu espaço de trabalho.",
         "loginRequired": "Você precisa primeiro entrar com seu provedor de identidade.",
         "oauthUserAlreadyExists": "Já existe uma conta com este e-mail usando outro método de login. Entre da forma que usou pela primeira vez, ou peça ao seu administrador para vincular este provedor.",
+        "playgroundActiveTenant": "Uma equipe da sua empresa já está testando o Onyx. Entrar na sua equipe ou criar uma nova equipe?",
+        "playgroundAskAdmin": "Peça ao seu administrador para convidá-lo.",
+        "playgroundCheckFailed": "Não foi possível verificar seu cadastro. Tente novamente mais tarde.",
+        "playgroundEmailUsed": "Você já usou seu acesso ao playground.",
+        "playgroundLimitReached": "Sua empresa já usou seu acesso ao playground.",
         "serverError": "Seu provedor de identidade encontrou um erro. Tente novamente.",
         "staleSignIn": "Este link de acesso expirou ou não é mais válido. Entre novamente.",
         "temporarilyUnavailable": "Seu provedor de identidade está temporariamente indisponível. Tente novamente mais tarde."
+      },
+      "contactSalesButton": {
+        "label": "Falar com vendas"
       },
       "credentialsIssue": {
         "description": "Credenciais de login incorretas ou expiradas"
@@ -11812,6 +11820,12 @@
       "heading": {
         "description": "Houve um problema com sua tentativa de login.",
         "title": "Erro de autenticação"
+      },
+      "joinTeamButton": {
+        "label": "Entrar na minha equipe"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "Possíveis causas:"
@@ -11821,6 +11835,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "Se o problema continuar, entre em contato com o administrador do sistema para obter ajuda."
+      },
+      "startNewTeamButton": {
+        "label": "Criar uma nova equipe"
       },
       "systemDisruptionIssue": {
         "description": "Interrupção temporária do sistema de autenticação"
