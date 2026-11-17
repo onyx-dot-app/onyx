@@ -13,7 +13,11 @@ always left to right.
 | `CodePanel.Lines`    | The code, one row per line: optional line numbers and diff markers; scrolls past 24rem      |
 | `CodePanel.Columns`  | Two `Lines` side by side that scroll together, e.g. a split diff                            |
 | `CodePanel.Output`   | Optional output text (`background-tint-00`), or `error` output (red on a red tint)          |
+| `CodePanel.Content`  | Optional padded row for anything else, e.g. links or a progress indicator                   |
 | `CodePanel.Footer`   | Optional closing row, e.g. "12 more lines" and a "Show all" button                          |
+
+A panel can hold more than one section: e.g. a "Request" header and its
+lines, then a "Response" header and its lines.
 
 Highlighting is the caller's: pass each line's `content` as plain text or as
 highlighted markup.

@@ -14,7 +14,10 @@ import {
   RenderType,
 } from "@/app/app/message/messageComponents/types";
 import { buildImgUrl } from "../../../components/files/images/utils";
-import { CodePanel, ShadowDiv, Text } from "@opal/components";
+import { Button, CodePanel, ShadowDiv, Text } from "@opal/components";
+import { Section } from "@opal/layouts";
+import { downloadFile } from "@/lib/download";
+import { openExternalLink } from "@/lib/search/utils";
 import { SvgDownload, SvgExternalLink } from "@opal/icons";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
@@ -126,103 +129,128 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         : null,
     [data]
   );
+  const hasData = data !== undefined && data !== null;
+  const hasFiles = !error && !!fileIds && fileIds.length > 0;
+  // The response shows once it arrives, and as "waiting" while the tool runs.
+  const showResponse = !!error || hasFiles || hasData || isRunning;
   const argsLines = useCodeLines(toolArgsJson ?? "", "json");
   const dataLines = useCodeLines(dataJson ?? "", "json");
 
   const content = useMemo(
-    () => (
-      <div className="flex flex-col gap-3">
-        {/* Loading indicator */}
-        {isRunning &&
-          !error &&
-          !fileIds &&
-          (data === undefined || data === null) && (
-            <div className="flex items-center gap-2 text-sm text-text-03">
-              <div className="flex gap-0.5">
-                <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
-                <div
-                  className="w-1 h-1 bg-current rounded-full animate-pulse"
-                  style={{ animationDelay: "0.1s" }}
-                ></div>
-                <div
-                  className="w-1 h-1 bg-current rounded-full animate-pulse"
-                  style={{ animationDelay: "0.2s" }}
-                ></div>
-              </div>
-              <Text font="secondary-body" color="text-03">
-                {t("customTool.waitingIndicator.text")}
-              </Text>
-            </div>
+    () =>
+      // One panel: the request, then the response (waiting, files, JSON,
+      // text or the tool's error), each under its own title row.
+      toolArgsJson || showResponse ? (
+        <CodePanel>
+          {toolArgsJson && (
+            <>
+              <CodePanel.Header
+                title={t("customTool.requestBlock.label")}
+                copyText={toolArgsJson}
+              />
+              <CodePanel.Lines lineNumbers lines={argsLines} />
+            </>
           )}
-
-        {/* The request: the tool's arguments. */}
-        {toolArgsJson && (
-          <CodePanel>
-            <CodePanel.Header
-              title={t("customTool.requestBlock.label")}
-              copyText={toolArgsJson}
-            />
-            <CodePanel.Lines lineNumbers lines={argsLines} />
-          </CodePanel>
-        )}
-
-        {/* File responses */}
-        {!error && fileIds && fileIds.length > 0 && (
-          <div className="text-sm text-text-03 flex flex-col gap-2">
-            {fileIds.map((fid, idx) => (
-              <div key={fid} className="flex items-center gap-2 flex-wrap">
-                <Text
-                  font="secondary-body"
-                  color="text-03"
-                  wordWrap="whitespace-nowrap"
-                >
-                  {t("customTool.fileItem.label", { index: idx + 1 })}
-                </Text>
-                <a
-                  href={buildImgUrl(fid)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-action-selection-01 hover:underline whitespace-nowrap"
-                >
-                  <SvgExternalLink className="w-3 h-3" />{" "}
-                  {t("customTool.openFileLink.label")}
-                </a>
-                <a
-                  href={buildImgUrl(fid)}
-                  download
-                  className="inline-flex items-center gap-1 text-xs text-action-selection-01 hover:underline whitespace-nowrap"
-                >
-                  <SvgDownload className="w-3 h-3" />{" "}
-                  {t("customTool.downloadFileLink.label")}
-                </a>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* The response: JSON, text, or the tool's error. */}
-        {(error || (data !== undefined && data !== null)) && (
-          <CodePanel>
-            <CodePanel.Header
-              title={t("customTool.responseBlock.label")}
-              copyText={error ? undefined : (dataJson ?? String(data))}
-            />
-            {error ? (
-              <CodePanel.Output error>{error.message}</CodePanel.Output>
-            ) : dataJson ? (
-              <CodePanel.Lines lineNumbers lines={dataLines} />
-            ) : (
-              <CodePanel.Output>{String(data)}</CodePanel.Output>
-            )}
-          </CodePanel>
-        )}
-      </div>
-    ),
+          {showResponse && (
+            <>
+              <CodePanel.Header
+                title={t("customTool.responseBlock.label")}
+                copyText={
+                  error || hasFiles || !hasData
+                    ? undefined
+                    : (dataJson ?? String(data))
+                }
+              />
+              {error ? (
+                <CodePanel.Output error>{error.message}</CodePanel.Output>
+              ) : hasFiles ? (
+                <CodePanel.Content>
+                  <Section alignItems="stretch" gap={0.5} height="fit">
+                    {(fileIds ?? []).map((fid, idx) => (
+                      <Section
+                        key={fid}
+                        flexDirection="row"
+                        justifyContent="start"
+                        gap={2}
+                        height="fit"
+                      >
+                        <Text
+                          font="secondary-body"
+                          color="text-03"
+                          wordWrap="whitespace-nowrap"
+                        >
+                          {t("customTool.fileItem.label", { index: idx + 1 })}
+                        </Text>
+                        {/* Open and Download, 2px apart and 0.5rem from the label. */}
+                        <Section
+                          flexDirection="row"
+                          width="fit"
+                          height="fit"
+                          gap={0.5}
+                        >
+                          <Button
+                            prominence="secondary"
+                            size="xs"
+                            icon={SvgExternalLink}
+                            onClick={() => openExternalLink(buildImgUrl(fid))}
+                          >
+                            {t("customTool.openFileLink.label")}
+                          </Button>
+                          <Button
+                            prominence="secondary"
+                            size="xs"
+                            icon={SvgDownload}
+                            onClick={() =>
+                              downloadFile("", { url: buildImgUrl(fid) })
+                            }
+                          >
+                            {t("customTool.downloadFileLink.label")}
+                          </Button>
+                        </Section>
+                      </Section>
+                    ))}
+                  </Section>
+                </CodePanel.Content>
+              ) : hasData ? (
+                dataJson ? (
+                  <CodePanel.Lines lineNumbers lines={dataLines} />
+                ) : (
+                  <CodePanel.Output>{String(data)}</CodePanel.Output>
+                )
+              ) : (
+                <CodePanel.Content>
+                  <div className="flex items-center gap-2 text-sm text-text-03">
+                    <div className="flex gap-0.5">
+                      <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
+                      <div
+                        className="w-1 h-1 bg-current rounded-full animate-pulse"
+                        style={{ animationDelay: "0.1s" }}
+                      ></div>
+                      <div
+                        className="w-1 h-1 bg-current rounded-full animate-pulse"
+                        style={{ animationDelay: "0.2s" }}
+                      ></div>
+                    </div>
+                    <Text font="secondary-body" color="text-03">
+                      {t("customTool.waitingIndicator.text")}
+                    </Text>
+                  </div>
+                </CodePanel.Content>
+              )}
+            </>
+          )}
+        </CodePanel>
+      ) : (
+        <></>
+      ),
     [
       toolArgsJson,
       dataJson,
       argsLines,
       dataLines,
+      showResponse,
+      hasFiles,
+      hasData,
       data,
       fileIds,
       error,

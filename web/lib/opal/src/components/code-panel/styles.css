@@ -109,6 +109,11 @@
   @apply bg-status-error-01;
 }
 
+/* Content: anything that is not code or output. */
+.opal-code-panel-content {
+  @apply px-2 py-1;
+}
+
 /* Footer */
 .opal-code-panel-footer {
   @apply px-2 py-0.5 bg-background-tint-00;

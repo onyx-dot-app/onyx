@@ -66,6 +66,11 @@ interface CodePanelOutputProps {
   error?: boolean;
 }
 
+interface CodePanelContentProps {
+  /** Any content, such as links or a progress indicator. */
+  children: React.ReactNode;
+}
+
 interface CodePanelFooterProps {
   title: string | RichStr;
   /** Controls at the end of the row, such as "Show all". */
@@ -217,6 +222,11 @@ function CodePanelOutput({ children, error = false }: CodePanelOutputProps) {
   );
 }
 
+/** A padded row for content that is not code or output, such as links. */
+function CodePanelContent({ children }: CodePanelContentProps) {
+  return <div className="opal-code-panel-content">{children}</div>;
+}
+
 /** A closing row, such as "12 more lines" and a button to show them. */
 function CodePanelFooter({ title, rightChildren }: CodePanelFooterProps) {
   return (
@@ -241,6 +251,7 @@ const CodePanel = Object.assign(CodePanelRoot, {
   Lines: CodePanelLines,
   Columns: CodePanelColumns,
   Output: CodePanelOutput,
+  Content: CodePanelContent,
   Footer: CodePanelFooter,
 });
 
@@ -251,6 +262,7 @@ export {
   type CodePanelLinesProps,
   type CodePanelColumnsProps,
   type CodePanelOutputProps,
+  type CodePanelContentProps,
   type CodePanelFooterProps,
   type CodePanelLine,
   type CodePanelLineKind,

@@ -433,6 +433,7 @@ export {
   type CodePanelLinesProps,
   type CodePanelColumnsProps,
   type CodePanelOutputProps,
+  type CodePanelContentProps,
   type CodePanelFooterProps,
   type CodePanelLine,
   type CodePanelLineKind,
