@@ -90,10 +90,22 @@ send → ApiService                                   services/api-service.ts
   │    └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
   │         └─ saveSession to sessionStorage, scoped by credential identity
   ├─ stream over → resumeStream({sent}): the one follow path below
-  └─ 409 APPROVAL_PENDING → keep the draft, show the message, resumeStream
-       from the status with a session load (shows the waiting card), point
-       at the card
+  ├─ 409 APPROVAL_PENDING → keep the draft, show the message, resumeStream
+  │    from the status with a session load (shows the waiting card), point
+  │    at the card
+  └─ a root question waits (questions.ts:findPendingWait) → no send: the
+       text is a typed answer (below)
 decision → POST /chat/approvals/{id}/decision       widget.ts, services/approvals.ts
+answers  → POST /chat/question-requests/{id}/answers   widget.ts, services/questions.ts
+  card: one question per page (Back/Next, page in widget.ts questionPages);
+    per question, one option or "Other" with a typed answer in place of an
+    option (user_note, no option_label); Submit on the last page
+  typed: {message} answers every waiting question of the response; the
+    input clears and the card record shows the text; 409
+    APPROVAL_PENDING or another error (a query hook's refusal shows its
+    detail) keeps the draft
+  404 or a 409 conflict → "No longer waiting"; resumeStream from the status
+  decisions and answers share followReply:
   no follow runs:
   ├─ continuation set → resumeStream from cursor 0 of continuation.stream_id
   ├─ 404/409 → card shows "No longer waiting"; resumeStream from the status,
@@ -103,9 +115,11 @@ decision → POST /chat/approvals/{id}/decision       widget.ts, services/approv
   ├─ continuation null, "Approve for this chat" → resumeStream from the
   │    current stream with a session load: the server also approved the
   │    chat's other requests for the tool, which only the load shows
-  ├─ continuation null, last root request → resumeStream from the current
-  │    stream, then each stream the status reports, then the saved session
-  └─ continuation null, other root requests wait → nothing starts
+  ├─ continuation null, nothing else waits for the user → resumeStream from
+  │    the current stream, then each stream the status reports, then the
+  │    saved session
+  └─ continuation null, other root requests or questions wait → nothing
+       starts
   a follow runs: a continuation is stored, and the follow takes it before it
     ends (never a stream it just read); with none, the follow reads the
     status once more before it ends
@@ -132,8 +146,8 @@ restore / sent stream / decision / 409 → resumeStream    widget.ts
        branch); walk the selected branch from the root along
        latest_child_message and replay its saved answers (by parent_message
        for questions; a question with none is removed; a version change
-       replays answers with approval requests and answers the transcript
-       lacks); the transcript takes the branch order; the load's
+       replays answers with approval or question requests and answers the
+       transcript lacks); the transcript takes the branch order; the load's
        approvals_version becomes the baseline; on failure the response stays
        unfinished and the version change stays pending for the next load
   replay_end and a resolution sent again (replay, then live) change nothing
@@ -143,9 +157,9 @@ any status read with has_active_subagents (a decided agent that waits to
   each approvals_version change or unseen latest_response_id loads the
   session again; a new stream is followed; Send stays enabled, and a send
   ends the poll (its own follow polls on)
-card status = the server's tool_approval_resolved outcome ("cancelled" →
-  "No longer waiting"), else this widget's decision until the outcome
-  arrives; no stop changes a card
+card status = the server's tool_approval_resolved or tool_question_resolved
+  outcome ("cancelled" → "No longer waiting"), else this widget's decision or
+  answer until the outcome arrives; no stop changes a card
 ```
 `widget/src/config/config.ts:resolveAuthToken` picks the credential for each
 request: the `tokenProvider` result, else the API key, else it throws. The
@@ -282,9 +296,10 @@ panel picks up the new session when the user returns.
     `widget/src/services/api-service.ts:ApiService.waitForSessionIdle` before a
     send to an existing session. After every send, `OnyxChatWidget.resumeStream`
     polls it again when the stream stops, because the server can still save the
-    turn after the stream ends. A stop for decisions is the exception: the
-    response is suspended, and the server refuses a send with 409
-    `APPROVAL_PENDING`. Failed polls retry and keep
+    turn after the stream ends. A stop for decisions or answers
+    (`awaiting_user`) is the exception: the response is suspended, and the
+    server refuses a send with 409 `APPROVAL_PENDING`. While a question
+    waits, the widget posts the text to the answers route instead. Failed polls retry and keep
     Send disabled; there is no overall deadline. A 403 or 404, a 405, or three
     401s in a row end the wait with an error, and none counts as idle. A
     backend without the status route answers 404, so a new bundle on an older
@@ -301,7 +316,7 @@ panel picks up the new session when the user returns.
 ## Known issues
 
 - **The extension has no tests, build, type check or lint.** The widget tests
-  cover session readiness, failed drafts and tool approvals.
+  cover session readiness, failed drafts, tool approvals and questions.
 - **`<all_urls>` is broader than the features need.** Only the selection icon
   and tab reading need page access. Open question: the host grant may also be
   what lets the panel iframe send its `SameSite=Lax` auth cookie, because

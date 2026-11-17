@@ -12,12 +12,12 @@ import {
   ARGUMENT_ROWS_SHOWN,
   argumentRows,
   decidedStatus,
-  findPendingApproval,
 } from "../src/services/approvals";
 import {
   type ApprovalCardView,
   renderApprovalCard,
 } from "../src/services/approval-card";
+import type { PendingWait } from "../src/services/questions";
 import { processPacket } from "../src/services/stream-parser";
 import type {
   ChatSessionDetail,
@@ -26,7 +26,14 @@ import type {
   StreamCursor,
   ToolApprovalRequest,
 } from "../src/types/api-types";
-import { mockFetch, mockTimeouts } from "./mocks";
+import { mockFetch } from "./mocks";
+import {
+  findPendingApproval,
+  pendingApproval,
+  shownText,
+  skipPollPauses,
+  waitUntil,
+} from "./widget-helpers";
 import { chatStream, idle, offer, runs } from "./session-status";
 import type { ChatMessage } from "../src/types/widget-types";
 import { OnyxChatWidget } from "../src/widget";
@@ -142,7 +149,7 @@ describe("approval status", () => {
     expect(approvalStatus(agentEntry, undefined)).toBe("pending");
     expect(
       findPendingApproval(
-        [{ ...streamingMessage([agentEntry]), awaitingApproval: true }],
+        [{ ...streamingMessage([agentEntry]), awaitingUser: true }],
         new Map()
       )
     ).toBeNull();
@@ -227,16 +234,6 @@ describe("approval status", () => {
     expect(rows[3]!.mono).toBe(true);
   });
 });
-
-/** The text a template shows, without its markup or event handlers. */
-function shownText(value: unknown): string {
-  if (Array.isArray(value)) return value.map(shownText).join("");
-  if (typeof value === "string" || typeof value === "number")
-    return String(value);
-  if (typeof value === "object" && value !== null && "values" in value)
-    return shownText((value as { values: unknown[] }).values);
-  return "";
-}
 
 function view(expanded: ReadonlySet<string>): ApprovalCardView {
   return {
@@ -503,20 +500,6 @@ describe("approval decisions", () => {
   });
 });
 
-/** Resolves once `condition` holds; fails after `timeoutMs`. */
-async function waitUntil(condition: () => boolean, timeoutMs = 2_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (!condition()) {
-    if (Date.now() > deadline) throw new Error("The condition never held");
-    await Bun.sleep(1);
-  }
-}
-
-/** Ends the pauses of the poll interval at once. */
-function skipPollPauses() {
-  mockTimeouts((ms) => (ms === 1_000 ? 0 : ms));
-}
-
 /** A sessionStorage stand-in; returns its contents and a cleanup. */
 function fakeSessionStorage() {
   const stored = new Map<string, string>();
@@ -553,7 +536,7 @@ describe("widget while a request waits", () => {
       {
         ...streamingMessage([entry("a"), entry("b")]),
         isStreaming: false,
-        awaitingApproval: true,
+        awaitingUser: true,
       },
     ];
     // The suspended response has no running stream.
@@ -620,7 +603,7 @@ describe("widget while a request waits", () => {
     expect(status(widget, "a")).toBe("approvedForSession");
     expect(status(widget, "b")).toBe("approvedForSession");
     expect(widget["localApprovals"].size).toBe(0);
-    expect(widget["pendingApproval"]).toBeNull();
+    expect(pendingApproval(widget)).toBeNull();
   });
 
   it("follows nothing after a decision that names no continuation", async () => {
@@ -636,7 +619,7 @@ describe("widget while a request waits", () => {
     expect(api.resumeStream).not.toHaveBeenCalled();
     expect(api.waitForSessionIdle).not.toHaveBeenCalled();
     expect(status(widget, "a")).toBe("approved");
-    expect(widget["pendingApproval"]?.request.approval_id).toBe("b");
+    expect(pendingApproval(widget)?.request.approval_id).toBe("b");
   });
 
   it("follows the resume stream that the status reports after the last decision names no continuation", async () => {
@@ -645,7 +628,7 @@ describe("widget while a request waits", () => {
       {
         ...streamingMessage([entry("a")]),
         isStreaming: false,
-        awaitingApproval: true,
+        awaitingUser: true,
       },
     ];
     // Another turn held the chat when the decision landed.
@@ -788,7 +771,7 @@ describe("widget while a request waits", () => {
     expect(api.resumeStream).not.toHaveBeenCalled();
     expect(status(widget, "a")).toBe("rejected");
     expect(widget["localApprovals"].has("a")).toBe(false);
-    expect(widget["pendingApproval"]?.request.approval_id).toBe("b");
+    expect(pendingApproval(widget)?.request.approval_id).toBe("b");
   });
 
   /** A send whose stream shows request a, then stops for decisions. */
@@ -859,7 +842,7 @@ describe("widget while a request waits", () => {
     await widget["sendMessage"]();
 
     expect(widget["isStreaming"]).toBe(false);
-    expect(widget["pendingApproval"]?.request.approval_id).toBe("a");
+    expect(pendingApproval(widget)?.request.approval_id).toBe("a");
     // The new chat's baseline read, then the read after the stop.
     expect(attachables).toHaveLength(2);
     const attachable = attachables[1] ?? (() => true);
@@ -917,7 +900,7 @@ describe("widget while a request waits", () => {
       });
 
       const sending = widget["sendMessage"]();
-      await waitUntil(() => widget["pendingApproval"] !== null);
+      await waitUntil(() => pendingApproval(widget) !== null);
       await widget["decideApproval"](request("a"), "approve_once");
       expect(api.resumeStream).not.toHaveBeenCalled();
       release();
@@ -961,7 +944,7 @@ describe("widget while a request waits", () => {
     });
 
     const sending = widget["sendMessage"]();
-    await waitUntil(() => widget["pendingApproval"] !== null);
+    await waitUntil(() => pendingApproval(widget) !== null);
     await widget["decideApproval"](request("a"), "approve_once");
     expect(api.resumeStream).not.toHaveBeenCalled();
     release();
@@ -997,7 +980,7 @@ describe("widget while a request waits", () => {
     });
     await widget["decideApproval"](request("a"), "reject");
     expect(widget["localApprovals"].get("a")).toBe("failed");
-    expect(widget["pendingApproval"]?.request.approval_id).toBe("a");
+    expect(pendingApproval(widget)?.request.approval_id).toBe("a");
   });
 
   it("sends while a card waits, then keeps the draft and points at the card when the server refuses", async () => {
@@ -1007,7 +990,12 @@ describe("widget while a request waits", () => {
       value: Promise.resolve(true),
     });
     const pointed: string[] = [];
-    widget["pointAtApproval"] = (id: string) => void pointed.push(id);
+    widget["pointAtWait"] = (wait: PendingWait) =>
+      void pointed.push(
+        wait.kind === "approval"
+          ? wait.entry.request.approval_id
+          : wait.entry.request.question_request_id
+      );
     api.streamMessage = mock(async function* () {
       throw new ApiError("waiting", 409, APPROVAL_PENDING_ERROR_CODE);
     });
@@ -1059,7 +1047,7 @@ describe("widget while a request waits", () => {
     });
     widget["inputValue"] = "next";
 
-    expect(widget["pendingApproval"]).toBeNull();
+    expect(pendingApproval(widget)).toBeNull();
     await widget["sendMessage"]();
 
     expect(api.streamMessage).toHaveBeenCalledTimes(1);
@@ -1399,7 +1387,7 @@ describe("widget while a request waits", () => {
 
     expect(api.getChatSession).toHaveBeenCalledTimes(1);
     expect(status(widget, "b")).not.toBe("pending");
-    expect(widget["pendingApproval"]).toBeNull();
+    expect(pendingApproval(widget)).toBeNull();
   });
 
   it("recovers only the turns of the selected branch", async () => {
@@ -1761,7 +1749,7 @@ describe("widget while a request waits", () => {
 
     await widget["resumeStream"]("session", { streamId: null });
 
-    expect(widget["pendingApproval"]?.request.approval_id).toBe("a");
+    expect(pendingApproval(widget)?.request.approval_id).toBe("a");
     expect(widget["messages"].map((m) => [m.id, m.role])).toEqual([
       [6, "user"],
       [7, "assistant"],
@@ -2275,7 +2263,7 @@ describe("widget while a request waits", () => {
     expect(widget["error"]).toBe("Cannot reach the server");
     expect(widget["isStreaming"]).toBe(false);
     expect(widget["abortController"]).toBeUndefined();
-    expect(widget["pendingApproval"]?.request.approval_id).toBe("a");
+    expect(pendingApproval(widget)?.request.approval_id).toBe("a");
 
     widget["chatSessionId"] = "session";
     api.submitApprovalDecision = mock(async () => continuation(4));
@@ -2339,7 +2327,7 @@ describe("widget while a request waits", () => {
     > {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 7 } };
       yield { obj: request("a") };
-      seen.pending = widget["pendingApproval"];
+      seen.pending = pendingApproval(widget);
       return "ended";
     });
     api.waitForSessionIdle = mock(async () => idle());

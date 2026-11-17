@@ -20,6 +20,7 @@ The widget runs in the browser, so whatever credential it holds is visible to th
 - ♿ **Markdown Support** - Rich text formatting in responses
 - 💾 **Session Persistence** - Conversations survive page reloads
 - 👍 **Copy and Feedback** - Copy an answer with its formatting; rate it with thumbs up or down
+- ✅ **Approvals and Questions** - Approve or reject the agent's tool calls, and answer its questions on a card or in a typed message
 - 🎯 **Two Display Modes** - Floating launcher or inline embed
 
 ## Quick Start
@@ -307,6 +308,10 @@ widget/
 │   │   └── build-config.ts      # Build-time config injection
 │   ├── services/
 │   │   ├── api-service.ts       # API client (SSE streaming)
+│   │   ├── approvals.ts         # Tool-call approval status and copy
+│   │   ├── approval-card.ts     # Approval card template
+│   │   ├── questions.ts         # The agent's questions: status and answers
+│   │   ├── question-card.ts     # Question card template
 │   │   └── stream-parser.ts     # SSE packet processor
 │   ├── types/
 │   │   ├── api-types.ts         # Backend packet types
@@ -377,6 +382,48 @@ Response: Server-Sent Events stream
 {"type": "message_delta", "content": " world!"}
 {"type": "stop"}
 ```
+
+#### 3. Tool Approvals and Questions
+
+A response stops with `{"type": "stop", "stop_reason": "awaiting_user"}` when
+it waits for the user. The widget shows a card for each request, and the
+response continues on a new stream after the user replies.
+
+```
+POST /chat/approvals/{approval_id}/decision
+{"decision": "approve_once"}        // or "approve_session", "reject"
+
+Response:
+{
+  "approval_id": "uuid-here",
+  "decision": "APPROVED",           // or "REJECTED"
+  "decided_via": "USER",            // or "PRE_APPROVAL", "SESSION_GRANT", "POLICY"
+  "continuation": {"stream_id": 9, "response_ids": [7]}  // null while more waits
+}
+
+POST /chat/question-requests/{question_request_id}/answers
+{"answers": [{"question_id": "env", "option_label": "Staging"}]}
+// or {"answers": [{"question_id": "env", "user_note": "Both"}]}
+// or {"message": "Use staging"}   // the text that the user typed in the chat
+
+Response:
+{
+  "question_request_id": "uuid-here",
+  "continuation": {"stream_id": 9, "response_ids": [7]}  // null while more waits
+}
+```
+
+A `tool_question_request` packet opens a question card. The card shows one
+question at a time, and Back and Next move between the questions. For each
+question, the user picks one option or picks "Other" and types an answer in
+place of an option. Submit replaces
+Next on the last question, and it is enabled when each question has an answer.
+A message that the user types while a question waits goes to the answers
+route, not to `send-chat-message`. It answers every question of the response
+that waits, and the question's card shows the text. A `tool_question_resolved` packet
+shows how the question ended: answered on the card, answered in the chat, or
+cancelled. A 409 `APPROVAL_PENDING` means that an approval request of the
+response still waits; the draft stays.
 
 ## Deployment
 

@@ -4,6 +4,7 @@
 
 import { ResolvedCitation } from "@/types/api-types";
 import type { ApprovalEntry } from "@/services/approvals";
+import type { QuestionEntry } from "@/services/questions";
 
 /**
  * Returns the bearer credential for a single request. Called before every
@@ -53,8 +54,10 @@ export interface ChatMessage {
   citations?: ResolvedCitation[];
   // Tool calls of this response that asked for the user's approval
   approvals?: ApprovalEntry[];
-  // The stream stopped while the response waits for decisions
-  awaitingApproval?: boolean;
+  // Question calls of this response that asked the user
+  questions?: QuestionEntry[];
+  // The stream stopped while the response waits for decisions or answers
+  awaitingUser?: boolean;
   // The visitor's rating of this response
   feedback?: MessageFeedback;
 }

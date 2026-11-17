@@ -885,6 +885,93 @@ export const widgetStyles = css`
     color: var(--text-04);
   }
 
+  /* The agent's questions, in the approval card's frame */
+  .question {
+    display: flex;
+    flex-direction: column;
+    gap: var(--onyx-space-2xs);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+
+  .question legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--onyx-space-xs);
+    margin-bottom: var(--onyx-space-2xs);
+    padding: 0;
+  }
+
+  .question-page {
+    flex-basis: 100%;
+    font-size: var(--onyx-font-size-secondary);
+    opacity: 0.7;
+  }
+
+  .question-unanswered {
+    margin: 0;
+    font-size: var(--onyx-font-size-secondary);
+    opacity: 0.7;
+  }
+
+  .question-header {
+    padding: 0 6px;
+    border-radius: var(--onyx-radius-08);
+    background: var(--background-neutral-03);
+    font-size: var(--onyx-font-size-secondary);
+  }
+
+  .question-text {
+    font-weight: var(--onyx-weight-medium);
+    overflow-wrap: anywhere;
+  }
+
+  .question-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--onyx-space-xs);
+    cursor: pointer;
+  }
+
+  .question-option input {
+    margin: 3px 0 0;
+    accent-color: var(--theme-primary-05);
+  }
+
+  .question-option-label {
+    overflow-wrap: anywhere;
+  }
+
+  .question-option-description {
+    display: block;
+    opacity: 0.7;
+    overflow-wrap: anywhere;
+  }
+
+  .question:disabled .question-option {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .question-note {
+    padding: 4px 8px;
+    border: 1px solid var(--border-01);
+    border-radius: var(--onyx-radius-08);
+    background: var(--background-neutral-00);
+    color: var(--text-04);
+    font-family: var(--onyx-font-family);
+    font-size: var(--onyx-font-size-sm);
+  }
+
+  .question-option input:focus-visible,
+  .question-note:focus-visible {
+    outline: 2px solid var(--theme-primary-05);
+    outline-offset: 2px;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .approval-spinner {
       animation: none;
