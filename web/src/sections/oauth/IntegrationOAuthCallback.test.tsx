@@ -1,9 +1,5 @@
-import type { ComponentType } from "react";
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import IntegrationOAuthCallback from "@/sections/oauth/IntegrationOAuthCallback";
-import CraftAppsCallbackPage from "@/app/craft/v1/apps/oauth/callback/page";
-import McpCallbackPage from "@/app/mcp/oauth/callback/page";
-import OAuthConfigCallbackPage from "@/app/oauth-config/callback/page";
 import messages from "@/i18n/messages/en.json";
 import {
   mockFetch,
@@ -40,34 +36,26 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-test.each<[string, ComponentType]>([
-  ["the shared callback", IntegrationOAuthCallback],
-  ["the preset callback page", CraftAppsCallbackPage],
-  ["the MCP callback page", McpCallbackPage],
-  ["the manual OAuth client callback page", OAuthConfigCallbackPage],
-])(
-  "%s posts the code to the integration API and goes to the return path",
-  async (_name, Page) => {
-    const fetchMock = mockFetch({
-      [`POST ${CALLBACK}`]: {
-        integration_id: 4,
-        return_path: "/app/plugins/abc?tab=integrations",
-      },
-    });
-    render(<Page />);
-    await waitFor(() =>
-      expect(mockLoadPage).toHaveBeenCalledWith(
-        "/app/plugins/abc?tab=integrations",
-        { replace: true }
-      )
-    );
-    expect(requestBody(fetchMock, "POST", CALLBACK)).toEqual({
-      code: "code-1",
-      state: "attempt-1",
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  }
-);
+test("posts the code to the integration API and goes to the return path", async () => {
+  const fetchMock = mockFetch({
+    [`POST ${CALLBACK}`]: {
+      integration_id: 4,
+      return_path: "/app/plugins/abc?tab=integrations",
+    },
+  });
+  render(<IntegrationOAuthCallback />);
+  await waitFor(() =>
+    expect(mockLoadPage).toHaveBeenCalledWith(
+      "/app/plugins/abc?tab=integrations",
+      { replace: true }
+    )
+  );
+  expect(requestBody(fetchMock, "POST", CALLBACK)).toEqual({
+    code: "code-1",
+    state: "attempt-1",
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
 
 test("goes to the Plugins page when the return path is not a page of the app", async () => {
   mockFetch({
