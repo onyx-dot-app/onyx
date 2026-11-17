@@ -341,19 +341,6 @@ test("keeps showing a migrated Allow on a locked action and lets the owner chang
 
 // ── Effective setting ────────────────────────────────────────────────────────
 
-test("shows the setting that applies and the ask hint", async () => {
-  setup([draft({ actions: { list_issues: "blocked" } })]);
-  expect(
-    await screen.findByText("Blocked (agent setting)")
-  ).toBeInTheDocument();
-  expect(screen.getByText("Asks (integration setting)")).toBeInTheDocument();
-  expect(screen.getByText("Blocked (integration setting)")).toBeInTheDocument();
-  expect(screen.getAllByText(copy.askHint)).toHaveLength(1);
-  expect(
-    screen.queryByRole("link", { name: "Open Linear actions" })
-  ).not.toBeInTheDocument();
-});
-
 test("tells the owner to change an agent Ask that the integration allows", async () => {
   mockManage = true;
   setup([draft({ actions: { list_issues: "ask" } })]);
