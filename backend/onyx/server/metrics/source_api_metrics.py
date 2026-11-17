@@ -15,6 +15,10 @@ from enum import Enum
 
 from prometheus_client import Counter, Gauge
 
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
 
 class RequestOutcome(str, Enum):
     OK = "ok"
@@ -70,6 +74,9 @@ LIMITER_WAIT_SECONDS = Counter(
 USER_BUDGET_RECENT_SECONDS = 120.0
 # The user gauges are computed again at most once in this interval.
 _USER_GAUGE_INTERVAL_SECONDS = 1.0
+# The user gauges drop expired budgets at this interval, also when no new
+# budget is observed.
+_USER_GAUGE_REFRESH_SECONDS = 5.0
 
 
 def record_source_api_request(
@@ -126,24 +133,69 @@ class _UserBudgets:
                 < _USER_GAUGE_INTERVAL_SECONDS
             ):
                 return
-            self._published_at[key] = now
-            recent = {
-                user: budget
-                for user, budget in budgets.items()
-                if now - budget[2] <= USER_BUDGET_RECENT_SECONDS
-            }
-            self._budgets[key] = recent
-            lowest = min(budget[0] for budget in recent.values())
-            cut_users = sum(1 for budget in recent.values() if budget[0] < budget[1])
-            # Publish under the lock, so an older observation cannot overwrite
-            # a newer one.
-            LIMITER_BUDGET.labels(
-                source=source, api=api, scope=LimiterScope.USER.value
-            ).set(lowest)
-            LIMITER_CUT_USERS.labels(source=source, api=api).set(cut_users)
+            self._publish(key, now)
+
+    def refresh(self) -> None:
+        """Publishes the user gauges again without the expired budgets."""
+        now = self._clock()
+        with self._lock:
+            for key in list(self._budgets):
+                self._publish(key, now)
+
+    def _publish(self, key: tuple[str, str], now: float) -> None:
+        # The caller holds the lock, so an older state cannot overwrite a
+        # newer one.
+        source, api = key
+        recent = {
+            user: budget
+            for user, budget in self._budgets.get(key, {}).items()
+            if now - budget[2] <= USER_BUDGET_RECENT_SECONDS
+        }
+        if not recent:
+            self._budgets.pop(key, None)
+            self._published_at.pop(key, None)
+            for gauge, labels in (
+                (LIMITER_BUDGET, (source, api, LimiterScope.USER.value)),
+                (LIMITER_CUT_USERS, (source, api)),
+            ):
+                try:
+                    gauge.remove(*labels)
+                except KeyError:
+                    pass
+            return
+        self._budgets[key] = recent
+        self._published_at[key] = now
+        LIMITER_BUDGET.labels(
+            source=source, api=api, scope=LimiterScope.USER.value
+        ).set(min(budget[0] for budget in recent.values()))
+        LIMITER_CUT_USERS.labels(source=source, api=api).set(
+            sum(1 for budget in recent.values() if budget[0] < budget[1])
+        )
 
 
 _user_budgets = _UserBudgets()
+_refresher_lock = threading.Lock()
+_refresher_started = False
+
+
+def _refresh_user_budgets() -> None:
+    while True:
+        time.sleep(_USER_GAUGE_REFRESH_SECONDS)
+        try:
+            _user_budgets.refresh()
+        except Exception:
+            logger.exception("Could not refresh the user budget gauges")
+
+
+def _start_refresher() -> None:
+    global _refresher_started
+    with _refresher_lock:
+        if _refresher_started:
+            return
+        threading.Thread(
+            target=_refresh_user_budgets, daemon=True, name="user-budget-gauges"
+        ).start()
+        _refresher_started = True
 
 
 def observe_user_budget(
@@ -151,4 +203,5 @@ def observe_user_budget(
 ) -> None:
     """Records the budget of one user. ``user_key`` stays in this process: no
     metric label carries it."""
+    _start_refresher()
     _user_budgets.observe(source, api, user_key, allowed, limit)
