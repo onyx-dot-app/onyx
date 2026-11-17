@@ -50,13 +50,12 @@ const reports = makeMemberIntegration({
   status: {
     state: "needs_reconnect",
     reason: "Your admin changed the sign-in settings",
-    moving_credentials: false,
   },
 });
 const shared = makeMemberIntegration({
   id: 3,
   name: "Shared app",
-  status: { state: "not_set_up", reason: null, moving_credentials: false },
+  status: { state: "not_set_up", reason: null },
 });
 
 function user() {
@@ -125,7 +124,6 @@ test("shows nothing when every integration is connected", () => {
           status: {
             state: "connected",
             reason: null,
-            moving_credentials: false,
           },
         }),
       ],
