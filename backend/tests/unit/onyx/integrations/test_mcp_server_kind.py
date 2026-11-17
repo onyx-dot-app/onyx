@@ -21,7 +21,6 @@ from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.kinds import mcp_server as mcp_kind
 from onyx.integrations.kinds.base import ChatToolContext
 from onyx.integrations.kinds.mcp_server import McpServerKindHandler
-from onyx.integrations.registry import get_kind_handler
 from onyx.sandbox_proxy.request_evaluator import MCP_UNCLASSIFIABLE_ACTION_TYPE
 from onyx.tools.models import ToolApprovalScope
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
@@ -37,6 +36,7 @@ def integration() -> Integration:
         kind=IntegrationKind.MCP,
         name="Linear",
         auth_mode=IntegrationAuthMode.NONE,
+        mcp_server_id=3,
     )
 
 
@@ -78,12 +78,6 @@ def _request(
         body=body,
         url=url,
         headers={"content-type": "application/json"},
-    )
-
-
-def test_registry_returns_the_mcp_handler() -> None:
-    assert isinstance(
-        get_kind_handler(IntegrationKind.MCP), McpServerKindHandler
     )
 
 

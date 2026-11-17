@@ -1,12 +1,10 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from typing import ClassVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import IntegrationAuthMethod, IntegrationKind
 from onyx.db.models import Integration, IntegrationAction
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.integrations.models import (
@@ -50,28 +48,17 @@ class IntegrationKindHandler(ABC):
     the settings of the kind, never for the name, owner, access, sign-in or
     approval columns."""
 
-    kind: ClassVar[IntegrationKind]
-
     @abstractmethod
     def load_config(
         self, integration: Integration, db_session: Session
     ) -> IntegrationConfig:
-        """Validate and return the settings of the integration."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def auth_methods(
-        self, integration: Integration, db_session: Session
-    ) -> frozenset[IntegrationAuthMethod]:
-        """The sign-in methods that the integration permits."""
         raise NotImplementedError
 
     @abstractmethod
     def discover_actions(
         self, integration: Integration, db_session: Session
     ) -> list[IntegrationActionSpec]:
-        """The actions from the source of truth of the kind. Makes no network
-        call."""
+        """Makes no network call."""
         raise NotImplementedError
 
     @abstractmethod
@@ -82,8 +69,6 @@ class IntegrationKindHandler(ABC):
         ctx: ChatToolContext,
         db_session: Session,
     ) -> list[Tool]:
-        """One chat tool for each action in ``actions``. The caller removes
-        the blocked actions first."""
         raise NotImplementedError
 
     @abstractmethod

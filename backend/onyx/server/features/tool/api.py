@@ -39,7 +39,6 @@ from onyx.db.tools import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.sync import sync_actions_for_integration_id__no_commit
 from onyx.server.features.tool.models import (
     CustomToolCreate,
     CustomToolUpdate,
@@ -277,7 +276,6 @@ def create_custom_tool(
         enabled=tool_data.enabled,
     )
     _apply_default_chat_selection(tool_data.default_chat_enabled, tool, db_session)
-    sync_actions_for_integration_id__no_commit(tool.integration_id, db_session)
     db_session.commit()
     snapshot = ToolSnapshot.from_model(tool)
     _stamp_default_chat_availability([snapshot], db_session)
@@ -326,7 +324,6 @@ def update_custom_tool(
     _apply_default_chat_selection(
         tool_data.default_chat_enabled, updated_tool, db_session
     )
-    sync_actions_for_integration_id__no_commit(updated_tool.integration_id, db_session)
     db_session.commit()
     snapshot = ToolSnapshot.from_model(updated_tool)
     _stamp_default_chat_availability([snapshot], db_session)

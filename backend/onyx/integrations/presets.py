@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, InstanceOf
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.providers.base import ExternalAppProvider
 from onyx.external_apps.providers.registry import PROVIDERS
-from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 
 
 class Preset(BaseModel):
@@ -18,7 +17,6 @@ class Preset(BaseModel):
     app_type: ExternalAppType
     name: str
     provider: InstanceOf[ExternalAppProvider]
-    built_in_skill_id: str | None
 
 
 def _build_presets() -> dict[ExternalAppType, Preset]:
@@ -28,7 +26,6 @@ def _build_presets() -> dict[ExternalAppType, Preset]:
             app_type=app_type,
             name=provider.spec.app_name,
             provider=provider,
-            built_in_skill_id=EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app_type),
         )
         for app_type, provider in PROVIDERS.items()
     }

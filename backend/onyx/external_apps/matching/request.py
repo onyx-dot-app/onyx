@@ -13,13 +13,11 @@ class ProxiedRequest(BaseModel):
 
     The proxy builds one of these from whatever the sandbox emitted (the Python
     helper, ``curl``, or raw HTTP). The catalog matcher reads only the
-    path/method/body that distinguish *actions within an app*. An integration
-    kind (``onyx.integrations``) also needs ``url`` to find out if the request
-    is for its integration, and MCP needs ``headers``.
+    path/method/body that distinguish *actions within an app*.
     """
 
     method: str  # HTTP verb; compared case-insensitively
-    path: str  # URL path without the query, tested against RestRoute.path
+    path: str  # URL path, tested against RestRoute.path; may include the query
     body: bytes | None = None  # raw body; parsed lazily for GraphQLOp matching
     # The full URL, with scheme, host, port and query.
     url: str | None = None

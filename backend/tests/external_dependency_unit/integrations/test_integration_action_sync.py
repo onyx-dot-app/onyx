@@ -5,7 +5,7 @@ For each kind, ``discover_actions`` must give what the old code exposes, and
 that a second run leaves alone."""
 
 import datetime
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from copy import deepcopy
 from typing import Any
 from uuid import uuid4
@@ -38,24 +38,16 @@ from onyx.db.models import (
     IntegrationAction,
     MCPServer,
     Tool,
-    User,
 )
 from onyx.db.tools import create_tool__no_commit, get_tools_by_mcp_server_id
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.integrations.models import IntegrationActionSpec
 from onyx.integrations.registry import get_kind_handler
-from onyx.integrations.sync import (
-    sync_actions_for_integration_id__no_commit,
-    sync_all_integration_actions__no_commit,
-    sync_integration_actions__no_commit,
-)
+from onyx.integrations.sync import sync_integration_actions__no_commit
 from onyx.server.features.mcp import api as mcp_api
-from onyx.server.features.tool import api as tool_api
-from onyx.server.features.tool.models import CustomToolCreate, CustomToolUpdate
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
 )
-from tests.external_dependency_unit.conftest import MakeTestUser
 
 Snapshot = dict[str, tuple[int, datetime.datetime, str | None]]
 
@@ -127,12 +119,21 @@ def created(
 
 
 def _integration(
-    db_session: Session, created: Created, kind: IntegrationKind
+    db_session: Session,
+    created: Created,
+    kind: IntegrationKind,
+    *,
+    mcp_server_id: int | None = None,
+    external_app_id: int | None = None,
+    tool_id: int | None = None,
 ) -> Integration:
     integration = Integration(
         kind=kind,
         name=f"sync-{uuid4().hex[:8]}",
         auth_mode=IntegrationAuthMode.NONE,
+        mcp_server_id=mcp_server_id,
+        external_app_id=external_app_id,
+        tool_id=tool_id,
     )
     db_session.add(integration)
     db_session.flush()
@@ -141,7 +142,6 @@ def _integration(
 
 
 def _mcp_server(db_session: Session, created: Created) -> tuple[Integration, MCPServer]:
-    integration = _integration(db_session, created, IntegrationKind.MCP)
     server = create_mcp_server__no_commit(
         owner_email="admin@example.com",
         name=f"sync-{uuid4().hex[:8]}",
@@ -152,27 +152,28 @@ def _mcp_server(db_session: Session, created: Created) -> tuple[Integration, MCP
         auth_performer=MCPAuthenticationPerformer.ADMIN,
         db_session=db_session,
     )
-    server.integration_id = integration.id
     created.mcp_server_ids.append(server.id)
+    integration = _integration(
+        db_session, created, IntegrationKind.MCP, mcp_server_id=server.id
+    )
     db_session.commit()
     return integration, server
 
 
-def _openapi_tool(
-    db_session: Session, created: Created, user_id: Any = None
-) -> tuple[Integration, Tool]:
-    integration = _integration(db_session, created, IntegrationKind.API)
+def _openapi_tool(db_session: Session, created: Created) -> tuple[Integration, Tool]:
     tool = create_tool__no_commit(
         name=f"orders-{uuid4().hex[:8]}",
         description="Orders",
         openapi_schema=_openapi_spec(f"orders-{uuid4().hex[:8]}.example.com"),
         custom_headers=None,
-        user_id=user_id,
+        user_id=None,
         db_session=db_session,
         passthrough_auth=False,
     )
-    tool.integration_id = integration.id
     created.tool_ids.append(tool.id)
+    integration = _integration(
+        db_session, created, IntegrationKind.API, tool_id=tool.id
+    )
     db_session.commit()
     return integration, tool
 
@@ -183,16 +184,17 @@ def _external_app(
     app_type: ExternalAppType,
     patterns: list[str],
 ) -> tuple[Integration, ExternalApp]:
-    integration = _integration(db_session, created, IntegrationKind.API)
     app = ExternalApp(
         name=f"app-{uuid4().hex[:8]}",
         app_type=app_type,
         upstream_url_patterns=patterns,
-        integration_id=integration.id,
     )
     db_session.add(app)
     db_session.flush()
     created.external_app_ids.append(app.id)
+    integration = _integration(
+        db_session, created, IntegrationKind.API, external_app_id=app.id
+    )
     db_session.commit()
     return integration, app
 
@@ -263,15 +265,26 @@ def test_mcp_discover_actions_equal_the_tool_rows(
     ]
 
 
-def test_mcp_tool_sync_route_path_writes_actions(
+def _sync_mcp_tools(
+    db_session: Session,
+    integration: Integration,
+    server: MCPServer,
+    tools: list[tuple[str, str, bool | None]],
+) -> None:
+    mcp_api._sync_mcp_server_tools(server.id, _discovered(tools), db_session)
+    _sync(db_session, integration)
+
+
+def test_mcp_sync_writes_updates_and_deletes(
     db_session: Session, created: Created
 ) -> None:
     integration, server = _mcp_server(db_session, created)
 
-    mcp_api._sync_mcp_server_tools(
-        server.id,
-        _discovered([("search", "Find", True), ("create", "Make", False)]),
+    _sync_mcp_tools(
         db_session,
+        integration,
+        server,
+        [("search", "Find", True), ("create", "Make", False)],
     )
     first = _snapshot(db_session, integration.id)
     actions = {a.key: a for a in list_integration_actions(integration.id, db_session)}
@@ -286,34 +299,19 @@ def test_mcp_tool_sync_route_path_writes_actions(
 
     # Same tools: no write. A changed description updates in place. A gone
     # tool loses its action.
-    mcp_api._sync_mcp_server_tools(
-        server.id,
-        _discovered([("search", "Find", True), ("create", "Make", False)]),
+    _sync_mcp_tools(
         db_session,
+        integration,
+        server,
+        [("search", "Find", True), ("create", "Make", False)],
     )
     assert _snapshot(db_session, integration.id) == first
-    mcp_api._sync_mcp_server_tools(
-        server.id, _discovered([("search", "Find things", True)]), db_session
-    )
+    _sync_mcp_tools(db_session, integration, server, [("search", "Find things", True)])
     after = _snapshot(db_session, integration.id)
     assert set(after) == {"search"}
     assert after["search"][0] == first["search"][0]
     assert after["search"][2] == "Find things"
     assert after["search"][1] > first["search"][1]
-
-
-def test_mcp_tool_sync_without_integration_writes_no_actions(
-    db_session: Session, created: Created
-) -> None:
-    integration, server = _mcp_server(db_session, created)
-    server.integration_id = None
-    db_session.commit()
-
-    mcp_api._sync_mcp_server_tools(
-        server.id, _discovered([("search", "Find", True)]), db_session
-    )
-
-    assert list_integration_actions(integration.id, db_session) == []
 
 
 # OpenAPI tool
@@ -367,65 +365,6 @@ def test_openapi_sync_writes_updates_and_deletes(
     assert after["listOrders"][0] == first["listOrders"][0]
     assert after["listOrders"][2] == "List all orders"
     assert after["createOrder"] == first["createOrder"]
-
-
-def test_openapi_update_route_writes_actions(
-    db_session: Session, created: Created, make_test_user: MakeTestUser
-) -> None:
-    admin: User = make_test_user("sync_admin", is_admin=True)
-    integration, tool = _openapi_tool(db_session, created, user_id=admin.id)
-    host = f"orders-{uuid4().hex[:8]}.example.com"
-
-    tool_api.update_custom_tool(
-        tool_id=tool.id,
-        tool_data=CustomToolUpdate(definition=_openapi_spec(host)),
-        db_session=db_session,
-        user=admin,
-    )
-
-    assert set(_snapshot(db_session, integration.id)) == {
-        "listOrders",
-        "createOrder",
-        "deleteOrder",
-    }
-
-
-def test_openapi_create_route_syncs_the_integration_of_the_tool(
-    db_session: Session,
-    created: Created,
-    make_test_user: MakeTestUser,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The old create route makes no integration (U6 adds that), so give the
-    new tool one to prove the route syncs it."""
-    admin: User = make_test_user("sync_admin", is_admin=True)
-    integration = _integration(db_session, created, IntegrationKind.API)
-    db_session.commit()
-    real_create: Callable[..., Tool] = tool_api.create_tool__no_commit
-
-    def create_with_integration(**kwargs: Any) -> Tool:
-        tool = real_create(**kwargs)
-        tool.integration_id = integration.id
-        created.tool_ids.append(tool.id)
-        return tool
-
-    monkeypatch.setattr(tool_api, "create_tool__no_commit", create_with_integration)
-
-    tool_api.create_custom_tool(
-        tool_data=CustomToolCreate(
-            name=f"orders-{uuid4().hex[:8]}",
-            definition=_openapi_spec(f"orders-{uuid4().hex[:8]}.example.com"),
-            passthrough_auth=False,
-        ),
-        db_session=db_session,
-        user=admin,
-    )
-
-    assert set(_snapshot(db_session, integration.id)) == {
-        "listOrders",
-        "createOrder",
-        "deleteOrder",
-    }
 
 
 # External apps
@@ -499,7 +438,9 @@ def _spec(key: str, description: str) -> IntegrationActionSpec:
 def test_replace_keeps_other_sources_and_first_duplicate(
     db_session: Session, created: Created
 ) -> None:
-    integration = _integration(db_session, created, IntegrationKind.API)
+    integration, _app = _external_app(
+        db_session, created, ExternalAppType.CUSTOM, ["https://internal.example.com/**"]
+    )
     db_session.add(
         IntegrationAction(
             integration_id=integration.id,
@@ -521,40 +462,3 @@ def test_replace_keeps_other_sources_and_first_duplicate(
     actions = {a.key: a for a in list_integration_actions(integration.id, db_session)}
     assert set(actions) == {"from_mcp", "a"}
     assert actions["a"].description == "first"
-
-
-def test_replace_rejects_a_spec_of_another_source(
-    db_session: Session, created: Created
-) -> None:
-    integration = _integration(db_session, created, IntegrationKind.API)
-    with pytest.raises(ValueError):
-        replace_integration_actions__no_commit(
-            integration.id,
-            IntegrationActionSource.MCP,
-            [_spec("a", "x")],
-            db_session,
-        )
-
-
-def test_sync_by_id_and_sync_all(db_session: Session, created: Created) -> None:
-    preset, _ = _external_app(
-        db_session, created, ExternalAppType.GITHUB, [r"https://api\.github\.com/.*"]
-    )
-    custom, _ = _external_app(
-        db_session, created, ExternalAppType.CUSTOM, ["https://internal.example.com/**"]
-    )
-    # An integration with no kind row is logged and skipped.
-    _integration(db_session, created, IntegrationKind.API)
-    db_session.commit()
-
-    sync_actions_for_integration_id__no_commit(None, db_session)
-    sync_actions_for_integration_id__no_commit(preset.id, db_session)
-    db_session.commit()
-    assert set(_snapshot(db_session, preset.id)) == {
-        e.id.value for e in get_endpoint_catalog(ExternalAppType.GITHUB)
-    }
-    assert _snapshot(db_session, custom.id) == {}
-
-    sync_all_integration_actions__no_commit(db_session)
-    db_session.commit()
-    assert set(_snapshot(db_session, custom.id)) == {"unspecified"}
