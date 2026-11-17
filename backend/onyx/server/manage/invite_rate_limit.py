@@ -83,28 +83,45 @@ def _check_and_increment(
     not consume budget. Buckets with limit <= 0 or increment <= 0 are skipped
     (a disabled tier). The TTL is set when a counter is created and kept on
     later increments (fixed window, not sliding). The caller holds ``lock``.
-    Raises CacheLockLostError, without writing, if the lease ended during the
-    check: another request may have counted since the read.
+    Raises CacheLockLostError if the lease ended during the check, or if a
+    counter changed after it was read. Counters written before that point stay,
+    so the limiter can count high but never low.
     """
     active = [b for b in buckets if b.limit > 0 and b.increment > 0]
-    counts: list[int] = []
+    raws: list[bytes | None] = []
     for bucket in active:
-        current = int(cache.get(bucket.key) or 0)
-        if current + bucket.increment > bucket.limit:
+        raw = cache.get(bucket.key)
+        if int(raw or 0) + bucket.increment > bucket.limit:
             return bucket
-        counts.append(current)
+        raws.append(raw)
     if not lock.owned():
         raise CacheLockLostError("Invite rate limiter lock expired before the write")
-    for bucket, current in zip(active, counts, strict=True):
-        remaining = cache.ttl(bucket.key) if current else TTL_KEY_NOT_FOUND
-        if remaining == TTL_KEY_NOT_FOUND:
+    for bucket, raw in zip(active, raws, strict=True):
+        remaining = cache.ttl(bucket.key) if raw is not None else TTL_KEY_NOT_FOUND
+        # Each write is a compare-and-swap on the value read above. If the lease
+        # ends here and another request counts first, the write fails and
+        # cannot erase that request's increment.
+        if raw is None or remaining == TTL_KEY_NOT_FOUND:
             # No counter, or its window ended after the read: start a new window.
-            cache.set(bucket.key, bucket.increment, ex=bucket.ttl_seconds)
-        elif remaining == TTL_NO_EXPIRY:
-            cache.set(bucket.key, current + bucket.increment, ex=bucket.ttl_seconds)
+            stored = cache.set_if_absent(
+                bucket.key, bucket.increment, ex=bucket.ttl_seconds
+            )
         else:
             # Keep the window. A TTL of 0 is a window with under a second left.
-            cache.set(bucket.key, current + bucket.increment, ex=max(1, remaining))
+            stored = cache.replace_if_value(
+                bucket.key,
+                raw,
+                int(raw) + bucket.increment,
+                ex=(
+                    bucket.ttl_seconds
+                    if remaining == TTL_NO_EXPIRY
+                    else max(1, remaining)
+                ),
+            )
+        if not stored:
+            raise CacheLockLostError(
+                "Another request changed an invite counter during the write"
+            )
     return None
 
 
@@ -140,7 +157,7 @@ def _run_atomic(cache: CacheBackend, buckets: list[_Bucket]) -> None:
         return
     except CacheLockLostError:
         logger.warning(
-            "Invite rate limiter skipped — lock expired during the check. Rate limiting is disabled for this request."
+            "Invite rate limiter skipped — lock lost during the check. Rate limiting is disabled for this request."
         )
         return
 

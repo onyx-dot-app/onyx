@@ -31,6 +31,14 @@ class _StubCache(FakeCache):
     def ttl(self, key: str) -> int:
         return self.expiries.get(key, -2)
 
+    def set_if_absent(
+        self, key: str, value: str | bytes | int | float, ex: int | None = None
+    ) -> bool:
+        # An expired counter is absent, as it is in a real backend.
+        if self.expiries.get(key) == -2:
+            self.store.pop(key, None)
+        return super().set_if_absent(key, value, ex)
+
     @property
     def counts(self) -> dict[str, int]:
         return {key: int(value) for key, value in self.store.items()}
@@ -426,3 +434,26 @@ def test_no_write_after_the_lock_lease_ends() -> None:
         enforce_remove_invited_rate_limit(redis_client, user_id)
 
     assert redis_client.counts == {}
+
+
+def test_a_counter_changed_after_the_read_is_not_overwritten() -> None:
+    """With an expired lease another request can count between this request's
+    read and its write. The write is a compare-and-swap, so it fails and the
+    other request's count stays."""
+    redis_client = _stub()
+    user_id = uuid4()
+    day_key = f"ratelimit:invite_remove:admin:{user_id}:day"
+    redis_client.set(day_key, 2, ex=500)
+
+    def other_request_counts(key: str) -> int:
+        if key == day_key and redis_client.counts[day_key] == 2:
+            redis_client.set(day_key, 3, ex=500)
+        return redis_client.expiries.get(key, -2)
+
+    with (
+        patch.object(redis_client, "ttl", side_effect=other_request_counts),
+        patch("onyx.server.manage.invite_rate_limit._REMOVE_ADMIN_PER_DAY", 100),
+    ):
+        enforce_remove_invited_rate_limit(redis_client, user_id)
+
+    assert redis_client.counts[day_key] == 3
