@@ -1,0 +1,127 @@
+name: "Prebuilt Image"
+description: >-
+  Finds an image that an earlier run built from the same inputs, so a pull
+  request build can skip. With save-digest set, records the image that this run
+  built instead.
+inputs:
+  name:
+    description: "Short image name, used in the cache key"
+    required: true
+  context:
+    description: "Docker build context"
+    required: true
+  dockerfile:
+    description: "Dockerfile path"
+    required: true
+  build-config:
+    description: "Everything else that changes the image: build args, platforms"
+    required: false
+    default: ""
+  extra-paths:
+    description: "More repo paths that change the image, such as the file that runs the build"
+    required: false
+    default: ""
+  image-repo:
+    description: "Repository that holds the image, from runs-on/action"
+    required: true
+  save-digest:
+    description: "Digest of the image this run built. Set it to save the digest instead of finding one."
+    required: false
+    default: ""
+outputs:
+  digest:
+    description: "Digest of a reusable image in image-repo, or empty when the caller must build"
+    value: ${{ steps.verify.outputs.digest }}
+runs:
+  using: "composite"
+  steps:
+    - name: Hash image inputs
+      id: key
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        CONTEXT: ${{ inputs.context }}
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        BUILD_CONFIG: ${{ inputs.build-config }}
+        EXTRA_PATHS: ${{ inputs.extra-paths }}
+      run: |
+        set -euo pipefail
+        paths=("$DOCKERFILE" "$CONTEXT/.dockerignore")
+        # shellcheck disable=SC2206
+        paths+=($EXTRA_PATHS)
+        reusable=true
+        if grep -Eiq -- '--mount=type=bind|^[[:space:]]*(COPY|ADD)[[:space:]].*\[' "$DOCKERFILE"; then
+          paths+=("$CONTEXT")
+        else
+          # The sources of each COPY and ADD that reads the build context.
+          while read -r -a words; do
+            sources=()
+            for word in "${words[@]:1}"; do
+              [[ "$word" == --* ]] || sources+=("$word")
+            done
+            unset 'sources[${#sources[@]}-1]'
+            for source in "${sources[@]}"; do
+              path=$(realpath -m --relative-to=. "$CONTEXT/$source")
+              if [ -z "$(git ls-files -- "$path")" ]; then
+                echo "::notice::$path is not tracked by git, so the $NAME image always builds."
+                reusable=false
+              fi
+              paths+=("$path")
+            done
+          done < <(sed -e ':a' -e '/\\$/N; s/\\\n//; ta' "$DOCKERFILE" \
+            | grep -Ei '^[[:space:]]*(COPY|ADD)[[:space:]]' | grep -v -- '--from=')
+        fi
+        hash=$({ git ls-files -s -- "${paths[@]}"; printf '%s' "$BUILD_CONFIG"; } \
+          | sha256sum | cut -c1-32)
+        echo "Inputs of the $NAME image:"
+        printf '  %s\n' "${paths[@]}"
+        echo "prefix=prebuilt-image-${NAME}-${RUNNER_ARCH}-${hash}-" >> "$GITHUB_OUTPUT"
+        echo "reusable=${reusable}" >> "$GITHUB_OUTPUT"
+
+    # Only GitHub's cache, not RunsOn's S3 cache or the ECR cache: fork pull
+    # requests can write those, but cannot write a main branch cache entry.
+    # Push runs on main always build, so the newest main entry stays fresh.
+    - name: Restore the digest of an earlier build
+      if: >-
+        inputs.save-digest == '' &&
+        github.event_name == 'pull_request' &&
+        steps.key.outputs.reusable == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: .prebuilt-image/${{ inputs.name }}
+        key: ${{ steps.key.outputs.prefix }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+
+    # The ECR cache can expire an untagged image, so confirm it still exists.
+    - name: Check that the image still exists
+      id: verify
+      if: inputs.save-digest == ''
+      shell: bash
+      env:
+        DIGEST_FILE: .prebuilt-image/${{ inputs.name }}/digest
+        IMAGE_REPO: ${{ inputs.image-repo }}
+      run: |
+        if [ -f "$DIGEST_FILE" ]; then
+          digest=$(cat "$DIGEST_FILE")
+          if docker buildx imagetools inspect "${IMAGE_REPO}@${digest}" > /dev/null; then
+            echo "Reusing ${IMAGE_REPO}@${digest}"
+            echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          fi
+        fi
+
+    - name: Write the digest of this build
+      if: inputs.save-digest != '' && steps.key.outputs.reusable == 'true'
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        DIGEST: ${{ inputs.save-digest }}
+      run: |
+        mkdir -p ".prebuilt-image/${NAME}"
+        echo "$DIGEST" > ".prebuilt-image/${NAME}/digest"
+
+    - name: Save the digest of this build
+      if: inputs.save-digest != '' && steps.key.outputs.reusable == 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: .prebuilt-image/${{ inputs.name }}
+        key: ${{ steps.key.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
