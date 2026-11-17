@@ -163,9 +163,10 @@ five minutes, and started rows after `JOB_TIMEOUT` plus five minutes. It keeps
 failures for 24 hours from the failure transition. Claiming resets the start
 time, so an old queued job that just started is safe. The worker uploads the
 file without a row lock, then locks the started row to publish. A late worker
-whose job cleanup failed deletes its file. Cleanup skips rows that a worker
-locks. The start route fails its new row when the send fails, as on Lite
-without workers.
+whose job cleanup failed deletes its file. Before cleanup purges an expired
+failure, it deletes that job's file, because without the row the file looks
+published. Cleanup skips rows that a worker locks. The start route fails its
+new row when the broker send fails.
 Celery time limits do not stop these thread workers.
 
 **Other periodic flows.** Each owner documents its flow; this list says where

@@ -292,3 +292,52 @@ def test_file_of_a_failed_export_is_not_published(db_session: Session) -> None:
         db_session.rollback()
         db_session.delete(row)
         db_session.commit()
+
+
+def test_cleanup_deletes_the_file_of_an_expired_failure(db_session: Session) -> None:
+    from ee.onyx.background.task_name_builders import query_history_task_name
+    from ee.onyx.server.query_history.api import list_all_query_history_exports
+
+    when = datetime.now(timezone.utc) - timedelta(days=2)
+    row = register_task(
+        task_name=query_history_task_name(start=when, end=when),
+        db_session=db_session,
+        task_id=str(uuid4()),
+        status=TaskStatus.FAILURE,
+        start_time=when,
+    )
+    task_id = row.task_id
+    report_name = construct_query_history_report_name(task_id)
+    file_store = get_default_file_store()
+    # The worker stopped after its upload, before it published the file.
+    file_store.save_file(
+        content=io.BytesIO(b"unpublished"),
+        display_name=report_name,
+        file_origin=FileOrigin.QUERY_HISTORY_CSV,
+        file_type=FileType.CSV,
+        file_metadata={
+            "start": when.isoformat(),
+            "end": when.isoformat(),
+            "start_time": when.isoformat(),
+        },
+        file_id=report_name,
+    )
+    try:
+        export_query_history_cleanup_task.run(tenant_id="public")
+        db_session.expire_all()
+        assert get_task_with_id(db_session, task_id) is None
+        assert not file_store.has_file(
+            file_id=report_name,
+            file_origin=FileOrigin.QUERY_HISTORY_CSV,
+            file_type=FileType.CSV,
+        )
+        with patch("ee.onyx.server.query_history.api.ensure_query_history_is_enabled"):
+            exports = list_all_query_history_exports(MagicMock(), db_session=db_session)
+        assert task_id not in {export.task_id for export in exports}
+    finally:
+        file_store.delete_file(report_name, error_on_missing=False)
+        db_session.rollback()
+        leftover = get_task_with_id(db_session, task_id)
+        if leftover is not None:
+            db_session.delete(leftover)
+            db_session.commit()

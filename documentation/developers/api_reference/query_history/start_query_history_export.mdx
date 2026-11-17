@@ -17,5 +17,5 @@ import BusinessEditionInfo from "/snippets/business-edition-info.mdx";
   and then call [Download Query History CSV](/developers/api_reference/query_history/download_query_history_csv).
 </Note>
 
-The request fails with `503` if Onyx cannot queue the export, for example on Onyx Lite without background workers.
+The request fails with `503` if Onyx cannot send the export task to its task queue broker.
 The export then has status `FAILURE`.

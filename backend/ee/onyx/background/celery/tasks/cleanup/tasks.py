@@ -1,6 +1,7 @@
 from celery import shared_task
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
+from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import (
     USER_EXPORT_TASK_EXPIRES,
@@ -8,7 +9,8 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.tasks import cleanup_stale_tasks
+from onyx.db.tasks import cleanup_stale_tasks, get_expired_failed_task_ids
+from onyx.file_store.file_store import get_default_file_store
 
 
 @shared_task(
@@ -18,9 +20,20 @@ from onyx.db.tasks import cleanup_stale_tasks
 )
 def export_query_history_cleanup_task(*, tenant_id: str) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        expired = get_expired_failed_task_ids(
+            db_session, QUERY_HISTORY_TASK_NAME_PREFIX
+        )
+        # A worker that stopped after its upload leaves an unpublished file.
+        # Delete it first: without the failure row, the file looks published.
+        file_store = get_default_file_store()
+        for task_id in expired:
+            file_store.delete_file(
+                construct_query_history_report_name(task_id), error_on_missing=False
+            )
         cleanup_stale_tasks(
             db_session,
             QUERY_HISTORY_TASK_NAME_PREFIX,
             pending_timeout=USER_EXPORT_TASK_EXPIRES + USER_JOB_LOST_TASK_GRACE,
             started_timeout=JOB_TIMEOUT + USER_JOB_LOST_TASK_GRACE,
+            expired_failed_task_ids=expired,
         )

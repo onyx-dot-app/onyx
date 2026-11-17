@@ -1,8 +1,9 @@
+from collections.abc import Collection
 from datetime import datetime, timedelta
 
 from sqlalchemy import and_, desc, func, or_, select, update
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import delete
+from sqlalchemy.sql import ColumnElement, delete
 
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.db.engine.time_utils import get_db_current_time
@@ -67,16 +68,36 @@ def is_task_started(db_session: Session, task_id: str) -> bool:
     )
 
 
+def _matching_tasks(task_name_prefix: str) -> ColumnElement[bool]:
+    return TaskQueueState.task_name.startswith(f"{task_name_prefix}_", autoescape=True)
+
+
+def get_expired_failed_task_ids(
+    db_session: Session, task_name_prefix: str
+) -> list[str]:
+    """Failures older than a day, which `cleanup_stale_tasks` can purge."""
+    return list(
+        db_session.scalars(
+            select(TaskQueueState.task_id).where(
+                _matching_tasks(task_name_prefix),
+                TaskQueueState.status == TaskStatus.FAILURE,
+                func.coalesce(TaskQueueState.start_time, TaskQueueState.register_time)
+                < func.now() - timedelta(days=1),
+            )
+        )
+    )
+
+
 def cleanup_stale_tasks(
     db_session: Session,
     task_name_prefix: str,
     pending_timeout: int,
     started_timeout: int,
+    expired_failed_task_ids: Collection[str],
 ) -> None:
-    """Retain failures for a day, including jobs whose worker never ran."""
-    matching = TaskQueueState.task_name.startswith(
-        f"{task_name_prefix}_", autoescape=True
-    )
+    """Purges successes and the given expired failures. The caller removes the
+    output of each failure first, because the failure row hides that output."""
+    matching = _matching_tasks(task_name_prefix)
     db_session.execute(
         delete(TaskQueueState).where(
             matching,
@@ -84,10 +105,7 @@ def cleanup_stale_tasks(
                 TaskQueueState.status == TaskStatus.SUCCESS,
                 and_(
                     TaskQueueState.status == TaskStatus.FAILURE,
-                    func.coalesce(
-                        TaskQueueState.start_time, TaskQueueState.register_time
-                    )
-                    < func.now() - timedelta(days=1),
+                    TaskQueueState.task_id.in_(expired_failed_task_ids),
                 ),
             ),
         )
