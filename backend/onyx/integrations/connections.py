@@ -279,6 +279,15 @@ def _with_legacy_defaults(
             and integration.header_template
             and _fills_template(integration, defaults, signed_in_user)
         ):
+            organization_record = read_connection(organization)
+            if (
+                organization_record.status
+                is IntegrationConnectionStatus.NEEDS_RECONNECT
+            ):
+                return ConnectionProblem(
+                    code=ConnectionState.NEEDS_RECONNECT,
+                    reason=_needs_reconnect_reason(integration, organization_record),
+                )
             return ResolvedConnection(
                 integration_id=integration.id,
                 connection_id=organization.id,

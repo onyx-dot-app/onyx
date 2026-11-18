@@ -45,6 +45,7 @@ from onyx.integrations.connection_models import (
 from onyx.integrations.connections import (
     ensure_fresh_connection,
     integration_status,
+    mark_sign_in_settings_changed,
     oauth_client_configured,
     preset_host_values,
     render_headers,
@@ -693,6 +694,33 @@ def test_individual_custom_app_user_without_row_uses_full_organization_values(
     assert expect_problem(resolve_connection(integration, None, db_session)).code is (
         ConnectionState.NOT_CONNECTED
     )
+
+
+def test_custom_app_user_without_row_needs_reconnect_after_settings_change(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration, _ = make_app_integration(
+        db_session,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Key": "{api_key}"},
+    )
+    _seed(
+        db_session,
+        integration,
+        None,
+        IntegrationLegacyFormat.EXTERNAL_APP_ORG,
+        {"api_key": "org-key"},
+    )
+    mark_sign_in_settings_changed(integration.id, db_session)
+    db_session.commit()
+    user = make_test_user("legacy_custom_app_marked_org")
+
+    problem = expect_problem(resolve_connection(integration, user, db_session))
+    assert problem.code is ConnectionState.NEEDS_RECONNECT
+    status = integration_status(integration, user, db_session)
+    assert (status.state, status.reason) == (problem.code, problem.reason)
 
 
 def test_mcp_config_no_sign_in_without_user_values_is_not_connected(
