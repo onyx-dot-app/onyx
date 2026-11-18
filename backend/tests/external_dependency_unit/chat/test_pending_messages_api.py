@@ -91,7 +91,7 @@ from onyx.server.query_and_chat.streaming_models import (
     UserMessagePacket,
 )
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
-from onyx.tools.models import ChatToolSelection
+from onyx.tools.models import CapabilityEntry, ToolOptions
 from onyx.tools.tool_implementations.code_mode.store import ProgramStore
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.external_dependency_unit.conftest import MakeTestUser
@@ -410,20 +410,20 @@ def test_interrupt_rejects_a_finished_response_on_another_branch(
     assert current.status_code == 200, current.text
 
 
-def test_an_incognito_chat_saves_its_tool_selection(
+def test_an_incognito_chat_saves_its_tool_options(
     chat: ChatSession, owner: User, db_session: Session
 ) -> None:
     chat.incognito_record_mode = IncognitoRecordMode.FULL_HISTORY
     db_session.commit()
-    selection = ChatToolSelection(allowed_tool_ids=[1], preferred_tool_id=None)
+    options = ToolOptions(allowed=[CapabilityEntry(tool_id=1)], preferred=None)
     assert (
-        chat_backend.update_chat_tool_selection(chat.id, selection, owner, db_session)
-        == selection
+        chat_backend.update_chat_tool_options(chat.id, options, owner, db_session)
+        == options
     )
     db_session.expire_all()
     saved = db_session.get(ChatSession, chat.id)
     assert saved is not None
-    assert saved.tool_selection == selection
+    assert saved.tool_options == options
 
 
 def test_send_without_target_binds_to_the_only_running_regeneration(
@@ -2363,7 +2363,7 @@ def test_a_queued_turn_checks_access_to_the_saved_document_sets(
         response,
         db_session,
         monkeypatch,
-        tool_selection=ChatToolSelection(
+        tool_options=ToolOptions(
             internal_search_filters=BaseFilters(document_set=[f"Gone {uuid4()}"])
         ),
     )
@@ -2382,10 +2382,32 @@ def test_a_queued_turn_runs_without_a_saved_preferred_tool_that_is_gone(
         response,
         db_session,
         monkeypatch,
-        tool_selection=ChatToolSelection(preferred_tool_id=2_000_000_000),
+        tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=2_000_000_000)),
     )
     assert answer.response_status == RunStatus.COMPLETE
     assert answer.message == "Done"
+
+
+def test_a_queued_turn_builds_its_tools_with_the_saved_tool_options(
+    client: TestClient,
+    response: ChatMessage,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved = ToolOptions(allowed=[CapabilityEntry(tool_id=1)])
+    seen: list[ToolOptions | None] = []
+    construct_tools = execution.construct_tools
+
+    def spy(**kwargs: Any) -> Any:
+        seen.append(kwargs["tool_options"])
+        return construct_tools(**kwargs)
+
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", spy)
+    answer, _models = _start_queued_turn(
+        client, response, db_session, monkeypatch, tool_options=saved
+    )
+    assert answer.response_status == RunStatus.COMPLETE
+    assert seen == [saved]
 
 
 def _stream_turn(

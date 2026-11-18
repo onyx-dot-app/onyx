@@ -47,7 +47,7 @@ logger = setup_logger()
 # The empty action key names the default row.
 DEFAULT_ACTION_KEY = ""
 
-_STORED_TO_EFFECTIVE: dict[IntegrationActionPolicyValue, EffectivePolicy] = {
+STORED_TO_EFFECTIVE: dict[IntegrationActionPolicyValue, EffectivePolicy] = {
     IntegrationActionPolicyValue.ALLOW: EffectivePolicy.ALLOW,
     # No run mode answers Auto yet.
     IntegrationActionPolicyValue.AUTO: EffectivePolicy.ASK,
@@ -63,10 +63,11 @@ _STRICTNESS: dict[EffectivePolicy, int] = {
 
 
 class AgentIntegrationLinks(BaseModel):
-    """An integration that plugins of an agent hold, with the agent settings
-    of each such plugin."""
+    """An integration that plugins of an agent hold, with each such plugin
+    and its agent settings."""
 
     integration: InstanceOf[Integration]
+    plugin_ids: list[UUID] = []
     settings: list[ActionSettings | None] = []
 
 
@@ -82,12 +83,35 @@ def parse_action_settings(raw: Mapping[str, object] | None) -> ActionSettings:
         return ActionSettings(default=LinkValue.BLOCKED)
 
 
-def _action_default(action: IntegrationAction | None) -> EffectivePolicy:
+def action_default_policy(action: IntegrationAction | None) -> EffectivePolicy:
     if action is None:
         return EffectivePolicy.ASK
     if action.default_policy is not None:
-        return _STORED_TO_EFFECTIVE[action.default_policy]
+        return STORED_TO_EFFECTIVE[action.default_policy]
     return EffectivePolicy.ALLOW if action.read_only else EffectivePolicy.ASK
+
+
+def admin_policy(
+    admin_rows: Mapping[str, IntegrationActionPolicyValue],
+    action_key: str,
+    action: IntegrationAction | None,
+) -> EffectivePolicy:
+    """Step 1: the admin row of the action, else the admin default row, else
+    the default of the action."""
+    stored = admin_rows.get(action_key, admin_rows.get(DEFAULT_ACTION_KEY))
+    if stored is not None:
+        return STORED_TO_EFFECTIVE[stored]
+    return action_default_policy(action)
+
+
+def admin_blocked_actions(db_session: Session, integration_id: int) -> set[str]:
+    """The actions whose admin value (step 1) is Blocked."""
+    rows = get_policy_rows(db_session, integration_id, None).admin
+    return {
+        action.key
+        for action in list_integration_actions(integration_id, db_session)
+        if admin_policy(rows, action.key, action) is EffectivePolicy.BLOCKED
+    }
 
 
 def _with_link(
@@ -122,12 +146,7 @@ def decide_action_policy(
     blocks."""
     if not links:
         return EffectivePolicy.BLOCKED
-    stored_admin = rows.admin.get(key, rows.admin.get(DEFAULT_ACTION_KEY))
-    admin = (
-        _STORED_TO_EFFECTIVE[stored_admin]
-        if stored_admin is not None
-        else _action_default(action)
-    )
+    admin = admin_policy(rows.admin, key, action)
     locked = admin is EffectivePolicy.BLOCKED or not users_can_save_always_allow
     policy = max(
         (_with_link(admin, locked, link.value_for(key)) for link in links),
@@ -237,9 +256,11 @@ def agent_link_settings_by_integration(
     for plugin_id, integration in list_plugin_integrations(
         db_session, list(settings_by_plugin)
     ):
-        by_integration.setdefault(
+        held = by_integration.setdefault(
             integration.id, AgentIntegrationLinks(integration=integration)
-        ).settings.append(settings_by_plugin[plugin_id])
+        )
+        held.plugin_ids.append(plugin_id)
+        held.settings.append(settings_by_plugin[plugin_id])
     return by_integration
 
 

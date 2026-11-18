@@ -7,26 +7,15 @@ icon: "plug"
 Plugins give Onyx agents live access to external tools and services.
 An agent can use a plugin to read current data or to take an action, such as post a Slack reply or create a ticket.
 
-Admins manage all plugins in **Admin Panel → Plugins** (`/admin/plugins`).
+Admins manage plugins and integrations in the **Agents & Plugins** section of the Admin Panel:
+
+- **Admin Panel → Integrations** (`/admin/integrations`) lists each MCP server and app. Add, configure and approve
+  actions here.
+- **Admin Panel → Plugins** (`/admin/plugins`) lists the plugins that hold integrations. A plugin gives people access
+  to its integrations.
+
 Users connect their accounts and set personal defaults in **Plugins** in the main sidebar (`/app/plugins`).
-
-<img className="rounded-image" src="/assets/admins/plugins/plugins_directory.webp" alt="The Admin Panel Plugins page with an MCP server, an OpenAPI plugin, and a Slack Craft App"/>
-
-## Where things moved in Onyx 5
-
-In Onyx 5.0, MCP servers, OpenAPI actions, and Craft Apps moved to one **Plugins** page. Existing servers, tools,
-credentials, and Craft App settings stay the same. Only the location changed.
-
-| Before 5.0 | In 5.0 |
-| --- | --- |
-| **Admin Panel → MCP Actions** (`/admin/mcp-actions`) | **Admin Panel → Plugins**, type **MCP server** |
-| **Admin Panel → OpenAPI Actions** (`/admin/openapi-actions`) | **Admin Panel → Plugins**, type **OpenAPI** |
-| **Admin Panel → Craft → Apps** (`/admin/craft/apps`) | **Admin Panel → Plugins**, type **Craft App** |
-| **Craft → Apps** (`/craft/v1/apps`) | **Plugins** in the Craft sidebar (`/craft/v1/plugins`) |
-| MCP and OpenAPI tools in the Chat **Actions** menu | **Actions → Plugins** in Chat, and **Plugins** in the main sidebar (`/app/plugins`) |
-| "OpenAPI actions" and "MCP actions" | "OpenAPI plugins" and "MCP plugins" |
-
-Old links open the new pages.
+The [release notes](/changelog) list the old admin pages and where they are now.
 
 ## Plugin types
 
@@ -53,85 +42,108 @@ Onyx has three plugin types. Each type connects to a different kind of external 
 | Permissions | Onyx applies the permissions it syncs from the source, so each user finds only documents they can access | The external service applies its own permissions to the account that the plugin uses |
 | Actions | Read only | Read and write, if the service and the plugin allow it |
 
-## Add a plugin
+## Add an integration
 
-Go to **Admin Panel → Plugins**, click **Add**, then select **MCP**, **OpenAPI**, or **Craft Apps**.
-Follow the guide for the plugin type: [MCP](/admins/plugins/mcp), [OpenAPI](/admins/plugins/openapi),
+<Steps>
+  <Step title="Open the add dialog">
+    Go to **Admin Panel → Integrations** and click **Add**.
+  </Step>
+
+  <Step title="Select the type">
+    Select **MCP server**, **OpenAPI app**, **App** (from a preset), or **Custom app**.
+    **App** and **Custom app** show only when Craft is available on your plan.
+  </Step>
+
+  <Step title="Fill in the form">
+    Fill in the form of that type. For an MCP server, pick a suggested server or enter its URL.
+    Onyx checks the server URL and suggests the sign-in settings.
+  </Step>
+
+  <Step title="Set the sign-in">
+    Select the sign-in mode: **No sign-in**, **One account for the organization**, or **Each user signs in**.
+    Then select the method, such as **OAuth** or **API key**.
+  </Step>
+
+  <Step title="Select the owner and add">
+    **For me** puts the integration in a plugin in your **My uploads**.
+    **For the organization** puts it in a plugin in the **Organization library**. Click **Add**.
+  </Step>
+</Steps>
+
+Follow the guide for the type: [MCP](/admins/plugins/mcp), [OpenAPI](/admins/plugins/openapi),
 or [Craft Apps](/admins/plugins/craft_apps).
 
-<img className="rounded-image" src="/assets/admins/plugins/plugins_add_menu.webp" alt="The Add menu with MCP, OpenAPI, and Craft Apps options"/>
+Users with the **Manage Actions** permission can add integrations.
+Only users with the organization-wide **Manage Actions** permission see **For the organization**.
+A user with **Manage Actions** for some groups adds integrations **For me** and manages only the integrations of plugins
+in their **My uploads**.
 
-Only full admins can add Craft Apps. The **Craft Apps** filter and type show only for full admins,
-and only when Craft is available on your plan.
-Users with the **Manage Actions** permission can add and edit MCP and OpenAPI plugins.
-A Group Manager can restrict an MCP server only to the groups they manage.
-Only full admins can change which plugins are on in default Chat for the workspace.
+## The Integrations page
+
+The list shows **Name**, **Type**, **Sign-in**, **Access**, and **Status** for each integration.
+Use the type filter and the search field to find an integration.
+An integration that needs setup comes first and shows **Needs setup**. Point to the status to see the reason,
+for example a missing organization connection or OAuth client.
+
+Deleting an integration removes it from each plugin that holds it, and deletes its connections and action settings.
+To keep an integration but stop all use of it, turn off **Enabled** on its **Overview** tab instead.
 
 ## The Plugins page
 
-Cards sort by status: active plugins first, then plugins with issues, then plugins that are off.
-Onyx-managed Craft Apps on Onyx Cloud cannot be deleted.
+**Admin Panel → Plugins** lists each plugin that holds integrations, with its library, its install setting,
+and its integrations. Each **Organization library** plugin has an install setting:
 
-Deleting a plugin removes it from the workspace, from every custom agent, and from every user.
-To keep a plugin but stop default Chat or Craft from using it, turn off its availability switch instead.
-
-## Plugin settings
-
-Changes stay as a draft until you click **Save Changes**.
-
-| Tab | MCP | OpenAPI | Craft App |
-| --- | --- | --- | --- |
-| **Configuration** | Name, description, access control, availability | Name, descriptions, schema, default Chat | Name, availability |
-| **Authentication** | Authentication method, custom headers, transport | Authentication method | Provider credentials or header patterns |
-| **Tools** | Tool list and approval settings | Read-only list of operations | Action approval policies |
-
-## Availability and personal defaults
-
-| Setting | Who sets it | Effect |
-| --- | --- | --- |
-| **Access control** (MCP) | Admin | **Organization**, or limited to selected **User groups**. Group restrictions require a **Business** or **Enterprise** plan. |
-| **Enable in default Chat** (MCP, OpenAPI) | Admin | Makes the plugin available in chats that do not use a custom agent. |
-| **Enable for Craft** (MCP, Craft App) | Admin | Makes the plugin available in Craft sessions and scheduled tasks. |
-| **Custom agent attachment** | Agent builder | Gives one [custom agent](/admins/agents/overview) the plugin's tools. Default Chat settings do not change it. |
-| **Personal defaults** | Each user | Turns a workspace-available plugin off in that user's default Chat or Craft. |
-| **Account connection** | Each user | Signs the user in when the plugin uses personal OAuth or personal API keys. |
-
-A personal default can only narrow what the admin allows. If an admin turns off **Enable in default Chat**,
-no user can turn the plugin on in default Chat. Custom agents that already use the plugin keep it,
-and its credentials and settings stay the same.
-
-<Note>
-  Default Chat selection for MCP and OpenAPI plugins is now on the Plugins page.
-  **Chat Preferences** manages only built-in tools, such as Internal Search and Web Search. In Terraform,
-  `onyx_custom_tool.enabled` sets the default Chat selection for an OpenAPI plugin.
-</Note>
-
-## Status icons
-
-The status icon on each card shows where the plugin is available. Each segment of the icon is one surface:
-**Main Chat**, **Custom agents**, and **Craft**.
-
-| Color | Meaning |
+| Install setting | Effect |
 | --- | --- |
-| Green | On and ready |
-| Orange | Off, or the user must sign in |
-| Gray | The plugin type does not support this surface |
+| **Required** | On for each user. Users cannot turn it off. |
+| **Installed by default** | On for each user. Each user can turn it off. |
+| **Available to install** | Off for each user. Each user can turn it on in **Plugins**. |
+| **Not available** | Hidden from users. |
+
+Only users with the organization-wide **Manage Actions** permission can change the install setting.
+The default agent uses only the plugins that a user has on.
+A custom agent uses each plugin that it holds and that the user can see.
+
+A plugin in a **My uploads** has no install setting. Its owner shares it with people and groups,
+or publishes it to the **Organization library**. To publish a plugin that holds an integration,
+a user needs the organization-wide **Manage Actions** permission.
+
+## Integration settings
+
+Click an integration to open its detail page.
+
+| Tab | Settings |
+| --- | --- |
+| **Overview** | Name, description, type, sign-in, the plugins that hold it, **Enabled**, and **Delete** |
+| **Configuration** | Server URL, OpenAPI schema, or URL patterns, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
+| **Actions** | **Default for New Actions**, then the read-only actions and the write actions, each with **Allow**, **Ask**, or **Blocked** |
+
+If you change the sign-in method, the OAuth client, the URLs, or the scopes, each user must connect again.
+
+When the sign-in mode is **One account for the organization**,
+connect the organization account on the **Configuration** tab.
+The actions of an MCP server load after the server is connected.
+Click **Refresh** on the **Actions** tab to load them again.
 
 ## Approvals
 
 Onyx can ask a user to approve an action before it runs.
-Admins set the policy for each MCP tool and each Craft App action. MCP tool policies apply in Chat, in custom agents,
-and in Craft. Craft App policies apply in Craft.
+Admins set the policy for each action on the **Actions** tab of an integration. MCP tool policies apply in Chat,
+in custom agents, and in Craft. Craft App policies apply in Craft.
 
 | Policy | Effect |
 | --- | --- |
-| **Auto-approve** | The action runs without a prompt. |
+| **Allow** | The action runs without a prompt. |
 | **Ask** | Onyx shows an approval card. The user can approve once, approve for the chat or Craft session, or reject. |
-| **Disabled** | The action never runs. Users and scheduled tasks cannot override it. |
+| **Blocked** | The action never runs. Users and scheduled tasks cannot override it. |
 
-Turn on **Let users manage approval settings** to let users choose a stricter or more permissive policy for actions that
-the admin did not disable. For MCP plugins, users can change personal approval settings with or without Craft.
-For Craft Apps, users need Craft.
+The first row, **Default for New Actions**, applies to each action with no setting of its own,
+and to actions that the integration adds later. Each action shows **Uses default** or **Set by admin**.
+
+Turn on **Users Can Save Always Allow** on the **Configuration** tab to let each user save **Always allow** for an
+action with the **Ask** policy. Users cannot run an action with the **Blocked** policy.
+
+An Agent can also set each action of its plugins. See [Action Settings](/admins/agents/overview#action-settings).
 
 The Slack and Discord bots cannot show approval requests, so a tool with the **Ask** policy is not available to them.
 Each tool that the agent of a bot had before integrations were added keeps running without approval.

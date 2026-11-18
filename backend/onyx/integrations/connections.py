@@ -1,12 +1,12 @@
 import re
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
 import httpx
 import requests
-from pydantic import ValidationError
+from pydantic import JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_refresher import (
@@ -28,16 +28,20 @@ from onyx.db.enums import (
 from onyx.db.integration import (
     get_external_app_for_integration,
     get_mcp_server_for_integration,
+    get_openapi_tool_for_integration,
+    lock_integration__no_commit,
 )
 from onyx.db.integration_connection import (
-    delete_connection__no_commit,
     get_connection_by_id,
     get_connection_with_organization,
     get_oauth_client,
+    get_oauth_clients,
+    list_connections,
     mark_connection_needs_reconnect__no_commit,
     mark_integration_connections_needs_reconnect__no_commit,
     reload_connection,
     update_connection_secret__no_commit,
+    upsert_connection__no_commit,
 )
 from onyx.db.models import (
     Integration,
@@ -76,7 +80,11 @@ from onyx.integrations.connection_models import (
     read_oauth_client,
     secret_fingerprint,
 )
-from onyx.server.features.mcp.models import merge_mcp_headers
+from onyx.oauth.authorization_attempt import canonical_json_fingerprint
+from onyx.server.features.mcp.models import (
+    DENYLISTED_MCP_HEADERS,
+    merge_mcp_headers,
+)
 from onyx.server.features.mcp.oauth import (
     IntegrationTokenStorage,
     integration_mcp_server_connection,
@@ -85,6 +93,7 @@ from onyx.server.features.mcp.oauth import (
     oauth_token_from_response,
 )
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
+from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 
@@ -490,7 +499,13 @@ def render_headers(
     """``{{``/``}}`` are literal; a missing placeholder raises
     ``MissingHeaderValueError``."""
     secret = secret or ConnectionSecret()
-    templates = merge_mcp_headers(secret.headers, dict(header_template or {}))
+    templates = {
+        name: template
+        for name, template in merge_mcp_headers(
+            secret.headers, dict(header_template or {})
+        ).items()
+        if name.lower() not in DENYLISTED_MCP_HEADERS
+    }
     values = _placeholder_values(secret, extra_values)
     missing = sorted(
         {
@@ -785,6 +800,43 @@ def _refresh_with_token_url(
     return _grant_from_token_response(request, mcp=False)
 
 
+def sign_in_host(integration: Integration, db_session: Session) -> str | None:
+    """Where the credentials go: the MCP server URL, or the OpenAPI server
+    URL, the app URL patterns and the preset host values."""
+    if integration.kind is IntegrationKind.MCP:
+        mcp_server = get_mcp_server_for_integration(integration.id, db_session)
+        return mcp_server.server_url if mcp_server is not None else None
+    destinations: dict[str, JsonValue] = {}
+    tool = get_openapi_tool_for_integration(integration.id, db_session)
+    if tool is not None and tool.openapi_schema is not None:
+        try:
+            destinations["openapi_url"] = openapi_to_url(tool.openapi_schema)
+        except ValueError:
+            destinations["openapi_url"] = None
+    app = get_external_app_for_integration(integration.id, db_session)
+    if app is not None:
+        destinations["upstream_url_patterns"] = sorted(app.upstream_url_patterns)
+    host_values = preset_host_values(integration, db_session)
+    if host_values:
+        destinations["host_values"] = host_values
+    return canonical_json_fingerprint(destinations) if destinations else None
+
+
+def preset_organization_values(
+    integration_id: int, db_session: Session
+) -> dict[str, str]:
+    """The organization settings of a preset that are not secret: the host
+    values and the client id."""
+    oauth_client = get_oauth_client(db_session, integration_id)
+    if oauth_client is None:
+        return {}
+    credentials = read_oauth_client(oauth_client)
+    values = dict(credentials.host_values)
+    if credentials.client_id:
+        values["client_id"] = credentials.client_id
+    return values
+
+
 def preset_host_values(integration: Integration, db_session: Session) -> dict[str, str]:
     """The account settings a preset needs to build its endpoints, such as
     the Zendesk subdomain. They are host settings of the kind, not secrets."""
@@ -887,24 +939,149 @@ def oauth_client_configured(
 def integration_status(
     integration: Integration, user: User | None, db_session: Session
 ) -> IntegrationStatus:
-    if integration.auth_mode is not IntegrationAuthMode.NONE and (
-        not oauth_client_configured(
-            integration, get_oauth_client(db_session, integration.id)
-        )
-    ):
-        return IntegrationStatus(
-            state=ConnectionState.NOT_SET_UP, reason=not_set_up_reason(integration)
-        )
-    result = resolve_connection(integration, user, db_session, refresh=False)
-    if isinstance(result, ConnectionProblem):
-        return IntegrationStatus(state=result.code, reason=result.reason)
-    return IntegrationStatus(state=ConnectionState.CONNECTED, reason=None)
+    return integration_statuses([integration], user, db_session)[integration.id]
 
 
-def disconnect(integration: Integration, user: User, db_session: Session) -> bool:
-    deleted = delete_connection__no_commit(db_session, integration.id, user.id)
-    db_session.commit()
-    return deleted
+def _reads_connections(integration: Integration) -> bool:
+    if integration.auth_mode is IntegrationAuthMode.NONE:
+        return _may_have_legacy_defaults(integration)
+    return integration.auth_method is not IntegrationAuthMethod.ONYX_LOGIN or (
+        _may_have_legacy_defaults(integration)
+    )
+
+
+def integration_statuses(
+    integrations: Collection[Integration], user: User | None, db_session: Session
+) -> dict[int, IntegrationStatus]:
+    """The status of each integration for ``user`` (None: the organization
+    connection). One query reads the OAuth clients and one the connections,
+    for all integrations."""
+    oauth_clients = get_oauth_clients(
+        db_session,
+        [
+            integration.id
+            for integration in integrations
+            if integration.auth_method is IntegrationAuthMethod.OAUTH2
+        ],
+    )
+    signed_in_user = _signed_in(user)
+    connections = list_connections(
+        db_session,
+        [
+            integration.id
+            for integration in integrations
+            if _reads_connections(integration)
+        ],
+        signed_in_user.id if signed_in_user is not None else None,
+    )
+    statuses: dict[int, IntegrationStatus] = {}
+    for integration in integrations:
+        if integration.auth_mode is not IntegrationAuthMode.NONE and (
+            not oauth_client_configured(integration, oauth_clients.get(integration.id))
+        ):
+            statuses[integration.id] = IntegrationStatus(
+                state=ConnectionState.NOT_SET_UP,
+                reason=not_set_up_reason(integration),
+            )
+            continue
+
+        organization = connections.get((integration.id, None))
+        user_row = (
+            connections.get((integration.id, signed_in_user.id))
+            if signed_in_user is not None
+            else None
+        )
+        result = _resolve_by_mode(
+            integration,
+            signed_in_user,
+            organization,
+            user_row,
+            db_session,
+            refresh=False,
+        )
+        if _may_have_legacy_defaults(integration):
+            result = _with_legacy_defaults(
+                integration, signed_in_user, result, organization, user_row
+            )
+        statuses[integration.id] = (
+            IntegrationStatus(state=result.code, reason=result.reason)
+            if isinstance(result, ConnectionProblem)
+            else IntegrationStatus(state=ConnectionState.CONNECTED, reason=None)
+        )
+    return statuses
+
+
+def credential_field_keys(integration: Integration) -> list[str]:
+    """The keys a person fills for an api_key connection: the stored
+    credential fields, else the placeholders of the header template."""
+    if integration.credential_fields:
+        return [
+            str(field["key"])
+            for field in integration.credential_fields
+            if isinstance(field.get("key"), str)
+        ]
+    return header_field_keys(integration.header_template or {})
+
+
+def header_field_keys(header_template: Mapping[str, str]) -> list[str]:
+    """The placeholders of a header template that a person fills, in
+    order. ``user_email`` is filled by Onyx."""
+    keys: list[str] = []
+    for value in header_template.values():
+        for match in _TEMPLATE_TOKEN_RE.finditer(value):
+            key = match.group(1)
+            if key is not None and key != "user_email" and key not in keys:
+                keys.append(key)
+    return keys
+
+
+def check_connection_mode(integration: Integration, for_organization: bool) -> None:
+    if for_organization != (integration.auth_mode is IntegrationAuthMode.SHARED):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{integration.name} uses "
+            + (
+                "one connection for the organization."
+                if integration.auth_mode is IntegrationAuthMode.SHARED
+                else "a connection for each user."
+            ),
+        )
+
+
+def connect_with_fields__no_commit(
+    integration: Integration,
+    user: User | None,
+    fields: Mapping[str, str],
+    db_session: Session,
+) -> None:
+    """Save an api_key connection for ``user``, or for the organization when
+    ``user`` is None. Each credential field needs a value; other keys are
+    refused. The integration row lock orders the save with a settings
+    change, which sets the connections to Needs reconnect."""
+    lock_integration__no_commit(integration.id, db_session)
+    if integration.auth_method is not IntegrationAuthMethod.API_KEY:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{integration.name} does not sign in with an API key.",
+        )
+    check_connection_mode(integration, for_organization=user is None)
+    keys = credential_field_keys(integration)
+    unknown = sorted(set(fields) - set(keys))
+    if unknown:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "Unknown fields: " + ", ".join(unknown)
+        )
+    missing = [key for key in keys if not fields.get(key, "").strip()]
+    if missing:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Fill in: " + ", ".join(missing))
+    upsert_connection__no_commit(
+        db_session,
+        integration_id=integration.id,
+        user_id=user.id if user is not None else None,
+        secret=ConnectionSecret(fields=dict(fields)).model_dump(mode="json"),
+        expires_at=None,
+        granted_scopes=None,
+    )
 
 
 def sign_in_settings_for(

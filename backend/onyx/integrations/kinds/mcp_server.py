@@ -1,26 +1,50 @@
 from collections import Counter
 from collections.abc import Sequence
 
+from mcp.types import Tool as MCPLibTool
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import IntegrationActionPolicyValue
+from onyx.db.enums import (
+    IntegrationActionPolicyValue,
+    IntegrationActionSource,
+    MCPTransport,
+)
 from onyx.db.integration import (
     get_mcp_server_for_integration,
     list_integration_actions,
 )
-from onyx.db.models import Integration, IntegrationAction, MCPServer
+from onyx.db.models import Integration, IntegrationAction, MCPServer, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.request import ProxiedRequest
-from onyx.integrations.call_credentials import mcp_oauth_server
+from onyx.integrations.call_credentials import (
+    mcp_oauth_provider,
+    mcp_oauth_server,
+    resolve_call_credentials,
+)
+from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.kinds.base import IntegrationKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
-from onyx.integrations.models import MatchedIntegrationAction, McpServerConfig
-from onyx.sandbox_proxy.mcp_jsonrpc import classify_mcp_request
+from onyx.integrations.models import (
+    IntegrationActionSpec,
+    MatchedIntegrationAction,
+    McpServerConfig,
+    RequestMatch,
+)
+from onyx.sandbox_proxy.mcp_jsonrpc import (
+    MCP_UNCLASSIFIABLE_ACTION_TYPE,
+    classify_mcp_request,
+)
 from onyx.sandbox_proxy.models import McpRpcKind
-from onyx.sandbox_proxy.request_evaluator import MCP_UNCLASSIFIABLE_ACTION_TYPE
-from onyx.sandbox_proxy.resolvers.mcp_matching import match_request, parse_target
+from onyx.sandbox_proxy.resolvers.mcp_matching import (
+    IntegrationMatchTarget,
+    match_request,
+)
+from onyx.server.features.mcp.client import (
+    discover_mcp_tools,
+    has_auth_rejection_response,
+)
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.utils.logger import setup_logger
@@ -37,23 +61,94 @@ def mcp_action_default_policy(read_only: bool | None) -> IntegrationActionPolicy
     )
 
 
-def _blocked_unclassifiable(
-    integration_id: int, description: str
-) -> list[MatchedIntegrationAction]:
-    return [
-        MatchedIntegrationAction(
-            integration_id=integration_id,
-            action_key=MCP_UNCLASSIFIABLE_ACTION_TYPE,
-            display_name="Unrecognized MCP request",
-            description=description,
-            default_policy=IntegrationActionPolicyValue.BLOCKED,
+def mcp_tool_action_spec(tool: MCPLibTool) -> IntegrationActionSpec:
+    annotations = tool.annotations
+    read_only = annotations.readOnlyHint if annotations is not None else None
+    return IntegrationActionSpec(
+        key=tool.name,
+        source=IntegrationActionSource.MCP,
+        display_name=tool.title
+        or (annotations.title if annotations is not None else None)
+        or tool.name,
+        description=tool.description,
+        read_only=read_only,
+        default_policy=mcp_action_default_policy(read_only),
+        input_schema=tool.inputSchema,
+        output_schema=tool.outputSchema,
+    )
+
+
+def fetch_mcp_actions(
+    integration: Integration, acting_user: User | None, db_session: Session
+) -> list[IntegrationActionSpec]:
+    """Ask the MCP server for its tools with the credential of
+    ``acting_user``: the organization connection of a shared server, or the
+    connection of ``acting_user`` on an individual server. Raises a 400 when
+    there is no usable credential or the server refuses it."""
+    server = get_mcp_server_for_integration(integration.id, db_session)
+    if server is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Integration {integration.id} has no MCP server settings.",
         )
-    ]
+    credentials = resolve_call_credentials(integration, acting_user, db_session)
+    if isinstance(credentials, ConnectionProblem):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Connect {integration.name} first to load its actions.",
+        )
+    transport = server.transport or MCPTransport.STREAMABLE_HTTP
+    oauth_server = mcp_oauth_server(integration, credentials, transport, db_session)
+    try:
+        tools = discover_mcp_tools(
+            server.server_url,
+            credentials.headers,
+            transport=transport,
+            auth=(
+                mcp_oauth_provider(oauth_server, credentials)
+                if oauth_server is not None
+                else None
+            ),
+        )
+    except Exception as error:
+        if has_auth_rejection_response(error):
+            raise OnyxError(
+                OnyxErrorCode.CREDENTIAL_INVALID,
+                f"{integration.name} refused the credential. Reconnect it and try again.",
+            ) from error
+        raise
+    return mcp_action_specs(tools)
+
+
+def mcp_action_specs(tools: Sequence[MCPLibTool]) -> list[IntegrationActionSpec]:
+    """One spec for each tool name; the first tool of a name wins."""
+    specs: dict[str, IntegrationActionSpec] = {}
+    for tool in tools:
+        if tool.name and tool.name not in specs:
+            specs[tool.name] = mcp_tool_action_spec(tool)
+    return list(specs.values())
+
+
+def _blocked_unclassifiable(
+    integration_id: int, description: str, path_prefix_length: int
+) -> RequestMatch:
+    return RequestMatch(
+        actions=[
+            MatchedIntegrationAction(
+                integration_id=integration_id,
+                action_key=MCP_UNCLASSIFIABLE_ACTION_TYPE,
+                display_name="Unrecognized MCP request",
+                description=description,
+                default_policy=IntegrationActionPolicyValue.BLOCKED,
+            )
+        ],
+        path_prefix_length=path_prefix_length,
+    )
 
 
 class McpServerKindHandler(IntegrationKindHandler):
-    """An MCP server. Its actions are the tools of the server, kept by the
-    tool sync by name (``server/features/mcp/api.py``)."""
+    """An MCP server. Its actions are the tools of the server, stored as
+    ``integration_action`` rows by ``fetch_mcp_actions``."""
 
     def _server(self, integration: Integration, db_session: Session) -> MCPServer:
         server = get_mcp_server_for_integration(integration.id, db_session)
@@ -102,6 +197,7 @@ class McpServerKindHandler(IntegrationKindHandler):
                 oauth_server=oauth_server,
                 additional_headers=ctx.mcp_headers,
                 approval=ctx.approval_for(action.key),
+                plugin_ids=ctx.plugin_ids,
             )
             for action in actions
         ]
@@ -109,17 +205,14 @@ class McpServerKindHandler(IntegrationKindHandler):
     def match_request(
         self,
         integration: Integration,
+        target: IntegrationMatchTarget,
         request: ProxiedRequest,
         db_session: Session,
-    ) -> list[MatchedIntegrationAction] | None:
-        """Same rules as the sandbox proxy (``McpRequestEvaluator``): the host
-        and the path prefix of the server URL attribute the request, and the
-        JSON-RPC body gives the tools."""
-        if request.url is None:
-            return None
-        server = self._server(integration, db_session)
-        target = parse_target(server.id, server.server_url)
-        if target is None:
+    ) -> RequestMatch | None:
+        """The host and the path prefix of the server URL attribute the
+        request, and the JSON-RPC body gives the tools. The caller picks the
+        longest prefix when servers share a host."""
+        if request.url is None or target.endpoint is None:
             return None
         proxied = http.Request.make(
             request.method,
@@ -130,24 +223,26 @@ class McpServerKindHandler(IntegrationKindHandler):
                 for name, value in request.headers.items()
             ],
         )
-        if match_request((target,), proxied) is None:
+        if match_request((target.endpoint,), proxied) is None:
             return None
+        prefix_length = len(target.endpoint.path_prefix)
 
         try:
             classification = classify_mcp_request(proxied)
         except Exception:
             logger.exception("mcp_match_error integration=%s; denying", integration.id)
             return _blocked_unclassifiable(
-                integration.id, "MCP gating failed; blocked."
+                integration.id, "MCP gating failed; blocked.", prefix_length
             )
         if classification.kind is McpRpcKind.PLUMBING:
-            return []
+            return RequestMatch(actions=[], path_prefix_length=prefix_length)
         if classification.kind is McpRpcKind.UNCLASSIFIABLE:
             path = (proxied.path or "").split("?", 1)[0]
             return _blocked_unclassifiable(
                 integration.id,
                 f"{request.method} {path} could not be parsed "
                 "as an MCP tool call or protocol message; blocked.",
+                prefix_length,
             )
 
         defaults = {
@@ -156,7 +251,7 @@ class McpServerKindHandler(IntegrationKindHandler):
             for action in list_integration_actions(integration.id, db_session)
         }
         counts: Counter[str] = Counter(classification.tool_names)
-        return [
+        actions = [
             MatchedIntegrationAction(
                 integration_id=integration.id,
                 action_key=tool_name,
@@ -171,3 +266,4 @@ class McpServerKindHandler(IntegrationKindHandler):
             )
             for tool_name, count in counts.items()
         ]
+        return RequestMatch(actions=actions, path_prefix_length=prefix_length)

@@ -232,7 +232,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Term | Meaning |
 |---|---|
 | Session workspace | The sandbox directory of one Craft session (`/workspace/sessions/<id>`), with its outputs, attachments and agent config. Not the tenant-wide workspace. See [[craft-sandboxes]]. |
-| Action policy | `ALWAYS` (Auto-approve), `ASK` (Ask) or `DENY` (Disabled) for each catalog action or MCP tool. Chat applies it to MCP tools too. See [[craft-external-apps]]. |
+| Action policy | `ALWAYS` (Allow), `ASK` (Ask) or `DENY` (Blocked); the integration API writes `allow`, `ask` or `blocked` for each catalog action or MCP tool. Chat applies it to MCP tools too. See [[craft-external-apps]]. |
 | Workspace policy, personal choice, task choice | The three policy layers. See [[craft-external-apps]]. |
 | `unspecified` | The synthetic whole-domain action for a connected-app request that matches no catalog action. See [[craft-external-apps]]. |
 | Session grant | "Approve for session" for specific Ask actions in one Craft session. Chat has its own, "Approve for this chat" ([[mcp-and-custom-tools]]). See [[craft-external-apps]]. |

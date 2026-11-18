@@ -819,10 +819,11 @@ the app from the same rule
   the new files of a Skill. The previous tree stays readable until the next
   push to that mount or for 60 seconds.
 - **App lifecycle keeps skill settings.** Disconnecting an app deletes only
-  the user's credentials (`db/external_app.py:disconnect_external_app_for_user`).
+  the user's connection
+  (`backend/onyx/server/features/integrations/api.py:delete_member_connection`).
   Deleting an app keeps the skills of its plugins with their settings and
-  choices (`db/external_app.py:delete_external_app`). It deletes the built-in
-  skill row of the app's preset.
+  choices (`db/external_app.py:delete_external_app__no_commit`). It deletes
+  the built-in skill row of the app's preset.
 
 ---
 
@@ -838,10 +839,10 @@ the app from the same rule
   default) is DENY, or when cloud withholds it. Personal and task DENY choices
   are not listed, so the agent can try an action that the proxy then blocks
   ([[craft-external-apps]]).
-- **External-app admin writes push in different orders.**
-  `server/features/build/external_apps/api.py:update_external_app_admin`
-  commits and then pushes. `create_built_in_external_app` and
-  `delete_external_app_admin` push before the commit. Their comments say a
+- **External-app admin writes push in different orders.** The old
+  external-app admin routes are gone; integration writes call
+  `backend/onyx/integrations/service.py:reload_craft_sessions` after the
+  commit. Their comments say a
   push failure rolls back the change, but `push_skills_for_users` logs and
   drops every failure ([[#push-holds-row-locks]]), so the change commits
   anyway. If that commit fails, the sandboxes hold files that the database
@@ -860,8 +861,9 @@ the app from the same rule
   live runtime.
 - [[craft-external-apps]]: the app rows behind built-in app skills, the
   connectable-apps list and action policy views. GitHub
-  import and preview authenticate with the user's GitHub app credential
-  (`server/features/skill/api.py:_github_authorization_header`).
+  import and preview authenticate with the user's connection of the GitHub
+  integration (`server/features/skill/api.py:_github_authorization_header`,
+  through `resolve_call_credentials`).
 - [[authorization]]: `MANAGE_PLUGINS` and the scoped-manager group check
   (`assert_within_scope`).
 - [[file-store-and-user-files]]: bundle blobs.

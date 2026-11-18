@@ -452,4 +452,5 @@ class IntegrationOAuthAttemptPayload(BaseModel):
 
 class IntegrationOAuthCallbackResult(BaseModel):
     integration_id: int
+    for_organization: bool
     return_path: str | None

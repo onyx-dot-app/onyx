@@ -65,7 +65,7 @@ from onyx.prompts.chat_prompts import (
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile
+from onyx.tools.models import CapabilityEntry, ChatFile
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
@@ -223,7 +223,7 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
         user_memory_context=None,
         llm=llm,
         token_counter=len,
-        preferred_tool_id=1,
+        preferred_tool=CapabilityEntry(tool_id=1),
     )
     project = partial(
         project_response,
@@ -975,11 +975,11 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
         token_counter=len,
         reminders_enabled=False,
     )
-    original = make_agent(messages=[], preferred_tool_id=1)
+    original = make_agent(messages=[], preferred_tool=CapabilityEntry(tool_id=1))
     saved = TypeAdapter(dict[str, JsonValue]).validate_json(
         original.capture_state().model_dump_json()
     )
-    restored = make_agent(messages=[], preferred_tool_id=1)
+    restored = make_agent(messages=[], preferred_tool=CapabilityEntry(tool_id=1))
     restored.restore_state(saved)
     outcome = run_agent(
         restored, messages=[UserMessage(content="Question")], max_steps=2

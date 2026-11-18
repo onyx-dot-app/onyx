@@ -1,6 +1,6 @@
 "use client";
 
-import { useNavigation } from "@opal/navigation";
+import { useNavigation, usePathname, useSearchParams } from "@opal/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
@@ -11,21 +11,18 @@ import { cn } from "@opal/utils";
 import {
   ConnectAppDecision,
   postConnectAppDecision,
-  startExternalAppOAuth,
-  upsertUserCredentials,
 } from "@/app/craft/services/externalAppsService";
 import CometEdge from "@/refresh-components/CometEdge";
-import {
-  OAUTH_POPUP_MESSAGE_SOURCE,
-  OAuthPopupMessage,
-} from "@/app/craft/types/setupRequests";
-import {
-  ExternalAppUserResponse,
-  getAppTypeLogo,
-} from "@/app/craft/v1/apps/registry";
-import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
+import { connectWithOAuth } from "@/lib/integrations/connect";
+import { useMemberIntegrations } from "@/lib/integrations/hooks";
+import { startUserOAuth } from "@/lib/integrations/svc";
+import { isSilentOAuthOutcome, oauthFailureDetail } from "@/lib/oauth/launch";
+import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
+import type { CraftApp } from "@/lib/integrations/craft";
+import IntegrationCredentialsModal from "@/sections/plugins/IntegrationCredentialsModal";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { refreshSkillLists } from "@/lib/skills/cache";
+import { locationKey } from "@/app/app/services/submitLocation";
 
 interface SetupCardProps {
   // Correlation id for the parked `connect_app` request (from the packet).
@@ -35,17 +32,14 @@ interface SetupCardProps {
   // The agent's one-line justification, when provided.
   reason: string | null;
   // The user-facing app row, when resolved — drives popup-vs-form + fields.
-  userApp?: ExternalAppUserResponse;
+  userApp?: CraftApp;
 }
 
-const POPUP_FEATURES = "popup,width=520,height=720";
-const POPUP_POLL_MS = 600;
-
 /**
- * Connect-app card rendered from a `connect_app_request` packet. "Connect" runs
- * the OAuth popup (or the credential form for token apps); finishing posts a
- * "connected" decision (→ the parked agent tool resumes with access), "Not now"
- * posts "declined" (→ the agent gets a rejection and picks an alternative).
+ * Connect-app card rendered from a `connect_app_request` packet. Finishing
+ * "Connect" posts a "connected" decision (the parked agent tool resumes with
+ * access). "Not now" posts "declined" (the agent gets a rejection and picks an
+ * alternative).
  */
 export default function SetupCard({
   requestId,
@@ -56,22 +50,22 @@ export default function SetupCard({
   const t = useTranslations("craft.setupCard");
   const tActionPolicies = useTranslations("craft.actionPolicies");
   const navigation = useNavigation();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [credModalOpen, setCredModalOpen] = useState(false);
   const [decision, setDecision] = useState<ConnectAppDecision | null>(null);
+  const { data: integrations } = useMemberIntegrations();
 
   const mountedRef = useRef(true);
   const resolvingRef = useRef(false);
   const autoResolvedRef = useRef(false);
-  // Tears down the in-flight OAuth poll/listener; run on finish and on unmount.
-  const cleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      cleanupRef.current?.();
     };
   }, []);
 
@@ -79,6 +73,9 @@ export default function SetupCard({
     userApp?.name ?? t("appFallback.label", { id: externalAppId });
   const supportsOauth = userApp?.supports_oauth ?? false;
   const appLoading = userApp === undefined;
+  const integration = integrations?.find(
+    (candidate) => candidate.id === userApp?.integration_id
+  );
 
   const resolve = useCallback(
     async (result: ConnectAppDecision) => {
@@ -101,7 +98,7 @@ export default function SetupCard({
       if (!mountedRef.current) return;
       setDecision(result);
       if (result === "connected") {
-        void mutate(SWR_KEYS.buildExternalApps);
+        void mutate(SWR_KEYS.integrations);
         void refreshSkillLists(mutate);
       }
     },
@@ -114,60 +111,6 @@ export default function SetupCard({
     autoResolvedRef.current = true;
     void resolve("connected");
   }, [userApp?.authenticated, decision, resolve]);
-
-  async function confirmConnected(): Promise<boolean> {
-    try {
-      const apps = await mutate<ExternalAppUserResponse[]>(
-        SWR_KEYS.buildExternalApps
-      );
-      return !!apps?.some(
-        (app) => app.id === externalAppId && app.authenticated
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  function awaitOAuthCompletion(popup: Window) {
-    let settled = false;
-
-    function onMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return;
-      const data = event.data as Partial<OAuthPopupMessage> | undefined;
-      if (data?.source !== OAUTH_POPUP_MESSAGE_SOURCE) return;
-      if (data.externalAppId !== externalAppId) return;
-      finish(true);
-    }
-
-    // Close alone isn't a cancel: the success postMessage can lose the race with
-    // this poll, so confirm against the server before giving up.
-    async function onClose() {
-      if (settled) return;
-      clearInterval(poll);
-      finish(await confirmConnected());
-    }
-
-    const poll = setInterval(() => {
-      if (popup.closed) void onClose();
-    }, POPUP_POLL_MS);
-    window.addEventListener("message", onMessage);
-
-    const teardown = () => {
-      window.removeEventListener("message", onMessage);
-      clearInterval(poll);
-    };
-    cleanupRef.current = teardown;
-
-    function finish(connected: boolean) {
-      if (settled) return;
-      settled = true;
-      teardown();
-      cleanupRef.current = null;
-      if (mountedRef.current) setBusy(false);
-      // Unconfirmed attempts leave the card live to retry rather than decline.
-      if (connected) void resolve("connected");
-    }
-  }
 
   async function connect() {
     setError(null);
@@ -182,6 +125,10 @@ export default function SetupCard({
       return;
     }
     if (!supportsOauth) {
+      if (!integration) {
+        setError(t("error.notConfigurable"));
+        return;
+      }
       // Lock the actions so "Not now" can't decline while the form is open.
       setBusy(true);
       setCredModalOpen(true);
@@ -190,17 +137,23 @@ export default function SetupCard({
 
     setBusy(true);
     try {
-      const { authorize_url } = await startExternalAppOAuth(externalAppId);
-      const popup = window.open(authorize_url, "_blank", POPUP_FEATURES);
-      if (!popup) {
-        setBusy(false);
-        setError(t("error.popupBlocked"));
-        return;
-      }
-      awaitOAuthCompletion(popup);
-    } catch (e) {
+      const result = await connectWithOAuth(
+        (path) => startUserOAuth(userApp.integration_id, path),
+        locationKey(pathname, searchParams.toString())
+      );
+      if (!mountedRef.current) return;
       setBusy(false);
-      setError(e instanceof Error ? e.message : t("error.startFailed"));
+      if (result === "connected") await resolve("connected");
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setBusy(false);
+      if (!isSilentOAuthOutcome(e))
+        setError(
+          oauthFailureDetail(e)?.description ??
+            (e instanceof Error && e.message
+              ? e.message
+              : t("error.startFailed"))
+        );
     }
   }
 
@@ -236,9 +189,7 @@ export default function SetupCard({
           {connected && (
             <Button
               prominence="tertiary"
-              {...navigation.linkTo(
-                `/craft/v1/plugins?actionPolicies=app-${externalAppId}`
-              )}
+              {...navigation.linkTo("/craft/v1/plugins")}
             >
               {tActionPolicies("title")}
             </Button>
@@ -287,19 +238,17 @@ export default function SetupCard({
                 : t("connect.title", { app: appName })}
           </Button>
         </div>
-        {userApp && (
-          <UserCredentialsModal
-            open={credModalOpen}
+        {credModalOpen && integration && (
+          <IntegrationCredentialsModal
+            integration={integration}
             onClose={() => {
               setCredModalOpen(false);
               setBusy(false);
             }}
-            onSaved={() => void resolve("connected")}
-            name={userApp.name}
-            logo={getAppTypeLogo(userApp.app_type)}
-            credentialKeys={userApp.credential_keys}
-            credentialValues={userApp.credential_values}
-            save={(values) => upsertUserCredentials(userApp.id, values)}
+            onConnected={() => {
+              setCredModalOpen(false);
+              void resolve("connected");
+            }}
           />
         )}
       </div>

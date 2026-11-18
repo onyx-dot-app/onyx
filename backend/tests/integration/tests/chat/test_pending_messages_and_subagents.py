@@ -20,9 +20,13 @@ from onyx.server.query_and_chat.models import (
     PendingChatMessageRequest,
 )
 from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
+from onyx.tools.models import ToolOptions
+from onyx.tools.tool_name import normalize_external_tool_name
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.integration_rows import link_persona
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.integration import IntegrationManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.mock_llm import (
     MockLLMManager,
@@ -485,47 +489,48 @@ def test_a_background_agent_runs_programs_in_code_mode(
     assert "42" in (child_answer_request.tool_result("child-program") or "")
 
 
-@pytest.mark.skip(
-    reason="U4b: chat offers integration actions with no tool id, so "
-    "allowed_tool_ids cannot narrow them. U4b rewrites this on tool_options."
-)
-def test_turns_the_server_starts_use_the_current_tool_selection(
+def test_turns_the_server_starts_use_the_saved_tool_options(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
-    """The chat keeps the user's tool selection: a queued turn offers the
-    tools selected when it starts, not the tools of the last sent message."""
+    """The chat keeps the user's tool options: a queued turn offers the
+    actions saved when it starts, not the tools of the last sent message."""
     nonce = uuid4().hex
     enabled, blocked = "Queued with the tool", "Queued without the tool"
-    created = client.post(
-        f"{API_SERVER_URL}/admin/tool/custom",
-        json={
-            "name": f"selection-{nonce}",
+    created = IntegrationManager.create(
+        {
+            "for_organization": True,
+            "name": f"options-{nonce}",
             "description": "Ping a service",
-            "definition": {
-                "openapi": "3.0.0",
-                "info": {"title": "Ping", "description": "Ping", "version": "1.0.0"},
-                "servers": [{"url": "https://example.com"}],
-                "paths": {
-                    "/ping": {
-                        "get": {
-                            "summary": "Ping the service",
-                            "operationId": "ping",
-                            "responses": {"200": {"description": "ok"}},
+            "auth_mode": "none",
+            "auth_method": None,
+            "config": {
+                "shape": "openapi",
+                "openapi_spec": {
+                    "openapi": "3.0.0",
+                    "info": {
+                        "title": "Ping",
+                        "description": "Ping",
+                        "version": "1.0.0",
+                    },
+                    "servers": [{"url": "https://example.com"}],
+                    "paths": {
+                        "/ping": {
+                            "get": {
+                                "summary": "Ping the service",
+                                "operationId": "ping",
+                                "responses": {"200": {"description": "ok"}},
+                            }
                         }
-                    }
+                    },
                 },
             },
-            "custom_headers": [],
-            "passthrough_auth": False,
         },
-        headers=admin_user.headers,
+        admin_user,
     )
-    created.raise_for_status()
-    tool_id = int(created.json()["id"])
-    tool_name = f"custom__{tool_id}__ping"
-    persona = PersonaManager.create(
-        tool_ids=[tool_id], user_performing_action=admin_user
-    )
+    integration_id, plugin_id = created.id, created.plugins[0].plugin_id
+    tool_name = normalize_external_tool_name(f"custom__{integration_id}__ping")
+    persona = PersonaManager.create(tool_ids=[], user_performing_action=admin_user)
+    link_persona(persona.id, plugin_id, {})
     mock_llm.conversation(
         nonce,
         Reply(text="Answer without the tool."),
@@ -539,22 +544,29 @@ def test_turns_the_server_starts_use_the_current_tool_selection(
         ),
         conditions=RequestConditions(prompt_contains=[nonce]),
     )
-    selection_url = f"{API_SERVER_URL}/chat/chat-session/{{}}/tool-selection"
+    options_url = f"{API_SERVER_URL}/chat/chat-session/{{}}/tool-options"
     try:
         session = ChatSessionManager.create(
             persona_id=persona.id, user_performing_action=admin_user
         )
         sent = ChatSessionManager.send_message(
-            session.id, f"Start without tools. {nonce}", admin_user, allowed_tool_ids=[]
+            session.id,
+            f"Start without tools. {nonce}",
+            admin_user,
+            tool_options=ToolOptions(allowed=[]),
         )
         assert sent.error is None
-        for message, selection, answer in (
-            (enabled, [tool_id], "Answer with the tool."),
+        for message, allowed, answer in (
+            (
+                enabled,
+                [{"type": "plugin", "plugin_id": str(plugin_id), "actions": ["ping"]}],
+                "Answer with the tool.",
+            ),
             (blocked, [], "Answer without the tool again."),
         ):
             client.patch(
-                selection_url.format(session.id),
-                json={"allowed_tool_ids": selection, "preferred_tool_id": None},
+                options_url.format(session.id),
+                json={"allowed": allowed, "preferred": None},
                 headers=admin_user.headers,
             ).raise_for_status()
             _submit(session.id, admin_user, message)
@@ -569,9 +581,7 @@ def test_turns_the_server_starts_use_the_current_tool_selection(
             _wait_until(answered, f"the queued turn answers: {answer}")
     finally:
         assert PersonaManager.delete(persona, user_performing_action=admin_user)
-        client.delete(
-            f"{API_SERVER_URL}/admin/tool/custom/{tool_id}", headers=admin_user.headers
-        ).raise_for_status()
+        IntegrationManager.delete(integration_id, admin_user).raise_for_status()
     # Code mode defers the tool: a program finds it with `tool_search`.
     assert [
         tool_name in request.tools

@@ -22,7 +22,11 @@ async function drainSendMessage(): Promise<void> {
     message: "hello",
     parentMessageId: null,
     chatSessionId: "chat-session-id",
-    filters: null,
+    toolOptions: {
+      allowed: null,
+      preferred: null,
+      internal_search_filters: null,
+    },
   });
   for await (const _packet of stream) {
     // The tests only check the failure path.
@@ -88,7 +92,11 @@ test("sendMessage sends each mention once, up to the per-message limit", async (
     message: "hello",
     parentMessageId: null,
     chatSessionId: "chat-session-id",
-    filters: null,
+    toolOptions: {
+      allowed: null,
+      preferred: null,
+      internal_search_filters: null,
+    },
     mentions: [...names, names[0]!].map((name) => ({ type: "skill", name })),
   });
   // Only the request matters, so the empty response's stream error does not.

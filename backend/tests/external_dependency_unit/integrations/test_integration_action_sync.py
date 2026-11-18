@@ -24,6 +24,7 @@ from onyx.db.enums import (
     IntegrationKind,
 )
 from onyx.db.integration import (
+    create_openapi_tool_row__no_commit,
     list_integration_actions,
     replace_integration_actions__no_commit,
 )
@@ -33,7 +34,6 @@ from onyx.db.models import (
     IntegrationAction,
     Tool,
 )
-from onyx.db.tools import create_tool__no_commit
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.integrations.kinds.api import ApiKindHandler
 from onyx.integrations.models import IntegrationActionSpec
@@ -125,14 +125,12 @@ def _integration(
 
 
 def _openapi_tool(db_session: Session, created: Created) -> tuple[Integration, Tool]:
-    tool = create_tool__no_commit(
+    tool = create_openapi_tool_row__no_commit(
         name=f"orders-{uuid4().hex[:8]}",
         description="Orders",
-        openapi_schema=_openapi_spec(f"orders-{uuid4().hex[:8]}.example.com"),
-        custom_headers=None,
         user_id=None,
+        openapi_spec=_openapi_spec(f"orders-{uuid4().hex[:8]}.example.com"),
         db_session=db_session,
-        passthrough_auth=False,
     )
     created.tool_ids.append(tool.id)
     integration = _integration(

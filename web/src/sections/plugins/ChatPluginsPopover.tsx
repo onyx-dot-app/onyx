@@ -1,7 +1,6 @@
 "use client";
 
-import { useNavigation, usePathname, useSearchParams } from "@opal/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -11,50 +10,50 @@ import {
   Popover,
   Text,
 } from "@opal/components";
-import { SvgChevronRight, SvgCodeFile, SvgPlug } from "@opal/icons";
+import { SvgBlocks, SvgChevronRight, SvgPlug } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useFocusOnMount } from "@opal/hooks";
-import type { MinimalAgent } from "@/lib/agents/types";
-import {
-  chatPluginsForAgent,
-  isChatPluginEnabled,
-  memberPluginsHref,
-  setChatPluginEnabled,
-} from "@/lib/plugins/chat";
-import {
-  memberPluginName,
-  memberPluginReference,
-  useMemberPlugins,
-  type MemberPlugin,
-} from "@/lib/plugins/member";
+import { useNavigation } from "@opal/navigation";
 import useScreenSize from "@/hooks/useScreenSize";
+import { connectAction, needsAdmin } from "@/lib/integrations/connect";
 import { useAppPosition } from "@/lib/navigation/hooks";
+import {
+  useAgentPluginPreferences,
+  type AgentChatPlugins,
+  type ChatPluginEntry,
+} from "@/lib/plugins/hooks";
+import { useUser } from "@/providers/UserProvider";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { getActionIcon } from "@/lib/tools/utils";
 
 export interface ChatPluginsPopoverProps {
-  agent: MinimalAgent;
+  agentId: number;
   toolConfiguration: ToolConfigurationHandle;
+  /** The agent's plugins (persona detail `plugins`). */
+  catalog: AgentChatPlugins;
   disabled?: boolean;
-  catalog: ReturnType<typeof useMemberPlugins>;
-  onConnect: (plugin: MemberPlugin) => void;
+  onConnect: (plugin: ChatPluginEntry) => void;
   onBrowse: () => void;
 }
 
 export default function ChatPluginsPopover({
-  agent,
+  agentId,
   toolConfiguration,
-  disabled = false,
   catalog,
+  disabled = false,
   onConnect,
   onBrowse,
 }: ChatPluginsPopoverProps) {
-  const t = useTranslations("actions.memberPlugins");
-  const { plugins, isLoading, errors, refresh } = catalog;
+  const t = useTranslations("plugins.chat.popover");
+  const memberCopy = useTranslations("plugins.member");
+  const connectionCopy = useTranslations("plugins.member.connection");
+  const { plugins, isLoading, refresh } = catalog;
+  const { user } = useUser();
+  const preferences = useAgentPluginPreferences(
+    user !== null && !user.is_anonymous_user
+  );
+  const error = catalog.error ?? preferences.error;
   const appPosition = useAppPosition();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const navigation = useNavigation();
   const { isMobile } = useScreenSize();
   const [open, setOpen] = useState(false);
@@ -62,46 +61,23 @@ export default function ChatPluginsPopover({
   const trigger = useRef<HTMLElement | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
-  const attached = useMemo(
-    () => chatPluginsForAgent(plugins, agent),
-    [plugins, agent]
+  const matching = plugins.filter((plugin) =>
+    plugin.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())
   );
-  const matching = attached.filter(({ plugin }) =>
-    memberPluginName(plugin)
-      .toLocaleLowerCase()
-      .includes(search.toLocaleLowerCase())
-  );
-  const hasError = Boolean(errors.servers || errors.tools || errors.oauth);
-  const returnTo =
-    pathname === "/app"
-      ? `/app?${searchParams.toString()}`
-      : `/app?agentId=${agent.id}`;
-
-  const browseLink = navigation.linkTo(memberPluginsHref(returnTo));
+  const browseLink = navigation.linkTo("/app/plugins");
 
   function handleBrowse(event: React.MouseEvent<HTMLElement>) {
     if (appPosition.chat() === null) {
-      toolConfiguration.handOffToNewChatWith(agent.id, appPosition.project());
+      toolConfiguration.handOffToNewChatWith(agentId, appPosition.project());
     }
     setOpen(false);
     onBrowse();
     browseLink.onClick(event);
   }
 
-  function connect(plugin: MemberPlugin) {
-    setOpen(false);
-    onConnect(plugin);
-  }
-
   function cancelHover() {
     if (hoverTimer.current !== null) clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
-  }
-
-  function hover(next: boolean) {
-    cancelHover();
-    if (disabled && next) return;
-    hoverTimer.current = setTimeout(() => changeOpen(next), next ? 100 : 250);
   }
 
   function changeOpen(next: boolean) {
@@ -111,6 +87,12 @@ export default function ChatPluginsPopover({
     if (next && !open) setSearch("");
   }
 
+  function hover(next: boolean) {
+    cancelHover();
+    if (disabled && next) return;
+    hoverTimer.current = setTimeout(() => changeOpen(next), next ? 100 : 250);
+  }
+
   useEffect(
     () => () => {
       if (hoverTimer.current !== null) clearTimeout(hoverTimer.current);
@@ -118,212 +100,209 @@ export default function ChatPluginsPopover({
     []
   );
 
-  return (
-    <>
-      <Popover open={open} onOpenChange={changeOpen}>
-        <Popover.Trigger asChild>
-          <LineItemButton
-            font="main-ui-action"
-            ref={trigger}
-            disabled={disabled}
-            icon={SvgPlug}
-            title={t("chat.trigger.label")}
-            rounding={2}
-            interaction={open ? "hover" : "rest"}
-            aria-label={t("chat.trigger.label")}
-            rightChildren={
-              <Section
-                width={1.5}
-                height={1.5}
-                justifyContent="center"
-                alignItems="center"
+  function row(plugin: ChatPluginEntry) {
+    const adminOnly = plugin.integrations.every(needsAdmin);
+    const enabled = toolConfiguration.isPluginEnabled(plugin.pluginId);
+    const action =
+      plugin.integrations.map(connectAction).find((a) => a !== null) ?? null;
+    return (
+      <LineItemButton
+        font="main-ui-action"
+        key={plugin.pluginId}
+        title={plugin.name}
+        titleMaxLines={1}
+        description={adminOnly ? connectionCopy("askAdmin") : undefined}
+        descriptionMaxLines={1}
+        icon={SvgBlocks}
+        padding={0}
+        rounding={2}
+        presentational
+        rightChildren={
+          <Section
+            flexDirection="row"
+            gap={0.5}
+            width="auto"
+            height="auto"
+            alignItems="center"
+          >
+            {action && (
+              <Button
+                size="sm"
+                prominence="secondary"
+                disabled={disabled}
+                onClick={() => {
+                  setOpen(false);
+                  // Connect shows that the member wants to use the plugin.
+                  if (!enabled && toolConfiguration.ready)
+                    toolConfiguration.setPluginEnabled([plugin.pluginId], true);
+                  onConnect(plugin);
+                }}
               >
-                <SvgChevronRight size={16} />
-              </Section>
-            }
-            onPointerEnter={(event) => {
-              if (event.pointerType === "mouse") hover(true);
-            }}
-            onPointerLeave={(event) => {
-              if (event.pointerType === "mouse") hover(false);
-            }}
-            onFocus={cancelHover}
-            onClick={(event) => {
-              event.preventDefault();
-              changeOpen(true);
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== "ArrowRight") return;
-              event.preventDefault();
-              event.stopPropagation();
-              changeOpen(true);
-            }}
-          />
-        </Popover.Trigger>
-        <Popover.Content
-          // No room beside the parent menu on phones, so open over it.
-          side={isMobile ? "top" : "right"}
-          align={isMobile ? "start" : "end"}
-          alignOffset={isMobile ? 0 : -5}
-          width={60}
-          aria-label={t("chat.trigger.label")}
-          onPointerEnter={cancelHover}
+                {connectionCopy(`${action}.label`)}
+              </Button>
+            )}
+            <InputSwitch
+              checked={enabled}
+              disabled={disabled || !toolConfiguration.ready}
+              aria-label={t("toggle.label", { name: plugin.name })}
+              onCheckedChange={(checked) =>
+                toolConfiguration.setPluginEnabled([plugin.pluginId], checked)
+              }
+            />
+          </Section>
+        }
+      />
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={changeOpen}>
+      <Popover.Trigger asChild>
+        <LineItemButton
+          font="main-ui-action"
+          ref={trigger}
+          disabled={disabled}
+          icon={SvgPlug}
+          title={t("trigger.label")}
+          rounding={2}
+          interaction={open ? "hover" : "rest"}
+          aria-label={t("trigger.label")}
+          rightChildren={
+            <Section
+              width={1.5}
+              height={1.5}
+              justifyContent="center"
+              alignItems="center"
+            >
+              <SvgChevronRight size={16} />
+            </Section>
+          }
+          onPointerEnter={(event) => {
+            if (event.pointerType === "mouse") hover(true);
+          }}
           onPointerLeave={(event) => {
             if (event.pointerType === "mouse") hover(false);
           }}
-          onCloseAutoFocus={(event) => event.preventDefault()}
-          onEscapeKeyDown={(event) => {
+          onFocus={cancelHover}
+          onClick={(event) => {
             event.preventDefault();
-            event.stopPropagation();
-            setOpen(false);
-            trigger.current?.focus();
+            changeOpen(true);
           }}
           onKeyDown={(event) => {
-            if (event.key !== "ArrowLeft") return;
-            if (
-              event.target instanceof HTMLInputElement &&
-              event.target.selectionStart !== 0
-            )
-              return;
+            if (event.key !== "ArrowRight") return;
             event.preventDefault();
             event.stopPropagation();
-            setOpen(false);
-            trigger.current?.focus();
+            changeOpen(true);
           }}
+        />
+      </Popover.Trigger>
+      <Popover.Content
+        // No room beside the parent menu on phones, so open over it.
+        side={isMobile ? "top" : "right"}
+        align={isMobile ? "start" : "end"}
+        alignOffset={isMobile ? 0 : -5}
+        width={60}
+        aria-label={t("trigger.label")}
+        onPointerEnter={cancelHover}
+        onPointerLeave={(event) => {
+          if (event.pointerType === "mouse") hover(false);
+        }}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(false);
+          trigger.current?.focus();
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft") return;
+          if (
+            event.target instanceof HTMLInputElement &&
+            event.target.selectionStart !== 0
+          )
+            return;
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(false);
+          trigger.current?.focus();
+        }}
+      >
+        <Popover.Menu
+          gap={1}
+          footer={
+            <LineItemButton
+              font="main-ui-action"
+              title={t("browse.label")}
+              icon={SvgPlug}
+              href={browseLink.href}
+              onClick={handleBrowse}
+              padding={0}
+              rounding={2}
+            />
+          }
         >
-          <Popover.Menu
-            gap={1}
-            footer={
-              <LineItemButton
-                font="main-ui-action"
-                title={t("chat.browse.label")}
-                icon={SvgPlug}
-                href={browseLink.href}
-                onClick={handleBrowse}
-                padding={0}
-                rounding={2}
-              />
-            }
-          >
-            {[
-              <InputTypeIn
-                key="search"
-                ref={focusOnMount}
-                icon="search"
-                variant="internal"
-                value={search}
-                placeholder={t("chat.search.placeholder")}
-                aria-label={t("chat.search.placeholder")}
-                onChange={(event) => setSearch(event.target.value)}
-              />,
-              isLoading && (
-                <div
-                  key="loading"
-                  role="status"
-                  className="flex items-center gap-2 p-2"
+          {[
+            <InputTypeIn
+              key="search"
+              ref={focusOnMount}
+              icon="search"
+              variant="internal"
+              value={search}
+              placeholder={memberCopy("search.placeholder")}
+              aria-label={memberCopy("search.placeholder")}
+              onChange={(event) => setSearch(event.target.value)}
+            />,
+            isLoading && (
+              <Section
+                key="loading"
+                role="status"
+                flexDirection="row"
+                justifyContent="start"
+                height="auto"
+                gap={2}
+                padding={2}
+              >
+                <IconLoader size={16} />
+                <Text font="secondary-body" color="text-03">
+                  {t("loading")}
+                </Text>
+              </Section>
+            ),
+            error && (
+              <Section
+                key="error"
+                role="alert"
+                alignItems="start"
+                height="auto"
+                gap={2}
+                padding={2}
+              >
+                <Text font="secondary-body" color="status-error-05">
+                  {t("loadError")}
+                </Text>
+                <Button
+                  size="sm"
+                  prominence="secondary"
+                  onClick={() => {
+                    void refresh();
+                    void preferences.retry();
+                  }}
                 >
-                  <IconLoader size={16} />
-                  <Text font="secondary-body" color="text-03">
-                    {t("chat.loading.label")}
-                  </Text>
-                </div>
-              ),
-              hasError && (
-                <div
-                  key="error"
-                  role="alert"
-                  className="flex flex-col gap-2 p-2"
-                >
-                  <Text font="secondary-body" color="status-error-05">
-                    {t("chat.loadError.text")}
-                  </Text>
-                  <Button
-                    size="sm"
-                    prominence="secondary"
-                    onClick={() => void refresh()}
-                  >
-                    {t("chat.retry.label")}
-                  </Button>
-                </div>
-              ),
-              ...matching.map((group) => {
-                const { plugin } = group;
-                const reference = memberPluginReference(plugin);
-                const name = memberPluginName(plugin);
-                const needsConnection =
-                  plugin.connection.kind === "oauth" ||
-                  plugin.connection.kind === "credentials";
-                const unavailable =
-                  plugin.connection.kind === "checking" ||
-                  plugin.connection.kind === "unconfigured" ||
-                  plugin.connection.kind === "unavailable";
-                const enabled = isChatPluginEnabled(group, toolConfiguration);
-                return (
-                  <LineItemButton
-                    font="main-ui-action"
-                    key={`${reference.kind}:${reference.id}`}
-                    title={name}
-                    titleMaxLines={1}
-                    description={
-                      plugin.connection.kind === "connected" || needsConnection
-                        ? undefined
-                        : t(`chat.connection.${plugin.connection.kind}`)
-                    }
-                    descriptionMaxLines={1}
-                    icon={
-                      plugin.kind === "mcp"
-                        ? getActionIcon(
-                            plugin.server.server_url,
-                            plugin.server.name
-                          )
-                        : SvgCodeFile
-                    }
-                    padding={0}
-                    rounding={2}
-                    presentational
-                    rightChildren={
-                      needsConnection ? (
-                        <Button
-                          size="sm"
-                          prominence="secondary"
-                          disabled={disabled}
-                          onClick={() => connect(plugin)}
-                        >
-                          {t("chat.connect.label")}
-                        </Button>
-                      ) : (
-                        <InputSwitch
-                          checked={enabled}
-                          disabled={
-                            disabled ||
-                            !toolConfiguration.ready ||
-                            (unavailable && !enabled)
-                          }
-                          aria-label={t("chat.toggle.ariaLabel", { name })}
-                          onCheckedChange={(enabled) =>
-                            setChatPluginEnabled(
-                              group,
-                              enabled,
-                              toolConfiguration
-                            )
-                          }
-                        />
-                      )
-                    }
-                  />
-                );
-              }),
-              !isLoading && !hasError && matching.length === 0 && (
-                <div key="empty" className="p-2">
-                  <Text font="secondary-body" color="text-03">
-                    {t(search ? "chat.empty.searchText" : "chat.empty.text")}
-                  </Text>
-                </div>
-              ),
-            ]}
-          </Popover.Menu>
-        </Popover.Content>
-      </Popover>
-    </>
+                  {t("retry.label")}
+                </Button>
+              </Section>
+            ),
+            ...matching.map(row),
+            !isLoading && !error && matching.length === 0 && (
+              <Section key="empty" alignItems="start" height="auto" padding={2}>
+                <Text font="secondary-body" color="text-03">
+                  {t(search ? "searchEmpty" : "empty")}
+                </Text>
+              </Section>
+            ),
+          ]}
+        </Popover.Menu>
+      </Popover.Content>
+    </Popover>
   );
 }

@@ -18,7 +18,12 @@ from onyx.tools.interface import (
     parse_tool_arguments,
     tool_definition_from_arguments,
 )
-from onyx.tools.models import CodeModeExposure, ToolCallException, ToolContext
+from onyx.tools.models import (
+    CodeModeExposure,
+    ToolCallException,
+    ToolContext,
+    ToolPreference,
+)
 from onyx.tools.tool_implementations.code_mode.cells import (
     DEFAULT_MAX_OUTPUT_TOKENS,
     CodeCells,
@@ -152,11 +157,11 @@ class CodeModeTool(Tool):
     def inner_tools(self) -> list[Tool]:
         return self._inner_tools
 
-    def operation_names(self, tool_id: int) -> list[str]:
+    def operation_names(self, preference: ToolPreference) -> list[str]:
         return [
             program_function_operation(function.called_name, deferred=function.deferred)
             for function in self._stubs.functions.values()
-            if function.tool.id == tool_id
+            if function.tool.matches(preference)
         ]
 
     def called_name(self, tool_name: str) -> str:

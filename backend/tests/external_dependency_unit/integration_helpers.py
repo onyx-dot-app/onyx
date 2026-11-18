@@ -20,6 +20,7 @@ from onyx.db.enums import (
     MCPTransport,
     PluginInstallationPolicy,
 )
+from onyx.db.external_app import delete_external_app__no_commit
 from onyx.db.integration import replace_integration_actions__no_commit
 from onyx.db.models import (
     ExternalApp,
@@ -145,20 +146,23 @@ def make_app_integration(
     *,
     name: str | None = None,
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
+    upstream_url_patterns: list[str] | None = None,
     auth_template: dict[str, Any] | None = None,
     organization_credentials: dict[str, Any] | None = None,
-    auth_mode: IntegrationAuthMode = IntegrationAuthMode.INDIVIDUAL,
+    auth_mode: IntegrationAuthMode = IntegrationAuthMode.NONE,
     auth_method: IntegrationAuthMethod | None = None,
     header_template: dict[str, str] | None = None,
     oauth_client: IntegrationOAuthClient | None = None,
 ) -> tuple[Integration, ExternalApp]:
-    """An external app integration. ``oauth_client`` is an unsaved row; this
-    function links and saves it."""
+    """An external app integration: a preset (``app_type``) or a CUSTOM app,
+    with the actions that its kind finds. ``oauth_client`` is an unsaved row;
+    this function links and saves it."""
     app_name = name or f"app-{uuid4().hex[:8]}"
     app = ExternalApp(
         name=app_name,
         app_type=app_type,
-        upstream_url_patterns=[],
+        enabled=True,
+        upstream_url_patterns=upstream_url_patterns or [],
         auth_template=auth_template or {},
         organization_credentials=organization_credentials or {},
     )
@@ -174,6 +178,7 @@ def make_app_integration(
         oauth_client=oauth_client,
         external_app_id=app.id,
     )
+    sync_integration_actions__no_commit(integration, db_session)
     db_session.commit()
     return integration, app
 
@@ -291,6 +296,8 @@ def delete_integrations(db_session: Session, integration_ids: Sequence[int]) -> 
     server_ids = [i.mcp_server_id for i in integrations if i.mcp_server_id]
     app_ids = [i.external_app_id for i in integrations if i.external_app_id]
     tool_ids = [i.tool_id for i in integrations if i.tool_id]
+    for app_id in app_ids:
+        delete_external_app__no_commit(db_session, app_id)
     db_session.execute(delete(Integration).where(Integration.id.in_(integration_ids)))
     db_session.execute(delete(Tool).where(Tool.id.in_(tool_ids)))
     db_session.execute(delete(MCPServer).where(MCPServer.id.in_(server_ids)))

@@ -2,6 +2,7 @@ import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import Engine, event
 from sqlalchemy.orm import Session, sessionmaker
@@ -28,6 +29,7 @@ from onyx.evals.models import (
 )
 from onyx.evals.provider import get_provider
 from onyx.integrations.models import ApprovalMode
+from onyx.integrations.policy import agent_plugin_settings
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
@@ -35,16 +37,38 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
+from onyx.tools.models import CapabilityEntry, PluginEntry, ToolOptions
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 
-def _preferred_tool_id(db_session: Session, tool_type: str | None) -> int | None:
-    if tool_type is None:
-        return None
-    return get_builtin_tool(db_session, BUILT_IN_TOOL_MAP[tool_type]).id
+def _tool_options(
+    db_session: Session,
+    user_id: UUID,
+    allowed_tool_ids: list[int],
+    preferred_tool: str | None,
+) -> ToolOptions:
+    """Limits the built-in tools to the configured ones and keeps each plugin
+    that the default agent uses for the user."""
+    allowed: list[CapabilityEntry | PluginEntry] = [
+        CapabilityEntry(tool_id=tool_id) for tool_id in allowed_tool_ids
+    ]
+    allowed.extend(
+        PluginEntry(plugin_id=plugin_id)
+        for plugin_id in agent_plugin_settings(
+            db_session, user_id, DEFAULT_PERSONA_ID, {}
+        )
+    )
+    return ToolOptions(
+        allowed=allowed,
+        preferred=None
+        if preferred_tool is None
+        else CapabilityEntry(
+            tool_id=get_builtin_tool(db_session, BUILT_IN_TOOL_MAP[preferred_tool]).id
+        ),
+    )
 
 
 @contextmanager
@@ -214,14 +238,15 @@ def _get_answer_with_tools(
                     f"User not found for email: {configuration.search_permissions_email}"
                 )
 
-            preferred_tool_id = _preferred_tool_id(
-                db_session, eval_input.get("preferred_tool")
-            )
             request = SendMessageRequest(
                 message=eval_input["message"],
                 llm_override=llm_override,
-                allowed_tool_ids=full_configuration.allowed_tool_ids,
-                preferred_tool_id=preferred_tool_id,
+                tool_options=_tool_options(
+                    db_session,
+                    user.id,
+                    full_configuration.allowed_tool_ids,
+                    eval_input.get("preferred_tool"),
+                ),
                 chat_session_info=ChatSessionCreationRequest(
                     persona_id=DEFAULT_PERSONA_ID,
                     description="Eval session",
@@ -360,14 +385,17 @@ def _get_multi_turn_answer_with_tools(
 
                 # Create request for this turn using SendMessageRequest (same API as run_chat_turn)
                 # Use AUTO_PLACE_AFTER_LATEST_MESSAGE to chain messages
-                preferred_tool_id = _preferred_tool_id(db_session, msg.preferred_tool)
                 request = SendMessageRequest(
                     chat_session_id=chat_session_id,
                     parent_message_id=AUTO_PLACE_AFTER_LATEST_MESSAGE,
                     message=msg.message,
                     llm_override=llm_override,
-                    allowed_tool_ids=full_configuration.allowed_tool_ids,
-                    preferred_tool_id=preferred_tool_id,
+                    tool_options=_tool_options(
+                        db_session,
+                        user_id,
+                        full_configuration.allowed_tool_ids,
+                        msg.preferred_tool,
+                    ),
                 )
 
                 stream_start_time = time.time()
