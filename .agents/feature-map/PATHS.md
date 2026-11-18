@@ -403,7 +403,6 @@ the admin routes and check that each has a row above, run
 | `web/.oxlintrc.json` | Lint config for `web/`, with the design-system, layout, navigation, and React effect baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
 | `AGENTS.md` | Repository-wide standards for agents. Read it before changing the repository. |
 | `web/AGENTS.md` | Frontend standards for every agent. Read it before you work in `web/`. |
-| `web/jest.config.js` | Selects web unit and integration tests and sets their Node and jsdom environments. |
 | `web/playwright.config.ts` | Shared Playwright projects, retry settings, and reporters for end-to-end tests. |
 | `backend/AGENTS.md` | Backend standards for every agent: workers, migrations, tests, errors and tracing. Read it before you work in `backend/`. |
 | `AGENTS.md` | Repo-wide agent guidance (`CLAUDE.md` links to it): setup, the hook runner, docs, the feature map, writing and testing rules. |

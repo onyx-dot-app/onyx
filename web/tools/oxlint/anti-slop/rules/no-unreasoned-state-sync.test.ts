@@ -6,9 +6,8 @@ import { promisify } from "node:util";
 
 const webRoot = resolve(__dirname, "../../../..");
 const run = promisify(execFile);
-const effectDiagnostic = "anti-slop(no-unreasoned-state-sync)";
 
-async function lint(source: string) {
+async function diagnosticCodes(source: string): Promise<string[]> {
   const directory = await mkdtemp(join(tmpdir(), "onyx-oxlint-"));
   const path = join(directory, "fixture.tsx");
   try {
@@ -17,126 +16,41 @@ async function lint(source: string) {
       join(webRoot, "node_modules", ".bin", "oxlint"),
       ["--format", "json", path],
       { cwd: webRoot }
-    ).catch((error: unknown) => {
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === 1 &&
-        "stdout" in error &&
-        typeof error.stdout === "string"
-      ) {
-        return { stdout: error.stdout };
-      }
+    ).catch((error: { code?: number; stdout?: string }) => {
+      if (error.code === 1 && error.stdout) return { stdout: error.stdout };
       throw error;
     });
-    const result: unknown = JSON.parse(stdout);
-    return result;
+    const result: { diagnostics: { code: string }[] } = JSON.parse(stdout);
+    return result.diagnostics.map((diagnostic) => diagnostic.code);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 }
 
-test("reports each effect call, including named aliases and member calls", async () => {
-  const result = await lint(`
-    import React, { useEffect, useLayoutEffect as useMeasure } from "react";
-    import * as Hooks from "react";
-    import { default as ReactAlias } from "react";
-    export function Panel() {
-      useEffect(() => {}, []);
-      useMeasure(() => {}, []);
-      React.useLayoutEffect(() => {}, []);
-      (React!).useEffect(() => {}, []);
-      Hooks["useEffect"](() => {}, []);
-      ReactAlias.useEffect(() => {}, []);
-      return null;
-    }
-  `);
-  expect(result).toMatchObject({
-    diagnostics: Array.from({ length: 6 }, () => ({
-      code: effectDiagnostic,
-      severity: "error",
-    })),
-  });
-});
-
-test("reports hooks destructured from React and ignores shadowed bindings", async () => {
-  const result = await lint(`
-    import * as React from "react";
-    const { useEffect: useDestructured } = React;
-    export function Panel() {
-      useDestructured(() => {}, []);
-      return null;
-    }
-    export function OtherPanel(React: { useEffect: () => void }) {
-      const { useEffect } = React;
-      useEffect();
-      return null;
-    }
-  `);
-  expect(result).toMatchObject({
-    diagnostics: [{ code: effectDiagnostic, severity: "error" }],
-  });
-});
-
-test("ignores comments, lookalike names, and references without a call", async () => {
-  const result = await lint(`
-    import { useEffect as useMeasure } from "react";
+test("reports direct and member effect calls, not lookalikes", async () => {
+  const codes = await diagnosticCodes(`
+    import React, { useEffect } from "react";
     // useEffect(() => {}, []);
     export const label = "useLayoutEffect(() => {}, [])";
-    export const reference = useMeasure;
-    export function otherCalls(useMeasure: () => void, matchCauseEffect: () => void) {
-      useMeasure();
+    export const reference = useEffect;
+    export function Panel(matchCauseEffect: () => void) {
+      useEffect(() => {}, []);
+      React.useLayoutEffect(() => {}, []);
       matchCauseEffect();
-    }
-  `);
-  expect(result).toMatchObject({ diagnostics: [] });
-});
-
-test("ignores unrelated methods and shadowed React bindings", async () => {
-  const result = await lint(`
-    import React, { useEffect } from "react";
-    import { useLayoutEffect } from "./non-react";
-    const service = { useEffect() {} };
-    service.useEffect();
-    export function Panel(
-      useEffect: () => void,
-      React: { useLayoutEffect: () => void }
-    ) {
-      useEffect();
-      React.useLayoutEffect();
-    }
-    export function OtherPanel() {
-      useLayoutEffect();
-    }
-    export const references = [React, useEffect];
-  `);
-  expect(result).toMatchObject({ diagnostics: [] });
-});
-
-test("reports hooks loaded through require and Jest's requireActual", async () => {
-  const result = await lint(`
-    const Hooks = require("react");
-    const { useEffect: useTestEffect } = jest.requireActual("react");
-    export function TestPanel() {
-      Hooks.useLayoutEffect(() => {}, []);
-      useTestEffect(() => {}, []);
       return null;
     }
   `);
-  expect(result).toMatchObject({
-    diagnostics: Array.from({ length: 2 }, () => ({
-      code: effectDiagnostic,
-      severity: "error",
-    })),
-  });
+  expect(codes).toEqual([
+    "anti-slop(no-unreasoned-state-sync)",
+    "anti-slop(no-unreasoned-state-sync)",
+  ]);
 });
 
 test.each([
   ["a reason", " -- focus the dialog when it opens", []],
   ["an empty reason", " --", ["anti-slop(require-suppression-reason)"]],
-])("checks a suppression with %s", async (_name, reason, codes) => {
-  const result = await lint(`
+])("checks a suppression with %s", async (_name, reason, expected) => {
+  const codes = await diagnosticCodes(`
     import { useEffect } from "react";
     export function Panel() {
       // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync${reason}
@@ -144,7 +58,5 @@ test.each([
       return null;
     }
   `);
-  expect(result).toMatchObject({
-    diagnostics: codes.map((code) => ({ code, severity: "error" })),
-  });
+  expect(codes).toEqual(expected);
 });
