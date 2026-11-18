@@ -1,14 +1,15 @@
 """When suggested-questions runs happen.
 
-Indexing, deletion and chat call the request functions. They return at once
-and never raise, so they cannot slow or break those paths. The rules that
+Indexing, deletion and chat call the request functions. They never raise, so
+they cannot break those paths; the task send is a normal broker publish, as
+in Onyx's other request paths. The rules that
 decide whether a run is worth its model calls are pure functions, checked
 again by the task after it takes the pool lock.
 """
 
 from datetime import datetime, timedelta
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend, CacheLockAcquisitionError
@@ -70,9 +71,11 @@ _TOPUP_QUEUED_KEY = "suggested_questions_topup_queued:{}"
 def is_enabled() -> bool:
     """Only on the Playground, and only while the company's trial runs. The
     read-only grace period and an expired trial stop every run."""
-    return (
-        IS_PLAYGROUND and load_settings().application_status == ApplicationStatus.ACTIVE
-    )
+    if not IS_PLAYGROUND:
+        return False
+    # A failed read raises instead of returning defaults, which say ACTIVE.
+    settings = load_settings(raise_on_error=True)
+    return settings.application_status == ApplicationStatus.ACTIVE
 
 
 def request_pool_refresh(tenant_id: str, reason: RefreshReason) -> None:
@@ -83,17 +86,25 @@ def request_pool_refresh(tenant_id: str, reason: RefreshReason) -> None:
         priority, countdown = _SCHEDULE[reason]
         cache = get_cache_backend(tenant_id=tenant_id)
         flag_ttl = countdown + SQ_TASK_EXPIRES_S
-        if not cache.set_if_absent(_POOL_QUEUED_KEY, int(priority), ex=flag_ttl):
+        token = _token(priority)
+        previous: tuple[bytes, int] | None = None
+        if not cache.set_if_absent(_POOL_QUEUED_KEY, token, ex=flag_ttl):
             queued = cache.get(_POOL_QUEUED_KEY)
             # A lower number is more urgent. The queued run will see the new
             # documents, so only a more urgent reason queues another; the task's
             # own checks stop a second run that is not needed.
-            if queued is not None and int(queued) <= priority:
+            if queued is None or _priority_of(queued) <= priority:
                 return
-            cache.set(_POOL_QUEUED_KEY, int(priority), ex=flag_ttl)
+            remaining = cache.ttl(_POOL_QUEUED_KEY)
+            # Only one of several upgrading requests wins the swap.
+            if not cache.replace_if_value(_POOL_QUEUED_KEY, queued, token, ex=flag_ttl):
+                return
+            previous = (queued, remaining if remaining > 0 else flag_ttl)
         _send(
             cache,
             _POOL_QUEUED_KEY,
+            token,
+            previous,
             OnyxCeleryTask.GENERATE_SUGGESTED_QUESTIONS_POOL,
             {"tenant_id": tenant_id, "reason": reason.value},
             priority,
@@ -119,11 +130,14 @@ def request_user_topup(
             return
         cache = get_cache_backend(tenant_id=tenant_id)
         queued_key = _TOPUP_QUEUED_KEY.format(user_id)
-        if not cache.set_if_absent(queued_key, 1, ex=SQ_TASK_EXPIRES_S):
+        token = _token(OnyxCeleryPriority.HIGH)
+        if not cache.set_if_absent(queued_key, token, ex=SQ_TASK_EXPIRES_S):
             return
         _send(
             cache,
             queued_key,
+            token,
+            None,
             OnyxCeleryTask.GENERATE_SUGGESTED_QUESTIONS_FOR_USER,
             {"tenant_id": tenant_id, "user_id": str(user_id)},
             OnyxCeleryPriority.HIGH,
@@ -215,21 +229,34 @@ def worth_running(
     return RunDecision(run=False, reason="enough questions and no new material")
 
 
+def _token(priority: OnyxCeleryPriority) -> bytes:
+    """A queued flag's value: the run's priority and a value unique to this
+    request, so a request only ever removes its own flag."""
+    return f"{int(priority)}:{uuid4().hex}".encode()
+
+
+def _priority_of(token: bytes) -> int:
+    return int(token.split(b":", 1)[0])
+
+
 def _send(
     cache: CacheBackend,
     queued_key: str,
+    token: bytes,
+    previous: tuple[bytes, int] | None,
     task_name: str,
     kwargs: dict[str, Any],
     priority: OnyxCeleryPriority,
     countdown: int,
 ) -> None:
-    """Send the task. If the send fails, remove its queued flag, so a failed
-    send does not block the next request until the flag expires."""
-    # Imported here, as other request paths do, so importing this module does
-    # not build the Celery app.
-    from onyx.background.celery.versioned_apps.client import app as client_app
-
+    """Send the task. If the send fails, undo this request's flag: put back
+    the flag it replaced, with that flag's remaining lifetime, or remove it.
+    Another request's flag is left alone."""
     try:
+        # Imported here, as other request paths do, so importing this module
+        # does not build the Celery app.
+        from onyx.background.celery.versioned_apps.client import app as client_app
+
         client_app.send_task(
             task_name,
             kwargs=kwargs,
@@ -239,5 +266,8 @@ def _send(
             expires=countdown + SQ_TASK_EXPIRES_S,
         )
     except Exception:
-        cache.delete(queued_key)
+        if previous is None:
+            cache.delete_if_value(queued_key, token)
+        else:
+            cache.replace_if_value(queued_key, token, previous[0], ex=previous[1])
         raise

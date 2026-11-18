@@ -112,7 +112,9 @@ SQ_GROWTH_DELAY_S = 600
 # A queued task expires this long after it was due, and the queued flag lives
 # as long as the task can wait, so a stale flag cannot block runs.
 SQ_TASK_EXPIRES_S = 1800
-# A run holds the pool lock for at most its own time budget plus a margin.
+# Lease of the pool lock. It expires only on Redis; on Postgres the lock is
+# held until released or the session closes. Celery time limits do not apply
+# in thread pools, so a run must keep its own time budget well below this.
 SQ_POOL_LOCK_HELD_S = 120.0
 # How long a deletion waits for a running pool run to finish with the pool.
 SQ_POOL_LOCK_WAIT_S = 5.0
