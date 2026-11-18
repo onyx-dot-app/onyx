@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -499,10 +500,6 @@ async def test_resolve_token_endpoint_openid_via_discovery(
 ) -> None:
     """For OIDC ("openid"), the token endpoint is read from the discovery doc."""
     monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_CACHE", {})
-    # Reset the locks so they get created in the current test's event loop;
-    # without this, a prior test's lock could be bound to a different loop.
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS_GUARD", None)
     monkeypatch.setattr(
         oauth_refresher,
         "OPENID_CONFIG_URL",
@@ -545,8 +542,6 @@ async def test_resolve_token_endpoint_openid_cache_ttl_expiry(
     """An expired cache entry triggers a fresh discovery fetch."""
     import time as _time
 
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS_GUARD", None)
     monkeypatch.setattr(
         oauth_refresher,
         "OPENID_CONFIG_URL",
@@ -612,8 +607,6 @@ async def test_resolve_token_endpoint_openid_invalid_json(
 ) -> None:
     """A non-JSON discovery body degrades to None instead of crashing."""
     monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_CACHE", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS_GUARD", None)
     monkeypatch.setattr(
         oauth_refresher,
         "OPENID_CONFIG_URL",
@@ -654,8 +647,6 @@ async def test_resolve_token_endpoint_openid_concurrent_fetches_coalesce(
     import asyncio as _asyncio
 
     monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_CACHE", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS", {})
-    monkeypatch.setattr(oauth_refresher, "_OIDC_DISCOVERY_LOCKS_GUARD", None)
     monkeypatch.setattr(
         oauth_refresher,
         "OPENID_CONFIG_URL",
@@ -948,3 +939,39 @@ async def test_resolve_context_null_row_config_returns_none(
 
     context = await _resolve_refresh_context(MagicMock(), "keycloak")
     assert context is None
+
+
+def test_discovery_under_contention_works_on_each_new_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The sync refresh runs each call on a new event loop. A discovery lock
+    that waited on one loop must not break the discovery on the next one."""
+    config_url = "https://idp.example.com/.well-known/openid-configuration"
+
+    async def slow_get(*_args: Any, **_kwargs: Any) -> MagicMock:
+        await asyncio.sleep(0.01)  # test-flakes: allow keep the lock held
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"token_endpoint": "https://idp.example.com/t"}
+        return response
+
+    mock_client = AsyncMock()
+    mock_client.get.side_effect = slow_get
+
+    async def two_concurrent_discoveries() -> list[str | None]:
+        oauth_refresher._OIDC_TOKEN_ENDPOINT_CACHE.pop(config_url, None)
+        return list(
+            await asyncio.gather(
+                oauth_refresher._get_oidc_token_endpoint(config_url),
+                oauth_refresher._get_oidc_token_endpoint(config_url),
+            )
+        )
+
+    monkeypatch.setattr(oauth_refresher, "_OIDC_TOKEN_ENDPOINT_CACHE", {})
+    with patch("onyx.auth.oauth_refresher.httpx.AsyncClient") as client_class_mock:
+        client_class_mock.return_value.__aenter__.return_value = mock_client
+        for _ in range(2):
+            assert asyncio.run(two_concurrent_discoveries()) == [
+                "https://idp.example.com/t",
+                "https://idp.example.com/t",
+            ]
