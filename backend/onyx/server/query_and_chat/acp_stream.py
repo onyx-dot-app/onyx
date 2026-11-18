@@ -13,6 +13,9 @@ ACP-shaped update instead of a v1 packet, the shape Craft already sends (see
   bodies from the packets while typed payloads replace them tool by tool.
 - Anything else (session ids, citations, stop, errors outside a call) is an
   ``_onyx/<type>`` extension notification with the v1 object as ``params``.
+  ``message_start`` is one too, for its documents and timing, before its text.
+  ``stop`` closes the calls still open (``failed`` with ``cancelled`` when the
+  user stopped) before its notification.
 
 Every update carries ``_meta.onyx.version = 2``. v1 stays the default and is
 unchanged; this only re-shapes what the chat pipeline already yields.
@@ -29,7 +32,7 @@ _TOOL_STARTS: dict[str, tuple[str, str]] = {
     "open_url_start": ("fetch", "Reading"),
     "image_generation_start": ("other", "Generating images"),
     "python_tool_start": ("execute", "Running Python"),
-    "tool_call_argument_delta": ("execute", "Writing code"),
+    "tool_call_argument_delta": ("other", "Running tool"),
     "custom_tool_start": ("other", "Running tool"),
     "file_reader_start": ("read", "Reading file"),
     "memory_tool_start": ("edit", "Updating memory"),
@@ -42,6 +45,12 @@ _TOOL_STARTS: dict[str, tuple[str, str]] = {
     "exec_command_start": ("execute", "Running command"),
     "write_stdin_start": ("execute", "Sending input"),
     "apply_patch_start": ("edit", "Editing files"),
+}
+
+# A streamed argument opens its call before the start packet; its tool type
+# names it until the start arrives. Python streams its code.
+_ARGUMENT_TOOL_TYPES: dict[str, tuple[str, str]] = {
+    "python": ("execute", "Writing code"),
 }
 
 _MESSAGE_TYPES = {"message_start", "message_delta"}
@@ -57,6 +66,18 @@ def _call_id(placement: dict[str, Any]) -> str:
     call_id = f"tc:{placement.get('turn_index', 0)}-{placement.get('tab_index', 0)}"
     sub = placement.get("sub_turn_index")
     return f"{call_id}/{sub}" if sub is not None else call_id
+
+
+def _reports_failure(packet_type: str, packet: dict[str, Any]) -> bool:
+    """Whether a packet inside a call says the call failed. Code mode and
+    sandbox results report it themselves, before the call's section ends."""
+    if packet_type == "error":
+        return True
+    if packet_type == "code_mode_delta":
+        return packet.get("status") == "failed" or bool(packet.get("error"))
+    if packet_type in ("exec_end", "apply_patch_end"):
+        return bool(packet.get("error"))
+    return False
 
 
 class ChatAcpTranslator:
@@ -80,13 +101,36 @@ class ChatAcpTranslator:
             yield self._notice(obj)
             return
 
+        if packet_type == "message_start":
+            # It carries the answer's documents and timing, which ACP has no
+            # field for; the notice keeps them.
+            yield self._notice(obj, packet_type)
         if packet_type in _MESSAGE_TYPES or packet_type in _REASONING_TYPES:
             yield from self._text(packet_type, packet, placement)
+            return
+
+        if packet_type == "stop":
+            # The stream's end, whatever its placement: close the calls still
+            # open, then report the stop.
+            cancelled = packet.get("stop_reason") == "user_cancelled"
+            for open_id in list(self._open):
+                self._open.pop(open_id)
+                yield {
+                    "sessionUpdate": "tool_call_update",
+                    "toolCallId": open_id,
+                    "status": "failed" if cancelled else "completed",
+                    "_meta": _onyx_meta(**({"cancelled": True} if cancelled else {})),
+                }
+            yield self._notice(obj, packet_type)
             return
 
         call_id = _call_id(placement)
         if call_id not in self._open and packet_type in _TOOL_STARTS:
             kind, title = _TOOL_STARTS[packet_type]
+            if packet_type == "tool_call_argument_delta":
+                kind, title = _ARGUMENT_TOOL_TYPES.get(
+                    str(packet.get("tool_type")), (kind, title)
+                )
             self._open[call_id] = False
             yield {
                 "sessionUpdate": "tool_call",
@@ -99,13 +143,19 @@ class ChatAcpTranslator:
             return
 
         if call_id in self._open:
-            if packet_type == "error":
+            if _reports_failure(packet_type, packet):
                 self._open[call_id] = True
             update: dict[str, Any] = {
                 "sessionUpdate": "tool_call_update",
                 "toolCallId": call_id,
                 "_meta": _onyx_meta(packet=packet, placement=placement),
             }
+            if (
+                packet_type in _TOOL_STARTS
+                and packet_type != "tool_call_argument_delta"
+            ):
+                # The real start of a call its streamed arguments opened.
+                update["kind"], update["title"] = _TOOL_STARTS[packet_type]
             if packet_type == "section_end":
                 failed = self._open.pop(call_id)
                 update["status"] = "failed" if failed else "completed"
