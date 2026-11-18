@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.agents.tool_execution import NO_TOOL_CAN_RUN_RESULT
 from onyx.chat.models import CreateChatSessionID
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import ToolCall
@@ -341,6 +342,11 @@ def test_chat_stops_tools_at_the_step_cap(
                 if calls_tool_at_cap
                 else [],
             ),
+            *(
+                [Delta(content="Answered after the denied call.")]
+                if calls_tool_at_cap
+                else []
+            ),
         ],
         max_input_tokens=128000,
     )
@@ -366,21 +372,30 @@ def test_chat_stops_tools_at_the_step_cap(
                 ],
             )
         parts = list(submit_query("Cover every topic.", session.id, user))
-    assert final_answer(parts) == "Answered at the cap."
-    assert len(llm.requests) == cap
+    # A call at the cap is denied, and one extra step writes the answer.
+    assert final_answer(parts) == (
+        "Answered after the denied call."
+        if calls_tool_at_cap
+        else "Answered at the cap."
+    )
+    assert len(llm.requests) == cap + int(calls_tool_at_cap)
     assert all(
         request["tool_choice"] == ToolChoiceOptions.AUTO and request["tools"]
-        for request in llm.requests[:-1]
+        for request in llm.requests[: cap - 1]
     )
-    last = llm.requests[-1]
-    assert last["tools"] == llm.requests[0]["tools"]
-    assert last["tool_choice"] == ToolChoiceOptions.NONE
+    assert all(
+        request["tools"] == llm.requests[0]["tools"]
+        and request["tool_choice"] == ToolChoiceOptions.NONE
+        for request in llm.requests[cap - 1 :]
+    )
     assert any(
         isinstance(message, RequestUserMessage)
         and isinstance(message.content, str)
         and LAST_CYCLE_CITATION_REMINDER in message.content
-        for message in last["prompt"]
+        for message in llm.requests[cap - 1]["prompt"]
     )
+    if calls_tool_at_cap:
+        assert NO_TOOL_CAN_RUN_RESULT in str(llm.requests[-1]["prompt"])
     saved_calls = (
         db_session.query(ToolCall).filter(ToolCall.chat_session_id == session.id).all()
     )
