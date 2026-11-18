@@ -121,16 +121,20 @@ pub fn set_hotkey(
 
 async fn end_session(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
+    // The token is cleared before the epoch moves on, and requests read the
+    // epoch before the token: a request either sees no token or goes stale.
+    let server = state.server().ok();
+    let token = server.as_deref().and_then(|s| state.token(s));
+    let cleared = server.as_deref().map(|s| state.clear_token(s));
     state.end_epoch();
     crate::sso::cancel(app);
-    let Ok(server) = state.server() else {
+    let Some(server) = server else {
         return Ok(());
     };
-
-    if let Some(token) = state.token(&server) {
+    if let Some(token) = token {
         state.api.logout(&server, &token).await;
     }
-    state.clear_token(&server)?;
+    cleared.unwrap_or(Ok(()))?;
     main_window::close(app, &server);
     windows::reset_launcher(app);
     Ok(())
@@ -165,8 +169,8 @@ pub async fn ask(
     on_event: Channel<AskEvent>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let (server, token) = state.session()?;
     let epoch = state.epoch();
+    let (server, token) = state.session()?;
     let current = || state.epoch() == epoch;
     let result = ask::run(&state.api, &server, &token, &question, &on_event, &current).await;
     let event = match &result {
@@ -181,8 +185,8 @@ pub async fn ask(
 
 #[tauri::command]
 pub async fn search(query: String, state: State<'_, AppState>) -> Result<Vec<SearchHit>, String> {
-    let (server, token) = state.session()?;
     let epoch = state.epoch();
+    let (server, token) = state.session()?;
     let hits = state.api.search(&server, &token, &query).await?;
     // Results for a session that has since ended are dropped.
     if state.epoch() != epoch {

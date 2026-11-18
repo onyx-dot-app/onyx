@@ -239,10 +239,10 @@ pub async fn run(
         let next = tokio::time::timeout(STREAM_IDLE_TIMEOUT, stream.next())
             .await
             .map_err(|_| "The server stopped sending the answer.".to_string())?;
-        let Some(chunk) = next else { break };
         if !is_current() {
             return Err("Signed out.".into());
         }
+        let Some(chunk) = next else { break };
         let chunk = chunk.map_err(|e| format!("The answer stream broke: {e}"))?;
         buffer.extend_from_slice(&chunk);
         drain_records(&mut buffer, &mut state, &send)?;
