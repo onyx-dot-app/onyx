@@ -218,6 +218,39 @@ def count_integration_actions(
     return counts
 
 
+def list_integration_actions_by_id(
+    integration_ids: Collection[int], db_session: Session
+) -> dict[int, list[IntegrationAction]]:
+    actions: dict[int, list[IntegrationAction]] = {key: [] for key in integration_ids}
+    if not integration_ids:
+        return actions
+    for action in db_session.scalars(
+        select(IntegrationAction)
+        .where(IntegrationAction.integration_id.in_(integration_ids))
+        .order_by(IntegrationAction.id)
+    ):
+        actions[action.integration_id].append(action)
+    return actions
+
+
+def list_openapi_tools_by_integration(
+    integration_ids: Collection[int], db_session: Session
+) -> dict[int, Tool]:
+    if not integration_ids:
+        return {}
+    return dict(
+        db_session.execute(
+            select(Integration.id, Tool)
+            .join(Tool, Tool.id == Integration.tool_id)
+            .where(
+                Integration.id.in_(integration_ids), Tool.openapi_schema.is_not(None)
+            )
+        )
+        .tuples()
+        .all()
+    )
+
+
 def list_action_summaries(
     integration_ids: Collection[int], db_session: Session
 ) -> dict[int, list[IntegrationAction]]:

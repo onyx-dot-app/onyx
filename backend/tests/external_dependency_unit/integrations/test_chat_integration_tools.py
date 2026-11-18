@@ -5,7 +5,7 @@ Ask action, the credential of each call, and bot and eval runs."""
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock, patch
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -25,11 +25,17 @@ from onyx.db.models import (
     User,
     UserPluginPreference,
 )
+from onyx.integrations.chat_tools import (
+    _integration_tools,
+    build_integration_chat_tools,
+)
 from onyx.integrations.connection_models import ConnectionSecret
-from onyx.integrations.models import ActionSettings, ApprovalMode
+from onyx.integrations.models import ActionSettings, ApprovalMode, IntegrationConfig
+from onyx.integrations.registry import get_kind_handler
 from onyx.llm.interfaces import LLM
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
+    IntegrationChatRequest,
     PersonaToolConfiguration,
     PluginEntry,
     PluginLinkConfiguration,
@@ -48,10 +54,89 @@ from tests.external_dependency_unit.integration_helpers import (
     set_policy,
 )
 from tests.external_dependency_unit.integrations.conftest import add_connection
+from tests.external_dependency_unit.integrations.test_list_query_counts import (
+    _query_count,
+)
 
 AGENT_ID = 7
 ALLOW = IntegrationActionPolicyValue.ALLOW
 BLOCKED = IntegrationActionPolicyValue.BLOCKED
+
+
+@pytest.mark.parametrize("kind", ["api", "mcp"])
+def test_chat_tool_query_count_is_constant(
+    db_session: Session, user: User, integration_ids: list[int], kind: str
+) -> None:
+    links: list[PluginLinkConfiguration] = []
+    counts: list[int] = []
+    expected_configs: dict[int, IntegrationConfig] = {}
+    actual_configs: dict[int, IntegrationConfig | None] = {}
+    for size in (3, 10):
+        for _ in range(len(links), size):
+            factory = _openapi if kind == "api" else _mcp
+            integration = factory(
+                db_session,
+                integration_ids,
+                auth_mode=IntegrationAuthMode.SHARED,
+                auth_method=IntegrationAuthMethod.API_KEY,
+                header_template={"Authorization": "Bearer {api_key}"},
+            )
+            add_connection(
+                db_session,
+                integration,
+                None,
+                ConnectionSecret(fields={"api_key": "shared-key"}),
+            )
+            plugin = _plugin(db_session, [integration])
+            expected_configs[integration.id] = get_kind_handler(
+                integration.kind
+            ).load_config(integration, db_session)
+            links.append(
+                PluginLinkConfiguration(
+                    plugin_id=plugin.id, action_settings=ActionSettings()
+                )
+            )
+        request = IntegrationChatRequest(
+            persona_id=AGENT_ID,
+            plugin_links=links,
+            approval_mode=ApprovalMode.INTERACTIVE,
+            chat_session_id=uuid4(),
+        )
+
+        def read(
+            expected: int = size, request: IntegrationChatRequest = request
+        ) -> None:
+            with patch(
+                "onyx.integrations.chat_tools._integration_tools",
+                wraps=_integration_tools,
+            ) as build:
+                tools = build_integration_chat_tools(db_session, user, request)
+            assert len(tools) == expected * 2
+            assert len(build.call_args_list) == expected
+            for call in build.call_args_list:
+                actual_configs[call.args[1].id] = call.kwargs.get("config")
+
+        counts.append(_query_count(db_session, [user], read))
+    assert counts[0] == counts[1], counts
+    assert actual_configs == expected_configs
+
+
+def test_chat_tools_without_linked_integrations(
+    db_session: Session, user: User
+) -> None:
+    assert (
+        build_integration_chat_tools(
+            db_session,
+            user,
+            IntegrationChatRequest(
+                persona_id=AGENT_ID,
+                plugin_links=[],
+                approval_mode=ApprovalMode.INTERACTIVE,
+            ),
+        )
+        == []
+    )
+
 
 ORDERS_SPEC: dict[str, Any] = {
     "openapi": "3.0.0",

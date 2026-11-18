@@ -69,6 +69,46 @@ def list_admin_policy_rows(
     return rows
 
 
+def list_policy_rows(
+    db_session: Session, integration_ids: Collection[int], user_id: UUID | None
+) -> dict[int, PolicyRows]:
+    rows = {key: PolicyRows(admin={}, user={}) for key in integration_ids}
+    if not integration_ids:
+        return rows
+    owner = IntegrationActionPolicy.user_id.is_(None)
+    if user_id is not None:
+        owner = or_(owner, IntegrationActionPolicy.user_id == user_id)
+    for integration_id, row_user_id, action, policy in db_session.execute(
+        select(
+            IntegrationActionPolicy.integration_id,
+            IntegrationActionPolicy.user_id,
+            IntegrationActionPolicy.action,
+            IntegrationActionPolicy.policy,
+        ).where(IntegrationActionPolicy.integration_id.in_(integration_ids), owner)
+    ).tuples():
+        row = rows[integration_id]
+        (row.admin if row_user_id is None else row.user)[action] = policy
+    return rows
+
+
+def list_session_granted_actions(
+    db_session: Session, chat_session_id: UUID | None, integration_ids: Collection[int]
+) -> dict[int, set[str]]:
+    granted: dict[int, set[str]] = {key: set() for key in integration_ids}
+    if chat_session_id is None or not integration_ids:
+        return granted
+    for integration_id, action in db_session.execute(
+        select(ApprovalRequest.integration_id, ApprovalRequest.action_id).where(
+            ApprovalRequest.chat_session_id == chat_session_id,
+            ApprovalRequest.integration_id.in_(integration_ids),
+            ApprovalRequest.decided_via == ApprovalDecidedVia.SESSION_GRANT,
+        )
+    ).tuples():
+        if integration_id is not None:
+            granted[integration_id].add(action)
+    return granted
+
+
 def get_session_granted_actions(
     db_session: Session, chat_session_id: UUID, integration_id: int
 ) -> set[str]:

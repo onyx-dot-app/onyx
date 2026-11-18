@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from onyx.integrations.models import CallCredentials
+from onyx.integrations.models import CallCredentials, IntegrationConfig
 from onyx.tools.models import ToolApprovalScope
 
 
@@ -23,6 +23,7 @@ class ChatToolContext(BaseModel):
     message_id: int | None = None
     # The rendered credential of the acting user or of the organization.
     credentials: CallCredentials
+    config: IntegrationConfig | None = None
     # Request headers for each OpenAPI call.
     additional_headers: dict[str, str] = {}
     # Request headers for each MCP call.

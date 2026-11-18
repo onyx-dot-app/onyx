@@ -17,6 +17,7 @@ from onyx.db.integration import (
     list_integration_actions,
 )
 from onyx.db.models import ExternalApp, Integration, IntegrationAction
+from onyx.db.models import Tool as ToolModel
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
@@ -144,7 +145,11 @@ class ApiKindHandler(IntegrationKindHandler):
         if integration.tool_id is None:
             return None
         tool = get_openapi_tool_for_integration(integration.id, db_session)
-        if tool is None or tool.openapi_schema is None:
+        return self.openapi_config_from_tool(tool) if tool is not None else None
+
+    @staticmethod
+    def openapi_config_from_tool(tool: ToolModel) -> ApiConfig | None:
+        if tool.openapi_schema is None:
             return None
         try:
             base_url: str | None = openapi_to_url(tool.openapi_schema)
@@ -235,7 +240,11 @@ class ApiKindHandler(IntegrationKindHandler):
         only Craft uses it."""
         if not actions:
             return []
-        config = self.load_config(integration, db_session)
+        config = (
+            ctx.config
+            if isinstance(ctx.config, ApiConfig)
+            else self.load_config(integration, db_session)
+        )
         if (
             config.shape is not ApiShape.OPENAPI
             or config.tool_id is None

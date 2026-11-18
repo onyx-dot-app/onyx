@@ -163,6 +163,10 @@ class McpServerKindHandler(IntegrationKindHandler):
         self, integration: Integration, db_session: Session
     ) -> McpServerConfig:
         server = self._server(integration, db_session)
+        return self.config_from_server(server)
+
+    @staticmethod
+    def config_from_server(server: MCPServer) -> McpServerConfig:
         return McpServerConfig(
             mcp_server_id=server.id,
             server_url=server.server_url,
@@ -178,7 +182,11 @@ class McpServerKindHandler(IntegrationKindHandler):
     ) -> list[Tool]:
         if not actions:
             return []
-        server = self._server(integration, db_session)
+        server = (
+            ctx.config
+            if isinstance(ctx.config, McpServerConfig)
+            else self.load_config(integration, db_session)
+        )
         oauth_server = mcp_oauth_server(
             integration, ctx.credentials, server.transport, db_session
         )

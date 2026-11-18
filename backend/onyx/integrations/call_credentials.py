@@ -19,7 +19,7 @@ from onyx.db.integration_connection import (
     get_oauth_client,
     mark_connection_needs_reconnect__no_commit,
 )
-from onyx.db.models import Integration, User
+from onyx.db.models import Integration, IntegrationConnection, User
 from onyx.db.users import fetch_user_by_id
 from onyx.integrations.connection_models import (
     SIGN_IN_REJECTED_REASON,
@@ -58,13 +58,19 @@ def _fills_authorization(header_template: Mapping[str, str] | None) -> bool:
 
 
 def resolve_call_credentials(
-    integration: Integration, acting_user: User | None, db_session: Session
+    integration: Integration,
+    acting_user: User | None,
+    db_session: Session,
+    *,
+    connections: Mapping[tuple[int, UUID | None], IntegrationConnection] | None = None,
 ) -> CallCredentials | ConnectionProblem:
     """The headers for a call by ``acting_user`` (None or the anonymous user
     for a caller with no user), or why the call cannot authenticate."""
     if acting_user is not None and acting_user.is_anonymous:
         acting_user = None
-    resolved = resolve_connection(integration, acting_user, db_session)
+    resolved = resolve_connection(
+        integration, acting_user, db_session, connections=connections
+    )
     if isinstance(resolved, ConnectionProblem):
         return resolved
     try:
