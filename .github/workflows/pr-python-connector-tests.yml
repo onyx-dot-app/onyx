@@ -41,7 +41,10 @@ on:
       - "uv.lock"
       - ".github/workflows/pr-python-connector-tests.yml"
       - ".github/actions/build-backend-image/**"
+      - ".github/actions/stack-position/**"
       - ".github/actions/login-ecr-pullthrough-cache/**"
+    # A draft skips the tests, so they run again when the draft state changes.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches:
       - main
@@ -81,7 +84,36 @@ env:
   BITBUCKET_EMAIL: ${{ vars.BITBUCKET_EMAIL }}
 
 jobs:
+  stack-position:
+    # A draft PR, or a PR with an open, ready child PR, skips the tests (see
+    # .github/actions/stack-position).
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      skip_reason: ${{ steps.stack.outputs.skip_reason }}
+    steps:
+      - name: Checkout stack position action
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/stack-position
+      - name: Find the PR's place in a stack
+        id: stack
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/stack-position
+      - name: Skip the slow suites
+        if: steps.stack.outputs.skip_reason != ''
+        env:
+          SKIP_REASON: ${{ steps.stack.outputs.skip_reason }}
+        run: echo "::notice::${SKIP_REASON}"
+
   build-backend-image:
+    needs: stack-position
+    if: needs.stack-position.outputs.skip_reason == ''
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     # See https://runs-on.com/runners/linux/
