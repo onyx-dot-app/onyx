@@ -66,10 +66,11 @@ def test_binder_sets_and_resets_the_context_variable() -> None:
 
     async def scenario() -> tuple[str | None, str | None]:
         with (
+            patch.object(craft_session, "get_session_with_current_tenant"),
             patch.object(craft_session, "get_build_session", return_value=object()),
             patch.object(craft_session, "get_craft_turn_trace_id", return_value=None),
         ):
-            dependency = bind(_request(session_id), MagicMock(), MagicMock())
+            dependency = bind(_request(session_id), MagicMock())
             await dependency.__anext__()
             bound = CRAFT_SESSION_ID_CONTEXTVAR.get()
             try:
@@ -107,14 +108,45 @@ def test_unowned_session_cannot_bind_a_turn_trace() -> None:
 
     async def scenario() -> None:
         with (
+            patch.object(craft_session, "get_session_with_current_tenant"),
             patch.object(craft_session, "get_build_session", return_value=None),
             patch.object(craft_session, "get_craft_turn_trace_id") as lookup,
         ):
-            dependency = bind(_request(str(uuid4())), MagicMock(), MagicMock())
+            dependency = bind(_request(str(uuid4())), MagicMock())
             await dependency.__anext__()
             assert CRAFT_TURN_TRACE_ID_CONTEXTVAR.get() is None
             with pytest.raises(StopAsyncIteration):
                 await dependency.__anext__()
             lookup.assert_not_called()
+
+    asyncio.run(scenario())
+
+
+def test_ownership_connection_is_released_before_cache_lookup() -> None:
+    bind = craft_session_binder(lambda: MagicMock())
+    session_context = MagicMock()
+
+    def read_turn_trace(_session_id: object) -> str:
+        session_context.__exit__.assert_called_once()
+        return "a" * 32
+
+    async def scenario() -> None:
+        with (
+            patch.object(
+                craft_session,
+                "get_session_with_current_tenant",
+                return_value=session_context,
+                create=True,
+            ),
+            patch.object(craft_session, "get_build_session", return_value=object()),
+            patch.object(
+                craft_session, "get_craft_turn_trace_id", side_effect=read_turn_trace
+            ),
+        ):
+            dependency = bind(_request(str(uuid4())), MagicMock())
+            await dependency.__anext__()
+            assert CRAFT_TURN_TRACE_ID_CONTEXTVAR.get() == "a" * 32
+            with pytest.raises(StopAsyncIteration):
+                await dependency.__anext__()
 
     asyncio.run(scenario())

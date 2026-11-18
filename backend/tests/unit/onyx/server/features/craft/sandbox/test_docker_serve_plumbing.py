@@ -596,7 +596,7 @@ def test_gateway_steps_share_turn_identity_without_sharing_request_state() -> No
     bind = craft_session_binder(lambda: MagicMock())
 
     async def request_trace() -> tuple[str, str]:
-        dependency = bind(request, MagicMock(), MagicMock())
+        dependency = bind(request, MagicMock())
         await dependency.__anext__()
         try:
             with llm_gateway_trace(LLMFlow.CRAFT_LLM_GENERATION, "m") as active:
@@ -611,6 +611,7 @@ def test_gateway_steps_share_turn_identity_without_sharing_request_state() -> No
         return await asyncio.gather(request_trace(), request_trace())
 
     with (
+        patch.object(craft_session, "get_session_with_current_tenant"),
         patch.object(craft_session, "get_build_session", return_value=object()),
         patch.object(turn_tracing, "get_cache_backend", return_value=cache),
         patch.object(serve_transport, "get_cache_backend", return_value=cache),

@@ -18,7 +18,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from onyx.db.build_session import get_build_session
-from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.server.features.build.turn_tracing import get_craft_turn_trace_id
 from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
@@ -44,8 +44,7 @@ def resolve_craft_session_id(
     malformed or foreign id is dropped, never trusted: the sandbox can edit its
     own config, so the header is an attribution hint, not an identity claim.
     """
-    # ``db_session`` is the request's database connection; the Craft session
-    # is the build session row the header names.
+    # The Craft session is the build session row the header names.
     claimed = http_request.headers.get(CRAFT_SESSION_HEADER)
     if not claimed:
         return None
@@ -65,6 +64,18 @@ def resolve_craft_session_id(
     return str(craft_session_id)
 
 
+def _resolve_craft_trace_context(
+    http_request: Request, user: User
+) -> tuple[str | None, str | None]:
+    # Release the ownership connection before the PostgreSQL cache checks out one.
+    with get_session_with_current_tenant() as db_session:
+        session_id = resolve_craft_session_id(http_request, user, db_session)
+    turn_trace_id = (
+        get_craft_turn_trace_id(UUID(session_id)) if session_id is not None else None
+    )
+    return session_id, turn_trace_id
+
+
 def craft_session_binder(
     user_dependency: Callable[..., Coroutine[Any, Any, User]],
 ) -> Callable[..., AsyncIterator[None]]:
@@ -78,15 +89,9 @@ def craft_session_binder(
     async def bind_craft_session(
         http_request: Request,
         user: User = Depends(user_dependency),
-        db_session: Session = Depends(get_session),
     ) -> AsyncIterator[None]:
-        craft_session_id = await run_in_threadpool(
-            resolve_craft_session_id, http_request, user, db_session
-        )
-        turn_trace_id = (
-            await run_in_threadpool(get_craft_turn_trace_id, UUID(craft_session_id))
-            if craft_session_id is not None
-            else None
+        craft_session_id, turn_trace_id = await run_in_threadpool(
+            _resolve_craft_trace_context, http_request, user
         )
         token = CRAFT_SESSION_ID_CONTEXTVAR.set(craft_session_id)
         turn_token = CRAFT_TURN_TRACE_ID_CONTEXTVAR.set(turn_trace_id)
