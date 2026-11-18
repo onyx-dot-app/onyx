@@ -196,6 +196,7 @@ def resolve_connection(
     db_session: Session,
     *,
     refresh: bool = True,
+    connections: Mapping[tuple[int, UUID | None], IntegrationConnection] | None = None,
 ) -> ResolvedConnection | ConnectionProblem:
     """The credential for one call by ``acting_user``, or why there is none.
     The caller always gives the acting user: the chat user, the sandbox
@@ -207,9 +208,15 @@ def resolve_connection(
         return ResolvedConnection(
             integration_id=integration.id, connection_id=None, secret=None
         )
-    organization, user_row = get_connection_with_organization(
-        db_session, integration.id, user.id if user is not None else None
-    )
+    if connections is None:
+        organization, user_row = get_connection_with_organization(
+            db_session, integration.id, user.id if user is not None else None
+        )
+    else:
+        organization = connections.get((integration.id, None))
+        user_row = (
+            connections.get((integration.id, user.id)) if user is not None else None
+        )
     resolved = _resolve_by_mode(
         integration, user, organization, user_row, db_session, refresh
     )

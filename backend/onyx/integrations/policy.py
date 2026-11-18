@@ -178,6 +178,8 @@ def resolve_action_policies(
     link_settings: Sequence[ActionSettings | None],
     approval_mode: ApprovalMode,
     chat_session_id: UUID | None,
+    policy_rows: PolicyRows | None = None,
+    granted_actions: Collection[str] | None = None,
 ) -> dict[str, EffectivePolicy]:
     """The policy of each action in ``action_keys`` for one run. ``actions``
     are the stored actions of the integration. ``user_id`` is the acting
@@ -189,11 +191,19 @@ def resolve_action_policies(
     if not link_settings:
         return dict.fromkeys(action_keys, EffectivePolicy.BLOCKED)
     by_key = {action.key: action for action in actions}
-    rows = get_policy_rows(db_session, integration.id, user_id)
+    rows = (
+        policy_rows
+        if policy_rows is not None
+        else get_policy_rows(db_session, integration.id, user_id)
+    )
     granted = (
-        get_session_granted_actions(db_session, chat_session_id, integration.id)
-        if chat_session_id is not None
-        else set()
+        granted_actions
+        if granted_actions is not None
+        else (
+            get_session_granted_actions(db_session, chat_session_id, integration.id)
+            if chat_session_id is not None
+            else set()
+        )
     )
     links = [settings or ActionSettings() for settings in link_settings]
     return {
