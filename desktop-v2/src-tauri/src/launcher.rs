@@ -4,7 +4,7 @@
 //! keystrokes without bringing Onyx's other windows forward, and it hides when
 //! it loses focus.
 
-use tauri::{AppHandle, Manager, WebviewUrl};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl};
 
 use crate::windows::{local_navigation_allowed, local_new_window, LAUNCHER};
 
@@ -80,11 +80,7 @@ mod platform {
         // Spotlight does.
         let handler = LauncherPanelEvents::new();
         let hide_app = app.clone();
-        handler.window_did_resign_key(move |_| {
-            if let Ok(panel) = hide_app.get_webview_panel(LAUNCHER) {
-                panel.hide();
-            }
-        });
+        handler.window_did_resign_key(move |_| hide(&hide_app));
         panel.set_event_handler(Some(handler.as_ref()));
         // The panel's delegate is a weak reference; keep the handler alive.
         std::mem::forget(handler);
@@ -154,6 +150,7 @@ mod platform {
     pub fn hide(app: &AppHandle) {
         if let Ok(panel) = app.get_webview_panel(LAUNCHER) {
             panel.hide();
+            super::emit_hidden(app);
         }
     }
 
@@ -193,6 +190,7 @@ mod platform {
         window.on_window_event(move |event| {
             if let WindowEvent::Focused(false) = event {
                 let _ = handle.hide();
+                super::emit_hidden(handle.app_handle());
             }
         });
         Ok(())
@@ -208,6 +206,7 @@ mod platform {
     pub fn hide(app: &AppHandle) {
         if let Some(window) = app.get_webview_window(LAUNCHER) {
             let _ = window.hide();
+            super::emit_hidden(app);
         }
     }
 
@@ -215,6 +214,14 @@ mod platform {
         app.get_webview_window(LAUNCHER)
             .is_some_and(|w| w.is_visible().unwrap_or(false))
     }
+}
+
+/// Sent to the launcher page each time the panel hides, so it opens fresh
+/// next time, like Claude Desktop's quick entry.
+pub const HIDDEN_EVENT: &str = "launcher-hidden";
+
+fn emit_hidden(app: &AppHandle) {
+    let _ = app.emit_to(LAUNCHER, HIDDEN_EVENT, ());
 }
 
 // AppKit panels must be created and changed on the main thread, and callers
