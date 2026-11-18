@@ -1646,7 +1646,9 @@ def upsert_persona(
             user.id if user is not None else None,
             db_session,
             attached=(
-                {
+                {link.plugin_id for link in plugin_links}
+                if plugin_links is not None
+                else {
                     row.plugin_id
                     for row in list_persona_plugin_links(
                         db_session, existing_persona.id
