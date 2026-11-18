@@ -269,6 +269,7 @@ const AppInputBar = React.memo(
     });
 
     // Clearing or replacing the input in code fires no input event.
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resets the mention picker when code empties the contentEditable editor, which fires no input event
     useEffect(() => {
       if (!message) mentionPicker.reset();
     }, [message, mentionPicker.reset]);
@@ -341,6 +342,7 @@ const AppInputBar = React.memo(
     const isRecordingRef = useRef(isRecording);
     // Text returned after an unmount goes to the chat's draft instead.
     const mountedRef = useRef(true);
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- tracks mount so dictation text that returns after unmount goes to the chat draft
     useEffect(() => {
       mountedRef.current = true;
       return () => {
@@ -348,10 +350,12 @@ const AppInputBar = React.memo(
       };
     }, []);
 
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest composed message in a ref for the draft and held-send effects
     useEffect(() => {
       composedRef.current = composed;
     }, [composed]);
 
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the contentEditable editor and the held send when the chat draft key changes
     useEffect(() => {
       draftSeededRef.current = false;
       // Clear the previous session's leftover text instead of leaking it into
@@ -365,6 +369,7 @@ const AppInputBar = React.memo(
 
     // Restore once read: a URL prompt wins and a non-empty input is never
     // clobbered.
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- seeds the contentEditable editor from the stored chat draft once storage loads
     useEffect(() => {
       if (!chatDraftLoaded || draftSeededRef.current) return;
       draftSeededRef.current = true;
@@ -377,6 +382,7 @@ const AppInputBar = React.memo(
       }
     }, [chatDraftLoaded, chatDraft, initialMessage, setMessage]);
 
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- persists the composed message to chat draft storage
     useEffect(() => {
       if (!chatDraftLoaded || !draftSeededRef.current) return;
       if (skipNextDraftSaveRef.current) {
@@ -446,6 +452,7 @@ const AppInputBar = React.memo(
     // Sync non-empty prop changes to internal state (e.g. NRFPage reads URL params
     // after mount). Intentionally skips empty strings — clearing is handled via the
     // imperative ref.reset() method, not by passing initialMessage="".
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- writes a non-empty initialMessage prop into the contentEditable editor
     useEffect(() => {
       if (initialMessage) {
         setMessage(initialMessage);
@@ -456,6 +463,7 @@ const AppInputBar = React.memo(
       !isVoicePlaybackActive &&
       (isNewSession || recordingCycleCount === 1);
 
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the contentEditable editor when a new session starts without an initial message
     useEffect(() => {
       if (isNewSession && !initialMessage) {
         clearMessage();
@@ -688,6 +696,7 @@ const AppInputBar = React.memo(
     // Animate attached files wrapper to its content height so CSS transitions
     // can interpolate between concrete pixel values (0px ↔ Npx).
     const showFiles = !isSearchMode && currentMessageFiles.length > 0;
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- sets the files wrapper DOM height from its measured content so the height transition runs
     useEffect(() => {
       const wrapper = filesWrapperRef.current;
       const content = filesContentRef.current;

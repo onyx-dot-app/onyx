@@ -155,6 +155,7 @@ const AgentMessage = React.memo(function AgentMessage({
     mountedPrefix.current.nodeId === nodeId
       ? mountedPrefix.current
       : { nodeId, count: rawPackets.length };
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- remembers this commit's mounted packet prefix for the next render
   useEffect(() => {
     mountedPrefix.current = mounted;
   }, [mounted]);
@@ -214,6 +215,7 @@ const AgentMessage = React.memo(function AgentMessage({
     }
     return groups;
   }, [nodeId, lastVisiblePacket, rawPackets, visiblePacketCount]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- remembers this commit's visible packet prefix for the next render
   useEffect(() => {
     visiblePrefix.current = {
       nodeId,
@@ -406,6 +408,7 @@ const AgentMessage = React.memo(function AgentMessage({
   // Streaming TTS integration
   const { streamTTS, resetTTS, stopTTS, activeMessageNodeId } = useVoiceMode();
   const activeTTSNodeIdRef = useRef(activeMessageNodeId);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the active TTS node id in a ref for the unmount cleanup
   useEffect(() => {
     activeTTSNodeIdRef.current = activeMessageNodeId;
   }, [activeMessageNodeId]);
@@ -416,6 +419,7 @@ const AgentMessage = React.memo(function AgentMessage({
   const streamTTSRef = useRef(streamTTS);
 
   // Keep streamTTS ref in sync without triggering effect re-runs
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest streamTTS in a ref for the TTS streaming effect
   useEffect(() => {
     streamTTSRef.current = streamTTS;
   }, [streamTTS]);
@@ -423,6 +427,7 @@ const AgentMessage = React.memo(function AgentMessage({
   // Stream TTS as text content arrives - only for messages still streaming
   // Uses ref for streamTTS to avoid re-triggering when its identity changes
   // Note: packetCount is used instead of rawPackets because the array is mutated in place
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- streams the arriving answer text to the voice TTS player
   useLayoutEffect(() => {
     const effectivePacketCount = packetCount ?? rawPackets.length;
     if (effectivePacketCount > lastSeenPacketCountRef.current) {
@@ -481,6 +486,7 @@ const AgentMessage = React.memo(function AgentMessage({
   ]); // packetCount triggers on new packets since rawPackets is mutated in place
 
   // Stop TTS immediately when user cancels generation.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- stops TTS audio playback when the user cancels generation
   useEffect(() => {
     if (stopPacketSeen && stopReason === StopReason.USER_CANCELLED) {
       stopTTS({ manual: true });
@@ -488,6 +494,7 @@ const AgentMessage = React.memo(function AgentMessage({
   }, [stopPacketSeen, stopReason, stopTTS]);
 
   // Reset TTS completed flag when nodeId changes (new message)
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resets the TTS streaming flags for a new message node
   useEffect(() => {
     ttsCompletedRef.current = false;
     hasStreamedIncompleteRef.current = false;
@@ -498,6 +505,7 @@ const AgentMessage = React.memo(function AgentMessage({
   // Reset TTS when this message unmounts or its nodeId changes, if it is the
   // one speaking. A chat unmounts rows far from the viewport, and that must
   // not stop another message's audio.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resets the TTS player on unmount when this message is speaking
   useEffect(() => {
     return () => {
       if (activeTTSNodeIdRef.current === nodeId) resetTTS();

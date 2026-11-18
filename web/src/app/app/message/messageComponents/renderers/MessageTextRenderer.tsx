@@ -154,6 +154,7 @@ export const MessageTextRenderer: MessageRenderer<
     activeMessageNodeId === messageNodeId;
 
   // Start/clear the timeout when voice sync activates/deactivates.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- timeout that gives up waiting for TTS playback to start after 5 seconds
   useEffect(() => {
     if (shouldUseAutoPlaybackSync && isAwaitingAutoPlaybackStart) {
       if (!voiceSyncTimeoutRef.current) {
@@ -247,6 +248,7 @@ export const MessageTextRenderer: MessageRenderer<
     animate,
   ]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- remembers the last synced content so render can show it while voice sync waits
   useEffect(() => {
     if (stopReason === StopReason.USER_CANCELLED) {
       return;
@@ -258,6 +260,7 @@ export const MessageTextRenderer: MessageRenderer<
     }
   }, [content, shouldUseAutoPlaybackSync, stopReason]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- remembers the last non-empty content so render can show it between packets
   useEffect(() => {
     if (content.length > 0) {
       lastVisibleContentRef.current = content;
@@ -319,6 +322,7 @@ export const MessageTextRenderer: MessageRenderer<
   // ChatScrollContainer can pause auto-scroll while the drain runs. Only
   // the actively-animating renderer writes — historical mounts never
   // enter the drain branch in useTypewriter.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- publishes the typewriter drain state to the chat session store for the scroll container
   useEffect(() => {
     if (!wasEverAnimatingRef.current || !sessionIdAtMountRef.current) return;
     setIsStreamDraining(sessionIdAtMountRef.current, isDraining);

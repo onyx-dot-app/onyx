@@ -23,12 +23,14 @@ export default function LLMGatewayPage() {
   const gatewayDisabled =
     !settings.isLoading && settings.llm_gateway_enabled === false;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- router redirect to general settings once access loads without permission
   useEffect(() => {
     if (!isLoadingAccess && !error && !gatewayDisabled && !hasAccess) {
       navigation.go("/app/settings/general", { replace: true });
     }
   }, [error, gatewayDisabled, hasAccess, isLoadingAccess, navigation]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- logs each models load error to the console
   useEffect(() => {
     if (error) {
       console.error("Failed to load LLM Gateway models", error);

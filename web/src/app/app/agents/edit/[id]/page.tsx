@@ -21,6 +21,7 @@ export default function Page(props: PageProps) {
   );
 
   // Handle invalid ID (NaN)
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- router redirect home when the URL holds no valid agent id
   useEffect(() => {
     if (isNaN(agentId)) {
       navigation.go("/app");
@@ -28,6 +29,7 @@ export default function Page(props: PageProps) {
   }, [agentId, navigation]);
 
   // Redirect to home if agent not found after loading completes
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- router redirect home once loading finds no agent
   useEffect(() => {
     if (!isLoading && !agent) {
       navigation.go("/app");

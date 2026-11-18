@@ -32,6 +32,7 @@ function QueuedMessageBar({
   const isEmpty = messages.length === 0;
   const highlightedItemRef = useRef<HTMLDivElement>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the highlighted queued message DOM node into view
   useEffect(() => {
     highlightedItemRef.current?.scrollIntoView({
       block: "nearest",

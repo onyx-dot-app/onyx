@@ -66,6 +66,7 @@ export function SearchChipList<T>({
     setVisibleCount((prev) => prev + expansionCount);
   };
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- timer that marks the shown chips as animated after their entry animation starts
   useEffect(() => {
     const timer = setTimeout(() => {
       displayList.forEach((entry) =>

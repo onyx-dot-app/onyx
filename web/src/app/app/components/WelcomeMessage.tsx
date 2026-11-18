@@ -27,6 +27,7 @@ export default function WelcomeMessage({
   // Use a stable default for SSR, then randomize on client after hydration
   const [greeting, setGreeting] = useState(t("greeting.helpText"));
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- picks the random greeting after hydration so server and client markup match
   useEffect(() => {
     if (settings.enterprise?.custom_greeting_message) {
       setGreeting(settings.enterprise.custom_greeting_message);

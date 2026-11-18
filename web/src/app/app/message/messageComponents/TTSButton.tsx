@@ -60,6 +60,7 @@ function TTSButton({ text, voice, speed }: TTSButtonProps) {
   ]);
 
   // Surface streaming voice playback errors to the user via toast
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- shows a toast for each voice playback error
   useEffect(() => {
     if (error) {
       toast.error(error);

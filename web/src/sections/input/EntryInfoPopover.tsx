@@ -27,6 +27,7 @@ function EntryInfoPopover({
 
   // Move focus into the popover on open so screen readers announce it and it's
   // reachable by keyboard, then restore focus (to the input) on dismiss.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus into the popover on open and restores it on dismiss
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     containerRef.current?.focus();
@@ -41,6 +42,7 @@ function EntryInfoPopover({
     });
   }, [tileElement]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document keydown listener that dismisses on Escape
   useEffect(() => {
     function handleEscape(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -52,6 +54,7 @@ function EntryInfoPopover({
     return () => document.removeEventListener("keydown", handleEscape);
   }, [onDismiss]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- window resize and scroll listeners that reposition the popover
   useEffect(() => {
     window.addEventListener("resize", updateRect);
     document.addEventListener("scroll", updateRect, true);
@@ -66,6 +69,7 @@ function EntryInfoPopover({
 
   // Dismiss if the tile is removed from the DOM (Backspace, cut, reset, …),
   // otherwise the popover would anchor to a detached node (rect 0,0).
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- MutationObserver that dismisses when the tile leaves the DOM
   useEffect(() => {
     const parent = tileElement.parentNode;
     if (!parent) return;
@@ -79,6 +83,7 @@ function EntryInfoPopover({
   // When opened from an arrow-selected tile, dismiss once it loses the
   // highlight (e.g. the user arrowed away). Click-opened popovers (tile not
   // selected at open) are unaffected.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- MutationObserver that dismisses when the tile loses its selected class
   useEffect(() => {
     if (!tileElement.classList.contains("rich-input-tile-selected")) return;
     const observer = new MutationObserver(() => {

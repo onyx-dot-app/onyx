@@ -34,6 +34,7 @@ function MessageEditing({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [editedContent, setEditedContent] = useState(content);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- focuses and selects the edit textarea DOM node on mount
   useEffect(() => {
     if (!textareaRef.current) return;
 
