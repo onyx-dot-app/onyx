@@ -401,7 +401,11 @@ def test_js_lint_range_expansion() -> None:
         "cubic.yaml",
         "tools/ods/cmd/check_getattr.go",
         "tools/ods/internal/lazyimports/checker.go",
-        "tools/ods/internal/typecoverage/typescript.go",
+        "tools/ods/internal/typecoverage/measure.go",
+        "tools/ods/cmd/coverage_gate.go",
+        "tools/ods/internal/coverage/kind.go",
+        "tools/ods/internal/coverage/check.go",
+        "web/tools/type-check/index.ts",
         "ty.toml",
     ],
 )
@@ -435,3 +439,16 @@ def test_every_pre_commit_hook_has_an_inventory_entry() -> None:
     entries = Counter(re.findall(r"^\| ([\w][^|]*?) \|", inventory, re.MULTILINE))
     entries.pop("Hook")
     assert hooks == entries
+
+
+def test_web_gate_command_changes_require_approval() -> None:
+    path = "web/package.json"
+    original = '{"scripts": {"types:check": "node checker.ts"}}'
+    assert check_change(path, original, '{"scripts": {"types:check": "true"}}')
+    assert check_change(path, original, '{"scripts": {"oxlint": "true"}}')
+    assert (
+        check_change(
+            path, original, original.replace('"scripts"', '"name": "web", "scripts"')
+        )
+        is None
+    )

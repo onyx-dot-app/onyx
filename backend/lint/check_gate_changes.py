@@ -49,6 +49,7 @@ PROTECTED = {
     "tools/ods/cmd/check_getattr.go",
     "tools/ods/cmd/check_lazy_imports.go",
     "tools/ods/cmd/type_coverage.go",
+    "tools/ods/cmd/coverage_gate.go",
     "backend/scripts/check_migration_determinism.py",
     "backend/scripts/env_inventory.py",
 }
@@ -58,7 +59,9 @@ PROTECTED_DIRECTORIES = (
     "tools/ods/internal/pycheck/",
     "tools/ods/internal/lazyimports/",
     "tools/ods/internal/typecoverage/",
+    "tools/ods/internal/coverage/",
     "web/tools/oxlint/",
+    "web/tools/type-check/",
 )
 IMPORT_BOUNDARIES = "backend/lint/import_boundaries.toml"
 NOQA = re.compile(
@@ -373,6 +376,11 @@ def check_change(path: str, before: str, after: str) -> str | None:
     elif path == IMPORT_BOUNDARIES:
         if changes_import_boundaries(before, after):
             return "import boundary policy changed"
+    elif path == "web/package.json":
+        old = json.loads(before or "{}").get("scripts", {})
+        new = json.loads(after or "{}").get("scripts", {})
+        if any(old.get(name) != new.get(name) for name in ("types:check", "oxlint")):
+            return "web lint or type check command changed"
     elif is_gate_definition(path):
         return "gate definition changed"
     elif (name := Path(path).name) in {".ruff.toml", "ruff.toml", "pyproject.toml"}:
@@ -416,6 +424,7 @@ def violations(base: str, head: str) -> list[tuple[str, str]]:
         if not (
             protected
             or path in SET_BASELINES
+            or path == "web/package.json"
             or is_playwright_source(path)
             or path.endswith(
                 (".py", ".pyi", ".pyw", "pyproject.toml", "ruff.toml", *JS_SUFFIXES)

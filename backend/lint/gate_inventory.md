@@ -20,7 +20,7 @@ The table records coverage of the files and exceptions used by each hook.
 | ruff-format | Ruff config and `# fmt: skip/off/on` | Config covered. Formatting waivers are outside the gate. |
 | terraform-fmt | ODS Terraform formatter. No inline waiver. | Formatting is outside the gate. |
 | terraform-public-safe | ODS Terraform lint rules in `tools/ods/` | Deployment policy is outside this gate. |
-| typescript-check | ODS type coverage implementation, TypeScript configs, `web/.type-coverage-baseline.yaml`, `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck` | Covered. |
+| typescript-check | `tools/ods/cmd/type_coverage.go`, `coverage_gate.go`, `tools/ods/internal/typecoverage/` and `coverage/`, `web/tools/type-check/`, the `types:check` package script, TypeScript configs, `web/.type-coverage-baseline.yaml`, `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck` | Covered. |
 | zizmor | Tool pin and config. `# zizmor: ignore[rule]` | Workflow security has its own review policy. Inline waivers and tool config are outside the gate. |
 | check-added-large-files | Hook sets file-size limit. Git LFS files can be exempt. | Hook covered. LFS settings are outside the gate. |
 | check-yaml | Hook sets parser options. No inline waiver. | Hook covered. |
@@ -53,7 +53,7 @@ The table records coverage of the files and exceptions used by each hook.
 | root-bun-install | Root workspace manifests and lockfile | Dependency install. Outside the gate. |
 | root-bun-install-check | Root workspace manifests and lockfile | Dependency sync. Outside the gate. |
 | oxfmt | Formatter config and `oxfmt-ignore` | Formatting is outside the gate. |
-| oxlint | `.oxlintrc.json`, `web/tools/oxlint/` including anti-slop, i18n, navigation and Opal, `oxlint-disable/enable` and ESLint spellings | Covered. Package and lock changes are outside the gate. |
+| oxlint | `.oxlintrc.json`, `web/tools/oxlint/` including anti-slop, i18n, navigation and Opal, the `oxlint` package script, `oxlint-disable/enable` and ESLint spellings | Covered. Package and lock changes are outside the gate. |
 | widget-typescript-check | Widget TS configs and `@ts-*` directives | Covered. |
 | examples-widget-typescript-check | Example widget TS config and `@ts-*` directives | Covered. |
 | shared-typescript-check | Shared library TS configs and `@ts-*` directives | Covered. |
