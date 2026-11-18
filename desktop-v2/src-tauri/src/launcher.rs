@@ -1,8 +1,7 @@
 //! The launcher panel. On macOS it is a non-activating `NSPanel`, like
-//! Spotlight or Claude Desktop's quick entry: the global shortcut shows it over
-//! whatever app is in front (also full-screen apps and on every Space), it takes
-//! keystrokes without bringing Onyx's other windows forward, and it hides when
-//! it loses focus.
+//! Spotlight: the global shortcut shows it over whatever app is in front (also
+//! full-screen apps and on every Space), it takes keystrokes without bringing
+//! Onyx's other windows forward, and it hides when it loses focus.
 
 use tauri::{AppHandle, Manager, WebviewUrl};
 
@@ -73,8 +72,8 @@ mod platform {
             .build()
             .map_err(|e| e.to_string())?;
 
-        // Native rounded corners (and a matching shadow), like Claude Desktop's
-        // quick entry; the page's frame uses the same 16px radius.
+        // Native rounded corners (and a matching shadow); the page's frame
+        // uses the same 16px radius.
         panel.set_corner_radius(16.0);
         clip_to_corners(app);
         prevent_activation(app);
@@ -255,6 +254,9 @@ mod platform {
     }
 }
 
+/// Where the launcher page keeps recent questions (`Launcher.tsx`).
+const HISTORY_KEY: &str = "onyx.launcher.history";
+
 // AppKit panels must be created and changed on the main thread, and callers
 // include background threads (commands), so every entry point hops there.
 
@@ -263,14 +265,18 @@ pub fn hide(app: &AppHandle) {
     let _ = app.run_on_main_thread(move || platform::hide(&handle));
 }
 
-/// Hides the panel and reloads its page, which clears the question, answer
-/// and results. Updates from requests still running reach the old page only.
+/// Hides the panel and reloads its page, which clears the question, answer,
+/// results and recent questions. Updates from requests still running reach
+/// the old page only.
 pub fn reset(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         platform::hide(&handle);
         if let Some(window) = handle.get_webview_window(LAUNCHER) {
-            let _ = window.eval("location.reload()");
+            // Recent questions belong to the account that asked them.
+            let _ = window.eval(format!(
+                "localStorage.removeItem({HISTORY_KEY:?}); location.reload()"
+            ));
         }
     });
 }

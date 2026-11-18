@@ -35,6 +35,7 @@ interface Turn {
   approval: { tool: string | null } | null;
 }
 
+// Cleared on sign-out and server change (launcher.rs `reset`).
 const HISTORY_KEY = "onyx.launcher.history";
 const HISTORY_SIZE = 20;
 
@@ -130,12 +131,17 @@ function Launcher() {
         updateLast((t) => {
           switch (event.kind) {
             case "delta":
-              return { ...t, text: t.text + event.text };
+              // Answer text replaces the progress line; a later tool step sets it again.
+              return { ...t, text: t.text + event.text, status: event.text ? null : t.status };
             case "status":
               return { ...t, status: event.text };
             case "restart":
               // The earlier text was narration ("Retrying with a simpler query.").
-              return { ...t, status: t.text.trim() || t.status, text: event.text };
+              return {
+                ...t,
+                status: event.text ? null : t.text.trim() || t.status,
+                text: event.text,
+              };
             case "citations":
               return { ...t, citations: event.docs };
             case "needsApproval":
@@ -416,7 +422,7 @@ function TurnView({ turn }: { turn: Turn }) {
   );
 }
 
-// Shown while an answer works without streaming text, like Claude's status line.
+// Shown while an answer works without streaming text.
 function StatusLine({ text }: { text: string }) {
   return (
     <div role="status" className="flex items-center gap-2">

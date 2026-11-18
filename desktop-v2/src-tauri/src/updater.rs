@@ -1,4 +1,4 @@
-//! Auto-update, Claude Desktop style: check quietly after launch and every few
+//! Auto-update: check quietly after launch and every few
 //! hours, download in the background, then offer "Restart to Update" in the app
 //! and tray menus instead of restarting on its own. "Check for Updates…" runs
 //! the same check on demand and reports the result.

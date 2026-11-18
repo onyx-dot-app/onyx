@@ -108,7 +108,7 @@ interface ShortcutRecorderProps {
   onRecord: (accelerator: string) => void;
 }
 
-// Like Claude Desktop's shortcut setting: click, then press the new keys.
+// Click, then press the new keys.
 function ShortcutRecorder({ value, onRecord }: ShortcutRecorderProps) {
   const [recording, setRecording] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);

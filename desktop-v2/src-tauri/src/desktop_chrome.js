@@ -8,7 +8,7 @@
 // - The sidebar runs to the window's top edge. Its logo row becomes the
 //   traffic-light row: the logo is hidden, the collapse button sits at the
 //   row's right end in line with the lights, and the rest moves up.
-// - Collapsed, the sidebar disappears (as in Claude Desktop) and the collapse
+// - Collapsed, the sidebar disappears and the collapse
 //   button stays beside the traffic lights. In full screen, where macOS hides
 //   the lights, the button sits at the left edge whether open or collapsed.
 // - The sidebar's top row and the chat area's top bar drag the window
@@ -153,7 +153,7 @@
     }
     ${FOLDED} .opal-sidebar-header__fold-button { left: ${pt(76)} !important; right: auto !important; }
     /* Full screen hides the lights: the toggle stays at the left edge, open or
-       collapsed, as in Claude Desktop. */
+       collapsed. */
     /* ${SIDEBAR} makes this outrank the folded position above. */
     ${FULLSCREEN} ${SIDEBAR} .opal-sidebar-header__fold-button {
       left: ${pt(12)} !important;

@@ -22,14 +22,14 @@ shipping unchanged and stays the default desktop app. v2 has its own bundle ID
   native save panel. `alert()`, `confirm()` and `prompt()` show native dialogs.
 - Tray icon, standard macOS menus (with Edit), and a Preferences window (`Cmd+,`) for the
   server and sign-out.
-- Main window chrome like Claude Desktop: overlay title bar, the sidebar runs to the top with
+- Native main window chrome: overlay title bar, the sidebar runs to the top with
   the traffic lights inside it, the collapse button sits on that row, and collapsing slides the
   sidebar fully away. In full screen the button moves to the left edge. The sidebar's top row
   and the chat area's top bar drag the window. Zoom (`Cmd+=`/`Cmd+-`) keeps the title-bar row
   at its native size. Window size and position are remembered.
 - Launcher panel on a global shortcut (default `Cmd+Shift+Space`, set in Preferences) that
   works from any app. On macOS it is a non-activating `NSPanel` (`src-tauri/src/launcher.rs`),
-  like Spotlight or Claude Desktop's quick entry: it appears over the app you are in, also
+  like Spotlight: it appears over the app you are in, also
   full-screen apps and on every Space, without bringing Onyx's other windows forward, and it
   hides when you click away. It keeps its chat and query while hidden, also an answer that is
   still streaming. **Ask** streams an answer through `POST /api/chat/send-chat-message`, shows
@@ -116,7 +116,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ## Auto-update
 
-`src-tauri/src/updater.rs`, like Claude Desktop: the app checks the feed 15 seconds after launch
+`src-tauri/src/updater.rs`: the app checks the feed 15 seconds after launch
 and every 6 hours, downloads a newer version in the background, then changes **Check for
 Updates…** (app menu and tray) to **Restart to Update (vX)**. It does not restart on its own.
 Every download is verified against `plugins.updater.pubkey` in `tauri.conf.json` before it is
