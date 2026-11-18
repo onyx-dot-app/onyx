@@ -46,16 +46,36 @@ test("reports each effect call, including named aliases and member calls", async
       useEffect(() => {}, []);
       useMeasure(() => {}, []);
       React.useLayoutEffect(() => {}, []);
+      (React!).useEffect(() => {}, []);
       Hooks["useEffect"](() => {}, []);
       ReactAlias.useEffect(() => {}, []);
       return null;
     }
   `);
   expect(result).toMatchObject({
-    diagnostics: Array.from({ length: 5 }, () => ({
+    diagnostics: Array.from({ length: 6 }, () => ({
       code: effectDiagnostic,
       severity: "error",
     })),
+  });
+});
+
+test("reports hooks destructured from React and ignores shadowed bindings", async () => {
+  const result = await lint(`
+    import * as React from "react";
+    const { useEffect: useDestructured } = React;
+    export function Panel() {
+      useDestructured(() => {}, []);
+      return null;
+    }
+    export function OtherPanel(React: { useEffect: () => void }) {
+      const { useEffect } = React;
+      useEffect();
+      return null;
+    }
+  `);
+  expect(result).toMatchObject({
+    diagnostics: [{ code: effectDiagnostic, severity: "error" }],
   });
 });
 
