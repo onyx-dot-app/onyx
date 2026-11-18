@@ -39,7 +39,11 @@ nginx:
       use-http2: "false"
 ```
 
-After the upgrade, check that the controller pods restarted. If they did not, restart the controller:
+After the upgrade, check that the controller pods restarted. If a DaemonSet uses `nginx.controller.updateStrategy.type:
+OnDelete`, delete the old controller pods one at a time.
+Wait for each replacement pod to be ready before you delete the next one.
+
+For other controllers, run this command if the pods did not restart:
 
 ```bash
 kubectl rollout restart "deployment/<controller-name>" -n "<namespace>"
