@@ -267,7 +267,7 @@ jobs:
     runs-on:
       [
         runs-on,
-        runner=8cpu-linux-arm64,
+        runner=1cpu-linux-arm64,
         "run-id=${{ github.run_id }}-build-model-server-image",
         "extras=ecr-cache",
       ]
@@ -307,7 +307,7 @@ jobs:
     runs-on:
       [
         runs-on,
-        runner=8cpu-linux-arm64,
+        runner=2cpu-linux-arm64,
         "run-id=${{ github.run_id }}-build-devcontainer-image",
         "extras=ecr-cache",
       ]
@@ -392,9 +392,7 @@ jobs:
       contents: read
     runs-on:
       - runs-on
-      - >-
-        ${{ contains(fromJSON('["connector_job_tests/azure_datalake","connector_job_tests/onedrive","connector_job_tests/jira","tests/llm_provider","tests/query_history","tests/permissions_access","tests/usergroup","tests/permissions_resources","tests/connector_edit"]'), matrix.test-dir.path)
-            && 'runner=8cpu-linux-arm64' || 'runner=4cpu-linux-arm64' }}
+      - runner=4cpu-linux-arm64
       - ${{ format('run-id={0}-integration-tests-{1}-job-{2}', github.run_id, matrix.edition, strategy['job-index']) }}
       - extras=ecr-cache
       # The default ~38GB volume is ~50% AMI baseline plus ~15GB of pulled
