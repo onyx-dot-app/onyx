@@ -2,19 +2,18 @@ import { defineRule, type ESTree, type Variable } from "@oxlint/plugins";
 
 const effectHooks = new Set(["useEffect", "useLayoutEffect"]);
 
-function enclosingCall(callee: ESTree.Node): ESTree.CallExpression | undefined {
-  const parent = callee.parent;
+function outerExpression(expression: ESTree.Node): ESTree.Node {
+  const parent = expression.parent;
   switch (parent?.type) {
-    case "CallExpression":
-      return parent.callee === callee ? parent : undefined;
     case "ParenthesizedExpression":
     case "TSAsExpression":
     case "TSSatisfiesExpression":
     case "TSTypeAssertion":
     case "TSNonNullExpression":
     case "TSInstantiationExpression":
-      return enclosingCall(parent);
+      if (parent.expression === expression) return outerExpression(parent);
   }
+  return expression;
 }
 
 function staticName(node: ESTree.Node, computed = false): string | undefined {
@@ -38,19 +37,50 @@ export const noUnreasonedStateSyncRule = defineRule({
   createOnce(context) {
     function reportCalls(variable: Variable, namespace: boolean) {
       for (const { identifier } of variable.references) {
-        let callee: ESTree.Node = identifier;
+        let callee = outerExpression(identifier);
         if (namespace) {
-          const member = identifier.parent;
+          const member = callee.parent;
           if (
-            member.type !== "MemberExpression" ||
-            member.object !== identifier ||
+            member?.type === "VariableDeclarator" &&
+            member.init === callee &&
+            member.parent.type === "VariableDeclaration" &&
+            member.parent.kind === "const"
+          ) {
+            reportNamespaceBinding(member);
+            continue;
+          }
+          if (
+            member?.type !== "MemberExpression" ||
+            member.object !== callee ||
             !effectHooks.has(staticName(member.property, member.computed) ?? "")
           )
             continue;
-          callee = member;
+          callee = outerExpression(member);
         }
-        const call = enclosingCall(callee);
-        if (call) context.report({ node: call, messageId: "effect" });
+        const call = callee.parent;
+        if (call?.type === "CallExpression" && call.callee === callee) {
+          context.report({ node: call, messageId: "effect" });
+        }
+      }
+    }
+
+    function reportNamespaceBinding(node: ESTree.VariableDeclarator) {
+      const { id } = node;
+      for (const variable of context.sourceCode.getDeclaredVariables(node)) {
+        if (id.type === "Identifier") {
+          reportCalls(variable, true);
+        } else if (
+          id.type === "ObjectPattern" &&
+          id.properties.some(
+            (property) =>
+              property.type === "Property" &&
+              property.value.type === "Identifier" &&
+              property.value.name === variable.name &&
+              effectHooks.has(staticName(property.key, property.computed) ?? "")
+          )
+        ) {
+          reportCalls(variable, false);
+        }
       }
     }
 
@@ -80,7 +110,7 @@ export const noUnreasonedStateSyncRule = defineRule({
       },
       VariableDeclarator(node) {
         const { sourceCode } = context;
-        const { id, init } = node;
+        const { init } = node;
         if (init?.type !== "CallExpression") return;
         const [module] = init.arguments;
         if (module?.type !== "Literal" || module.value !== "react") return;
@@ -101,24 +131,7 @@ export const noUnreasonedStateSyncRule = defineRule({
         while (scope.upper && !scope.set.has(loader.name)) scope = scope.upper;
         if (scope.set.get(loader.name)?.defs.length) return;
 
-        for (const variable of sourceCode.getDeclaredVariables(node)) {
-          if (id.type === "Identifier") {
-            reportCalls(variable, true);
-          } else if (
-            id.type === "ObjectPattern" &&
-            id.properties.some(
-              (property) =>
-                property.type === "Property" &&
-                property.value.type === "Identifier" &&
-                property.value.name === variable.name &&
-                effectHooks.has(
-                  staticName(property.key, property.computed) ?? ""
-                )
-            )
-          ) {
-            reportCalls(variable, false);
-          }
-        }
+        reportNamespaceBinding(node);
       },
     };
   },
