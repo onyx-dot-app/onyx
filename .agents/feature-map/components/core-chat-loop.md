@@ -14,7 +14,7 @@
 
 - **An end user** sends a message. The assistant can think, run tools (search,
   web, code, images, custom tools) for several steps, and then streams an answer
-  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 6; when
+  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 30; when
   code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or
   `MAX_LLM_CYCLES` when higher) the model must answer without tools.
 - **One message at a time.** While a turn runs, the session is busy. The client
@@ -424,8 +424,8 @@ termination grace period is much shorter, so it ends running turns first
     takes one extra step for the answer; the full rule is in "Preparing and
     completing steps" in `backend/onyx/agents/README.md`.
     Image generation does not remove tools, even when the image call fails.
-    The default cap is six cycles, including the final answer cycle, and the
-    extra step can make it seven; code mode uses `CODE_MODE_MAX_LLM_CYCLES`
+    The default cap is 30 cycles, including the final answer cycle, and the
+    extra step can make it 31; code mode uses `CODE_MODE_MAX_LLM_CYCLES`
     instead.
 
 
