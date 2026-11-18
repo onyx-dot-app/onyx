@@ -120,6 +120,8 @@ export function useAdminAgents(
 
 // ── Pinned agents ─────────────────────────────────────────────────────────────
 
+const NO_PINNED_AGENTS: MinimalAgent[] = [];
+
 /**
  * The agents pinned to the sidebar, and the writes that reorder or toggle them.
  *
@@ -141,7 +143,7 @@ export function usePinnedAgents() {
   );
 
   const serverPinnedAgents = useMemo(() => {
-    if (agents.length === 0) return [];
+    if (agents.length === 0) return NO_PINNED_AGENTS;
     const pinnedIds = user?.preferences.pinned_assistants ?? [];
     return pinnedIds
       .map((id) => agents.find((agent) => agent.id === id))
