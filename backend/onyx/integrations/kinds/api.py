@@ -1,5 +1,6 @@
 import re
 from collections.abc import Sequence
+from urllib.parse import unquote
 
 from mitmproxy import http
 from sqlalchemy.orm import Session
@@ -84,16 +85,17 @@ _PATH_PARAMETER = re.compile(r"\{[^{}/]+\}")
 
 
 def _literal_length(template: str) -> int:
-    return len(_PATH_PARAMETER.sub("", template.rstrip("/")))
+    return len(unquote(_PATH_PARAMETER.sub("", template.rstrip("/"))))
 
 
 def _segment_matches(template: str, segment: str) -> bool:
     """Each parameter takes one or more characters. Each literal goes at its
     first place after the previous one, so the time is linear, with no
-    backtracking."""
-    literals = _PATH_PARAMETER.split(template)
+    backtracking. The literals are decoded as the request path is, after
+    the split, so an encoded brace stays literal text."""
+    literals = [unquote(literal) for literal in _PATH_PARAMETER.split(template)]
     if len(literals) == 1:
-        return template == segment
+        return literals[0] == segment
     first, *middle, last = literals
     if not segment.startswith(first) or not segment.endswith(last):
         return False
