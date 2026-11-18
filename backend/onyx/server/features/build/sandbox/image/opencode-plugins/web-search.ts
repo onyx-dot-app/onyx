@@ -23,8 +23,14 @@ const SDK_TOOL_PATHS = [
 
 // Caps on what is sent back. Every tool-call update repeats the whole object,
 // and the final one is saved, so keep it small.
+// Keep the per-field caps in step with ONYX_SEARCH_* in
+// backend/onyx/server/features/build/sandbox/event_schema.py, which drops
+// metadata past them.
 const MAX_RESULTS_PER_QUERY = 10;
 const MAX_RESULTS = 20;
+const MAX_QUERY_CHARS = 500;
+const MAX_TITLE_CHARS = 300;
+const MAX_URL_CHARS = 2048;
 const MAX_SNIPPET_CHARS = 300;
 
 interface SearchResult {
@@ -52,9 +58,14 @@ function asResults(body: unknown): SearchResult[] {
   for (const item of results) {
     if (typeof item !== "object" || item === null) continue;
     const { title, url, snippet } = item as Record<string, unknown>;
+    // A cut URL would be a broken link, so a long one is left out.
     if (typeof url !== "string" || url.length === 0) continue;
+    if (url.length > MAX_URL_CHARS) continue;
     out.push({
-      title: typeof title === "string" && title ? title : url,
+      title: (typeof title === "string" && title ? title : url).slice(
+        0,
+        MAX_TITLE_CHARS
+      ),
       url,
       snippet:
         typeof snippet === "string" ? snippet.slice(0, MAX_SNIPPET_CHARS) : "",
@@ -122,7 +133,14 @@ export const WebSearch: Plugin = async () => {
           const results = asResults(await response.json());
           return {
             output: formatForModel(results),
-            metadata: { onyxSearch: { queries: args.queries, results } },
+            metadata: {
+              onyxSearch: {
+                queries: args.queries.map((query) =>
+                  query.slice(0, MAX_QUERY_CHARS)
+                ),
+                results,
+              },
+            },
           };
         },
       }),
