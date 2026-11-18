@@ -91,40 +91,48 @@ too_deep() {
   return 1
 }
 
-# Waits until the merge queue entry of PR $1 passes its checks. GitHub merges
-# the lower PRs of a stack even when an entry above them fails, so a lower PR
-# that relies on the stack tip's verdict must not pass before the tip does.
-# 80 polls of 20 seconds stay under the queue's 30-minute check timeout.
-wait_for_entry() {
-  local pr="$1" state attempt
+# Waits until the merge queue entries of the PRs in $1 (space separated) pass
+# their checks. GitHub merges the lower PRs of a stack even when an entry above
+# them fails, and the stack tip's entry can pass while a PR below it fails. So a
+# lower PR that relies on the tip's verdict waits for every PR up to the tip.
+# The waits clear from the top down, one poll for each level. 80 polls of 20
+# seconds stay under the queue's 30-minute check timeout.
+wait_for_entries() {
+  local prs="$1" entries state pending pr attempt
   for attempt in $(seq 1 80); do
     # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
-    state="$(gh api graphql \
+    entries="$(gh api graphql \
       -f query='query($owner: String!, $name: String!, $branch: String!) {
         repository(owner: $owner, name: $name) {
           mergeQueue(branch: $branch) { entries(first: 100) { nodes { state pullRequest { number } } } }
         }
       }' \
       -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f branch="${TARGET}" \
-      --jq ".data.repository.mergeQueue.entries.nodes[] | select(.pullRequest.number == ${pr}) | .state")"
-    case "${state}" in
-      MERGEABLE | LOCKED)
-        echo "PR #${pr} passed its merge queue checks."
-        return 0
-        ;;
-      UNMERGEABLE)
-        echo "::error::PR #${pr} failed its merge queue checks, so PR #${PR_NUMBER} does not merge without it."
-        return 1
-        ;;
-      "")
-        echo "::error::PR #${pr} left the merge queue, so PR #${PR_NUMBER} does not merge without it."
-        return 1
-        ;;
-    esac
-    echo "Waiting for PR #${pr} in the merge queue (${state}, ${attempt}/80)"
+      --jq '.data.repository.mergeQueue.entries.nodes[] | "\(.pullRequest.number) \(.state)"')"
+    pending=""
+    for pr in ${prs}; do
+      state="$(awk -v pr="${pr}" '$1 == pr { print $2 }' <<<"${entries}")"
+      case "${state}" in
+        MERGEABLE | LOCKED) ;;
+        UNMERGEABLE)
+          echo "::error::PR #${pr} failed its merge queue checks, so PR #${PR_NUMBER} does not merge without it."
+          return 1
+          ;;
+        "")
+          echo "::error::PR #${pr} left the merge queue, so PR #${PR_NUMBER} does not merge without it."
+          return 1
+          ;;
+        *) pending+=" #${pr}" ;;
+      esac
+    done
+    if [[ -z "${pending}" ]]; then
+      echo "Every PR up to the stack tip passed its merge queue checks."
+      return 0
+    fi
+    echo "Waiting in the merge queue for${pending} (${attempt}/80)"
     sleep 20
   done
-  echo "::error::PR #${pr} did not pass its merge queue checks in time."
+  echo "::error::These PRs did not pass their merge queue checks in time:${pending}."
   return 1
 }
 
@@ -289,7 +297,7 @@ while IFS=$'\t' read -r number head_sha chain; do
     not_queued+=" #${number}"
     continue
   fi
-  wait_for_entry "${number}" || exit 1
+  wait_for_entries "${chain}" || exit 1
   echo "${CONTEXT} for PR #${PR_NUMBER} accepted: descendant PR #${number} tested ${head_sha}, which contains ${HEAD_SHA}, and passed in the merge queue with it."
   exit 0
 done < <(descendants)
