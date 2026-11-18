@@ -938,7 +938,8 @@ def oauth_client_configured(
 
 def header_template_missing(integration: Integration) -> bool:
     """A per-user API key MCP server whose template the migration could not
-    read: users have no fields to fill."""
+    read: new users have no fields to fill. Users with an old connection keep
+    its stored headers, so only the admin list treats it as not set up."""
     return (
         integration.kind is IntegrationKind.MCP
         and integration.auth_mode is IntegrationAuthMode.INDIVIDUAL
@@ -987,11 +988,8 @@ def integration_statuses(
     )
     statuses: dict[int, IntegrationStatus] = {}
     for integration in integrations:
-        if header_template_missing(integration) or (
-            integration.auth_mode is not IntegrationAuthMode.NONE
-            and not oauth_client_configured(
-                integration, oauth_clients.get(integration.id)
-            )
+        if integration.auth_mode is not IntegrationAuthMode.NONE and (
+            not oauth_client_configured(integration, oauth_clients.get(integration.id))
         ):
             statuses[integration.id] = IntegrationStatus(
                 state=ConnectionState.NOT_SET_UP,

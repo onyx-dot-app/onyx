@@ -1045,7 +1045,23 @@ def _organization_statuses(
 ) -> dict[int, IntegrationStatus]:
     """The status of each organization connection, with a reason that tells
     the admin what to do."""
-    statuses = integration_statuses(integrations, None, db_session)
+    # The old organization row of an integration with no template may not
+    # read, so its status is not resolved.
+    statuses = integration_statuses(
+        [
+            integration
+            for integration in integrations
+            if not header_template_missing(integration)
+        ],
+        None,
+        db_session,
+    )
+    for integration in integrations:
+        if header_template_missing(integration):
+            statuses[integration.id] = IntegrationStatus(
+                state=ConnectionState.NOT_SET_UP,
+                reason=None,
+            )
     not_set_up = [
         integration
         for integration in integrations
