@@ -238,7 +238,9 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
 12. `redact-span-errors` **Redact a span error first.**
     `llm/multi_llm.py:LitellmLLM.invoke` and `stream` pass the error through
     `redact_error` before `span.set_error`, so no provider credential reaches a
-    trace backend. Do the same in a new span.
+    trace backend. Do the same in a new span. On exceptional exit,
+    `SpanImpl.__exit__` records the exception type before ending the span if
+    the caller has not set an error. It does not record the exception text.
 
 ---
 
