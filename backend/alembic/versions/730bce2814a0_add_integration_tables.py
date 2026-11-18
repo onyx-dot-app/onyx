@@ -10,7 +10,7 @@ spec and of a built-in app catalog, which only app code can read. It moves no
 secret in clear: each credential is copied as its encrypted bytes.
 
 Revision ID: 730bce2814a0
-Revises: ff11c4042c42
+Revises: 2bb0e564ae2d
 Create Date: 2026-11-13 14:42:45.411165
 
 """
@@ -37,7 +37,7 @@ logger = logging.getLogger("alembic.runtime.migration")
 
 # revision identifiers, used by Alembic.
 revision = "730bce2814a0"
-down_revision = "ff11c4042c42"
+down_revision = "2bb0e564ae2d"
 branch_labels = None
 depends_on = None
 
