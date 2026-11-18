@@ -5,25 +5,95 @@ import json
 import re
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Literal, NotRequired, TypedDict, cast, get_args
+
+Reviewer = Literal["greptile", "cubic", "human"]
+MatchStatus = Literal["fixed", "declined", "ignored", "unfixed", "unknown"]
+ControlStatus = Literal["changed", "declined", "unchanged", "unknown"]
+GitHubRecord = dict[str, object]
+
+
+class CommitEntry(TypedDict):
+    sha: str
+    message: str
+
+
+class Candidate(CommitEntry):
+    pr: int
+    references: list[int]
+
+
+class ReviewEvidence(TypedDict):
+    pr: GitHubRecord
+    commits: list[GitHubRecord]
+    reviews: list[GitHubRecord]
+    inline: list[GitHubRecord]
+    discussion: list[GitHubRecord]
+
+
+class Match(TypedDict):
+    comment: int
+    status: MatchStatus
+
+
+class OtherMatch(Match):
+    reviewer: str
+
+
+class Case(TypedDict):
+    introduced: int
+    fixed: int
+    answer: str
+    reviewed: list[Reviewer]
+    matches: dict[Reviewer, Match]
+    other_match: NotRequired[OtherMatch]
+
+
+class ControlFinding(TypedDict):
+    comment: int
+    status: ControlStatus
+
+
+class Control(TypedDict):
+    pr: int
+    findings: dict[Reviewer, list[ControlFinding]]
+
+
+class Labels(TypedDict):
+    cases: list[Case]
+    excluded: NotRequired[dict[str, str]]
+    controls: list[Control]
+
+
+class ReviewerResult(TypedDict):
+    cases: int
+    reviewed_cases: int
+    found: int
+    lost: int
+    unknown_match_outcome: int
+    control_prs: int
+    control_comments: int
+    control_declined_or_unchanged: int
+    control_unknown: int
 
 
 def run(*args: str) -> str:
     return subprocess.check_output(args, text=True)
 
 
-def github(repo: str, endpoint: str) -> Any:
+def github(repo: str, endpoint: str) -> GitHubRecord:
     return json.loads(run("gh", "api", f"repos/{repo}/{endpoint}"))
 
 
-def pages(repo: str, endpoint: str) -> list[dict[str, Any]]:
+def pages(repo: str, endpoint: str) -> list[GitHubRecord]:
     result = run(
         "gh", "api", "--paginate", "--slurp", f"repos/{repo}/{endpoint}?per_page=100"
     )
-    return [row for page in json.loads(result) for row in page]
+    page_rows: list[list[GitHubRecord]] = json.loads(result)
+    return [row for page in page_rows for row in page]
 
 
-def discover(ref: str, since: str, until: str) -> dict[int, dict[str, Any]]:
+def discover(ref: str, since: str, until: str) -> dict[int, CommitEntry]:
     log = run(
         "git",
         "log",
@@ -33,7 +103,7 @@ def discover(ref: str, since: str, until: str) -> dict[int, dict[str, Any]]:
         f"--until={until}",
         "--format=%H%x09%B%x00",
     )
-    commits = {}
+    commits: dict[int, CommitEntry] = {}
     for row in log.split("\0"):
         if not row.strip():
             continue
@@ -45,8 +115,8 @@ def discover(ref: str, since: str, until: str) -> dict[int, dict[str, Any]]:
     return commits
 
 
-def candidates(commits: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
-    result = []
+def candidates(commits: dict[int, CommitEntry]) -> list[Candidate]:
+    result: list[Candidate] = []
     for number, entry in commits.items():
         message = entry["message"]
         references = sorted(
@@ -65,11 +135,35 @@ def candidates(commits: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
-def score(labels: dict[str, Any]) -> dict[str, Any]:
+def load_labels(path: Path) -> Labels:
+    labels = cast(Labels, json.loads(path.read_text()))
+    for case in labels["cases"]:
+        matches = list(case["matches"].values())
+        if "other_match" in case:
+            matches.append(case["other_match"])
+        for match in matches:
+            if match["status"] not in get_args(MatchStatus):
+                raise ValueError(
+                    f"{path}: case #{case['introduced']}, comment {match['comment']}: "
+                    f"unsupported match status {match['status']!r}"
+                )
+    for control in labels["controls"]:
+        for findings in control["findings"].values():
+            for finding in findings:
+                if finding["status"] not in get_args(ControlStatus):
+                    raise ValueError(
+                        f"{path}: control #{control['pr']}, comment {finding['comment']}: "
+                        f"unsupported control status {finding['status']!r}"
+                    )
+    return labels
+
+
+def score(labels: Labels) -> dict[Reviewer, ReviewerResult]:
     cases = labels["cases"]
     controls = labels["controls"]
-    result = {}
-    for reviewer in ("greptile", "cubic", "human"):
+    result: dict[Reviewer, ReviewerResult] = {}
+    reviewers: tuple[Reviewer, ...] = ("greptile", "cubic", "human")
+    for reviewer in reviewers:
         covered = sum(reviewer in case["reviewed"] for case in cases)
         hits = [
             case["matches"][reviewer] for case in cases if reviewer in case["matches"]
@@ -112,6 +206,7 @@ def main() -> None:
     collect.add_argument("prs", nargs="+", type=int)
     collect.add_argument("--repo", default="onyx-dot-app/onyx")
     args = parser.parse_args()
+    output: list[Candidate] | dict[int, ReviewEvidence] | dict[Reviewer, ReviewerResult]
     if args.command == "discover":
         output = candidates(discover(args.ref, args.since, args.until))
     elif args.command == "collect":
@@ -126,7 +221,7 @@ def main() -> None:
             for pr in args.prs
         }
     else:
-        output = score(json.loads(args.labels.read_text()))
+        output = score(load_labels(args.labels))
     print(json.dumps(output, indent=2))
 
 
