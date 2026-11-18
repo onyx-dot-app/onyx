@@ -11,7 +11,7 @@ import {
   makeIntegration,
   mockFetch,
   requestBody,
-} from "@/sections/integrations/__tests__/integrationFixtures";
+} from "@tests/setup/integrationTestUtils";
 
 const copy = messages.admin.plugins;
 const policyCopy = messages.skills.installationPolicy;

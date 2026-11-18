@@ -12,7 +12,7 @@ import {
   makeDetail,
   mockFetch,
   requestBody,
-} from "@/sections/integrations/__tests__/integrationFixtures";
+} from "@tests/setup/integrationTestUtils";
 
 const copy = messages.admin.integrations;
 const detailCopy = copy.detail;
