@@ -199,6 +199,16 @@ shared = ["cross_connector_utils", "google_utils", "microsoft_utils"]
 hubs = ["capability_checks", "edit_plan"]
 
 [[contract.exception]]
+importer = "onyx/connectors/jira_service_management/connector.py"
+imports = "onyx.connectors.jira.connector"
+reason = "A Jira Service Management request is a Jira issue: its connector subclasses JiraConnector and adds the project type check and the portal fields."
+
+[[contract.exception]]
+importer = "onyx/connectors/jira_service_management/config.py"
+imports = "onyx.connectors.jira.config"
+reason = "The Jira Service Management config reuses the Jira credential binding, because both use the same site and token."
+
+[[contract.exception]]
 importer = "onyx/connectors/wikipedia/connector.py"
 imports = "onyx.connectors.mediawiki.wiki"
 reason = "Wikipedia is a MediaWiki site: its connector subclasses MediaWikiConnector and adds only the hostname."

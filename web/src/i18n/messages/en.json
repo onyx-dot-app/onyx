@@ -636,6 +636,9 @@
         "youtrack": {
           "description": "Issue tracker and project management"
         },
+        "jiraServiceManagement": {
+          "description": "Service desk requests & tickets"
+        },
         "canvas": {
           "description": "Courses, pages, & announcements"
         },
@@ -2984,6 +2987,15 @@
             "lang": {
               "label": "Language",
               "description": "Language used for content title/body and metadata labels (ISO 639-1, e.g. en, fr)."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Configure Jira Service Management connector",
+          "fields": {
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of the Jira Service Management project to index, for example HELP. Only service projects are accepted."
             }
           }
         },

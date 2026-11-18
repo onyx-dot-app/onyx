@@ -636,6 +636,9 @@
         "youtrack": {
           "description": "متتبع المشكلات وإدارة المشاريع"
         },
+        "jiraServiceManagement": {
+          "description": "طلبات وتذاكر مكتب الخدمة"
+        },
         "canvas": {
           "description": "الدورات والصفحات والإعلانات"
         },
@@ -2984,6 +2987,15 @@
             "lang": {
               "label": "اللغة",
               "description": "اللغة المستخدمة لعنوان المحتوى ونصه وتسميات البيانات الوصفية (ISO 639-1، مثل en وfr)."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "إعداد موصل Jira Service Management",
+          "fields": {
+            "project_key": {
+              "label": "مفتاح المشروع",
+              "description": "مفتاح مشروع Jira Service Management المراد فهرسته، مثل HELP. تُقبل مشاريع الخدمة فقط."
             }
           }
         },

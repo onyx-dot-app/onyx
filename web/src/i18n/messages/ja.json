@@ -636,6 +636,9 @@
         "youtrack": {
           "description": "課題管理とプロジェクト管理"
         },
+        "jiraServiceManagement": {
+          "description": "サービスデスクのリクエストとチケット"
+        },
         "canvas": {
           "description": "コース、ページ、お知らせ"
         },
@@ -2984,6 +2987,15 @@
             "lang": {
               "label": "言語",
               "description": "コンテンツのタイトル/本文とメタデータラベルに使用する言語(ISO 639-1。例: en、fr)。"
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management コネクターを設定",
+          "fields": {
+            "project_key": {
+              "label": "プロジェクトキー",
+              "description": "インデックス化する Jira Service Management プロジェクトのキー（例: HELP）。サービスプロジェクトのみ指定できます。"
             }
           }
         },

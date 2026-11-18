@@ -395,7 +395,9 @@ downloaded file with
   source's own package. A config with a `CredentialBinding` also needs
   `backend/scripts/generate_credential_bound_fields.py` run again. For
   permission sync, implement the permission interfaces (Architecture,
-  Permission fetching). Add daily tests and a docs page
+  Permission fetching). A connector that subclasses another (`jira_service_management`
+  extends `jira`) needs a `[[contract.exception]]` in `backend/lint/import_boundaries.toml`.
+  Add daily tests and a docs page
   (`documentation/AGENTS.md`).
 - `source-gateway` **A source gateway.** Copy
   `connectors/youtrack/source_operations.py:YouTrackSourceOperations`; list the gateways with
