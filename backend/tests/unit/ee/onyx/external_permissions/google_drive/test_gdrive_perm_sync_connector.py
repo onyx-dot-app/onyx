@@ -2,6 +2,7 @@
 connector takes the indexing image policy. Doc and group sync spend from the
 credential's shared API budget, and report Google's rate limits to it."""
 
+from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
@@ -47,12 +48,16 @@ def test_perm_sync_connector_takes_the_image_policy(
 
 def _limiter_calls(
     monkeypatch: pytest.MonkeyPatch, module: Any
-) -> tuple[MagicMock, list[tuple[DocumentSource, int]]]:
+) -> tuple[MagicMock, list[tuple[DocumentSource, int, Callable[[], bool] | None]]]:
     limiter = MagicMock()
-    built: list[tuple[DocumentSource, int]] = []
+    built: list[tuple[DocumentSource, int, Callable[[], bool] | None]] = []
 
-    def build(source: DocumentSource, credential_id: int) -> MagicMock:
-        built.append((source, credential_id))
+    def build(
+        source: DocumentSource,
+        credential_id: int,
+        should_stop: Callable[[], bool] | None = None,
+    ) -> MagicMock:
+        built.append((source, credential_id, should_stop))
         return limiter
 
     monkeypatch.setattr(module, "build_source_api_limiter", build)
@@ -89,9 +94,10 @@ def test_doc_sync_attaches_the_shared_limiter_before_it_loads_credentials(
         ),
     )
 
-    doc_sync.build_perm_sync_connector(cc_pair)
+    should_stop = MagicMock(return_value=False)
+    doc_sync.build_perm_sync_connector(cc_pair, should_stop)
 
-    assert built == [(DocumentSource.GOOGLE_DRIVE, 7)]
+    assert built == [(DocumentSource.GOOGLE_DRIVE, 7, should_stop)]
     assert order == ["limiter", "credentials"]
 
 
@@ -112,7 +118,18 @@ def test_group_sync_attaches_the_shared_limiter_before_it_loads_credentials(
     ):
         list(group_sync.gdrive_group_sync("tenant", cc_pair))
 
-    assert built == [(DocumentSource.GOOGLE_DRIVE, 7)]
+    assert [(source, credential_id) for source, credential_id, _ in built] == [
+        (DocumentSource.GOOGLE_DRIVE, 7)
+    ]
+    # A wait for the budget ends at the sync's deadline.
+    should_stop = built[0][2]
+    assert should_stop is not None
+    assert should_stop() is False
+    with (
+        patch.object(group_sync.time, "monotonic", return_value=float("inf")),
+        pytest.raises(TimeoutError),
+    ):
+        should_stop()
     calls = [call[0] for call in connector.method_calls]
     assert calls.index("set_source_api_limiter") < calls.index("load_credentials")
     connector.set_source_api_limiter.assert_called_once_with(limiter)

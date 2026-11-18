@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
-from onyx.background.indexing.source_api_limiter import build_source_api_limiter
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
@@ -32,6 +31,7 @@ from onyx.connectors.interfaces import (
 )
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+from onyx.connectors.source_api_limiter import build_source_api_limiter
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import get_cc_pairs_using_credential
 from onyx.db.credentials import (

@@ -15,13 +15,13 @@ import pytest
 from prometheus_client import REGISTRY
 from redis.exceptions import ConnectionError as RedisConnectionError
 
-from onyx.background.indexing import source_api_limiter
-from onyx.background.indexing.source_api_limiter import (
+from onyx.configs.constants import DocumentSource
+from onyx.connectors import source_api_limiter
+from onyx.connectors.models import ConnectorStopSignal
+from onyx.connectors.source_api_limiter import (
     RedisSourceApiLimiter,
     SourceApiBudget,
 )
-from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import ConnectorStopSignal
 from onyx.redis import redis_rate_window
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_rate_window import RateWindow, RedisRateWindows, RefusalResult
@@ -80,7 +80,7 @@ def test_units_come_back_when_their_request_leaves_the_window(
     wait = windows.try_acquire([window], cost=60)
     assert 0 < wait <= 0.3
 
-    time.sleep(wait + 0.05)
+    time.sleep(wait + 0.05)  # test-flakes: allow the window reads the Redis clock
 
     assert windows.try_acquire([window], cost=60) == 0
     assert 0 < windows.try_acquire([window], cost=60)
@@ -107,6 +107,46 @@ def test_one_request_larger_than_the_limit_fits_an_empty_window(
     window = RateWindow(key="w", limit=50, period_seconds=10)
     assert windows.try_acquire([window], cost=200) == 0
     assert windows.try_acquire([window], cost=1) > 0
+
+
+def test_a_report_keeps_the_total_of_a_window_longer_than_the_meta_ttl(
+    tenant_id: str, windows: RedisRateWindows
+) -> None:
+    window = RateWindow(key="w", limit=100, period_seconds=3600)
+    assert windows.try_acquire([window], cost=100) == 0
+
+    windows.report_refusals(window)
+
+    # The running total must live as long as the log of the window.
+    client = get_redis_client(tenant_id=tenant_id)
+    assert client.pttl("w:meta") > 600_000
+    assert windows.try_acquire([window], cost=1) > 0
+
+
+def test_a_short_window_cannot_pass_the_budget_of_the_period(tenant_id: str) -> None:
+    """A request larger than the short window's share fits an empty window.
+    The window of the whole period still holds the configured budget."""
+    limiter = RedisSourceApiLimiter(
+        tenant_id,
+        "google_drive:1",
+        {
+            _API: SourceApiBudget(
+                per_credential=300, period_seconds=60, window_seconds=10
+            )
+        },
+        source=DocumentSource.GOOGLE_DRIVE,
+    )
+    short_window = limiter.credential_window(_API)
+    assert short_window is not None and short_window.limit == 50
+
+    taken = 0
+    for _ in range(6):
+        # As if the short window emptied between the requests.
+        limiter._windows.delete(short_window)
+        if limiter.try_acquire(_API, 100) == 0:
+            taken += 100
+
+    assert taken == 300
 
 
 def _send(windows: RedisRateWindows, window: RateWindow, requests: int) -> None:
@@ -201,7 +241,7 @@ def test_a_storm_cuts_again_in_the_hold_after_the_recut_time(
     _send(windows, window, 100)
     assert not windows.report_refusals(window, count=50).applied
 
-    time.sleep(0.25)
+    time.sleep(0.25)  # test-flakes: allow the window reads the Redis clock
     _send(windows, window, 100)
     result = windows.report_refusals(window, count=50)
     assert (result.share, result.applied, result.hard) == (0.25, True, True)
@@ -233,12 +273,12 @@ def test_the_share_grows_back_and_slowly_near_the_last_cut(
     assert windows.report_refusals(window, count=10).share == 0.5
 
     def share_after_one_interval() -> float:
-        time.sleep(0.12)
+        time.sleep(0.12)  # test-flakes: allow the window reads the Redis clock
         return windows.try_acquire_with_shares([window], cost=1).shares[0]
 
     # No growth in the hold.
     assert windows.try_acquire_with_shares([window], cost=1).shares[0] == 0.5
-    time.sleep(0.3)
+    time.sleep(0.3)  # test-flakes: allow the window reads the Redis clock
     grown = [share_after_one_interval() for _ in range(7)]
     # Fast steps up to 75 % of the share before the cut, then slow steps.
     assert grown == [0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0]
@@ -256,7 +296,7 @@ def test_a_cut_resets_the_refused_share(windows: RedisRateWindows) -> None:
 def test_two_processes_share_one_budget(tenant_id: str) -> None:
     """Another process spends 800 of 1000 units. This process then has 200."""
     code = (
-        "from onyx.background.indexing.source_api_limiter import "
+        "from onyx.connectors.source_api_limiter import "
         "RedisSourceApiLimiter, SourceApiBudget\n"
         "from onyx.configs.constants import DocumentSource\n"
         f"limiter = RedisSourceApiLimiter({tenant_id!r}, 'google_drive:1', "
@@ -432,6 +472,8 @@ def test_the_factory_builds_the_drive_limiter_and_wires_the_stop_signal(
                 for window in (
                     limiter.credential_window(api),
                     limiter.user_window(api, user),
+                    limiter.credential_guard(api),
+                    limiter.user_guard(api, user),
                 ):
                     if window is not None:
                         limiter._windows.delete(window)
@@ -506,7 +548,7 @@ def test_the_limiter_metrics_show_a_cut_and_the_recovery(
     assert sample("onyx_source_api_limiter_cut_users") == 1
 
     # After the hold, each request reads the grown share.
-    time.sleep(0.45)
+    time.sleep(0.45)  # test-flakes: allow the window reads the Redis clock
     assert limiter.try_acquire(_API, 1, "a@x.com") == 0
     assert (budget("project"), budget("user")) == (750, 75)
 

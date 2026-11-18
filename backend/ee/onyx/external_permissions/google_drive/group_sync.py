@@ -20,7 +20,6 @@ from ee.onyx.external_permissions.utils import (
     credential_json,
 )
 from onyx.access.utils import build_domain_group_id
-from onyx.background.indexing.source_api_limiter import build_source_api_limiter
 from onyx.configs.app_configs import PERMISSION_SYNC_TIMEOUT
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import build_connector_kwargs
@@ -29,6 +28,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveHttpError,
     GoogleDriveSourceOperations,
 )
+from onyx.connectors.source_api_limiter import build_source_api_limiter
 from onyx.db.enums import SyncEntityKind
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -47,6 +47,13 @@ as groups.
 class FolderInfo(BaseModel):
     id: str
     permissions: list[GoogleDrivePermission]
+
+
+def _deadline_passed(deadline: float) -> bool:
+    """A stop check for the API limiter: raises the deadline's TimeoutError,
+    so a wait for the budget ends as the other phases do."""
+    _check_sync_deadline(deadline)
+    return False
 
 
 def _check_sync_deadline(deadline: float) -> None:
@@ -386,19 +393,22 @@ def gdrive_group_sync(
             cc_pair.connector.source, cc_pair.connector.connector_specific_config
         )
     )
+    # One budget for the whole sync: every long enumeration phase below checks
+    # this deadline, since none of them yield often (or at all) on big domains.
+    sync_deadline = time.monotonic() + PERMISSION_SYNC_TIMEOUT
+
     # Group sync spends the indexing budget of the credential, and reports
-    # Google's rate limits to it.
+    # Google's rate limits to it. A wait for the budget also checks the
+    # deadline.
     limiter = build_source_api_limiter(
-        DocumentSource.GOOGLE_DRIVE, cc_pair.credential_id
+        DocumentSource.GOOGLE_DRIVE,
+        cc_pair.credential_id,
+        lambda: _deadline_passed(sync_deadline),
     )
     if limiter is not None:
         google_drive_connector.set_source_api_limiter(limiter)
     google_drive_connector.load_credentials(credential_json(cc_pair))
     ops = google_drive_connector.ops
-
-    # One budget for the whole sync: every long enumeration phase below checks
-    # this deadline, since none of them yield often (or at all) on big domains.
-    sync_deadline = time.monotonic() + PERMISSION_SYNC_TIMEOUT
 
     # Get all drive members
     drive_id_to_members_map = _get_drive_members(google_drive_connector, sync_deadline)
