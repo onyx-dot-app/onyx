@@ -272,6 +272,7 @@ covers new files that match it.
 | `web/src/lib/navigation/`, `web/lib/opal/src/navigation/`, `web/tools/oxlint/navigation/` | chat-frontend |
 | `web/src/lib/timeline/` | chat-frontend, craft-frontend |
 | `web/src/lib/app/hooks.ts` | chat-frontend, whitelabelling-and-theme |
+| `web/src/lib/hooks.ts` | chat-frontend |
 | `web/src/providers/IncognitoProvider.tsx` | chat-frontend, chat-persistence |
 | `web/src/sections/model-selector/` | chat-frontend, llm-providers |
 | `web/src/lib/search/streamingUtils.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
