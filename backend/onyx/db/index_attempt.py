@@ -1900,3 +1900,7 @@ def delete_index_attempts_by_ids__no_commit(
     db_session.query(IndexAttempt).filter(
         IndexAttempt.id.in_(index_attempt_ids)
     ).delete(synchronize_session=False)
+
+
+def add_index_attempt__no_commit(db_session: Session, row: IndexAttempt) -> None:
+    db_session.add(row)

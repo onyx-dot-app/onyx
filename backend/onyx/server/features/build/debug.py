@@ -19,10 +19,10 @@ from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, SandboxStatus
 from onyx.db.models import User
+from onyx.db.sandbox import get_sandbox_by_user_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.configs import ENABLE_OPENCODE_DEBUGGING
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.utils.logger import setup_logger
 

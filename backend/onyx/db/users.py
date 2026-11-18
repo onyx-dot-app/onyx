@@ -44,13 +44,13 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.utils import is_check_violation, is_fk_violation
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     get_sandbox_purge_targets,
     get_user_sandbox_blob_paths,
 )
+from onyx.db.utils import is_check_violation, is_fk_violation
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes_in_background,
 )

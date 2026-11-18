@@ -31,18 +31,15 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.interface import CacheLock
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox, User
-from onyx.db.users import fetch_user_by_id
-from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
-from onyx.server.features.build.db.build_session import (
+from onyx.db.build_session import (
     clear_nextjs_ports_for_user,
     get_orphan_build_session_ids,
     get_webapp_session_ids,
     mark_user_sessions_idle__no_commit,
 )
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.enums import SandboxStatus
+from onyx.db.models import Sandbox, User
+from onyx.db.sandbox import (
     begin_provisioning_attempt__no_commit,
     begin_recovery_attempt__no_commit,
     create_sandbox__no_commit,
@@ -60,6 +57,9 @@ from onyx.server.features.build.db.sandbox import (
     set_sandbox_skills_states__no_commit,
     sleep_running_sandbox__no_commit,
 )
+from onyx.db.users import fetch_user_by_id
+from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.preview_activity import latest_preview_activity
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.locks import sandbox_provision_lock

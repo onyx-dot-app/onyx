@@ -43,9 +43,9 @@ from onyx.db.plugin import (
     create_skill_plugin__no_commit,
     legacy_skill_version_content,
 )
+from onyx.db.sandbox import create_sandbox__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.session import llm_config
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.manage.llm.models import (

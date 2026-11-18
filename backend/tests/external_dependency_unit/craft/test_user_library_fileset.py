@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox, User
-from onyx.server.features.build.db.user_library import (
+from onyx.db.user_library import (
     create_directory_record,
     fetch_user_file_for_user,
     get_or_create_craft_connector,

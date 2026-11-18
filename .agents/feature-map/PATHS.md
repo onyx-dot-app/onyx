@@ -237,7 +237,7 @@ covers new files that match it.
 | `backend/onyx/server/features/build/approvals/` | craft-external-apps |
 | `backend/onyx/server/features/build/external_apps/`, `backend/onyx/server/features/build/action_policies.py` | craft-external-apps, craft-admin |
 | `backend/onyx/server/features/build/connect_app.py`, `backend/onyx/server/features/build/sandbox/image/opencode-plugins/connect-app.ts` | craft-external-apps |
-| `backend/onyx/server/features/build/db/action_approval.py` | craft-external-apps |
+| `backend/onyx/db/action_approval.py` | craft-external-apps |
 | `backend/onyx/db/action_policy.py`, `web/src/sections/actions/PolicyEditor.tsx` | craft-external-apps |
 | `web/src/sections/approvals/`, `web/src/lib/approvals/` | chat-frontend, craft-frontend |
 | `backend/onyx/server/features/build/scheduled_tasks/`, `backend/onyx/db/scheduled_task.py`, `backend/onyx/background/celery/tasks/scheduled_tasks/`, `backend/onyx/background/celery/apps/scheduled_tasks.py` | craft-scheduled-tasks |
@@ -246,9 +246,10 @@ covers new files that match it.
 | `backend/onyx/server/features/build/sandbox/opencode/`, `backend/onyx/server/features/build/sandbox/event_schema.py`, `backend/onyx/server/features/build/sandbox/sse.py` | craft-streaming |
 | `backend/onyx/server/features/build/sandbox/serve_transport.py` | craft-streaming, craft-sandboxes |
 | `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` | craft-sandboxes, craft-sessions |
-| `backend/onyx/server/features/build/session/sandbox_lifecycle.py`, `backend/onyx/server/features/build/db/sandbox.py`, `backend/onyx/server/features/build/session/resource_cleanup.py`, `backend/onyx/background/celery/tasks/build/tasks.py` | craft-sandboxes |
+| `backend/onyx/server/features/build/session/sandbox_lifecycle.py`, `backend/onyx/db/sandbox.py`, `backend/onyx/server/features/build/session/resource_cleanup.py`, `backend/onyx/background/celery/tasks/build/tasks.py` | craft-sandboxes |
 | `backend/onyx/server/features/build/static_preview.py`, `backend/onyx/server/features/build/webapp_proxy.py`, `backend/onyx/server/features/build/sandbox/nextjs_dev.py`, `backend/onyx/server/features/build/templates/` | craft-webapp-proxy |
 | `backend/onyx/server/features/build/sandbox/image/opencode-plugins/webapp.ts`, `backend/onyx/server/features/build/sandbox/image/templates/outputs/web/` | craft-webapp-proxy |
+| `backend/onyx/db/build_session.py`, `backend/onyx/db/artifact.py`, `backend/onyx/db/receipt.py`, `backend/onyx/db/user_library.py` | craft-sessions |
 | `backend/onyx/server/features/build/session/output_cards.py` | craft-sessions, craft-scheduled-tasks |
 | `backend/onyx/sandbox_proxy/`, `deployment/helm/charts/onyx/templates/sandbox-proxy/` | craft-external-apps |
 | `backend/onyx/server/features/microvm/api.py`, `backend/onyx/microvm/registry.py` | craft-external-apps |

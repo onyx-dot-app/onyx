@@ -275,6 +275,10 @@ def sleep_running_sandbox__no_commit(
     return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
 
+def get_sandbox_owner_id(db_session: Session, sandbox_id: UUID) -> UUID | None:
+    return db_session.scalar(select(Sandbox.user_id).where(Sandbox.id == sandbox_id))
+
+
 def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     """Get sandbox by its ID."""
     stmt = select(Sandbox).where(Sandbox.id == sandbox_id)

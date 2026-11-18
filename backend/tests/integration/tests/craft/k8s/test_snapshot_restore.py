@@ -15,13 +15,13 @@ from kubernetes import client
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
+from onyx.db.sandbox import create_snapshot__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     SANDBOX_BACKEND,
     SANDBOX_NAMESPACE,
     SandboxBackend,
 )
-from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )

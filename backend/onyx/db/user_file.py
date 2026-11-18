@@ -613,3 +613,7 @@ def lock_next_sync_user_file_id(
     if exclude_ids:
         stmt = stmt.where(UserFile.id.notin_(exclude_ids))
     return db_session.execute(stmt).scalar_one_or_none()
+
+
+def add_user_file__no_commit(db_session: Session, row: UserFile) -> None:
+    db_session.add(row)

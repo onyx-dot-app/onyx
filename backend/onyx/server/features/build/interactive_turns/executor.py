@@ -10,16 +10,16 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
+from onyx.db.build_session import get_build_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Sandbox
+from onyx.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
 from onyx.db.users import fetch_user_by_id
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
-)
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.sandbox import (
-    get_sandbox_by_user_id,
-    update_sandbox_heartbeat,
 )
 from onyx.server.features.build.interactive_turns.models import (
     PromptOutcome,

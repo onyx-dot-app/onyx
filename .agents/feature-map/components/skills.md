@@ -245,7 +245,7 @@ file path and its bytes, plus the connectable-apps text. `Sandbox.skills_hash`
 records what was last pushed to the sandbox. `BuildSession.skills_hash`
 records what the live runtime of a session loaded. A session is stale when the
 two differ
-(`server/features/build/db/build_session.py:session_runtime_stale`). A push
+(`db/build_session.py:session_runtime_stale`). A push
 changes only the sandbox side. The runtime reads the skills directory once per
 instance, so only a reload (`SessionManager.reload_session_skills`) or a new
 session applies the change. The craft MCP set has its own `mcp_config_hash`
