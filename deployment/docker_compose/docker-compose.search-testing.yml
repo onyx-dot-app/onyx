@@ -160,7 +160,10 @@ services:
       - discovery.type=single-node
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g"
+      # -XX:-UseBASE64Intrinsics turns off the JVM's native Base64 decoder
+      # (Java4Shell, CVE-2026-114938). Keep it until the OpenSearch image ships
+      # a fixed JDK.
+      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g -XX:-UseBASE64Intrinsics"
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     ulimits:
