@@ -71,6 +71,7 @@ from onyx.server.features.integrations import admin_api, api
 from onyx.server.features.integrations.models import (
     ActionGrantsUpdate,
     ConnectionFieldsRequest,
+    CredentialField,
     CustomConfigInput,
     IntegrationActionsUpdate,
     IntegrationCreate,
@@ -211,6 +212,40 @@ def test_create_openapi_makes_integration_tool_plugin_and_actions(
     }
     assert set(actions) == {"get_forecast", "set_alert"}
     assert detail.action_count == 2
+
+
+def test_a_header_change_keeps_the_stored_credential_fields(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            credential_fields=[
+                CredentialField(key="api_key", label="Weather key", secret=False)
+            ]
+        ),
+        admin,
+        db_session,
+    )
+
+    updated = admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            header_template={
+                "X-Api-Key": "{api_key}",
+                "X-Region": "{region}",
+                "X-Team": "blue",
+            }
+        ),
+        admin,
+        db_session,
+    )
+
+    assert [
+        (field.key, field.label, field.secret) for field in updated.credential_fields
+    ] == [("api_key", "Weather key", False), ("region", "region", True)]
 
 
 def test_a_spec_with_no_server_url_does_not_break_the_admin_list(
