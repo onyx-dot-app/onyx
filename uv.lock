@@ -4483,6 +4483,7 @@ dev = [
     { name = "matplotlib" },
     { name = "onyx-devtools", extra = ["audit"] },
     { name = "openapi-generator-cli" },
+    { name = "power-pptx" },
     { name = "prek" },
     { name = "pytest" },
     { name = "pytest-alembic" },
@@ -4674,6 +4675,7 @@ dev = [
     { name = "matplotlib", specifier = "==3.10.8" },
     { name = "onyx-devtools", extras = ["audit"], specifier = "==0.13.16" },
     { name = "openapi-generator-cli", specifier = "==7.17.0" },
+    { name = "power-pptx", specifier = "==2.15.0" },
     { name = "prek", specifier = "==0.5.10" },
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-alembic", specifier = "==0.12.1" },
@@ -5264,6 +5266,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/77/a0/7607d4fd7c52b086671d8618e76cb5b9a642311fd6f352ebd7eb035319f2/posthog-3.7.4.tar.gz", hash = "sha256:19384bd09d330f9787a7e2446aba14c8057ece56144970ea2791072d4e40cd36", size = 50174, upload-time = "2024-11-27T22:25:54.61Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d3/f2/5ee24cd69e2120bf87356c02ace0438b4e4fb78229fddcbf6f1c6be377d5/posthog-3.7.4-py2.py3-none-any.whl", hash = "sha256:21c18c6bf43b2de303ea4cd6e95804cc0f24c20cb2a96a8fd09da2ed50b62faa", size = 54777, upload-time = "2024-11-27T22:25:53.358Z" },
+]
+
+[[package]]
+name = "power-pptx"
+version = "2.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "lxml" },
+    { name = "pillow" },
+    { name = "typing-extensions" },
+    { name = "xlsxwriter" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/65/8b/4fbe28f0ab8f2fd6440172f035e4bce16994d64c95acd62cdeb692660b5f/power_pptx-2.15.0.tar.gz", hash = "sha256:a59b2ab08ce3dfe55e2631cd594523cb01da4a64f078f6e1ca7cba9d7a774712", size = 10869255, upload-time = "2026-11-15T21:55:07.615Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/84/49/93e3ac429b82e4113f17fe00733d728ccf9a843bff3e2eb1394c329f4a6c/power_pptx-2.15.0-py3-none-any.whl", hash = "sha256:81ef8e5bdcad9c6f5a0a61211dc5093fcc2a51a942d5a8632fd910e3d4a75924", size = 1210203, upload-time = "2026-11-15T21:55:05.319Z" },
 ]
 
 [[package]]
