@@ -170,7 +170,7 @@ opensearch:
   resources:
     requests: {cpu: 2000m, memory: 12Gi}
     limits: {cpu: 4000m, memory: 16Gi}
-  opensearchJavaOpts: "-Xmx6g -Xms6g"
+  opensearchJavaOpts: "-Xmx6g -Xms6g -XX:-UseBASE64Intrinsics"
   persistence:
     size: 512Gi
   # Pin the index to the dedicated document-index node group created by the
