@@ -488,7 +488,7 @@ it.
     A key saved during the call stays connected. An OAuth2 connection is left
     to the refresh.
 13. `craft-sessions-bake-mcp-config` **Craft sessions bake MCP config.** A change
-    to a server's URL or access must call
+    to a server's URL, access or `available_in_craft` must call
     `server/features/mcp/api.py:_hot_reload_craft_sessions`. Take
     `backend/onyx/db/mcp.py:affected_user_ids_for_mcp_server` before an access
     change or a delete; users who lose access are not in the

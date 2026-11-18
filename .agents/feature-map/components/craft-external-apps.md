@@ -203,8 +203,9 @@ injects the credential of the matched integration through
 integration sends its access token as a bearer token. It sets
 `CURRENT_TENANT_ID_CONTEXTVAR` to the sandbox tenant around this, because a
 refresh reads the tenant from the context. It checks again that
-the integration is enabled, and refuses with `CredentialUnavailableError` and
-the reason of the connection problem. An internal MCP host is reachable only
+the integration is enabled and that the request still matches the endpoint in
+its kind row, because the gate matched against cached targets. Otherwise, or on
+a connection problem, it refuses with `CredentialUnavailableError`. An internal MCP host is reachable only
 when the server belongs to a plugin that the user can see
 (`IntegrationResolver.allows_destination`).
 
