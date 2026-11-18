@@ -40,6 +40,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           ACTION: ${{ github.event.action }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           OLD_BASE_REF: ${{ github.event.changes.base.ref.from }}
         run: bash .github/scripts/stack-ci-handoff.sh

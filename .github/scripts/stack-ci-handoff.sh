@@ -8,7 +8,10 @@
 # verdict of its own, this script starts its runs again, so they test it.
 set -euo pipefail
 
-: "${GH_TOKEN:?}" "${REPO:?}" "${ACTION:?}" "${BASE_REF:?}"
+: "${GH_TOKEN:?}" "${REPO:?}" "${ACTION:?}" "${PR_NUMBER:?}"
+
+# The event's base can be stale when a stack tool sets it after opening the PR.
+BASE_REF="$(gh pr view "${PR_NUMBER}" --repo "${REPO}" --json baseRefName --jq .baseRefName)"
 
 WORKFLOWS=(
   "pr-integration-tests.yml:ci/tested-base/integration"

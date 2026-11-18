@@ -20,14 +20,18 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         REPO: ${{ github.repository }}
-        HEAD_REF: ${{ github.head_ref }}
-        BASE_REF: ${{ github.base_ref }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
         SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      # Read the branches from the API: a re-run reuses the original event,
+      # whose base can be stale after a stack moves.
       run: |
         set -euo pipefail
         child=""
         stacked=false
         if [[ "$SAME_REPO" == "true" ]]; then
+          pr=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefName,baseRefName)
+          HEAD_REF=$(jq -r .headRefName <<< "$pr")
+          BASE_REF=$(jq -r .baseRefName <<< "$pr")
           same_repo='[.[] | select(.isCrossRepository == false) | .number] | first // empty'
           child=$(gh pr list --repo "$REPO" --base "$HEAD_REF" --state open \
             --json number,isCrossRepository --jq "$same_repo")
