@@ -256,6 +256,7 @@ export default function MemberPluginDetailPage({
       <SettingsLayouts.Header
         title={entry?.name ?? t("title")}
         description={entry?.description ?? undefined}
+        stackActionsOnMobile
         actions={[
           <Button
             key="back"
