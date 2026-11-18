@@ -16,7 +16,8 @@
 # .github/actions/stack-position). Its verdict then comes from an open
 # descendant whose passing run tested a head that contains this PR's head.
 # That run tested the PR only together with the PRs up to the descendant, so
-# all of them must be in the merge queue: a stack merges as one unit.
+# all of them must be in the merge queue. A PR in a GitHub stack also merges
+# only with every open PR of its stack (gh stack merge).
 #
 # Runs with a read-only token. Needs contents:read, pull-requests:read, and
 # statuses:read.
@@ -48,6 +49,52 @@ echo "PR #${PR_NUMBER} by ${AUTHOR}: head ${HEAD_SHA} -> ${TARGET}"
 if [[ "${IS_CROSS_REPO}" == "true" || "${AUTHOR}" == "app/dependabot" ]]; then
   echo "::warning::PR #${PR_NUMBER} runs with a read-only token and cannot record ${CONTEXT}. Skipping this check."
   exit 0
+fi
+
+# PR numbers in the merge queue of TARGET, space separated, in QUEUED.
+QUEUED=""
+QUEUE_LOADED=false
+load_queue() {
+  if [[ "${QUEUE_LOADED}" != "true" ]]; then
+    # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
+    QUEUED=" $(gh api graphql \
+      -f query='query($owner: String!, $name: String!, $branch: String!) {
+        repository(owner: $owner, name: $name) {
+          mergeQueue(branch: $branch) { entries(first: 100) { nodes { pullRequest { number } } } }
+        }
+      }' \
+      -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f branch="${TARGET}" \
+      --jq '.data.repository.mergeQueue.entries.nodes[].pullRequest.number' | tr '\n' ' ')"
+    QUEUE_LOADED=true
+    echo "merge queue for ${TARGET}:${QUEUED}"
+  fi
+}
+
+# A PR in a GitHub stack merges only with the whole stack (gh stack merge),
+# because the stack tip's run is the one that tests the PRs below it.
+# shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
+stack_json="$(gh api graphql \
+  -f query='query($owner: String!, $name: String!, $number: Int!) {
+    repository(owner: $owner, name: $name) {
+      pullRequest(number: $number) {
+        stack { number entries(first: 100) { nodes { pullRequest { number state } } } }
+      }
+    }
+  }' \
+  -f owner="${REPO%%/*}" -f name="${REPO#*/}" -F number="${PR_NUMBER}" \
+  --jq '.data.repository.pullRequest.stack')"
+if [[ -n "${stack_json}" && "${stack_json}" != "null" ]]; then
+  STACK_NUMBER="$(jq -r '.number' <<<"${stack_json}")"
+  load_queue
+  missing=""
+  for pr in $(jq -r '.entries.nodes[].pullRequest | select(.state == "OPEN") | .number' <<<"${stack_json}"); do
+    [[ "${QUEUED}" == *" ${pr} "* ]] || missing+=" #${pr}"
+  done
+  if [[ -n "${missing}" ]]; then
+    echo "::error::PR #${PR_NUMBER} is in stack #${STACK_NUMBER}, and a stack merges only as one unit. These open PRs of the stack are not in the merge queue:${missing}. Merge the whole stack with: gh stack merge ${STACK_NUMBER}. To land only part of it, take the other PRs out of the stack first."
+    exit 1
+  fi
+  echo "Every open PR of stack #${STACK_NUMBER} is in the merge queue."
 fi
 
 # Verdict record of CONTEXT on commit $1: "<tested base sha> <tested base ref>".
@@ -158,27 +205,9 @@ descendants() {
   done
 }
 
-# PR numbers in the merge queue of TARGET, space separated. A descendant's
-# verdict tested this PR together with every PR up to that descendant, so it
-# covers this PR only when all of them merge as one unit (gh stack merge).
-QUEUED=""
-QUEUE_LOADED=false
-load_queue() {
-  if [[ "${QUEUE_LOADED}" != "true" ]]; then
-    # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
-    QUEUED=" $(gh api graphql \
-      -f query='query($owner: String!, $name: String!, $branch: String!) {
-        repository(owner: $owner, name: $name) {
-          mergeQueue(branch: $branch) { entries(first: 100) { nodes { pullRequest { number } } } }
-        }
-      }' \
-      -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f branch="${TARGET}" \
-      --jq '.data.repository.mergeQueue.entries.nodes[].pullRequest.number' | tr '\n' ' ')"
-    QUEUE_LOADED=true
-    echo "merge queue for ${TARGET}:${QUEUED}"
-  fi
-}
-
+# A descendant's verdict tested this PR together with every PR up to that
+# descendant, so it covers this PR only when all of them are in the queue. This
+# also covers a chain of PRs that is not a GitHub stack.
 not_queued=""
 while IFS=$'\t' read -r number head_sha chain; do
   [[ -z "${number}" ]] && continue
