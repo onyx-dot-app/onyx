@@ -54,6 +54,11 @@ docker compose up -d --force-recreate background
 
 The `background` container starts the `docconversion` worker only when the variable is `true`.
 
+<Note>
+  In Docker Compose, the `docconversion` worker runs in the `background` container with the other workers.
+  It uses the resource limit of that container. To scale conversion on its own, use Kubernetes.
+</Note>
+
 ## Settings
 
 | Helm value | Default | Description |

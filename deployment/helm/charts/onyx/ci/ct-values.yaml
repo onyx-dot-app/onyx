@@ -14,3 +14,10 @@ auth:
       s3_aws_secret_access_key: "placeholder"
       rootUser: "placeholder"
       rootPassword: "placeholder"
+
+# Render the optional docconversion worker, and the conversion switch it sets
+# on docfetching, in ct lint. The install step sets its replicas to zero, as
+# for most workers.
+celery_worker_docconversion:
+  enabled: true
+  replicaCount: 1

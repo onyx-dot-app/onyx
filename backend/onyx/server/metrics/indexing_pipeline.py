@@ -77,6 +77,7 @@ _QUEUE_LABEL_MAP: dict[str, str] = {
 # Queues where prefetched (unacked) task counts are meaningful
 _UNACKED_QUEUES: list[str] = [
     OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
+    OnyxCeleryQueues.DOCCONVERSION,
     OnyxCeleryQueues.DOCPROCESSING,
 ]
 
