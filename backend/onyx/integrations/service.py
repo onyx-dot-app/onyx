@@ -1561,6 +1561,7 @@ def set_action_grants__no_commit(
     grants: Mapping[str, str | None],
     db_session: Session,
 ) -> None:
+    lock_integration__no_commit(integration.id, db_session)
     if not integration.users_can_save_always_allow:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
