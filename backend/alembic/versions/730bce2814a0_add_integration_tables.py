@@ -29,9 +29,12 @@ from sqlalchemy.exc import DBAPIError
 from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.integrations.connections import header_field_keys
+from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
 )
+from onyx.utils.encryption import decrypt_bytes_to_string
 
 logger = logging.getLogger("alembic.runtime.migration")
 
@@ -873,9 +876,9 @@ _INSERT_MCP_ACTIONS = """
 """
 
 # Credentials. The old columns use the same encryption as the new ones, so
-# each secret is copied as its bytes, never decrypted: the migration cannot
-# know the edition or the key the app runs with. legacy_format names the old
-# format, which the credential code reads.
+# each secret is copied as its bytes, never decrypted. legacy_format names
+# the old format, which the credential code reads. The one exception is the
+# header template of a per-user API key MCP server (_copy_mcp_header_templates).
 
 # The configuration of an MCP server that the admin set up.
 _INSERT_MCP_ORGANIZATION_CONNECTIONS = """
@@ -1486,6 +1489,73 @@ def _copy_integrations() -> None:
         op.execute(statement)
 
 
+def _mcp_header_template(config: object) -> dict[str, str] | None:
+    """Old configs kept the template in ``headers``."""
+    if not isinstance(config, dict):
+        return None
+    template = config.get("header_template") or config.get("headers")
+    if not isinstance(template, dict):
+        return None
+    return {
+        name: value
+        for name, value in template.items()
+        if isinstance(name, str)
+        and isinstance(value, str)
+        and name.lower() not in DENYLISTED_MCP_HEADERS
+    } or None
+
+
+def _copy_mcp_header_templates() -> None:
+    """A per-user API key MCP server kept its header template in the
+    encrypted admin config, so SQL cannot copy it. A config that does not
+    read leaves no template, and the admin list shows the integration as
+    not set up."""
+    bind = op.get_bind()
+    updates: list[dict[str, Any]] = []
+    for row in bind.execute(
+        sa.text(
+            "SELECT i.id, c.config FROM integration i "
+            "JOIN mcp_server m ON m.id = i.mcp_server_id "
+            "JOIN mcp_connection_config c ON c.id = m.admin_connection_config_id "
+            "WHERE i.auth_mode = 'individual' AND i.auth_method = 'api_key' "
+            "ORDER BY i.id"
+        )
+    ):
+        try:
+            config = json.loads(decrypt_bytes_to_string(bytes(row.config)))
+        except Exception as error:
+            logger.warning(
+                "Integration %s: the MCP admin config does not read (%s)",
+                row.id,
+                type(error).__name__,
+            )
+            continue
+        template = _mcp_header_template(config)
+        if template is None:
+            continue
+        fields = [
+            {"key": key, "label": key.replace("_", " "), "secret": True}
+            for key in header_field_keys(template)
+        ]
+        updates.append(
+            {
+                "id": row.id,
+                "header_template": json.dumps(template),
+                "credential_fields": json.dumps(fields) if fields else None,
+            }
+        )
+    if updates:
+        bind.execute(
+            sa.text(
+                "UPDATE integration SET "
+                "header_template = CAST(:header_template AS jsonb), "
+                "credential_fields = CAST(:credential_fields AS jsonb) "
+                "WHERE id = :id"
+            ),
+            updates,
+        )
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     schema: str = bind.execute(sa.text("SELECT current_schema()")).scalar_one()
@@ -1496,6 +1566,7 @@ def upgrade() -> None:
         # tool against writes while the tables are made.
         _with_bounded_lock_wait(_create_tables)
         _copy_integrations()
+        _copy_mcp_header_templates()
         _seed_api_actions()
         # The chat tables stay locked from here to the commit, so they are
         # altered last, with only the statement that needs a new column of

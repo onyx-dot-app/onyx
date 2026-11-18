@@ -89,6 +89,7 @@ from onyx.integrations.connections import (
     credential_field_keys,
     has_placeholder,
     header_field_keys,
+    header_template_missing,
     integration_statuses,
     mark_sign_in_settings_changed,
     oauth_client_configured,
@@ -1032,6 +1033,8 @@ def action_views(
 def _setup_reason(
     integration: Integration, oauth_client: IntegrationOAuthClient | None
 ) -> str:
+    if header_template_missing(integration):
+        return "Add the header template."
     if not oauth_client_configured(integration, oauth_client):
         return "Add the OAuth client ID."
     return "Connect the account of the organization."

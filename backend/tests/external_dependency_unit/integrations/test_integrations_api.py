@@ -721,6 +721,28 @@ def test_scoped_owner_starts_the_organization_sign_in_of_its_integration(
     assert error.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
 
+def test_per_user_key_mcp_without_a_template_needs_setup(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    """A migrated per-user API key MCP server whose template did not read has
+    no fields for users to fill, so it is not ready."""
+    integration, _ = make_mcp_integration(
+        db_session,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+    )
+    created.add(integration.id)
+
+    view = admin_api.get_integration_admin(integration.id, admin, db_session)
+    assert view.needs_setup is True
+    assert view.setup_reason == "Add the header template."
+
+    integration.header_template = {"X-Api-Key": "{api_key}"}
+    db_session.commit()
+    view = admin_api.get_integration_admin(integration.id, admin, db_session)
+    assert view.needs_setup is False
+
+
 def test_organization_connection_put_and_delete(
     db_session: Session, admin: User, created: Created
 ) -> None:
