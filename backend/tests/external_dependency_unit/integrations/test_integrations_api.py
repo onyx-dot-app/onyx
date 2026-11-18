@@ -789,15 +789,53 @@ def test_a_new_header_field_resets_connections_and_a_literal_change_does_not(
     )
     assert status() is IntegrationConnectionStatus.CONNECTED
 
-    admin_api.update_integration(
+    # The explicit fields leave out the new placeholder.
+    updated = admin_api.update_integration(
         detail.id,
         IntegrationUpdate(
-            header_template={"X-Api-Key": "{api_key}", "X-Tenant": "{tenant}"}
+            header_template={"X-Api-Key": "{api_key}", "X-Tenant": "{tenant}"},
+            credential_fields=[
+                CredentialField(key="api_key", label="Weather key", secret=True)
+            ],
         ),
         admin,
         db_session,
     )
+    assert [field.key for field in updated.credential_fields] == ["api_key", "tenant"]
     assert status() is IntegrationConnectionStatus.NEEDS_RECONNECT
+
+
+def test_an_oauth_template_cannot_use_a_placeholder_that_oauth_does_not_fill(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+
+    with pytest.raises(OnyxError) as error:
+        admin_api.update_integration(
+            detail.id,
+            IntegrationUpdate(
+                auth_method=IntegrationAuthMethod.OAUTH2,
+                oauth_client=_oauth_create().oauth_client,
+                header_template={"X-Api-Key": "{api_key}"},
+            ),
+            admin,
+            db_session,
+        )
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+    db_session.rollback()
+
+    updated = admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            auth_method=IntegrationAuthMethod.OAUTH2,
+            oauth_client=_oauth_create().oauth_client,
+            header_template={"Authorization": "Bearer {access_token}"},
+        ),
+        admin,
+        db_session,
+    )
+    assert updated.header_template == {"Authorization": "Bearer {access_token}"}
 
 
 def test_a_switch_to_oauth_drops_the_api_key_template_and_fields(
@@ -1555,6 +1593,35 @@ def test_legacy_tool_ids_do_not_allow_a_shared_name_that_another_server_left_out
         for link in list_persona_plugin_links(db_session, persona_id)
     }
     assert links[plugin.id] == {"default": "blocked", "actions": {"alpha": "inherit"}}
+
+
+def test_legacy_tool_ids_do_not_bring_back_a_plugin_that_the_request_replaces(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    mcp, server = make_mcp_integration(
+        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("hello",)
+    )
+    created.add(mcp.id)
+    old, new = (hold_in_plugin(db_session, [mcp]) for _ in range(2))
+    hello = _old_mcp_tool(db_session, server.id, "hello")
+    persona_id = _persona(
+        db_session,
+        admin,
+        tool_ids=None,
+        plugin_links=[PersonaPluginLink(plugin_id=old.id)],
+    )
+
+    _persona(
+        db_session,
+        admin,
+        tool_ids=[hello.id],
+        plugin_links=[PersonaPluginLink(plugin_id=new.id)],
+        persona_id=persona_id,
+    )
+
+    assert [
+        link.plugin_id for link in list_persona_plugin_links(db_session, persona_id)
+    ] == [new.id]
 
 
 def test_legacy_tool_ids_keep_the_plugin_that_the_agent_holds(

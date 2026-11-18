@@ -402,14 +402,42 @@ def _credential_fields_json(
     stored: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]] | None:
     if fields is not None:
-        return [field.model_dump() for field in fields]
+        stored = [field.model_dump() for field in fields]
     if not header_template:
-        return None
+        return stored if fields is not None else None
     kept = {field.get("key"): field for field in stored or []}
-    return [
+    template_fields = [
         kept.get(key) or {"key": key, "label": key.replace("_", " "), "secret": True}
         for key in header_field_keys(header_template)
-    ] or None
+    ]
+    if fields is not None:
+        listed = {field["key"] for field in stored or []}
+        return [
+            *(stored or []),
+            *(f for f in template_fields if f["key"] not in listed),
+        ]
+    return template_fields or None
+
+
+_TOKEN_PLACEHOLDERS = frozenset({"access_token", "refresh_token", "token_type"})
+
+
+def _check_template_fits(
+    auth_method: IntegrationAuthMethod | None,
+    header_template: Mapping[str, str] | None,
+) -> None:
+    """A header template may use only the placeholders the sign-in method
+    fills; an API key method fills the fields that the template names."""
+    if auth_method is IntegrationAuthMethod.API_KEY or not header_template:
+        return
+    allowed = _TOKEN_PLACEHOLDERS if auth_method is not None else frozenset()
+    unknown = sorted(set(header_field_keys(header_template)) - allowed)
+    if unknown:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This sign-in method cannot fill the header placeholders: "
+            + ", ".join(unknown),
+        )
 
 
 def _validate_sign_in(
@@ -658,6 +686,7 @@ def create_integration__no_commit(
         None if request.auth_mode is IntegrationAuthMode.NONE else request.auth_method
     )
     header_template = request.header_template
+    _check_template_fits(auth_method, header_template)
     if (
         preset is not None
         and header_template is None
@@ -931,6 +960,8 @@ def update_integration__no_commit(
     if auth_mode is IntegrationAuthMode.NONE:
         auth_method = None
     header_template = _updated_header_template(integration, request, auth_method)
+    if "header_template" in fields:
+        _check_template_fits(auth_method, header_template)
     header_template_changed = header_template != integration.header_template
     if auth_method is not integration.auth_method or fields & {
         "config",
