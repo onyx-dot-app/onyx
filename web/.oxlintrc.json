@@ -743,7 +743,6 @@
         "src/views/admin/connectors/ConnectorDetailPage/ActivityPanel.test.tsx",
         "tests/e2e/admin/code-interpreter/code_interpreter.spec.ts",
         "tests/e2e/admin/default-agent.spec.ts",
-        "tests/e2e/admin/disable_default_agent.spec.ts",
         "tests/e2e/admin/discord-bot/guilds-list.spec.ts",
         "tests/e2e/admin/theme/appearance_theme_settings.spec.ts",
         "tests/e2e/admin/usage_report_status.spec.ts",
