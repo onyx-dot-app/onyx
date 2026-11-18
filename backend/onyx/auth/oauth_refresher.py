@@ -1,7 +1,9 @@
 import asyncio
 import os
+import threading
 import time
 import uuid
+import weakref
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
@@ -57,27 +59,20 @@ OIDC_DISCOVERY_CACHE_TTL_SECONDS: int = int(
 OIDC_DISCOVERY_NEGATIVE_TTL_SECONDS: int = 45
 
 # Per-discovery-URL locks so one IdP's hanging fetch never blocks another's.
-# Created on first use so they bind to the running event loop.
-_OIDC_DISCOVERY_LOCKS: Dict[str, asyncio.Lock] = {}
-_OIDC_DISCOVERY_LOCKS_GUARD: Optional[asyncio.Lock] = None
+# An asyncio lock works on one event loop only, and the sync refresh runs each
+# call on a new loop, so each loop has its own locks.
+_OIDC_DISCOVERY_LOCKS: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, Dict[str, asyncio.Lock]
+] = weakref.WeakKeyDictionary()
+_OIDC_DISCOVERY_LOCKS_GUARD = threading.Lock()
 
 
-def _get_discovery_locks_guard() -> asyncio.Lock:
-    """Lazy-init the meta-lock that protects the per-URL lock dict itself."""
-    global _OIDC_DISCOVERY_LOCKS_GUARD
-    if _OIDC_DISCOVERY_LOCKS_GUARD is None:
-        _OIDC_DISCOVERY_LOCKS_GUARD = asyncio.Lock()
-    return _OIDC_DISCOVERY_LOCKS_GUARD
-
-
-async def _get_discovery_lock(config_url: str) -> asyncio.Lock:
-    """Get-or-create the discovery lock for one discovery URL."""
-    async with _get_discovery_locks_guard():
-        lock = _OIDC_DISCOVERY_LOCKS.get(config_url)
-        if lock is None:
-            lock = asyncio.Lock()
-            _OIDC_DISCOVERY_LOCKS[config_url] = lock
-        return lock
+def _get_discovery_lock(config_url: str) -> asyncio.Lock:
+    """Get-or-create the discovery lock of the running loop for one URL."""
+    loop = asyncio.get_running_loop()
+    with _OIDC_DISCOVERY_LOCKS_GUARD:
+        locks = _OIDC_DISCOVERY_LOCKS.setdefault(loop, {})
+        return locks.setdefault(config_url, asyncio.Lock())
 
 
 # The cache lock serializes the refresh of one user's login tokens across
@@ -139,7 +134,7 @@ async def _get_oidc_token_endpoint(config_url: str) -> Optional[str]:
     hit, cached = _cached_token_endpoint(config_url)
     if hit:
         return await _revalidate_cached_endpoint(cached)
-    async with await _get_discovery_lock(config_url):
+    async with _get_discovery_lock(config_url):
         # Re-check inside the lock — another coroutine may have populated
         # the cache while we were waiting to acquire it.
         hit, cached = _cached_token_endpoint(config_url)
