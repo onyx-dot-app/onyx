@@ -79,6 +79,14 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
 - **Data fetching:** `useSWR`, on the client, inside the component that needs the data, with a
   loader while pending. Do not fetch at the top of the page and pass data down.
 
+## React Compiler lint
+
+Production builds run the React Compiler. `next dev` does not, so set `ENABLE_REACT_COMPILER=1`
+to check compiled behavior locally. Oxlint fails on the compiler rules that make the compiler skip
+a component or change its behavior. Files that broke a rule when it landed are in that rule's
+React Compiler baseline in `.oxlintrc.json`, where they only warn. Remove a file once it is clean.
+Never add one.
+
 ## Style
 
 - Absolute imports only: `@/` for `src/`, `@opal/` for Opal. No `../` paths.

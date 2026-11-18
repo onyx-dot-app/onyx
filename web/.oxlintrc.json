@@ -33,13 +33,13 @@
     // Opt in to compiler rules individually after auditing their diagnostics.
     "react/error-boundaries": "off",
     "react/globals": "off",
-    "react/immutability": "off",
+    "react/immutability": "error",
     "react/incompatible-library": "off",
-    "react/preserve-manual-memoization": "off",
-    "react/purity": "off",
-    "react/refs": "off",
+    "react/preserve-manual-memoization": "error",
+    "react/purity": "error",
+    "react/refs": "error",
     "react/set-state-in-effect": "off",
-    "react/set-state-in-render": "off",
+    "react/set-state-in-render": "error",
     "react/static-components": "off",
     "react/use-memo": "off",
     "react/void-use-memo": "off",
@@ -55,7 +55,6 @@
     "react-doctor/effect-needs-cleanup": "error",
     "react-doctor/no-effect-with-fresh-deps": "error",
     "react-doctor/aria-role": "error",
-    "react-doctor/no-ref-current-in-render": "error",
     "react-doctor/no-impure-state-updater": "error",
     "react-doctor/no-layout-property-animation": "error",
     "anti-slop/no-chained-type-assertions": "error",
@@ -806,6 +805,94 @@
       ],
       "rules": {
         "anti-slop/require-test-skip-reason": "warn"
+      }
+    },
+    // React Compiler baseline. Remove a file once it is clean for that rule. Never add one.
+    {
+      "files": [
+        "lib/opal/src/components/inputs/dropdowns/single/components.tsx",
+        "lib/opal/src/icons/progress-ring.tsx",
+        "src/app/admin/billing/page.tsx",
+        "src/app/app/message/MultiModelResponseView.tsx",
+        "src/app/craft/components/IntroBackground.tsx",
+        "src/components/EditableStringFieldDisplay.tsx",
+        "src/components/tools/CSVContent.tsx",
+        "src/hooks/useChatSessionController.ts",
+        "src/providers/VoiceModeProvider.tsx",
+        "src/sections/chat/ChatUI.tsx",
+        "src/sections/chat/ScrollContainerContext.tsx",
+        "src/sections/input/AppInputBar.tsx",
+        "src/sections/modals/NewTeamModal.tsx",
+        "src/sections/modals/languageModels/BifrostModal.tsx",
+        "src/sections/modals/languageModels/NebiusTokenfactoryModal.tsx",
+        "src/sections/modals/languageModels/PortkeyModal.tsx"
+      ],
+      "rules": {
+        "react/immutability": "warn"
+      }
+    },
+    {
+      "files": [
+        "lib/opal/src/components/shadow-div/components.tsx",
+        "src/app/app/message/MultiModelResponseView.tsx",
+        "src/app/app/message/messageComponents/timeline/renderers/code/PythonToolRenderer.tsx",
+        "src/lib/connectors/checks/hooks.ts",
+        "src/sections/input/AppInputBar.tsx",
+        "src/sections/modals/skills/ShareSkillModal.tsx",
+        "src/sections/model-selector/ModelSelector.tsx",
+        "src/views/admin/WebSearchPage/index.tsx",
+        "src/views/admin/connectors/CatalogPage.tsx"
+      ],
+      "rules": {
+        "react/preserve-manual-memoization": "warn"
+      }
+    },
+    {
+      "files": [
+        "src/app/admin/billing/BillingDetailsView.tsx",
+        "src/app/app/components/tools/GeneratingImageDisplay.tsx",
+        "src/app/app/message/Resubmit.tsx",
+        "src/ee/hooks/useHookExecutionLogs.ts",
+        "src/lib/auth/hooks.ts",
+        "src/sections/usage/AnalyticsChart.tsx"
+      ],
+      "rules": {
+        "react/purity": "warn"
+      }
+    },
+    {
+      "files": [
+        "lib/opal/src/components/buttons/button/label.tsx",
+        "lib/opal/src/components/dropdown/hooks.ts",
+        "lib/opal/src/components/inputs/chrono/input-date-picker/components.tsx",
+        "lib/opal/src/components/inputs/chrono/input-time/components.tsx",
+        "lib/opal/src/components/inputs/numbers/input-currency/components.tsx",
+        "lib/opal/src/components/inputs/uploads/UploadControl.tsx",
+        "lib/opal/src/components/presence/components.tsx",
+        "lib/opal/src/components/tag/components.tsx",
+        "lib/opal/src/navigation/hooks.ts",
+        "src/app/app/message/messageComponents/AgentMessage.tsx",
+        "src/app/app/message/messageComponents/ToolApprovalCard.tsx",
+        "src/app/app/message/messageComponents/ToolQuestionCard.tsx",
+        "src/app/app/message/messageComponents/renderers/MessageTextRenderer.tsx",
+        "src/app/app/message/messageComponents/timeline/hooks/usePacedTurnGroups.ts",
+        "src/app/app/message/messageComponents/timeline/hooks/usePacketProcessor.ts",
+        "src/app/app/message/messageComponents/timeline/renderers/search/SearchChipList.tsx",
+        "src/app/craft/components/CraftInputBar.tsx",
+        "src/app/craft/v1/tasks/components/TaskActionPolicies.tsx",
+        "src/ee/views/admin/HooksPage/HookStatusPopover.tsx",
+        "src/hooks/__tests__/useContentEditable.undo.test.tsx",
+        "src/lib/agents/components/ShareAgentModal.tsx",
+        "src/lib/common/components.tsx",
+        "src/refresh-components/commandmenu/CommandMenu.tsx",
+        "src/sections/actions/modals/AddOpenAPIActionModal.tsx",
+        "src/sections/chat/ChatUI.tsx",
+        "src/sections/input/InputChipStrip.tsx",
+        "src/views/AgentsCatalogPage/page.tsx",
+        "src/views/admin/connectors/ConnectorDetailPage/StatusCard.tsx"
+      ],
+      "rules": {
+        "react/refs": "warn"
       }
     }
   ],
