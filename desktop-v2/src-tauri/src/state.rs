@@ -102,11 +102,19 @@ impl AppState {
         Some(token)
     }
 
-    pub fn set_token(&self, server: &str, token: &str) -> Result<(), String> {
+    /// Saves a new sign-in's token if the session it started in (`epoch`) is
+    /// still current, then starts a new epoch. The check and the save happen
+    /// under one lock, so of two sign-ins that finish together only the first
+    /// is kept. Returns `Ok(false)` for a stale sign-in.
+    pub fn commit_sign_in(&self, server: &str, token: &str, epoch: u64) -> Result<bool, String> {
+        let mut cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
+        if self.epoch() != epoch || self.server().ok().as_deref() != Some(server) {
+            return Ok(false);
+        }
         session_store::store(server, token)?;
-        *self.token.lock().unwrap_or_else(|p| p.into_inner()) =
-            Some((server.to_string(), token.to_string()));
-        Ok(())
+        *cache = Some((server.to_string(), token.to_string()));
+        self.end_epoch();
+        Ok(true)
     }
 
     pub fn clear_token(&self, server: &str) -> Result<(), String> {

@@ -52,11 +52,10 @@ pub async fn login(
     let server = state.server()?;
     let epoch = state.epoch();
     let token = state.api.login(&server, &email, &password).await?;
-    // The user changed server or signed out while this request was running.
-    if state.epoch() != epoch {
+    // Fails if the user changed server, signed out or finished SSO meanwhile.
+    if !state.commit_sign_in(&server, &token, epoch)? {
         return Err("Sign-in was cancelled.".into());
     }
-    state.set_token(&server, &token)?;
     main_window::open(&app, &server, &token, "/app").await?;
     windows::close(&app, windows::LOGIN);
     Ok(())
