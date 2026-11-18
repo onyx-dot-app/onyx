@@ -352,9 +352,9 @@ test("tells the owner to change an agent Ask that the integration allows", async
 
 test("names the agent setting in the hint for an integration Ask that the agent can allow", async () => {
   setup([draft()]);
-  const listIssues = "Setting for List issues";
-  await screen.findByRole("combobox", { name: listIssues });
-  expect(await optionsOf(listIssues)).toContain("Allow");
+  const createIssue = "Setting for Create issue";
+  await screen.findByRole("combobox", { name: createIssue });
+  expect(await optionsOf(createIssue)).toContain("Allow");
   expect(screen.getByText(copy.askHint)).toHaveTextContent(
     /change the agent setting/
   );

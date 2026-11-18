@@ -305,7 +305,7 @@ def test_persona_plugins_and_legacy_custom_tool_ids(
     finally:
         client.delete(
             f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
-        )
+        ).raise_for_status()
 
 
 TOOL_SNAPSHOT_KEYS = {
