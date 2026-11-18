@@ -485,15 +485,16 @@ def test_an_onyx_login_integration_sends_the_login_token(
     with (
         login_account,
         patch(
-            "onyx.integrations.connections._fresh_onyx_login_token", return_value=None
+            "onyx.integrations.connections._fresh_onyx_login_account",
+            return_value=None,
         ),
     ):
         assert _build(db_session, user, configuration) == {}
     with (
         login_account,
         patch(
-            "onyx.integrations.connections._fresh_onyx_login_token",
-            return_value="login-token",
+            "onyx.integrations.connections._fresh_onyx_login_account",
+            return_value=MagicMock(access_token="login-token", expires_at=None),
         ),
     ):
         tools = _build(db_session, user, configuration)

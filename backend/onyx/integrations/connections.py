@@ -396,13 +396,14 @@ def _refresh_login_account(user_id: UUID, account_id: UUID) -> bool:
         return True
 
 
-def _fresh_onyx_login_token(
+def _fresh_onyx_login_account(
     user: User, account: OAuthAccount, db_session: Session
-) -> str | None:
-    """Refreshes a token near expiry with no web request. None when the
-    token expired and could not be renewed, or the account was deleted."""
+) -> OAuthAccount | None:
+    """Refreshes a token near expiry with no web request and returns the
+    account with the current token and expiry. None when the token expired and
+    could not be renewed, or the account was deleted."""
     if not _login_token_stale(account, datetime.now(timezone.utc).timestamp()):
-        return account.access_token
+        return account
     refreshed = False
     if account.refresh_token:
         try:
@@ -423,7 +424,7 @@ def _fresh_onyx_login_token(
     # A refresh with no expires_in keeps the old expiry.
     if not refreshed and _login_token_expired(current):
         return None
-    return current.access_token
+    return current
 
 
 def _resolve_onyx_login(
@@ -435,13 +436,14 @@ def _resolve_onyx_login(
             code=ConnectionState.NOT_CONNECTED,
             reason=f"Sign in to Onyx with single sign-on to use {integration.name}.",
         )
+    current: OAuthAccount | None
     if refresh:
-        token = _fresh_onyx_login_token(user, account, db_session)
+        current = _fresh_onyx_login_account(user, account, db_session)
     elif _login_token_expired(account) and not account.refresh_token:
-        token = None
+        current = None
     else:
-        token = account.access_token
-    if token is None:
+        current = account
+    if current is None:
         return ConnectionProblem(
             code=ConnectionState.NEEDS_RECONNECT,
             reason=f"Sign in to Onyx again to use {integration.name}.",
@@ -449,10 +451,10 @@ def _resolve_onyx_login(
     return ResolvedConnection(
         integration_id=integration.id,
         connection_id=None,
-        secret=ConnectionSecret(access_token=token, token_type="Bearer"),
+        secret=ConnectionSecret(access_token=current.access_token, token_type="Bearer"),
         expires_at=(
-            datetime.fromtimestamp(account.expires_at, timezone.utc)
-            if account.expires_at is not None
+            datetime.fromtimestamp(current.expires_at, timezone.utc)
+            if current.expires_at is not None
             else None
         ),
     )

@@ -272,6 +272,65 @@ def test_onyx_login_uses_and_refreshes_login_token(
         db_session.commit()
 
 
+def test_onyx_login_reports_the_expiry_of_the_refreshed_token(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration, _ = make_app_integration(
+        db_session,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.ONYX_LOGIN,
+        header_template={"Authorization": "Bearer {access_token}"},
+    )
+    user = make_test_user("onyx_login_refreshed_expiry")
+    try:
+        now = int(datetime.now(timezone.utc).timestamp())
+        _add_login_account(
+            db_session, user, expires_at=now + 10, refresh_token="login-refresh"
+        )
+        new_expiry = now + int(timedelta(hours=1).total_seconds())
+        # The user of a request comes from the auth session, so its login
+        # account keeps the old expiry after the refresh.
+        with get_session_with_current_tenant() as auth_session:
+            request_user = auth_session.get(User, user.id)
+            assert request_user is not None
+            assert request_user.oauth_accounts
+            with (
+                patch(
+                    "onyx.auth.oauth_refresher._refresh_context_for_provider",
+                    AsyncMock(
+                        return_value=_RefreshContext(
+                            token_endpoint="https://idp/token",
+                            client_id="c",
+                            client_secret="s",
+                        )
+                    ),
+                ),
+                patch(
+                    "onyx.auth.oauth_refresher._request_login_token_refresh",
+                    AsyncMock(
+                        return_value=RefreshedLoginToken(
+                            access_token="refreshed-login",
+                            refresh_token="login-refresh-2",
+                            expires_at=new_expiry,
+                        )
+                    ),
+                ),
+            ):
+                resolved = expect_resolved(
+                    resolve_connection(integration, request_user, db_session)
+                )
+        assert resolved.secret is not None
+        assert resolved.secret.access_token == "refreshed-login"
+        assert resolved.expires_at == datetime.fromtimestamp(new_expiry, timezone.utc)
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(OAuthAccount).where(OAuthAccount.__table__.c.user_id == user.id)
+        )
+        db_session.commit()
+
+
 def test_onyx_login_uses_a_refreshed_token_that_has_no_expiry(
     db_session: Session,
     make_test_user: MakeTestUser,
