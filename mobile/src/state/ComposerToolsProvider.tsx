@@ -73,7 +73,6 @@ export interface ComposerTools {
   // False while a saved switch-off needs the plugin list to build the allow-list. A send then
   // waits, because an allow-list without the plugins would turn every plugin off.
   toolOptionsReady: boolean;
-  // The saved switches did not load, so a send waits until a retry loads them.
   toolOptionsFailed: boolean;
   retryToolOptions: () => void;
   // Read at send time, never during render.

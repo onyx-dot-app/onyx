@@ -174,9 +174,6 @@ def plugin_ids_for_integrations(
     db_session: Session,
     attached: Collection[UUID] = (),
 ) -> dict[int, UUID]:
-    """One plugin for each integration: the first one in ``attached`` (the
-    plugins the agent holds), else the first one the user can see, else the
-    first one, by plugin id."""
     if not integration_ids:
         return {}
     visible = (

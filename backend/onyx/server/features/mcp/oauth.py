@@ -494,9 +494,6 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
     async def build_refresh_request(
         self, tokens: OAuthToken | None = None
     ) -> httpx.Request | None:
-        """Build the SDK refresh request for ``tokens``, the grant that the
-        caller read, or for the stored grant. None when the grant cannot
-        refresh."""
         await self._initialize()
         if tokens is not None:
             self.context.current_tokens = tokens
