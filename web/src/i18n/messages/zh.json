@@ -12444,6 +12444,9 @@
           "generatingPlan": {
             "label": "正在生成计划"
           },
+          "queryingKnowledgeBase": {
+            "label": "正在查询知识库"
+          },
           "reading": {
             "label": "正在读取"
           },
@@ -12525,6 +12528,57 @@
             "label": "已更新记忆"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "已查询知识库"
+          },
+          "querying": {
+            "status": "正在查询知识库"
+          },
+          "listed": {
+            "label": "{count, plural, one {已列出 # 个文档} other {已列出 # 个文档}}"
+          },
+          "query": {
+            "table": {
+              "document": "文档",
+              "hierarchy_node": "文件夹",
+              "chat_session": "聊天会话",
+              "chat_message": "聊天消息",
+              "search_doc": "引用的文档"
+            },
+            "count": "数量",
+            "countBy": {
+              "source": "按来源统计",
+              "owner": "按所有者统计",
+              "month": "按月统计"
+            },
+            "titleContains": "标题包含“{text}”",
+            "nameContains": "名称包含“{text}”",
+            "textContains": "正文包含“{text}”",
+            "updated": {
+              "since": "{date} 以来更新",
+              "before": "{date} 之前更新",
+              "between": "{start} – {end} 更新"
+            },
+            "created": {
+              "since": "{date} 以来创建",
+              "before": "{date} 之前创建",
+              "between": "{start} – {end} 创建"
+            },
+            "sent": {
+              "since": "{date} 以来发送",
+              "before": "{date} 之前发送",
+              "between": "{start} – {end} 发送"
+            },
+            "owner": "所有者：{owner}",
+            "folder": "在文件夹 {id} 中",
+            "nodeType": "类型：{type}",
+            "author": "发送者：{author}",
+            "message": "消息 {id}",
+            "allRetrieved": "所有检索到的",
+            "nextPage": "下一页"
+          }
+        },
         "python": {
           "completed": {
             "status": "Python 执行完成"
@@ -12603,6 +12657,7 @@
           "generateImage": "生成图片",
           "generatePlan": "生成计划",
           "internalSearch": "内部搜索",
+          "knowledgeBaseQuery": "知识库查询",
           "memory": "记忆",
           "openUrls": "打开 URL",
           "researchAgent": "研究智能体",

@@ -12444,6 +12444,9 @@
           "generatingPlan": {
             "label": "Génération du plan"
           },
+          "queryingKnowledgeBase": {
+            "label": "Interrogation de la base de connaissances"
+          },
           "reading": {
             "label": "Lecture"
           },
@@ -12525,6 +12528,57 @@
             "label": "Mémoire mise à jour"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "Base de connaissances interrogée"
+          },
+          "querying": {
+            "status": "Interrogation de la base de connaissances"
+          },
+          "listed": {
+            "label": "{count, plural, one {# document listé} other {# documents listés}}"
+          },
+          "query": {
+            "table": {
+              "document": "Documents",
+              "hierarchy_node": "Dossiers",
+              "chat_session": "Sessions de discussion",
+              "chat_message": "Messages de discussion",
+              "search_doc": "Documents cités"
+            },
+            "count": "Nombre",
+            "countBy": {
+              "source": "Nombre par source",
+              "owner": "Nombre par propriétaire",
+              "month": "Nombre par mois"
+            },
+            "titleContains": "Le titre contient « {text} »",
+            "nameContains": "Le nom contient « {text} »",
+            "textContains": "Le texte contient « {text} »",
+            "updated": {
+              "since": "Mis à jour depuis le {date}",
+              "before": "Mis à jour avant le {date}",
+              "between": "Mis à jour du {start} au {end}"
+            },
+            "created": {
+              "since": "Créé depuis le {date}",
+              "before": "Créé avant le {date}",
+              "between": "Créé du {start} au {end}"
+            },
+            "sent": {
+              "since": "Envoyé depuis le {date}",
+              "before": "Envoyé avant le {date}",
+              "between": "Envoyé du {start} au {end}"
+            },
+            "owner": "Propriétaire : {owner}",
+            "folder": "Dans le dossier {id}",
+            "nodeType": "Type : {type}",
+            "author": "De : {author}",
+            "message": "Message {id}",
+            "allRetrieved": "Tous les résultats récupérés",
+            "nextPage": "Page suivante"
+          }
+        },
         "python": {
           "completed": {
             "status": "Exécution Python terminée"
@@ -12603,6 +12657,7 @@
           "generateImage": "Générer une image",
           "generatePlan": "Générer un plan",
           "internalSearch": "Recherche interne",
+          "knowledgeBaseQuery": "Requête de la base de connaissances",
           "memory": "Mémoire",
           "openUrls": "Ouvrir des URL",
           "researchAgent": "Agent de recherche",

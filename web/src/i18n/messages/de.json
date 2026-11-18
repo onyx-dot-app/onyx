@@ -12444,6 +12444,9 @@
           "generatingPlan": {
             "label": "Erstellt Plan"
           },
+          "queryingKnowledgeBase": {
+            "label": "Wissensdatenbank wird abgefragt"
+          },
           "reading": {
             "label": "Liest"
           },
@@ -12525,6 +12528,57 @@
             "label": "Erinnerung aktualisiert"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "Wissensdatenbank abgefragt"
+          },
+          "querying": {
+            "status": "Wissensdatenbank wird abgefragt"
+          },
+          "listed": {
+            "label": "{count, plural, one {# Dokument aufgelistet} other {# Dokumente aufgelistet}}"
+          },
+          "query": {
+            "table": {
+              "document": "Dokumente",
+              "hierarchy_node": "Ordner",
+              "chat_session": "Chat-Sitzungen",
+              "chat_message": "Chat-Nachrichten",
+              "search_doc": "Zitierte Dokumente"
+            },
+            "count": "Anzahl",
+            "countBy": {
+              "source": "Anzahl nach Quelle",
+              "owner": "Anzahl nach Eigentümer",
+              "month": "Anzahl nach Monat"
+            },
+            "titleContains": "Titel enthält „{text}“",
+            "nameContains": "Name enthält „{text}“",
+            "textContains": "Text enthält „{text}“",
+            "updated": {
+              "since": "Aktualisiert seit {date}",
+              "before": "Aktualisiert vor {date}",
+              "between": "Aktualisiert {start} – {end}"
+            },
+            "created": {
+              "since": "Erstellt seit {date}",
+              "before": "Erstellt vor {date}",
+              "between": "Erstellt {start} – {end}"
+            },
+            "sent": {
+              "since": "Gesendet seit {date}",
+              "before": "Gesendet vor {date}",
+              "between": "Gesendet {start} – {end}"
+            },
+            "owner": "Eigentümer: {owner}",
+            "folder": "Im Ordner {id}",
+            "nodeType": "Typ: {type}",
+            "author": "Von: {author}",
+            "message": "Nachricht {id}",
+            "allRetrieved": "Alle abgerufenen",
+            "nextPage": "Nächste Seite"
+          }
+        },
         "python": {
           "completed": {
             "status": "Python-Ausführung abgeschlossen"
@@ -12603,6 +12657,7 @@
           "generateImage": "Bild generieren",
           "generatePlan": "Plan erstellen",
           "internalSearch": "Interne Suche",
+          "knowledgeBaseQuery": "Wissensdatenbank-Abfrage",
           "memory": "Erinnerung",
           "openUrls": "URLs öffnen",
           "researchAgent": "Recherche-Agent",

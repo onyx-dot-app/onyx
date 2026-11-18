@@ -12444,6 +12444,9 @@
           "generatingPlan": {
             "label": "Gerando plano"
           },
+          "queryingKnowledgeBase": {
+            "label": "Consultando a base de conhecimento"
+          },
           "reading": {
             "label": "Lendo"
           },
@@ -12525,6 +12528,57 @@
             "label": "Memória atualizada"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "Base de conhecimento consultada"
+          },
+          "querying": {
+            "status": "Consultando a base de conhecimento"
+          },
+          "listed": {
+            "label": "{count, plural, one {# documento listado} other {# documentos listados}}"
+          },
+          "query": {
+            "table": {
+              "document": "Documentos",
+              "hierarchy_node": "Pastas",
+              "chat_session": "Sessões de chat",
+              "chat_message": "Mensagens de chat",
+              "search_doc": "Documentos citados"
+            },
+            "count": "Contagem",
+            "countBy": {
+              "source": "Contagem por fonte",
+              "owner": "Contagem por proprietário",
+              "month": "Contagem por mês"
+            },
+            "titleContains": "O título contém “{text}”",
+            "nameContains": "O nome contém “{text}”",
+            "textContains": "O texto contém “{text}”",
+            "updated": {
+              "since": "Atualizado desde {date}",
+              "before": "Atualizado antes de {date}",
+              "between": "Atualizado {start} – {end}"
+            },
+            "created": {
+              "since": "Criado desde {date}",
+              "before": "Criado antes de {date}",
+              "between": "Criado {start} – {end}"
+            },
+            "sent": {
+              "since": "Enviado desde {date}",
+              "before": "Enviado antes de {date}",
+              "between": "Enviado {start} – {end}"
+            },
+            "owner": "Proprietário: {owner}",
+            "folder": "Na pasta {id}",
+            "nodeType": "Tipo: {type}",
+            "author": "De: {author}",
+            "message": "Mensagem {id}",
+            "allRetrieved": "Todos os recuperados",
+            "nextPage": "Próxima página"
+          }
+        },
         "python": {
           "completed": {
             "status": "Execução do Python concluída"
@@ -12603,6 +12657,7 @@
           "generateImage": "Gerar imagem",
           "generatePlan": "Gerar plano",
           "internalSearch": "Pesquisa interna",
+          "knowledgeBaseQuery": "Consulta à base de conhecimento",
           "memory": "Memória",
           "openUrls": "Abrir URLs",
           "researchAgent": "Agente de pesquisa",
