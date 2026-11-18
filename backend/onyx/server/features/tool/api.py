@@ -20,9 +20,11 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
 )
 from onyx.db.integration import (
+    get_mcp_tool_with_integration,
     get_openapi_tool_for_integration,
     get_openapi_tool_with_integration,
     list_integration_plugin_rows,
+    list_mcp_tools_with_integration,
     list_openapi_tools_with_integration,
 )
 from onyx.db.integration_connection import (
@@ -237,7 +239,7 @@ def _alias_snapshot(
             for name, value in _stored_headers(integration, organization).items()
         ],
         passthrough_auth=integration.auth_method is IntegrationAuthMethod.ONYX_LOGIN,
-        mcp_server_id=None,
+        mcp_server_id=tool.mcp_server_id,
         user_id=(
             str(integration.created_by_user_id)
             if integration.created_by_user_id is not None
@@ -427,20 +429,25 @@ def _openapi_snapshots(
             continue
         if not include_managed and not integration.enabled:
             continue
-        snapshots.append(
-            _alias_snapshot(
+        if tool.mcp_server_id is not None:
+            snapshot = ToolSnapshot.from_model(tool)
+            snapshot.plugin_ids = [plugin.plugin_id for plugin in plugins]
+        else:
+            snapshot = _alias_snapshot(
                 tool,
                 integration,
                 organization,
                 plugins,
-                user_enabled=any(states[p.plugin_id].enabled for p in visible)
-                if visible
-                else True,
-                permissions=(
-                    tool_permissions(can_manage=can_manage) if include_managed else None
-                ),
             )
+        snapshot.user_enabled_in_chat = (
+            any(states[p.plugin_id].enabled for p in visible) if visible else True
         )
+        snapshot.default_chat_enabled = any(
+            plugin.installation_policy in _DEFAULT_CHAT_POLICIES for plugin in plugins
+        )
+        if include_managed:
+            snapshot.permissions = tool_permissions(can_manage=can_manage)
+        snapshots.append(snapshot)
     return snapshots
 
 
@@ -466,9 +473,14 @@ def get_custom_tool(
     tools = get_tools_by_ids([tool_id], db_session)
     if tools and tools[0].in_code_tool_id is not None:
         return ToolSnapshot.from_model(tools[0])
+    row = get_openapi_tool_with_integration(
+        tool_id, db_session
+    ) or get_mcp_tool_with_integration(tool_id, db_session)
+    if row is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, f"Tool with ID {tool_id} not found")
     snapshots = _openapi_snapshots(
         user,
-        [_openapi_tool_or_404(tool_id, db_session)],
+        [row],
         db_session,
         include_managed=True,
     )
@@ -528,7 +540,8 @@ def list_tools(
         built_in.append(ToolSnapshot.from_model(tool))
     return built_in + _openapi_snapshots(
         user,
-        list_openapi_tools_with_integration(db_session),
+        list_openapi_tools_with_integration(db_session)
+        + list_mcp_tools_with_integration(db_session),
         db_session,
         include_managed=False,
     )
