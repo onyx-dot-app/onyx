@@ -13,6 +13,9 @@ Each budget is for a period (a minute for Google), but the window that
 enforces it is shorter, with the same rate. A window of the whole period lets
 the full budget go in one burst, and then lets requests in only as the burst
 leaves the window. The source then sees bursts and stops, not a steady rate.
+One request always fits an empty window, so a request larger than the short
+window's share could pass the budget of the period. A second window of the
+whole period, with the full budget, stops that.
 """
 
 import math
@@ -34,6 +37,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive.quota import DriveQuotaApi
 from onyx.connectors.interfaces import SourceApiLimiter
 from onyx.connectors.models import ConnectorStopSignal
+
+# no-direct-redis: allow the budget is shared by every indexing and sync worker
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_rate_window import RateWindow, RedisRateWindows
 from onyx.server.metrics.source_api_metrics import (
@@ -85,6 +90,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         self._prefix = f"{_KEY_PREFIX}:{credential_key}"
         self._budgets = budgets
         self._should_stop = should_stop
+        # no-direct-redis: allow the budget is shared by every indexing and sync worker
         self._windows = RedisRateWindows(get_redis_client(tenant_id=tenant_id))
 
     def credential_window(self, api: str) -> RateWindow | None:
@@ -101,6 +107,20 @@ class RedisSourceApiLimiter(SourceApiLimiter):
             f"{self._prefix}:{api}:user:{user.lower()}", budget.per_user, budget
         )
 
+    def credential_guard(self, api: str) -> RateWindow | None:
+        budget = self._budgets.get(api)
+        if budget is None or budget.per_credential is None:
+            return None
+        return _period_guard(f"{self._prefix}:{api}:all", budget.per_credential, budget)
+
+    def user_guard(self, api: str, user: str | None) -> RateWindow | None:
+        budget = self._budgets.get(api)
+        if budget is None or budget.per_user is None or user is None:
+            return None
+        return _period_guard(
+            f"{self._prefix}:{api}:user:{user.lower()}", budget.per_user, budget
+        )
+
     def try_acquire(
         self, api: str, cost: int, user: str | None = None, request_count: int = 1
     ) -> float:
@@ -112,12 +132,22 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         credential_window = self.credential_window(api)
         user_window = self.user_window(api, user)
         windows = [w for w in (credential_window, user_window) if w is not None]
+        guards = [
+            w
+            for w in (self.credential_guard(api), self.user_guard(api, user))
+            if w is not None
+        ]
         result = self._windows.try_acquire_with_shares(
-            windows, request_count if budget.count_requests else cost, request_count
+            windows + guards,
+            request_count if budget.count_requests else cost,
+            request_count,
         )
-        # No shares when Redis cannot be reached.
+        # No shares when Redis cannot be reached. A guard is never cut, so
+        # only the windows have a share to record.
         if result.shares:
-            for window, share in zip(windows, result.shares, strict=True):
+            for window, share in zip(
+                windows, result.shares[: len(windows)], strict=True
+            ):
                 self._record_budget(api, window, share, window is user_window)
         return result.wait_seconds
 
@@ -206,6 +236,16 @@ def _window(key: str, limit: int, budget: SourceApiBudget) -> RateWindow:
         key=key,
         limit=max(1, math.floor(limit * budget.window_seconds / budget.period_seconds)),
         period_seconds=budget.window_seconds,
+    )
+
+
+def _period_guard(key: str, limit: int, budget: SourceApiBudget) -> RateWindow | None:
+    """The window of the whole period behind a shorter window, or None when
+    the budget's window is the whole period."""
+    if budget.window_seconds is None or budget.window_seconds >= budget.period_seconds:
+        return None
+    return RateWindow(
+        key=f"{key}:period", limit=limit, period_seconds=budget.period_seconds
     )
 
 
