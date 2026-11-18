@@ -17,7 +17,7 @@ from sqlalchemy import pool
 from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.engine.base import Connection
-from sqlalchemy.schema import SchemaItem
+from sqlalchemy.schema import Column, Constraint, Index, SchemaItem, Table
 import os
 from itertools import chain
 import asyncio
@@ -82,20 +82,19 @@ _TABLES_KEPT_WITHOUT_MODEL = frozenset(
 
 def include_object(
     object_: SchemaItem,
-    name: str | None,
-    type_: str,
+    _name: str | None,
+    _type: str,
     reflected: bool,
     compare_to: SchemaItem | None,
 ) -> bool:
     if not reflected or compare_to is not None:
         return True
-    # An index or constraint names its table through `.table`.
-    table_name = (
-        name
-        if type_ == "table"
-        else getattr(getattr(object_, "table", None), "name", None)
-    )
-    return table_name not in _TABLES_KEPT_WITHOUT_MODEL
+    if isinstance(object_, Table):
+        return object_.name not in _TABLES_KEPT_WITHOUT_MODEL
+    if isinstance(object_, (Column, Constraint, Index)):
+        table = object_.table
+        return table is None or table.name not in _TABLES_KEPT_WITHOUT_MODEL
+    return True
 
 
 logger = logging.getLogger(__name__)
