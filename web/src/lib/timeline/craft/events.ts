@@ -170,9 +170,9 @@ function decodePlanEntries(raw: unknown): AcpPlanEntry[] {
 
 /** Saved rows and live events name the same update differently. */
 function updateKind(packet: RawRecord): string | undefined {
-  const sessionUpdate = asString(packet.sessionUpdate);
-  if (sessionUpdate) return sessionUpdate;
-  switch (packet.type) {
+  // Saved rows carry the saved name in `sessionUpdate` too.
+  const kind = asString(packet.sessionUpdate) || asString(packet.type);
+  switch (kind) {
     case "agent_message":
       return "agent_message_chunk";
     case "agent_thought":
@@ -184,7 +184,7 @@ function updateKind(packet: RawRecord): string | undefined {
     case "agent_plan_update":
       return "plan";
     default:
-      return asString(packet.type);
+      return kind;
   }
 }
 
@@ -197,7 +197,7 @@ function toolEvents(
   if (toolCallId === undefined) return [];
 
   // TodoWrite is the agent's plan, not a step.
-  if (meta?.toolName === "todowrite") {
+  if (meta?.toolName === "todowrite" || meta?.toolName === "todo_write") {
     const entries = todosToPlan(packet.rawInput);
     return entries
       ? [{ type: "update", update: { sessionUpdate: "plan", entries } }]
