@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Card, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { mount } from "@/lib/mount";
@@ -53,7 +53,15 @@ const NAMED_KEYS: Record<string, string> = {
 
 // The accelerator for a key press, or null for a press that cannot be a
 // shortcut: only modifiers, or no Command, Control or Option.
-function acceleratorFor(event: KeyboardEvent): string | null {
+interface KeyPress {
+  code: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+}
+
+function acceleratorFor(event: KeyPress): string | null {
   const code = event.code;
   const key =
     NAMED_KEYS[code] ??
@@ -103,31 +111,45 @@ interface ShortcutRecorderProps {
 // Like Claude Desktop's shortcut setting: click, then press the new keys.
 function ShortcutRecorder({ value, onRecord }: ShortcutRecorderProps) {
   const [recording, setRecording] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
-  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+  // WebKit on macOS does not focus a button on click, so its own key handler
+  // never runs: listen on the window while recording.
+  useEffect(() => {
     if (!recording) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.key === "Escape") {
-      setRecording(false);
-      return;
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        setRecording(false);
+        return;
+      }
+      const accelerator = acceleratorFor(event);
+      if (accelerator) {
+        setRecording(false);
+        onRecord(accelerator);
+      }
     }
-    const accelerator = acceleratorFor(event);
-    if (accelerator) {
-      setRecording(false);
-      onRecord(accelerator);
-    }
-  }
+    const cancel = () => setRecording(false);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("blur", cancel);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("blur", cancel);
+    };
+  }, [recording, onRecord]);
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       id="hotkey"
       aria-label="Launcher shortcut"
       className="h-9 rounded-08 border border-border-02 bg-background-neutral-00 px-3 text-start font-main-ui-body text-text-04 focus:border-border-05 focus:outline-none"
-      onClick={() => setRecording(true)}
-      onBlur={() => setRecording(false)}
-      onKeyDown={onKeyDown}
+      onClick={() => {
+        buttonRef.current?.focus();
+        setRecording(true);
+      }}
     >
       {recording ? "Press the new shortcut… (Esc cancels)" : value ? displayShortcut(value) : ""}
     </button>

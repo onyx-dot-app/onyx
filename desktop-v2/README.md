@@ -31,9 +31,12 @@ shipping unchanged and stays the default desktop app. v2 has its own bundle ID
   works from any app. On macOS it is a non-activating `NSPanel` (`src-tauri/src/launcher.rs`),
   like Spotlight or Claude Desktop's quick entry: it appears over the app you are in, also
   full-screen apps and on every Space, without bringing Onyx's other windows forward, and it
-  hides when you click away. It opens empty each time. **Ask** streams an answer through
-  `POST /api/chat/send-chat-message` and shows it as markdown. **Search** calls `POST /api/search/send-search-message`
-  (EE). `Tab` switches mode, `Cmd+Enter` opens the chat in the main window, `Esc` closes.
+  hides when you click away. It keeps its chat and query while hidden, also an answer that is
+  still streaming. **Ask** streams an answer through `POST /api/chat/send-chat-message`, shows
+  what it is doing (searching, reading sources) until text arrives, and shows the answer as
+  markdown. A question after an answer is a follow-up in the same chat. **Search** calls
+  `POST /api/search/send-search-message` (EE). If Onyx is hidden (`Cmd+H`), the launcher still
+  opens over the current app and Onyx stays hidden.
 - SSO in the system browser, where you are often signed in already. The browser runs the
   server's normal OAuth flow with Onyx's mobile SSO parameters and PKCE, and the server ends it
   with `onyx://auth/callback?code=..`. The app swaps the one-time code for a session token
@@ -60,6 +63,7 @@ Closing the main window keeps the app running in the menu bar; the Dock icon, th
 | `Ctrl+Cmd+F` | Full screen |
 | `Cmd+M`, `Cmd+H`, `Cmd+W`, `Cmd+Q` | Minimize, hide, close window, quit |
 | Launcher: `Enter`, `Tab`, `Cmd+Enter`, `Esc` | Ask or search, switch mode, open in window, close |
+| Launcher: `Cmd+N`, `↑` in an empty input | New chat, recent questions |
 
 ## Security boundary
 

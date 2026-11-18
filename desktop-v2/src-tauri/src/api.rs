@@ -421,6 +421,8 @@ impl Api {
         token: &str,
         chat_session_id: &str,
         message: &str,
+        // A follow-up goes after the chat's latest message (-1); a new chat starts at the root.
+        follow_up: bool,
     ) -> Result<Response, String> {
         // Bounds the wait for the response headers only; the streamed answer
         // that follows has its own idle timeout in `ask::run`.
@@ -431,7 +433,7 @@ impl Api {
             .json(&json!({
                 "message": message,
                 "chat_session_id": chat_session_id,
-                "parent_message_id": null,
+                "parent_message_id": if follow_up { json!(-1) } else { json!(null) },
                 "file_descriptors": [],
                 "deep_research": false,
                 "origin": "unknown",

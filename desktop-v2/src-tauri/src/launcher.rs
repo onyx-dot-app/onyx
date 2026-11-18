@@ -4,7 +4,7 @@
 //! keystrokes without bringing Onyx's other windows forward, and it hides when
 //! it loses focus.
 
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl};
+use tauri::{AppHandle, Manager, WebviewUrl};
 
 use crate::windows::{local_navigation_allowed, local_new_window, LAUNCHER};
 
@@ -12,6 +12,9 @@ use crate::windows::{local_navigation_allowed, local_new_window, LAUNCHER};
 // The panel_event! macro needs the explicit `-> ()` return type.
 #[allow(clippy::unused_unit)]
 mod platform {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use objc2_app_kit::NSApplication;
     use tauri::{AppHandle, LogicalSize, Manager, Size, WebviewUrl};
     use tauri_nspanel::{
         tauri_panel, CollectionBehavior, ManagerExt, PanelBuilder, PanelLevel, StyleMask,
@@ -136,12 +139,42 @@ mod platform {
         }
     }
 
+    /// Set while the launcher shows for an app the user hid (Cmd+H). Showing
+    /// any window unhides the app and with it the main window, which a
+    /// Spotlight-style launcher must not bring back.
+    static OVER_HIDDEN_APP: AtomicBool = AtomicBool::new(false);
+
+    /// Makes the app's other windows invisible and click-through, or restores them.
+    fn set_others_invisible(app: &AppHandle, invisible: bool) {
+        for (label, window) in app.webview_windows() {
+            if label == LAUNCHER {
+                continue;
+            }
+            let Ok(ns_window) = window.ns_window() else {
+                continue;
+            };
+            let alpha: f64 = if invisible { 0.0 } else { 1.0 };
+            // SAFETY: main thread, live NSWindow.
+            unsafe {
+                let ns_window = ns_window.cast::<AnyObject>();
+                let _: () = msg_send![ns_window, setAlphaValue: alpha];
+                let _: () = msg_send![ns_window, setIgnoresMouseEvents: Bool::new(invisible)];
+            }
+        }
+    }
+
     pub fn show(app: &AppHandle) -> Result<(), String> {
         let panel = app
             .get_webview_panel(LAUNCHER)
             .map_err(|e| format!("{e:?}"))?;
         if let Some(window) = app.get_webview_window(LAUNCHER) {
             let _ = window.center();
+        }
+        if let Some(mtm) = MainThreadMarker::new() {
+            if NSApplication::sharedApplication(mtm).isHidden() {
+                set_others_invisible(app, true);
+                OVER_HIDDEN_APP.store(true, Ordering::SeqCst);
+            }
         }
         panel.show_and_make_key();
         Ok(())
@@ -150,7 +183,15 @@ mod platform {
     pub fn hide(app: &AppHandle) {
         if let Ok(panel) = app.get_webview_panel(LAUNCHER) {
             panel.hide();
-            super::emit_hidden(app);
+        }
+        // Back to how the user left it: hidden, with its windows intact for
+        // the next unhide. A window that opens from the launcher (Cmd+Enter)
+        // activates the app again afterwards.
+        if OVER_HIDDEN_APP.swap(false, Ordering::SeqCst) {
+            if let Some(mtm) = MainThreadMarker::new() {
+                NSApplication::sharedApplication(mtm).hide(None);
+            }
+            set_others_invisible(app, false);
         }
     }
 
@@ -190,7 +231,6 @@ mod platform {
         window.on_window_event(move |event| {
             if let WindowEvent::Focused(false) = event {
                 let _ = handle.hide();
-                super::emit_hidden(handle.app_handle());
             }
         });
         Ok(())
@@ -206,7 +246,6 @@ mod platform {
     pub fn hide(app: &AppHandle) {
         if let Some(window) = app.get_webview_window(LAUNCHER) {
             let _ = window.hide();
-            super::emit_hidden(app);
         }
     }
 
@@ -214,14 +253,6 @@ mod platform {
         app.get_webview_window(LAUNCHER)
             .is_some_and(|w| w.is_visible().unwrap_or(false))
     }
-}
-
-/// Sent to the launcher page each time the panel hides, so it opens fresh
-/// next time, like Claude Desktop's quick entry.
-pub const HIDDEN_EVENT: &str = "launcher-hidden";
-
-fn emit_hidden(app: &AppHandle) {
-    let _ = app.emit_to(LAUNCHER, HIDDEN_EVENT, ());
 }
 
 // AppKit panels must be created and changed on the main thread, and callers

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { listen } from "@tauri-apps/api/event";
 import {
   Button,
   CompactMarkdown,
@@ -23,89 +22,134 @@ import {
 
 type Mode = "ask" | "search";
 
-interface AnswerState {
+// One question and its answer. Follow-ups add turns to the same chat.
+interface Turn {
+  question: string;
   text: string;
+  // What the answer is doing while no text streams (searching, reading).
+  status: string | null;
   citations: Citation[];
-  chatSessionId: string | null;
   streaming: boolean;
   error: string | null;
   // Set when the answer waits for a tool approval, which only the main window can give.
   approval: { tool: string | null } | null;
 }
 
-const EMPTY_ANSWER: AnswerState = {
-  text: "",
-  citations: [],
-  chatSessionId: null,
-  streaming: false,
-  error: null,
-  approval: null,
-};
+const HISTORY_KEY = "onyx.launcher.history";
+const HISTORY_SIZE = 20;
+
+function loadHistory(): string[] {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
+    return Array.isArray(saved) ? saved.filter((q): q is string => typeof q === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function remember(question: string) {
+  const history = loadHistory().filter((q) => q !== question);
+  history.push(question);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(-HISTORY_SIZE)));
+}
 
 function Launcher() {
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<Mode>("ask");
   const [query, setQuery] = useState("");
-  const [answer, setAnswer] = useState<AnswerState>(EMPTY_ANSWER);
+  // The panel keeps its chat, results and query while hidden; ⌘N starts over.
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null);
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   // Each ask or search gets an id; updates from a replaced request are ignored.
   const askId = useRef(0);
   const searchId = useRef(0);
+  // Position in the question history while ↑/↓ browse it; null otherwise.
+  const historyAt = useRef<number | null>(null);
 
   useEffect(() => {
+    // Back from hiding: typing replaces the last query, ↓ reaches the answer.
     function focus() {
       inputRef.current?.focus();
-    }
-    // Like Claude's quick entry, the launcher opens fresh each time;
-    // ⌘↵ continues an answer in the main window.
-    function reset() {
-      askId.current += 1;
-      searchId.current += 1;
-      setMode("ask");
-      setQuery("");
-      setAnswer(EMPTY_ANSWER);
-      setHits(null);
-      setSearching(false);
-      setSearchError(null);
+      inputRef.current?.select();
     }
     focus();
     window.addEventListener("focus", focus);
-    const unlisten = listen("launcher-hidden", reset);
-    return () => {
-      window.removeEventListener("focus", focus);
-      void unlisten.then((stop) => stop());
-    };
+    return () => window.removeEventListener("focus", focus);
   }, []);
+
+  useEffect(() => {
+    resultsRef.current?.scrollTo({ top: resultsRef.current.scrollHeight });
+  }, [turns.length]);
+
+  function newChat() {
+    askId.current += 1;
+    searchId.current += 1;
+    setTurns([]);
+    setChatSessionId(null);
+    setQuery("");
+    setHits(null);
+    setSearching(false);
+    setSearchError(null);
+    inputRef.current?.focus();
+  }
+
+  function updateLast(change: (turn: Turn) => Turn) {
+    setTurns((prev) => {
+      const last = prev.at(-1);
+      return last ? [...prev.slice(0, -1), change(last)] : prev;
+    });
+  }
 
   async function runAsk(question: string) {
     const id = ++askId.current;
-    setAnswer({ ...EMPTY_ANSWER, streaming: true });
+    const last = turns.at(-1);
+    // A follow-up continues the chat once its last answer is complete.
+    const followUp = chatSessionId !== null && last !== undefined && !last.streaming && !last.error;
+    const turn: Turn = {
+      question,
+      text: "",
+      status: null,
+      citations: [],
+      streaming: true,
+      error: null,
+      approval: null,
+    };
+    setTurns((prev) => (followUp ? [...prev, turn] : [turn]));
+    if (!followUp) setChatSessionId(null);
     try {
-      await ask(question, (event) => {
+      await ask(question, followUp ? chatSessionId : null, (event) => {
         if (id !== askId.current) return;
-        setAnswer((prev) => {
+        if (event.kind === "session") {
+          setChatSessionId(event.chatSessionId);
+          return;
+        }
+        updateLast((t) => {
           switch (event.kind) {
-            case "session":
-              return { ...prev, chatSessionId: event.chatSessionId };
             case "delta":
-              return { ...prev, text: prev.text + event.text };
+              return { ...t, text: t.text + event.text };
+            case "status":
+              return { ...t, status: event.text };
+            case "restart":
+              // The earlier text was narration ("Retrying with a simpler query.").
+              return { ...t, status: t.text.trim() || t.status, text: event.text };
             case "citations":
-              return { ...prev, citations: event.docs };
+              return { ...t, citations: event.docs };
             case "needsApproval":
-              return { ...prev, approval: { tool: event.tool } };
+              return { ...t, approval: { tool: event.tool } };
             case "done":
-              return { ...prev, streaming: false };
+              return { ...t, streaming: false, status: null };
             case "error":
-              return { ...prev, streaming: false, error: event.message };
+              return { ...t, streaming: false, status: null, error: event.message };
           }
         });
       });
     } catch (e) {
       if (id !== askId.current) return;
-      setAnswer((prev) => ({ ...prev, streaming: false, error: errorMessage(e) }));
+      updateLast((t) => ({ ...t, streaming: false, status: null, error: errorMessage(e) }));
     }
   }
 
@@ -153,7 +197,11 @@ function Launcher() {
     } else if (event.key === "Enter" && event.metaKey) {
       event.preventDefault();
       event.stopPropagation();
-      void openChatInMain(answer.chatSessionId);
+      void openChatInMain(chatSessionId);
+    } else if (event.key.toLowerCase() === "n" && event.metaKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      newChat();
     }
   }
 
@@ -172,15 +220,45 @@ function Launcher() {
     }
   }
 
+  // ↑ in an empty input steps back through recent questions; ↓ steps forward.
+  function browseHistory(event: KeyboardEvent<HTMLInputElement>): boolean {
+    const browsing = historyAt.current !== null;
+    if (event.key === "ArrowUp" && (query === "" || browsing)) {
+      const history = loadHistory();
+      const at = (historyAt.current ?? history.length) - 1;
+      if (at < 0) return true;
+      historyAt.current = at;
+      setQuery(history[at] ?? "");
+      return true;
+    }
+    if (event.key === "ArrowDown" && browsing) {
+      const history = loadHistory();
+      const at = (historyAt.current ?? 0) + 1;
+      historyAt.current = at < history.length ? at : null;
+      setQuery(at < history.length ? (history[at] ?? "") : "");
+      return true;
+    }
+    return false;
+  }
+
   function onInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (composing(event)) return;
-    if (event.key === "Tab") {
+    if (browseHistory(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+    } else if (event.key === "Tab") {
       event.preventDefault();
       setMode((m) => (m === "ask" ? "search" : "ask"));
     } else if (event.key === "Enter" && !event.metaKey && query.trim() !== "") {
       event.preventDefault();
-      if (mode === "ask") void runAsk(query.trim());
-      else void runSearch(query.trim());
+      const text = query.trim();
+      remember(text);
+      historyAt.current = null;
+      if (mode === "ask") {
+        // The question moves into the thread, like a chat input.
+        setQuery("");
+        void runAsk(text);
+      } else void runSearch(text);
     }
   }
 
@@ -212,7 +290,7 @@ function Launcher() {
             </Button>
             <Section flexDirection="row" justifyContent="end" height="fit">
               <Text font="secondary-body" color="text-02">
-                Tab switches · ↓ results · ⌘↵ opens in window · Esc closes
+                Tab switches · ⌘N new chat · ⌘↵ opens in window · Esc closes
               </Text>
             </Section>
           </Section>
@@ -223,10 +301,17 @@ function Launcher() {
             ref={inputRef}
             value={query}
             spellCheck={false}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              historyAt.current = null;
+              setQuery(e.target.value);
+            }}
             onKeyDown={onInputKeyDown}
             placeholder={
-              mode === "ask" ? "Ask Onyx anything…" : "Search your company's knowledge…"
+              mode === "search"
+                ? "Search your company's knowledge…"
+                : turns.length > 0
+                  ? "Ask a follow-up…"
+                  : "Ask Onyx anything…"
             }
           />
         </div>
@@ -234,7 +319,7 @@ function Launcher() {
           ref={resultsRef}
           className="selectable flex-1 overflow-y-auto border-t border-border-01 p-4"
         >
-          {mode === "ask" ? <AnswerView answer={answer} /> : null}
+          {mode === "ask" ? <ChatView turns={turns} /> : null}
           {mode === "search" ? (
             <SearchView hits={hits} searching={searching} error={searchError} />
           ) : null}
@@ -266,40 +351,55 @@ const ANSWER_COMPONENTS: CompactMarkdownProps["components"] = {
     ),
 };
 
-interface AnswerViewProps {
-  answer: AnswerState;
+interface ChatViewProps {
+  turns: Turn[];
 }
 
-function AnswerView({ answer }: AnswerViewProps) {
-  if (answer.error) {
-    return (
-      <Text font="main-ui-body" color="text-04">
-        {answer.error}
-      </Text>
-    );
-  }
-  if (!answer.text && !answer.streaming && !answer.approval) {
+function ChatView({ turns }: ChatViewProps) {
+  if (turns.length === 0) {
     return (
       <Text font="main-ui-muted" color="text-02">
-        Press Enter to ask. The answer streams here.
+        Press Enter to ask. The answer streams here; ↑ shows recent questions.
       </Text>
     );
   }
   return (
-    <Section gap={3} alignItems="start" justifyContent="start" height="fit">
-      {answer.text || answer.streaming ? (
+    <Section gap={5} alignItems="stretch" justifyContent="start" height="fit">
+      {turns.map((turn, i) => (
+        <TurnView key={i} turn={turn} />
+      ))}
+    </Section>
+  );
+}
+
+function TurnView({ turn }: { turn: Turn }) {
+  return (
+    <Section gap={2} alignItems="start" justifyContent="start" height="fit">
+      <Text font="main-ui-action" color="text-05">
+        {turn.question}
+      </Text>
+      {turn.streaming && !turn.text ? (
+        <StatusLine text={turn.status ?? "Thinking…"} />
+      ) : null}
+      {turn.text ? (
         <CompactMarkdown components={ANSWER_COMPONENTS}>
-          {answer.streaming ? `${answer.text}▍` : answer.text}
+          {turn.streaming ? `${turn.text}▍` : turn.text}
         </CompactMarkdown>
       ) : null}
-      {answer.approval ? (
-        <Text font="main-ui-body" color="text-03">
-          {`Onyx needs your approval to use ${answer.approval.tool ?? "a tool"}. Press ⌘↵ to continue in the Onyx window.`}
+      {turn.streaming && turn.text && turn.status ? <StatusLine text={turn.status} /> : null}
+      {turn.error ? (
+        <Text font="main-ui-body" color="text-04">
+          {turn.error}
         </Text>
       ) : null}
-      {answer.citations.length > 0 ? (
+      {turn.approval ? (
+        <Text font="main-ui-body" color="text-03">
+          {`Onyx needs your approval to use ${turn.approval.tool ?? "a tool"}. Press ⌘↵ to continue in the Onyx window.`}
+        </Text>
+      ) : null}
+      {turn.citations.length > 0 ? (
         <Section flexDirection="row" gap={1} justifyContent="start" wrap height="fit">
-          {answer.citations.map((citation, i) => (
+          {turn.citations.map((citation, i) => (
             <Button
               key={`${citation.title}-${i}`}
               size="sm"
@@ -313,6 +413,18 @@ function AnswerView({ answer }: AnswerViewProps) {
         </Section>
       ) : null}
     </Section>
+  );
+}
+
+// Shown while an answer works without streaming text, like Claude's status line.
+function StatusLine({ text }: { text: string }) {
+  return (
+    <div role="status" className="flex items-center gap-2">
+      <span className="h-2 w-2 animate-pulse rounded-full bg-background-tint-inverted-03" />
+      <Text font="secondary-body" color="text-03">
+        {text}
+      </Text>
+    </div>
   );
 }
 
