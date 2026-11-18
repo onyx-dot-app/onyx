@@ -1,6 +1,6 @@
 from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 from onyx.access.utils import (
     prefix_external_group,
@@ -18,9 +18,9 @@ class ExternalAccess(BaseModel):
     MAX_NUM_ENTRIES: ClassVar[int] = 5000
 
     # Emails of external users with access to the doc externally
-    external_user_emails: set[str]
+    external_user_emails: set[StrictStr] = Field(strict=False)
     # Names or external IDs of groups with access to the doc
-    external_user_group_ids: set[str]
+    external_user_group_ids: set[StrictStr] = Field(strict=False)
     # Whether the document is public in the external system or Onyx
     is_public: bool
 
