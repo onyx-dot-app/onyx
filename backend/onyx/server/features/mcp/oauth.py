@@ -843,7 +843,11 @@ class IntegrationTokenStorage(TokenStorage):
             granted_scopes=(
                 tokens.scope.split()
                 if tokens.scope
-                else (record.granted_scopes if record is not None else None)
+                else (
+                    record.granted_scopes
+                    if keep_refresh and record is not None
+                    else None
+                )
             ),
         )
         if metadata_client is not None:
