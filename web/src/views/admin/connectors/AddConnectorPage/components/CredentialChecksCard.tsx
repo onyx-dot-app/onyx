@@ -547,10 +547,12 @@ export function CheckCardView({
   // The card can outgrow the viewport. Centered, its failed rows still show.
   // It centers once the opened card has rendered, not the folded one.
   const [centerRequest, setCenterRequest] = useState(0);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the pinned card back into the form, then opens it, when the parent asks to expand
   useEffect(() => {
     if (expandRequest === 0) return;
     void expand().then(() => setCenterRequest((request) => request + 1));
   }, [expandRequest, expand]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the opened card to the center of the viewport once it renders
   useEffect(() => {
     if (centerRequest === 0 || !cardRef.current) return;
     void smoothScrollToCenter(cardRef.current);

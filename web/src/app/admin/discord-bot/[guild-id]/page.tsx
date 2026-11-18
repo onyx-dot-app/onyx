@@ -1,7 +1,7 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import { use, useState, useEffect, useCallback, useMemo } from "react";
+import { use, useState, useCallback, useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { PageLoader } from "@opal/loaders";
@@ -179,12 +179,12 @@ export default function Page({ params }: Props) {
   >([]);
 
   // Sync local state with fetched channels
-  useEffect(() => {
-    if (channels) {
-      setLocalChannels(channels);
-      setOriginalChannels(channels);
-    }
-  }, [channels]);
+  const [loadedChannels, setLoadedChannels] = useState(channels);
+  if (channels && loadedChannels !== channels) {
+    setLoadedChannels(channels);
+    setLocalChannels(channels);
+    setOriginalChannels(channels);
+  }
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = useMemo(() => {

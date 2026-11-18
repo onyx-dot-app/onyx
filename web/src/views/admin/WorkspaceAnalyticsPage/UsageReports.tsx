@@ -329,6 +329,7 @@ export default function UsageReports() {
       });
     },
   });
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- revalidates the SWR jobs list on each visit and resets the visit flag on unmount
   useEffect(() => {
     void mutateJobs();
     return () => {
@@ -351,10 +352,12 @@ export default function UsageReports() {
   });
   const listLoading = !reports && !listError;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- logs a usage report list failure to the console
   useEffect(() => {
     if (listError) console.error("Failed to load usage reports:", listError);
   }, [listError]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- raises a toast when the polled reports show the requested report done or failed
   useEffect(() => {
     if (!requestedReportId) return;
     const completed = reports?.find((report) =>
@@ -375,6 +378,7 @@ export default function UsageReports() {
     }
   }, [reports, jobs, requestedReportId, t]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- aborts the in-flight report request on unmount
   useEffect(() => () => abortRef.current?.abort(), []);
 
   async function requestReport(period: ReportPeriod): Promise<void> {

@@ -73,6 +73,7 @@ export const ExistingSlackBotForm = ({
     setFormValues((prev) => ({ ...prev, [field]: value }));
   };
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document mousedown listener that closes the token panel on an outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -134,7 +135,6 @@ export const ExistingSlackBotForm = ({
                   initialValues={formValues}
                   existingSlackBotId={existingSlackBot.id}
                   refreshSlackBot={refreshSlackBot}
-                  onValuesChange={(values) => setFormValues(values)}
                 />
               </div>
             </div>

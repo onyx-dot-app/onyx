@@ -192,6 +192,7 @@ export default function AuthenticationAccountSection({
   // shown counts, so a just-created pick waits for the list to catch up.
   const pickSeenRef = useRef<number | null>(null);
   const deletingIdRef = useRef<number | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- drops the pick and raises a toast when the polled account list loses the picked account
   useEffect(() => {
     if (credentials === undefined || selectedSavedId === null) return;
     if (credentials.some((credential) => credential.id === selectedSavedId)) {

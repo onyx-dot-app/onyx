@@ -399,6 +399,7 @@ export default function ActivityCard({
   const [openPopover, setOpenPopover] = useState<"trace" | EntityKind | null>(
     null
   );
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the focused card into view on each focus request
   useEffect(() => {
     if (focused) {
       rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -407,6 +408,7 @@ export default function ActivityCard({
   const selected = openPopover !== null;
   const traceBeside = openPopover === "trace" && placement.trace === "beside";
   // Measured on open, when a resize moves the trace beside, and while beside whenever the card resizes, since a polled run can reword its message and move the chip.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that places the trace panel beside the card while it is open
   useLayoutEffect(() => {
     if (!traceBeside) return;
     const measure = () =>
@@ -421,6 +423,7 @@ export default function ActivityCard({
   const reportPanelOpen = useEffectEvent((open: boolean) =>
     onPanelOpenChange?.(open)
   );
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- tells the parent a panel is open, and that it closed on unmount
   useEffect(() => {
     if (!selected) return;
     reportPanelOpen(true);
@@ -428,6 +431,7 @@ export default function ActivityCard({
   }, [selected]);
   // Reported from the hover state, so a card that unmounts under the pointer (resolved out of its feed) still ends its hover.
   const reportHover = useEffectEvent((on: boolean) => onHoverChange?.(on));
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- tells the parent the card is hovered, and ends the hover on unmount
   useEffect(() => {
     if (!hovered) return;
     reportHover(true);
@@ -468,9 +472,7 @@ export default function ActivityCard({
       ? trace === null
       : openPopover !== null &&
         !chips.some((chip) => chip.kind === openPopover);
-  useEffect(() => {
-    if (openGone) setOpenPopover(null);
-  }, [openGone]);
+  if (openGone) setOpenPopover(null);
   const mutedColor = closed ? "text-02" : "text-03";
 
   // A failure, superseded or not, titles with the error's first sentence and describes with the rest. A run with errors reports what it still did.

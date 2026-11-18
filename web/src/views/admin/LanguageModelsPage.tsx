@@ -116,6 +116,7 @@ function ExistingProviderCard({
       providerModal.isPresent && isPaged ? provider.id : null
     );
   const fullProvider = isPaged ? fetchedProvider : provider;
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- raises a toast, closes the editor, and drops the SWR cache entry when the provider fails to load
   useEffect(() => {
     if (!fullProviderError) return;
     toast.error(

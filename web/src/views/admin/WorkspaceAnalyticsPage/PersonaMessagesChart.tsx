@@ -86,6 +86,7 @@ export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
     error: personaUniqueUsersError,
   } = usePersonaUniqueUsers(selectedPersonaId, timeRange);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- logs analytics fetch failures to the console
   useEffect(() => {
     if (agentsError) {
       console.error("Failed to fetch admin agents:", agentsError);

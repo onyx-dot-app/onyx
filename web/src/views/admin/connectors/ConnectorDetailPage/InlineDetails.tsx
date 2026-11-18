@@ -49,6 +49,7 @@ export function DetailsCloseButton({
   const ref = useRef<HTMLElement>(null);
   const inline = onClose !== undefined;
   // Opening a card moves focus into it, as opening a popover did.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus into the card when it opens inline
   useEffect(() => {
     if (inline) ref.current?.focus();
   }, [inline]);

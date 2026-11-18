@@ -78,6 +78,7 @@ export default function OAuthFinalizePage() {
   const credential = credentialParam ? parseInt(credentialParam, 10) : NaN;
   const connector = pathname.split("/")[3];
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- sends the OAuth finalize request for the credential and connector in the URL on load
   useEffect(() => {
     const onFirstLoad = async () => {
       // Examples
@@ -140,8 +141,6 @@ export default function OAuthFinalizePage() {
 
     onFirstLoad();
   }, [credential, connector, t]);
-
-  useEffect(() => {}, [redirectUrl]);
 
   return (
     <div className="mx-auto h-screen flex flex-col">

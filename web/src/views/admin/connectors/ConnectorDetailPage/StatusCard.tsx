@@ -583,9 +583,11 @@ function IndexingCard({
     : null;
   const hover: TypeHover = { hovered, onHover: setHoveredType };
   // Any fold drops the table under the pointer without a leave: the button, a timed-out or failed refresh, a new untyped document.
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (!open) setHoveredType(null);
-  }, [open]);
+  }
   const summary = typesLoadFailed ? (
     <TypesSummary typeCount={null} sizeBytes={null} />
   ) : (

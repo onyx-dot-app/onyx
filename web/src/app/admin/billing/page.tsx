@@ -139,21 +139,14 @@ export default function BillingPage() {
   const isManualLicenseOnly = !!(hasManualLicense && !hasSubscription);
 
   // Set initial view based on subscription status (only once when data first loads)
-  useEffect(() => {
-    if (!isLoading && view === null) {
-      const shouldShowDetails =
-        hasSubscription || (isSelfHosted && licenseData?.has_license);
-      setView(shouldShowDetails ? "details" : "plans");
-    }
-  }, [
-    isLoading,
-    hasSubscription,
-    isSelfHosted,
-    licenseData?.has_license,
-    view,
-  ]);
+  if (!isLoading && view === null) {
+    const shouldShowDetails =
+      hasSubscription || (isSelfHosted && licenseData?.has_license);
+    setView(shouldShowDetails ? "details" : "plans");
+  }
 
   // Read activating state from sessionStorage after mount (avoids SSR hydration mismatch)
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the activation deadline from sessionStorage after mount
   useEffect(() => {
     const raw = sessionStorage.getItem(BILLING_ACTIVATING_KEY);
     if (!raw) return;
@@ -165,14 +158,13 @@ export default function BillingPage() {
   }, []);
 
   // Show license activation card when there's a Stripe error
-  useEffect(() => {
-    if (hasStripeError && !showLicenseActivationInput) {
-      setLicenseCardAutoOpened(true);
-      setShowLicenseActivationInput(true);
-    }
-  }, [hasStripeError, showLicenseActivationInput]);
+  if (hasStripeError && !showLicenseActivationInput) {
+    setLicenseCardAutoOpened(true);
+    setShowLicenseActivationInput(true);
+  }
 
   // Handle return from checkout or customer portal
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- claims the license from the server and clears the URL params on return from checkout or the portal
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
     const portalReturn = searchParams.get("portal_return");
@@ -272,6 +264,7 @@ export default function BillingPage() {
   }, [searchParams, navigation, refreshBilling, refreshLicense]);
 
   // Poll every 15s while activating, up to 2 minutes, to detect when the license arrives.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- interval that polls the server for the license while activation is pending
   useEffect(() => {
     if (!isActivating) return;
 
@@ -324,6 +317,7 @@ export default function BillingPage() {
   const [graceSyncAttempted, setGraceSyncAttempted] = useState(false);
   const [isGraceSyncing, setIsGraceSyncing] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- claims the license from the server once when the loaded license enters its grace period
   useEffect(() => {
     if (
       !isSelfHosted ||
@@ -345,27 +339,18 @@ export default function BillingPage() {
   }, [isSelfHosted, graceSyncAttempted, licenseData?.expiry_warning_stage, t]);
 
   // Hide license activation card when Stripe connection is restored (only if auto-opened)
-  useEffect(() => {
-    if (
-      !hasStripeError &&
-      !isAirGapped &&
-      showLicenseActivationInput &&
-      licenseCardAutoOpened &&
-      !isLoading
-    ) {
-      if (billingData && hasActiveSubscription(billingData)) {
-        setLicenseCardAutoOpened(false);
-        setShowLicenseActivationInput(false);
-      }
-    }
-  }, [
-    hasStripeError,
-    isAirGapped,
-    showLicenseActivationInput,
-    licenseCardAutoOpened,
-    isLoading,
-    billingData,
-  ]);
+  if (
+    !hasStripeError &&
+    !isAirGapped &&
+    showLicenseActivationInput &&
+    licenseCardAutoOpened &&
+    !isLoading &&
+    billingData &&
+    hasActiveSubscription(billingData)
+  ) {
+    setLicenseCardAutoOpened(false);
+    setShowLicenseActivationInput(false);
+  }
 
   const handleLicenseActivated = () => {
     refreshLicense();

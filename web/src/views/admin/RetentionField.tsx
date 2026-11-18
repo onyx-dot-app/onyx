@@ -122,6 +122,7 @@ export default function RetentionField({
 
   // Focus the custom input only when the user explicitly picks "Custom
   // Retention" (never on initial mount for an already-custom value).
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus to the custom input when the user picks Custom Retention
   useEffect(() => {
     if (showCustom && focusCustomOnShowRef.current) {
       customInputRef.current?.focus();
@@ -129,6 +130,7 @@ export default function RetentionField({
     }
   }, [showCustom]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus to the preset select and reopens it after Custom Retention closes
   useEffect(() => {
     if (!showCustom && reopenPresetsRef.current) {
       const trigger = selectWrapperRef.current?.querySelector("input");
@@ -138,6 +140,7 @@ export default function RetentionField({
     }
   }, [showCustom]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document pointerdown and keydown listeners that close the reopened presets
   useEffect(() => {
     if (!presetsReopened) return;
     const revert = () => {

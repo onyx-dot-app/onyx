@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 import { Disabled } from "@opal/core";
@@ -143,19 +143,24 @@ export default function AuthenticationAccountCard({
     admin_public: credential.admin_public,
     groups: credential.groups ?? [],
   });
-  useEffect(() => {
-    if (savingSharing || hasUnsavedSharing) return;
-    const next = shareAccountValues(JSON.parse(serverSharing));
-    setSavedSharing(next);
-    setSharing(next);
-    // Only a new server value resets the select.
-  }, [serverSharing]);
+  // Only a new server value resets the select.
+  const [shownServerSharing, setShownServerSharing] = useState(serverSharing);
+  if (shownServerSharing !== serverSharing) {
+    setShownServerSharing(serverSharing);
+    if (!savingSharing && !hasUnsavedSharing) {
+      const next = shareAccountValues(JSON.parse(serverSharing));
+      setSavedSharing(next);
+      setSharing(next);
+    }
+  }
 
   // A rename shows at once, until the list refetch brings the stored name.
   const [pendingName, setPendingName] = useState<string | null>(null);
-  useEffect(() => {
+  const [storedName, setStoredName] = useState(credential.name);
+  if (storedName !== credential.name) {
+    setStoredName(credential.name);
     setPendingName(null);
-  }, [credential.name]);
+  }
 
   // Sharing and the name save through one route, one save at a time, without
   // locking the controls: a change made while a save runs waits, and the

@@ -8,7 +8,6 @@ import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { createSlackBot, updateSlackBot } from "./new/lib";
 import { Button, Divider } from "@opal/components";
-import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { toast } from "@opal/layouts";
 
@@ -17,22 +16,14 @@ export const SlackTokensForm = ({
   initialValues,
   existingSlackBotId,
   refreshSlackBot,
-  onValuesChange,
 }: {
   isUpdate: boolean;
   initialValues: any;
   existingSlackBotId?: number;
   refreshSlackBot?: () => void;
-  onValuesChange?: (values: any) => void;
 }) => {
   const t = useTranslations("admin.slackBots");
   const navigation = useNavigation();
-
-  useEffect(() => {
-    if (onValuesChange) {
-      onValuesChange(initialValues);
-    }
-  }, [initialValues, onValuesChange]);
 
   return (
     <Formik

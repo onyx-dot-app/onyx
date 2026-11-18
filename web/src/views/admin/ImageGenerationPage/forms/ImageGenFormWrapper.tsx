@@ -83,6 +83,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
   ]);
 
   // Close modal after successful connection (1 second delay)
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- timer that closes the modal one second after a successful connection
   useEffect(() => {
     if (apiStatus === "success" && !isSubmitting) {
       const timer = setTimeout(() => {

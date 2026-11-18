@@ -1,7 +1,7 @@
 "use client";
 
 import { useNavigation } from "@opal/navigation";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { InputHorizontal, Section } from "@opal/layouts";
 import { Button, Divider, Text } from "@opal/components";
@@ -123,11 +123,9 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Update seats if minRequiredSeats changes (e.g., after user data loads)
-  useEffect(() => {
-    if (seats < minRequiredSeats) {
-      setSeats(minRequiredSeats);
-    }
-  }, [minRequiredSeats, seats]);
+  if (seats < minRequiredSeats) {
+    setSeats(minRequiredSeats);
+  }
 
   const monthlyPrice = 25;
   const annualPrice = 20;

@@ -148,6 +148,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   // Counts View Errors clicks with no index run to focus, each of which resets the panel's filters and scrolls it into view.
   const [errorsRequest, setErrorsRequest] = useState(0);
   // Stacked under the column, the panel is out of view, so it scrolls there.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the stacked activity panel into view on each View Errors click
   useEffect(() => {
     if (errorsRequest > 0) {
       panelRef.current?.scrollIntoView({
@@ -202,6 +203,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const linkedRun = parseRunParams(searchParams);
   const linkedRunId = linkedRun?.id ?? null;
   const linkedRunKind = linkedRun?.kind ?? null;
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- follows the tab and run named in the URL when the address changes
   useEffect(() => {
     showTab(parseTab(linkedTab));
     if (linkedRunId === null || linkedRunKind === null) {
@@ -332,6 +334,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     refresh();
   };
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- leaves the page through the router once polling shows the connector is deleted
   useEffect(() => {
     if (isLoadingCCPair) return;
     if (ccPair && !ccPairError) setHasLoadedOnce(true);

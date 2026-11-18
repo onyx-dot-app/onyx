@@ -173,6 +173,7 @@ export default function IndexingStatusPage() {
       : history === "fleet"
         ? `fleet ${range?.since ?? ""} ${range?.until ?? ""}`
         : `pair ${history.cc_pair_id}`;
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the stacked history panel into view when the admin picks a new subject
   useEffect(() => {
     if (subject !== null && adminPicked.current) {
       revealHistory(panelRef.current);

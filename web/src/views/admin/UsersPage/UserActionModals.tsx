@@ -267,6 +267,7 @@ const PRIVATE_SKILLS_TOAST_ID = "delete-user-private-skills";
  * the toast leaves together with the page and not over it.
  */
 export function useClosePrivateSkillsToastOnLeave() {
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- dismisses the private skills toast when the page unmounts
   useEffect(() => () => toast.dismiss(PRIVATE_SKILLS_TOAST_ID), []);
 }
 

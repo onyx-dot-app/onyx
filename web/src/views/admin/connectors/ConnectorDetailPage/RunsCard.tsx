@@ -262,12 +262,15 @@ export default function RunsCard({
     ].slice(0, pageSize);
   }, [runningFirst, runningData, data, pageSize]);
   const { retain, setOpen } = focus;
-  useEffect(() => {
-    if (data !== undefined) retain(items.map(runKey));
-  }, [data, items, retain]);
+  const [retainedItems, setRetainedItems] = useState(items);
+  if (data !== undefined && retainedItems !== items) {
+    setRetainedItems(items);
+    retain(items.map(runKey));
+  }
   // A focused row with no details has no control to close it, so a link to one only selects the tab.
   const openedRun = useRef<RunRef | null>(null);
   const revealedRun = useRef<RunRef | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- pages the polled runs feed until the run linked in the URL loads, then opens it
   useEffect(() => {
     if (openRun === null || openedRun.current === openRun) return;
     if (data === undefined || isLoading) return;
@@ -334,9 +337,7 @@ export default function RunsCard({
   const totalItems = data?.total_items ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   // Polling can shrink the feed under an open page.
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+  if (page > totalPages) setPage(totalPages);
   // A window is always set, so only a narrowing inside it counts as a filter.
   const filtered = kind !== null || statusGroup !== null || range !== null;
 
